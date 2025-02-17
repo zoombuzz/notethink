@@ -1,0 +1,47 @@
+# Editor config (root only)
+.idea
+.vscode
+
+# Github pages/MM
+docs/_site
+.sass-cache
+.jekyll-metadata
+Gemfile.lock
+
+# Terraform local files
+**/.terraform/*
+**/.terraform.*
+*.tfstate
+*.tfstate.*
+*.tfvars
+nohup.out
+
+# Node.js dev
+**/node_modules
+.env
+.env*.local
+.env*.local-docker
+**/.env.development.local
+
+# Python dev
+*_venv/
+*__pycache__*
+
+# typescript
+*.tsbuildinfo
+
+# service workers
+**/public/sw.js
+**/public/sw.js.map
+**/public/workbox-*
+
+# ignore dynamically generated secrets files
+**/dynamic-secrets.*.yaml
+
+# ignore spurious logs
+app/debug.log
+**/newrelic_agent.log
+
+# misc
+.DS_Store
+*.pem

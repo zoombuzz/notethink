@@ -12,10 +12,22 @@
   "activationEvents": [],
   "browser": "./dist/web/extension.js",
   "contributes": {
+		"customEditors": [
+			{
+				"viewType": "zoombuzz.notethink",
+				"displayName": "NoteThink",
+				"selector": [
+					{
+						"filenamePattern": "*.md"
+					}
+				],
+        "priority": "option"
+			}
+		],
     "commands": [
       {
-        "command": "notethink.helloWorld",
-        "title": "Hello World"
+        "command": "notethink.openview",
+        "title": "NoteThink: Open View"
       }
     ]
   },

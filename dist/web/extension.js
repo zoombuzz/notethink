@@ -1779,11 +1779,157 @@ function ieee754write(buffer, value, offset, isLE, mLen, nBytes) {
 }
 
 // src/web/extension.ts
+var vscode2 = __toESM(require("vscode"));
+
+// src/web/notethinkEditor.ts
 var vscode = __toESM(require("vscode"));
+
+// src/web/util.ts
+function getNonce() {
+  let text = "";
+  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+
+// src/web/notethinkEditor.ts
+var NotethinkEditorProvider = class _NotethinkEditorProvider {
+  constructor(context) {
+    this.context = context;
+  }
+  static {
+    this.viewType = "zoombuzz.notethink";
+  }
+  static register(context) {
+    const provider = new _NotethinkEditorProvider(context);
+    const providerRegistration = vscode.window.registerCustomEditorProvider(_NotethinkEditorProvider.viewType, provider);
+    return providerRegistration;
+  }
+  async myWebviewPanel(webviewPanel) {
+    webviewPanel.webview.options = {
+      enableScripts: true
+    };
+    webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
+    const allDocuments = await vscode.workspace.findFiles("**/*.md");
+    const allDocs = await Promise.all(allDocuments.map(async (doc) => {
+      const document = await vscode.workspace.openTextDocument(doc);
+      return {
+        name: doc.path,
+        metadata: document,
+        content: document.getText()
+      };
+    }));
+    function updateWebview() {
+      for (const doc of allDocs) {
+        doc.content = doc.metadata.getText();
+      }
+      webviewPanel.webview.postMessage({
+        type: "update",
+        text: JSON.stringify({ allDocs })
+      });
+    }
+    const watcher = vscode.workspace.createFileSystemWatcher("**/*.md");
+    watcher.onDidCreate(async (uri) => {
+      const document = await vscode.workspace.openTextDocument(uri);
+      allDocs.push({
+        name: uri.path,
+        metadata: document,
+        content: document.getText()
+      });
+      console.log("New matching document added in the background");
+      updateWebview();
+    });
+    const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument((e) => {
+      console.log("Document changed in the background", e.document.uri.toString());
+      updateWebview();
+    });
+    webviewPanel.onDidDispose(() => {
+      changeDocumentSubscription.dispose();
+    });
+    webviewPanel.webview.onDidReceiveMessage((e) => {
+      switch (e.type) {
+        case "action_name":
+          return;
+      }
+    });
+    updateWebview();
+  }
+  /**
+   * resolveCustomTextEditor
+   * called when file is right clicked, then "Open With..." NoteThink
+   */
+  async resolveCustomTextEditor(document, webviewPanel, _token) {
+    return this.myWebviewPanel(webviewPanel);
+  }
+  /**
+   * getHtmlForWebview
+   * get the static HTML used for the editor webviews
+   */
+  getHtmlForWebview(webview) {
+    const clientDistDirectory = "dist/client";
+    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(
+      this.context.extensionUri,
+      clientDistDirectory,
+      "app.js"
+    ));
+    const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(
+      this.context.extensionUri,
+      clientDistDirectory,
+      "reset.css"
+    ));
+    const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(
+      this.context.extensionUri,
+      clientDistDirectory,
+      "vscode.css"
+    ));
+    const styleMainUri = webview.asWebviewUri(vscode.Uri.joinPath(
+      this.context.extensionUri,
+      clientDistDirectory,
+      "app.css"
+    ));
+    const nonce = getNonce();
+    return (
+      /* html */
+      `
+			<!DOCTYPE html>
+			<html lang="en">
+			<head>
+				<meta charset="UTF-8">
+
+				<!--
+				Use a content security policy to only allow loading images from https or from our extension directory,
+				and only allow scripts that have a specific nonce.
+				-->
+				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+
+				<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+				<link href="${styleResetUri}" rel="stylesheet" />
+				<link href="${styleVSCodeUri}" rel="stylesheet" />
+				<link href="${styleMainUri}" rel="stylesheet" />
+
+				<title>Cat Scratch</title>
+			</head>
+			<body>
+				<div class="notes">
+				</div>
+				
+				<script nonce="${nonce}" src="${scriptUri}"><\/script>
+			</body>
+			</html>`
+    );
+  }
+};
+
+// src/web/extension.ts
 function activate(context) {
-  console.log('Congratulations, your extension "notethink" is now active in the web extension host!');
-  const disposable = vscode.commands.registerCommand("notethink.helloWorld", () => {
-    vscode.window.showInformationMessage("Hello World from NoteThink in a web extension host!");
+  const provider = new NotethinkEditorProvider(context);
+  const providerRegistration = vscode2.window.registerCustomEditorProvider(NotethinkEditorProvider.viewType, provider);
+  context.subscriptions.push(providerRegistration);
+  const disposable = vscode2.commands.registerCommand("notethink.openview", async () => {
+    provider.myWebviewPanel(vscode2.window.createWebviewPanel("notethink", "NoteThink", vscode2.ViewColumn.One, {}));
   });
   context.subscriptions.push(disposable);
 }

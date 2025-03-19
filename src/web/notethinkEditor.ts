@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 import { getNonce } from './util';
+import { generateIdentifier } from './lib/crypto';
+import { HashMapOf } from './types/general';
+import { abbrevDoc } from './lib/utils';
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
@@ -20,57 +23,89 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 	public async myWebviewPanel(
 		webviewPanel: vscode.WebviewPanel,
 	): Promise<void> {
-		// Setup initial content for the webview
+		// setup initial content for the webview
 		webviewPanel.webview.options = {
 			enableScripts: true,
 		};
 		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
-		// load all markdown documents in repo
-		const allDocuments = await vscode.workspace.findFiles('**/*.md');
-		const allDocs = await Promise.all(allDocuments.map(async (doc) => {
-			const document = await vscode.workspace.openTextDocument(doc);
-			return {
-				name: doc.path,
-				metadata: document,
-				content: document.getText(),
-			};
-		}));
+		// load all matching documents in repo
+		const filter_criterion = '**/docstech/**/*.md';
+		const all_documents_meta_raw = await vscode.workspace.findFiles(filter_criterion);
+		const load_time = new Date().toISOString();
+		const docs: HashMapOf<any> = (await Promise.all(all_documents_meta_raw
+			.map(async (uri) => {
+				const document = await vscode.workspace.openTextDocument(uri);
+				const doc = {
+					path: uri.path,
+					id: await generateIdentifier(uri.path),
+					content: document.getText(),
+					updatedAt: load_time,
+				};
+				// debug('loaded matching document', abbrevDoc(doc));
+				return doc;
+			})
+		))
+		// convert to hashmap for rapid access
+		.reduce((acc: HashMapOf<any>, doc) => (acc[doc.id]=doc,acc),{});
 
-		function updateWebview() {
-			for (const doc of allDocs) {
-				doc.content = doc.metadata.getText();
-			}
-			webviewPanel.webview.postMessage({
+		/**
+		 * Update the webview content
+		 * @param doc optional doc to update just one document
+		 */
+		function updateWebview(doc?: any) {
+			const message = {
 				type: 'update',
-				text: JSON.stringify({ allDocs }),
-			});
+				partial: { docs: (doc ? { [doc.id]: { 
+					...doc,
+					updatedAt: new Date().toISOString(),
+				} } : docs)},
+			};
+			console.log('updateWebview', message);
+			webviewPanel.webview.postMessage(message);
 		}
 
 		// listen for new documents being created that match the glob
-		const watcher = vscode.workspace.createFileSystemWatcher('**/*.md');
+		const watcher = vscode.workspace.createFileSystemWatcher(filter_criterion);
 		watcher.onDidCreate(async (uri) => {
 			const document = await vscode.workspace.openTextDocument(uri);
-			allDocs.push({
-				name: uri.path,
-				metadata: document,
+		    const doc = {
+				path: uri.path,
+				id: await generateIdentifier(uri.path),
 				content: document.getText(),
-			});
-			console.log('New matching document added in the background');
-			updateWebview();
+			};
+			// add to hashmap
+			docs[doc.id] = doc;
+			console.log('new matching document added in the background', abbrevDoc(doc));
+			updateWebview(uri);
 		});
 
-		const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
-			console.log('Document changed in the background', e.document.uri.toString());
-			updateWebview();
+		// listen for changes (live in this instance or background saved) to watched documents
+		const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(async e => {
+			const uri = e.document.uri.toString();
+			const document = await vscode.workspace.openTextDocument(e.document.uri);
+			const name_without_protocol = decodeURI(uri.replace('file://', ''));
+			const doc_id = await generateIdentifier(name_without_protocol);
+			let doc = docs[doc_id];
+			if (doc === undefined) {
+				doc = docs[doc_id] = {
+					path: name_without_protocol,
+					id: doc_id,
+				};
+				console.log('onDidChangeTextDocument event for unknown document, adding', name_without_protocol, doc_id);
+			} else {
+				console.log('Document changed in the background', abbrevDoc(doc));
+			}
+			doc.content = document.getText();
+			updateWebview(doc);	
 		});
 
-		// Make sure we get rid of the listener when our editor is closed.
+		// make sure we get rid of the listener when our editor is closed.
 		webviewPanel.onDidDispose(() => {
 			changeDocumentSubscription.dispose();
 		});
 
-		// Receive message from the webview.
+		// receive message back from the webview.
 		webviewPanel.webview.onDidReceiveMessage(e => {
 			switch (e.type) {
 				case 'action_name':

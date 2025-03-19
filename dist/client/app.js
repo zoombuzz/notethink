@@ -4,7 +4,7 @@
 (function () {
 
 	// @ts-ignore; get a reference to the VS Code webview api, to post messages back to the extension
-	// 
+	//
 	const vscode = acquireVsCodeApi();
 
 	const notesContainer = /** @type {HTMLElement} */ (document.querySelector('.notes'));
@@ -13,60 +13,37 @@
 	document.body.appendChild(errorContainer);
 	errorContainer.className = 'error';
 	errorContainer.style.display = 'none';
+	const state = vscode.getState() || { docs: {} };
 
 	/**
 	 * Render the document in the webview.
 	 */
-	function updateContent(/** @type {string} */ text) {
-		let json;
-		try {
-			if (!text) {
-				text = '{}';
-			}
-			json = JSON.parse(text);
-		} catch {
-			notesContainer.style.display = 'none';
-			errorContainer.innerText = 'Error: Document is not valid json';
-			errorContainer.style.display = '';
-			return;
-		}
+	function updateContent(/** @type {any} */ docs) {
 		notesContainer.style.display = '';
 		errorContainer.style.display = 'none';
-
-		notesContainer.innerHTML = JSON.stringify(json);
-
-		// add a button
-		// const addButtonContainer = document.querySelector('.add-button');
-		// addButtonContainer?.querySelector('button')?.addEventListener('click', () => {
-		// 	vscode.postMessage({
-		// 		type: 'add'
-		// 	});
-		// });	
-		// notesContainer.appendChild(addButtonContainer);
+		notesContainer.innerHTML = '<pre>' + JSON.stringify(docs) + '</pre>';
 	}
 
-	// Handle messages sent from the extension to the webview
+	// handle messages sent from the extension to the webview
 	window.addEventListener('message', event => {
-		const message = event.data; // The json data that the extension sent
+		const message = event.data;
 		switch (message.type) {
 			case 'update':
-				const text = message.text;
-
-				// Update our webview's content
-				updateContent(text);
-
-				// Then persist state information.
-				// This state is returned in the call to `vscode.getState` below when a webview is reloaded.
-				vscode.setState({ text });
-
+				// merge partial update into state
+				Object.assign(state.docs, message.partial.docs);
+				// update our webview's content
+				updateContent(state.docs);
+				// then persist; state is returned in the call to `vscode.getState` below when a webview is reloaded.
+				vscode.setState(state);
+				console.log('received update', message.partial.docs, state);
 				return;
 		}
 	});
 
 	// Webviews are normally torn down when not visible and re-created when they become visible again.
 	// State lets us save information across these re-loads
-	const state = vscode.getState();
 	if (state) {
-		updateContent(state.text);
+		console.log('loaded state', state);
+		updateContent(state.docs);
 	}
 }());

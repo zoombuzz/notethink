@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "module": "commonjs",
+        "target": "es2020",
+        "lib": [
+			"WebWorker",
+			"es2020"
+		],
+        "rootDir": "src",
+        "sourceMap": true
+    },
+    "include": ["src"],
+    "exclude": ["node_modules", ".vscode-test-web"]
+}

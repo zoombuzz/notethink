@@ -1,6 +1,7 @@
 {
   "name": "notethink",
   "displayName": "NoteThink",
+  "publisher": "zoombuzz",
   "description": "Notes in markdown, visualised as anything",
   "version": "0.0.1",
   "engines": {
@@ -10,7 +11,7 @@
     "Other"
   ],
   "activationEvents": [],
-  "browser": "./dist/web/extension.js",
+  "browser": "./client/extension/dist/extension.js",
   "contributes": {
     "customEditors": [
       {
@@ -31,31 +32,28 @@
       }
     ]
   },
-  "scripts": {
-    "test": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/suite/index.js",
-    "pretest": "pnpm run compile-web",
-    "vscode:prepublish": "pnpm run package-web",
-    "compile-web": "webpack",
-    "watch-web": "webpack --watch",
-    "package-web": "webpack --mode production --devtool hidden-source-map",
-    "lint": "eslint src",
-    "run-in-browser": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ."
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.99.0",
-    "@types/mocha": "^10.0.10",
-    "@types/assert": "^1.5.11",
-    "eslint": "^9.25.1",
-    "@typescript-eslint/eslint-plugin": "^8.31.1",
-    "@typescript-eslint/parser": "^8.31.1",
-    "mocha": "^11.1.0",
-    "typescript": "^5.8.3",
-    "@vscode/test-web": "^0.0.69",
-    "ts-loader": "^9.5.2",
-    "webpack": "^5.99.7",
-    "webpack-cli": "^6.0.1",
-    "@types/webpack-env": "^1.18.8",
-    "assert": "^2.1.0",
-    "process": "^0.11.10"
-  }
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "webpack",
+		"watch": "webpack --watch",
+		"package": "webpack --mode production --devtool hidden-source-map",
+		"lint": "eslint",
+		"postinstall": "cd client/display && npm install && cd ../../ && cd client/extension && npm install && cd ../..",
+		"chrome": "npm run compile && vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ./docstech/testdata"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.13.0",
+		"@stylistic/eslint-plugin": "^2.9.0",
+		"@vscode/test-web": "^0.0.51",
+		"eslint": "^9.13.0",
+		"path-browserify": "^1.0.1",
+		"mocha": "^11.1.0",
+    "process":"0.11.10",
+		"ts-loader": "^9.5.1",
+		"typescript": "^5.8.2",
+		"typescript-eslint": "^8.26.0",
+		"webpack": "^5.90.1",
+		"webpack-cli": "^5.1.4",
+    "copy-webpack-plugin": "13.0.0"
+	}
 }

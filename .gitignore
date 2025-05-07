@@ -18,6 +18,8 @@ nohup.out
 
 # Node.js dev
 **/node_modules
+/.pnp
+.pnp.js
 .env
 .env*.local
 .env*.local-docker

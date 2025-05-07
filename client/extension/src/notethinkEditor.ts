@@ -134,15 +134,9 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 	 * get the static HTML used for the editor webviews
 	 */
 	private getHtmlForWebview(webview: vscode.Webview): string {
-		const clientDistDirectory = 'dist/client';
+		const clientDistDirectory = 'client/display/dist';
 		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this.context.extensionUri, clientDistDirectory, 'app.js'));
-		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this.context.extensionUri, clientDistDirectory, 'reset.css'));
-		const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this.context.extensionUri, clientDistDirectory, 'vscode.css'));
-		const styleMainUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this.context.extensionUri, clientDistDirectory, 'app.css'));
+			this.context.extensionUri, clientDistDirectory, 'index.js'));
 
 		// whitelist which scripts can be run
 		const nonce = getNonce();
@@ -152,25 +146,17 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
-
 				<!--
 				Use a content security policy to only allow loading images from https or from our extension directory,
 				and only allow scripts that have a specific nonce.
 				-->
 				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
-
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-				<link href="${styleResetUri}" rel="stylesheet" />
-				<link href="${styleVSCodeUri}" rel="stylesheet" />
-				<link href="${styleMainUri}" rel="stylesheet" />
-
-				<title>Cat Scratch</title>
+				<title>Replace this title</title>
 			</head>
 			<body>
-				<div class="notes">
-				</div>
-				
+				<div id="root" data-testId="root"></div>
+				<!-- Use a nonce to whitelist which scripts can be run -->
 				<script nonce="${nonce}" src="${scriptUri}"></script>
 			</body>
 			</html>`;

@@ -1,64 +1,7 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ([
-/* 0 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.activate = activate;
-exports.deactivate = deactivate;
-const vscode = __importStar(__webpack_require__(1));
-const notethinkEditor_1 = __webpack_require__(2);
-function activate(context) {
-    // register our editor for opening specific files in wider context
-    const provider = new notethinkEditor_1.NotethinkEditorProvider(context);
-    const providerRegistration = vscode.window.registerCustomEditorProvider(notethinkEditor_1.NotethinkEditorProvider.viewType, provider);
-    context.subscriptions.push(providerRegistration);
-    // register command defined in package.json
-    const disposable = vscode.commands.registerCommand('notethink.openview', async () => {
-        // open an editor webview (without a specific file) in a wider context
-        provider.myWebviewPanel(vscode.window.createWebviewPanel('notethink', 'NoteThink', vscode.ViewColumn.One, {}));
-    });
-    context.subscriptions.push(disposable);
-}
-function deactivate() { }
-
-
-/***/ }),
+/* 0 */,
 /* 1 */
 /***/ ((module) => {
 
@@ -66,45 +9,12 @@ module.exports = require("vscode");
 
 /***/ }),
 /* 2 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.NotethinkEditorProvider = void 0;
-const vscode = __importStar(__webpack_require__(1));
+const vscode = __webpack_require__(1);
 const crypto_1 = __webpack_require__(3);
 const utils_1 = __webpack_require__(4);
 class NotethinkEditorProvider {
@@ -217,11 +127,8 @@ class NotethinkEditorProvider {
      * get the static HTML used for the editor webviews
      */
     getHtmlForWebview(webview) {
-        const clientDistDirectory = 'dist/client';
-        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, clientDistDirectory, 'app.js'));
-        const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, clientDistDirectory, 'reset.css'));
-        const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, clientDistDirectory, 'vscode.css'));
-        const styleMainUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, clientDistDirectory, 'app.css'));
+        const clientDistDirectory = 'client/display/dist';
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, clientDistDirectory, 'index.js'));
         // whitelist which scripts can be run
         const nonce = (0, utils_1.getNonce)();
         return /* html */ `
@@ -229,25 +136,17 @@ class NotethinkEditorProvider {
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
-
 				<!--
 				Use a content security policy to only allow loading images from https or from our extension directory,
 				and only allow scripts that have a specific nonce.
 				-->
 				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
-
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-				<link href="${styleResetUri}" rel="stylesheet" />
-				<link href="${styleVSCodeUri}" rel="stylesheet" />
-				<link href="${styleMainUri}" rel="stylesheet" />
-
-				<title>Cat Scratch</title>
+				<title>Replace this title</title>
 			</head>
 			<body>
-				<div class="notes">
-				</div>
-				
+				<div id="root" data-testId="root"></div>
+				<!-- Use a nonce to whitelist which scripts can be run -->
 				<script nonce="${nonce}" src="${scriptUri}"></script>
 			</body>
 			</html>`;
@@ -313,22 +212,42 @@ function getNonce() {
 /******/ 		};
 /******/ 	
 /******/ 		// Execute the module function
-/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 		__webpack_modules__[moduleId](module, module.exports, __webpack_require__);
 /******/ 	
 /******/ 		// Return the exports of the module
 /******/ 		return module.exports;
 /******/ 	}
 /******/ 	
 /************************************************************************/
-/******/ 	
-/******/ 	// startup
-/******/ 	// Load entry module and return exports
-/******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__(0);
-/******/ 	var __webpack_export_target__ = exports;
-/******/ 	for(var __webpack_i__ in __webpack_exports__) __webpack_export_target__[__webpack_i__] = __webpack_exports__[__webpack_i__];
-/******/ 	if(__webpack_exports__.__esModule) Object.defineProperty(__webpack_export_target__, "__esModule", { value: true });
-/******/ 	
+var __webpack_exports__ = {};
+// This entry needs to be wrapped in an IIFE because it needs to be isolated against other modules in the chunk.
+(() => {
+var exports = __webpack_exports__;
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.activate = activate;
+exports.deactivate = deactivate;
+const vscode = __webpack_require__(1);
+const notethinkEditor_1 = __webpack_require__(2);
+function activate(context) {
+    // register our editor for opening specific files in wider context
+    const provider = new notethinkEditor_1.NotethinkEditorProvider(context);
+    const providerRegistration = vscode.window.registerCustomEditorProvider(notethinkEditor_1.NotethinkEditorProvider.viewType, provider);
+    context.subscriptions.push(providerRegistration);
+    // register command defined in package.json
+    const disposable = vscode.commands.registerCommand('notethink.openview', async () => {
+        // open an editor webview (without a specific file) in a wider context
+        provider.myWebviewPanel(vscode.window.createWebviewPanel('notethink', 'NoteThink', vscode.ViewColumn.One, {}));
+    });
+    context.subscriptions.push(disposable);
+}
+function deactivate() { }
+
+})();
+
+var __webpack_export_target__ = exports;
+for(var __webpack_i__ in __webpack_exports__) __webpack_export_target__[__webpack_i__] = __webpack_exports__[__webpack_i__];
+if(__webpack_exports__.__esModule) Object.defineProperty(__webpack_export_target__, "__esModule", { value: true });
 /******/ })()
 ;
 //# sourceMappingURL=extension.js.map

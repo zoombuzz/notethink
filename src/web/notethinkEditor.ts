@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
-import { getNonce } from './util';
 import { generateIdentifier } from './lib/crypto';
 import { HashMapOf } from './types/general';
-import { abbrevDoc } from './lib/utils';
+import { abbrevDoc, getNonce } from './lib/utils';
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 

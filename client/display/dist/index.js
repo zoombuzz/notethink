@@ -15,6 +15,8 @@ const client_1 = __importDefault(__webpack_require__(8));
 __webpack_require__(17);
 const App_1 = __importDefault(__webpack_require__(27));
 const reportWebVitals_1 = __importDefault(__webpack_require__(31));
+// This is a placeholder file only
+// The actual HTML is generated dynamically in the client/extension/src/extension.ts file
 const root = client_1.default.createRoot(document.getElementById('root'));
 root.render((0, jsx_runtime_1.jsx)(react_1.default.StrictMode, { children: (0, jsx_runtime_1.jsx)(App_1.default, {}) }));
 // If you want to start measuring performance in your app, pass a function
@@ -44789,10 +44791,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const jsx_runtime_1 = __webpack_require__(1);
-const VSCodeReceiver_1 = __importDefault(__webpack_require__(28));
+const ExtensionReceiver_1 = __importDefault(__webpack_require__(28));
 __webpack_require__(29);
 function App() {
-    return ((0, jsx_runtime_1.jsx)("div", { className: "App", children: (0, jsx_runtime_1.jsx)(VSCodeReceiver_1.default, {}) }));
+    return ((0, jsx_runtime_1.jsx)("div", { className: "App", children: (0, jsx_runtime_1.jsx)(ExtensionReceiver_1.default, {}) }));
 }
 exports["default"] = App;
 
@@ -44804,37 +44806,43 @@ exports["default"] = App;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports["default"] = VSCodeReceiver;
+exports["default"] = ExtensionReceiver;
 const jsx_runtime_1 = __webpack_require__(1);
 const react_1 = __webpack_require__(5);
-function VSCodeReceiver() {
-    // @ts-ignore acquireVsCodeApi is a global function provided by VSCode webview
-    const vscode = acquireVsCodeApi();
+const vscode = acquireVsCodeApi();
+function ExtensionReceiver() {
     const ref = (0, react_1.useRef)(null);
     // state originates from `vscode.getState` when a webview is reloaded, cached in setState
     const [state, setState] = (0, react_1.useState)(vscode.getState() || { docs: {} });
+    const onMessage = (0, react_1.useCallback)((event) => {
+        const message = event.data;
+        console.warn('ExtensionReceiver: onMessage', message);
+        switch (message.type) {
+            case 'update':
+                console.warn('received update', message.partial.docs);
+                console.warn('pre-update state', state);
+                setState(state => ({ ...state, docs: {
+                        ...state.docs,
+                        ...message.partial.docs,
+                    } }));
+                return;
+        }
+    }, []);
     // listen for messages sent from the extension to the webview
     (0, react_1.useEffect)(() => {
-        const onMessage = ((event) => {
-            const message = event.data;
-            switch (message.type) {
-                case 'update':
-                    console.error('pre-update state', state);
-                    // merge partial update into state first
-                    Object.assign(state.docs, message.partial.docs);
-                    // then persist in both react state and vscode state
-                    setState(state);
-                    vscode.setState(state);
-                    console.error('received update', message.partial.docs, state);
-                    return;
-            }
-        });
         window.addEventListener('message', onMessage);
+        console.warn('ExtensionReceiver: added event listener');
+        // after adding the event listener, we can send a message to the extension to get the current state
+        // this is a workaround for the fact that the webview is not fully loaded when the extension sends the initial message
+        vscode.postMessage({
+            type: 'requestState',
+        });
         return () => {
+            console.warn('ExtensionReceiver: removed event listener');
             window.removeEventListener('message', onMessage);
         };
-    }, [vscode, state]);
-    return (0, jsx_runtime_1.jsx)("div", { ref: ref, "data-testId": "VSCodeReceiver", children: JSON.stringify(state) });
+    }, []);
+    return (0, jsx_runtime_1.jsx)("div", { ref: ref, "data-testid": "ExtensionReceiver", children: JSON.stringify(state) });
 }
 
 

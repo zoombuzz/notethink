@@ -1,11 +1,11 @@
 import React from 'react';
-import VSCodeReceiver from '../VSCodeReceiver';
+import ExtensionReceiver from '../ExtensionReceiver';
 import './App.css';
 
 function App() {
   return (
     <div className="App">
-      <VSCodeReceiver />
+      <ExtensionReceiver />
     </div>
   );
 }

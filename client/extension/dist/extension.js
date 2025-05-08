@@ -107,8 +107,16 @@ class NotethinkEditorProvider {
         // receive message back from the webview.
         webviewPanel.webview.onDidReceiveMessage(e => {
             switch (e.type) {
-                case 'action_name':
+                case 'actionName':
                     // do stuff
+                    return;
+                case 'requestState':
+                    // send the current state of the documents to the webview
+                    console.warn('requestState', docs);
+                    webviewPanel.webview.postMessage({
+                        type: 'update',
+                        partial: { docs },
+                    });
                     return;
             }
         });
@@ -138,15 +146,18 @@ class NotethinkEditorProvider {
 				<meta charset="UTF-8">
 				<!--
 				Use a content security policy to only allow loading images from https or from our extension directory,
-				and only allow scripts that have a specific nonce.
+				and only allow scripts that have a specific nonce.  This policy is definitely being enforced,
+				in spite of "created a webview without a content security policy" [warning].
+				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 				-->
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+				<meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline'; img-src * data: blob: 'unsafe-inline'; frame-src *; style-src * 'unsafe-inline';">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
 				<title>Replace this title</title>
 			</head>
 			<body>
-				<div id="root" data-testId="root"></div>
-				<!-- Use a nonce to whitelist which scripts can be run -->
+				<div id="root"></div>
+				<!-- Use a nonce to whitelist which scripts can be run; create global exports var to avoid JS error (https://stackoverflow.com/a/43702240/1444233) -->
+				<script nonce="${nonce}">var exports = {};</script>
 				<script nonce="${nonce}" src="${scriptUri}"></script>
 			</body>
 			</html>`;

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { NotethinkEditorProvider } from './notethinkEditor';
+import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 
 export function activate(context: vscode.ExtensionContext) {
 

@@ -1,9 +1,9 @@
 {
   "name": "notethink",
   "displayName": "NoteThink",
-  "publisher": "zoombuzz",
+  "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.99.0"
   },

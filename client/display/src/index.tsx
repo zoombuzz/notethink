@@ -4,6 +4,9 @@ import './index.css';
 import App from './components/base/App';
 import reportWebVitals from './reportWebVitals';
 
+// This is a placeholder file only
+// The actual HTML is generated dynamically in the client/extension/src/extension.ts file
+
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );

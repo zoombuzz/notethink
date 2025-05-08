@@ -73,3 +73,13 @@
   + currently not activating
 
 
+### continue dev setup
+
++ [X] chase down log entries
+  + can see all logs issued from `client/extension`
+  + where are the logs from `client/display`
+    + Shift+Ctrl+P: Toggle Developer Tools
++ [X] mark index.tsx HTML as only being used for testing
+  + the app's real HTML is generated dynamicalled in `notethinkEditor.ts`
+
+

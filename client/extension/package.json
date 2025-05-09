@@ -12,14 +12,15 @@
 		"vscode": "^1.85.0"
 	},
 	"dependencies": {
-		"vscode-languageclient": "9.0.1"
+		"vscode-languageclient": "9.0.1",
+		"winston": "^3.17.0",
+		"winston-transport-vscode": "^0.1.0",
+		"mdast-util-from-markdown": "^2.0.2",
+		"mdast-util-frontmatter": "^2.0.1",
+		"mdast-util-gfm": "^3.1.0",
+		"micromark-extension-frontmatter": "^2.0.0",
+		"micromark-extension-gfm": "^3.0.0"	
 	},
 	"devDependencies": {
-		"@types/mocha": "^10.0.10",
-		"@types/webpack-env": "^1.18.8",
-		"@types/vscode": "^1.73.0",
-		"@vscode/test-web": "^0.0.51",
-		"assert": "2.1.0",
-		"mocha": "^11.1.0"
 	}
 }

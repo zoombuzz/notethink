@@ -14,7 +14,7 @@ const webpack = require('webpack');
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 
 /** @type WebpackConfig */
-const clientDisplayConfig = {
+const clientExtensionConfig = {
 	context: path.join(__dirname, 'client', 'extension'),
 	mode: process.env.NODE_ENV === 'production' ? 'production' : 'none',
 	target: 'webworker', // extensions run in a webworker context
@@ -38,7 +38,18 @@ const clientDisplayConfig = {
 			// Webpack 5 no longer polyfills Node.js core modules automatically.
 			// see https://webpack.js.org/configuration/resolve/#resolvefallback
 			// for the list of Node.js core module polyfills.
-			'assert': require.resolve('assert')
+			'assert': require.resolve('assert'),
+			'process/browser': require.resolve('process/browser'),
+			'os': require.resolve('os-browserify/browser'),
+			'buffer': require.resolve('buffer/'),
+			'path': require.resolve('path-browserify'),
+			'zlib': require.resolve('browserify-zlib'),
+			'fs': require.resolve('memfs'),
+			'http': require.resolve('stream-http'),
+			'https': require.resolve('https-browserify'),
+			'stream': require.resolve('stream-browserify'),
+			'url': require.resolve('url/'),
+			'util': require.resolve('util/'),
 		}
 	},
 	module: {
@@ -70,8 +81,9 @@ const clientDisplayConfig = {
 	},
 };
 
-const clientExtensionConfig = {
-	context: path.join(__dirname, 'client/display'),
+/** @type WebpackConfig */
+const clientWebviewConfig = {
+	context: path.join(__dirname, 'client', 'webview'),
 	mode: process.env.NODE_ENV === 'production' ? 'production' : 'none',
 	target: 'webworker', // extensions run in a webworker context
 	entry: {
@@ -79,13 +91,13 @@ const clientExtensionConfig = {
 	},
 	output: {
 		filename: '[name].js',
-		path: path.join(__dirname, 'client', 'display', 'dist'),
+		path: path.join(__dirname, 'client', 'webview', 'dist'),
 		libraryTarget: 'commonjs',
 		devtoolModuleFilenameTemplate: '../../[resource-path]'
 	},
 	resolve: {
 		mainFields: ['browser', 'module', 'main'], // look for `browser` entry point in imported node modules
-		extensions: ['.tsx', '.ts', '.js'], // support ts-files and js-files
+		extensions: ['.tsx', '.ts', '.js'],
 		alias: {
 			// provides alternate implementation for node module and source files
 		},
@@ -94,7 +106,6 @@ const clientExtensionConfig = {
 			// see https://webpack.js.org/configuration/resolve/#resolvefallback
 			// for the list of Node.js core module polyfills.
 			'assert': require.resolve('assert'),
-			'process/browser': require.resolve('process/browser'),
 		}
 	},
 	module: {
@@ -135,4 +146,4 @@ const clientExtensionConfig = {
 	},
 };
 
-module.exports = [ clientDisplayConfig, clientExtensionConfig ];
+module.exports = [ clientExtensionConfig, clientWebviewConfig ];

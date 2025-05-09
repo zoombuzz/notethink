@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { generateIdentifier } from '../lib/crypto';
 import { HashMapOf } from '../types/general';
 import { abbrevDoc, getNonce } from '../lib/utils';
+import { debug, writeToLog } from "../lib/errorops";
+import { parse } from '../lib/parseops';
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
@@ -27,16 +29,17 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
 		// load all matching documents in repo
-		const filter_criterion = '**/docstech/**/*.md';
+		const filter_criterion = '**/*.md';
 		const all_documents_meta_raw = await vscode.workspace.findFiles(filter_criterion);
 		const load_time = new Date().toISOString();
 		const docs: HashMapOf<any> = (await Promise.all(all_documents_meta_raw
 			.map(async (uri) => {
 				const document = await vscode.workspace.openTextDocument(uri);
+				const mdast = parse(document.getText());
 				const doc = {
 					path: uri.path,
 					id: await generateIdentifier(uri.path),
-					content: document.getText(),
+					content: mdast,
 					updatedAt: load_time,
 				};
 				// debug('loaded matching document', abbrevDoc(doc));
@@ -58,7 +61,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					updatedAt: new Date().toISOString(),
 				} } : docs)},
 			};
-			console.log('updateWebview', message);
+			debug('updateWebview', message);
 			webviewPanel.webview.postMessage(message);
 		}
 
@@ -73,7 +76,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			};
 			// add to hashmap
 			docs[doc.id] = doc;
-			console.log('new matching document added in the background', abbrevDoc(doc));
+			writeToLog('new matching document added in the background', abbrevDoc(doc));
 			updateWebview(uri);
 		});
 
@@ -89,9 +92,9 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					path: name_without_protocol,
 					id: doc_id,
 				};
-				console.log('onDidChangeTextDocument event for unknown document, adding', name_without_protocol, doc_id);
+				writeToLog('onDidChangeTextDocument event for unknown document, adding', name_without_protocol, doc_id);
 			} else {
-				console.log('Document changed in the background', abbrevDoc(doc));
+				writeToLog('Document changed in the background', abbrevDoc(doc));
 			}
 			doc.content = document.getText();
 			updateWebview(doc);	
@@ -104,13 +107,13 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 		// receive message back from the webview.
 		webviewPanel.webview.onDidReceiveMessage(e => {
+			debug('onDidReceiveMessage', e.type, docs);
 			switch (e.type) {
 				case 'actionName':
 					// do stuff
 					return;
-				case 'requestState':
+				case 'requestInitialState':
 					// send the current state of the documents to the webview
-					console.warn('requestState', docs);
 					webviewPanel.webview.postMessage({
 						type: 'update',
 						partial: { docs },
@@ -140,7 +143,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 	 * get the static HTML used for the editor webviews
 	 */
 	private getHtmlForWebview(webview: vscode.Webview): string {
-		const clientDistDirectory = 'client/display/dist';
+		const clientDistDirectory = 'client/webview/dist';
 		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(
 			this.context.extensionUri, clientDistDirectory, 'index.js'));
 

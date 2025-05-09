@@ -37,6 +37,14 @@ Calling out known issues can help limit users opening duplicate issues against y
 npm install
 ```
 
+### Browser-debugging
+NPM [debug](https://www.npmjs.com/package/debug) library used throughout the code.  To enable browser debugging messages, run in console:
+```
+allow pasting
+localStorage.debug = 'notethink:*'
+```
+
+
 ## Release Notes
 
 Users appreciate release notes as you update your extension.

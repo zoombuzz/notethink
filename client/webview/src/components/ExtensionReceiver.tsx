@@ -34,7 +34,7 @@ export default function ExtensionReceiver() {
         // after adding the event listener, we can send a message to the extension to get the current state
         // this is a workaround for the fact that the webview is not fully loaded when the extension sends the initial message
         vscode.postMessage({
-			type: 'requestState',
+			type: 'requestInitialState',
 		});
         return () => {
             console.warn('ExtensionReceiver: removed event listener');

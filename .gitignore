@@ -1,6 +1,6 @@
 # Editor config (root only)
 .idea
-.vscode
+.vscode-test-web
 
 # Github pages/MM
 docs/_site

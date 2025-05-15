@@ -157,3 +157,11 @@
 > working debugger
 
 
+### get tests running again
+
++ no results currently
+  + non-specific `fetch` error
++ just needed a path sorting out
+> runs nicely
+
+

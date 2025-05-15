@@ -1,26 +1,16 @@
 # Todo [](?type=board&ng_level=1&ng_child_type=story&ng_child_status=backlog&ng_view=kanban)
 
 
-### dev environment
+### get tests running again
 
-+ make debugging breakpoints bind
-  + works fine in `custom-editor-sample`
-  + works fine in `modified-lsp-web-extension-sample`
-    + which is using the same webpack watch
-    + `.vscode/launch.json` defines correct configurations
-  + bring across components
-    + from `notethink` into `modified-lsp-web-extension-sample`
-      + latter isn't versioned
-      + better doing it the other way around
-    + try to understand at what point does it break
-  + works in `notethink` repo using:
-    + `client4`
-    + `backup-package.json`
-    + `backup-webpack.config.json`
-    + now try to make it work with client
-      + same package.json
-      + working with correct `package.json`
-    + now try to make it work with correct `webpack.config.js`
++ no results currently
+  + non-specific `fetch` error
+
+
+### open named folder on startup
+
++ currently opening the last folder opened
+  + like to standardise that in the code
 
 
 ### turn MDAST back into React

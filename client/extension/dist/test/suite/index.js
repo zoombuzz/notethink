@@ -5526,7 +5526,7 @@ module.exports = function shimNumberIsNaN() {
 
 /***/ }),
 
-/***/ 446:
+/***/ 449:
 /***/ (function(module, __unused_webpack_exports, __webpack_require__) {
 
 // mocha@11.2.2 in javascript ES2018
@@ -25132,7 +25132,7 @@ module.exports = function shimNumberIsNaN() {
       if (!reporter) {
         let foundReporter;
         try {
-          foundReporter = /*require.resolve*/(__webpack_require__(447).resolve(reporterName));
+          foundReporter = /*require.resolve*/(__webpack_require__(450).resolve(reporterName));
           reporter = commonjsRequire(foundReporter);
         } catch (err) {
           if (foundReporter) {
@@ -26362,7 +26362,7 @@ module.exports = function shimNumberIsNaN() {
 
 /***/ }),
 
-/***/ 447:
+/***/ 450:
 /***/ ((module) => {
 
 function webpackEmptyContext(req) {
@@ -26372,16 +26372,16 @@ function webpackEmptyContext(req) {
 }
 webpackEmptyContext.keys = () => ([]);
 webpackEmptyContext.resolve = webpackEmptyContext;
-webpackEmptyContext.id = 447;
+webpackEmptyContext.id = 450;
 module.exports = webpackEmptyContext;
 
 /***/ }),
 
-/***/ 448:
+/***/ 451:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 var map = {
-	"./extension.test": 449
+	"./extension.test": 452
 };
 
 
@@ -26402,11 +26402,11 @@ webpackContext.keys = function webpackContextKeys() {
 };
 webpackContext.resolve = webpackContextResolve;
 module.exports = webpackContext;
-webpackContext.id = 448;
+webpackContext.id = 451;
 
 /***/ }),
 
-/***/ 449:
+/***/ 452:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 "use strict";
@@ -26482,7 +26482,7 @@ var exports = __webpack_exports__;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.run = run;
 // Imports mocha for the browser, defining the `mocha` global.
-__webpack_require__(446);
+__webpack_require__(449);
 function run() {
     return new Promise((c, e) => {
         mocha.setup({
@@ -26491,7 +26491,7 @@ function run() {
         });
         // Bundles all files in the current directory matching `*.test`
         const importAll = (r) => r.keys().forEach(r);
-        importAll(__webpack_require__(448));
+        importAll(__webpack_require__(451));
         try {
             // Run the mocha test
             mocha.run(failures => {

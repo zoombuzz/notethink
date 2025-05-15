@@ -40,12 +40,12 @@ const default_format = winston.format.combine(
 type TransportStream = /*unresolved*/ any
 const transports = [
     // write out logs to stdout (console)
-    new winston.transports.Console({
-        level: 'info',
-        format: default_format,
-    }),
+    // new winston.transports.Console({
+    //     level: 'info',
+    //     format: default_format,
+    // }),
     // write out to the VSCode output channel
-    // new LogOutputChannelTransport({ outputChannel }) as TransportStream,
+    new LogOutputChannelTransport({ outputChannel }) as TransportStream,
 ];
 
 const logger = winston.createLogger({

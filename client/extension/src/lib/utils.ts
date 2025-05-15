@@ -1,6 +1,7 @@
 
 export function abbrevDoc(doc: any) {
     return {
+		path: doc.path,
         id: doc.id,
     };
 }

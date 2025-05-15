@@ -19,7 +19,7 @@ const vscode = __webpack_require__(1);
 const crypto_1 = __webpack_require__(3);
 const utils_1 = __webpack_require__(4);
 const errorops_1 = __webpack_require__(5);
-const parseops_1 = __webpack_require__(313);
+const parseops_1 = __webpack_require__(316);
 class NotethinkEditorProvider {
     static register(context) {
         const provider = new NotethinkEditorProvider(context);
@@ -49,12 +49,14 @@ class NotethinkEditorProvider {
                 id: await (0, crypto_1.generateIdentifier)(uri.path),
                 content: mdast,
                 updatedAt: load_time,
+                createdBy: "openTextDocument",
             };
-            // debug('loaded matching document', abbrevDoc(doc));
+            (0, errorops_1.debug)('loaded matching document', (0, utils_1.abbrevDoc)(doc));
             return doc;
         })))
             // convert to hashmap for rapid access
             .reduce((acc, doc) => (acc[doc.id] = doc, acc), {});
+        (0, errorops_1.debug)('initial load of docs', docs);
         /**
          * Update the webview content
          * @param doc optional doc to update just one document
@@ -64,7 +66,7 @@ class NotethinkEditorProvider {
                 type: 'update',
                 partial: { docs: (doc ? { [doc.id]: {
                             ...doc,
-                            updatedAt: new Date().toISOString(),
+                            updateSentAt: new Date().toISOString(),
                         } } : docs) },
             };
             (0, errorops_1.debug)('updateWebview', message);
@@ -76,13 +78,14 @@ class NotethinkEditorProvider {
             const document = await vscode.workspace.openTextDocument(uri);
             const doc = {
                 path: uri.path,
+                createdBy: "onDidCreate",
                 id: await (0, crypto_1.generateIdentifier)(uri.path),
                 content: document.getText(),
             };
             // add to hashmap
             docs[doc.id] = doc;
             (0, errorops_1.writeToLog)('new matching document added in the background', (0, utils_1.abbrevDoc)(doc));
-            updateWebview(uri);
+            updateWebview(doc);
         });
         // listen for changes (live in this instance or background saved) to watched documents
         const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(async (e) => {
@@ -195,6 +198,7 @@ exports.abbrevDoc = abbrevDoc;
 exports.getNonce = getNonce;
 function abbrevDoc(doc) {
     return {
+        path: doc.path,
         id: doc.id,
     };
 }
@@ -226,6 +230,7 @@ exports.writeToErrorLog = writeToErrorLog;
 exports.debug = debug;
 const winston = __webpack_require__(6);
 const vscode = __webpack_require__(1);
+const winston_transport_vscode_1 = __webpack_require__(313);
 const util = __webpack_require__(13);
 const logSourceMaxLen = 24;
 const outputChannel = vscode.window.createOutputChannel('NoteThink', {
@@ -251,12 +256,12 @@ const combineTransform = (info) => {
 const default_format = winston.format.combine(winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }), winston.format.errors({ stack: true }), winston.format(combineTransform)(), winston.format.printf(({ level, message, timestamp, label }) => `${level.toUpperCase().slice(-5).padEnd(5, ' ')} ${message}`), winston.format.colorize());
 const transports = [
     // write out logs to stdout (console)
-    new winston.transports.Console({
-        level: 'info',
-        format: default_format,
-    }),
+    // new winston.transports.Console({
+    //     level: 'info',
+    //     format: default_format,
+    // }),
     // write out to the VSCode output channel
-    // new LogOutputChannelTransport({ outputChannel }) as TransportStream,
+    new winston_transport_vscode_1.LogOutputChannelTransport({ outputChannel }),
 ];
 const logger = winston.createLogger({
     level: 'trace',
@@ -46371,12 +46376,149 @@ module.exports = /*#__PURE__*/function () {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.LogOutputChannelTransport = exports.OutputChannelTransport = void 0;
+var output_channel_1 = __webpack_require__(314);
+Object.defineProperty(exports, "OutputChannelTransport", ({ enumerable: true, get: function () { return output_channel_1.OutputChannelTransport; } }));
+var log_output_channel_1 = __webpack_require__(315);
+Object.defineProperty(exports, "LogOutputChannelTransport", ({ enumerable: true, get: function () { return log_output_channel_1.LogOutputChannelTransport; } }));
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+/* 314 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OutputChannelTransport = void 0;
+const triple_beam_1 = __webpack_require__(79);
+const winston_transport_1 = __importDefault(__webpack_require__(107));
+class OutputChannelTransport extends winston_transport_1.default {
+    outputChannel;
+    constructor(opts) {
+        super(opts);
+        this.outputChannel = opts.outputChannel;
+    }
+    log(info, next) {
+        setImmediate(() => {
+            this.emit('logged', info);
+        });
+        this.outputChannel.appendLine(info[triple_beam_1.MESSAGE]);
+        next();
+    }
+}
+exports.OutputChannelTransport = OutputChannelTransport;
+//# sourceMappingURL=output-channel.js.map
+
+/***/ }),
+/* 315 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.LogOutputChannelTransport = void 0;
+const logform_1 = __webpack_require__(7);
+const triple_beam_1 = __webpack_require__(79);
+const winston_transport_1 = __importDefault(__webpack_require__(107));
+class LogOutputChannelTransport extends winston_transport_1.default {
+    outputChannel;
+    constructor(opts) {
+        super(opts);
+        this.outputChannel = opts.outputChannel;
+    }
+    log(info, next) {
+        setImmediate(() => {
+            this.emit('logged', info);
+        });
+        switch (info[triple_beam_1.LEVEL]) {
+            case 'error':
+                this.outputChannel.error(info[triple_beam_1.MESSAGE]);
+                break;
+            case 'warning':
+            case 'warn':
+                this.outputChannel.warn(info[triple_beam_1.MESSAGE]);
+                break;
+            case 'info':
+                this.outputChannel.info(info[triple_beam_1.MESSAGE]);
+                break;
+            case 'debug':
+                this.outputChannel.debug(info[triple_beam_1.MESSAGE]);
+                break;
+            case 'trace':
+                this.outputChannel.trace(info[triple_beam_1.MESSAGE]);
+                break;
+            default:
+                this.outputChannel.appendLine(info[triple_beam_1.MESSAGE]);
+                break;
+        }
+        next();
+    }
+}
+exports.LogOutputChannelTransport = LogOutputChannelTransport;
+// Pass empty string for key if this is a root-level object
+function stringify(key, val) {
+    if (typeof val === 'object' && !Array.isArray(val) && val !== null) {
+        // Recursively stringify objects
+        const prefix = key === '' ? '' : `${key}.`;
+        return Object.entries(val)
+            .map(([k, v]) => `${stringify(`${prefix}${k}`, v)}`)
+            .join(' ');
+    }
+    return `${key}=${JSON.stringify(val)}`;
+}
+const formatFunc = (0, logform_1.format)((info) => {
+    const { level, message, ...rest } = info;
+    let msg = info[triple_beam_1.MESSAGE] ?? message;
+    if (Object.keys(rest).length > 0) {
+        msg += ` ${stringify('', rest)}`;
+    }
+    return {
+        ...info,
+        [triple_beam_1.LEVEL]: info[triple_beam_1.LEVEL] ?? level,
+        [triple_beam_1.MESSAGE]: msg,
+    };
+});
+(function (LogOutputChannelTransport) {
+    LogOutputChannelTransport.config = {
+        levels: {
+            error: 0,
+            warn: 1,
+            info: 2,
+            debug: 3,
+            trace: 4,
+        },
+        colors: {
+            error: 'red',
+            warn: 'yellow',
+            info: 'green',
+            debug: 'blue',
+            trace: 'grey',
+        },
+    };
+    LogOutputChannelTransport.format = formatFunc;
+})(LogOutputChannelTransport || (exports.LogOutputChannelTransport = LogOutputChannelTransport = {}));
+//# sourceMappingURL=log-output-channel.js.map
+
+/***/ }),
+/* 316 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.parse = parse;
-const mdast_util_from_markdown_1 = __webpack_require__(314);
-const mdast_util_gfm_1 = __webpack_require__(367);
-const mdast_util_frontmatter_1 = __webpack_require__(421);
-const micromark_extension_gfm_1 = __webpack_require__(426);
-const micromark_extension_frontmatter_1 = __webpack_require__(442);
+const mdast_util_from_markdown_1 = __webpack_require__(317);
+const mdast_util_gfm_1 = __webpack_require__(370);
+const mdast_util_frontmatter_1 = __webpack_require__(424);
+const micromark_extension_gfm_1 = __webpack_require__(429);
+const micromark_extension_frontmatter_1 = __webpack_require__(445);
 function parse(text) {
     const mdast = (0, mdast_util_from_markdown_1.fromMarkdown)(text, {
         extensions: [
@@ -46393,7 +46535,7 @@ function parse(text) {
 
 
 /***/ }),
-/* 314 */
+/* 317 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -46401,12 +46543,12 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   fromMarkdown: () => (/* reexport safe */ _lib_index_js__WEBPACK_IMPORTED_MODULE_0__.fromMarkdown)
 /* harmony export */ });
-/* harmony import */ var _lib_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(315);
+/* harmony import */ var _lib_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(318);
 // Note: types exported from `index.d.ts`.
 
 
 /***/ }),
-/* 315 */
+/* 318 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -46414,15 +46556,15 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   fromMarkdown: () => (/* binding */ fromMarkdown)
 /* harmony export */ });
-/* harmony import */ var mdast_util_to_string__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(366);
-/* harmony import */ var micromark__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(321);
-/* harmony import */ var micromark__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(325);
-/* harmony import */ var micromark__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(364);
-/* harmony import */ var micromark_util_decode_numeric_character_reference__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(316);
-/* harmony import */ var micromark_util_decode_string__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(317);
-/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(320);
-/* harmony import */ var decode_named_character_reference__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(318);
-/* harmony import */ var unist_util_stringify_position__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(365);
+/* harmony import */ var mdast_util_to_string__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(369);
+/* harmony import */ var micromark__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(324);
+/* harmony import */ var micromark__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
+/* harmony import */ var micromark__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(367);
+/* harmony import */ var micromark_util_decode_numeric_character_reference__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(319);
+/* harmony import */ var micromark_util_decode_string__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(320);
+/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(323);
+/* harmony import */ var decode_named_character_reference__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(321);
+/* harmony import */ var unist_util_stringify_position__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(368);
 /**
  * @import {
  *   Break,
@@ -47602,7 +47744,7 @@ function defaultOnError(left, right) {
 }
 
 /***/ }),
-/* 316 */
+/* 319 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -47644,7 +47786,7 @@ function decodeNumericCharacterReference(value, base) {
 }
 
 /***/ }),
-/* 317 */
+/* 320 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -47652,8 +47794,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   decodeString: () => (/* binding */ decodeString)
 /* harmony export */ });
-/* harmony import */ var decode_named_character_reference__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(318);
-/* harmony import */ var micromark_util_decode_numeric_character_reference__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(316);
+/* harmony import */ var decode_named_character_reference__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(321);
+/* harmony import */ var micromark_util_decode_numeric_character_reference__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(319);
 
 
 const characterEscapeOrReference = /\\([!-/:-@[-`{-~])|&(#(?:\d{1,7}|x[\da-f]{1,6})|[\da-z]{1,31});/gi;
@@ -47701,7 +47843,7 @@ function decode($0, $1, $2) {
 }
 
 /***/ }),
-/* 318 */
+/* 321 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -47709,7 +47851,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   decodeNamedCharacterReference: () => (/* binding */ decodeNamedCharacterReference)
 /* harmony export */ });
-/* harmony import */ var character_entities__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(319);
+/* harmony import */ var character_entities__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(322);
 
 
 // To do: next major: use `Object.hasOwn`.
@@ -47732,7 +47874,7 @@ function decodeNamedCharacterReference(value) {
 
 
 /***/ }),
-/* 319 */
+/* 322 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -49875,7 +50017,7 @@ const characterEntities = {
 
 
 /***/ }),
-/* 320 */
+/* 323 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -49918,7 +50060,7 @@ function normalizeIdentifier(value) {
 }
 
 /***/ }),
-/* 321 */
+/* 324 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -49926,7 +50068,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   postprocess: () => (/* binding */ postprocess)
 /* harmony export */ });
-/* harmony import */ var micromark_util_subtokenize__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(322);
+/* harmony import */ var micromark_util_subtokenize__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(325);
 /**
  * @import {Event} from 'micromark-util-types'
  */
@@ -49947,7 +50089,7 @@ function postprocess(events) {
 }
 
 /***/ }),
-/* 322 */
+/* 325 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -49956,8 +50098,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   SpliceBuffer: () => (/* reexport safe */ _lib_splice_buffer_js__WEBPACK_IMPORTED_MODULE_0__.SpliceBuffer),
 /* harmony export */   subtokenize: () => (/* binding */ subtokenize)
 /* harmony export */ });
-/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(323);
-/* harmony import */ var _lib_splice_buffer_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(324);
+/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(326);
+/* harmony import */ var _lib_splice_buffer_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(327);
 /**
  * @import {Chunk, Event, Token} from 'micromark-util-types'
  */
@@ -50188,7 +50330,7 @@ function subcontent(events, eventIndex) {
 }
 
 /***/ }),
-/* 323 */
+/* 326 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -50280,7 +50422,7 @@ function push(list, items) {
 }
 
 /***/ }),
-/* 324 */
+/* 327 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -50541,7 +50683,7 @@ function chunkedPush(list, right) {
 }
 
 /***/ }),
-/* 325 */
+/* 328 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -50549,13 +50691,13 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   parse: () => (/* binding */ parse)
 /* harmony export */ });
-/* harmony import */ var micromark_util_combine_extensions__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(326);
-/* harmony import */ var _initialize_content_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(327);
-/* harmony import */ var _initialize_document_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(330);
-/* harmony import */ var _initialize_flow_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(331);
-/* harmony import */ var _initialize_text_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(334);
-/* harmony import */ var _constructs_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(335);
-/* harmony import */ var _create_tokenizer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(363);
+/* harmony import */ var micromark_util_combine_extensions__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var _initialize_content_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(330);
+/* harmony import */ var _initialize_document_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(333);
+/* harmony import */ var _initialize_flow_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(334);
+/* harmony import */ var _initialize_text_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(337);
+/* harmony import */ var _constructs_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(338);
+/* harmony import */ var _create_tokenizer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(366);
 /**
  * @import {
  *   Create,
@@ -50614,7 +50756,7 @@ function parse(options) {
 }
 
 /***/ }),
-/* 326 */
+/* 329 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -50623,7 +50765,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   combineExtensions: () => (/* binding */ combineExtensions),
 /* harmony export */   combineHtmlExtensions: () => (/* binding */ combineHtmlExtensions)
 /* harmony export */ });
-/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(323);
+/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(326);
 /**
  * @import {
  *   Extension,
@@ -50770,7 +50912,7 @@ function htmlExtension(all, extension) {
 
 
 /***/ }),
-/* 327 */
+/* 330 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -50778,8 +50920,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   content: () => (/* binding */ content)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(332);
 /**
  * @import {
  *   InitialConstruct,
@@ -50861,7 +51003,7 @@ function initializeContent(effects) {
 }
 
 /***/ }),
-/* 328 */
+/* 331 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -50869,7 +51011,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   factorySpace: () => (/* binding */ factorySpace)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {Effects, State, TokenType} from 'micromark-util-types'
  */
@@ -50936,7 +51078,7 @@ function factorySpace(effects, ok, type, max) {
 }
 
 /***/ }),
-/* 329 */
+/* 332 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -51203,7 +51345,7 @@ function regexCheck(regex) {
 }
 
 /***/ }),
-/* 330 */
+/* 333 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -51211,9 +51353,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   document: () => (/* binding */ document)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(329);
-/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(323);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(326);
 /**
  * @import {
  *   Construct,
@@ -51578,7 +51720,7 @@ function tokenizeContainer(effects, ok, nok) {
 }
 
 /***/ }),
-/* 331 */
+/* 334 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -51586,9 +51728,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   flow: () => (/* binding */ flow)
 /* harmony export */ });
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(333);
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(335);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(336);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
 /**
  * @import {
  *   InitialConstruct,
@@ -51649,7 +51791,7 @@ function initializeFlow(effects) {
 }
 
 /***/ }),
-/* 332 */
+/* 335 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -51657,8 +51799,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   blankLine: () => (/* binding */ blankLine)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Construct,
@@ -51722,7 +51864,7 @@ function tokenizeBlankLine(effects, ok, nok) {
 }
 
 /***/ }),
-/* 333 */
+/* 336 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -51730,9 +51872,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   content: () => (/* binding */ content)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(329);
-/* harmony import */ var micromark_util_subtokenize__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(322);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_subtokenize__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(325);
 /**
  * @import {
  *   Construct,
@@ -51898,7 +52040,7 @@ function tokenizeContinuation(effects, ok, nok) {
 }
 
 /***/ }),
-/* 334 */
+/* 337 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -52122,7 +52264,7 @@ function resolveAllLineSuffixes(events, context) {
 }
 
 /***/ }),
-/* 335 */
+/* 338 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -52138,27 +52280,27 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   string: () => (/* binding */ string),
 /* harmony export */   text: () => (/* binding */ text)
 /* harmony export */ });
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(336);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(338);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(339);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(344);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(345);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(337);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(346);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(347);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(349);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(350);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(351);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(352);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(353);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(356);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(358);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(359);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_16__ = __webpack_require__(360);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_17__ = __webpack_require__(361);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_18__ = __webpack_require__(354);
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_19__ = __webpack_require__(362);
-/* harmony import */ var _initialize_text_js__WEBPACK_IMPORTED_MODULE_20__ = __webpack_require__(334);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(339);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(341);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(342);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(347);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(348);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(340);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(349);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(350);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(352);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(353);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(354);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(355);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(356);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(359);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(361);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(362);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_16__ = __webpack_require__(363);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_17__ = __webpack_require__(364);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_18__ = __webpack_require__(357);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_19__ = __webpack_require__(365);
+/* harmony import */ var _initialize_text_js__WEBPACK_IMPORTED_MODULE_20__ = __webpack_require__(337);
 /**
  * @import {Extension} from 'micromark-util-types'
  */
@@ -52246,7 +52388,7 @@ const disable = {
 };
 
 /***/ }),
-/* 336 */
+/* 339 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -52254,10 +52396,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   list: () => (/* binding */ list)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
-/* harmony import */ var _blank_line_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(332);
-/* harmony import */ var _thematic_break_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(337);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
+/* harmony import */ var _blank_line_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(335);
+/* harmony import */ var _thematic_break_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(340);
 /**
  * @import {
  *   Code,
@@ -52473,7 +52615,7 @@ function tokenizeListItemPrefixWhitespace(effects, ok, nok) {
 }
 
 /***/ }),
-/* 337 */
+/* 340 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -52481,8 +52623,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   thematicBreak: () => (/* binding */ thematicBreak)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Code,
@@ -52587,7 +52729,7 @@ function tokenizeThematicBreak(effects, ok, nok) {
 }
 
 /***/ }),
-/* 338 */
+/* 341 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -52595,8 +52737,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   blockQuote: () => (/* binding */ blockQuote)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Construct,
@@ -52742,7 +52884,7 @@ function exit(effects) {
 }
 
 /***/ }),
-/* 339 */
+/* 342 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -52750,13 +52892,13 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   definition: () => (/* binding */ definition)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_destination__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(340);
-/* harmony import */ var micromark_factory_label__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(341);
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(328);
-/* harmony import */ var micromark_factory_title__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(342);
-/* harmony import */ var micromark_factory_whitespace__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(343);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(329);
-/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(320);
+/* harmony import */ var micromark_factory_destination__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(343);
+/* harmony import */ var micromark_factory_label__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(344);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(331);
+/* harmony import */ var micromark_factory_title__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(345);
+/* harmony import */ var micromark_factory_whitespace__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(346);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(323);
 /**
  * @import {
  *   Construct,
@@ -53013,7 +53155,7 @@ function tokenizeTitleBefore(effects, ok, nok) {
 }
 
 /***/ }),
-/* 340 */
+/* 343 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -53021,7 +53163,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   factoryDestination: () => (/* binding */ factoryDestination)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {Effects, State, TokenType} from 'micromark-util-types'
  */
@@ -53230,7 +53372,7 @@ function factoryDestination(effects, ok, nok, type, literalType, literalMarkerTy
 }
 
 /***/ }),
-/* 341 */
+/* 344 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -53238,7 +53380,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   factoryLabel: () => (/* binding */ factoryLabel)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Effects,
@@ -53389,7 +53531,7 @@ function factoryLabel(effects, ok, nok, type, markerType, stringType) {
 }
 
 /***/ }),
-/* 342 */
+/* 345 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -53397,8 +53539,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   factoryTitle: () => (/* binding */ factoryTitle)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Code,
@@ -53559,7 +53701,7 @@ function factoryTitle(effects, ok, nok, type, markerType, stringType) {
 }
 
 /***/ }),
-/* 343 */
+/* 346 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -53567,8 +53709,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   factoryWhitespace: () => (/* binding */ factoryWhitespace)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {Effects, State} from 'micromark-util-types'
  */
@@ -53615,7 +53757,7 @@ function factoryWhitespace(effects, ok) {
 }
 
 /***/ }),
-/* 344 */
+/* 347 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -53623,8 +53765,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   codeIndented: () => (/* binding */ codeIndented)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(332);
 /**
  * @import {
  *   Construct,
@@ -53804,7 +53946,7 @@ function tokenizeFurtherStart(effects, ok, nok) {
 }
 
 /***/ }),
-/* 345 */
+/* 348 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -53812,9 +53954,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   headingAtx: () => (/* binding */ headingAtx)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(329);
-/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(323);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(326);
 /**
  * @import {
  *   Construct,
@@ -54012,7 +54154,7 @@ function tokenizeHeadingAtx(effects, ok, nok) {
 }
 
 /***/ }),
-/* 346 */
+/* 349 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -54020,8 +54162,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   setextUnderline: () => (/* binding */ setextUnderline)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Code,
@@ -54209,7 +54351,7 @@ function tokenizeSetextUnderline(effects, ok, nok) {
 }
 
 /***/ }),
-/* 347 */
+/* 350 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -54217,9 +54359,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   htmlFlow: () => (/* binding */ htmlFlow)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
-/* harmony import */ var micromark_util_html_tag_name__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(348);
-/* harmony import */ var _blank_line_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_html_tag_name__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(351);
+/* harmony import */ var _blank_line_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(335);
 /**
  * @import {
  *   Code,
@@ -55098,7 +55240,7 @@ function tokenizeBlankLineBefore(effects, ok, nok) {
 }
 
 /***/ }),
-/* 348 */
+/* 351 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -55203,7 +55345,7 @@ const htmlRawNames = ['pre', 'script', 'style', 'textarea']
 
 
 /***/ }),
-/* 349 */
+/* 352 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -55211,8 +55353,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   codeFenced: () => (/* binding */ codeFenced)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Code,
@@ -55675,7 +55817,7 @@ function tokenizeNonLazyContinuation(effects, ok, nok) {
 }
 
 /***/ }),
-/* 350 */
+/* 353 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -55683,8 +55825,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   characterReference: () => (/* binding */ characterReference)
 /* harmony export */ });
-/* harmony import */ var decode_named_character_reference__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(318);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var decode_named_character_reference__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(321);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Code,
@@ -55836,7 +55978,7 @@ function tokenizeCharacterReference(effects, ok, nok) {
 }
 
 /***/ }),
-/* 351 */
+/* 354 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -55844,7 +55986,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   characterEscape: () => (/* binding */ characterEscape)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Construct,
@@ -55911,7 +56053,7 @@ function tokenizeCharacterEscape(effects, ok, nok) {
 }
 
 /***/ }),
-/* 352 */
+/* 355 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -55919,7 +56061,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   lineEnding: () => (/* binding */ lineEnding)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(328);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(331);
 /**
  * @import {
  *   Construct,
@@ -55955,7 +56097,7 @@ function tokenizeLineEnding(effects, ok) {
 }
 
 /***/ }),
-/* 353 */
+/* 356 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -55963,7 +56105,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   labelStartImage: () => (/* binding */ labelStartImage)
 /* harmony export */ });
-/* harmony import */ var _label_end_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(354);
+/* harmony import */ var _label_end_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(357);
 /**
  * @import {
  *   Construct,
@@ -56068,7 +56210,7 @@ function tokenizeLabelStartImage(effects, ok, nok) {
 }
 
 /***/ }),
-/* 354 */
+/* 357 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -56076,14 +56218,14 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   labelEnd: () => (/* binding */ labelEnd)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_destination__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(340);
-/* harmony import */ var micromark_factory_label__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(341);
-/* harmony import */ var micromark_factory_title__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(342);
-/* harmony import */ var micromark_factory_whitespace__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(343);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(329);
-/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(323);
-/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(320);
-/* harmony import */ var micromark_util_resolve_all__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(355);
+/* harmony import */ var micromark_factory_destination__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(343);
+/* harmony import */ var micromark_factory_label__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(344);
+/* harmony import */ var micromark_factory_title__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(345);
+/* harmony import */ var micromark_factory_whitespace__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(346);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(326);
+/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(323);
+/* harmony import */ var micromark_util_resolve_all__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(358);
 /**
  * @import {
  *   Construct,
@@ -56646,7 +56788,7 @@ function tokenizeReferenceCollapsed(effects, ok, nok) {
 }
 
 /***/ }),
-/* 355 */
+/* 358 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -56689,7 +56831,7 @@ function resolveAll(constructs, events, context) {
 
 
 /***/ }),
-/* 356 */
+/* 359 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -56697,9 +56839,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   attention: () => (/* binding */ attention)
 /* harmony export */ });
-/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(323);
-/* harmony import */ var micromark_util_classify_character__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(357);
-/* harmony import */ var micromark_util_resolve_all__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(355);
+/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(326);
+/* harmony import */ var micromark_util_classify_character__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(360);
+/* harmony import */ var micromark_util_resolve_all__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(358);
 /**
  * @import {
  *   Code,
@@ -56943,7 +57085,7 @@ function movePoint(point, offset) {
 }
 
 /***/ }),
-/* 357 */
+/* 360 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -56951,7 +57093,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   classifyCharacter: () => (/* binding */ classifyCharacter)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {Code} from 'micromark-util-types'
  */
@@ -56981,7 +57123,7 @@ function classifyCharacter(code) {
 }
 
 /***/ }),
-/* 358 */
+/* 361 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -56989,7 +57131,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   autolink: () => (/* binding */ autolink)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Construct,
@@ -57225,7 +57367,7 @@ function tokenizeAutolink(effects, ok, nok) {
 }
 
 /***/ }),
-/* 359 */
+/* 362 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -57233,8 +57375,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   htmlText: () => (/* binding */ htmlText)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Code,
@@ -57915,7 +58057,7 @@ function tokenizeHtmlText(effects, ok, nok) {
 }
 
 /***/ }),
-/* 360 */
+/* 363 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -57923,7 +58065,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   labelStartLink: () => (/* binding */ labelStartLink)
 /* harmony export */ });
-/* harmony import */ var _label_end_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(354);
+/* harmony import */ var _label_end_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(357);
 /**
  * @import {
  *   Construct,
@@ -57981,7 +58123,7 @@ function tokenizeLabelStartLink(effects, ok, nok) {
 }
 
 /***/ }),
-/* 361 */
+/* 364 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -57989,7 +58131,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   hardBreakEscape: () => (/* binding */ hardBreakEscape)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Construct,
@@ -58052,7 +58194,7 @@ function tokenizeHardBreakEscape(effects, ok, nok) {
 }
 
 /***/ }),
-/* 362 */
+/* 365 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -58060,7 +58202,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   codeText: () => (/* binding */ codeText)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {
  *   Construct,
@@ -58288,7 +58430,7 @@ function tokenizeCodeText(effects, ok, nok) {
 }
 
 /***/ }),
-/* 363 */
+/* 366 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -58296,9 +58438,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   createTokenizer: () => (/* binding */ createTokenizer)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(329);
-/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(323);
-/* harmony import */ var micromark_util_resolve_all__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(355);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(326);
+/* harmony import */ var micromark_util_resolve_all__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(358);
 /**
  * @import {
  *   Chunk,
@@ -58912,7 +59054,7 @@ function serializeChunks(chunks, expandTabs) {
 }
 
 /***/ }),
-/* 364 */
+/* 367 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59037,7 +59179,7 @@ function preprocess() {
 }
 
 /***/ }),
-/* 365 */
+/* 368 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59132,7 +59274,7 @@ function index(value) {
 
 
 /***/ }),
-/* 366 */
+/* 369 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59251,7 +59393,7 @@ function node(value) {
 
 
 /***/ }),
-/* 367 */
+/* 370 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59260,13 +59402,13 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   gfmFromMarkdown: () => (/* reexport safe */ _lib_index_js__WEBPACK_IMPORTED_MODULE_0__.gfmFromMarkdown),
 /* harmony export */   gfmToMarkdown: () => (/* reexport safe */ _lib_index_js__WEBPACK_IMPORTED_MODULE_0__.gfmToMarkdown)
 /* harmony export */ });
-/* harmony import */ var _lib_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(368);
+/* harmony import */ var _lib_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(371);
 // Note: types exposed from `index.d.ts`.
 
 
 
 /***/ }),
-/* 368 */
+/* 371 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59275,11 +59417,11 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   gfmFromMarkdown: () => (/* binding */ gfmFromMarkdown),
 /* harmony export */   gfmToMarkdown: () => (/* binding */ gfmToMarkdown)
 /* harmony export */ });
-/* harmony import */ var mdast_util_gfm_autolink_literal__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(369);
-/* harmony import */ var mdast_util_gfm_footnote__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(377);
-/* harmony import */ var mdast_util_gfm_strikethrough__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(378);
-/* harmony import */ var mdast_util_gfm_table__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(379);
-/* harmony import */ var mdast_util_gfm_task_list_item__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(420);
+/* harmony import */ var mdast_util_gfm_autolink_literal__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(372);
+/* harmony import */ var mdast_util_gfm_footnote__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(380);
+/* harmony import */ var mdast_util_gfm_strikethrough__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(381);
+/* harmony import */ var mdast_util_gfm_table__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(382);
+/* harmony import */ var mdast_util_gfm_task_list_item__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(423);
 /**
  * @import {Extension as FromMarkdownExtension} from 'mdast-util-from-markdown'
  * @import {Options} from 'mdast-util-gfm'
@@ -59334,7 +59476,7 @@ function gfmToMarkdown(options) {
 
 
 /***/ }),
-/* 369 */
+/* 372 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59343,10 +59485,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   gfmAutolinkLiteralFromMarkdown: () => (/* binding */ gfmAutolinkLiteralFromMarkdown),
 /* harmony export */   gfmAutolinkLiteralToMarkdown: () => (/* binding */ gfmAutolinkLiteralToMarkdown)
 /* harmony export */ });
-/* harmony import */ var ccount__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(370);
-/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(371);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(329);
-/* harmony import */ var mdast_util_find_and_replace__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(372);
+/* harmony import */ var ccount__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(373);
+/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(374);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(332);
+/* harmony import */ var mdast_util_find_and_replace__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(375);
 /**
  * @import {RegExpMatchObject, ReplaceFunction} from 'mdast-util-find-and-replace'
  * @import {CompileContext, Extension as FromMarkdownExtension, Handle as FromMarkdownHandle, Transform as FromMarkdownTransform} from 'mdast-util-from-markdown'
@@ -59630,7 +59772,7 @@ function previous(match, email) {
 
 
 /***/ }),
-/* 370 */
+/* 373 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59668,7 +59810,7 @@ function ccount(value, character) {
 
 
 /***/ }),
-/* 371 */
+/* 374 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59691,7 +59833,7 @@ function unreachable() {}
 
 
 /***/ }),
-/* 372 */
+/* 375 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59699,9 +59841,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   findAndReplace: () => (/* binding */ findAndReplace)
 /* harmony export */ });
-/* harmony import */ var escape_string_regexp__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(373);
-/* harmony import */ var unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(375);
-/* harmony import */ var unist_util_is__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(374);
+/* harmony import */ var escape_string_regexp__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(376);
+/* harmony import */ var unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(378);
+/* harmony import */ var unist_util_is__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(377);
 /**
  * @import {Nodes, Parents, PhrasingContent, Root, Text} from 'mdast'
  * @import {BuildVisitor, Test, VisitorResult} from 'unist-util-visit-parents'
@@ -59966,7 +60108,7 @@ function toFunction(replace) {
 
 
 /***/ }),
-/* 373 */
+/* 376 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -59988,7 +60130,7 @@ function escapeStringRegexp(string) {
 
 
 /***/ }),
-/* 374 */
+/* 377 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -60291,7 +60433,7 @@ function looksLikeANode(value) {
 
 
 /***/ }),
-/* 375 */
+/* 378 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -60302,8 +60444,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   SKIP: () => (/* binding */ SKIP),
 /* harmony export */   visitParents: () => (/* binding */ visitParents)
 /* harmony export */ });
-/* harmony import */ var unist_util_is__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(374);
-/* harmony import */ var unist_util_visit_parents_do_not_use_color__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(376);
+/* harmony import */ var unist_util_is__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(377);
+/* harmony import */ var unist_util_visit_parents_do_not_use_color__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(379);
 /**
  * @typedef {import('unist').Node} UnistNode
  * @typedef {import('unist').Parent} UnistParent
@@ -60705,7 +60847,7 @@ function toResult(value) {
 
 
 /***/ }),
-/* 376 */
+/* 379 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -60723,7 +60865,7 @@ function color(d) {
 
 
 /***/ }),
-/* 377 */
+/* 380 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -60732,8 +60874,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   gfmFootnoteFromMarkdown: () => (/* binding */ gfmFootnoteFromMarkdown),
 /* harmony export */   gfmFootnoteToMarkdown: () => (/* binding */ gfmFootnoteToMarkdown)
 /* harmony export */ });
-/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(371);
-/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(320);
+/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(374);
+/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(323);
 /**
  * @import {
  *   CompileContext,
@@ -60949,7 +61091,7 @@ function mapAll(line, index, blank) {
 
 
 /***/ }),
-/* 378 */
+/* 381 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -61067,7 +61209,7 @@ function peekDelete() {
 
 
 /***/ }),
-/* 379 */
+/* 382 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -61076,9 +61218,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   gfmTableFromMarkdown: () => (/* binding */ gfmTableFromMarkdown),
 /* harmony export */   gfmTableToMarkdown: () => (/* binding */ gfmTableToMarkdown)
 /* harmony export */ });
-/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(371);
-/* harmony import */ var markdown_table__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(380);
-/* harmony import */ var mdast_util_to_markdown__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(381);
+/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(374);
+/* harmony import */ var markdown_table__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(383);
+/* harmony import */ var mdast_util_to_markdown__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(384);
 /**
  * @typedef {import('mdast').InlineCode} InlineCode
  * @typedef {import('mdast').Table} Table
@@ -61382,7 +61524,7 @@ function gfmTableToMarkdown(options) {
 
 
 /***/ }),
-/* 380 */
+/* 383 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -61786,7 +61928,7 @@ function toAlignment(value) {
 
 
 /***/ }),
-/* 381 */
+/* 384 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -61794,25 +61936,25 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   handle: () => (/* binding */ handle)
 /* harmony export */ });
-/* harmony import */ var _blockquote_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(382);
-/* harmony import */ var _break_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(383);
-/* harmony import */ var _code_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(385);
-/* harmony import */ var _definition_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(389);
-/* harmony import */ var _emphasis_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(391);
-/* harmony import */ var _heading_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(395);
-/* harmony import */ var _html_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(398);
-/* harmony import */ var _image_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(399);
-/* harmony import */ var _image_reference_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(400);
-/* harmony import */ var _inline_code_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(401);
-/* harmony import */ var _link_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(402);
-/* harmony import */ var _link_reference_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(404);
-/* harmony import */ var _list_js__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(405);
-/* harmony import */ var _list_item_js__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(410);
-/* harmony import */ var _paragraph_js__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(412);
-/* harmony import */ var _root_js__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(413);
-/* harmony import */ var _strong_js__WEBPACK_IMPORTED_MODULE_16__ = __webpack_require__(415);
-/* harmony import */ var _text_js__WEBPACK_IMPORTED_MODULE_17__ = __webpack_require__(417);
-/* harmony import */ var _thematic_break_js__WEBPACK_IMPORTED_MODULE_18__ = __webpack_require__(418);
+/* harmony import */ var _blockquote_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(385);
+/* harmony import */ var _break_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(386);
+/* harmony import */ var _code_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(388);
+/* harmony import */ var _definition_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(392);
+/* harmony import */ var _emphasis_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(394);
+/* harmony import */ var _heading_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(398);
+/* harmony import */ var _html_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(401);
+/* harmony import */ var _image_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(402);
+/* harmony import */ var _image_reference_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(403);
+/* harmony import */ var _inline_code_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(404);
+/* harmony import */ var _link_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(405);
+/* harmony import */ var _link_reference_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(407);
+/* harmony import */ var _list_js__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(408);
+/* harmony import */ var _list_item_js__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(413);
+/* harmony import */ var _paragraph_js__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(415);
+/* harmony import */ var _root_js__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(416);
+/* harmony import */ var _strong_js__WEBPACK_IMPORTED_MODULE_16__ = __webpack_require__(418);
+/* harmony import */ var _text_js__WEBPACK_IMPORTED_MODULE_17__ = __webpack_require__(420);
+/* harmony import */ var _thematic_break_js__WEBPACK_IMPORTED_MODULE_18__ = __webpack_require__(421);
 
 
 
@@ -61861,7 +62003,7 @@ const handle = {
 
 
 /***/ }),
-/* 382 */
+/* 385 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -61901,7 +62043,7 @@ function map(line, _, blank) {
 
 
 /***/ }),
-/* 383 */
+/* 386 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -61909,7 +62051,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   hardBreak: () => (/* binding */ hardBreak)
 /* harmony export */ });
-/* harmony import */ var _util_pattern_in_scope_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(384);
+/* harmony import */ var _util_pattern_in_scope_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(387);
 /**
  * @import {Break, Parents} from 'mdast'
  * @import {Info, State} from 'mdast-util-to-markdown'
@@ -61943,7 +62085,7 @@ function hardBreak(_, _1, state, info) {
 
 
 /***/ }),
-/* 384 */
+/* 387 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -61995,7 +62137,7 @@ function listInScope(stack, list, none) {
 
 
 /***/ }),
-/* 385 */
+/* 388 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62003,9 +62145,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   code: () => (/* binding */ code)
 /* harmony export */ });
-/* harmony import */ var longest_streak__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(386);
-/* harmony import */ var _util_format_code_as_indented_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(387);
-/* harmony import */ var _util_check_fence_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(388);
+/* harmony import */ var longest_streak__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(389);
+/* harmony import */ var _util_format_code_as_indented_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(390);
+/* harmony import */ var _util_check_fence_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(391);
 /**
  * @import {Info, Map, State} from 'mdast-util-to-markdown'
  * @import {Code, Parents} from 'mdast'
@@ -62084,7 +62226,7 @@ function map(line, _, blank) {
 
 
 /***/ }),
-/* 386 */
+/* 389 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62131,7 +62273,7 @@ function longestStreak(value, substring) {
 
 
 /***/ }),
-/* 387 */
+/* 390 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62164,7 +62306,7 @@ function formatCodeAsIndented(node, state) {
 
 
 /***/ }),
-/* 388 */
+/* 391 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62196,7 +62338,7 @@ function checkFence(state) {
 
 
 /***/ }),
-/* 389 */
+/* 392 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62204,7 +62346,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   definition: () => (/* binding */ definition)
 /* harmony export */ });
-/* harmony import */ var _util_check_quote_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(390);
+/* harmony import */ var _util_check_quote_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(393);
 /**
  * @import {Info, State} from 'mdast-util-to-markdown'
  * @import {Definition, Parents} from 'mdast'
@@ -62284,7 +62426,7 @@ function definition(node, _, state, info) {
 
 
 /***/ }),
-/* 390 */
+/* 393 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62316,7 +62458,7 @@ function checkQuote(state) {
 
 
 /***/ }),
-/* 391 */
+/* 394 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62324,9 +62466,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   emphasis: () => (/* binding */ emphasis)
 /* harmony export */ });
-/* harmony import */ var _util_check_emphasis_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(392);
-/* harmony import */ var _util_encode_character_reference_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(393);
-/* harmony import */ var _util_encode_info_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(394);
+/* harmony import */ var _util_check_emphasis_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(395);
+/* harmony import */ var _util_encode_character_reference_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(396);
+/* harmony import */ var _util_encode_info_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(397);
 /**
  * @import {Info, State} from 'mdast-util-to-markdown'
  * @import {Emphasis, Parents} from 'mdast'
@@ -62399,7 +62541,7 @@ function emphasisPeek(_, _1, state) {
 
 
 /***/ }),
-/* 392 */
+/* 395 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62431,7 +62573,7 @@ function checkEmphasis(state) {
 
 
 /***/ }),
-/* 393 */
+/* 396 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62453,7 +62595,7 @@ function encodeCharacterReference(code) {
 
 
 /***/ }),
-/* 394 */
+/* 397 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62461,7 +62603,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   encodeInfo: () => (/* binding */ encodeInfo)
 /* harmony export */ });
-/* harmony import */ var micromark_util_classify_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(357);
+/* harmony import */ var micromark_util_classify_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(360);
 /**
  * @import {EncodeSides} from '../types.js'
  */
@@ -62547,7 +62689,7 @@ function encodeInfo(outside, inside, marker) {
 
 
 /***/ }),
-/* 395 */
+/* 398 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62555,8 +62697,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   heading: () => (/* binding */ heading)
 /* harmony export */ });
-/* harmony import */ var _util_encode_character_reference_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(393);
-/* harmony import */ var _util_format_heading_as_setext_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(396);
+/* harmony import */ var _util_encode_character_reference_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(396);
+/* harmony import */ var _util_format_heading_as_setext_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(399);
 /**
  * @import {Info, State} from 'mdast-util-to-markdown'
  * @import {Heading, Parents} from 'mdast'
@@ -62635,7 +62777,7 @@ function heading(node, _, state, info) {
 
 
 /***/ }),
-/* 396 */
+/* 399 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62643,9 +62785,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   formatHeadingAsSetext: () => (/* binding */ formatHeadingAsSetext)
 /* harmony export */ });
-/* harmony import */ var unist_util_visit__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(397);
-/* harmony import */ var unist_util_visit__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(375);
-/* harmony import */ var mdast_util_to_string__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(366);
+/* harmony import */ var unist_util_visit__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(400);
+/* harmony import */ var unist_util_visit__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(378);
+/* harmony import */ var mdast_util_to_string__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(369);
 /**
  * @import {State} from 'mdast-util-to-markdown'
  * @import {Heading} from 'mdast'
@@ -62683,7 +62825,7 @@ function formatHeadingAsSetext(node, state) {
 
 
 /***/ }),
-/* 397 */
+/* 400 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -62694,7 +62836,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   SKIP: () => (/* reexport safe */ unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_0__.SKIP),
 /* harmony export */   visit: () => (/* binding */ visit)
 /* harmony export */ });
-/* harmony import */ var unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(375);
+/* harmony import */ var unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(378);
 /**
  * @typedef {import('unist').Node} UnistNode
  * @typedef {import('unist').Parent} UnistParent
@@ -63011,7 +63153,7 @@ function visit(tree, testOrVisitor, visitorOrReverse, maybeReverse) {
 
 
 /***/ }),
-/* 398 */
+/* 401 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63042,7 +63184,7 @@ function htmlPeek() {
 
 
 /***/ }),
-/* 399 */
+/* 402 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63050,7 +63192,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   image: () => (/* binding */ image)
 /* harmony export */ });
-/* harmony import */ var _util_check_quote_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(390);
+/* harmony import */ var _util_check_quote_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(393);
 /**
  * @import {Info, State} from 'mdast-util-to-markdown'
  * @import {Image, Parents} from 'mdast'
@@ -63136,7 +63278,7 @@ function imagePeek() {
 
 
 /***/ }),
-/* 400 */
+/* 403 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63210,7 +63352,7 @@ function imageReferencePeek() {
 
 
 /***/ }),
-/* 401 */
+/* 404 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63297,7 +63439,7 @@ function inlineCodePeek() {
 
 
 /***/ }),
-/* 402 */
+/* 405 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63305,8 +63447,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   link: () => (/* binding */ link)
 /* harmony export */ });
-/* harmony import */ var _util_check_quote_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(390);
-/* harmony import */ var _util_format_link_as_autolink_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(403);
+/* harmony import */ var _util_check_quote_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(393);
+/* harmony import */ var _util_format_link_as_autolink_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(406);
 /**
  * @import {Info, State} from 'mdast-util-to-markdown'
  * @import {Link, Parents} from 'mdast'
@@ -63424,7 +63566,7 @@ function linkPeek(node, _, state) {
 
 
 /***/ }),
-/* 403 */
+/* 406 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63432,7 +63574,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   formatLinkAsAutolink: () => (/* binding */ formatLinkAsAutolink)
 /* harmony export */ });
-/* harmony import */ var mdast_util_to_string__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(366);
+/* harmony import */ var mdast_util_to_string__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(369);
 /**
  * @import {State} from 'mdast-util-to-markdown'
  * @import {Link} from 'mdast'
@@ -63470,7 +63612,7 @@ function formatLinkAsAutolink(node, state) {
 
 
 /***/ }),
-/* 404 */
+/* 407 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63544,7 +63686,7 @@ function linkReferencePeek() {
 
 
 /***/ }),
-/* 405 */
+/* 408 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63552,10 +63694,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   list: () => (/* binding */ list)
 /* harmony export */ });
-/* harmony import */ var _util_check_bullet_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(406);
-/* harmony import */ var _util_check_bullet_other_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(407);
-/* harmony import */ var _util_check_bullet_ordered_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(408);
-/* harmony import */ var _util_check_rule_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(409);
+/* harmony import */ var _util_check_bullet_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(409);
+/* harmony import */ var _util_check_bullet_other_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(410);
+/* harmony import */ var _util_check_bullet_ordered_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(411);
+/* harmony import */ var _util_check_rule_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(412);
 /**
  * @import {Info, State} from 'mdast-util-to-markdown'
  * @import {List, Parents} from 'mdast'
@@ -63659,7 +63801,7 @@ function list(node, parent, state, info) {
 
 
 /***/ }),
-/* 406 */
+/* 409 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63691,7 +63833,7 @@ function checkBullet(state) {
 
 
 /***/ }),
-/* 407 */
+/* 410 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63699,7 +63841,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   checkBulletOther: () => (/* binding */ checkBulletOther)
 /* harmony export */ });
-/* harmony import */ var _check_bullet_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(406);
+/* harmony import */ var _check_bullet_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(409);
 /**
  * @import {Options, State} from 'mdast-util-to-markdown'
  */
@@ -63741,7 +63883,7 @@ function checkBulletOther(state) {
 
 
 /***/ }),
-/* 408 */
+/* 411 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63773,7 +63915,7 @@ function checkBulletOrdered(state) {
 
 
 /***/ }),
-/* 409 */
+/* 412 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63805,7 +63947,7 @@ function checkRule(state) {
 
 
 /***/ }),
-/* 410 */
+/* 413 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63813,8 +63955,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   listItem: () => (/* binding */ listItem)
 /* harmony export */ });
-/* harmony import */ var _util_check_bullet_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(406);
-/* harmony import */ var _util_check_list_item_indent_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(411);
+/* harmony import */ var _util_check_bullet_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(409);
+/* harmony import */ var _util_check_list_item_indent_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(414);
 /**
  * @import {Info, Map, State} from 'mdast-util-to-markdown'
  * @import {ListItem, Parents} from 'mdast'
@@ -63880,7 +64022,7 @@ function listItem(node, parent, state, info) {
 
 
 /***/ }),
-/* 411 */
+/* 414 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63912,7 +64054,7 @@ function checkListItemIndent(state) {
 
 
 /***/ }),
-/* 412 */
+/* 415 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63943,7 +64085,7 @@ function paragraph(node, _, state, info) {
 
 
 /***/ }),
-/* 413 */
+/* 416 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63951,7 +64093,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   root: () => (/* binding */ root)
 /* harmony export */ });
-/* harmony import */ var mdast_util_phrasing__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(414);
+/* harmony import */ var mdast_util_phrasing__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(417);
 /**
  * @import {Info, State} from 'mdast-util-to-markdown'
  * @import {Parents, Root} from 'mdast'
@@ -63978,7 +64120,7 @@ function root(node, _, state, info) {
 
 
 /***/ }),
-/* 414 */
+/* 417 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -63986,7 +64128,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   phrasing: () => (/* binding */ phrasing)
 /* harmony export */ });
-/* harmony import */ var unist_util_is__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(374);
+/* harmony import */ var unist_util_is__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(377);
 /**
  * @typedef {import('mdast').Html} Html
  * @typedef {import('mdast').PhrasingContent} PhrasingContent
@@ -64035,7 +64177,7 @@ const phrasing =
 
 
 /***/ }),
-/* 415 */
+/* 418 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64043,9 +64185,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   strong: () => (/* binding */ strong)
 /* harmony export */ });
-/* harmony import */ var _util_check_strong_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(416);
-/* harmony import */ var _util_encode_character_reference_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(393);
-/* harmony import */ var _util_encode_info_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(394);
+/* harmony import */ var _util_check_strong_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(419);
+/* harmony import */ var _util_encode_character_reference_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(396);
+/* harmony import */ var _util_encode_info_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(397);
 /**
  * @import {Info, State} from 'mdast-util-to-markdown'
  * @import {Parents, Strong} from 'mdast'
@@ -64118,7 +64260,7 @@ function strongPeek(_, _1, state) {
 
 
 /***/ }),
-/* 416 */
+/* 419 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64150,7 +64292,7 @@ function checkStrong(state) {
 
 
 /***/ }),
-/* 417 */
+/* 420 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64176,7 +64318,7 @@ function text(node, _, state, info) {
 
 
 /***/ }),
-/* 418 */
+/* 421 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64184,8 +64326,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   thematicBreak: () => (/* binding */ thematicBreak)
 /* harmony export */ });
-/* harmony import */ var _util_check_rule_repetition_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(419);
-/* harmony import */ var _util_check_rule_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(409);
+/* harmony import */ var _util_check_rule_repetition_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(422);
+/* harmony import */ var _util_check_rule_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(412);
 /**
  * @import {State} from 'mdast-util-to-markdown'
  * @import {Parents, ThematicBreak} from 'mdast'
@@ -64210,7 +64352,7 @@ function thematicBreak(_, _1, state) {
 
 
 /***/ }),
-/* 419 */
+/* 422 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64242,7 +64384,7 @@ function checkRuleRepetition(state) {
 
 
 /***/ }),
-/* 420 */
+/* 423 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64251,8 +64393,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   gfmTaskListItemFromMarkdown: () => (/* binding */ gfmTaskListItemFromMarkdown),
 /* harmony export */   gfmTaskListItemToMarkdown: () => (/* binding */ gfmTaskListItemToMarkdown)
 /* harmony export */ });
-/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(371);
-/* harmony import */ var mdast_util_to_markdown__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(381);
+/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(374);
+/* harmony import */ var mdast_util_to_markdown__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(384);
 /**
  * @typedef {import('mdast').ListItem} ListItem
  * @typedef {import('mdast').Paragraph} Paragraph
@@ -64397,7 +64539,7 @@ function listItemWithTaskListItem(node, parent, state, info) {
 
 
 /***/ }),
-/* 421 */
+/* 424 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64406,7 +64548,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   frontmatterFromMarkdown: () => (/* reexport safe */ _lib_index_js__WEBPACK_IMPORTED_MODULE_0__.frontmatterFromMarkdown),
 /* harmony export */   frontmatterToMarkdown: () => (/* reexport safe */ _lib_index_js__WEBPACK_IMPORTED_MODULE_0__.frontmatterToMarkdown)
 /* harmony export */ });
-/* harmony import */ var _lib_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(422);
+/* harmony import */ var _lib_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(425);
 /**
  * @typedef {import('./lib/index.js').Options} Options
  * @typedef {import('./lib/index.js').Matter} Matter
@@ -64417,7 +64559,7 @@ __webpack_require__.r(__webpack_exports__);
 
 
 /***/ }),
-/* 422 */
+/* 425 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64426,9 +64568,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   frontmatterFromMarkdown: () => (/* binding */ frontmatterFromMarkdown),
 /* harmony export */   frontmatterToMarkdown: () => (/* binding */ frontmatterToMarkdown)
 /* harmony export */ });
-/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(371);
-/* harmony import */ var micromark_extension_frontmatter__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(423);
-/* harmony import */ var escape_string_regexp__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(373);
+/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(374);
+/* harmony import */ var micromark_extension_frontmatter__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(426);
+/* harmony import */ var escape_string_regexp__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(376);
 /**
  * @typedef {import('mdast').Literal} Literal
  *
@@ -64608,7 +64750,7 @@ function pick(schema, prop) {
 
 
 /***/ }),
-/* 423 */
+/* 426 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64616,7 +64758,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   toMatters: () => (/* binding */ toMatters)
 /* harmony export */ });
-/* harmony import */ var fault__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(424);
+/* harmony import */ var fault__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(427);
 /**
  * @typedef {'toml' | 'yaml'} Preset
  *   Known name of a frontmatter style.
@@ -64744,7 +64886,7 @@ function matter(option) {
 
 
 /***/ }),
-/* 424 */
+/* 427 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64753,7 +64895,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   create: () => (/* binding */ create),
 /* harmony export */   fault: () => (/* binding */ fault)
 /* harmony export */ });
-/* harmony import */ var format__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(425);
+/* harmony import */ var format__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(428);
 // @ts-expect-error
 
 
@@ -64798,7 +64940,7 @@ function create(Constructor) {
 
 
 /***/ }),
-/* 425 */
+/* 428 */
 /***/ ((module) => {
 
 //
@@ -64929,7 +65071,7 @@ function create(Constructor) {
 
 
 /***/ }),
-/* 426 */
+/* 429 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -64938,18 +65080,18 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   gfm: () => (/* binding */ gfm),
 /* harmony export */   gfmHtml: () => (/* binding */ gfmHtml)
 /* harmony export */ });
-/* harmony import */ var micromark_util_combine_extensions__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(326);
-/* harmony import */ var micromark_extension_gfm_autolink_literal__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(427);
-/* harmony import */ var micromark_extension_gfm_autolink_literal__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(434);
-/* harmony import */ var micromark_extension_gfm_footnote__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(428);
-/* harmony import */ var micromark_extension_gfm_footnote__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(437);
-/* harmony import */ var micromark_extension_gfm_strikethrough__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(429);
-/* harmony import */ var micromark_extension_gfm_strikethrough__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(438);
-/* harmony import */ var micromark_extension_gfm_table__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(430);
-/* harmony import */ var micromark_extension_gfm_table__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(439);
-/* harmony import */ var micromark_extension_gfm_tagfilter__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(440);
-/* harmony import */ var micromark_extension_gfm_task_list_item__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(433);
-/* harmony import */ var micromark_extension_gfm_task_list_item__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(441);
+/* harmony import */ var micromark_util_combine_extensions__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_extension_gfm_autolink_literal__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(430);
+/* harmony import */ var micromark_extension_gfm_autolink_literal__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(437);
+/* harmony import */ var micromark_extension_gfm_footnote__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(431);
+/* harmony import */ var micromark_extension_gfm_footnote__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(440);
+/* harmony import */ var micromark_extension_gfm_strikethrough__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(432);
+/* harmony import */ var micromark_extension_gfm_strikethrough__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(441);
+/* harmony import */ var micromark_extension_gfm_table__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(433);
+/* harmony import */ var micromark_extension_gfm_table__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(442);
+/* harmony import */ var micromark_extension_gfm_tagfilter__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(443);
+/* harmony import */ var micromark_extension_gfm_task_list_item__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(436);
+/* harmony import */ var micromark_extension_gfm_task_list_item__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(444);
 /**
  * @typedef {import('micromark-extension-gfm-footnote').HtmlOptions} HtmlOptions
  * @typedef {import('micromark-extension-gfm-strikethrough').Options} Options
@@ -65010,7 +65152,7 @@ function gfmHtml(options) {
 
 
 /***/ }),
-/* 427 */
+/* 430 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -65018,7 +65160,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   gfmAutolinkLiteral: () => (/* binding */ gfmAutolinkLiteral)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {Code, ConstructRecord, Event, Extension, Previous, State, TokenizeContext, Tokenizer} from 'micromark-util-types'
  */
@@ -65875,7 +66017,7 @@ function previousUnbalanced(events) {
 }
 
 /***/ }),
-/* 428 */
+/* 431 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -65883,10 +66025,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   gfmFootnote: () => (/* binding */ gfmFootnote)
 /* harmony export */ });
-/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(332);
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(329);
-/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(320);
+/* harmony import */ var micromark_core_commonmark__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(335);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(323);
 /**
  * @import {Event, Exiter, Extension, Resolver, State, Token, TokenizeContext, Tokenizer} from 'micromark-util-types'
  */
@@ -66374,7 +66516,7 @@ function tokenizeIndent(effects, ok, nok) {
 }
 
 /***/ }),
-/* 429 */
+/* 432 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -66382,9 +66524,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   gfmStrikethrough: () => (/* binding */ gfmStrikethrough)
 /* harmony export */ });
-/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(323);
-/* harmony import */ var micromark_util_classify_character__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(357);
-/* harmony import */ var micromark_util_resolve_all__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(355);
+/* harmony import */ var micromark_util_chunked__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(326);
+/* harmony import */ var micromark_util_classify_character__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(360);
+/* harmony import */ var micromark_util_resolve_all__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(358);
 /**
  * @import {Options} from 'micromark-extension-gfm-strikethrough'
  * @import {Event, Extension, Resolver, State, Token, TokenizeContext, Tokenizer} from 'micromark-util-types'
@@ -66529,7 +66671,7 @@ function gfmStrikethrough(options) {
 }
 
 /***/ }),
-/* 430 */
+/* 433 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -66537,10 +66679,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   gfmTable: () => (/* binding */ gfmTable)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
-/* harmony import */ var _edit_map_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(431);
-/* harmony import */ var _infer_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(432);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
+/* harmony import */ var _edit_map_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(434);
+/* harmony import */ var _infer_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(435);
 /**
  * @import {Event, Extension, Point, Resolver, State, Token, TokenizeContext, Tokenizer} from 'micromark-util-types'
  */
@@ -67362,7 +67504,7 @@ function getPoint(events, index) {
 }
 
 /***/ }),
-/* 431 */
+/* 434 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -67574,7 +67716,7 @@ function addImplementation(editMap, at, remove, add) {
 // }
 
 /***/ }),
-/* 432 */
+/* 435 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -67636,7 +67778,7 @@ function gfmTableAlign(events, index) {
 }
 
 /***/ }),
-/* 433 */
+/* 436 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -67644,8 +67786,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   gfmTaskListItem: () => (/* binding */ gfmTaskListItem)
 /* harmony export */ });
-/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(328);
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(329);
+/* harmony import */ var micromark_factory_space__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(331);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(332);
 /**
  * @import {Extension, State, TokenizeContext, Tokenizer} from 'micromark-util-types'
  */
@@ -67806,7 +67948,7 @@ function spaceThenNonSpace(effects, ok, nok) {
 }
 
 /***/ }),
-/* 434 */
+/* 437 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -67814,7 +67956,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   gfmAutolinkLiteralHtml: () => (/* binding */ gfmAutolinkLiteralHtml)
 /* harmony export */ });
-/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(435);
+/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(438);
 /**
  * @import {CompileContext, Handle, HtmlExtension, Token} from 'micromark-util-types'
  */
@@ -67877,7 +68019,7 @@ function anchorFromToken(token, protocol) {
 }
 
 /***/ }),
-/* 435 */
+/* 438 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -67886,8 +68028,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   normalizeUri: () => (/* binding */ normalizeUri),
 /* harmony export */   sanitizeUri: () => (/* binding */ sanitizeUri)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(329);
-/* harmony import */ var micromark_util_encode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(436);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(332);
+/* harmony import */ var micromark_util_encode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(439);
 
 
 /**
@@ -67997,7 +68139,7 @@ function normalizeUri(value) {
 }
 
 /***/ }),
-/* 436 */
+/* 439 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -68041,7 +68183,7 @@ function encode(value) {
 
 
 /***/ }),
-/* 437 */
+/* 440 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -68050,8 +68192,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   defaultBackLabel: () => (/* binding */ defaultBackLabel),
 /* harmony export */   gfmFootnoteHtml: () => (/* binding */ gfmFootnoteHtml)
 /* harmony export */ });
-/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(320);
-/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(435);
+/* harmony import */ var micromark_util_normalize_identifier__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(323);
+/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(438);
 /**
  * @import {HtmlOptions as Options} from 'micromark-extension-gfm-footnote'
  * @import {HtmlExtension} from 'micromark-util-types'
@@ -68208,7 +68350,7 @@ function gfmFootnoteHtml(options) {
 }
 
 /***/ }),
-/* 438 */
+/* 441 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -68244,7 +68386,7 @@ function gfmStrikethroughHtml() {
 }
 
 /***/ }),
-/* 439 */
+/* 442 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -68384,7 +68526,7 @@ function replace($0, $1) {
 }
 
 /***/ }),
-/* 440 */
+/* 443 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -68446,7 +68588,7 @@ function exitHtmlData(token, filter) {
 
 
 /***/ }),
-/* 441 */
+/* 444 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -68485,7 +68627,7 @@ function gfmTaskListItemHtml() {
 }
 
 /***/ }),
-/* 442 */
+/* 445 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -68495,9 +68637,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   frontmatterHtml: () => (/* reexport safe */ _lib_html_js__WEBPACK_IMPORTED_MODULE_1__.frontmatterHtml),
 /* harmony export */   toMatters: () => (/* reexport safe */ _lib_to_matters_js__WEBPACK_IMPORTED_MODULE_2__.toMatters)
 /* harmony export */ });
-/* harmony import */ var _lib_syntax_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(443);
-/* harmony import */ var _lib_html_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(444);
-/* harmony import */ var _lib_to_matters_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(423);
+/* harmony import */ var _lib_syntax_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(446);
+/* harmony import */ var _lib_html_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(447);
+/* harmony import */ var _lib_to_matters_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(426);
 /**
  * @typedef {import('./lib/to-matters.js').Info} Info
  * @typedef {import('./lib/to-matters.js').Matter} Matter
@@ -68514,7 +68656,7 @@ __webpack_require__.r(__webpack_exports__);
 
 
 /***/ }),
-/* 443 */
+/* 446 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -68522,8 +68664,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   frontmatter: () => (/* binding */ frontmatter)
 /* harmony export */ });
-/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(329);
-/* harmony import */ var _to_matters_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(423);
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(332);
+/* harmony import */ var _to_matters_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(426);
 /**
  * @typedef {import('micromark-util-types').Construct} Construct
  * @typedef {import('micromark-util-types').ConstructRecord} ConstructRecord
@@ -68921,7 +69063,7 @@ function pick(schema, prop) {
 
 
 /***/ }),
-/* 444 */
+/* 447 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -68929,7 +69071,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   frontmatterHtml: () => (/* binding */ frontmatterHtml)
 /* harmony export */ });
-/* harmony import */ var _to_matters_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(423);
+/* harmony import */ var _to_matters_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(426);
 /**
  * @typedef {import('micromark-util-types').CompileContext} CompileContext
  * @typedef {import('micromark-util-types').Handle} Handle

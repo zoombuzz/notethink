@@ -17,9 +17,9 @@
     "style-loader": "^4.0.0",
     "css-loader": "^4.0.0",
     "web-vitals": "^2.1.4",
-		"debug": "^4.4.0",
-		"winston": "^3.17.0",
-		"winston-transport-vscode": "^0.1.0"
+    "mdast-util-to-hast": "^13.2.0",
+    "hast-util-sanitize": "^5.0.2",
+    "hast-util-to-jsx-runtime": "^2.3.6"
   },
   "devDependencies": {    
   },

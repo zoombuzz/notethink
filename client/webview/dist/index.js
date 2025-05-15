@@ -14,7 +14,7 @@ const react_1 = __importDefault(__webpack_require__(5));
 const client_1 = __importDefault(__webpack_require__(8));
 __webpack_require__(17);
 const App_1 = __importDefault(__webpack_require__(26));
-const reportWebVitals_1 = __importDefault(__webpack_require__(30));
+const reportWebVitals_1 = __importDefault(__webpack_require__(107));
 // This is a placeholder file only
 // The actual HTML is generated dynamically in the client/extension/src/extension.ts file
 const root = client_1.default.createRoot(document.getElementById('root'));
@@ -44761,7 +44761,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const jsx_runtime_1 = __webpack_require__(1);
 const ExtensionReceiver_1 = __importDefault(__webpack_require__(27));
-__webpack_require__(28);
+__webpack_require__(105);
 function App() {
     return ((0, jsx_runtime_1.jsx)("div", { className: "App", children: (0, jsx_runtime_1.jsx)(ExtensionReceiver_1.default, {}) }));
 }
@@ -44770,17 +44770,20 @@ exports["default"] = App;
 
 /***/ }),
 /* 27 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports["default"] = ExtensionReceiver;
 const jsx_runtime_1 = __webpack_require__(1);
 const react_1 = __webpack_require__(5);
+const NoteRenderer_1 = __importDefault(__webpack_require__(28));
 const vscode = acquireVsCodeApi();
 function ExtensionReceiver() {
-    const ref = (0, react_1.useRef)(null);
     // state originates from `vscode.getState` when a webview is reloaded, cached in setState
     const [state, setState] = (0, react_1.useState)(vscode.getState() || { docs: {} });
     const onMessage = (0, react_1.useCallback)((event) => {
@@ -44811,12 +44814,8921 @@ function ExtensionReceiver() {
             window.removeEventListener('message', onMessage);
         };
     }, []);
-    return (0, jsx_runtime_1.jsx)("div", { ref: ref, "data-testid": "ExtensionReceiver", children: JSON.stringify(state) });
+    return (0, jsx_runtime_1.jsx)(NoteRenderer_1.default, { notes: state.docs || {} });
 }
 
 
 /***/ }),
 /* 28 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.renderNodeUnified = renderNodeUnified;
+exports["default"] = NoteRenderer;
+const jsx_runtime_1 = __webpack_require__(1);
+const react_1 = __webpack_require__(5);
+const hast_util_sanitize_1 = __webpack_require__(29);
+const mdast_util_to_hast_1 = __webpack_require__(37);
+const hast_util_to_jsx_runtime_1 = __webpack_require__(75);
+const jsx_runtime_2 = __webpack_require__(1);
+function renderNodeUnified(node) {
+    const hast = (0, hast_util_sanitize_1.sanitize)((0, mdast_util_to_hast_1.toHast)(node));
+    // @ts-ignore safe to ignore type error on jsx and jsxs (https://github.com/syntax-tree/hast-util-to-jsx-runtime)
+    return (0, hast_util_to_jsx_runtime_1.toJsxRuntime)(hast, { Fragment: jsx_runtime_2.Fragment, jsx: jsx_runtime_2.jsx, jsxs: jsx_runtime_2.jsxs });
+}
+function NoteRenderer(props) {
+    const ref = (0, react_1.useRef)(null);
+    const rendered_notes = Object.keys(props.notes).map((note_id) => {
+        const note = props.notes[note_id];
+        return renderNodeUnified(note.content);
+    });
+    const fragment = rendered_notes.map((rnote, index) => {
+        return (0, jsx_runtime_1.jsx)("div", { className: "note-renderer", children: rnote }, `rnote-${index}`);
+    });
+    return (0, jsx_runtime_1.jsx)("div", { ref: ref, "data-testid": "NoteRenderer", children: fragment });
+}
+
+
+/***/ }),
+/* 29 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   defaultSchema: () => (/* reexport safe */ _lib_schema_js__WEBPACK_IMPORTED_MODULE_1__.defaultSchema),
+/* harmony export */   sanitize: () => (/* reexport safe */ _lib_index_js__WEBPACK_IMPORTED_MODULE_0__.sanitize)
+/* harmony export */ });
+/* harmony import */ var _lib_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(30);
+/* harmony import */ var _lib_schema_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(35);
+/**
+ * @typedef {import('./lib/index.js').Schema} Schema
+ */
+
+
+
+
+
+/***/ }),
+/* 30 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   sanitize: () => (/* binding */ sanitize)
+/* harmony export */ });
+/* harmony import */ var _ungap_structured_clone__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(31);
+/* harmony import */ var unist_util_position__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(36);
+/* harmony import */ var _schema_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(35);
+/**
+ * @import {
+ *   Comment,
+ *   Doctype,
+ *   ElementContent,
+ *   Element,
+ *   Nodes,
+ *   Properties,
+ *   RootContent,
+ *   Root,
+ *   Text
+ * } from 'hast'
+ */
+
+/**
+ * @typedef {[string, ...Array<Exclude<Properties[keyof Properties], Array<any>> | RegExp>] | string} PropertyDefinition
+ *   Definition for a property.
+ *
+ * @typedef Schema
+ *   Schema that defines what nodes and properties are allowed.
+ *
+ *   The default schema is `defaultSchema`, which follows how GitHub cleans.
+ *   If any top-level key is missing in the given schema, the corresponding
+ *   value of the default schema is used.
+ *
+ *   To extend the standard schema with a few changes, clone `defaultSchema`
+ *   like so:
+ *
+ *   ```js
+ *   import deepmerge from 'deepmerge'
+ *   import {h} from 'hastscript'
+ *   import {defaultSchema, sanitize} from 'hast-util-sanitize'
+ *
+ *   // This allows `className` on all elements.
+ *   const schema = deepmerge(defaultSchema, {attributes: {'*': ['className']}})
+ *
+ *   const tree = sanitize(h('div', {className: ['foo']}), schema)
+ *
+ *   // `tree` still has `className`.
+ *   console.log(tree)
+ *   // {
+ *   //   type: 'element',
+ *   //   tagName: 'div',
+ *   //   properties: {className: ['foo']},
+ *   //   children: []
+ *   // }
+ *   ```
+ * @property {boolean | null | undefined} [allowComments=false]
+ *   Whether to allow comment nodes (default: `false`).
+ *
+ *   For example:
+ *
+ *   ```js
+ *   allowComments: true
+ *   ```
+ * @property {boolean | null | undefined} [allowDoctypes=false]
+ *   Whether to allow doctype nodes (default: `false`).
+ *
+ *   For example:
+ *
+ *   ```js
+ *   allowDoctypes: true
+ *   ```
+ * @property {Record<string, Array<string>> | null | undefined} [ancestors]
+ *   Map of tag names to a list of tag names which are required ancestors
+ *   (default: `defaultSchema.ancestors`).
+ *
+ *   Elements with these tag names will be ignored if they occur outside of one
+ *   of their allowed parents.
+ *
+ *   For example:
+ *
+ *   ```js
+ *   ancestors: {
+ *     tbody: ['table'],
+ *     // …
+ *     tr: ['table']
+ *   }
+ *   ```
+ * @property {Record<string, Array<PropertyDefinition>> | null | undefined} [attributes]
+ *   Map of tag names to allowed property names (default:
+ *   `defaultSchema.attributes`).
+ *
+ *   The special key `'*'` as a tag name defines property names allowed on all
+ *   elements.
+ *
+ *   The special value `'data*'` as a property name can be used to allow all
+ *   `data` properties.
+ *
+ *   For example:
+ *
+ *   ```js
+ *   attributes: {
+ *     'ariaDescribedBy', 'ariaLabel', 'ariaLabelledBy', …, 'href'
+ *     // …
+ *     '*': [
+ *       'abbr',
+ *       'accept',
+ *       'acceptCharset',
+ *       // …
+ *       'vAlign',
+ *       'value',
+ *       'width'
+ *     ]
+ *   }
+ *   ```
+ *
+ *   Instead of a single string in the array, which allows any property value
+ *   for the field, you can use an array to allow several values.
+ *   For example, `input: ['type']` allows `type` set to any value on `input`s.
+ *   But `input: [['type', 'checkbox', 'radio']]` allows `type` when set to
+ *   `'checkbox'` or `'radio'`.
+ *
+ *   You can use regexes, so for example `span: [['className', /^hljs-/]]`
+ *   allows any class that starts with `hljs-` on `span`s.
+ *
+ *   When comma- or space-separated values are used (such as `className`), each
+ *   value in is checked individually.
+ *   For example, to allow certain classes on `span`s for syntax highlighting,
+ *   use `span: [['className', 'number', 'operator', 'token']]`.
+ *   This will allow `'number'`, `'operator'`, and `'token'` classes, but drop
+ *   others.
+ * @property {Array<string> | null | undefined} [clobber]
+ *   List of property names that clobber (default: `defaultSchema.clobber`).
+ *
+ *   For example:
+ *
+ *   ```js
+ *   clobber: ['ariaDescribedBy', 'ariaLabelledBy', 'id', 'name']
+ *   ```
+ * @property {string | null | undefined} [clobberPrefix]
+ *   Prefix to use before clobbering properties (default:
+ *   `defaultSchema.clobberPrefix`).
+ *
+ *   For example:
+ *
+ *   ```js
+ *   clobberPrefix: 'user-content-'
+ *   ```
+ * @property {Record<string, Array<string> | null | undefined> | null | undefined} [protocols]
+ *   Map of *property names* to allowed protocols (default:
+ *   `defaultSchema.protocols`).
+ *
+ *   This defines URLs that are always allowed to have local URLs (relative to
+ *   the current website, such as `this`, `#this`, `/this`, or `?this`), and
+ *   only allowed to have remote URLs (such as `https://example.com`) if they
+ *   use a known protocol.
+ *
+ *   For example:
+ *
+ *   ```js
+ *   protocols: {
+ *     cite: ['http', 'https'],
+ *     // …
+ *     src: ['http', 'https']
+ *   }
+ *   ```
+ * @property {Record<string, Record<string, Properties[keyof Properties]>> | null | undefined} [required]
+ *   Map of tag names to required property names with a default value
+ *   (default: `defaultSchema.required`).
+ *
+ *   This defines properties that must be set.
+ *   If a field does not exist (after the element was made safe), these will be
+ *   added with the given value.
+ *
+ *   For example:
+ *
+ *   ```js
+ *   required: {
+ *     input: {disabled: true, type: 'checkbox'}
+ *   }
+ *   ```
+ *
+ *   > 👉 **Note**: properties are first checked based on `schema.attributes`,
+ *   > then on `schema.required`.
+ *   > That means properties could be removed by `attributes` and then added
+ *   > again with `required`.
+ * @property {Array<string> | null | undefined} [strip]
+ *   List of tag names to strip from the tree (default: `defaultSchema.strip`).
+ *
+ *   By default, unsafe elements (those not in `schema.tagNames`) are replaced
+ *   by what they contain.
+ *   This option can drop their contents.
+ *
+ *   For example:
+ *
+ *   ```js
+ *   strip: ['script']
+ *   ```
+ * @property {Array<string> | null | undefined} [tagNames]
+ *   List of allowed tag names (default: `defaultSchema.tagNames`).
+ *
+ *   For example:
+ *
+ *   ```js
+ *   tagNames: [
+ *     'a',
+ *     'b',
+ *     // …
+ *     'ul',
+ *     'var'
+ *   ]
+ *   ```
+ *
+ * @typedef State
+ *   Info passed around.
+ * @property {Readonly<Schema>} schema
+ *   Schema.
+ * @property {Array<string>} stack
+ *   Tag names of ancestors.
+ */
+
+
+
+
+
+const own = {}.hasOwnProperty
+
+/**
+ * Sanitize a tree.
+ *
+ * @param {Readonly<Nodes>} node
+ *   Unsafe tree.
+ * @param {Readonly<Schema> | null | undefined} [options]
+ *   Configuration (default: `defaultSchema`).
+ * @returns {Nodes}
+ *   New, safe tree.
+ */
+function sanitize(node, options) {
+  /** @type {Nodes} */
+  let result = {type: 'root', children: []}
+
+  /** @type {State} */
+  const state = {
+    schema: options ? {..._schema_js__WEBPACK_IMPORTED_MODULE_0__.defaultSchema, ...options} : _schema_js__WEBPACK_IMPORTED_MODULE_0__.defaultSchema,
+    stack: []
+  }
+  const replace = transform(state, node)
+
+  if (replace) {
+    if (Array.isArray(replace)) {
+      if (replace.length === 1) {
+        result = replace[0]
+      } else {
+        result.children = replace
+      }
+    } else {
+      result = replace
+    }
+  }
+
+  return result
+}
+
+/**
+ * Sanitize `node`.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<unknown>} node
+ *   Unsafe node.
+ * @returns {Array<ElementContent> | Nodes | undefined}
+ *   Safe result.
+ */
+function transform(state, node) {
+  if (node && typeof node === 'object') {
+    const unsafe = /** @type {Record<string, Readonly<unknown>>} */ (node)
+    const type = typeof unsafe.type === 'string' ? unsafe.type : ''
+
+    switch (type) {
+      case 'comment': {
+        return comment(state, unsafe)
+      }
+
+      case 'doctype': {
+        return doctype(state, unsafe)
+      }
+
+      case 'element': {
+        return element(state, unsafe)
+      }
+
+      case 'root': {
+        return root(state, unsafe)
+      }
+
+      case 'text': {
+        return text(state, unsafe)
+      }
+
+      default:
+    }
+  }
+}
+
+/**
+ * Make a safe comment.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<Record<string, Readonly<unknown>>>} unsafe
+ *   Unsafe comment-like value.
+ * @returns {Comment | undefined}
+ *   Safe comment (if with `allowComments`).
+ */
+function comment(state, unsafe) {
+  if (state.schema.allowComments) {
+    // See <https://html.spec.whatwg.org/multipage/parsing.html#serialising-html-fragments>
+    const result = typeof unsafe.value === 'string' ? unsafe.value : ''
+    const index = result.indexOf('-->')
+    const value = index < 0 ? result : result.slice(0, index)
+
+    /** @type {Comment} */
+    const node = {type: 'comment', value}
+
+    patch(node, unsafe)
+
+    return node
+  }
+}
+
+/**
+ * Make a safe doctype.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<Record<string, Readonly<unknown>>>} unsafe
+ *   Unsafe doctype-like value.
+ * @returns {Doctype | undefined}
+ *   Safe doctype (if with `allowDoctypes`).
+ */
+function doctype(state, unsafe) {
+  if (state.schema.allowDoctypes) {
+    /** @type {Doctype} */
+    const node = {type: 'doctype'}
+
+    patch(node, unsafe)
+
+    return node
+  }
+}
+
+/**
+ * Make a safe element.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<Record<string, Readonly<unknown>>>} unsafe
+ *   Unsafe element-like value.
+ * @returns {Array<ElementContent> | Element | undefined}
+ *   Safe element.
+ */
+function element(state, unsafe) {
+  const name = typeof unsafe.tagName === 'string' ? unsafe.tagName : ''
+
+  state.stack.push(name)
+
+  const content = /** @type {Array<ElementContent>} */ (
+    children(state, unsafe.children)
+  )
+  const properties_ = properties(state, unsafe.properties)
+
+  state.stack.pop()
+
+  let safeElement = false
+
+  if (
+    name &&
+    name !== '*' &&
+    (!state.schema.tagNames || state.schema.tagNames.includes(name))
+  ) {
+    safeElement = true
+
+    // Some nodes can break out of their context if they don’t have a certain
+    // ancestor.
+    if (state.schema.ancestors && own.call(state.schema.ancestors, name)) {
+      const ancestors = state.schema.ancestors[name]
+      let index = -1
+
+      safeElement = false
+
+      while (++index < ancestors.length) {
+        if (state.stack.includes(ancestors[index])) {
+          safeElement = true
+        }
+      }
+    }
+  }
+
+  if (!safeElement) {
+    return state.schema.strip && !state.schema.strip.includes(name)
+      ? content
+      : undefined
+  }
+
+  /** @type {Element} */
+  const node = {
+    type: 'element',
+    tagName: name,
+    properties: properties_,
+    children: content
+  }
+
+  patch(node, unsafe)
+
+  return node
+}
+
+/**
+ * Make a safe root.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<Record<string, Readonly<unknown>>>} unsafe
+ *   Unsafe root-like value.
+ * @returns {Root}
+ *   Safe root.
+ */
+function root(state, unsafe) {
+  const content = /** @type {Array<RootContent>} */ (
+    children(state, unsafe.children)
+  )
+
+  /** @type {Root} */
+  const node = {type: 'root', children: content}
+
+  patch(node, unsafe)
+
+  return node
+}
+
+/**
+ * Make a safe text.
+ *
+ * @param {State} _
+ *   Info passed around.
+ * @param {Readonly<Record<string, Readonly<unknown>>>} unsafe
+ *   Unsafe text-like value.
+ * @returns {Text}
+ *   Safe text.
+ */
+function text(_, unsafe) {
+  const value = typeof unsafe.value === 'string' ? unsafe.value : ''
+  /** @type {Text} */
+  const node = {type: 'text', value}
+
+  patch(node, unsafe)
+
+  return node
+}
+
+/**
+ * Make children safe.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<unknown>} children
+ *   Unsafe value.
+ * @returns {Array<Nodes>}
+ *   Safe children.
+ */
+function children(state, children) {
+  /** @type {Array<Nodes>} */
+  const results = []
+
+  if (Array.isArray(children)) {
+    const childrenUnknown = /** @type {Array<Readonly<unknown>>} */ (children)
+    let index = -1
+
+    while (++index < childrenUnknown.length) {
+      const value = transform(state, childrenUnknown[index])
+
+      if (value) {
+        if (Array.isArray(value)) {
+          results.push(...value)
+        } else {
+          results.push(value)
+        }
+      }
+    }
+  }
+
+  return results
+}
+
+/**
+ * Make element properties safe.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<unknown>} properties
+ *   Unsafe value.
+ * @returns {Properties}
+ *   Safe value.
+ */
+function properties(state, properties) {
+  const tagName = state.stack[state.stack.length - 1]
+  const attributes = state.schema.attributes
+  const required = state.schema.required
+  const specific =
+    attributes && own.call(attributes, tagName)
+      ? attributes[tagName]
+      : undefined
+  const defaults =
+    attributes && own.call(attributes, '*') ? attributes['*'] : undefined
+  const properties_ =
+    /** @type {Readonly<Record<string, Readonly<unknown>>>} */ (
+      properties && typeof properties === 'object' ? properties : {}
+    )
+  /** @type {Properties} */
+  const result = {}
+  /** @type {string} */
+  let key
+
+  for (key in properties_) {
+    if (own.call(properties_, key)) {
+      const unsafe = properties_[key]
+      let safe = propertyValue(
+        state,
+        findDefinition(specific, key),
+        key,
+        unsafe
+      )
+
+      if (safe === null || safe === undefined) {
+        safe = propertyValue(state, findDefinition(defaults, key), key, unsafe)
+      }
+
+      if (safe !== null && safe !== undefined) {
+        result[key] = safe
+      }
+    }
+  }
+
+  if (required && own.call(required, tagName)) {
+    const properties = required[tagName]
+
+    for (key in properties) {
+      if (own.call(properties, key) && !own.call(result, key)) {
+        result[key] = properties[key]
+      }
+    }
+  }
+
+  return result
+}
+
+/**
+ * Sanitize a property value.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<PropertyDefinition> | undefined} definition
+ *   Definition.
+ * @param {string} key
+ *   Field name.
+ * @param {Readonly<unknown>} value
+ *   Unsafe value (but an array).
+ * @returns {Array<number | string> | boolean | number | string | undefined}
+ *   Safe value.
+ */
+function propertyValue(state, definition, key, value) {
+  return definition
+    ? Array.isArray(value)
+      ? propertyValueMany(state, definition, key, value)
+      : propertyValuePrimitive(state, definition, key, value)
+    : undefined
+}
+
+/**
+ * Sanitize a property value which is a list.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<PropertyDefinition>} definition
+ *   Definition.
+ * @param {string} key
+ *   Field name.
+ * @param {Readonly<Array<Readonly<unknown>>>} values
+ *   Unsafe value (but an array).
+ * @returns {Array<number | string>}
+ *   Safe value.
+ */
+function propertyValueMany(state, definition, key, values) {
+  let index = -1
+  /** @type {Array<number | string>} */
+  const result = []
+
+  while (++index < values.length) {
+    const value = propertyValuePrimitive(state, definition, key, values[index])
+
+    if (typeof value === 'number' || typeof value === 'string') {
+      result.push(value)
+    }
+  }
+
+  return result
+}
+
+/**
+ * Sanitize a property value which is a primitive.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Readonly<PropertyDefinition>} definition
+ *   Definition.
+ * @param {string} key
+ *   Field name.
+ * @param {Readonly<unknown>} value
+ *   Unsafe value (but not an array).
+ * @returns {boolean | number | string | undefined}
+ *   Safe value.
+ */
+function propertyValuePrimitive(state, definition, key, value) {
+  if (
+    typeof value !== 'boolean' &&
+    typeof value !== 'number' &&
+    typeof value !== 'string'
+  ) {
+    return
+  }
+
+  if (!safeProtocol(state, key, value)) {
+    return
+  }
+
+  // Just a string, or only one item in an array, means all values are OK.
+  // More than one item means an allow list.
+  if (typeof definition === 'object' && definition.length > 1) {
+    let ok = false
+    let index = 0 // Ignore `key`, which is the first item.
+
+    while (++index < definition.length) {
+      const allowed = definition[index]
+
+      // Expression.
+      if (allowed && typeof allowed === 'object' && 'flags' in allowed) {
+        if (allowed.test(String(value))) {
+          ok = true
+          break
+        }
+      }
+      // Primitive.
+      else if (allowed === value) {
+        ok = true
+        break
+      }
+    }
+
+    if (!ok) return
+  }
+
+  return state.schema.clobber &&
+    state.schema.clobberPrefix &&
+    state.schema.clobber.includes(key)
+    ? state.schema.clobberPrefix + value
+    : value
+}
+
+/**
+ * Check whether `value` is a safe URL.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {string} key
+ *   Field name.
+ * @param {Readonly<unknown>} value
+ *   Unsafe value.
+ * @returns {boolean}
+ *   Whether it’s a safe value.
+ */
+function safeProtocol(state, key, value) {
+  const protocols =
+    state.schema.protocols && own.call(state.schema.protocols, key)
+      ? state.schema.protocols[key]
+      : undefined
+
+  // No protocols defined? Then everything is fine.
+  if (!protocols || protocols.length === 0) {
+    return true
+  }
+
+  const url = String(value)
+  const colon = url.indexOf(':')
+  const questionMark = url.indexOf('?')
+  const numberSign = url.indexOf('#')
+  const slash = url.indexOf('/')
+
+  if (
+    colon < 0 ||
+    // If the first colon is after a `?`, `#`, or `/`, it’s not a protocol.
+    (slash > -1 && colon > slash) ||
+    (questionMark > -1 && colon > questionMark) ||
+    (numberSign > -1 && colon > numberSign)
+  ) {
+    return true
+  }
+
+  let index = -1
+
+  while (++index < protocols.length) {
+    const protocol = protocols[index]
+
+    if (
+      colon === protocol.length &&
+      url.slice(0, protocol.length) === protocol
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * Add data and position.
+ *
+ * @param {Nodes} node
+ *   Node to patch safe data and position on.
+ * @param {Readonly<Record<string, Readonly<unknown>>>} unsafe
+ *   Unsafe node-like value.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function patch(node, unsafe) {
+  const cleanPosition = (0,unist_util_position__WEBPACK_IMPORTED_MODULE_1__.position)(
+    // @ts-expect-error: looks like a node.
+    unsafe
+  )
+
+  if (unsafe.data) {
+    node.data = (0,_ungap_structured_clone__WEBPACK_IMPORTED_MODULE_2__["default"])(unsafe.data)
+  }
+
+  if (cleanPosition) node.position = cleanPosition
+}
+
+/**
+ *
+ * @param {Readonly<Array<PropertyDefinition>> | undefined} definitions
+ * @param {string} key
+ * @returns {Readonly<PropertyDefinition> | undefined}
+ */
+function findDefinition(definitions, key) {
+  /** @type {PropertyDefinition | undefined} */
+  let dataDefault
+  let index = -1
+
+  if (definitions) {
+    while (++index < definitions.length) {
+      const entry = definitions[index]
+      const name = typeof entry === 'string' ? entry : entry[0]
+
+      if (name === key) {
+        return entry
+      }
+
+      if (name === 'data*') dataDefault = entry
+    }
+  }
+
+  if (key.length > 4 && key.slice(0, 4).toLowerCase() === 'data') {
+    return dataDefault
+  }
+}
+
+
+/***/ }),
+/* 31 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__),
+/* harmony export */   deserialize: () => (/* reexport safe */ _deserialize_js__WEBPACK_IMPORTED_MODULE_0__.deserialize),
+/* harmony export */   serialize: () => (/* reexport safe */ _serialize_js__WEBPACK_IMPORTED_MODULE_1__.serialize)
+/* harmony export */ });
+/* harmony import */ var _deserialize_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(32);
+/* harmony import */ var _serialize_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(34);
+
+
+
+/**
+ * @typedef {Array<string,any>} Record a type representation
+ */
+
+/**
+ * Returns an array of serialized Records.
+ * @param {any} any a serializable value.
+ * @param {{transfer?: any[], json?: boolean, lossy?: boolean}?} options an object with
+ * a transfer option (ignored when polyfilled) and/or non standard fields that
+ * fallback to the polyfill if present.
+ * @returns {Record[]}
+ */
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (typeof structuredClone === "function" ?
+  /* c8 ignore start */
+  (any, options) => (
+    options && ('json' in options || 'lossy' in options) ?
+      (0,_deserialize_js__WEBPACK_IMPORTED_MODULE_0__.deserialize)((0,_serialize_js__WEBPACK_IMPORTED_MODULE_1__.serialize)(any, options)) : structuredClone(any)
+  ) :
+  (any, options) => (0,_deserialize_js__WEBPACK_IMPORTED_MODULE_0__.deserialize)((0,_serialize_js__WEBPACK_IMPORTED_MODULE_1__.serialize)(any, options)));
+  /* c8 ignore stop */
+
+
+
+
+/***/ }),
+/* 32 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   deserialize: () => (/* binding */ deserialize)
+/* harmony export */ });
+/* harmony import */ var _types_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(33);
+
+
+const env = typeof self === 'object' ? self : globalThis;
+
+const deserializer = ($, _) => {
+  const as = (out, index) => {
+    $.set(index, out);
+    return out;
+  };
+
+  const unpair = index => {
+    if ($.has(index))
+      return $.get(index);
+
+    const [type, value] = _[index];
+    switch (type) {
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.PRIMITIVE:
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.VOID:
+        return as(value, index);
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.ARRAY: {
+        const arr = as([], index);
+        for (const index of value)
+          arr.push(unpair(index));
+        return arr;
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.OBJECT: {
+        const object = as({}, index);
+        for (const [key, index] of value)
+          object[unpair(key)] = unpair(index);
+        return object;
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.DATE:
+        return as(new Date(value), index);
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.REGEXP: {
+        const {source, flags} = value;
+        return as(new RegExp(source, flags), index);
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.MAP: {
+        const map = as(new Map, index);
+        for (const [key, index] of value)
+          map.set(unpair(key), unpair(index));
+        return map;
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.SET: {
+        const set = as(new Set, index);
+        for (const index of value)
+          set.add(unpair(index));
+        return set;
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.ERROR: {
+        const {name, message} = value;
+        return as(new env[name](message), index);
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.BIGINT:
+        return as(BigInt(value), index);
+      case 'BigInt':
+        return as(Object(BigInt(value)), index);
+      case 'ArrayBuffer':
+        return as(new Uint8Array(value).buffer, value);
+      case 'DataView': {
+        const { buffer } = new Uint8Array(value);
+        return as(new DataView(buffer), value);
+      }
+    }
+    return as(new env[type](value), index);
+  };
+
+  return unpair;
+};
+
+/**
+ * @typedef {Array<string,any>} Record a type representation
+ */
+
+/**
+ * Returns a deserialized value from a serialized array of Records.
+ * @param {Record[]} serialized a previously serialized value.
+ * @returns {any}
+ */
+const deserialize = serialized => deserializer(new Map, serialized)(0);
+
+
+/***/ }),
+/* 33 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   ARRAY: () => (/* binding */ ARRAY),
+/* harmony export */   BIGINT: () => (/* binding */ BIGINT),
+/* harmony export */   DATE: () => (/* binding */ DATE),
+/* harmony export */   ERROR: () => (/* binding */ ERROR),
+/* harmony export */   MAP: () => (/* binding */ MAP),
+/* harmony export */   OBJECT: () => (/* binding */ OBJECT),
+/* harmony export */   PRIMITIVE: () => (/* binding */ PRIMITIVE),
+/* harmony export */   REGEXP: () => (/* binding */ REGEXP),
+/* harmony export */   SET: () => (/* binding */ SET),
+/* harmony export */   VOID: () => (/* binding */ VOID)
+/* harmony export */ });
+const VOID       = -1;
+const PRIMITIVE  = 0;
+const ARRAY      = 1;
+const OBJECT     = 2;
+const DATE       = 3;
+const REGEXP     = 4;
+const MAP        = 5;
+const SET        = 6;
+const ERROR      = 7;
+const BIGINT     = 8;
+// export const SYMBOL = 9;
+
+
+/***/ }),
+/* 34 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   serialize: () => (/* binding */ serialize)
+/* harmony export */ });
+/* harmony import */ var _types_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(33);
+
+
+const EMPTY = '';
+
+const {toString} = {};
+const {keys} = Object;
+
+const typeOf = value => {
+  const type = typeof value;
+  if (type !== 'object' || !value)
+    return [_types_js__WEBPACK_IMPORTED_MODULE_0__.PRIMITIVE, type];
+
+  const asString = toString.call(value).slice(8, -1);
+  switch (asString) {
+    case 'Array':
+      return [_types_js__WEBPACK_IMPORTED_MODULE_0__.ARRAY, EMPTY];
+    case 'Object':
+      return [_types_js__WEBPACK_IMPORTED_MODULE_0__.OBJECT, EMPTY];
+    case 'Date':
+      return [_types_js__WEBPACK_IMPORTED_MODULE_0__.DATE, EMPTY];
+    case 'RegExp':
+      return [_types_js__WEBPACK_IMPORTED_MODULE_0__.REGEXP, EMPTY];
+    case 'Map':
+      return [_types_js__WEBPACK_IMPORTED_MODULE_0__.MAP, EMPTY];
+    case 'Set':
+      return [_types_js__WEBPACK_IMPORTED_MODULE_0__.SET, EMPTY];
+    case 'DataView':
+      return [_types_js__WEBPACK_IMPORTED_MODULE_0__.ARRAY, asString];
+  }
+
+  if (asString.includes('Array'))
+    return [_types_js__WEBPACK_IMPORTED_MODULE_0__.ARRAY, asString];
+
+  if (asString.includes('Error'))
+    return [_types_js__WEBPACK_IMPORTED_MODULE_0__.ERROR, asString];
+
+  return [_types_js__WEBPACK_IMPORTED_MODULE_0__.OBJECT, asString];
+};
+
+const shouldSkip = ([TYPE, type]) => (
+  TYPE === _types_js__WEBPACK_IMPORTED_MODULE_0__.PRIMITIVE &&
+  (type === 'function' || type === 'symbol')
+);
+
+const serializer = (strict, json, $, _) => {
+
+  const as = (out, value) => {
+    const index = _.push(out) - 1;
+    $.set(value, index);
+    return index;
+  };
+
+  const pair = value => {
+    if ($.has(value))
+      return $.get(value);
+
+    let [TYPE, type] = typeOf(value);
+    switch (TYPE) {
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.PRIMITIVE: {
+        let entry = value;
+        switch (type) {
+          case 'bigint':
+            TYPE = _types_js__WEBPACK_IMPORTED_MODULE_0__.BIGINT;
+            entry = value.toString();
+            break;
+          case 'function':
+          case 'symbol':
+            if (strict)
+              throw new TypeError('unable to serialize ' + type);
+            entry = null;
+            break;
+          case 'undefined':
+            return as([_types_js__WEBPACK_IMPORTED_MODULE_0__.VOID], value);
+        }
+        return as([TYPE, entry], value);
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.ARRAY: {
+        if (type) {
+          let spread = value;
+          if (type === 'DataView') {
+            spread = new Uint8Array(value.buffer);
+          }
+          else if (type === 'ArrayBuffer') {
+            spread = new Uint8Array(value);
+          }
+          return as([type, [...spread]], value);
+        }
+
+        const arr = [];
+        const index = as([TYPE, arr], value);
+        for (const entry of value)
+          arr.push(pair(entry));
+        return index;
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.OBJECT: {
+        if (type) {
+          switch (type) {
+            case 'BigInt':
+              return as([type, value.toString()], value);
+            case 'Boolean':
+            case 'Number':
+            case 'String':
+              return as([type, value.valueOf()], value);
+          }
+        }
+
+        if (json && ('toJSON' in value))
+          return pair(value.toJSON());
+
+        const entries = [];
+        const index = as([TYPE, entries], value);
+        for (const key of keys(value)) {
+          if (strict || !shouldSkip(typeOf(value[key])))
+            entries.push([pair(key), pair(value[key])]);
+        }
+        return index;
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.DATE:
+        return as([TYPE, value.toISOString()], value);
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.REGEXP: {
+        const {source, flags} = value;
+        return as([TYPE, {source, flags}], value);
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.MAP: {
+        const entries = [];
+        const index = as([TYPE, entries], value);
+        for (const [key, entry] of value) {
+          if (strict || !(shouldSkip(typeOf(key)) || shouldSkip(typeOf(entry))))
+            entries.push([pair(key), pair(entry)]);
+        }
+        return index;
+      }
+      case _types_js__WEBPACK_IMPORTED_MODULE_0__.SET: {
+        const entries = [];
+        const index = as([TYPE, entries], value);
+        for (const entry of value) {
+          if (strict || !shouldSkip(typeOf(entry)))
+            entries.push(pair(entry));
+        }
+        return index;
+      }
+    }
+
+    const {message} = value;
+    return as([TYPE, {name: type, message}], value);
+  };
+
+  return pair;
+};
+
+/**
+ * @typedef {Array<string,any>} Record a type representation
+ */
+
+/**
+ * Returns an array of serialized Records.
+ * @param {any} value a serializable value.
+ * @param {{json?: boolean, lossy?: boolean}?} options an object with a `lossy` or `json` property that,
+ *  if `true`, will not throw errors on incompatible types, and behave more
+ *  like JSON stringify would behave. Symbol and Function will be discarded.
+ * @returns {Record[]}
+ */
+ const serialize = (value, {json, lossy} = {}) => {
+  const _ = [];
+  return serializer(!(json || lossy), !!json, new Map, _)(value), _;
+};
+
+
+/***/ }),
+/* 35 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   defaultSchema: () => (/* binding */ defaultSchema)
+/* harmony export */ });
+/**
+ * @import {Schema} from 'hast-util-sanitize'
+ */
+
+// Couple of ARIA attributes allowed in several, but not all, places.
+const aria = ['ariaDescribedBy', 'ariaLabel', 'ariaLabelledBy']
+
+/**
+ * Default schema.
+ *
+ * Follows GitHub style sanitation.
+ *
+ * @type {Schema}
+ */
+const defaultSchema = {
+  ancestors: {
+    tbody: ['table'],
+    td: ['table'],
+    th: ['table'],
+    thead: ['table'],
+    tfoot: ['table'],
+    tr: ['table']
+  },
+  attributes: {
+    a: [
+      ...aria,
+      // Note: these 3 are used by GFM footnotes, they do work on all links.
+      'dataFootnoteBackref',
+      'dataFootnoteRef',
+      ['className', 'data-footnote-backref'],
+      'href'
+    ],
+    blockquote: ['cite'],
+    // Note: this class is not normally allowed by GH, when manually writing
+    // `code` as HTML in markdown, they adds it some other way.
+    // We can’t do that, so we have to allow it.
+    code: [['className', /^language-./]],
+    del: ['cite'],
+    div: ['itemScope', 'itemType'],
+    dl: [...aria],
+    // Note: this is used by GFM footnotes.
+    h2: [['className', 'sr-only']],
+    img: [...aria, 'longDesc', 'src'],
+    // Note: `input` is not normally allowed by GH, when manually writing
+    // it in markdown, they add it from tasklists some other way.
+    // We can’t do that, so we have to allow it.
+    input: [
+      ['disabled', true],
+      ['type', 'checkbox']
+    ],
+    ins: ['cite'],
+    // Note: this class is not normally allowed by GH, when manually writing
+    // `li` as HTML in markdown, they adds it some other way.
+    // We can’t do that, so we have to allow it.
+    li: [['className', 'task-list-item']],
+    // Note: this class is not normally allowed by GH, when manually writing
+    // `ol` as HTML in markdown, they adds it some other way.
+    // We can’t do that, so we have to allow it.
+    ol: [...aria, ['className', 'contains-task-list']],
+    q: ['cite'],
+    section: ['dataFootnotes', ['className', 'footnotes']],
+    source: ['srcSet'],
+    summary: [...aria],
+    table: [...aria],
+    // Note: this class is not normally allowed by GH, when manually writing
+    // `ol` as HTML in markdown, they adds it some other way.
+    // We can’t do that, so we have to allow it.
+    ul: [...aria, ['className', 'contains-task-list']],
+    '*': [
+      'abbr',
+      'accept',
+      'acceptCharset',
+      'accessKey',
+      'action',
+      'align',
+      'alt',
+      'axis',
+      'border',
+      'cellPadding',
+      'cellSpacing',
+      'char',
+      'charOff',
+      'charSet',
+      'checked',
+      'clear',
+      'colSpan',
+      'color',
+      'cols',
+      'compact',
+      'coords',
+      'dateTime',
+      'dir',
+      // Note: `disabled` is technically allowed on all elements by GH.
+      // But it is useless on everything except `input`.
+      // Because `input`s are normally not allowed, but we allow them for
+      // checkboxes due to tasklists, we allow `disabled` only there.
+      'encType',
+      'frame',
+      'hSpace',
+      'headers',
+      'height',
+      'hrefLang',
+      'htmlFor',
+      'id',
+      'isMap',
+      'itemProp',
+      'label',
+      'lang',
+      'maxLength',
+      'media',
+      'method',
+      'multiple',
+      'name',
+      'noHref',
+      'noShade',
+      'noWrap',
+      'open',
+      'prompt',
+      'readOnly',
+      'rev',
+      'rowSpan',
+      'rows',
+      'rules',
+      'scope',
+      'selected',
+      'shape',
+      'size',
+      'span',
+      'start',
+      'summary',
+      'tabIndex',
+      'title',
+      'useMap',
+      'vAlign',
+      'value',
+      'width'
+    ]
+  },
+  clobber: ['ariaDescribedBy', 'ariaLabelledBy', 'id', 'name'],
+  clobberPrefix: 'user-content-',
+  protocols: {
+    cite: ['http', 'https'],
+    href: ['http', 'https', 'irc', 'ircs', 'mailto', 'xmpp'],
+    longDesc: ['http', 'https'],
+    src: ['http', 'https']
+  },
+  required: {
+    input: {disabled: true, type: 'checkbox'}
+  },
+  strip: ['script'],
+  tagNames: [
+    'a',
+    'b',
+    'blockquote',
+    'br',
+    'code',
+    'dd',
+    'del',
+    'details',
+    'div',
+    'dl',
+    'dt',
+    'em',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'hr',
+    'i',
+    'img',
+    // Note: `input` is not normally allowed by GH, when manually writing
+    // it in markdown, they add it from tasklists some other way.
+    // We can’t do that, so we have to allow it.
+    'input',
+    'ins',
+    'kbd',
+    'li',
+    'ol',
+    'p',
+    'picture',
+    'pre',
+    'q',
+    'rp',
+    'rt',
+    'ruby',
+    's',
+    'samp',
+    'section',
+    'source',
+    'span',
+    'strike',
+    'strong',
+    'sub',
+    'summary',
+    'sup',
+    'table',
+    'tbody',
+    'td',
+    'tfoot',
+    'th',
+    'thead',
+    'tr',
+    'tt',
+    'ul',
+    'var'
+  ]
+}
+
+
+/***/ }),
+/* 36 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   pointEnd: () => (/* binding */ pointEnd),
+/* harmony export */   pointStart: () => (/* binding */ pointStart),
+/* harmony export */   position: () => (/* binding */ position)
+/* harmony export */ });
+/**
+ * @typedef {import('unist').Node} Node
+ * @typedef {import('unist').Point} Point
+ * @typedef {import('unist').Position} Position
+ */
+
+/**
+ * @typedef NodeLike
+ * @property {string} type
+ * @property {PositionLike | null | undefined} [position]
+ *
+ * @typedef PositionLike
+ * @property {PointLike | null | undefined} [start]
+ * @property {PointLike | null | undefined} [end]
+ *
+ * @typedef PointLike
+ * @property {number | null | undefined} [line]
+ * @property {number | null | undefined} [column]
+ * @property {number | null | undefined} [offset]
+ */
+
+/**
+ * Get the ending point of `node`.
+ *
+ * @param node
+ *   Node.
+ * @returns
+ *   Point.
+ */
+const pointEnd = point('end')
+
+/**
+ * Get the starting point of `node`.
+ *
+ * @param node
+ *   Node.
+ * @returns
+ *   Point.
+ */
+const pointStart = point('start')
+
+/**
+ * Get the positional info of `node`.
+ *
+ * @param {'end' | 'start'} type
+ *   Side.
+ * @returns
+ *   Getter.
+ */
+function point(type) {
+  return point
+
+  /**
+   * Get the point info of `node` at a bound side.
+   *
+   * @param {Node | NodeLike | null | undefined} [node]
+   * @returns {Point | undefined}
+   */
+  function point(node) {
+    const point = (node && node.position && node.position[type]) || {}
+
+    if (
+      typeof point.line === 'number' &&
+      point.line > 0 &&
+      typeof point.column === 'number' &&
+      point.column > 0
+    ) {
+      return {
+        line: point.line,
+        column: point.column,
+        offset:
+          typeof point.offset === 'number' && point.offset > -1
+            ? point.offset
+            : undefined
+      }
+    }
+  }
+}
+
+/**
+ * Get the positional info of `node`.
+ *
+ * @param {Node | NodeLike | null | undefined} [node]
+ *   Node.
+ * @returns {Position | undefined}
+ *   Position.
+ */
+function position(node) {
+  const start = pointStart(node)
+  const end = pointEnd(node)
+
+  if (start && end) {
+    return {start, end}
+  }
+}
+
+
+/***/ }),
+/* 37 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   defaultFootnoteBackContent: () => (/* reexport safe */ _lib_footer_js__WEBPACK_IMPORTED_MODULE_2__.defaultFootnoteBackContent),
+/* harmony export */   defaultFootnoteBackLabel: () => (/* reexport safe */ _lib_footer_js__WEBPACK_IMPORTED_MODULE_2__.defaultFootnoteBackLabel),
+/* harmony export */   defaultHandlers: () => (/* reexport safe */ _lib_handlers_index_js__WEBPACK_IMPORTED_MODULE_0__.handlers),
+/* harmony export */   toHast: () => (/* reexport safe */ _lib_index_js__WEBPACK_IMPORTED_MODULE_1__.toHast)
+/* harmony export */ });
+/* harmony import */ var _lib_handlers_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(38);
+/* harmony import */ var _lib_index_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(67);
+/* harmony import */ var _lib_footer_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(69);
+// Note: types exposed from `index.d.ts`.
+
+
+
+
+
+/***/ }),
+/* 38 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   handlers: () => (/* binding */ handlers)
+/* harmony export */ });
+/* harmony import */ var _blockquote_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(39);
+/* harmony import */ var _break_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(40);
+/* harmony import */ var _code_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(41);
+/* harmony import */ var _delete_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(42);
+/* harmony import */ var _emphasis_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(43);
+/* harmony import */ var _footnote_reference_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(44);
+/* harmony import */ var _heading_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(48);
+/* harmony import */ var _html_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(49);
+/* harmony import */ var _image_reference_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(50);
+/* harmony import */ var _image_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(52);
+/* harmony import */ var _inline_code_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(53);
+/* harmony import */ var _link_reference_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(54);
+/* harmony import */ var _link_js__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(55);
+/* harmony import */ var _list_item_js__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(56);
+/* harmony import */ var _list_js__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(57);
+/* harmony import */ var _paragraph_js__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(58);
+/* harmony import */ var _root_js__WEBPACK_IMPORTED_MODULE_16__ = __webpack_require__(59);
+/* harmony import */ var _strong_js__WEBPACK_IMPORTED_MODULE_17__ = __webpack_require__(60);
+/* harmony import */ var _table_js__WEBPACK_IMPORTED_MODULE_18__ = __webpack_require__(61);
+/* harmony import */ var _table_row_js__WEBPACK_IMPORTED_MODULE_20__ = __webpack_require__(62);
+/* harmony import */ var _table_cell_js__WEBPACK_IMPORTED_MODULE_19__ = __webpack_require__(63);
+/* harmony import */ var _text_js__WEBPACK_IMPORTED_MODULE_21__ = __webpack_require__(64);
+/* harmony import */ var _thematic_break_js__WEBPACK_IMPORTED_MODULE_22__ = __webpack_require__(66);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * Default handlers for nodes.
+ *
+ * @satisfies {import('../state.js').Handlers}
+ */
+const handlers = {
+  blockquote: _blockquote_js__WEBPACK_IMPORTED_MODULE_0__.blockquote,
+  break: _break_js__WEBPACK_IMPORTED_MODULE_1__.hardBreak,
+  code: _code_js__WEBPACK_IMPORTED_MODULE_2__.code,
+  delete: _delete_js__WEBPACK_IMPORTED_MODULE_3__.strikethrough,
+  emphasis: _emphasis_js__WEBPACK_IMPORTED_MODULE_4__.emphasis,
+  footnoteReference: _footnote_reference_js__WEBPACK_IMPORTED_MODULE_5__.footnoteReference,
+  heading: _heading_js__WEBPACK_IMPORTED_MODULE_6__.heading,
+  html: _html_js__WEBPACK_IMPORTED_MODULE_7__.html,
+  imageReference: _image_reference_js__WEBPACK_IMPORTED_MODULE_8__.imageReference,
+  image: _image_js__WEBPACK_IMPORTED_MODULE_9__.image,
+  inlineCode: _inline_code_js__WEBPACK_IMPORTED_MODULE_10__.inlineCode,
+  linkReference: _link_reference_js__WEBPACK_IMPORTED_MODULE_11__.linkReference,
+  link: _link_js__WEBPACK_IMPORTED_MODULE_12__.link,
+  listItem: _list_item_js__WEBPACK_IMPORTED_MODULE_13__.listItem,
+  list: _list_js__WEBPACK_IMPORTED_MODULE_14__.list,
+  paragraph: _paragraph_js__WEBPACK_IMPORTED_MODULE_15__.paragraph,
+  // @ts-expect-error: root is different, but hard to type.
+  root: _root_js__WEBPACK_IMPORTED_MODULE_16__.root,
+  strong: _strong_js__WEBPACK_IMPORTED_MODULE_17__.strong,
+  table: _table_js__WEBPACK_IMPORTED_MODULE_18__.table,
+  tableCell: _table_cell_js__WEBPACK_IMPORTED_MODULE_19__.tableCell,
+  tableRow: _table_row_js__WEBPACK_IMPORTED_MODULE_20__.tableRow,
+  text: _text_js__WEBPACK_IMPORTED_MODULE_21__.text,
+  thematicBreak: _thematic_break_js__WEBPACK_IMPORTED_MODULE_22__.thematicBreak,
+  toml: ignore,
+  yaml: ignore,
+  definition: ignore,
+  footnoteDefinition: ignore
+}
+
+// Return nothing for nodes that are ignored.
+function ignore() {
+  return undefined
+}
+
+
+/***/ }),
+/* 39 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   blockquote: () => (/* binding */ blockquote)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').Blockquote} Blockquote
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `blockquote` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Blockquote} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function blockquote(state, node) {
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'blockquote',
+    properties: {},
+    children: state.wrap(state.all(node), true)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 40 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   hardBreak: () => (/* binding */ hardBreak)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').Text} Text
+ * @typedef {import('mdast').Break} Break
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `break` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Break} node
+ *   mdast node.
+ * @returns {Array<Element | Text>}
+ *   hast element content.
+ */
+function hardBreak(state, node) {
+  /** @type {Element} */
+  const result = {type: 'element', tagName: 'br', properties: {}, children: []}
+  state.patch(node, result)
+  return [state.applyData(node, result), {type: 'text', value: '\n'}]
+}
+
+
+/***/ }),
+/* 41 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   code: () => (/* binding */ code)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').Properties} Properties
+ * @typedef {import('mdast').Code} Code
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `code` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Code} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function code(state, node) {
+  const value = node.value ? node.value + '\n' : ''
+  /** @type {Properties} */
+  const properties = {}
+
+  if (node.lang) {
+    properties.className = ['language-' + node.lang]
+  }
+
+  // Create `<code>`.
+  /** @type {Element} */
+  let result = {
+    type: 'element',
+    tagName: 'code',
+    properties,
+    children: [{type: 'text', value}]
+  }
+
+  if (node.meta) {
+    result.data = {meta: node.meta}
+  }
+
+  state.patch(node, result)
+  result = state.applyData(node, result)
+
+  // Create `<pre>`.
+  result = {type: 'element', tagName: 'pre', properties: {}, children: [result]}
+  state.patch(node, result)
+  return result
+}
+
+
+/***/ }),
+/* 42 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   strikethrough: () => (/* binding */ strikethrough)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').Delete} Delete
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `delete` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Delete} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function strikethrough(state, node) {
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'del',
+    properties: {},
+    children: state.all(node)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 43 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   emphasis: () => (/* binding */ emphasis)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').Emphasis} Emphasis
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `emphasis` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Emphasis} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function emphasis(state, node) {
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'em',
+    properties: {},
+    children: state.all(node)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 44 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   footnoteReference: () => (/* binding */ footnoteReference)
+/* harmony export */ });
+/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(45);
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').FootnoteReference} FootnoteReference
+ * @typedef {import('../state.js').State} State
+ */
+
+
+
+/**
+ * Turn an mdast `footnoteReference` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {FootnoteReference} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function footnoteReference(state, node) {
+  const clobberPrefix =
+    typeof state.options.clobberPrefix === 'string'
+      ? state.options.clobberPrefix
+      : 'user-content-'
+  const id = String(node.identifier).toUpperCase()
+  const safeId = (0,micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__.normalizeUri)(id.toLowerCase())
+  const index = state.footnoteOrder.indexOf(id)
+  /** @type {number} */
+  let counter
+
+  let reuseCounter = state.footnoteCounts.get(id)
+
+  if (reuseCounter === undefined) {
+    reuseCounter = 0
+    state.footnoteOrder.push(id)
+    counter = state.footnoteOrder.length
+  } else {
+    counter = index + 1
+  }
+
+  reuseCounter += 1
+  state.footnoteCounts.set(id, reuseCounter)
+
+  /** @type {Element} */
+  const link = {
+    type: 'element',
+    tagName: 'a',
+    properties: {
+      href: '#' + clobberPrefix + 'fn-' + safeId,
+      id:
+        clobberPrefix +
+        'fnref-' +
+        safeId +
+        (reuseCounter > 1 ? '-' + reuseCounter : ''),
+      dataFootnoteRef: true,
+      ariaDescribedBy: ['footnote-label']
+    },
+    children: [{type: 'text', value: String(counter)}]
+  }
+  state.patch(node, link)
+
+  /** @type {Element} */
+  const sup = {
+    type: 'element',
+    tagName: 'sup',
+    properties: {},
+    children: [link]
+  }
+  state.patch(node, sup)
+  return state.applyData(node, sup)
+}
+
+
+/***/ }),
+/* 45 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   normalizeUri: () => (/* binding */ normalizeUri),
+/* harmony export */   sanitizeUri: () => (/* binding */ sanitizeUri)
+/* harmony export */ });
+/* harmony import */ var micromark_util_character__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(46);
+/* harmony import */ var micromark_util_encode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(47);
+
+
+/**
+ * Make a value safe for injection as a URL.
+ *
+ * This encodes unsafe characters with percent-encoding and skips already
+ * encoded sequences (see `normalizeUri`).
+ * Further unsafe characters are encoded as character references (see
+ * `micromark-util-encode`).
+ *
+ * A regex of allowed protocols can be given, in which case the URL is
+ * sanitized.
+ * For example, `/^(https?|ircs?|mailto|xmpp)$/i` can be used for `a[href]`, or
+ * `/^https?$/i` for `img[src]` (this is what `github.com` allows).
+ * If the URL includes an unknown protocol (one not matched by `protocol`, such
+ * as a dangerous example, `javascript:`), the value is ignored.
+ *
+ * @param {string | null | undefined} url
+ *   URI to sanitize.
+ * @param {RegExp | null | undefined} [protocol]
+ *   Allowed protocols.
+ * @returns {string}
+ *   Sanitized URI.
+ */
+function sanitizeUri(url, protocol) {
+  const value = (0,micromark_util_encode__WEBPACK_IMPORTED_MODULE_0__.encode)(normalizeUri(url || ''));
+  if (!protocol) {
+    return value;
+  }
+  const colon = value.indexOf(':');
+  const questionMark = value.indexOf('?');
+  const numberSign = value.indexOf('#');
+  const slash = value.indexOf('/');
+  if (
+  // If there is no protocol, it’s relative.
+  colon < 0 ||
+  // If the first colon is after a `?`, `#`, or `/`, it’s not a protocol.
+  slash > -1 && colon > slash || questionMark > -1 && colon > questionMark || numberSign > -1 && colon > numberSign ||
+  // It is a protocol, it should be allowed.
+  protocol.test(value.slice(0, colon))) {
+    return value;
+  }
+  return '';
+}
+
+/**
+ * Normalize a URL.
+ *
+ * Encode unsafe characters with percent-encoding, skipping already encoded
+ * sequences.
+ *
+ * @param {string} value
+ *   URI to normalize.
+ * @returns {string}
+ *   Normalized URI.
+ */
+function normalizeUri(value) {
+  /** @type {Array<string>} */
+  const result = [];
+  let index = -1;
+  let start = 0;
+  let skip = 0;
+  while (++index < value.length) {
+    const code = value.charCodeAt(index);
+    /** @type {string} */
+    let replace = '';
+
+    // A correct percent encoded value.
+    if (code === 37 && (0,micromark_util_character__WEBPACK_IMPORTED_MODULE_1__.asciiAlphanumeric)(value.charCodeAt(index + 1)) && (0,micromark_util_character__WEBPACK_IMPORTED_MODULE_1__.asciiAlphanumeric)(value.charCodeAt(index + 2))) {
+      skip = 2;
+    }
+    // ASCII.
+    else if (code < 128) {
+      if (!/[!#$&-;=?-Z_a-z~]/.test(String.fromCharCode(code))) {
+        replace = String.fromCharCode(code);
+      }
+    }
+    // Astral.
+    else if (code > 55_295 && code < 57_344) {
+      const next = value.charCodeAt(index + 1);
+
+      // A correct surrogate pair.
+      if (code < 56_320 && next > 56_319 && next < 57_344) {
+        replace = String.fromCharCode(code, next);
+        skip = 1;
+      }
+      // Lone surrogate.
+      else {
+        replace = "\uFFFD";
+      }
+    }
+    // Unicode.
+    else {
+      replace = String.fromCharCode(code);
+    }
+    if (replace) {
+      result.push(value.slice(start, index), encodeURIComponent(replace));
+      start = index + skip + 1;
+      replace = '';
+    }
+    if (skip) {
+      index += skip;
+      skip = 0;
+    }
+  }
+  return result.join('') + value.slice(start);
+}
+
+/***/ }),
+/* 46 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   asciiAlpha: () => (/* binding */ asciiAlpha),
+/* harmony export */   asciiAlphanumeric: () => (/* binding */ asciiAlphanumeric),
+/* harmony export */   asciiAtext: () => (/* binding */ asciiAtext),
+/* harmony export */   asciiControl: () => (/* binding */ asciiControl),
+/* harmony export */   asciiDigit: () => (/* binding */ asciiDigit),
+/* harmony export */   asciiHexDigit: () => (/* binding */ asciiHexDigit),
+/* harmony export */   asciiPunctuation: () => (/* binding */ asciiPunctuation),
+/* harmony export */   markdownLineEnding: () => (/* binding */ markdownLineEnding),
+/* harmony export */   markdownLineEndingOrSpace: () => (/* binding */ markdownLineEndingOrSpace),
+/* harmony export */   markdownSpace: () => (/* binding */ markdownSpace),
+/* harmony export */   unicodePunctuation: () => (/* binding */ unicodePunctuation),
+/* harmony export */   unicodeWhitespace: () => (/* binding */ unicodeWhitespace)
+/* harmony export */ });
+/**
+ * @import {Code} from 'micromark-util-types'
+ */
+
+/**
+ * Check whether the character code represents an ASCII alpha (`a` through `z`,
+ * case insensitive).
+ *
+ * An **ASCII alpha** is an ASCII upper alpha or ASCII lower alpha.
+ *
+ * An **ASCII upper alpha** is a character in the inclusive range U+0041 (`A`)
+ * to U+005A (`Z`).
+ *
+ * An **ASCII lower alpha** is a character in the inclusive range U+0061 (`a`)
+ * to U+007A (`z`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiAlpha = regexCheck(/[A-Za-z]/);
+
+/**
+ * Check whether the character code represents an ASCII alphanumeric (`a`
+ * through `z`, case insensitive, or `0` through `9`).
+ *
+ * An **ASCII alphanumeric** is an ASCII digit (see `asciiDigit`) or ASCII alpha
+ * (see `asciiAlpha`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiAlphanumeric = regexCheck(/[\dA-Za-z]/);
+
+/**
+ * Check whether the character code represents an ASCII atext.
+ *
+ * atext is an ASCII alphanumeric (see `asciiAlphanumeric`), or a character in
+ * the inclusive ranges U+0023 NUMBER SIGN (`#`) to U+0027 APOSTROPHE (`'`),
+ * U+002A ASTERISK (`*`), U+002B PLUS SIGN (`+`), U+002D DASH (`-`), U+002F
+ * SLASH (`/`), U+003D EQUALS TO (`=`), U+003F QUESTION MARK (`?`), U+005E
+ * CARET (`^`) to U+0060 GRAVE ACCENT (`` ` ``), or U+007B LEFT CURLY BRACE
+ * (`{`) to U+007E TILDE (`~`).
+ *
+ * See:
+ * **\[RFC5322]**:
+ * [Internet Message Format](https://tools.ietf.org/html/rfc5322).
+ * P. Resnick.
+ * IETF.
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiAtext = regexCheck(/[#-'*+\--9=?A-Z^-~]/);
+
+/**
+ * Check whether a character code is an ASCII control character.
+ *
+ * An **ASCII control** is a character in the inclusive range U+0000 NULL (NUL)
+ * to U+001F (US), or U+007F (DEL).
+ *
+ * @param {Code} code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+function asciiControl(code) {
+  return (
+    // Special whitespace codes (which have negative values), C0 and Control
+    // character DEL
+    code !== null && (code < 32 || code === 127)
+  );
+}
+
+/**
+ * Check whether the character code represents an ASCII digit (`0` through `9`).
+ *
+ * An **ASCII digit** is a character in the inclusive range U+0030 (`0`) to
+ * U+0039 (`9`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiDigit = regexCheck(/\d/);
+
+/**
+ * Check whether the character code represents an ASCII hex digit (`a` through
+ * `f`, case insensitive, or `0` through `9`).
+ *
+ * An **ASCII hex digit** is an ASCII digit (see `asciiDigit`), ASCII upper hex
+ * digit, or an ASCII lower hex digit.
+ *
+ * An **ASCII upper hex digit** is a character in the inclusive range U+0041
+ * (`A`) to U+0046 (`F`).
+ *
+ * An **ASCII lower hex digit** is a character in the inclusive range U+0061
+ * (`a`) to U+0066 (`f`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiHexDigit = regexCheck(/[\dA-Fa-f]/);
+
+/**
+ * Check whether the character code represents ASCII punctuation.
+ *
+ * An **ASCII punctuation** is a character in the inclusive ranges U+0021
+ * EXCLAMATION MARK (`!`) to U+002F SLASH (`/`), U+003A COLON (`:`) to U+0040 AT
+ * SIGN (`@`), U+005B LEFT SQUARE BRACKET (`[`) to U+0060 GRAVE ACCENT
+ * (`` ` ``), or U+007B LEFT CURLY BRACE (`{`) to U+007E TILDE (`~`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiPunctuation = regexCheck(/[!-/:-@[-`{-~]/);
+
+/**
+ * Check whether a character code is a markdown line ending.
+ *
+ * A **markdown line ending** is the virtual characters M-0003 CARRIAGE RETURN
+ * LINE FEED (CRLF), M-0004 LINE FEED (LF) and M-0005 CARRIAGE RETURN (CR).
+ *
+ * In micromark, the actual character U+000A LINE FEED (LF) and U+000D CARRIAGE
+ * RETURN (CR) are replaced by these virtual characters depending on whether
+ * they occurred together.
+ *
+ * @param {Code} code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+function markdownLineEnding(code) {
+  return code !== null && code < -2;
+}
+
+/**
+ * Check whether a character code is a markdown line ending (see
+ * `markdownLineEnding`) or markdown space (see `markdownSpace`).
+ *
+ * @param {Code} code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+function markdownLineEndingOrSpace(code) {
+  return code !== null && (code < 0 || code === 32);
+}
+
+/**
+ * Check whether a character code is a markdown space.
+ *
+ * A **markdown space** is the concrete character U+0020 SPACE (SP) and the
+ * virtual characters M-0001 VIRTUAL SPACE (VS) and M-0002 HORIZONTAL TAB (HT).
+ *
+ * In micromark, the actual character U+0009 CHARACTER TABULATION (HT) is
+ * replaced by one M-0002 HORIZONTAL TAB (HT) and between 0 and 3 M-0001 VIRTUAL
+ * SPACE (VS) characters, depending on the column at which the tab occurred.
+ *
+ * @param {Code} code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+function markdownSpace(code) {
+  return code === -2 || code === -1 || code === 32;
+}
+
+// Size note: removing ASCII from the regex and using `asciiPunctuation` here
+// In fact adds to the bundle size.
+/**
+ * Check whether the character code represents Unicode punctuation.
+ *
+ * A **Unicode punctuation** is a character in the Unicode `Pc` (Punctuation,
+ * Connector), `Pd` (Punctuation, Dash), `Pe` (Punctuation, Close), `Pf`
+ * (Punctuation, Final quote), `Pi` (Punctuation, Initial quote), `Po`
+ * (Punctuation, Other), or `Ps` (Punctuation, Open) categories, or an ASCII
+ * punctuation (see `asciiPunctuation`).
+ *
+ * See:
+ * **\[UNICODE]**:
+ * [The Unicode Standard](https://www.unicode.org/versions/).
+ * Unicode Consortium.
+ *
+ * @param code
+ *   Code.
+ * @returns
+ *   Whether it matches.
+ */
+const unicodePunctuation = regexCheck(/\p{P}|\p{S}/u);
+
+/**
+ * Check whether the character code represents Unicode whitespace.
+ *
+ * Note that this does handle micromark specific markdown whitespace characters.
+ * See `markdownLineEndingOrSpace` to check that.
+ *
+ * A **Unicode whitespace** is a character in the Unicode `Zs` (Separator,
+ * Space) category, or U+0009 CHARACTER TABULATION (HT), U+000A LINE FEED (LF),
+ * U+000C (FF), or U+000D CARRIAGE RETURN (CR) (**\[UNICODE]**).
+ *
+ * See:
+ * **\[UNICODE]**:
+ * [The Unicode Standard](https://www.unicode.org/versions/).
+ * Unicode Consortium.
+ *
+ * @param code
+ *   Code.
+ * @returns
+ *   Whether it matches.
+ */
+const unicodeWhitespace = regexCheck(/\s/);
+
+/**
+ * Create a code check from a regex.
+ *
+ * @param {RegExp} regex
+ *   Expression.
+ * @returns {(code: Code) => boolean}
+ *   Check.
+ */
+function regexCheck(regex) {
+  return check;
+
+  /**
+   * Check whether a code matches the bound regex.
+   *
+   * @param {Code} code
+   *   Character code.
+   * @returns {boolean}
+   *   Whether the character code matches the bound regex.
+   */
+  function check(code) {
+    return code !== null && code > -1 && regex.test(String.fromCharCode(code));
+  }
+}
+
+/***/ }),
+/* 47 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   encode: () => (/* binding */ encode)
+/* harmony export */ });
+const characterReferences = {'"': 'quot', '&': 'amp', '<': 'lt', '>': 'gt'}
+
+/**
+ * Encode only the dangerous HTML characters.
+ *
+ * This ensures that certain characters which have special meaning in HTML are
+ * dealt with.
+ * Technically, we can skip `>` and `"` in many cases, but CM includes them.
+ *
+ * @param {string} value
+ *   Value to encode.
+ * @returns {string}
+ *   Encoded value.
+ */
+function encode(value) {
+  return value.replace(/["&<>]/g, replace)
+
+  /**
+   * @param {string} value
+   *   Value to replace.
+   * @returns {string}
+   *   Encoded value.
+   */
+  function replace(value) {
+    return (
+      '&' +
+      characterReferences[
+        /** @type {keyof typeof characterReferences} */ (value)
+      ] +
+      ';'
+    )
+  }
+}
+
+
+/***/ }),
+/* 48 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   heading: () => (/* binding */ heading)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').Heading} Heading
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `heading` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Heading} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function heading(state, node) {
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'h' + node.depth,
+    properties: {},
+    children: state.all(node)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 49 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   html: () => (/* binding */ html)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').Html} Html
+ * @typedef {import('../state.js').State} State
+ * @typedef {import('../../index.js').Raw} Raw
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `html` node into hast (`raw` node in dangerous mode, otherwise
+ * nothing).
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Html} node
+ *   mdast node.
+ * @returns {Element | Raw | undefined}
+ *   hast node.
+ */
+function html(state, node) {
+  if (state.options.allowDangerousHtml) {
+    /** @type {Raw} */
+    const result = {type: 'raw', value: node.value}
+    state.patch(node, result)
+    return state.applyData(node, result)
+  }
+
+  return undefined
+}
+
+
+/***/ }),
+/* 50 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   imageReference: () => (/* binding */ imageReference)
+/* harmony export */ });
+/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(45);
+/* harmony import */ var _revert_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(51);
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').ElementContent} ElementContent
+ * @typedef {import('hast').Properties} Properties
+ * @typedef {import('mdast').ImageReference} ImageReference
+ * @typedef {import('../state.js').State} State
+ */
+
+
+
+
+/**
+ * Turn an mdast `imageReference` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {ImageReference} node
+ *   mdast node.
+ * @returns {Array<ElementContent> | ElementContent}
+ *   hast node.
+ */
+function imageReference(state, node) {
+  const id = String(node.identifier).toUpperCase()
+  const definition = state.definitionById.get(id)
+
+  if (!definition) {
+    return (0,_revert_js__WEBPACK_IMPORTED_MODULE_0__.revert)(state, node)
+  }
+
+  /** @type {Properties} */
+  const properties = {src: (0,micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_1__.normalizeUri)(definition.url || ''), alt: node.alt}
+
+  if (definition.title !== null && definition.title !== undefined) {
+    properties.title = definition.title
+  }
+
+  /** @type {Element} */
+  const result = {type: 'element', tagName: 'img', properties, children: []}
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 51 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   revert: () => (/* binding */ revert)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').ElementContent} ElementContent
+ *
+ * @typedef {import('mdast').Nodes} Nodes
+ * @typedef {import('mdast').Reference} Reference
+ *
+ * @typedef {import('./state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Return the content of a reference without definition as plain text.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Extract<Nodes, Reference>} node
+ *   Reference node (image, link).
+ * @returns {Array<ElementContent>}
+ *   hast content.
+ */
+function revert(state, node) {
+  const subtype = node.referenceType
+  let suffix = ']'
+
+  if (subtype === 'collapsed') {
+    suffix += '[]'
+  } else if (subtype === 'full') {
+    suffix += '[' + (node.label || node.identifier) + ']'
+  }
+
+  if (node.type === 'imageReference') {
+    return [{type: 'text', value: '![' + node.alt + suffix}]
+  }
+
+  const contents = state.all(node)
+  const head = contents[0]
+
+  if (head && head.type === 'text') {
+    head.value = '[' + head.value
+  } else {
+    contents.unshift({type: 'text', value: '['})
+  }
+
+  const tail = contents[contents.length - 1]
+
+  if (tail && tail.type === 'text') {
+    tail.value += suffix
+  } else {
+    contents.push({type: 'text', value: suffix})
+  }
+
+  return contents
+}
+
+
+/***/ }),
+/* 52 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   image: () => (/* binding */ image)
+/* harmony export */ });
+/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(45);
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').Properties} Properties
+ * @typedef {import('mdast').Image} Image
+ * @typedef {import('../state.js').State} State
+ */
+
+
+
+/**
+ * Turn an mdast `image` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Image} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function image(state, node) {
+  /** @type {Properties} */
+  const properties = {src: (0,micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__.normalizeUri)(node.url)}
+
+  if (node.alt !== null && node.alt !== undefined) {
+    properties.alt = node.alt
+  }
+
+  if (node.title !== null && node.title !== undefined) {
+    properties.title = node.title
+  }
+
+  /** @type {Element} */
+  const result = {type: 'element', tagName: 'img', properties, children: []}
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 53 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   inlineCode: () => (/* binding */ inlineCode)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').Text} Text
+ * @typedef {import('mdast').InlineCode} InlineCode
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `inlineCode` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {InlineCode} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function inlineCode(state, node) {
+  /** @type {Text} */
+  const text = {type: 'text', value: node.value.replace(/\r?\n|\r/g, ' ')}
+  state.patch(node, text)
+
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'code',
+    properties: {},
+    children: [text]
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 54 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   linkReference: () => (/* binding */ linkReference)
+/* harmony export */ });
+/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(45);
+/* harmony import */ var _revert_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(51);
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').ElementContent} ElementContent
+ * @typedef {import('hast').Properties} Properties
+ * @typedef {import('mdast').LinkReference} LinkReference
+ * @typedef {import('../state.js').State} State
+ */
+
+
+
+
+/**
+ * Turn an mdast `linkReference` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {LinkReference} node
+ *   mdast node.
+ * @returns {Array<ElementContent> | ElementContent}
+ *   hast node.
+ */
+function linkReference(state, node) {
+  const id = String(node.identifier).toUpperCase()
+  const definition = state.definitionById.get(id)
+
+  if (!definition) {
+    return (0,_revert_js__WEBPACK_IMPORTED_MODULE_0__.revert)(state, node)
+  }
+
+  /** @type {Properties} */
+  const properties = {href: (0,micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_1__.normalizeUri)(definition.url || '')}
+
+  if (definition.title !== null && definition.title !== undefined) {
+    properties.title = definition.title
+  }
+
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'a',
+    properties,
+    children: state.all(node)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 55 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   link: () => (/* binding */ link)
+/* harmony export */ });
+/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(45);
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').Properties} Properties
+ * @typedef {import('mdast').Link} Link
+ * @typedef {import('../state.js').State} State
+ */
+
+
+
+/**
+ * Turn an mdast `link` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Link} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function link(state, node) {
+  /** @type {Properties} */
+  const properties = {href: (0,micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__.normalizeUri)(node.url)}
+
+  if (node.title !== null && node.title !== undefined) {
+    properties.title = node.title
+  }
+
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'a',
+    properties,
+    children: state.all(node)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 56 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   listItem: () => (/* binding */ listItem)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').ElementContent} ElementContent
+ * @typedef {import('hast').Properties} Properties
+ * @typedef {import('mdast').ListItem} ListItem
+ * @typedef {import('mdast').Parents} Parents
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `listItem` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {ListItem} node
+ *   mdast node.
+ * @param {Parents | undefined} parent
+ *   Parent of `node`.
+ * @returns {Element}
+ *   hast node.
+ */
+function listItem(state, node, parent) {
+  const results = state.all(node)
+  const loose = parent ? listLoose(parent) : listItemLoose(node)
+  /** @type {Properties} */
+  const properties = {}
+  /** @type {Array<ElementContent>} */
+  const children = []
+
+  if (typeof node.checked === 'boolean') {
+    const head = results[0]
+    /** @type {Element} */
+    let paragraph
+
+    if (head && head.type === 'element' && head.tagName === 'p') {
+      paragraph = head
+    } else {
+      paragraph = {type: 'element', tagName: 'p', properties: {}, children: []}
+      results.unshift(paragraph)
+    }
+
+    if (paragraph.children.length > 0) {
+      paragraph.children.unshift({type: 'text', value: ' '})
+    }
+
+    paragraph.children.unshift({
+      type: 'element',
+      tagName: 'input',
+      properties: {type: 'checkbox', checked: node.checked, disabled: true},
+      children: []
+    })
+
+    // According to github-markdown-css, this class hides bullet.
+    // See: <https://github.com/sindresorhus/github-markdown-css>.
+    properties.className = ['task-list-item']
+  }
+
+  let index = -1
+
+  while (++index < results.length) {
+    const child = results[index]
+
+    // Add eols before nodes, except if this is a loose, first paragraph.
+    if (
+      loose ||
+      index !== 0 ||
+      child.type !== 'element' ||
+      child.tagName !== 'p'
+    ) {
+      children.push({type: 'text', value: '\n'})
+    }
+
+    if (child.type === 'element' && child.tagName === 'p' && !loose) {
+      children.push(...child.children)
+    } else {
+      children.push(child)
+    }
+  }
+
+  const tail = results[results.length - 1]
+
+  // Add a final eol.
+  if (tail && (loose || tail.type !== 'element' || tail.tagName !== 'p')) {
+    children.push({type: 'text', value: '\n'})
+  }
+
+  /** @type {Element} */
+  const result = {type: 'element', tagName: 'li', properties, children}
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+/**
+ * @param {Parents} node
+ * @return {Boolean}
+ */
+function listLoose(node) {
+  let loose = false
+  if (node.type === 'list') {
+    loose = node.spread || false
+    const children = node.children
+    let index = -1
+
+    while (!loose && ++index < children.length) {
+      loose = listItemLoose(children[index])
+    }
+  }
+
+  return loose
+}
+
+/**
+ * @param {ListItem} node
+ * @return {Boolean}
+ */
+function listItemLoose(node) {
+  const spread = node.spread
+
+  return spread === null || spread === undefined
+    ? node.children.length > 1
+    : spread
+}
+
+
+/***/ }),
+/* 57 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   list: () => (/* binding */ list)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').Properties} Properties
+ * @typedef {import('mdast').List} List
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `list` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {List} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function list(state, node) {
+  /** @type {Properties} */
+  const properties = {}
+  const results = state.all(node)
+  let index = -1
+
+  if (typeof node.start === 'number' && node.start !== 1) {
+    properties.start = node.start
+  }
+
+  // Like GitHub, add a class for custom styling.
+  while (++index < results.length) {
+    const child = results[index]
+
+    if (
+      child.type === 'element' &&
+      child.tagName === 'li' &&
+      child.properties &&
+      Array.isArray(child.properties.className) &&
+      child.properties.className.includes('task-list-item')
+    ) {
+      properties.className = ['contains-task-list']
+      break
+    }
+  }
+
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: node.ordered ? 'ol' : 'ul',
+    properties,
+    children: state.wrap(results, true)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 58 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   paragraph: () => (/* binding */ paragraph)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').Paragraph} Paragraph
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `paragraph` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Paragraph} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function paragraph(state, node) {
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'p',
+    properties: {},
+    children: state.all(node)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 59 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   root: () => (/* binding */ root)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Parents} HastParents
+ * @typedef {import('hast').Root} HastRoot
+ * @typedef {import('mdast').Root} MdastRoot
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `root` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {MdastRoot} node
+ *   mdast node.
+ * @returns {HastParents}
+ *   hast node.
+ */
+function root(state, node) {
+  /** @type {HastRoot} */
+  const result = {type: 'root', children: state.wrap(state.all(node))}
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 60 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   strong: () => (/* binding */ strong)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').Strong} Strong
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `strong` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Strong} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function strong(state, node) {
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'strong',
+    properties: {},
+    children: state.all(node)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 61 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   table: () => (/* binding */ table)
+/* harmony export */ });
+/* harmony import */ var unist_util_position__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(36);
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').Table} Table
+ * @typedef {import('../state.js').State} State
+ */
+
+
+
+/**
+ * Turn an mdast `table` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Table} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function table(state, node) {
+  const rows = state.all(node)
+  const firstRow = rows.shift()
+  /** @type {Array<Element>} */
+  const tableContent = []
+
+  if (firstRow) {
+    /** @type {Element} */
+    const head = {
+      type: 'element',
+      tagName: 'thead',
+      properties: {},
+      children: state.wrap([firstRow], true)
+    }
+    state.patch(node.children[0], head)
+    tableContent.push(head)
+  }
+
+  if (rows.length > 0) {
+    /** @type {Element} */
+    const body = {
+      type: 'element',
+      tagName: 'tbody',
+      properties: {},
+      children: state.wrap(rows, true)
+    }
+
+    const start = (0,unist_util_position__WEBPACK_IMPORTED_MODULE_0__.pointStart)(node.children[1])
+    const end = (0,unist_util_position__WEBPACK_IMPORTED_MODULE_0__.pointEnd)(node.children[node.children.length - 1])
+    if (start && end) body.position = {start, end}
+    tableContent.push(body)
+  }
+
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'table',
+    properties: {},
+    children: state.wrap(tableContent, true)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 62 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   tableRow: () => (/* binding */ tableRow)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').ElementContent} ElementContent
+ * @typedef {import('hast').Properties} Properties
+ * @typedef {import('mdast').Parents} Parents
+ * @typedef {import('mdast').TableRow} TableRow
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `tableRow` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {TableRow} node
+ *   mdast node.
+ * @param {Parents | undefined} parent
+ *   Parent of `node`.
+ * @returns {Element}
+ *   hast node.
+ */
+function tableRow(state, node, parent) {
+  const siblings = parent ? parent.children : undefined
+  // Generate a body row when without parent.
+  const rowIndex = siblings ? siblings.indexOf(node) : 1
+  const tagName = rowIndex === 0 ? 'th' : 'td'
+  // To do: option to use `style`?
+  const align = parent && parent.type === 'table' ? parent.align : undefined
+  const length = align ? align.length : node.children.length
+  let cellIndex = -1
+  /** @type {Array<ElementContent>} */
+  const cells = []
+
+  while (++cellIndex < length) {
+    // Note: can also be undefined.
+    const cell = node.children[cellIndex]
+    /** @type {Properties} */
+    const properties = {}
+    const alignValue = align ? align[cellIndex] : undefined
+
+    if (alignValue) {
+      properties.align = alignValue
+    }
+
+    /** @type {Element} */
+    let result = {type: 'element', tagName, properties, children: []}
+
+    if (cell) {
+      result.children = state.all(cell)
+      state.patch(cell, result)
+      result = state.applyData(cell, result)
+    }
+
+    cells.push(result)
+  }
+
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'tr',
+    properties: {},
+    children: state.wrap(cells, true)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 63 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   tableCell: () => (/* binding */ tableCell)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').TableCell} TableCell
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `tableCell` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {TableCell} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function tableCell(state, node) {
+  // Note: this function is normally not called: see `table-row` for how rows
+  // and their cells are compiled.
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'td', // Assume body cell.
+    properties: {},
+    children: state.all(node)
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 64 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   text: () => (/* binding */ text)
+/* harmony export */ });
+/* harmony import */ var trim_lines__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(65);
+/**
+ * @typedef {import('hast').Element} HastElement
+ * @typedef {import('hast').Text} HastText
+ * @typedef {import('mdast').Text} MdastText
+ * @typedef {import('../state.js').State} State
+ */
+
+
+
+/**
+ * Turn an mdast `text` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {MdastText} node
+ *   mdast node.
+ * @returns {HastElement | HastText}
+ *   hast node.
+ */
+function text(state, node) {
+  /** @type {HastText} */
+  const result = {type: 'text', value: (0,trim_lines__WEBPACK_IMPORTED_MODULE_0__.trimLines)(String(node.value))}
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 65 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   trimLines: () => (/* binding */ trimLines)
+/* harmony export */ });
+const tab = 9 /* `\t` */
+const space = 32 /* ` ` */
+
+/**
+ * Remove initial and final spaces and tabs at the line breaks in `value`.
+ * Does not trim initial and final spaces and tabs of the value itself.
+ *
+ * @param {string} value
+ *   Value to trim.
+ * @returns {string}
+ *   Trimmed value.
+ */
+function trimLines(value) {
+  const source = String(value)
+  const search = /\r?\n|\r/g
+  let match = search.exec(source)
+  let last = 0
+  /** @type {Array<string>} */
+  const lines = []
+
+  while (match) {
+    lines.push(
+      trimLine(source.slice(last, match.index), last > 0, true),
+      match[0]
+    )
+
+    last = match.index + match[0].length
+    match = search.exec(source)
+  }
+
+  lines.push(trimLine(source.slice(last), last > 0, false))
+
+  return lines.join('')
+}
+
+/**
+ * @param {string} value
+ *   Line to trim.
+ * @param {boolean} start
+ *   Whether to trim the start of the line.
+ * @param {boolean} end
+ *   Whether to trim the end of the line.
+ * @returns {string}
+ *   Trimmed line.
+ */
+function trimLine(value, start, end) {
+  let startIndex = 0
+  let endIndex = value.length
+
+  if (start) {
+    let code = value.codePointAt(startIndex)
+
+    while (code === tab || code === space) {
+      startIndex++
+      code = value.codePointAt(startIndex)
+    }
+  }
+
+  if (end) {
+    let code = value.codePointAt(endIndex - 1)
+
+    while (code === tab || code === space) {
+      endIndex--
+      code = value.codePointAt(endIndex - 1)
+    }
+  }
+
+  return endIndex > startIndex ? value.slice(startIndex, endIndex) : ''
+}
+
+
+/***/ }),
+/* 66 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   thematicBreak: () => (/* binding */ thematicBreak)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('mdast').ThematicBreak} ThematicBreak
+ * @typedef {import('../state.js').State} State
+ */
+
+// Make VS Code show references to the above types.
+''
+
+/**
+ * Turn an mdast `thematicBreak` node into hast.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {ThematicBreak} node
+ *   mdast node.
+ * @returns {Element}
+ *   hast node.
+ */
+function thematicBreak(state, node) {
+  /** @type {Element} */
+  const result = {
+    type: 'element',
+    tagName: 'hr',
+    properties: {},
+    children: []
+  }
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+
+/***/ }),
+/* 67 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   toHast: () => (/* binding */ toHast)
+/* harmony export */ });
+/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(68);
+/* harmony import */ var _footer_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(69);
+/* harmony import */ var _state_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(70);
+/**
+ * @typedef {import('hast').Nodes} HastNodes
+ * @typedef {import('mdast').Nodes} MdastNodes
+ * @typedef {import('./state.js').Options} Options
+ */
+
+
+
+
+
+/**
+ * Transform mdast to hast.
+ *
+ * ##### Notes
+ *
+ * ###### HTML
+ *
+ * Raw HTML is available in mdast as `html` nodes and can be embedded in hast
+ * as semistandard `raw` nodes.
+ * Most utilities ignore `raw` nodes but two notable ones don’t:
+ *
+ * *   `hast-util-to-html` also has an option `allowDangerousHtml` which will
+ *     output the raw HTML.
+ *     This is typically discouraged as noted by the option name but is useful
+ *     if you completely trust authors
+ * *   `hast-util-raw` can handle the raw embedded HTML strings by parsing them
+ *     into standard hast nodes (`element`, `text`, etc).
+ *     This is a heavy task as it needs a full HTML parser, but it is the only
+ *     way to support untrusted content
+ *
+ * ###### Footnotes
+ *
+ * Many options supported here relate to footnotes.
+ * Footnotes are not specified by CommonMark, which we follow by default.
+ * They are supported by GitHub, so footnotes can be enabled in markdown with
+ * `mdast-util-gfm`.
+ *
+ * The options `footnoteBackLabel` and `footnoteLabel` define natural language
+ * that explains footnotes, which is hidden for sighted users but shown to
+ * assistive technology.
+ * When your page is not in English, you must define translated values.
+ *
+ * Back references use ARIA attributes, but the section label itself uses a
+ * heading that is hidden with an `sr-only` class.
+ * To show it to sighted users, define different attributes in
+ * `footnoteLabelProperties`.
+ *
+ * ###### Clobbering
+ *
+ * Footnotes introduces a problem, as it links footnote calls to footnote
+ * definitions on the page through `id` attributes generated from user content,
+ * which results in DOM clobbering.
+ *
+ * DOM clobbering is this:
+ *
+ * ```html
+ * <p id=x></p>
+ * <script>alert(x) // `x` now refers to the DOM `p#x` element</script>
+ * ```
+ *
+ * Elements by their ID are made available by browsers on the `window` object,
+ * which is a security risk.
+ * Using a prefix solves this problem.
+ *
+ * More information on how to handle clobbering and the prefix is explained in
+ * Example: headings (DOM clobbering) in `rehype-sanitize`.
+ *
+ * ###### Unknown nodes
+ *
+ * Unknown nodes are nodes with a type that isn’t in `handlers` or `passThrough`.
+ * The default behavior for unknown nodes is:
+ *
+ * *   when the node has a `value` (and doesn’t have `data.hName`,
+ *     `data.hProperties`, or `data.hChildren`, see later), create a hast `text`
+ *     node
+ * *   otherwise, create a `<div>` element (which could be changed with
+ *     `data.hName`), with its children mapped from mdast to hast as well
+ *
+ * This behavior can be changed by passing an `unknownHandler`.
+ *
+ * @param {MdastNodes} tree
+ *   mdast tree.
+ * @param {Options | null | undefined} [options]
+ *   Configuration (optional).
+ * @returns {HastNodes}
+ *   hast tree.
+ */
+function toHast(tree, options) {
+  const state = (0,_state_js__WEBPACK_IMPORTED_MODULE_0__.createState)(tree, options)
+  const node = state.one(tree, undefined)
+  const foot = (0,_footer_js__WEBPACK_IMPORTED_MODULE_1__.footer)(state)
+  /** @type {HastNodes} */
+  const result = Array.isArray(node)
+    ? {type: 'root', children: node}
+    : node || {type: 'root', children: []}
+
+  if (foot) {
+    // If there’s a footer, there were definitions, meaning block
+    // content.
+    // So `result` is a parent node.
+    (0,devlop__WEBPACK_IMPORTED_MODULE_2__.ok)('children' in result)
+    result.children.push({type: 'text', value: '\n'}, foot)
+  }
+
+  return result
+}
+
+
+/***/ }),
+/* 68 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   deprecate: () => (/* binding */ deprecate),
+/* harmony export */   equal: () => (/* binding */ equal),
+/* harmony export */   ok: () => (/* binding */ ok),
+/* harmony export */   unreachable: () => (/* binding */ unreachable)
+/* harmony export */ });
+function deprecate(fn) {
+  return fn
+}
+
+function equal() {}
+
+function ok() {}
+
+function unreachable() {}
+
+
+/***/ }),
+/* 69 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   defaultFootnoteBackContent: () => (/* binding */ defaultFootnoteBackContent),
+/* harmony export */   defaultFootnoteBackLabel: () => (/* binding */ defaultFootnoteBackLabel),
+/* harmony export */   footer: () => (/* binding */ footer)
+/* harmony export */ });
+/* harmony import */ var _ungap_structured_clone__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(31);
+/* harmony import */ var micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(45);
+/**
+ * @typedef {import('hast').Element} Element
+ * @typedef {import('hast').ElementContent} ElementContent
+ *
+ * @typedef {import('./state.js').State} State
+ */
+
+/**
+ * @callback FootnoteBackContentTemplate
+ *   Generate content for the backreference dynamically.
+ *
+ *   For the following markdown:
+ *
+ *   ```markdown
+ *   Alpha[^micromark], bravo[^micromark], and charlie[^remark].
+ *
+ *   [^remark]: things about remark
+ *   [^micromark]: things about micromark
+ *   ```
+ *
+ *   This function will be called with:
+ *
+ *   *  `0` and `0` for the backreference from `things about micromark` to
+ *      `alpha`, as it is the first used definition, and the first call to it
+ *   *  `0` and `1` for the backreference from `things about micromark` to
+ *      `bravo`, as it is the first used definition, and the second call to it
+ *   *  `1` and `0` for the backreference from `things about remark` to
+ *      `charlie`, as it is the second used definition
+ * @param {number} referenceIndex
+ *   Index of the definition in the order that they are first referenced,
+ *   0-indexed.
+ * @param {number} rereferenceIndex
+ *   Index of calls to the same definition, 0-indexed.
+ * @returns {Array<ElementContent> | ElementContent | string}
+ *   Content for the backreference when linking back from definitions to their
+ *   reference.
+ *
+ * @callback FootnoteBackLabelTemplate
+ *   Generate a back label dynamically.
+ *
+ *   For the following markdown:
+ *
+ *   ```markdown
+ *   Alpha[^micromark], bravo[^micromark], and charlie[^remark].
+ *
+ *   [^remark]: things about remark
+ *   [^micromark]: things about micromark
+ *   ```
+ *
+ *   This function will be called with:
+ *
+ *   *  `0` and `0` for the backreference from `things about micromark` to
+ *      `alpha`, as it is the first used definition, and the first call to it
+ *   *  `0` and `1` for the backreference from `things about micromark` to
+ *      `bravo`, as it is the first used definition, and the second call to it
+ *   *  `1` and `0` for the backreference from `things about remark` to
+ *      `charlie`, as it is the second used definition
+ * @param {number} referenceIndex
+ *   Index of the definition in the order that they are first referenced,
+ *   0-indexed.
+ * @param {number} rereferenceIndex
+ *   Index of calls to the same definition, 0-indexed.
+ * @returns {string}
+ *   Back label to use when linking back from definitions to their reference.
+ */
+
+
+
+
+/**
+ * Generate the default content that GitHub uses on backreferences.
+ *
+ * @param {number} _
+ *   Index of the definition in the order that they are first referenced,
+ *   0-indexed.
+ * @param {number} rereferenceIndex
+ *   Index of calls to the same definition, 0-indexed.
+ * @returns {Array<ElementContent>}
+ *   Content.
+ */
+function defaultFootnoteBackContent(_, rereferenceIndex) {
+  /** @type {Array<ElementContent>} */
+  const result = [{type: 'text', value: '↩'}]
+
+  if (rereferenceIndex > 1) {
+    result.push({
+      type: 'element',
+      tagName: 'sup',
+      properties: {},
+      children: [{type: 'text', value: String(rereferenceIndex)}]
+    })
+  }
+
+  return result
+}
+
+/**
+ * Generate the default label that GitHub uses on backreferences.
+ *
+ * @param {number} referenceIndex
+ *   Index of the definition in the order that they are first referenced,
+ *   0-indexed.
+ * @param {number} rereferenceIndex
+ *   Index of calls to the same definition, 0-indexed.
+ * @returns {string}
+ *   Label.
+ */
+function defaultFootnoteBackLabel(referenceIndex, rereferenceIndex) {
+  return (
+    'Back to reference ' +
+    (referenceIndex + 1) +
+    (rereferenceIndex > 1 ? '-' + rereferenceIndex : '')
+  )
+}
+
+/**
+ * Generate a hast footer for called footnote definitions.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @returns {Element | undefined}
+ *   `section` element or `undefined`.
+ */
+// eslint-disable-next-line complexity
+function footer(state) {
+  const clobberPrefix =
+    typeof state.options.clobberPrefix === 'string'
+      ? state.options.clobberPrefix
+      : 'user-content-'
+  const footnoteBackContent =
+    state.options.footnoteBackContent || defaultFootnoteBackContent
+  const footnoteBackLabel =
+    state.options.footnoteBackLabel || defaultFootnoteBackLabel
+  const footnoteLabel = state.options.footnoteLabel || 'Footnotes'
+  const footnoteLabelTagName = state.options.footnoteLabelTagName || 'h2'
+  const footnoteLabelProperties = state.options.footnoteLabelProperties || {
+    className: ['sr-only']
+  }
+  /** @type {Array<ElementContent>} */
+  const listItems = []
+  let referenceIndex = -1
+
+  while (++referenceIndex < state.footnoteOrder.length) {
+    const definition = state.footnoteById.get(
+      state.footnoteOrder[referenceIndex]
+    )
+
+    if (!definition) {
+      continue
+    }
+
+    const content = state.all(definition)
+    const id = String(definition.identifier).toUpperCase()
+    const safeId = (0,micromark_util_sanitize_uri__WEBPACK_IMPORTED_MODULE_0__.normalizeUri)(id.toLowerCase())
+    let rereferenceIndex = 0
+    /** @type {Array<ElementContent>} */
+    const backReferences = []
+    const counts = state.footnoteCounts.get(id)
+
+    // eslint-disable-next-line no-unmodified-loop-condition
+    while (counts !== undefined && ++rereferenceIndex <= counts) {
+      if (backReferences.length > 0) {
+        backReferences.push({type: 'text', value: ' '})
+      }
+
+      let children =
+        typeof footnoteBackContent === 'string'
+          ? footnoteBackContent
+          : footnoteBackContent(referenceIndex, rereferenceIndex)
+
+      if (typeof children === 'string') {
+        children = {type: 'text', value: children}
+      }
+
+      backReferences.push({
+        type: 'element',
+        tagName: 'a',
+        properties: {
+          href:
+            '#' +
+            clobberPrefix +
+            'fnref-' +
+            safeId +
+            (rereferenceIndex > 1 ? '-' + rereferenceIndex : ''),
+          dataFootnoteBackref: '',
+          ariaLabel:
+            typeof footnoteBackLabel === 'string'
+              ? footnoteBackLabel
+              : footnoteBackLabel(referenceIndex, rereferenceIndex),
+          className: ['data-footnote-backref']
+        },
+        children: Array.isArray(children) ? children : [children]
+      })
+    }
+
+    const tail = content[content.length - 1]
+
+    if (tail && tail.type === 'element' && tail.tagName === 'p') {
+      const tailTail = tail.children[tail.children.length - 1]
+      if (tailTail && tailTail.type === 'text') {
+        tailTail.value += ' '
+      } else {
+        tail.children.push({type: 'text', value: ' '})
+      }
+
+      tail.children.push(...backReferences)
+    } else {
+      content.push(...backReferences)
+    }
+
+    /** @type {Element} */
+    const listItem = {
+      type: 'element',
+      tagName: 'li',
+      properties: {id: clobberPrefix + 'fn-' + safeId},
+      children: state.wrap(content, true)
+    }
+
+    state.patch(definition, listItem)
+
+    listItems.push(listItem)
+  }
+
+  if (listItems.length === 0) {
+    return
+  }
+
+  return {
+    type: 'element',
+    tagName: 'section',
+    properties: {dataFootnotes: true, className: ['footnotes']},
+    children: [
+      {
+        type: 'element',
+        tagName: footnoteLabelTagName,
+        properties: {
+          ...(0,_ungap_structured_clone__WEBPACK_IMPORTED_MODULE_1__["default"])(footnoteLabelProperties),
+          id: 'footnote-label'
+        },
+        children: [{type: 'text', value: footnoteLabel}]
+      },
+      {type: 'text', value: '\n'},
+      {
+        type: 'element',
+        tagName: 'ol',
+        properties: {},
+        children: state.wrap(listItems, true)
+      },
+      {type: 'text', value: '\n'}
+    ]
+  }
+}
+
+
+/***/ }),
+/* 70 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   createState: () => (/* binding */ createState),
+/* harmony export */   wrap: () => (/* binding */ wrap)
+/* harmony export */ });
+/* harmony import */ var _ungap_structured_clone__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(31);
+/* harmony import */ var unist_util_visit__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(71);
+/* harmony import */ var unist_util_position__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(36);
+/* harmony import */ var _handlers_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(38);
+/**
+ * @typedef {import('hast').Element} HastElement
+ * @typedef {import('hast').ElementContent} HastElementContent
+ * @typedef {import('hast').Nodes} HastNodes
+ * @typedef {import('hast').Properties} HastProperties
+ * @typedef {import('hast').RootContent} HastRootContent
+ * @typedef {import('hast').Text} HastText
+ *
+ * @typedef {import('mdast').Definition} MdastDefinition
+ * @typedef {import('mdast').FootnoteDefinition} MdastFootnoteDefinition
+ * @typedef {import('mdast').Nodes} MdastNodes
+ * @typedef {import('mdast').Parents} MdastParents
+ *
+ * @typedef {import('vfile').VFile} VFile
+ *
+ * @typedef {import('./footer.js').FootnoteBackContentTemplate} FootnoteBackContentTemplate
+ * @typedef {import('./footer.js').FootnoteBackLabelTemplate} FootnoteBackLabelTemplate
+ */
+
+/**
+ * @callback Handler
+ *   Handle a node.
+ * @param {State} state
+ *   Info passed around.
+ * @param {any} node
+ *   mdast node to handle.
+ * @param {MdastParents | undefined} parent
+ *   Parent of `node`.
+ * @returns {Array<HastElementContent> | HastElementContent | undefined}
+ *   hast node.
+ *
+ * @typedef {Partial<Record<MdastNodes['type'], Handler>>} Handlers
+ *   Handle nodes.
+ *
+ * @typedef Options
+ *   Configuration (optional).
+ * @property {boolean | null | undefined} [allowDangerousHtml=false]
+ *   Whether to persist raw HTML in markdown in the hast tree (default:
+ *   `false`).
+ * @property {string | null | undefined} [clobberPrefix='user-content-']
+ *   Prefix to use before the `id` property on footnotes to prevent them from
+ *   *clobbering* (default: `'user-content-'`).
+ *
+ *   Pass `''` for trusted markdown and when you are careful with
+ *   polyfilling.
+ *   You could pass a different prefix.
+ *
+ *   DOM clobbering is this:
+ *
+ *   ```html
+ *   <p id="x"></p>
+ *   <script>alert(x) // `x` now refers to the `p#x` DOM element</script>
+ *   ```
+ *
+ *   The above example shows that elements are made available by browsers, by
+ *   their ID, on the `window` object.
+ *   This is a security risk because you might be expecting some other variable
+ *   at that place.
+ *   It can also break polyfills.
+ *   Using a prefix solves these problems.
+ * @property {VFile | null | undefined} [file]
+ *   Corresponding virtual file representing the input document (optional).
+ * @property {FootnoteBackContentTemplate | string | null | undefined} [footnoteBackContent]
+ *   Content of the backreference back to references (default: `defaultFootnoteBackContent`).
+ *
+ *   The default value is:
+ *
+ *   ```js
+ *   function defaultFootnoteBackContent(_, rereferenceIndex) {
+ *     const result = [{type: 'text', value: '↩'}]
+ *
+ *     if (rereferenceIndex > 1) {
+ *       result.push({
+ *         type: 'element',
+ *         tagName: 'sup',
+ *         properties: {},
+ *         children: [{type: 'text', value: String(rereferenceIndex)}]
+ *       })
+ *     }
+ *
+ *     return result
+ *   }
+ *   ```
+ *
+ *   This content is used in the `a` element of each backreference (the `↩`
+ *   links).
+ * @property {FootnoteBackLabelTemplate | string | null | undefined} [footnoteBackLabel]
+ *   Label to describe the backreference back to references (default:
+ *   `defaultFootnoteBackLabel`).
+ *
+ *   The default value is:
+ *
+ *   ```js
+ *   function defaultFootnoteBackLabel(referenceIndex, rereferenceIndex) {
+ *    return (
+ *      'Back to reference ' +
+ *      (referenceIndex + 1) +
+ *      (rereferenceIndex > 1 ? '-' + rereferenceIndex : '')
+ *    )
+ *   }
+ *   ```
+ *
+ *   Change it when the markdown is not in English.
+ *
+ *   This label is used in the `ariaLabel` property on each backreference
+ *   (the `↩` links).
+ *   It affects users of assistive technology.
+ * @property {string | null | undefined} [footnoteLabel='Footnotes']
+ *   Textual label to use for the footnotes section (default: `'Footnotes'`).
+ *
+ *   Change it when the markdown is not in English.
+ *
+ *   This label is typically hidden visually (assuming a `sr-only` CSS class
+ *   is defined that does that) and so affects screen readers only.
+ *   If you do have such a class, but want to show this section to everyone,
+ *   pass different properties with the `footnoteLabelProperties` option.
+ * @property {HastProperties | null | undefined} [footnoteLabelProperties={className: ['sr-only']}]
+ *   Properties to use on the footnote label (default: `{className:
+ *   ['sr-only']}`).
+ *
+ *   Change it to show the label and add other properties.
+ *
+ *   This label is typically hidden visually (assuming an `sr-only` CSS class
+ *   is defined that does that) and so affects screen readers only.
+ *   If you do have such a class, but want to show this section to everyone,
+ *   pass an empty string.
+ *   You can also add different properties.
+ *
+ *   > **Note**: `id: 'footnote-label'` is always added, because footnote
+ *   > calls use it with `aria-describedby` to provide an accessible label.
+ * @property {string | null | undefined} [footnoteLabelTagName='h2']
+ *   HTML tag name to use for the footnote label element (default: `'h2'`).
+ *
+ *   Change it to match your document structure.
+ *
+ *   This label is typically hidden visually (assuming a `sr-only` CSS class
+ *   is defined that does that) and so affects screen readers only.
+ *   If you do have such a class, but want to show this section to everyone,
+ *   pass different properties with the `footnoteLabelProperties` option.
+ * @property {Handlers | null | undefined} [handlers]
+ *   Extra handlers for nodes (optional).
+ * @property {Array<MdastNodes['type']> | null | undefined} [passThrough]
+ *   List of custom mdast node types to pass through (keep) in hast (note that
+ *   the node itself is passed, but eventual children are transformed)
+ *   (optional).
+ * @property {Handler | null | undefined} [unknownHandler]
+ *   Handler for all unknown nodes (optional).
+ *
+ * @typedef State
+ *   Info passed around.
+ * @property {(node: MdastNodes) => Array<HastElementContent>} all
+ *   Transform the children of an mdast parent to hast.
+ * @property {<Type extends HastNodes>(from: MdastNodes, to: Type) => HastElement | Type} applyData
+ *   Honor the `data` of `from`, and generate an element instead of `node`.
+ * @property {Map<string, MdastDefinition>} definitionById
+ *   Definitions by their identifier.
+ * @property {Map<string, MdastFootnoteDefinition>} footnoteById
+ *   Footnote definitions by their identifier.
+ * @property {Map<string, number>} footnoteCounts
+ *   Counts for how often the same footnote was called.
+ * @property {Array<string>} footnoteOrder
+ *   Identifiers of order when footnote calls first appear in tree order.
+ * @property {Handlers} handlers
+ *   Applied handlers.
+ * @property {(node: MdastNodes, parent: MdastParents | undefined) => Array<HastElementContent> | HastElementContent | undefined} one
+ *   Transform an mdast node to hast.
+ * @property {Options} options
+ *   Configuration.
+ * @property {(from: MdastNodes, node: HastNodes) => undefined} patch
+ *   Copy a node’s positional info.
+ * @property {<Type extends HastRootContent>(nodes: Array<Type>, loose?: boolean | undefined) => Array<HastText | Type>} wrap
+ *   Wrap `nodes` with line endings between each node, adds initial/final line endings when `loose`.
+ */
+
+
+
+
+
+
+const own = {}.hasOwnProperty
+
+/** @type {Options} */
+const emptyOptions = {}
+
+/**
+ * Create `state` from an mdast tree.
+ *
+ * @param {MdastNodes} tree
+ *   mdast node to transform.
+ * @param {Options | null | undefined} [options]
+ *   Configuration (optional).
+ * @returns {State}
+ *   `state` function.
+ */
+function createState(tree, options) {
+  const settings = options || emptyOptions
+  /** @type {Map<string, MdastDefinition>} */
+  const definitionById = new Map()
+  /** @type {Map<string, MdastFootnoteDefinition>} */
+  const footnoteById = new Map()
+  /** @type {Map<string, number>} */
+  const footnoteCounts = new Map()
+  /** @type {Handlers} */
+  // @ts-expect-error: the root handler returns a root.
+  // Hard to type.
+  const handlers = {..._handlers_index_js__WEBPACK_IMPORTED_MODULE_0__.handlers, ...settings.handlers}
+
+  /** @type {State} */
+  const state = {
+    all,
+    applyData,
+    definitionById,
+    footnoteById,
+    footnoteCounts,
+    footnoteOrder: [],
+    handlers,
+    one,
+    options: settings,
+    patch,
+    wrap
+  }
+
+  ;(0,unist_util_visit__WEBPACK_IMPORTED_MODULE_1__.visit)(tree, function (node) {
+    if (node.type === 'definition' || node.type === 'footnoteDefinition') {
+      const map = node.type === 'definition' ? definitionById : footnoteById
+      const id = String(node.identifier).toUpperCase()
+
+      // Mimick CM behavior of link definitions.
+      // See: <https://github.com/syntax-tree/mdast-util-definitions/blob/9032189/lib/index.js#L20-L21>.
+      if (!map.has(id)) {
+        // @ts-expect-error: node type matches map.
+        map.set(id, node)
+      }
+    }
+  })
+
+  return state
+
+  /**
+   * Transform an mdast node into a hast node.
+   *
+   * @param {MdastNodes} node
+   *   mdast node.
+   * @param {MdastParents | undefined} [parent]
+   *   Parent of `node`.
+   * @returns {Array<HastElementContent> | HastElementContent | undefined}
+   *   Resulting hast node.
+   */
+  function one(node, parent) {
+    const type = node.type
+    const handle = state.handlers[type]
+
+    if (own.call(state.handlers, type) && handle) {
+      return handle(state, node, parent)
+    }
+
+    if (state.options.passThrough && state.options.passThrough.includes(type)) {
+      if ('children' in node) {
+        const {children, ...shallow} = node
+        const result = (0,_ungap_structured_clone__WEBPACK_IMPORTED_MODULE_2__["default"])(shallow)
+        // @ts-expect-error: TS doesn’t understand…
+        result.children = state.all(node)
+        // @ts-expect-error: TS doesn’t understand…
+        return result
+      }
+
+      // @ts-expect-error: it’s custom.
+      return (0,_ungap_structured_clone__WEBPACK_IMPORTED_MODULE_2__["default"])(node)
+    }
+
+    const unknown = state.options.unknownHandler || defaultUnknownHandler
+
+    return unknown(state, node, parent)
+  }
+
+  /**
+   * Transform the children of an mdast node into hast nodes.
+   *
+   * @param {MdastNodes} parent
+   *   mdast node to compile
+   * @returns {Array<HastElementContent>}
+   *   Resulting hast nodes.
+   */
+  function all(parent) {
+    /** @type {Array<HastElementContent>} */
+    const values = []
+
+    if ('children' in parent) {
+      const nodes = parent.children
+      let index = -1
+      while (++index < nodes.length) {
+        const result = state.one(nodes[index], parent)
+
+        // To do: see if we van clean this? Can we merge texts?
+        if (result) {
+          if (index && nodes[index - 1].type === 'break') {
+            if (!Array.isArray(result) && result.type === 'text') {
+              result.value = trimMarkdownSpaceStart(result.value)
+            }
+
+            if (!Array.isArray(result) && result.type === 'element') {
+              const head = result.children[0]
+
+              if (head && head.type === 'text') {
+                head.value = trimMarkdownSpaceStart(head.value)
+              }
+            }
+          }
+
+          if (Array.isArray(result)) {
+            values.push(...result)
+          } else {
+            values.push(result)
+          }
+        }
+      }
+    }
+
+    return values
+  }
+}
+
+/**
+ * Copy a node’s positional info.
+ *
+ * @param {MdastNodes} from
+ *   mdast node to copy from.
+ * @param {HastNodes} to
+ *   hast node to copy into.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function patch(from, to) {
+  if (from.position) to.position = (0,unist_util_position__WEBPACK_IMPORTED_MODULE_3__.position)(from)
+}
+
+/**
+ * Honor the `data` of `from` and maybe generate an element instead of `to`.
+ *
+ * @template {HastNodes} Type
+ *   Node type.
+ * @param {MdastNodes} from
+ *   mdast node to use data from.
+ * @param {Type} to
+ *   hast node to change.
+ * @returns {HastElement | Type}
+ *   Nothing.
+ */
+function applyData(from, to) {
+  /** @type {HastElement | Type} */
+  let result = to
+
+  // Handle `data.hName`, `data.hProperties, `data.hChildren`.
+  if (from && from.data) {
+    const hName = from.data.hName
+    const hChildren = from.data.hChildren
+    const hProperties = from.data.hProperties
+
+    if (typeof hName === 'string') {
+      // Transforming the node resulted in an element with a different name
+      // than wanted:
+      if (result.type === 'element') {
+        result.tagName = hName
+      }
+      // Transforming the node resulted in a non-element, which happens for
+      // raw, text, and root nodes (unless custom handlers are passed).
+      // The intent of `hName` is to create an element, but likely also to keep
+      // the content around (otherwise: pass `hChildren`).
+      else {
+        /** @type {Array<HastElementContent>} */
+        // @ts-expect-error: assume no doctypes in `root`.
+        const children = 'children' in result ? result.children : [result]
+        result = {type: 'element', tagName: hName, properties: {}, children}
+      }
+    }
+
+    if (result.type === 'element' && hProperties) {
+      Object.assign(result.properties, (0,_ungap_structured_clone__WEBPACK_IMPORTED_MODULE_2__["default"])(hProperties))
+    }
+
+    if (
+      'children' in result &&
+      result.children &&
+      hChildren !== null &&
+      hChildren !== undefined
+    ) {
+      result.children = hChildren
+    }
+  }
+
+  return result
+}
+
+/**
+ * Transform an unknown node.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {MdastNodes} node
+ *   Unknown mdast node.
+ * @returns {HastElement | HastText}
+ *   Resulting hast node.
+ */
+function defaultUnknownHandler(state, node) {
+  const data = node.data || {}
+  /** @type {HastElement | HastText} */
+  const result =
+    'value' in node &&
+    !(own.call(data, 'hProperties') || own.call(data, 'hChildren'))
+      ? {type: 'text', value: node.value}
+      : {
+          type: 'element',
+          tagName: 'div',
+          properties: {},
+          children: state.all(node)
+        }
+
+  state.patch(node, result)
+  return state.applyData(node, result)
+}
+
+/**
+ * Wrap `nodes` with line endings between each node.
+ *
+ * @template {HastRootContent} Type
+ *   Node type.
+ * @param {Array<Type>} nodes
+ *   List of nodes to wrap.
+ * @param {boolean | undefined} [loose=false]
+ *   Whether to add line endings at start and end (default: `false`).
+ * @returns {Array<HastText | Type>}
+ *   Wrapped nodes.
+ */
+function wrap(nodes, loose) {
+  /** @type {Array<HastText | Type>} */
+  const result = []
+  let index = -1
+
+  if (loose) {
+    result.push({type: 'text', value: '\n'})
+  }
+
+  while (++index < nodes.length) {
+    if (index) result.push({type: 'text', value: '\n'})
+    result.push(nodes[index])
+  }
+
+  if (loose && nodes.length > 0) {
+    result.push({type: 'text', value: '\n'})
+  }
+
+  return result
+}
+
+/**
+ * Trim spaces and tabs at the start of `value`.
+ *
+ * @param {string} value
+ *   Value to trim.
+ * @returns {string}
+ *   Result.
+ */
+function trimMarkdownSpaceStart(value) {
+  let index = 0
+  let code = value.charCodeAt(index)
+
+  while (code === 9 || code === 32) {
+    index++
+    code = value.charCodeAt(index)
+  }
+
+  return value.slice(index)
+}
+
+
+/***/ }),
+/* 71 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   CONTINUE: () => (/* reexport safe */ unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_0__.CONTINUE),
+/* harmony export */   EXIT: () => (/* reexport safe */ unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_0__.EXIT),
+/* harmony export */   SKIP: () => (/* reexport safe */ unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_0__.SKIP),
+/* harmony export */   visit: () => (/* binding */ visit)
+/* harmony export */ });
+/* harmony import */ var unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(72);
+/**
+ * @typedef {import('unist').Node} UnistNode
+ * @typedef {import('unist').Parent} UnistParent
+ * @typedef {import('unist-util-visit-parents').VisitorResult} VisitorResult
+ */
+
+/**
+ * @typedef {Exclude<import('unist-util-is').Test, undefined> | undefined} Test
+ *   Test from `unist-util-is`.
+ *
+ *   Note: we have remove and add `undefined`, because otherwise when generating
+ *   automatic `.d.ts` files, TS tries to flatten paths from a local perspective,
+ *   which doesn’t work when publishing on npm.
+ */
+
+// To do: use types from `unist-util-visit-parents` when it’s released.
+
+/**
+ * @typedef {(
+ *   Fn extends (value: any) => value is infer Thing
+ *   ? Thing
+ *   : Fallback
+ * )} Predicate
+ *   Get the value of a type guard `Fn`.
+ * @template Fn
+ *   Value; typically function that is a type guard (such as `(x): x is Y`).
+ * @template Fallback
+ *   Value to yield if `Fn` is not a type guard.
+ */
+
+/**
+ * @typedef {(
+ *   Check extends null | undefined // No test.
+ *   ? Value
+ *   : Value extends {type: Check} // String (type) test.
+ *   ? Value
+ *   : Value extends Check // Partial test.
+ *   ? Value
+ *   : Check extends Function // Function test.
+ *   ? Predicate<Check, Value> extends Value
+ *     ? Predicate<Check, Value>
+ *     : never
+ *   : never // Some other test?
+ * )} MatchesOne
+ *   Check whether a node matches a primitive check in the type system.
+ * @template Value
+ *   Value; typically unist `Node`.
+ * @template Check
+ *   Value; typically `unist-util-is`-compatible test, but not arrays.
+ */
+
+/**
+ * @typedef {(
+ *   Check extends Array<any>
+ *   ? MatchesOne<Value, Check[keyof Check]>
+ *   : MatchesOne<Value, Check>
+ * )} Matches
+ *   Check whether a node matches a check in the type system.
+ * @template Value
+ *   Value; typically unist `Node`.
+ * @template Check
+ *   Value; typically `unist-util-is`-compatible test.
+ */
+
+/**
+ * @typedef {0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10} Uint
+ *   Number; capped reasonably.
+ */
+
+/**
+ * @typedef {I extends 0 ? 1 : I extends 1 ? 2 : I extends 2 ? 3 : I extends 3 ? 4 : I extends 4 ? 5 : I extends 5 ? 6 : I extends 6 ? 7 : I extends 7 ? 8 : I extends 8 ? 9 : 10} Increment
+ *   Increment a number in the type system.
+ * @template {Uint} [I=0]
+ *   Index.
+ */
+
+/**
+ * @typedef {(
+ *   Node extends UnistParent
+ *   ? Node extends {children: Array<infer Children>}
+ *     ? Child extends Children ? Node : never
+ *     : never
+ *   : never
+ * )} InternalParent
+ *   Collect nodes that can be parents of `Child`.
+ * @template {UnistNode} Node
+ *   All node types in a tree.
+ * @template {UnistNode} Child
+ *   Node to search for.
+ */
+
+/**
+ * @typedef {InternalParent<InclusiveDescendant<Tree>, Child>} Parent
+ *   Collect nodes in `Tree` that can be parents of `Child`.
+ * @template {UnistNode} Tree
+ *   All node types in a tree.
+ * @template {UnistNode} Child
+ *   Node to search for.
+ */
+
+/**
+ * @typedef {(
+ *   Depth extends Max
+ *   ? never
+ *   :
+ *     | InternalParent<Node, Child>
+ *     | InternalAncestor<Node, InternalParent<Node, Child>, Max, Increment<Depth>>
+ * )} InternalAncestor
+ *   Collect nodes in `Tree` that can be ancestors of `Child`.
+ * @template {UnistNode} Node
+ *   All node types in a tree.
+ * @template {UnistNode} Child
+ *   Node to search for.
+ * @template {Uint} [Max=10]
+ *   Max; searches up to this depth.
+ * @template {Uint} [Depth=0]
+ *   Current depth.
+ */
+
+/**
+ * @typedef {(
+ *   Tree extends UnistParent
+ *     ? Depth extends Max
+ *       ? Tree
+ *       : Tree | InclusiveDescendant<Tree['children'][number], Max, Increment<Depth>>
+ *     : Tree
+ * )} InclusiveDescendant
+ *   Collect all (inclusive) descendants of `Tree`.
+ *
+ *   > 👉 **Note**: for performance reasons, this seems to be the fastest way to
+ *   > recurse without actually running into an infinite loop, which the
+ *   > previous version did.
+ *   >
+ *   > Practically, a max of `2` is typically enough assuming a `Root` is
+ *   > passed, but it doesn’t improve performance.
+ *   > It gets higher with `List > ListItem > Table > TableRow > TableCell`.
+ *   > Using up to `10` doesn’t hurt or help either.
+ * @template {UnistNode} Tree
+ *   Tree type.
+ * @template {Uint} [Max=10]
+ *   Max; searches up to this depth.
+ * @template {Uint} [Depth=0]
+ *   Current depth.
+ */
+
+/**
+ * @callback Visitor
+ *   Handle a node (matching `test`, if given).
+ *
+ *   Visitors are free to transform `node`.
+ *   They can also transform `parent`.
+ *
+ *   Replacing `node` itself, if `SKIP` is not returned, still causes its
+ *   descendants to be walked (which is a bug).
+ *
+ *   When adding or removing previous siblings of `node` (or next siblings, in
+ *   case of reverse), the `Visitor` should return a new `Index` to specify the
+ *   sibling to traverse after `node` is traversed.
+ *   Adding or removing next siblings of `node` (or previous siblings, in case
+ *   of reverse) is handled as expected without needing to return a new `Index`.
+ *
+ *   Removing the children property of `parent` still results in them being
+ *   traversed.
+ * @param {Visited} node
+ *   Found node.
+ * @param {Visited extends UnistNode ? number | undefined : never} index
+ *   Index of `node` in `parent`.
+ * @param {Ancestor extends UnistParent ? Ancestor | undefined : never} parent
+ *   Parent of `node`.
+ * @returns {VisitorResult}
+ *   What to do next.
+ *
+ *   An `Index` is treated as a tuple of `[CONTINUE, Index]`.
+ *   An `Action` is treated as a tuple of `[Action]`.
+ *
+ *   Passing a tuple back only makes sense if the `Action` is `SKIP`.
+ *   When the `Action` is `EXIT`, that action can be returned.
+ *   When the `Action` is `CONTINUE`, `Index` can be returned.
+ * @template {UnistNode} [Visited=UnistNode]
+ *   Visited node type.
+ * @template {UnistParent} [Ancestor=UnistParent]
+ *   Ancestor type.
+ */
+
+/**
+ * @typedef {Visitor<Visited, Parent<Ancestor, Visited>>} BuildVisitorFromMatch
+ *   Build a typed `Visitor` function from a node and all possible parents.
+ *
+ *   It will infer which values are passed as `node` and which as `parent`.
+ * @template {UnistNode} Visited
+ *   Node type.
+ * @template {UnistParent} Ancestor
+ *   Parent type.
+ */
+
+/**
+ * @typedef {(
+ *   BuildVisitorFromMatch<
+ *     Matches<Descendant, Check>,
+ *     Extract<Descendant, UnistParent>
+ *   >
+ * )} BuildVisitorFromDescendants
+ *   Build a typed `Visitor` function from a list of descendants and a test.
+ *
+ *   It will infer which values are passed as `node` and which as `parent`.
+ * @template {UnistNode} Descendant
+ *   Node type.
+ * @template {Test} Check
+ *   Test type.
+ */
+
+/**
+ * @typedef {(
+ *   BuildVisitorFromDescendants<
+ *     InclusiveDescendant<Tree>,
+ *     Check
+ *   >
+ * )} BuildVisitor
+ *   Build a typed `Visitor` function from a tree and a test.
+ *
+ *   It will infer which values are passed as `node` and which as `parent`.
+ * @template {UnistNode} [Tree=UnistNode]
+ *   Node type.
+ * @template {Test} [Check=Test]
+ *   Test type.
+ */
+
+
+
+
+
+/**
+ * Visit nodes.
+ *
+ * This algorithm performs *depth-first* *tree traversal* in *preorder*
+ * (**NLR**) or if `reverse` is given, in *reverse preorder* (**NRL**).
+ *
+ * You can choose for which nodes `visitor` is called by passing a `test`.
+ * For complex tests, you should test yourself in `visitor`, as it will be
+ * faster and will have improved type information.
+ *
+ * Walking the tree is an intensive task.
+ * Make use of the return values of the visitor when possible.
+ * Instead of walking a tree multiple times, walk it once, use `unist-util-is`
+ * to check if a node matches, and then perform different operations.
+ *
+ * You can change the tree.
+ * See `Visitor` for more info.
+ *
+ * @overload
+ * @param {Tree} tree
+ * @param {Check} check
+ * @param {BuildVisitor<Tree, Check>} visitor
+ * @param {boolean | null | undefined} [reverse]
+ * @returns {undefined}
+ *
+ * @overload
+ * @param {Tree} tree
+ * @param {BuildVisitor<Tree>} visitor
+ * @param {boolean | null | undefined} [reverse]
+ * @returns {undefined}
+ *
+ * @param {UnistNode} tree
+ *   Tree to traverse.
+ * @param {Visitor | Test} testOrVisitor
+ *   `unist-util-is`-compatible test (optional, omit to pass a visitor).
+ * @param {Visitor | boolean | null | undefined} [visitorOrReverse]
+ *   Handle each node (when test is omitted, pass `reverse`).
+ * @param {boolean | null | undefined} [maybeReverse=false]
+ *   Traverse in reverse preorder (NRL) instead of the default preorder (NLR).
+ * @returns {undefined}
+ *   Nothing.
+ *
+ * @template {UnistNode} Tree
+ *   Node type.
+ * @template {Test} Check
+ *   `unist-util-is`-compatible test.
+ */
+function visit(tree, testOrVisitor, visitorOrReverse, maybeReverse) {
+  /** @type {boolean | null | undefined} */
+  let reverse
+  /** @type {Test} */
+  let test
+  /** @type {Visitor} */
+  let visitor
+
+  if (
+    typeof testOrVisitor === 'function' &&
+    typeof visitorOrReverse !== 'function'
+  ) {
+    test = undefined
+    visitor = testOrVisitor
+    reverse = visitorOrReverse
+  } else {
+    // @ts-expect-error: assume the overload with test was given.
+    test = testOrVisitor
+    // @ts-expect-error: assume the overload with test was given.
+    visitor = visitorOrReverse
+    reverse = maybeReverse
+  }
+
+  (0,unist_util_visit_parents__WEBPACK_IMPORTED_MODULE_0__.visitParents)(tree, test, overload, reverse)
+
+  /**
+   * @param {UnistNode} node
+   * @param {Array<UnistParent>} parents
+   */
+  function overload(node, parents) {
+    const parent = parents[parents.length - 1]
+    const index = parent ? parent.children.indexOf(node) : undefined
+    return visitor(node, index, parent)
+  }
+}
+
+
+/***/ }),
+/* 72 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   CONTINUE: () => (/* binding */ CONTINUE),
+/* harmony export */   EXIT: () => (/* binding */ EXIT),
+/* harmony export */   SKIP: () => (/* binding */ SKIP),
+/* harmony export */   visitParents: () => (/* binding */ visitParents)
+/* harmony export */ });
+/* harmony import */ var unist_util_is__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(74);
+/* harmony import */ var unist_util_visit_parents_do_not_use_color__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(73);
+/**
+ * @typedef {import('unist').Node} UnistNode
+ * @typedef {import('unist').Parent} UnistParent
+ */
+
+/**
+ * @typedef {Exclude<import('unist-util-is').Test, undefined> | undefined} Test
+ *   Test from `unist-util-is`.
+ *
+ *   Note: we have remove and add `undefined`, because otherwise when generating
+ *   automatic `.d.ts` files, TS tries to flatten paths from a local perspective,
+ *   which doesn’t work when publishing on npm.
+ */
+
+/**
+ * @typedef {(
+ *   Fn extends (value: any) => value is infer Thing
+ *   ? Thing
+ *   : Fallback
+ * )} Predicate
+ *   Get the value of a type guard `Fn`.
+ * @template Fn
+ *   Value; typically function that is a type guard (such as `(x): x is Y`).
+ * @template Fallback
+ *   Value to yield if `Fn` is not a type guard.
+ */
+
+/**
+ * @typedef {(
+ *   Check extends null | undefined // No test.
+ *   ? Value
+ *   : Value extends {type: Check} // String (type) test.
+ *   ? Value
+ *   : Value extends Check // Partial test.
+ *   ? Value
+ *   : Check extends Function // Function test.
+ *   ? Predicate<Check, Value> extends Value
+ *     ? Predicate<Check, Value>
+ *     : never
+ *   : never // Some other test?
+ * )} MatchesOne
+ *   Check whether a node matches a primitive check in the type system.
+ * @template Value
+ *   Value; typically unist `Node`.
+ * @template Check
+ *   Value; typically `unist-util-is`-compatible test, but not arrays.
+ */
+
+/**
+ * @typedef {(
+ *   Check extends Array<any>
+ *   ? MatchesOne<Value, Check[keyof Check]>
+ *   : MatchesOne<Value, Check>
+ * )} Matches
+ *   Check whether a node matches a check in the type system.
+ * @template Value
+ *   Value; typically unist `Node`.
+ * @template Check
+ *   Value; typically `unist-util-is`-compatible test.
+ */
+
+/**
+ * @typedef {0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10} Uint
+ *   Number; capped reasonably.
+ */
+
+/**
+ * @typedef {I extends 0 ? 1 : I extends 1 ? 2 : I extends 2 ? 3 : I extends 3 ? 4 : I extends 4 ? 5 : I extends 5 ? 6 : I extends 6 ? 7 : I extends 7 ? 8 : I extends 8 ? 9 : 10} Increment
+ *   Increment a number in the type system.
+ * @template {Uint} [I=0]
+ *   Index.
+ */
+
+/**
+ * @typedef {(
+ *   Node extends UnistParent
+ *   ? Node extends {children: Array<infer Children>}
+ *     ? Child extends Children ? Node : never
+ *     : never
+ *   : never
+ * )} InternalParent
+ *   Collect nodes that can be parents of `Child`.
+ * @template {UnistNode} Node
+ *   All node types in a tree.
+ * @template {UnistNode} Child
+ *   Node to search for.
+ */
+
+/**
+ * @typedef {InternalParent<InclusiveDescendant<Tree>, Child>} Parent
+ *   Collect nodes in `Tree` that can be parents of `Child`.
+ * @template {UnistNode} Tree
+ *   All node types in a tree.
+ * @template {UnistNode} Child
+ *   Node to search for.
+ */
+
+/**
+ * @typedef {(
+ *   Depth extends Max
+ *   ? never
+ *   :
+ *     | InternalParent<Node, Child>
+ *     | InternalAncestor<Node, InternalParent<Node, Child>, Max, Increment<Depth>>
+ * )} InternalAncestor
+ *   Collect nodes in `Tree` that can be ancestors of `Child`.
+ * @template {UnistNode} Node
+ *   All node types in a tree.
+ * @template {UnistNode} Child
+ *   Node to search for.
+ * @template {Uint} [Max=10]
+ *   Max; searches up to this depth.
+ * @template {Uint} [Depth=0]
+ *   Current depth.
+ */
+
+/**
+ * @typedef {InternalAncestor<InclusiveDescendant<Tree>, Child>} Ancestor
+ *   Collect nodes in `Tree` that can be ancestors of `Child`.
+ * @template {UnistNode} Tree
+ *   All node types in a tree.
+ * @template {UnistNode} Child
+ *   Node to search for.
+ */
+
+/**
+ * @typedef {(
+ *   Tree extends UnistParent
+ *     ? Depth extends Max
+ *       ? Tree
+ *       : Tree | InclusiveDescendant<Tree['children'][number], Max, Increment<Depth>>
+ *     : Tree
+ * )} InclusiveDescendant
+ *   Collect all (inclusive) descendants of `Tree`.
+ *
+ *   > 👉 **Note**: for performance reasons, this seems to be the fastest way to
+ *   > recurse without actually running into an infinite loop, which the
+ *   > previous version did.
+ *   >
+ *   > Practically, a max of `2` is typically enough assuming a `Root` is
+ *   > passed, but it doesn’t improve performance.
+ *   > It gets higher with `List > ListItem > Table > TableRow > TableCell`.
+ *   > Using up to `10` doesn’t hurt or help either.
+ * @template {UnistNode} Tree
+ *   Tree type.
+ * @template {Uint} [Max=10]
+ *   Max; searches up to this depth.
+ * @template {Uint} [Depth=0]
+ *   Current depth.
+ */
+
+/**
+ * @typedef {'skip' | boolean} Action
+ *   Union of the action types.
+ *
+ * @typedef {number} Index
+ *   Move to the sibling at `index` next (after node itself is completely
+ *   traversed).
+ *
+ *   Useful if mutating the tree, such as removing the node the visitor is
+ *   currently on, or any of its previous siblings.
+ *   Results less than 0 or greater than or equal to `children.length` stop
+ *   traversing the parent.
+ *
+ * @typedef {[(Action | null | undefined | void)?, (Index | null | undefined)?]} ActionTuple
+ *   List with one or two values, the first an action, the second an index.
+ *
+ * @typedef {Action | ActionTuple | Index | null | undefined | void} VisitorResult
+ *   Any value that can be returned from a visitor.
+ */
+
+/**
+ * @callback Visitor
+ *   Handle a node (matching `test`, if given).
+ *
+ *   Visitors are free to transform `node`.
+ *   They can also transform the parent of node (the last of `ancestors`).
+ *
+ *   Replacing `node` itself, if `SKIP` is not returned, still causes its
+ *   descendants to be walked (which is a bug).
+ *
+ *   When adding or removing previous siblings of `node` (or next siblings, in
+ *   case of reverse), the `Visitor` should return a new `Index` to specify the
+ *   sibling to traverse after `node` is traversed.
+ *   Adding or removing next siblings of `node` (or previous siblings, in case
+ *   of reverse) is handled as expected without needing to return a new `Index`.
+ *
+ *   Removing the children property of an ancestor still results in them being
+ *   traversed.
+ * @param {Visited} node
+ *   Found node.
+ * @param {Array<VisitedParents>} ancestors
+ *   Ancestors of `node`.
+ * @returns {VisitorResult}
+ *   What to do next.
+ *
+ *   An `Index` is treated as a tuple of `[CONTINUE, Index]`.
+ *   An `Action` is treated as a tuple of `[Action]`.
+ *
+ *   Passing a tuple back only makes sense if the `Action` is `SKIP`.
+ *   When the `Action` is `EXIT`, that action can be returned.
+ *   When the `Action` is `CONTINUE`, `Index` can be returned.
+ * @template {UnistNode} [Visited=UnistNode]
+ *   Visited node type.
+ * @template {UnistParent} [VisitedParents=UnistParent]
+ *   Ancestor type.
+ */
+
+/**
+ * @typedef {Visitor<Matches<InclusiveDescendant<Tree>, Check>, Ancestor<Tree, Matches<InclusiveDescendant<Tree>, Check>>>} BuildVisitor
+ *   Build a typed `Visitor` function from a tree and a test.
+ *
+ *   It will infer which values are passed as `node` and which as `parents`.
+ * @template {UnistNode} [Tree=UnistNode]
+ *   Tree type.
+ * @template {Test} [Check=Test]
+ *   Test type.
+ */
+
+
+
+
+/** @type {Readonly<ActionTuple>} */
+const empty = []
+
+/**
+ * Continue traversing as normal.
+ */
+const CONTINUE = true
+
+/**
+ * Stop traversing immediately.
+ */
+const EXIT = false
+
+/**
+ * Do not traverse this node’s children.
+ */
+const SKIP = 'skip'
+
+/**
+ * Visit nodes, with ancestral information.
+ *
+ * This algorithm performs *depth-first* *tree traversal* in *preorder*
+ * (**NLR**) or if `reverse` is given, in *reverse preorder* (**NRL**).
+ *
+ * You can choose for which nodes `visitor` is called by passing a `test`.
+ * For complex tests, you should test yourself in `visitor`, as it will be
+ * faster and will have improved type information.
+ *
+ * Walking the tree is an intensive task.
+ * Make use of the return values of the visitor when possible.
+ * Instead of walking a tree multiple times, walk it once, use `unist-util-is`
+ * to check if a node matches, and then perform different operations.
+ *
+ * You can change the tree.
+ * See `Visitor` for more info.
+ *
+ * @overload
+ * @param {Tree} tree
+ * @param {Check} check
+ * @param {BuildVisitor<Tree, Check>} visitor
+ * @param {boolean | null | undefined} [reverse]
+ * @returns {undefined}
+ *
+ * @overload
+ * @param {Tree} tree
+ * @param {BuildVisitor<Tree>} visitor
+ * @param {boolean | null | undefined} [reverse]
+ * @returns {undefined}
+ *
+ * @param {UnistNode} tree
+ *   Tree to traverse.
+ * @param {Visitor | Test} test
+ *   `unist-util-is`-compatible test
+ * @param {Visitor | boolean | null | undefined} [visitor]
+ *   Handle each node.
+ * @param {boolean | null | undefined} [reverse]
+ *   Traverse in reverse preorder (NRL) instead of the default preorder (NLR).
+ * @returns {undefined}
+ *   Nothing.
+ *
+ * @template {UnistNode} Tree
+ *   Node type.
+ * @template {Test} Check
+ *   `unist-util-is`-compatible test.
+ */
+function visitParents(tree, test, visitor, reverse) {
+  /** @type {Test} */
+  let check
+
+  if (typeof test === 'function' && typeof visitor !== 'function') {
+    reverse = visitor
+    // @ts-expect-error no visitor given, so `visitor` is test.
+    visitor = test
+  } else {
+    // @ts-expect-error visitor given, so `test` isn’t a visitor.
+    check = test
+  }
+
+  const is = (0,unist_util_is__WEBPACK_IMPORTED_MODULE_0__.convert)(check)
+  const step = reverse ? -1 : 1
+
+  factory(tree, undefined, [])()
+
+  /**
+   * @param {UnistNode} node
+   * @param {number | undefined} index
+   * @param {Array<UnistParent>} parents
+   */
+  function factory(node, index, parents) {
+    const value = /** @type {Record<string, unknown>} */ (
+      node && typeof node === 'object' ? node : {}
+    )
+
+    if (typeof value.type === 'string') {
+      const name =
+        // `hast`
+        typeof value.tagName === 'string'
+          ? value.tagName
+          : // `xast`
+          typeof value.name === 'string'
+          ? value.name
+          : undefined
+
+      Object.defineProperty(visit, 'name', {
+        value:
+          'node (' + (0,unist_util_visit_parents_do_not_use_color__WEBPACK_IMPORTED_MODULE_1__.color)(node.type + (name ? '<' + name + '>' : '')) + ')'
+      })
+    }
+
+    return visit
+
+    function visit() {
+      /** @type {Readonly<ActionTuple>} */
+      let result = empty
+      /** @type {Readonly<ActionTuple>} */
+      let subresult
+      /** @type {number} */
+      let offset
+      /** @type {Array<UnistParent>} */
+      let grandparents
+
+      if (!test || is(node, index, parents[parents.length - 1] || undefined)) {
+        // @ts-expect-error: `visitor` is now a visitor.
+        result = toResult(visitor(node, parents))
+
+        if (result[0] === EXIT) {
+          return result
+        }
+      }
+
+      if ('children' in node && node.children) {
+        const nodeAsParent = /** @type {UnistParent} */ (node)
+
+        if (nodeAsParent.children && result[0] !== SKIP) {
+          offset = (reverse ? nodeAsParent.children.length : -1) + step
+          grandparents = parents.concat(nodeAsParent)
+
+          while (offset > -1 && offset < nodeAsParent.children.length) {
+            const child = nodeAsParent.children[offset]
+
+            subresult = factory(child, offset, grandparents)()
+
+            if (subresult[0] === EXIT) {
+              return subresult
+            }
+
+            offset =
+              typeof subresult[1] === 'number' ? subresult[1] : offset + step
+          }
+        }
+      }
+
+      return result
+    }
+  }
+}
+
+/**
+ * Turn a return value into a clean result.
+ *
+ * @param {VisitorResult} value
+ *   Valid return values from visitors.
+ * @returns {Readonly<ActionTuple>}
+ *   Clean result.
+ */
+function toResult(value) {
+  if (Array.isArray(value)) {
+    return value
+  }
+
+  if (typeof value === 'number') {
+    return [CONTINUE, value]
+  }
+
+  return value === null || value === undefined ? empty : [value]
+}
+
+
+/***/ }),
+/* 73 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   color: () => (/* binding */ color)
+/* harmony export */ });
+/**
+ * @param {string} d
+ * @returns {string}
+ */
+function color(d) {
+  return d
+}
+
+
+/***/ }),
+/* 74 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   convert: () => (/* binding */ convert),
+/* harmony export */   is: () => (/* binding */ is)
+/* harmony export */ });
+/**
+ * @typedef {import('unist').Node} Node
+ * @typedef {import('unist').Parent} Parent
+ */
+
+/**
+ * @template Fn
+ * @template Fallback
+ * @typedef {Fn extends (value: any) => value is infer Thing ? Thing : Fallback} Predicate
+ */
+
+/**
+ * @callback Check
+ *   Check that an arbitrary value is a node.
+ * @param {unknown} this
+ *   The given context.
+ * @param {unknown} [node]
+ *   Anything (typically a node).
+ * @param {number | null | undefined} [index]
+ *   The node’s position in its parent.
+ * @param {Parent | null | undefined} [parent]
+ *   The node’s parent.
+ * @returns {boolean}
+ *   Whether this is a node and passes a test.
+ *
+ * @typedef {Record<string, unknown> | Node} Props
+ *   Object to check for equivalence.
+ *
+ *   Note: `Node` is included as it is common but is not indexable.
+ *
+ * @typedef {Array<Props | TestFunction | string> | Props | TestFunction | string | null | undefined} Test
+ *   Check for an arbitrary node.
+ *
+ * @callback TestFunction
+ *   Check if a node passes a test.
+ * @param {unknown} this
+ *   The given context.
+ * @param {Node} node
+ *   A node.
+ * @param {number | undefined} [index]
+ *   The node’s position in its parent.
+ * @param {Parent | undefined} [parent]
+ *   The node’s parent.
+ * @returns {boolean | undefined | void}
+ *   Whether this node passes the test.
+ *
+ *   Note: `void` is included until TS sees no return as `undefined`.
+ */
+
+/**
+ * Check if `node` is a `Node` and whether it passes the given test.
+ *
+ * @param {unknown} node
+ *   Thing to check, typically `Node`.
+ * @param {Test} test
+ *   A check for a specific node.
+ * @param {number | null | undefined} index
+ *   The node’s position in its parent.
+ * @param {Parent | null | undefined} parent
+ *   The node’s parent.
+ * @param {unknown} context
+ *   Context object (`this`) to pass to `test` functions.
+ * @returns {boolean}
+ *   Whether `node` is a node and passes a test.
+ */
+const is =
+  // Note: overloads in JSDoc can’t yet use different `@template`s.
+  /**
+   * @type {(
+   *   (<Condition extends string>(node: unknown, test: Condition, index?: number | null | undefined, parent?: Parent | null | undefined, context?: unknown) => node is Node & {type: Condition}) &
+   *   (<Condition extends Props>(node: unknown, test: Condition, index?: number | null | undefined, parent?: Parent | null | undefined, context?: unknown) => node is Node & Condition) &
+   *   (<Condition extends TestFunction>(node: unknown, test: Condition, index?: number | null | undefined, parent?: Parent | null | undefined, context?: unknown) => node is Node & Predicate<Condition, Node>) &
+   *   ((node?: null | undefined) => false) &
+   *   ((node: unknown, test?: null | undefined, index?: number | null | undefined, parent?: Parent | null | undefined, context?: unknown) => node is Node) &
+   *   ((node: unknown, test?: Test, index?: number | null | undefined, parent?: Parent | null | undefined, context?: unknown) => boolean)
+   * )}
+   */
+  (
+    /**
+     * @param {unknown} [node]
+     * @param {Test} [test]
+     * @param {number | null | undefined} [index]
+     * @param {Parent | null | undefined} [parent]
+     * @param {unknown} [context]
+     * @returns {boolean}
+     */
+    // eslint-disable-next-line max-params
+    function (node, test, index, parent, context) {
+      const check = convert(test)
+
+      if (
+        index !== undefined &&
+        index !== null &&
+        (typeof index !== 'number' ||
+          index < 0 ||
+          index === Number.POSITIVE_INFINITY)
+      ) {
+        throw new Error('Expected positive finite index')
+      }
+
+      if (
+        parent !== undefined &&
+        parent !== null &&
+        (!is(parent) || !parent.children)
+      ) {
+        throw new Error('Expected parent node')
+      }
+
+      if (
+        (parent === undefined || parent === null) !==
+        (index === undefined || index === null)
+      ) {
+        throw new Error('Expected both parent and index')
+      }
+
+      return looksLikeANode(node)
+        ? check.call(context, node, index, parent)
+        : false
+    }
+  )
+
+/**
+ * Generate an assertion from a test.
+ *
+ * Useful if you’re going to test many nodes, for example when creating a
+ * utility where something else passes a compatible test.
+ *
+ * The created function is a bit faster because it expects valid input only:
+ * a `node`, `index`, and `parent`.
+ *
+ * @param {Test} test
+ *   *   when nullish, checks if `node` is a `Node`.
+ *   *   when `string`, works like passing `(node) => node.type === test`.
+ *   *   when `function` checks if function passed the node is true.
+ *   *   when `object`, checks that all keys in test are in node, and that they have (strictly) equal values.
+ *   *   when `array`, checks if any one of the subtests pass.
+ * @returns {Check}
+ *   An assertion.
+ */
+const convert =
+  // Note: overloads in JSDoc can’t yet use different `@template`s.
+  /**
+   * @type {(
+   *   (<Condition extends string>(test: Condition) => (node: unknown, index?: number | null | undefined, parent?: Parent | null | undefined, context?: unknown) => node is Node & {type: Condition}) &
+   *   (<Condition extends Props>(test: Condition) => (node: unknown, index?: number | null | undefined, parent?: Parent | null | undefined, context?: unknown) => node is Node & Condition) &
+   *   (<Condition extends TestFunction>(test: Condition) => (node: unknown, index?: number | null | undefined, parent?: Parent | null | undefined, context?: unknown) => node is Node & Predicate<Condition, Node>) &
+   *   ((test?: null | undefined) => (node?: unknown, index?: number | null | undefined, parent?: Parent | null | undefined, context?: unknown) => node is Node) &
+   *   ((test?: Test) => Check)
+   * )}
+   */
+  (
+    /**
+     * @param {Test} [test]
+     * @returns {Check}
+     */
+    function (test) {
+      if (test === null || test === undefined) {
+        return ok
+      }
+
+      if (typeof test === 'function') {
+        return castFactory(test)
+      }
+
+      if (typeof test === 'object') {
+        return Array.isArray(test) ? anyFactory(test) : propsFactory(test)
+      }
+
+      if (typeof test === 'string') {
+        return typeFactory(test)
+      }
+
+      throw new Error('Expected function, string, or object as test')
+    }
+  )
+
+/**
+ * @param {Array<Props | TestFunction | string>} tests
+ * @returns {Check}
+ */
+function anyFactory(tests) {
+  /** @type {Array<Check>} */
+  const checks = []
+  let index = -1
+
+  while (++index < tests.length) {
+    checks[index] = convert(tests[index])
+  }
+
+  return castFactory(any)
+
+  /**
+   * @this {unknown}
+   * @type {TestFunction}
+   */
+  function any(...parameters) {
+    let index = -1
+
+    while (++index < checks.length) {
+      if (checks[index].apply(this, parameters)) return true
+    }
+
+    return false
+  }
+}
+
+/**
+ * Turn an object into a test for a node with a certain fields.
+ *
+ * @param {Props} check
+ * @returns {Check}
+ */
+function propsFactory(check) {
+  const checkAsRecord = /** @type {Record<string, unknown>} */ (check)
+
+  return castFactory(all)
+
+  /**
+   * @param {Node} node
+   * @returns {boolean}
+   */
+  function all(node) {
+    const nodeAsRecord = /** @type {Record<string, unknown>} */ (
+      /** @type {unknown} */ (node)
+    )
+
+    /** @type {string} */
+    let key
+
+    for (key in check) {
+      if (nodeAsRecord[key] !== checkAsRecord[key]) return false
+    }
+
+    return true
+  }
+}
+
+/**
+ * Turn a string into a test for a node with a certain type.
+ *
+ * @param {string} check
+ * @returns {Check}
+ */
+function typeFactory(check) {
+  return castFactory(type)
+
+  /**
+   * @param {Node} node
+   */
+  function type(node) {
+    return node && node.type === check
+  }
+}
+
+/**
+ * Turn a custom test into a test for a node that passes that test.
+ *
+ * @param {TestFunction} testFunction
+ * @returns {Check}
+ */
+function castFactory(testFunction) {
+  return check
+
+  /**
+   * @this {unknown}
+   * @type {Check}
+   */
+  function check(value, index, parent) {
+    return Boolean(
+      looksLikeANode(value) &&
+        testFunction.call(
+          this,
+          value,
+          typeof index === 'number' ? index : undefined,
+          parent || undefined
+        )
+    )
+  }
+}
+
+function ok() {
+  return true
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is Node}
+ */
+function looksLikeANode(value) {
+  return value !== null && typeof value === 'object' && 'type' in value
+}
+
+
+/***/ }),
+/* 75 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   toJsxRuntime: () => (/* reexport safe */ _lib_index_js__WEBPACK_IMPORTED_MODULE_0__.toJsxRuntime)
+/* harmony export */ });
+/* harmony import */ var _lib_index_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(76);
+// Note: types exposed from `index.d.ts`.
+
+
+
+/***/ }),
+/* 76 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   toJsxRuntime: () => (/* binding */ toJsxRuntime)
+/* harmony export */ });
+/* harmony import */ var comma_separated_tokens__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(77);
+/* harmony import */ var devlop__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(68);
+/* harmony import */ var estree_util_is_identifier_name__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(104);
+/* harmony import */ var hast_util_whitespace__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(101);
+/* harmony import */ var property_information__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(78);
+/* harmony import */ var property_information__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(95);
+/* harmony import */ var property_information__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(94);
+/* harmony import */ var space_separated_tokens__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(96);
+/* harmony import */ var style_to_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(97);
+/* harmony import */ var unist_util_position__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(36);
+/* harmony import */ var vfile_message__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(102);
+/**
+ * @import {Identifier, Literal, MemberExpression} from 'estree'
+ * @import {Jsx, JsxDev, Options, Props} from 'hast-util-to-jsx-runtime'
+ * @import {Element, Nodes, Parents, Root, Text} from 'hast'
+ * @import {MdxFlowExpressionHast, MdxTextExpressionHast} from 'mdast-util-mdx-expression'
+ * @import {MdxJsxFlowElementHast, MdxJsxTextElementHast} from 'mdast-util-mdx-jsx'
+ * @import {MdxjsEsmHast} from 'mdast-util-mdxjs-esm'
+ * @import {Position} from 'unist'
+ * @import {Child, Create, Field, JsxElement, State, Style} from './types.js'
+ */
+
+
+
+
+
+
+
+
+
+
+
+// To do: next major: `Object.hasOwn`.
+const own = {}.hasOwnProperty
+
+/** @type {Map<string, number>} */
+const emptyMap = new Map()
+
+const cap = /[A-Z]/g
+
+// `react-dom` triggers a warning for *any* white space in tables.
+// To follow GFM, `mdast-util-to-hast` injects line endings between elements.
+// Other tools might do so too, but they don’t do here, so we remove all of
+// that.
+
+// See: <https://github.com/facebook/react/pull/7081>.
+// See: <https://github.com/facebook/react/pull/7515>.
+// See: <https://github.com/remarkjs/remark-react/issues/64>.
+// See: <https://github.com/rehypejs/rehype-react/pull/29>.
+// See: <https://github.com/rehypejs/rehype-react/pull/32>.
+// See: <https://github.com/rehypejs/rehype-react/pull/45>.
+const tableElements = new Set(['table', 'tbody', 'thead', 'tfoot', 'tr'])
+
+const tableCellElement = new Set(['td', 'th'])
+
+const docs = 'https://github.com/syntax-tree/hast-util-to-jsx-runtime'
+
+/**
+ * Transform a hast tree to preact, react, solid, svelte, vue, etc.,
+ * with an automatic JSX runtime.
+ *
+ * @param {Nodes} tree
+ *   Tree to transform.
+ * @param {Options} options
+ *   Configuration (required).
+ * @returns {JsxElement}
+ *   JSX element.
+ */
+
+function toJsxRuntime(tree, options) {
+  if (!options || options.Fragment === undefined) {
+    throw new TypeError('Expected `Fragment` in options')
+  }
+
+  const filePath = options.filePath || undefined
+  /** @type {Create} */
+  let create
+
+  if (options.development) {
+    if (typeof options.jsxDEV !== 'function') {
+      throw new TypeError(
+        'Expected `jsxDEV` in options when `development: true`'
+      )
+    }
+
+    create = developmentCreate(filePath, options.jsxDEV)
+  } else {
+    if (typeof options.jsx !== 'function') {
+      throw new TypeError('Expected `jsx` in production options')
+    }
+
+    if (typeof options.jsxs !== 'function') {
+      throw new TypeError('Expected `jsxs` in production options')
+    }
+
+    create = productionCreate(filePath, options.jsx, options.jsxs)
+  }
+
+  /** @type {State} */
+  const state = {
+    Fragment: options.Fragment,
+    ancestors: [],
+    components: options.components || {},
+    create,
+    elementAttributeNameCase: options.elementAttributeNameCase || 'react',
+    evaluater: options.createEvaluater ? options.createEvaluater() : undefined,
+    filePath,
+    ignoreInvalidStyle: options.ignoreInvalidStyle || false,
+    passKeys: options.passKeys !== false,
+    passNode: options.passNode || false,
+    schema: options.space === 'svg' ? property_information__WEBPACK_IMPORTED_MODULE_1__.svg : property_information__WEBPACK_IMPORTED_MODULE_1__.html,
+    stylePropertyNameCase: options.stylePropertyNameCase || 'dom',
+    tableCellAlignToStyle: options.tableCellAlignToStyle !== false
+  }
+
+  const result = one(state, tree, undefined)
+
+  // JSX element.
+  if (result && typeof result !== 'string') {
+    return result
+  }
+
+  // Text node or something that turned into nothing.
+  return state.create(
+    tree,
+    state.Fragment,
+    {children: result || undefined},
+    undefined
+  )
+}
+
+/**
+ * Transform a node.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Nodes} node
+ *   Current node.
+ * @param {string | undefined} key
+ *   Key.
+ * @returns {Child | undefined}
+ *   Child, optional.
+ */
+function one(state, node, key) {
+  if (node.type === 'element') {
+    return element(state, node, key)
+  }
+
+  if (node.type === 'mdxFlowExpression' || node.type === 'mdxTextExpression') {
+    return mdxExpression(state, node)
+  }
+
+  if (node.type === 'mdxJsxFlowElement' || node.type === 'mdxJsxTextElement') {
+    return mdxJsxElement(state, node, key)
+  }
+
+  if (node.type === 'mdxjsEsm') {
+    return mdxEsm(state, node)
+  }
+
+  if (node.type === 'root') {
+    return root(state, node, key)
+  }
+
+  if (node.type === 'text') {
+    return text(state, node)
+  }
+}
+
+/**
+ * Handle element.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Element} node
+ *   Current node.
+ * @param {string | undefined} key
+ *   Key.
+ * @returns {Child | undefined}
+ *   Child, optional.
+ */
+function element(state, node, key) {
+  const parentSchema = state.schema
+  let schema = parentSchema
+
+  if (node.tagName.toLowerCase() === 'svg' && parentSchema.space === 'html') {
+    schema = property_information__WEBPACK_IMPORTED_MODULE_1__.svg
+    state.schema = schema
+  }
+
+  state.ancestors.push(node)
+
+  const type = findComponentFromName(state, node.tagName, false)
+  const props = createElementProps(state, node)
+  let children = createChildren(state, node)
+
+  if (tableElements.has(node.tagName)) {
+    children = children.filter(function (child) {
+      return typeof child === 'string' ? !(0,hast_util_whitespace__WEBPACK_IMPORTED_MODULE_2__.whitespace)(child) : true
+    })
+  }
+
+  addNode(state, props, type, node)
+  addChildren(props, children)
+
+  // Restore.
+  state.ancestors.pop()
+  state.schema = parentSchema
+
+  return state.create(node, type, props, key)
+}
+
+/**
+ * Handle MDX expression.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {MdxFlowExpressionHast | MdxTextExpressionHast} node
+ *   Current node.
+ * @returns {Child | undefined}
+ *   Child, optional.
+ */
+function mdxExpression(state, node) {
+  if (node.data && node.data.estree && state.evaluater) {
+    const program = node.data.estree
+    const expression = program.body[0]
+    ;(0,devlop__WEBPACK_IMPORTED_MODULE_3__.ok)(expression.type === 'ExpressionStatement')
+
+    // Assume result is a child.
+    return /** @type {Child | undefined} */ (
+      state.evaluater.evaluateExpression(expression.expression)
+    )
+  }
+
+  crashEstree(state, node.position)
+}
+
+/**
+ * Handle MDX ESM.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {MdxjsEsmHast} node
+ *   Current node.
+ * @returns {Child | undefined}
+ *   Child, optional.
+ */
+function mdxEsm(state, node) {
+  if (node.data && node.data.estree && state.evaluater) {
+    // Assume result is a child.
+    return /** @type {Child | undefined} */ (
+      state.evaluater.evaluateProgram(node.data.estree)
+    )
+  }
+
+  crashEstree(state, node.position)
+}
+
+/**
+ * Handle MDX JSX.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {MdxJsxFlowElementHast | MdxJsxTextElementHast} node
+ *   Current node.
+ * @param {string | undefined} key
+ *   Key.
+ * @returns {Child | undefined}
+ *   Child, optional.
+ */
+function mdxJsxElement(state, node, key) {
+  const parentSchema = state.schema
+  let schema = parentSchema
+
+  if (node.name === 'svg' && parentSchema.space === 'html') {
+    schema = property_information__WEBPACK_IMPORTED_MODULE_1__.svg
+    state.schema = schema
+  }
+
+  state.ancestors.push(node)
+
+  const type =
+    node.name === null
+      ? state.Fragment
+      : findComponentFromName(state, node.name, true)
+  const props = createJsxElementProps(state, node)
+  const children = createChildren(state, node)
+
+  addNode(state, props, type, node)
+  addChildren(props, children)
+
+  // Restore.
+  state.ancestors.pop()
+  state.schema = parentSchema
+
+  return state.create(node, type, props, key)
+}
+
+/**
+ * Handle root.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Root} node
+ *   Current node.
+ * @param {string | undefined} key
+ *   Key.
+ * @returns {Child | undefined}
+ *   Child, optional.
+ */
+function root(state, node, key) {
+  /** @type {Props} */
+  const props = {}
+
+  addChildren(props, createChildren(state, node))
+
+  return state.create(node, state.Fragment, props, key)
+}
+
+/**
+ * Handle text.
+ *
+ * @param {State} _
+ *   Info passed around.
+ * @param {Text} node
+ *   Current node.
+ * @returns {Child | undefined}
+ *   Child, optional.
+ */
+function text(_, node) {
+  return node.value
+}
+
+/**
+ * Add `node` to props.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Props} props
+ *   Props.
+ * @param {unknown} type
+ *   Type.
+ * @param {Element | MdxJsxFlowElementHast | MdxJsxTextElementHast} node
+ *   Node.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function addNode(state, props, type, node) {
+  // If this is swapped out for a component:
+  if (typeof type !== 'string' && type !== state.Fragment && state.passNode) {
+    props.node = node
+  }
+}
+
+/**
+ * Add children to props.
+ *
+ * @param {Props} props
+ *   Props.
+ * @param {Array<Child>} children
+ *   Children.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function addChildren(props, children) {
+  if (children.length > 0) {
+    const value = children.length > 1 ? children : children[0]
+
+    if (value) {
+      props.children = value
+    }
+  }
+}
+
+/**
+ * @param {string | undefined} _
+ *   Path to file.
+ * @param {Jsx} jsx
+ *   Dynamic.
+ * @param {Jsx} jsxs
+ *   Static.
+ * @returns {Create}
+ *   Create a production element.
+ */
+function productionCreate(_, jsx, jsxs) {
+  return create
+  /** @type {Create} */
+  function create(_, type, props, key) {
+    // Only an array when there are 2 or more children.
+    const isStaticChildren = Array.isArray(props.children)
+    const fn = isStaticChildren ? jsxs : jsx
+    return key ? fn(type, props, key) : fn(type, props)
+  }
+}
+
+/**
+ * @param {string | undefined} filePath
+ *   Path to file.
+ * @param {JsxDev} jsxDEV
+ *   Development.
+ * @returns {Create}
+ *   Create a development element.
+ */
+function developmentCreate(filePath, jsxDEV) {
+  return create
+  /** @type {Create} */
+  function create(node, type, props, key) {
+    // Only an array when there are 2 or more children.
+    const isStaticChildren = Array.isArray(props.children)
+    const point = (0,unist_util_position__WEBPACK_IMPORTED_MODULE_4__.pointStart)(node)
+    return jsxDEV(
+      type,
+      props,
+      key,
+      isStaticChildren,
+      {
+        columnNumber: point ? point.column - 1 : undefined,
+        fileName: filePath,
+        lineNumber: point ? point.line : undefined
+      },
+      undefined
+    )
+  }
+}
+
+/**
+ * Create props from an element.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Element} node
+ *   Current element.
+ * @returns {Props}
+ *   Props.
+ */
+function createElementProps(state, node) {
+  /** @type {Props} */
+  const props = {}
+  /** @type {string | undefined} */
+  let alignValue
+  /** @type {string} */
+  let prop
+
+  for (prop in node.properties) {
+    if (prop !== 'children' && own.call(node.properties, prop)) {
+      const result = createProperty(state, prop, node.properties[prop])
+
+      if (result) {
+        const [key, value] = result
+
+        if (
+          state.tableCellAlignToStyle &&
+          key === 'align' &&
+          typeof value === 'string' &&
+          tableCellElement.has(node.tagName)
+        ) {
+          alignValue = value
+        } else {
+          props[key] = value
+        }
+      }
+    }
+  }
+
+  if (alignValue) {
+    // Assume style is an object.
+    const style = /** @type {Style} */ (props.style || (props.style = {}))
+    style[state.stylePropertyNameCase === 'css' ? 'text-align' : 'textAlign'] =
+      alignValue
+  }
+
+  return props
+}
+
+/**
+ * Create props from a JSX element.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {MdxJsxFlowElementHast | MdxJsxTextElementHast} node
+ *   Current JSX element.
+ * @returns {Props}
+ *   Props.
+ */
+function createJsxElementProps(state, node) {
+  /** @type {Props} */
+  const props = {}
+
+  for (const attribute of node.attributes) {
+    if (attribute.type === 'mdxJsxExpressionAttribute') {
+      if (attribute.data && attribute.data.estree && state.evaluater) {
+        const program = attribute.data.estree
+        const expression = program.body[0]
+        ;(0,devlop__WEBPACK_IMPORTED_MODULE_3__.ok)(expression.type === 'ExpressionStatement')
+        const objectExpression = expression.expression
+        ;(0,devlop__WEBPACK_IMPORTED_MODULE_3__.ok)(objectExpression.type === 'ObjectExpression')
+        const property = objectExpression.properties[0]
+        ;(0,devlop__WEBPACK_IMPORTED_MODULE_3__.ok)(property.type === 'SpreadElement')
+
+        Object.assign(
+          props,
+          state.evaluater.evaluateExpression(property.argument)
+        )
+      } else {
+        crashEstree(state, node.position)
+      }
+    } else {
+      // For JSX, the author is responsible of passing in the correct values.
+      const name = attribute.name
+      /** @type {unknown} */
+      let value
+
+      if (attribute.value && typeof attribute.value === 'object') {
+        if (
+          attribute.value.data &&
+          attribute.value.data.estree &&
+          state.evaluater
+        ) {
+          const program = attribute.value.data.estree
+          const expression = program.body[0]
+          ;(0,devlop__WEBPACK_IMPORTED_MODULE_3__.ok)(expression.type === 'ExpressionStatement')
+          value = state.evaluater.evaluateExpression(expression.expression)
+        } else {
+          crashEstree(state, node.position)
+        }
+      } else {
+        value = attribute.value === null ? true : attribute.value
+      }
+
+      // Assume a prop.
+      props[name] = /** @type {Props[keyof Props]} */ (value)
+    }
+  }
+
+  return props
+}
+
+/**
+ * Create children.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {Parents} node
+ *   Current element.
+ * @returns {Array<Child>}
+ *   Children.
+ */
+function createChildren(state, node) {
+  /** @type {Array<Child>} */
+  const children = []
+  let index = -1
+  /** @type {Map<string, number>} */
+  // Note: test this when Solid doesn’t want to merge my upcoming PR.
+  /* c8 ignore next */
+  const countsByName = state.passKeys ? new Map() : emptyMap
+
+  while (++index < node.children.length) {
+    const child = node.children[index]
+    /** @type {string | undefined} */
+    let key
+
+    if (state.passKeys) {
+      const name =
+        child.type === 'element'
+          ? child.tagName
+          : child.type === 'mdxJsxFlowElement' ||
+              child.type === 'mdxJsxTextElement'
+            ? child.name
+            : undefined
+
+      if (name) {
+        const count = countsByName.get(name) || 0
+        key = name + '-' + count
+        countsByName.set(name, count + 1)
+      }
+    }
+
+    const result = one(state, child, key)
+    if (result !== undefined) children.push(result)
+  }
+
+  return children
+}
+
+/**
+ * Handle a property.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {string} prop
+ *   Key.
+ * @param {Array<number | string> | boolean | number | string | null | undefined} value
+ *   hast property value.
+ * @returns {Field | undefined}
+ *   Field for runtime, optional.
+ */
+function createProperty(state, prop, value) {
+  const info = (0,property_information__WEBPACK_IMPORTED_MODULE_5__.find)(state.schema, prop)
+
+  // Ignore nullish and `NaN` values.
+  if (
+    value === null ||
+    value === undefined ||
+    (typeof value === 'number' && Number.isNaN(value))
+  ) {
+    return
+  }
+
+  if (Array.isArray(value)) {
+    // Accept `array`.
+    // Most props are space-separated.
+    value = info.commaSeparated ? (0,comma_separated_tokens__WEBPACK_IMPORTED_MODULE_6__.stringify)(value) : (0,space_separated_tokens__WEBPACK_IMPORTED_MODULE_7__.stringify)(value)
+  }
+
+  // React only accepts `style` as object.
+  if (info.property === 'style') {
+    let styleObject =
+      typeof value === 'object' ? value : parseStyle(state, String(value))
+
+    if (state.stylePropertyNameCase === 'css') {
+      styleObject = transformStylesToCssCasing(styleObject)
+    }
+
+    return ['style', styleObject]
+  }
+
+  return [
+    state.elementAttributeNameCase === 'react' && info.space
+      ? property_information__WEBPACK_IMPORTED_MODULE_8__.hastToReact[info.property] || info.property
+      : info.attribute,
+    value
+  ]
+}
+
+/**
+ * Parse a CSS declaration to an object.
+ *
+ * @param {State} state
+ *   Info passed around.
+ * @param {string} value
+ *   CSS declarations.
+ * @returns {Style}
+ *   Properties.
+ * @throws
+ *   Throws `VFileMessage` when CSS cannot be parsed.
+ */
+function parseStyle(state, value) {
+  try {
+    return style_to_js__WEBPACK_IMPORTED_MODULE_0__(value, {reactCompat: true})
+  } catch (error) {
+    if (state.ignoreInvalidStyle) {
+      return {}
+    }
+
+    const cause = /** @type {Error} */ (error)
+    const message = new vfile_message__WEBPACK_IMPORTED_MODULE_9__.VFileMessage('Cannot parse `style` attribute', {
+      ancestors: state.ancestors,
+      cause,
+      ruleId: 'style',
+      source: 'hast-util-to-jsx-runtime'
+    })
+    message.file = state.filePath || undefined
+    message.url = docs + '#cannot-parse-style-attribute'
+
+    throw message
+  }
+}
+
+/**
+ * Create a JSX name from a string.
+ *
+ * @param {State} state
+ *   To do.
+ * @param {string} name
+ *   Name.
+ * @param {boolean} allowExpression
+ *   Allow member expressions and identifiers.
+ * @returns {unknown}
+ *   To do.
+ */
+function findComponentFromName(state, name, allowExpression) {
+  /** @type {Identifier | Literal | MemberExpression} */
+  let result
+
+  if (!allowExpression) {
+    result = {type: 'Literal', value: name}
+  } else if (name.includes('.')) {
+    const identifiers = name.split('.')
+    let index = -1
+    /** @type {Identifier | Literal | MemberExpression | undefined} */
+    let node
+
+    while (++index < identifiers.length) {
+      /** @type {Identifier | Literal} */
+      const prop = (0,estree_util_is_identifier_name__WEBPACK_IMPORTED_MODULE_10__.name)(identifiers[index])
+        ? {type: 'Identifier', name: identifiers[index]}
+        : {type: 'Literal', value: identifiers[index]}
+      node = node
+        ? {
+            type: 'MemberExpression',
+            object: node,
+            property: prop,
+            computed: Boolean(index && prop.type === 'Literal'),
+            optional: false
+          }
+        : prop
+    }
+
+    (0,devlop__WEBPACK_IMPORTED_MODULE_3__.ok)(node, 'always a result')
+    result = node
+  } else {
+    result =
+      (0,estree_util_is_identifier_name__WEBPACK_IMPORTED_MODULE_10__.name)(name) && !/^[a-z]/.test(name)
+        ? {type: 'Identifier', name}
+        : {type: 'Literal', value: name}
+  }
+
+  // Only literals can be passed in `components` currently.
+  // No identifiers / member expressions.
+  if (result.type === 'Literal') {
+    const name = /** @type {string | number} */ (result.value)
+    return own.call(state.components, name) ? state.components[name] : name
+  }
+
+  // Assume component.
+  if (state.evaluater) {
+    return state.evaluater.evaluateExpression(result)
+  }
+
+  crashEstree(state)
+}
+
+/**
+ * @param {State} state
+ * @param {Position | undefined} [place]
+ * @returns {never}
+ */
+function crashEstree(state, place) {
+  const message = new vfile_message__WEBPACK_IMPORTED_MODULE_9__.VFileMessage(
+    'Cannot handle MDX estrees without `createEvaluater`',
+    {
+      ancestors: state.ancestors,
+      place,
+      ruleId: 'mdx-estree',
+      source: 'hast-util-to-jsx-runtime'
+    }
+  )
+  message.file = state.filePath || undefined
+  message.url = docs + '#cannot-handle-mdx-estrees-without-createevaluater'
+
+  throw message
+}
+
+/**
+ * Transform a DOM casing style object to a CSS casing style object.
+ *
+ * @param {Style} domCasing
+ * @returns {Style}
+ */
+function transformStylesToCssCasing(domCasing) {
+  /** @type {Style} */
+  const cssCasing = {}
+  /** @type {string} */
+  let from
+
+  for (from in domCasing) {
+    if (own.call(domCasing, from)) {
+      cssCasing[transformStyleToCssCasing(from)] = domCasing[from]
+    }
+  }
+
+  return cssCasing
+}
+
+/**
+ * Transform a DOM casing style field to a CSS casing style field.
+ *
+ * @param {string} from
+ * @returns {string}
+ */
+function transformStyleToCssCasing(from) {
+  let to = from.replace(cap, toDash)
+  // Handle `ms-xxx` -> `-ms-xxx`.
+  if (to.slice(0, 3) === 'ms-') to = '-' + to
+  return to
+}
+
+/**
+ * Make `$0` dash cased.
+ *
+ * @param {string} $0
+ *   Capitalized ASCII leter.
+ * @returns {string}
+ *   Dash and lower letter.
+ */
+function toDash($0) {
+  return '-' + $0.toLowerCase()
+}
+
+
+/***/ }),
+/* 77 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   parse: () => (/* binding */ parse),
+/* harmony export */   stringify: () => (/* binding */ stringify)
+/* harmony export */ });
+/**
+ * @typedef Options
+ *   Configuration for `stringify`.
+ * @property {boolean} [padLeft=true]
+ *   Whether to pad a space before a token.
+ * @property {boolean} [padRight=false]
+ *   Whether to pad a space after a token.
+ */
+
+/**
+ * @typedef {Options} StringifyOptions
+ *   Please use `StringifyOptions` instead.
+ */
+
+/**
+ * Parse comma-separated tokens to an array.
+ *
+ * @param {string} value
+ *   Comma-separated tokens.
+ * @returns {Array<string>}
+ *   List of tokens.
+ */
+function parse(value) {
+  /** @type {Array<string>} */
+  const tokens = []
+  const input = String(value || '')
+  let index = input.indexOf(',')
+  let start = 0
+  /** @type {boolean} */
+  let end = false
+
+  while (!end) {
+    if (index === -1) {
+      index = input.length
+      end = true
+    }
+
+    const token = input.slice(start, index).trim()
+
+    if (token || !end) {
+      tokens.push(token)
+    }
+
+    start = index + 1
+    index = input.indexOf(',', start)
+  }
+
+  return tokens
+}
+
+/**
+ * Serialize an array of strings or numbers to comma-separated tokens.
+ *
+ * @param {Array<string|number>} values
+ *   List of tokens.
+ * @param {Options} [options]
+ *   Configuration for `stringify` (optional).
+ * @returns {string}
+ *   Comma-separated tokens.
+ */
+function stringify(values, options) {
+  const settings = options || {}
+
+  // Ensure the last empty entry is seen.
+  const input = values[values.length - 1] === '' ? [...values, ''] : values
+
+  return input
+    .join(
+      (settings.padRight ? ' ' : '') +
+        ',' +
+        (settings.padLeft === false ? '' : ' ')
+    )
+    .trim()
+}
+
+
+/***/ }),
+/* 78 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   find: () => (/* reexport safe */ _lib_find_js__WEBPACK_IMPORTED_MODULE_7__.find),
+/* harmony export */   hastToReact: () => (/* reexport safe */ _lib_hast_to_react_js__WEBPACK_IMPORTED_MODULE_0__.hastToReact),
+/* harmony export */   html: () => (/* binding */ html),
+/* harmony export */   normalize: () => (/* reexport safe */ _lib_normalize_js__WEBPACK_IMPORTED_MODULE_8__.normalize),
+/* harmony export */   svg: () => (/* binding */ svg)
+/* harmony export */ });
+/* harmony import */ var _lib_util_merge_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(79);
+/* harmony import */ var _lib_aria_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(81);
+/* harmony import */ var _lib_html_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(87);
+/* harmony import */ var _lib_svg_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(90);
+/* harmony import */ var _lib_xlink_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(91);
+/* harmony import */ var _lib_xmlns_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(92);
+/* harmony import */ var _lib_xml_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(93);
+/* harmony import */ var _lib_hast_to_react_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(94);
+/* harmony import */ var _lib_find_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(95);
+/* harmony import */ var _lib_normalize_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(83);
+// Note: types exposed from `index.d.ts`.
+
+
+
+
+
+
+
+
+
+
+const html = (0,_lib_util_merge_js__WEBPACK_IMPORTED_MODULE_1__.merge)([_lib_aria_js__WEBPACK_IMPORTED_MODULE_2__.aria, _lib_html_js__WEBPACK_IMPORTED_MODULE_3__.html, _lib_xlink_js__WEBPACK_IMPORTED_MODULE_4__.xlink, _lib_xmlns_js__WEBPACK_IMPORTED_MODULE_5__.xmlns, _lib_xml_js__WEBPACK_IMPORTED_MODULE_6__.xml], 'html')
+
+
+
+
+const svg = (0,_lib_util_merge_js__WEBPACK_IMPORTED_MODULE_1__.merge)([_lib_aria_js__WEBPACK_IMPORTED_MODULE_2__.aria, _lib_svg_js__WEBPACK_IMPORTED_MODULE_9__.svg, _lib_xlink_js__WEBPACK_IMPORTED_MODULE_4__.xlink, _lib_xmlns_js__WEBPACK_IMPORTED_MODULE_5__.xmlns, _lib_xml_js__WEBPACK_IMPORTED_MODULE_6__.xml], 'svg')
+
+
+/***/ }),
+/* 79 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   merge: () => (/* binding */ merge)
+/* harmony export */ });
+/* harmony import */ var _schema_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(80);
+/**
+ * @import {Info, Space} from 'property-information'
+ */
+
+
+
+/**
+ * @param {ReadonlyArray<Schema>} definitions
+ *   Definitions.
+ * @param {Space | undefined} [space]
+ *   Space.
+ * @returns {Schema}
+ *   Schema.
+ */
+function merge(definitions, space) {
+  /** @type {Record<string, Info>} */
+  const property = {}
+  /** @type {Record<string, string>} */
+  const normal = {}
+
+  for (const definition of definitions) {
+    Object.assign(property, definition.property)
+    Object.assign(normal, definition.normal)
+  }
+
+  return new _schema_js__WEBPACK_IMPORTED_MODULE_0__.Schema(property, normal, space)
+}
+
+
+/***/ }),
+/* 80 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   Schema: () => (/* binding */ Schema)
+/* harmony export */ });
+/**
+ * @import {Schema as SchemaType, Space} from 'property-information'
+ */
+
+/** @type {SchemaType} */
+class Schema {
+  /**
+   * @param {SchemaType['property']} property
+   *   Property.
+   * @param {SchemaType['normal']} normal
+   *   Normal.
+   * @param {Space | undefined} [space]
+   *   Space.
+   * @returns
+   *   Schema.
+   */
+  constructor(property, normal, space) {
+    this.normal = normal
+    this.property = property
+
+    if (space) {
+      this.space = space
+    }
+  }
+}
+
+Schema.prototype.normal = {}
+Schema.prototype.property = {}
+Schema.prototype.space = undefined
+
+
+/***/ }),
+/* 81 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   aria: () => (/* binding */ aria)
+/* harmony export */ });
+/* harmony import */ var _util_create_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(82);
+/* harmony import */ var _util_types_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(86);
+
+
+
+const aria = (0,_util_create_js__WEBPACK_IMPORTED_MODULE_0__.create)({
+  properties: {
+    ariaActiveDescendant: null,
+    ariaAtomic: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaAutoComplete: null,
+    ariaBusy: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaChecked: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaColCount: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaColIndex: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaColSpan: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaControls: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    ariaCurrent: null,
+    ariaDescribedBy: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    ariaDetails: null,
+    ariaDisabled: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaDropEffect: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    ariaErrorMessage: null,
+    ariaExpanded: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaFlowTo: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    ariaGrabbed: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaHasPopup: null,
+    ariaHidden: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaInvalid: null,
+    ariaKeyShortcuts: null,
+    ariaLabel: null,
+    ariaLabelledBy: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    ariaLevel: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaLive: null,
+    ariaModal: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaMultiLine: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaMultiSelectable: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaOrientation: null,
+    ariaOwns: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    ariaPlaceholder: null,
+    ariaPosInSet: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaPressed: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaReadOnly: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaRelevant: null,
+    ariaRequired: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaRoleDescription: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    ariaRowCount: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaRowIndex: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaRowSpan: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaSelected: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    ariaSetSize: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaSort: null,
+    ariaValueMax: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaValueMin: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaValueNow: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    ariaValueText: null,
+    role: null
+  },
+  transform(_, property) {
+    return property === 'role'
+      ? property
+      : 'aria-' + property.slice(4).toLowerCase()
+  }
+})
+
+
+/***/ }),
+/* 82 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   create: () => (/* binding */ create)
+/* harmony export */ });
+/* harmony import */ var _normalize_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(83);
+/* harmony import */ var _defined_info_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(84);
+/* harmony import */ var _schema_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(80);
+/**
+ * @import {Info, Space} from 'property-information'
+ */
+
+/**
+ * @typedef Definition
+ *   Definition of a schema.
+ * @property {Record<string, string> | undefined} [attributes]
+ *   Normalzed names to special attribute case.
+ * @property {ReadonlyArray<string> | undefined} [mustUseProperty]
+ *   Normalized names that must be set as properties.
+ * @property {Record<string, number | null>} properties
+ *   Property names to their types.
+ * @property {Space | undefined} [space]
+ *   Space.
+ * @property {Transform} transform
+ *   Transform a property name.
+ */
+
+/**
+ * @callback Transform
+ *   Transform.
+ * @param {Record<string, string>} attributes
+ *   Attributes.
+ * @param {string} property
+ *   Property.
+ * @returns {string}
+ *   Attribute.
+ */
+
+
+
+
+
+/**
+ * @param {Definition} definition
+ *   Definition.
+ * @returns {Schema}
+ *   Schema.
+ */
+function create(definition) {
+  /** @type {Record<string, Info>} */
+  const properties = {}
+  /** @type {Record<string, string>} */
+  const normals = {}
+
+  for (const [property, value] of Object.entries(definition.properties)) {
+    const info = new _defined_info_js__WEBPACK_IMPORTED_MODULE_0__.DefinedInfo(
+      property,
+      definition.transform(definition.attributes || {}, property),
+      value,
+      definition.space
+    )
+
+    if (
+      definition.mustUseProperty &&
+      definition.mustUseProperty.includes(property)
+    ) {
+      info.mustUseProperty = true
+    }
+
+    properties[property] = info
+
+    normals[(0,_normalize_js__WEBPACK_IMPORTED_MODULE_1__.normalize)(property)] = property
+    normals[(0,_normalize_js__WEBPACK_IMPORTED_MODULE_1__.normalize)(info.attribute)] = property
+  }
+
+  return new _schema_js__WEBPACK_IMPORTED_MODULE_2__.Schema(properties, normals, definition.space)
+}
+
+
+/***/ }),
+/* 83 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   normalize: () => (/* binding */ normalize)
+/* harmony export */ });
+/**
+ * Get the cleaned case insensitive form of an attribute or property.
+ *
+ * @param {string} value
+ *   An attribute-like or property-like name.
+ * @returns {string}
+ *   Value that can be used to look up the properly cased property on a
+ *   `Schema`.
+ */
+function normalize(value) {
+  return value.toLowerCase()
+}
+
+
+/***/ }),
+/* 84 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   DefinedInfo: () => (/* binding */ DefinedInfo)
+/* harmony export */ });
+/* harmony import */ var _info_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(85);
+/* harmony import */ var _types_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(86);
+/**
+ * @import {Space} from 'property-information'
+ */
+
+
+
+
+const checks = /** @type {ReadonlyArray<keyof typeof types>} */ (
+  Object.keys(_types_js__WEBPACK_IMPORTED_MODULE_0__)
+)
+
+class DefinedInfo extends _info_js__WEBPACK_IMPORTED_MODULE_1__.Info {
+  /**
+   * @constructor
+   * @param {string} property
+   *   Property.
+   * @param {string} attribute
+   *   Attribute.
+   * @param {number | null | undefined} [mask]
+   *   Mask.
+   * @param {Space | undefined} [space]
+   *   Space.
+   * @returns
+   *   Info.
+   */
+  constructor(property, attribute, mask, space) {
+    let index = -1
+
+    super(property, attribute)
+
+    mark(this, 'space', space)
+
+    if (typeof mask === 'number') {
+      while (++index < checks.length) {
+        const check = checks[index]
+        mark(this, checks[index], (mask & _types_js__WEBPACK_IMPORTED_MODULE_0__[check]) === _types_js__WEBPACK_IMPORTED_MODULE_0__[check])
+      }
+    }
+  }
+}
+
+DefinedInfo.prototype.defined = true
+
+/**
+ * @template {keyof DefinedInfo} Key
+ *   Key type.
+ * @param {DefinedInfo} values
+ *   Info.
+ * @param {Key} key
+ *   Key.
+ * @param {DefinedInfo[Key]} value
+ *   Value.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function mark(values, key, value) {
+  if (value) {
+    values[key] = value
+  }
+}
+
+
+/***/ }),
+/* 85 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   Info: () => (/* binding */ Info)
+/* harmony export */ });
+/**
+ * @import {Info as InfoType} from 'property-information'
+ */
+
+/** @type {InfoType} */
+class Info {
+  /**
+   * @param {string} property
+   *   Property.
+   * @param {string} attribute
+   *   Attribute.
+   * @returns
+   *   Info.
+   */
+  constructor(property, attribute) {
+    this.attribute = attribute
+    this.property = property
+  }
+}
+
+Info.prototype.attribute = ''
+Info.prototype.booleanish = false
+Info.prototype.boolean = false
+Info.prototype.commaOrSpaceSeparated = false
+Info.prototype.commaSeparated = false
+Info.prototype.defined = false
+Info.prototype.mustUseProperty = false
+Info.prototype.number = false
+Info.prototype.overloadedBoolean = false
+Info.prototype.property = ''
+Info.prototype.spaceSeparated = false
+Info.prototype.space = undefined
+
+
+/***/ }),
+/* 86 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   boolean: () => (/* binding */ boolean),
+/* harmony export */   booleanish: () => (/* binding */ booleanish),
+/* harmony export */   commaOrSpaceSeparated: () => (/* binding */ commaOrSpaceSeparated),
+/* harmony export */   commaSeparated: () => (/* binding */ commaSeparated),
+/* harmony export */   number: () => (/* binding */ number),
+/* harmony export */   overloadedBoolean: () => (/* binding */ overloadedBoolean),
+/* harmony export */   spaceSeparated: () => (/* binding */ spaceSeparated)
+/* harmony export */ });
+let powers = 0
+
+const boolean = increment()
+const booleanish = increment()
+const overloadedBoolean = increment()
+const number = increment()
+const spaceSeparated = increment()
+const commaSeparated = increment()
+const commaOrSpaceSeparated = increment()
+
+function increment() {
+  return 2 ** ++powers
+}
+
+
+/***/ }),
+/* 87 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   html: () => (/* binding */ html)
+/* harmony export */ });
+/* harmony import */ var _util_case_insensitive_transform_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(88);
+/* harmony import */ var _util_create_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(82);
+/* harmony import */ var _util_types_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(86);
+
+
+
+
+const html = (0,_util_create_js__WEBPACK_IMPORTED_MODULE_0__.create)({
+  attributes: {
+    acceptcharset: 'accept-charset',
+    classname: 'class',
+    htmlfor: 'for',
+    httpequiv: 'http-equiv'
+  },
+  mustUseProperty: ['checked', 'multiple', 'muted', 'selected'],
+  properties: {
+    // Standard Properties.
+    abbr: null,
+    accept: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaSeparated,
+    acceptCharset: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    accessKey: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    action: null,
+    allow: null,
+    allowFullScreen: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    allowPaymentRequest: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    allowUserMedia: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    alt: null,
+    as: null,
+    async: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    autoCapitalize: null,
+    autoComplete: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    autoFocus: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    autoPlay: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    blocking: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    capture: null,
+    charSet: null,
+    checked: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    cite: null,
+    className: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    cols: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    colSpan: null,
+    content: null,
+    contentEditable: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    controls: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    controlsList: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    coords: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number | _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaSeparated,
+    crossOrigin: null,
+    data: null,
+    dateTime: null,
+    decoding: null,
+    default: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    defer: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    dir: null,
+    dirName: null,
+    disabled: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    download: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.overloadedBoolean,
+    draggable: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    encType: null,
+    enterKeyHint: null,
+    fetchPriority: null,
+    form: null,
+    formAction: null,
+    formEncType: null,
+    formMethod: null,
+    formNoValidate: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    formTarget: null,
+    headers: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    height: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    hidden: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.overloadedBoolean,
+    high: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    href: null,
+    hrefLang: null,
+    htmlFor: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    httpEquiv: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    id: null,
+    imageSizes: null,
+    imageSrcSet: null,
+    inert: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    inputMode: null,
+    integrity: null,
+    is: null,
+    isMap: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    itemId: null,
+    itemProp: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    itemRef: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    itemScope: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    itemType: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    kind: null,
+    label: null,
+    lang: null,
+    language: null,
+    list: null,
+    loading: null,
+    loop: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    low: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    manifest: null,
+    max: null,
+    maxLength: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    media: null,
+    method: null,
+    min: null,
+    minLength: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    multiple: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    muted: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    name: null,
+    nonce: null,
+    noModule: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    noValidate: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    onAbort: null,
+    onAfterPrint: null,
+    onAuxClick: null,
+    onBeforeMatch: null,
+    onBeforePrint: null,
+    onBeforeToggle: null,
+    onBeforeUnload: null,
+    onBlur: null,
+    onCancel: null,
+    onCanPlay: null,
+    onCanPlayThrough: null,
+    onChange: null,
+    onClick: null,
+    onClose: null,
+    onContextLost: null,
+    onContextMenu: null,
+    onContextRestored: null,
+    onCopy: null,
+    onCueChange: null,
+    onCut: null,
+    onDblClick: null,
+    onDrag: null,
+    onDragEnd: null,
+    onDragEnter: null,
+    onDragExit: null,
+    onDragLeave: null,
+    onDragOver: null,
+    onDragStart: null,
+    onDrop: null,
+    onDurationChange: null,
+    onEmptied: null,
+    onEnded: null,
+    onError: null,
+    onFocus: null,
+    onFormData: null,
+    onHashChange: null,
+    onInput: null,
+    onInvalid: null,
+    onKeyDown: null,
+    onKeyPress: null,
+    onKeyUp: null,
+    onLanguageChange: null,
+    onLoad: null,
+    onLoadedData: null,
+    onLoadedMetadata: null,
+    onLoadEnd: null,
+    onLoadStart: null,
+    onMessage: null,
+    onMessageError: null,
+    onMouseDown: null,
+    onMouseEnter: null,
+    onMouseLeave: null,
+    onMouseMove: null,
+    onMouseOut: null,
+    onMouseOver: null,
+    onMouseUp: null,
+    onOffline: null,
+    onOnline: null,
+    onPageHide: null,
+    onPageShow: null,
+    onPaste: null,
+    onPause: null,
+    onPlay: null,
+    onPlaying: null,
+    onPopState: null,
+    onProgress: null,
+    onRateChange: null,
+    onRejectionHandled: null,
+    onReset: null,
+    onResize: null,
+    onScroll: null,
+    onScrollEnd: null,
+    onSecurityPolicyViolation: null,
+    onSeeked: null,
+    onSeeking: null,
+    onSelect: null,
+    onSlotChange: null,
+    onStalled: null,
+    onStorage: null,
+    onSubmit: null,
+    onSuspend: null,
+    onTimeUpdate: null,
+    onToggle: null,
+    onUnhandledRejection: null,
+    onUnload: null,
+    onVolumeChange: null,
+    onWaiting: null,
+    onWheel: null,
+    open: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    optimum: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    pattern: null,
+    ping: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    placeholder: null,
+    playsInline: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    popover: null,
+    popoverTarget: null,
+    popoverTargetAction: null,
+    poster: null,
+    preload: null,
+    readOnly: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    referrerPolicy: null,
+    rel: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    required: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    reversed: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    rows: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    rowSpan: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    sandbox: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    scope: null,
+    scoped: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    seamless: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    selected: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    shadowRootClonable: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    shadowRootDelegatesFocus: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    shadowRootMode: null,
+    shape: null,
+    size: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    sizes: null,
+    slot: null,
+    span: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    spellCheck: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    src: null,
+    srcDoc: null,
+    srcLang: null,
+    srcSet: null,
+    start: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    step: null,
+    style: null,
+    tabIndex: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    target: null,
+    title: null,
+    translate: null,
+    type: null,
+    typeMustMatch: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    useMap: null,
+    value: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish,
+    width: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    wrap: null,
+    writingSuggestions: null,
+
+    // Legacy.
+    // See: https://html.spec.whatwg.org/#other-elements,-attributes-and-apis
+    align: null, // Several. Use CSS `text-align` instead,
+    aLink: null, // `<body>`. Use CSS `a:active {color}` instead
+    archive: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated, // `<object>`. List of URIs to archives
+    axis: null, // `<td>` and `<th>`. Use `scope` on `<th>`
+    background: null, // `<body>`. Use CSS `background-image` instead
+    bgColor: null, // `<body>` and table elements. Use CSS `background-color` instead
+    border: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number, // `<table>`. Use CSS `border-width` instead,
+    borderColor: null, // `<table>`. Use CSS `border-color` instead,
+    bottomMargin: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number, // `<body>`
+    cellPadding: null, // `<table>`
+    cellSpacing: null, // `<table>`
+    char: null, // Several table elements. When `align=char`, sets the character to align on
+    charOff: null, // Several table elements. When `char`, offsets the alignment
+    classId: null, // `<object>`
+    clear: null, // `<br>`. Use CSS `clear` instead
+    code: null, // `<object>`
+    codeBase: null, // `<object>`
+    codeType: null, // `<object>`
+    color: null, // `<font>` and `<hr>`. Use CSS instead
+    compact: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean, // Lists. Use CSS to reduce space between items instead
+    declare: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean, // `<object>`
+    event: null, // `<script>`
+    face: null, // `<font>`. Use CSS instead
+    frame: null, // `<table>`
+    frameBorder: null, // `<iframe>`. Use CSS `border` instead
+    hSpace: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number, // `<img>` and `<object>`
+    leftMargin: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number, // `<body>`
+    link: null, // `<body>`. Use CSS `a:link {color: *}` instead
+    longDesc: null, // `<frame>`, `<iframe>`, and `<img>`. Use an `<a>`
+    lowSrc: null, // `<img>`. Use a `<picture>`
+    marginHeight: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number, // `<body>`
+    marginWidth: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number, // `<body>`
+    noResize: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean, // `<frame>`
+    noHref: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean, // `<area>`. Use no href instead of an explicit `nohref`
+    noShade: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean, // `<hr>`. Use background-color and height instead of borders
+    noWrap: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean, // `<td>` and `<th>`
+    object: null, // `<applet>`
+    profile: null, // `<head>`
+    prompt: null, // `<isindex>`
+    rev: null, // `<link>`
+    rightMargin: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number, // `<body>`
+    rules: null, // `<table>`
+    scheme: null, // `<meta>`
+    scrolling: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.booleanish, // `<frame>`. Use overflow in the child context
+    standby: null, // `<object>`
+    summary: null, // `<table>`
+    text: null, // `<body>`. Use CSS `color` instead
+    topMargin: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number, // `<body>`
+    valueType: null, // `<param>`
+    version: null, // `<html>`. Use a doctype.
+    vAlign: null, // Several. Use CSS `vertical-align` instead
+    vLink: null, // `<body>`. Use CSS `a:visited {color}` instead
+    vSpace: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number, // `<img>` and `<object>`
+
+    // Non-standard Properties.
+    allowTransparency: null,
+    autoCorrect: null,
+    autoSave: null,
+    disablePictureInPicture: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    disableRemotePlayback: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    prefix: null,
+    property: null,
+    results: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    security: null,
+    unselectable: null
+  },
+  space: 'html',
+  transform: _util_case_insensitive_transform_js__WEBPACK_IMPORTED_MODULE_2__.caseInsensitiveTransform
+})
+
+
+/***/ }),
+/* 88 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   caseInsensitiveTransform: () => (/* binding */ caseInsensitiveTransform)
+/* harmony export */ });
+/* harmony import */ var _case_sensitive_transform_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(89);
+
+
+/**
+ * @param {Record<string, string>} attributes
+ *   Attributes.
+ * @param {string} property
+ *   Property.
+ * @returns {string}
+ *   Transformed property.
+ */
+function caseInsensitiveTransform(attributes, property) {
+  return (0,_case_sensitive_transform_js__WEBPACK_IMPORTED_MODULE_0__.caseSensitiveTransform)(attributes, property.toLowerCase())
+}
+
+
+/***/ }),
+/* 89 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   caseSensitiveTransform: () => (/* binding */ caseSensitiveTransform)
+/* harmony export */ });
+/**
+ * @param {Record<string, string>} attributes
+ *   Attributes.
+ * @param {string} attribute
+ *   Attribute.
+ * @returns {string}
+ *   Transformed attribute.
+ */
+function caseSensitiveTransform(attributes, attribute) {
+  return attribute in attributes ? attributes[attribute] : attribute
+}
+
+
+/***/ }),
+/* 90 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   svg: () => (/* binding */ svg)
+/* harmony export */ });
+/* harmony import */ var _util_case_sensitive_transform_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(89);
+/* harmony import */ var _util_create_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(82);
+/* harmony import */ var _util_types_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(86);
+
+
+
+
+const svg = (0,_util_create_js__WEBPACK_IMPORTED_MODULE_0__.create)({
+  attributes: {
+    accentHeight: 'accent-height',
+    alignmentBaseline: 'alignment-baseline',
+    arabicForm: 'arabic-form',
+    baselineShift: 'baseline-shift',
+    capHeight: 'cap-height',
+    className: 'class',
+    clipPath: 'clip-path',
+    clipRule: 'clip-rule',
+    colorInterpolation: 'color-interpolation',
+    colorInterpolationFilters: 'color-interpolation-filters',
+    colorProfile: 'color-profile',
+    colorRendering: 'color-rendering',
+    crossOrigin: 'crossorigin',
+    dataType: 'datatype',
+    dominantBaseline: 'dominant-baseline',
+    enableBackground: 'enable-background',
+    fillOpacity: 'fill-opacity',
+    fillRule: 'fill-rule',
+    floodColor: 'flood-color',
+    floodOpacity: 'flood-opacity',
+    fontFamily: 'font-family',
+    fontSize: 'font-size',
+    fontSizeAdjust: 'font-size-adjust',
+    fontStretch: 'font-stretch',
+    fontStyle: 'font-style',
+    fontVariant: 'font-variant',
+    fontWeight: 'font-weight',
+    glyphName: 'glyph-name',
+    glyphOrientationHorizontal: 'glyph-orientation-horizontal',
+    glyphOrientationVertical: 'glyph-orientation-vertical',
+    hrefLang: 'hreflang',
+    horizAdvX: 'horiz-adv-x',
+    horizOriginX: 'horiz-origin-x',
+    horizOriginY: 'horiz-origin-y',
+    imageRendering: 'image-rendering',
+    letterSpacing: 'letter-spacing',
+    lightingColor: 'lighting-color',
+    markerEnd: 'marker-end',
+    markerMid: 'marker-mid',
+    markerStart: 'marker-start',
+    navDown: 'nav-down',
+    navDownLeft: 'nav-down-left',
+    navDownRight: 'nav-down-right',
+    navLeft: 'nav-left',
+    navNext: 'nav-next',
+    navPrev: 'nav-prev',
+    navRight: 'nav-right',
+    navUp: 'nav-up',
+    navUpLeft: 'nav-up-left',
+    navUpRight: 'nav-up-right',
+    onAbort: 'onabort',
+    onActivate: 'onactivate',
+    onAfterPrint: 'onafterprint',
+    onBeforePrint: 'onbeforeprint',
+    onBegin: 'onbegin',
+    onCancel: 'oncancel',
+    onCanPlay: 'oncanplay',
+    onCanPlayThrough: 'oncanplaythrough',
+    onChange: 'onchange',
+    onClick: 'onclick',
+    onClose: 'onclose',
+    onCopy: 'oncopy',
+    onCueChange: 'oncuechange',
+    onCut: 'oncut',
+    onDblClick: 'ondblclick',
+    onDrag: 'ondrag',
+    onDragEnd: 'ondragend',
+    onDragEnter: 'ondragenter',
+    onDragExit: 'ondragexit',
+    onDragLeave: 'ondragleave',
+    onDragOver: 'ondragover',
+    onDragStart: 'ondragstart',
+    onDrop: 'ondrop',
+    onDurationChange: 'ondurationchange',
+    onEmptied: 'onemptied',
+    onEnd: 'onend',
+    onEnded: 'onended',
+    onError: 'onerror',
+    onFocus: 'onfocus',
+    onFocusIn: 'onfocusin',
+    onFocusOut: 'onfocusout',
+    onHashChange: 'onhashchange',
+    onInput: 'oninput',
+    onInvalid: 'oninvalid',
+    onKeyDown: 'onkeydown',
+    onKeyPress: 'onkeypress',
+    onKeyUp: 'onkeyup',
+    onLoad: 'onload',
+    onLoadedData: 'onloadeddata',
+    onLoadedMetadata: 'onloadedmetadata',
+    onLoadStart: 'onloadstart',
+    onMessage: 'onmessage',
+    onMouseDown: 'onmousedown',
+    onMouseEnter: 'onmouseenter',
+    onMouseLeave: 'onmouseleave',
+    onMouseMove: 'onmousemove',
+    onMouseOut: 'onmouseout',
+    onMouseOver: 'onmouseover',
+    onMouseUp: 'onmouseup',
+    onMouseWheel: 'onmousewheel',
+    onOffline: 'onoffline',
+    onOnline: 'ononline',
+    onPageHide: 'onpagehide',
+    onPageShow: 'onpageshow',
+    onPaste: 'onpaste',
+    onPause: 'onpause',
+    onPlay: 'onplay',
+    onPlaying: 'onplaying',
+    onPopState: 'onpopstate',
+    onProgress: 'onprogress',
+    onRateChange: 'onratechange',
+    onRepeat: 'onrepeat',
+    onReset: 'onreset',
+    onResize: 'onresize',
+    onScroll: 'onscroll',
+    onSeeked: 'onseeked',
+    onSeeking: 'onseeking',
+    onSelect: 'onselect',
+    onShow: 'onshow',
+    onStalled: 'onstalled',
+    onStorage: 'onstorage',
+    onSubmit: 'onsubmit',
+    onSuspend: 'onsuspend',
+    onTimeUpdate: 'ontimeupdate',
+    onToggle: 'ontoggle',
+    onUnload: 'onunload',
+    onVolumeChange: 'onvolumechange',
+    onWaiting: 'onwaiting',
+    onZoom: 'onzoom',
+    overlinePosition: 'overline-position',
+    overlineThickness: 'overline-thickness',
+    paintOrder: 'paint-order',
+    panose1: 'panose-1',
+    pointerEvents: 'pointer-events',
+    referrerPolicy: 'referrerpolicy',
+    renderingIntent: 'rendering-intent',
+    shapeRendering: 'shape-rendering',
+    stopColor: 'stop-color',
+    stopOpacity: 'stop-opacity',
+    strikethroughPosition: 'strikethrough-position',
+    strikethroughThickness: 'strikethrough-thickness',
+    strokeDashArray: 'stroke-dasharray',
+    strokeDashOffset: 'stroke-dashoffset',
+    strokeLineCap: 'stroke-linecap',
+    strokeLineJoin: 'stroke-linejoin',
+    strokeMiterLimit: 'stroke-miterlimit',
+    strokeOpacity: 'stroke-opacity',
+    strokeWidth: 'stroke-width',
+    tabIndex: 'tabindex',
+    textAnchor: 'text-anchor',
+    textDecoration: 'text-decoration',
+    textRendering: 'text-rendering',
+    transformOrigin: 'transform-origin',
+    typeOf: 'typeof',
+    underlinePosition: 'underline-position',
+    underlineThickness: 'underline-thickness',
+    unicodeBidi: 'unicode-bidi',
+    unicodeRange: 'unicode-range',
+    unitsPerEm: 'units-per-em',
+    vAlphabetic: 'v-alphabetic',
+    vHanging: 'v-hanging',
+    vIdeographic: 'v-ideographic',
+    vMathematical: 'v-mathematical',
+    vectorEffect: 'vector-effect',
+    vertAdvY: 'vert-adv-y',
+    vertOriginX: 'vert-origin-x',
+    vertOriginY: 'vert-origin-y',
+    wordSpacing: 'word-spacing',
+    writingMode: 'writing-mode',
+    xHeight: 'x-height',
+    // These were camelcased in Tiny. Now lowercased in SVG 2
+    playbackOrder: 'playbackorder',
+    timelineBegin: 'timelinebegin'
+  },
+  properties: {
+    about: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    accentHeight: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    accumulate: null,
+    additive: null,
+    alignmentBaseline: null,
+    alphabetic: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    amplitude: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    arabicForm: null,
+    ascent: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    attributeName: null,
+    attributeType: null,
+    azimuth: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    bandwidth: null,
+    baselineShift: null,
+    baseFrequency: null,
+    baseProfile: null,
+    bbox: null,
+    begin: null,
+    bias: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    by: null,
+    calcMode: null,
+    capHeight: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    className: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    clip: null,
+    clipPath: null,
+    clipPathUnits: null,
+    clipRule: null,
+    color: null,
+    colorInterpolation: null,
+    colorInterpolationFilters: null,
+    colorProfile: null,
+    colorRendering: null,
+    content: null,
+    contentScriptType: null,
+    contentStyleType: null,
+    crossOrigin: null,
+    cursor: null,
+    cx: null,
+    cy: null,
+    d: null,
+    dataType: null,
+    defaultAction: null,
+    descent: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    diffuseConstant: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    direction: null,
+    display: null,
+    dur: null,
+    divisor: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    dominantBaseline: null,
+    download: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.boolean,
+    dx: null,
+    dy: null,
+    edgeMode: null,
+    editable: null,
+    elevation: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    enableBackground: null,
+    end: null,
+    event: null,
+    exponent: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    externalResourcesRequired: null,
+    fill: null,
+    fillOpacity: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    fillRule: null,
+    filter: null,
+    filterRes: null,
+    filterUnits: null,
+    floodColor: null,
+    floodOpacity: null,
+    focusable: null,
+    focusHighlight: null,
+    fontFamily: null,
+    fontSize: null,
+    fontSizeAdjust: null,
+    fontStretch: null,
+    fontStyle: null,
+    fontVariant: null,
+    fontWeight: null,
+    format: null,
+    fr: null,
+    from: null,
+    fx: null,
+    fy: null,
+    g1: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaSeparated,
+    g2: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaSeparated,
+    glyphName: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaSeparated,
+    glyphOrientationHorizontal: null,
+    glyphOrientationVertical: null,
+    glyphRef: null,
+    gradientTransform: null,
+    gradientUnits: null,
+    handler: null,
+    hanging: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    hatchContentUnits: null,
+    hatchUnits: null,
+    height: null,
+    href: null,
+    hrefLang: null,
+    horizAdvX: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    horizOriginX: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    horizOriginY: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    id: null,
+    ideographic: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    imageRendering: null,
+    initialVisibility: null,
+    in: null,
+    in2: null,
+    intercept: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    k: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    k1: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    k2: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    k3: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    k4: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    kernelMatrix: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    kernelUnitLength: null,
+    keyPoints: null, // SEMI_COLON_SEPARATED
+    keySplines: null, // SEMI_COLON_SEPARATED
+    keyTimes: null, // SEMI_COLON_SEPARATED
+    kerning: null,
+    lang: null,
+    lengthAdjust: null,
+    letterSpacing: null,
+    lightingColor: null,
+    limitingConeAngle: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    local: null,
+    markerEnd: null,
+    markerMid: null,
+    markerStart: null,
+    markerHeight: null,
+    markerUnits: null,
+    markerWidth: null,
+    mask: null,
+    maskContentUnits: null,
+    maskUnits: null,
+    mathematical: null,
+    max: null,
+    media: null,
+    mediaCharacterEncoding: null,
+    mediaContentEncodings: null,
+    mediaSize: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    mediaTime: null,
+    method: null,
+    min: null,
+    mode: null,
+    name: null,
+    navDown: null,
+    navDownLeft: null,
+    navDownRight: null,
+    navLeft: null,
+    navNext: null,
+    navPrev: null,
+    navRight: null,
+    navUp: null,
+    navUpLeft: null,
+    navUpRight: null,
+    numOctaves: null,
+    observer: null,
+    offset: null,
+    onAbort: null,
+    onActivate: null,
+    onAfterPrint: null,
+    onBeforePrint: null,
+    onBegin: null,
+    onCancel: null,
+    onCanPlay: null,
+    onCanPlayThrough: null,
+    onChange: null,
+    onClick: null,
+    onClose: null,
+    onCopy: null,
+    onCueChange: null,
+    onCut: null,
+    onDblClick: null,
+    onDrag: null,
+    onDragEnd: null,
+    onDragEnter: null,
+    onDragExit: null,
+    onDragLeave: null,
+    onDragOver: null,
+    onDragStart: null,
+    onDrop: null,
+    onDurationChange: null,
+    onEmptied: null,
+    onEnd: null,
+    onEnded: null,
+    onError: null,
+    onFocus: null,
+    onFocusIn: null,
+    onFocusOut: null,
+    onHashChange: null,
+    onInput: null,
+    onInvalid: null,
+    onKeyDown: null,
+    onKeyPress: null,
+    onKeyUp: null,
+    onLoad: null,
+    onLoadedData: null,
+    onLoadedMetadata: null,
+    onLoadStart: null,
+    onMessage: null,
+    onMouseDown: null,
+    onMouseEnter: null,
+    onMouseLeave: null,
+    onMouseMove: null,
+    onMouseOut: null,
+    onMouseOver: null,
+    onMouseUp: null,
+    onMouseWheel: null,
+    onOffline: null,
+    onOnline: null,
+    onPageHide: null,
+    onPageShow: null,
+    onPaste: null,
+    onPause: null,
+    onPlay: null,
+    onPlaying: null,
+    onPopState: null,
+    onProgress: null,
+    onRateChange: null,
+    onRepeat: null,
+    onReset: null,
+    onResize: null,
+    onScroll: null,
+    onSeeked: null,
+    onSeeking: null,
+    onSelect: null,
+    onShow: null,
+    onStalled: null,
+    onStorage: null,
+    onSubmit: null,
+    onSuspend: null,
+    onTimeUpdate: null,
+    onToggle: null,
+    onUnload: null,
+    onVolumeChange: null,
+    onWaiting: null,
+    onZoom: null,
+    opacity: null,
+    operator: null,
+    order: null,
+    orient: null,
+    orientation: null,
+    origin: null,
+    overflow: null,
+    overlay: null,
+    overlinePosition: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    overlineThickness: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    paintOrder: null,
+    panose1: null,
+    path: null,
+    pathLength: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    patternContentUnits: null,
+    patternTransform: null,
+    patternUnits: null,
+    phase: null,
+    ping: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.spaceSeparated,
+    pitch: null,
+    playbackOrder: null,
+    pointerEvents: null,
+    points: null,
+    pointsAtX: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    pointsAtY: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    pointsAtZ: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    preserveAlpha: null,
+    preserveAspectRatio: null,
+    primitiveUnits: null,
+    propagate: null,
+    property: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    r: null,
+    radius: null,
+    referrerPolicy: null,
+    refX: null,
+    refY: null,
+    rel: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    rev: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    renderingIntent: null,
+    repeatCount: null,
+    repeatDur: null,
+    requiredExtensions: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    requiredFeatures: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    requiredFonts: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    requiredFormats: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    resource: null,
+    restart: null,
+    result: null,
+    rotate: null,
+    rx: null,
+    ry: null,
+    scale: null,
+    seed: null,
+    shapeRendering: null,
+    side: null,
+    slope: null,
+    snapshotTime: null,
+    specularConstant: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    specularExponent: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    spreadMethod: null,
+    spacing: null,
+    startOffset: null,
+    stdDeviation: null,
+    stemh: null,
+    stemv: null,
+    stitchTiles: null,
+    stopColor: null,
+    stopOpacity: null,
+    strikethroughPosition: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    strikethroughThickness: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    string: null,
+    stroke: null,
+    strokeDashArray: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    strokeDashOffset: null,
+    strokeLineCap: null,
+    strokeLineJoin: null,
+    strokeMiterLimit: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    strokeOpacity: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    strokeWidth: null,
+    style: null,
+    surfaceScale: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    syncBehavior: null,
+    syncBehaviorDefault: null,
+    syncMaster: null,
+    syncTolerance: null,
+    syncToleranceDefault: null,
+    systemLanguage: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    tabIndex: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    tableValues: null,
+    target: null,
+    targetX: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    targetY: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    textAnchor: null,
+    textDecoration: null,
+    textRendering: null,
+    textLength: null,
+    timelineBegin: null,
+    title: null,
+    transformBehavior: null,
+    type: null,
+    typeOf: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.commaOrSpaceSeparated,
+    to: null,
+    transform: null,
+    transformOrigin: null,
+    u1: null,
+    u2: null,
+    underlinePosition: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    underlineThickness: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    unicode: null,
+    unicodeBidi: null,
+    unicodeRange: null,
+    unitsPerEm: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    values: null,
+    vAlphabetic: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    vMathematical: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    vectorEffect: null,
+    vHanging: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    vIdeographic: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    version: null,
+    vertAdvY: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    vertOriginX: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    vertOriginY: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    viewBox: null,
+    viewTarget: null,
+    visibility: null,
+    width: null,
+    widths: null,
+    wordSpacing: null,
+    writingMode: null,
+    x: null,
+    x1: null,
+    x2: null,
+    xChannelSelector: null,
+    xHeight: _util_types_js__WEBPACK_IMPORTED_MODULE_1__.number,
+    y: null,
+    y1: null,
+    y2: null,
+    yChannelSelector: null,
+    z: null,
+    zoomAndPan: null
+  },
+  space: 'svg',
+  transform: _util_case_sensitive_transform_js__WEBPACK_IMPORTED_MODULE_2__.caseSensitiveTransform
+})
+
+
+/***/ }),
+/* 91 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   xlink: () => (/* binding */ xlink)
+/* harmony export */ });
+/* harmony import */ var _util_create_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(82);
+
+
+const xlink = (0,_util_create_js__WEBPACK_IMPORTED_MODULE_0__.create)({
+  properties: {
+    xLinkActuate: null,
+    xLinkArcRole: null,
+    xLinkHref: null,
+    xLinkRole: null,
+    xLinkShow: null,
+    xLinkTitle: null,
+    xLinkType: null
+  },
+  space: 'xlink',
+  transform(_, property) {
+    return 'xlink:' + property.slice(5).toLowerCase()
+  }
+})
+
+
+/***/ }),
+/* 92 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   xmlns: () => (/* binding */ xmlns)
+/* harmony export */ });
+/* harmony import */ var _util_create_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(82);
+/* harmony import */ var _util_case_insensitive_transform_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(88);
+
+
+
+const xmlns = (0,_util_create_js__WEBPACK_IMPORTED_MODULE_0__.create)({
+  attributes: {xmlnsxlink: 'xmlns:xlink'},
+  properties: {xmlnsXLink: null, xmlns: null},
+  space: 'xmlns',
+  transform: _util_case_insensitive_transform_js__WEBPACK_IMPORTED_MODULE_1__.caseInsensitiveTransform
+})
+
+
+/***/ }),
+/* 93 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   xml: () => (/* binding */ xml)
+/* harmony export */ });
+/* harmony import */ var _util_create_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(82);
+
+
+const xml = (0,_util_create_js__WEBPACK_IMPORTED_MODULE_0__.create)({
+  properties: {xmlBase: null, xmlLang: null, xmlSpace: null},
+  space: 'xml',
+  transform(_, property) {
+    return 'xml:' + property.slice(3).toLowerCase()
+  }
+})
+
+
+/***/ }),
+/* 94 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   hastToReact: () => (/* binding */ hastToReact)
+/* harmony export */ });
+/**
+ * Special cases for React (`Record<string, string>`).
+ *
+ * `hast` is close to `React` but differs in a couple of cases.
+ * To get a React property from a hast property,
+ * check if it is in `hastToReact`.
+ * If it is, use the corresponding value;
+ * otherwise, use the hast property.
+ *
+ * @type {Record<string, string>}
+ */
+const hastToReact = {
+  classId: 'classID',
+  dataType: 'datatype',
+  itemId: 'itemID',
+  strokeDashArray: 'strokeDasharray',
+  strokeDashOffset: 'strokeDashoffset',
+  strokeLineCap: 'strokeLinecap',
+  strokeLineJoin: 'strokeLinejoin',
+  strokeMiterLimit: 'strokeMiterlimit',
+  typeOf: 'typeof',
+  xLinkActuate: 'xlinkActuate',
+  xLinkArcRole: 'xlinkArcrole',
+  xLinkHref: 'xlinkHref',
+  xLinkRole: 'xlinkRole',
+  xLinkShow: 'xlinkShow',
+  xLinkTitle: 'xlinkTitle',
+  xLinkType: 'xlinkType',
+  xmlnsXLink: 'xmlnsXlink'
+}
+
+
+/***/ }),
+/* 95 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   find: () => (/* binding */ find)
+/* harmony export */ });
+/* harmony import */ var _util_defined_info_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(84);
+/* harmony import */ var _util_info_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(85);
+/* harmony import */ var _normalize_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(83);
+/**
+ * @import {Schema} from 'property-information'
+ */
+
+
+
+
+
+const cap = /[A-Z]/g
+const dash = /-[a-z]/g
+const valid = /^data[-\w.:]+$/i
+
+/**
+ * Look up info on a property.
+ *
+ * In most cases the given `schema` contains info on the property.
+ * All standard,
+ * most legacy,
+ * and some non-standard properties are supported.
+ * For these cases,
+ * the returned `Info` has hints about the value of the property.
+ *
+ * `name` can also be a valid data attribute or property,
+ * in which case an `Info` object with the correctly cased `attribute` and
+ * `property` is returned.
+ *
+ * `name` can be an unknown attribute,
+ * in which case an `Info` object with `attribute` and `property` set to the
+ * given name is returned.
+ * It is not recommended to provide unsupported legacy or recently specced
+ * properties.
+ *
+ *
+ * @param {Schema} schema
+ *   Schema;
+ *   either the `html` or `svg` export.
+ * @param {string} value
+ *   An attribute-like or property-like name;
+ *   it will be passed through `normalize` to hopefully find the correct info.
+ * @returns {Info}
+ *   Info.
+ */
+function find(schema, value) {
+  const normal = (0,_normalize_js__WEBPACK_IMPORTED_MODULE_0__.normalize)(value)
+  let property = value
+  let Type = _util_info_js__WEBPACK_IMPORTED_MODULE_1__.Info
+
+  if (normal in schema.normal) {
+    return schema.property[schema.normal[normal]]
+  }
+
+  if (normal.length > 4 && normal.slice(0, 4) === 'data' && valid.test(value)) {
+    // Attribute or property.
+    if (value.charAt(4) === '-') {
+      // Turn it into a property.
+      const rest = value.slice(5).replace(dash, camelcase)
+      property = 'data' + rest.charAt(0).toUpperCase() + rest.slice(1)
+    } else {
+      // Turn it into an attribute.
+      const rest = value.slice(4)
+
+      if (!dash.test(rest)) {
+        let dashes = rest.replace(cap, kebab)
+
+        if (dashes.charAt(0) !== '-') {
+          dashes = '-' + dashes
+        }
+
+        value = 'data' + dashes
+      }
+    }
+
+    Type = _util_defined_info_js__WEBPACK_IMPORTED_MODULE_2__.DefinedInfo
+  }
+
+  return new Type(property, value)
+}
+
+/**
+ * @param {string} $0
+ *   Value.
+ * @returns {string}
+ *   Kebab.
+ */
+function kebab($0) {
+  return '-' + $0.toLowerCase()
+}
+
+/**
+ * @param {string} $0
+ *   Value.
+ * @returns {string}
+ *   Camel.
+ */
+function camelcase($0) {
+  return $0.charAt(1).toUpperCase()
+}
+
+
+/***/ }),
+/* 96 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   parse: () => (/* binding */ parse),
+/* harmony export */   stringify: () => (/* binding */ stringify)
+/* harmony export */ });
+/**
+ * Parse space-separated tokens to an array of strings.
+ *
+ * @param {string} value
+ *   Space-separated tokens.
+ * @returns {Array<string>}
+ *   List of tokens.
+ */
+function parse(value) {
+  const input = String(value || '').trim()
+  return input ? input.split(/[ \t\n\r\f]+/g) : []
+}
+
+/**
+ * Serialize an array of strings as space separated-tokens.
+ *
+ * @param {Array<string|number>} values
+ *   List of tokens.
+ * @returns {string}
+ *   Space-separated tokens.
+ */
+function stringify(values) {
+  return values.join(' ').trim()
+}
+
+
+/***/ }),
+/* 97 */
+/***/ (function(module, __unused_webpack_exports, __webpack_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var style_to_object_1 = __importDefault(__webpack_require__(98));
+var utilities_1 = __webpack_require__(100);
+/**
+ * Parses CSS inline style to JavaScript object (camelCased).
+ */
+function StyleToJS(style, options) {
+    var output = {};
+    if (!style || typeof style !== 'string') {
+        return output;
+    }
+    (0, style_to_object_1.default)(style, function (property, value) {
+        // skip CSS comment
+        if (property && value) {
+            output[(0, utilities_1.camelCase)(property, options)] = value;
+        }
+    });
+    return output;
+}
+StyleToJS.default = StyleToJS;
+module.exports = StyleToJS;
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+/* 98 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports["default"] = StyleToObject;
+var inline_style_parser_1 = __importDefault(__webpack_require__(99));
+/**
+ * Parses inline style to object.
+ *
+ * @param style - Inline style.
+ * @param iterator - Iterator.
+ * @returns - Style object or null.
+ *
+ * @example Parsing inline style to object:
+ *
+ * ```js
+ * import parse from 'style-to-object';
+ * parse('line-height: 42;'); // { 'line-height': '42' }
+ * ```
+ */
+function StyleToObject(style, iterator) {
+    var styleObject = null;
+    if (!style || typeof style !== 'string') {
+        return styleObject;
+    }
+    var declarations = (0, inline_style_parser_1.default)(style);
+    var hasIterator = typeof iterator === 'function';
+    declarations.forEach(function (declaration) {
+        if (declaration.type !== 'declaration') {
+            return;
+        }
+        var property = declaration.property, value = declaration.value;
+        if (hasIterator) {
+            iterator(property, value, declaration);
+        }
+        else if (value) {
+            styleObject = styleObject || {};
+            styleObject[property] = value;
+        }
+    });
+    return styleObject;
+}
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+/* 99 */
+/***/ ((module) => {
+
+// http://www.w3.org/TR/CSS21/grammar.html
+// https://github.com/visionmedia/css-parse/pull/49#issuecomment-30088027
+var COMMENT_REGEX = /\/\*[^*]*\*+([^/*][^*]*\*+)*\//g;
+
+var NEWLINE_REGEX = /\n/g;
+var WHITESPACE_REGEX = /^\s*/;
+
+// declaration
+var PROPERTY_REGEX = /^(\*?[-#/*\\\w]+(\[[0-9a-z_-]+\])?)\s*/;
+var COLON_REGEX = /^:\s*/;
+var VALUE_REGEX = /^((?:'(?:\\'|.)*?'|"(?:\\"|.)*?"|\([^)]*?\)|[^};])+)/;
+var SEMICOLON_REGEX = /^[;\s]*/;
+
+// https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String/Trim#Polyfill
+var TRIM_REGEX = /^\s+|\s+$/g;
+
+// strings
+var NEWLINE = '\n';
+var FORWARD_SLASH = '/';
+var ASTERISK = '*';
+var EMPTY_STRING = '';
+
+// types
+var TYPE_COMMENT = 'comment';
+var TYPE_DECLARATION = 'declaration';
+
+/**
+ * @param {String} style
+ * @param {Object} [options]
+ * @return {Object[]}
+ * @throws {TypeError}
+ * @throws {Error}
+ */
+module.exports = function (style, options) {
+  if (typeof style !== 'string') {
+    throw new TypeError('First argument must be a string');
+  }
+
+  if (!style) return [];
+
+  options = options || {};
+
+  /**
+   * Positional.
+   */
+  var lineno = 1;
+  var column = 1;
+
+  /**
+   * Update lineno and column based on `str`.
+   *
+   * @param {String} str
+   */
+  function updatePosition(str) {
+    var lines = str.match(NEWLINE_REGEX);
+    if (lines) lineno += lines.length;
+    var i = str.lastIndexOf(NEWLINE);
+    column = ~i ? str.length - i : column + str.length;
+  }
+
+  /**
+   * Mark position and patch `node.position`.
+   *
+   * @return {Function}
+   */
+  function position() {
+    var start = { line: lineno, column: column };
+    return function (node) {
+      node.position = new Position(start);
+      whitespace();
+      return node;
+    };
+  }
+
+  /**
+   * Store position information for a node.
+   *
+   * @constructor
+   * @property {Object} start
+   * @property {Object} end
+   * @property {undefined|String} source
+   */
+  function Position(start) {
+    this.start = start;
+    this.end = { line: lineno, column: column };
+    this.source = options.source;
+  }
+
+  /**
+   * Non-enumerable source string.
+   */
+  Position.prototype.content = style;
+
+  var errorsList = [];
+
+  /**
+   * Error `msg`.
+   *
+   * @param {String} msg
+   * @throws {Error}
+   */
+  function error(msg) {
+    var err = new Error(
+      options.source + ':' + lineno + ':' + column + ': ' + msg
+    );
+    err.reason = msg;
+    err.filename = options.source;
+    err.line = lineno;
+    err.column = column;
+    err.source = style;
+
+    if (options.silent) {
+      errorsList.push(err);
+    } else {
+      throw err;
+    }
+  }
+
+  /**
+   * Match `re` and return captures.
+   *
+   * @param {RegExp} re
+   * @return {undefined|Array}
+   */
+  function match(re) {
+    var m = re.exec(style);
+    if (!m) return;
+    var str = m[0];
+    updatePosition(str);
+    style = style.slice(str.length);
+    return m;
+  }
+
+  /**
+   * Parse whitespace.
+   */
+  function whitespace() {
+    match(WHITESPACE_REGEX);
+  }
+
+  /**
+   * Parse comments.
+   *
+   * @param {Object[]} [rules]
+   * @return {Object[]}
+   */
+  function comments(rules) {
+    var c;
+    rules = rules || [];
+    while ((c = comment())) {
+      if (c !== false) {
+        rules.push(c);
+      }
+    }
+    return rules;
+  }
+
+  /**
+   * Parse comment.
+   *
+   * @return {Object}
+   * @throws {Error}
+   */
+  function comment() {
+    var pos = position();
+    if (FORWARD_SLASH != style.charAt(0) || ASTERISK != style.charAt(1)) return;
+
+    var i = 2;
+    while (
+      EMPTY_STRING != style.charAt(i) &&
+      (ASTERISK != style.charAt(i) || FORWARD_SLASH != style.charAt(i + 1))
+    ) {
+      ++i;
+    }
+    i += 2;
+
+    if (EMPTY_STRING === style.charAt(i - 1)) {
+      return error('End of comment missing');
+    }
+
+    var str = style.slice(2, i - 2);
+    column += 2;
+    updatePosition(str);
+    style = style.slice(i);
+    column += 2;
+
+    return pos({
+      type: TYPE_COMMENT,
+      comment: str
+    });
+  }
+
+  /**
+   * Parse declaration.
+   *
+   * @return {Object}
+   * @throws {Error}
+   */
+  function declaration() {
+    var pos = position();
+
+    // prop
+    var prop = match(PROPERTY_REGEX);
+    if (!prop) return;
+    comment();
+
+    // :
+    if (!match(COLON_REGEX)) return error("property missing ':'");
+
+    // val
+    var val = match(VALUE_REGEX);
+
+    var ret = pos({
+      type: TYPE_DECLARATION,
+      property: trim(prop[0].replace(COMMENT_REGEX, EMPTY_STRING)),
+      value: val
+        ? trim(val[0].replace(COMMENT_REGEX, EMPTY_STRING))
+        : EMPTY_STRING
+    });
+
+    // ;
+    match(SEMICOLON_REGEX);
+
+    return ret;
+  }
+
+  /**
+   * Parse declarations.
+   *
+   * @return {Object[]}
+   */
+  function declarations() {
+    var decls = [];
+
+    comments(decls);
+
+    // declarations
+    var decl;
+    while ((decl = declaration())) {
+      if (decl !== false) {
+        decls.push(decl);
+        comments(decls);
+      }
+    }
+
+    return decls;
+  }
+
+  whitespace();
+  return declarations();
+};
+
+/**
+ * Trim `str`.
+ *
+ * @param {String} str
+ * @return {String}
+ */
+function trim(str) {
+  return str ? str.replace(TRIM_REGEX, EMPTY_STRING) : EMPTY_STRING;
+}
+
+
+/***/ }),
+/* 100 */
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.camelCase = void 0;
+var CUSTOM_PROPERTY_REGEX = /^--[a-zA-Z0-9_-]+$/;
+var HYPHEN_REGEX = /-([a-z])/g;
+var NO_HYPHEN_REGEX = /^[^-]+$/;
+var VENDOR_PREFIX_REGEX = /^-(webkit|moz|ms|o|khtml)-/;
+var MS_VENDOR_PREFIX_REGEX = /^-(ms)-/;
+/**
+ * Checks whether to skip camelCase.
+ */
+var skipCamelCase = function (property) {
+    return !property ||
+        NO_HYPHEN_REGEX.test(property) ||
+        CUSTOM_PROPERTY_REGEX.test(property);
+};
+/**
+ * Replacer that capitalizes first character.
+ */
+var capitalize = function (match, character) {
+    return character.toUpperCase();
+};
+/**
+ * Replacer that removes beginning hyphen of vendor prefix property.
+ */
+var trimHyphen = function (match, prefix) { return "".concat(prefix, "-"); };
+/**
+ * CamelCases a CSS property.
+ */
+var camelCase = function (property, options) {
+    if (options === void 0) { options = {}; }
+    if (skipCamelCase(property)) {
+        return property;
+    }
+    property = property.toLowerCase();
+    if (options.reactCompat) {
+        // `-ms` vendor prefix should not be capitalized
+        property = property.replace(MS_VENDOR_PREFIX_REGEX, trimHyphen);
+    }
+    else {
+        // for non-React, remove first hyphen so vendor prefix is not capitalized
+        property = property.replace(VENDOR_PREFIX_REGEX, trimHyphen);
+    }
+    return property.replace(HYPHEN_REGEX, capitalize);
+};
+exports.camelCase = camelCase;
+//# sourceMappingURL=utilities.js.map
+
+/***/ }),
+/* 101 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   whitespace: () => (/* binding */ whitespace)
+/* harmony export */ });
+/**
+ * @typedef {import('hast').Nodes} Nodes
+ */
+
+// HTML whitespace expression.
+// See <https://infra.spec.whatwg.org/#ascii-whitespace>.
+const re = /[ \t\n\f\r]/g
+
+/**
+ * Check if the given value is *inter-element whitespace*.
+ *
+ * @param {Nodes | string} thing
+ *   Thing to check (`Node` or `string`).
+ * @returns {boolean}
+ *   Whether the `value` is inter-element whitespace (`boolean`): consisting of
+ *   zero or more of space, tab (`\t`), line feed (`\n`), carriage return
+ *   (`\r`), or form feed (`\f`); if a node is passed it must be a `Text` node,
+ *   whose `value` field is checked.
+ */
+function whitespace(thing) {
+  return typeof thing === 'object'
+    ? thing.type === 'text'
+      ? empty(thing.value)
+      : false
+    : empty(thing)
+}
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
+function empty(value) {
+  return value.replace(re, '') === ''
+}
+
+
+/***/ }),
+/* 102 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   VFileMessage: () => (/* binding */ VFileMessage)
+/* harmony export */ });
+/* harmony import */ var unist_util_stringify_position__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(103);
+/**
+ * @typedef {import('unist').Node} Node
+ * @typedef {import('unist').Point} Point
+ * @typedef {import('unist').Position} Position
+ */
+
+/**
+ * @typedef {object & {type: string, position?: Position | undefined}} NodeLike
+ *
+ * @typedef Options
+ *   Configuration.
+ * @property {Array<Node> | null | undefined} [ancestors]
+ *   Stack of (inclusive) ancestor nodes surrounding the message (optional).
+ * @property {Error | null | undefined} [cause]
+ *   Original error cause of the message (optional).
+ * @property {Point | Position | null | undefined} [place]
+ *   Place of message (optional).
+ * @property {string | null | undefined} [ruleId]
+ *   Category of message (optional, example: `'my-rule'`).
+ * @property {string | null | undefined} [source]
+ *   Namespace of who sent the message (optional, example: `'my-package'`).
+ */
+
+
+
+/**
+ * Message.
+ */
+class VFileMessage extends Error {
+  /**
+   * Create a message for `reason`.
+   *
+   * > 🪦 **Note**: also has obsolete signatures.
+   *
+   * @overload
+   * @param {string} reason
+   * @param {Options | null | undefined} [options]
+   * @returns
+   *
+   * @overload
+   * @param {string} reason
+   * @param {Node | NodeLike | null | undefined} parent
+   * @param {string | null | undefined} [origin]
+   * @returns
+   *
+   * @overload
+   * @param {string} reason
+   * @param {Point | Position | null | undefined} place
+   * @param {string | null | undefined} [origin]
+   * @returns
+   *
+   * @overload
+   * @param {string} reason
+   * @param {string | null | undefined} [origin]
+   * @returns
+   *
+   * @overload
+   * @param {Error | VFileMessage} cause
+   * @param {Node | NodeLike | null | undefined} parent
+   * @param {string | null | undefined} [origin]
+   * @returns
+   *
+   * @overload
+   * @param {Error | VFileMessage} cause
+   * @param {Point | Position | null | undefined} place
+   * @param {string | null | undefined} [origin]
+   * @returns
+   *
+   * @overload
+   * @param {Error | VFileMessage} cause
+   * @param {string | null | undefined} [origin]
+   * @returns
+   *
+   * @param {Error | VFileMessage | string} causeOrReason
+   *   Reason for message, should use markdown.
+   * @param {Node | NodeLike | Options | Point | Position | string | null | undefined} [optionsOrParentOrPlace]
+   *   Configuration (optional).
+   * @param {string | null | undefined} [origin]
+   *   Place in code where the message originates (example:
+   *   `'my-package:my-rule'` or `'my-rule'`).
+   * @returns
+   *   Instance of `VFileMessage`.
+   */
+  // eslint-disable-next-line complexity
+  constructor(causeOrReason, optionsOrParentOrPlace, origin) {
+    super()
+
+    if (typeof optionsOrParentOrPlace === 'string') {
+      origin = optionsOrParentOrPlace
+      optionsOrParentOrPlace = undefined
+    }
+
+    /** @type {string} */
+    let reason = ''
+    /** @type {Options} */
+    let options = {}
+    let legacyCause = false
+
+    if (optionsOrParentOrPlace) {
+      // Point.
+      if (
+        'line' in optionsOrParentOrPlace &&
+        'column' in optionsOrParentOrPlace
+      ) {
+        options = {place: optionsOrParentOrPlace}
+      }
+      // Position.
+      else if (
+        'start' in optionsOrParentOrPlace &&
+        'end' in optionsOrParentOrPlace
+      ) {
+        options = {place: optionsOrParentOrPlace}
+      }
+      // Node.
+      else if ('type' in optionsOrParentOrPlace) {
+        options = {
+          ancestors: [optionsOrParentOrPlace],
+          place: optionsOrParentOrPlace.position
+        }
+      }
+      // Options.
+      else {
+        options = {...optionsOrParentOrPlace}
+      }
+    }
+
+    if (typeof causeOrReason === 'string') {
+      reason = causeOrReason
+    }
+    // Error.
+    else if (!options.cause && causeOrReason) {
+      legacyCause = true
+      reason = causeOrReason.message
+      options.cause = causeOrReason
+    }
+
+    if (!options.ruleId && !options.source && typeof origin === 'string') {
+      const index = origin.indexOf(':')
+
+      if (index === -1) {
+        options.ruleId = origin
+      } else {
+        options.source = origin.slice(0, index)
+        options.ruleId = origin.slice(index + 1)
+      }
+    }
+
+    if (!options.place && options.ancestors && options.ancestors) {
+      const parent = options.ancestors[options.ancestors.length - 1]
+
+      if (parent) {
+        options.place = parent.position
+      }
+    }
+
+    const start =
+      options.place && 'start' in options.place
+        ? options.place.start
+        : options.place
+
+    /* eslint-disable no-unused-expressions */
+    /**
+     * Stack of ancestor nodes surrounding the message.
+     *
+     * @type {Array<Node> | undefined}
+     */
+    this.ancestors = options.ancestors || undefined
+
+    /**
+     * Original error cause of the message.
+     *
+     * @type {Error | undefined}
+     */
+    this.cause = options.cause || undefined
+
+    /**
+     * Starting column of message.
+     *
+     * @type {number | undefined}
+     */
+    this.column = start ? start.column : undefined
+
+    /**
+     * State of problem.
+     *
+     * * `true` — error, file not usable
+     * * `false` — warning, change may be needed
+     * * `undefined` — change likely not needed
+     *
+     * @type {boolean | null | undefined}
+     */
+    this.fatal = undefined
+
+    /**
+     * Path of a file (used throughout the `VFile` ecosystem).
+     *
+     * @type {string | undefined}
+     */
+    this.file
+
+    // Field from `Error`.
+    /**
+     * Reason for message.
+     *
+     * @type {string}
+     */
+    this.message = reason
+
+    /**
+     * Starting line of error.
+     *
+     * @type {number | undefined}
+     */
+    this.line = start ? start.line : undefined
+
+    // Field from `Error`.
+    /**
+     * Serialized positional info of message.
+     *
+     * On normal errors, this would be something like `ParseError`, buit in
+     * `VFile` messages we use this space to show where an error happened.
+     */
+    this.name = (0,unist_util_stringify_position__WEBPACK_IMPORTED_MODULE_0__.stringifyPosition)(options.place) || '1:1'
+
+    /**
+     * Place of message.
+     *
+     * @type {Point | Position | undefined}
+     */
+    this.place = options.place || undefined
+
+    /**
+     * Reason for message, should use markdown.
+     *
+     * @type {string}
+     */
+    this.reason = this.message
+
+    /**
+     * Category of message (example: `'my-rule'`).
+     *
+     * @type {string | undefined}
+     */
+    this.ruleId = options.ruleId || undefined
+
+    /**
+     * Namespace of message (example: `'my-package'`).
+     *
+     * @type {string | undefined}
+     */
+    this.source = options.source || undefined
+
+    // Field from `Error`.
+    /**
+     * Stack of message.
+     *
+     * This is used by normal errors to show where something happened in
+     * programming code, irrelevant for `VFile` messages,
+     *
+     * @type {string}
+     */
+    this.stack =
+      legacyCause && options.cause && typeof options.cause.stack === 'string'
+        ? options.cause.stack
+        : ''
+
+    // The following fields are “well known”.
+    // Not standard.
+    // Feel free to add other non-standard fields to your messages.
+
+    /**
+     * Specify the source value that’s being reported, which is deemed
+     * incorrect.
+     *
+     * @type {string | undefined}
+     */
+    this.actual
+
+    /**
+     * Suggest acceptable values that can be used instead of `actual`.
+     *
+     * @type {Array<string> | undefined}
+     */
+    this.expected
+
+    /**
+     * Long form description of the message (you should use markdown).
+     *
+     * @type {string | undefined}
+     */
+    this.note
+
+    /**
+     * Link to docs for the message.
+     *
+     * > 👉 **Note**: this must be an absolute URL that can be passed as `x`
+     * > to `new URL(x)`.
+     *
+     * @type {string | undefined}
+     */
+    this.url
+    /* eslint-enable no-unused-expressions */
+  }
+}
+
+VFileMessage.prototype.file = ''
+VFileMessage.prototype.name = ''
+VFileMessage.prototype.reason = ''
+VFileMessage.prototype.message = ''
+VFileMessage.prototype.stack = ''
+VFileMessage.prototype.column = undefined
+VFileMessage.prototype.line = undefined
+VFileMessage.prototype.ancestors = undefined
+VFileMessage.prototype.cause = undefined
+VFileMessage.prototype.fatal = undefined
+VFileMessage.prototype.place = undefined
+VFileMessage.prototype.ruleId = undefined
+VFileMessage.prototype.source = undefined
+
+
+/***/ }),
+/* 103 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   stringifyPosition: () => (/* binding */ stringifyPosition)
+/* harmony export */ });
+/**
+ * @typedef {import('unist').Node} Node
+ * @typedef {import('unist').Point} Point
+ * @typedef {import('unist').Position} Position
+ */
+
+/**
+ * @typedef NodeLike
+ * @property {string} type
+ * @property {PositionLike | null | undefined} [position]
+ *
+ * @typedef PointLike
+ * @property {number | null | undefined} [line]
+ * @property {number | null | undefined} [column]
+ * @property {number | null | undefined} [offset]
+ *
+ * @typedef PositionLike
+ * @property {PointLike | null | undefined} [start]
+ * @property {PointLike | null | undefined} [end]
+ */
+
+/**
+ * Serialize the positional info of a point, position (start and end points),
+ * or node.
+ *
+ * @param {Node | NodeLike | Point | PointLike | Position | PositionLike | null | undefined} [value]
+ *   Node, position, or point.
+ * @returns {string}
+ *   Pretty printed positional info of a node (`string`).
+ *
+ *   In the format of a range `ls:cs-le:ce` (when given `node` or `position`)
+ *   or a point `l:c` (when given `point`), where `l` stands for line, `c` for
+ *   column, `s` for `start`, and `e` for end.
+ *   An empty string (`''`) is returned if the given value is neither `node`,
+ *   `position`, nor `point`.
+ */
+function stringifyPosition(value) {
+  // Nothing.
+  if (!value || typeof value !== 'object') {
+    return ''
+  }
+
+  // Node.
+  if ('position' in value || 'type' in value) {
+    return position(value.position)
+  }
+
+  // Position.
+  if ('start' in value || 'end' in value) {
+    return position(value)
+  }
+
+  // Point.
+  if ('line' in value || 'column' in value) {
+    return point(value)
+  }
+
+  // ?
+  return ''
+}
+
+/**
+ * @param {Point | PointLike | null | undefined} point
+ * @returns {string}
+ */
+function point(point) {
+  return index(point && point.line) + ':' + index(point && point.column)
+}
+
+/**
+ * @param {Position | PositionLike | null | undefined} pos
+ * @returns {string}
+ */
+function position(pos) {
+  return point(pos && pos.start) + '-' + point(pos && pos.end)
+}
+
+/**
+ * @param {number | null | undefined} value
+ * @returns {number}
+ */
+function index(value) {
+  return value && typeof value === 'number' ? value : 1
+}
+
+
+/***/ }),
+/* 104 */
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   cont: () => (/* binding */ cont),
+/* harmony export */   name: () => (/* binding */ name),
+/* harmony export */   start: () => (/* binding */ start)
+/* harmony export */ });
+/**
+ * @typedef Options
+ *   Configuration.
+ * @property {boolean | null | undefined} [jsx=false]
+ *   Support JSX identifiers (default: `false`).
+ */
+
+const startRe = /[$_\p{ID_Start}]/u
+const contRe = /[$_\u{200C}\u{200D}\p{ID_Continue}]/u
+const contReJsx = /[-$_\u{200C}\u{200D}\p{ID_Continue}]/u
+const nameRe = /^[$_\p{ID_Start}][$_\u{200C}\u{200D}\p{ID_Continue}]*$/u
+const nameReJsx = /^[$_\p{ID_Start}][-$_\u{200C}\u{200D}\p{ID_Continue}]*$/u
+
+/** @type {Options} */
+const emptyOptions = {}
+
+/**
+ * Checks if the given code point can start an identifier.
+ *
+ * @param {number | undefined} code
+ *   Code point to check.
+ * @returns {boolean}
+ *   Whether `code` can start an identifier.
+ */
+// Note: `undefined` is supported so you can pass the result from `''.codePointAt`.
+function start(code) {
+  return code ? startRe.test(String.fromCodePoint(code)) : false
+}
+
+/**
+ * Checks if the given code point can continue an identifier.
+ *
+ * @param {number | undefined} code
+ *   Code point to check.
+ * @param {Options | null | undefined} [options]
+ *   Configuration (optional).
+ * @returns {boolean}
+ *   Whether `code` can continue an identifier.
+ */
+// Note: `undefined` is supported so you can pass the result from `''.codePointAt`.
+function cont(code, options) {
+  const settings = options || emptyOptions
+  const re = settings.jsx ? contReJsx : contRe
+  return code ? re.test(String.fromCodePoint(code)) : false
+}
+
+/**
+ * Checks if the given value is a valid identifier name.
+ *
+ * @param {string} name
+ *   Identifier to check.
+ * @param {Options | null | undefined} [options]
+ *   Configuration (optional).
+ * @returns {boolean}
+ *   Whether `name` can be an identifier.
+ */
+function name(name, options) {
+  const settings = options || emptyOptions
+  const re = settings.jsx ? nameReJsx : nameRe
+  return re.test(name)
+}
+
+
+/***/ }),
+/* 105 */
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -44836,7 +53748,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _node_modules_style_loader_dist_runtime_insertStyleElement_js__WEBPACK_IMPORTED_MODULE_4___default = /*#__PURE__*/__webpack_require__.n(_node_modules_style_loader_dist_runtime_insertStyleElement_js__WEBPACK_IMPORTED_MODULE_4__);
 /* harmony import */ var _node_modules_style_loader_dist_runtime_styleTagTransform_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(23);
 /* harmony import */ var _node_modules_style_loader_dist_runtime_styleTagTransform_js__WEBPACK_IMPORTED_MODULE_5___default = /*#__PURE__*/__webpack_require__.n(_node_modules_style_loader_dist_runtime_styleTagTransform_js__WEBPACK_IMPORTED_MODULE_5__);
-/* harmony import */ var _node_modules_css_loader_dist_cjs_js_App_css__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(29);
+/* harmony import */ var _node_modules_css_loader_dist_cjs_js_App_css__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(106);
 
       
       
@@ -44865,7 +53777,7 @@ var update = _node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js
 
 
 /***/ }),
-/* 29 */
+/* 106 */
 /***/ ((module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -44885,7 +53797,7 @@ ___CSS_LOADER_EXPORT___.push([module.id, ".App {\n  text-align: center;\n}\n\n.A
 
 
 /***/ }),
-/* 30 */
+/* 107 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
@@ -44926,7 +53838,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const reportWebVitals = (onPerfEntry) => {
     if (onPerfEntry && onPerfEntry instanceof Function) {
-        Promise.resolve().then(() => __importStar(__webpack_require__(31))).then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
+        Promise.resolve().then(() => __importStar(__webpack_require__(108))).then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
             getCLS(onPerfEntry);
             getFID(onPerfEntry);
             getFCP(onPerfEntry);
@@ -44939,7 +53851,7 @@ exports["default"] = reportWebVitals;
 
 
 /***/ }),
-/* 31 */
+/* 108 */
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";

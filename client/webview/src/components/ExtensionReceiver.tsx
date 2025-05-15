@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { HashMapOf } from '../types/general';
+import NoteRenderer from './NoteRenderer';
 
 const vscode = acquireVsCodeApi();
 
@@ -8,7 +9,6 @@ type VSCodeState = {
 }
 
 export default function ExtensionReceiver() {
-    const ref = useRef<HTMLDivElement>(null);
     // state originates from `vscode.getState` when a webview is reloaded, cached in setState
 	const [state, setState] = useState<VSCodeState>(vscode.getState() || { docs: {} });
 
@@ -42,7 +42,5 @@ export default function ExtensionReceiver() {
         }
     }, []);
 
-    return <div ref={ref} data-testid="ExtensionReceiver">
-        {JSON.stringify(state)}
-    </div>;
+    return <NoteRenderer notes={state.docs || {}} />;
 }

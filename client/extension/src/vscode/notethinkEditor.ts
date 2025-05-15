@@ -41,13 +41,15 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					id: await generateIdentifier(uri.path),
 					content: mdast,
 					updatedAt: load_time,
+					createdBy: "openTextDocument",
 				};
-				// debug('loaded matching document', abbrevDoc(doc));
+				debug('loaded matching document', abbrevDoc(doc));
 				return doc;
 			})
 		))
 		// convert to hashmap for rapid access
 		.reduce((acc: HashMapOf<any>, doc) => (acc[doc.id]=doc,acc),{});
+		debug('initial load of docs', docs);
 
 		/**
 		 * Update the webview content
@@ -58,7 +60,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				type: 'update',
 				partial: { docs: (doc ? { [doc.id]: { 
 					...doc,
-					updatedAt: new Date().toISOString(),
+					updateSentAt: new Date().toISOString(),
 				} } : docs)},
 			};
 			debug('updateWebview', message);
@@ -71,13 +73,14 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			const document = await vscode.workspace.openTextDocument(uri);
 		    const doc = {
 				path: uri.path,
+				createdBy: "onDidCreate",
 				id: await generateIdentifier(uri.path),
 				content: document.getText(),
 			};
 			// add to hashmap
 			docs[doc.id] = doc;
 			writeToLog('new matching document added in the background', abbrevDoc(doc));
-			updateWebview(uri);
+			updateWebview(doc);
 		});
 
 		// listen for changes (live in this instance or background saved) to watched documents
@@ -97,7 +100,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				writeToLog('Document changed in the background', abbrevDoc(doc));
 			}
 			doc.content = document.getText();
-			updateWebview(doc);	
+			updateWebview(doc);
 		});
 
 		// make sure we get rid of the listener when our editor is closed.

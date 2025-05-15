@@ -19,9 +19,9 @@
     "multi-root ready"
   ],
   "activationEvents": [
-    "onLanguage:plaintext"
+    "onLanguage:markdown"
   ],
-  "browser": "./client/dist/browserClientMain",
+  "browser": "./client/extension/dist/extension",
   "contributes": {
     "customEditors": [
       {

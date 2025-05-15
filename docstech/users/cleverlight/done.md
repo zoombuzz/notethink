@@ -134,3 +134,26 @@
     + no polyfills required
 
 
+### dev environment
+
++ make debugging breakpoints bind
+  + works fine in `custom-editor-sample`
+  + works fine in `modified-lsp-web-extension-sample`
+    + which is using the same webpack watch
+    + `.vscode/launch.json` defines correct configurations
+  + bring across components
+    + from `notethink` into `modified-lsp-web-extension-sample`
+      + latter isn't versioned
+      + better doing it the other way around
+    + try to understand at what point does it break
+  + works in `notethink` repo using:
+    + `client4`
+    + `backup-package.json`
+    + `backup-webpack.config.json`
+    + now try to make it work with client
+      + same package.json
+      + working with correct `package.json`
+    + now try to make it work with correct `webpack.config.js`
+> working debugger
+
+

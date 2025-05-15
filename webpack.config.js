@@ -17,7 +17,7 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 const clientExtensionConfig = {
 	context: path.join(__dirname, 'client', 'extension'),
 	mode: process.env.NODE_ENV === 'production' ? 'production' : 'none',
-	target: 'webworker', // extensions run in a webworker context
+	target: 'webworker', // web extensions run in a webworker context
 	entry: {
 		'extension': './src/extension.ts',
 		'test/suite/index': './src/test/suite/index.ts'
@@ -26,7 +26,7 @@ const clientExtensionConfig = {
 		filename: '[name].js',
 		path: path.join(__dirname, 'client', 'extension', 'dist'),
 		libraryTarget: 'commonjs',
-		devtoolModuleFilenameTemplate: '../../[resource-path]'
+		devtoolModuleFilenameTemplate: '../[resource-path]'
 	},
 	resolve: {
 		mainFields: ['browser', 'module', 'main'], // look for `browser` entry point in imported node modules
@@ -93,7 +93,7 @@ const clientWebviewConfig = {
 		filename: '[name].js',
 		path: path.join(__dirname, 'client', 'webview', 'dist'),
 		libraryTarget: 'commonjs',
-		devtoolModuleFilenameTemplate: '../../[resource-path]'
+		devtoolModuleFilenameTemplate: '../[resource-path]'
 	},
 	resolve: {
 		mainFields: ['browser', 'module', 'main'], // look for `browser` entry point in imported node modules

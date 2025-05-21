@@ -71,11 +71,12 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		const watcher = vscode.workspace.createFileSystemWatcher(filter_criterion);
 		watcher.onDidCreate(async (uri) => {
 			const document = await vscode.workspace.openTextDocument(uri);
+			const mdast = parse(document.getText());
 		    const doc = {
 				path: uri.path,
 				createdBy: "onDidCreate",
 				id: await generateIdentifier(uri.path),
-				content: document.getText(),
+				content: mdast,
 			};
 			// add to hashmap
 			docs[doc.id] = doc;
@@ -99,7 +100,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			} else {
 				writeToLog('Document changed in the background', abbrevDoc(doc));
 			}
-			doc.content = document.getText();
+			const mdast = parse(document.getText());
+			doc.content = mdast;
 			updateWebview(doc);
 		});
 
@@ -162,9 +164,10 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				Use a content security policy to only allow loading images from https or from our extension directory,
 				and only allow scripts that have a specific nonce.  This policy is definitely being enforced,
 				in spite of "created a webview without a content security policy" [warning].
+				<meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline'; img-src * data: blob: 'unsafe-inline'; frame-src *; style-src * 'unsafe-inline';">
 				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 				-->
-				<meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline'; img-src * data: blob: 'unsafe-inline'; frame-src *; style-src * 'unsafe-inline';">
+				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
 				<title>Replace this title</title>
 			</head>

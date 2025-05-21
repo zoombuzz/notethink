@@ -165,3 +165,39 @@
 > runs nicely
 
 
+### open named folder on startup
+
++ currently opening the last folder opened
+  + like to standardise that in the code
++ after failing 4 attempts, AI says there's no way to do it
+  + `When you use "type": "extensionHost" with "request": "launch", the --folder-uri argument is ignored by VS Code.`
+  + `There is currently no supported way to force the debug extension host to always open a specific folder via launch.json alone. This is a limitation of VS Code itself.`
++ will have to do it manually
+  + can't test on `notethink` repo itself
+  + because `notethink` is already open in vscode
+  + need another test repo
+    + recommend note-templates
+
+
+### turn MDAST back into React
+
++ render docs to HTML
++ filter out logs
+  + need to differentiate our updates
+    + already done by `postMessage()`
+      + contamination is not at the send point
+  + seems to be bad state
+    + probably persisted in VSCode
+      + no change on restart
+    + visualise object in debugger
+      + can't debug webview (in parent instance) currently
+      + but can `Toggle Developer Tools`
+        + to debug in child instance
++ make update work
+  + currently update knocks out all the content
+    + suspect we're smashing the MDAST
+  + just need to always send an updated MDAST
+    + might need to bounce that
+      + give the frequency of update
+
+

@@ -15,6 +15,7 @@
 		"mdast",
 		"notethink",
 		"parseops",
+		"polyfills",
 		"zoombuzz"
 	],
 }

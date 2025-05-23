@@ -1,0 +1,574 @@
+//
+// Constants
+//
+
+// produce off_grey colour, darker than default in light-mode, lighter than default in dark-mode
+$off_grey: color-mix(in srgb, var(--mantine-color-default), var(--mantine-color-default-color) 5%);
+
+
+//
+// Layout
+//
+
+html.disableAddressBarHidingOnScroll {
+  height: 100%;
+  overflow: hidden;
+}
+
+body.disableAddressBarHidingOnScroll {
+  width: 100%;
+  height: 100%;
+  position: fixed;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+
+//
+// Focus-dependent styles
+//
+
+.hasfocus {
+  // hotkeys can occur in menu bar, or in menus which are dynamically attached elsewhere in the document
+  .menubar, .dropdown {
+    .hotkey {
+      text-decoration: underline;
+    }
+  }
+}
+
+
+//
+// Menus
+//
+
+// menu items appear in menus, not menubars
+.dropdown {
+  .item {
+    .flag {
+      // correct for larger flag icons
+      margin-left: -0.3em;
+      margin-right: -0.1em;
+      border-radius: 0.2em;
+    }
+  }
+  .label {
+    // make menu items more indented that the labels that group them
+    padding-left: calc(var(--mantine-spacing-xs)/2);
+  }
+}
+
+// menubars can appear outside views, e.g. Header
+.menubar {
+  height: 2.3rem;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+
+  button.menu_target {
+    border-radius: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    top: 0;
+
+    // ensure there's always room for at least two menus (and the account menu)
+    max-width: calc(50% - 2.3rem/2);
+
+    &.burgerback {
+      padding-left: 0.3em;
+      .title {
+        margin-left: 0.3em;
+      }
+    }
+
+    &:first-of-type {
+      border-left-width: 1px;
+    }
+
+    .lesser_label {
+      font-weight: 350;
+    }
+
+  }
+
+  .title {
+    .type_title {
+      margin-right: 0.3em;
+    }
+  }
+
+}
+
+
+//
+// Modals
+//
+
+.modal {
+  p {
+    margin-top: 1.0em;
+    margin-bottom: 1.0em;
+
+    &:first-of-type {
+      margin-top: 0;
+    }
+
+    &:last-of-type {
+      margin-bottom: 0;
+    }
+  }
+
+  .radiogroup {
+    .label {
+      margin-bottom: 1.0em;
+    }
+    .radio {
+      margin-left: 2.0em;
+      margin-right: 1.0em;
+    }
+  }
+
+  .buttongroup {
+    margin-top: 1.0em;
+  }
+}
+
+
+//
+// Context bars
+//
+
+.contextBar {
+  height: 2.3rem;
+  //background: darken(var(--mantine-color-default), 2%);
+  background: color-mix(in srgb, var(--mantine-color-default), var(--mantine-color-default-color) 2%);
+  //background: linear-gradient(0deg, darken($note_default_colour, 5%) 0%, $note_default_colour 40%);
+  background: linear-gradient(0deg, $off_grey 0%, var(--mantine-color-default) 70%);
+
+  > * {
+    text-align: left;
+    position: relative;
+    top: 50%;
+    -ms-transform: translateY(-50%);
+    -webkit-transform: translateY(-50%);
+    transform: translateY(-50%);
+  }
+}
+
+
+//
+// Views
+//
+
+.view {
+  margin: 0;
+
+  .content {
+    border-left: 1px solid var(--mantine-color-default-border);
+    border-bottom: 1px solid var(--mantine-color-default-border);
+    overflow: auto;
+    // height of content is full-height minus height of menubar
+    height: calc(100% - 2.3rem);
+    &.withoutMenubar {
+      height: 100%;
+    }
+  }
+
+  &.buried {
+    display: none;
+  }
+
+  &.fullwidth {
+    width: 100%;
+  }
+
+  // match views that are full-height and also views that contain full-height views (like AutoView)
+  &.fullheight, .fullheight {
+    height: 100%;
+
+    .spacerminus {
+      height: calc(100% - 100px);
+    }
+
+    .spacer {
+      height: 100px;
+    }
+  }
+}
+
+
+//
+// Generic Notes
+//
+
+.note {
+
+  &.focused {
+    outline: dashed 2px var(--mantine-primary-color-2);
+    outline-offset: 6px;
+
+    .note.focused {
+      outline-offset: 2px;
+    }
+  }
+
+  &.selected {
+    // solid is the only change, but repeat the whole style for nodes that are selected without being focused
+    outline: solid 2px var(--mantine-primary-color-2);
+    outline-offset: 3px;
+  }
+
+  &.unclickable {
+    // source selection colour from theme
+    outline: solid 5px var(--mantine-primary-color-2);
+    outline-offset: 0;
+    cursor: default;
+  }
+
+  &.locked {
+    outline-color: var(--mantine-color-red-outline);
+    opacity: 0.5;
+  }
+
+  a {
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .lineno {
+    float: left;
+    margin: 0 0 0 -1.7em;
+
+    text-align: center;
+    font-size: 70%;
+    font-weight: bold;
+    cursor: default;
+    user-select: none;
+
+    display: inline-block;
+    line-height: 0;
+    border-radius: 50%;
+    border: 1px solid var(--mantine-color-default-border);
+    color: color-mix(in srgb, var(--mantine-color-default-border), var(--mantine-color-default-color) 30%);
+    background: var(--mantine-color-default);
+
+    // set min width so that single-digit numbers are the same size as double-digit+ numbers
+    min-width: 2.0em;
+    // set position relative to give the line number a high implied z-index and lift over focused outline
+    position: relative;
+
+    > span {
+      display: inline-block;
+      padding-top: 50%;
+      padding-bottom: 50%;
+      margin-left: 3px;
+      margin-right: 3px;
+    }
+  }
+
+  .body {
+    table, p {
+      margin-top: 0.3em;
+      margin-bottom: 0.5em;
+    }
+
+    pre {
+      background: $off_grey;
+      margin: 0 -1.0em 0 -1.0em;
+      padding: 0.5em 0 0.5em 1.5em;
+    }
+  }
+
+  .leafNote {
+    &.addGutter {
+      margin: 0 0 0 1.0em;
+    }
+
+    .lineno {
+      font-size: 50%;
+      margin-left: -3.0em;
+
+      > span {
+        margin-left: 2px;
+        margin-right: 2px;
+      }
+    }
+  }
+
+  ul {
+    // add margin to the top of the list, but not nested <ul> tags
+    margin: 0.5em 0 0 0;
+
+    > li {
+      // explicitly set text-indent (to default) so that it doesn't inherit checkbox style for non-checkbox li tags
+      text-indent: 0;
+
+      // hide discs on todo items (that contain checkboxes), either in note or nested note
+      &:has(> input[type=checkbox]), &:has(div > input[type=checkbox]) {
+        list-style-type: none;
+        text-indent: -1.6em;
+      }
+
+      input[type=checkbox] {
+        margin-right: 0.4em;
+      }
+
+      > ul, > div > ul, > div > div > ul {
+        margin-top: 0;
+      }
+    }
+  }
+
+  table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow: auto;
+
+    // mirror GitHub default styles
+    border-spacing: 0;
+    border-collapse: collapse;
+
+    td, th {
+      padding-left: 0.3em;
+      padding-right: 0.3em;
+      border: 1px solid var(--mantine-color-default-border);
+    }
+
+    tr {
+      &:nth-child(2n) {
+        background-color: $off_grey;
+      }
+    }
+  }
+
+}
+
+[data-mantine-color-scheme='dark'] .view {
+  .note, .leafNote {
+    &.unclickable, &.focused, &.selected {
+      outline-color: var(--mantine-primary-color-8);
+    }
+  }
+}
+
+
+// Note components
+
+.linetags {
+  list-style: none;
+  padding: 0;
+  margin: 0.6em 0 0 0;
+
+  .linetag {
+    margin: 0;
+    font-size: 80%;
+    .key {
+      text-transform: capitalize;
+      display: inline-block;
+      width: 50%;
+      // don't allow the values to be too far away from the keys
+      max-width: 12em;
+    }
+    .value {
+
+    }
+  }
+}
+
+//
+// View-specific styles
+// including specialised sub-elements (like notes etc.)
+//
+
+.viewDocument {
+  padding: 0 0.8em 1.2em 0.8em;
+  font-size: 0.925em;
+  color: var(--mantine-color-default-color);
+
+  // support indenting on wide screens
+  text-align: center;
+
+  .contextBar {
+    padding: 0 0 0 1.2em;
+    // offset view's padding
+    margin-left: -0.8em;
+    margin-right: -0.8em;
+  }
+
+  .centredPane {
+    margin-left: 0.8em;
+    text-align: left;
+
+    // indenting on wide screens
+    display: inline-block;
+    max-width: 1012px;
+    width: 100%;
+  }
+
+  .note {
+
+    // show headlines as simplified HTML
+    h1, h2, h3 {
+      margin: 1.4rem 0 0 0;
+      padding: 0 0 0.1em 0;
+    }
+
+    .headline h1:first-of-type {
+      margin-top: 0.4em;
+    }
+
+    h1 {
+      font-size: 2.0em;
+      font-weight: 600;
+      border-bottom: 1px solid var(--mantine-color-default-border);
+    }
+
+    h2 {
+      font-weight: 600;
+      border-bottom: 1px solid var(--mantine-color-default-border);
+    }
+
+    .leafNote {
+      margin-right: 1em;
+
+      &.selected {
+        // while notes in all views show their selection, leafNotes only show it in DocumentView
+        outline: solid 2px var(--mantine-primary-color-2);
+        outline-offset: 3px;
+      }
+    }
+  }
+}
+
+.viewKanban {
+  padding: 0 0.8em 0 0.8em;
+  font-size: 0.925em;
+  color: var(--mantine-color-default-color);
+
+  .contextBar {
+    padding: 0 0.8em 0 1.2em;
+    // offset view's padding
+    margin-left: -0.8em;
+    margin-right: -0.8em;
+  }
+
+  .note {
+    &.parentContext {
+      margin: 0.5em;
+    }
+  }
+
+  .board {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.8em;
+
+    .column {
+      flex: 1;
+      background: $off_grey;
+      min-width: 17.0em;
+
+      padding: 0 1.0em 0 1.0em;
+      margin: 0 0 0.5em 1.0em;
+
+      border: 1px solid var(--mantine-color-default-border);
+      border-radius: 1.0em;
+
+      &:first-of-type {
+        margin-left: 0;
+      }
+
+      &.pseudo {
+        border-style: dashed;
+
+        .heading {
+          font-style: italic;
+          font-weight: normal;
+        }
+      }
+
+      &.draglight {
+      }
+
+      > div > .note {
+        margin: 0 0 1.0em 0;
+        background: var(--mantine-color-default);
+        border: 1px solid var(--mantine-color-default-border);
+        border-radius: 0 0 15px 0;
+        user-select: none;
+        //cursor: move;
+
+        // only the first level
+        > .headline {
+          padding: 0.2em 1.0em 0.2em 1.0em;
+          //background: darken(var(--mantine-color-default), 2%);
+          background: color-mix(in srgb, var(--mantine-color-default), var(--mantine-color-default-color) 2%);
+          //background: linear-gradient(0deg, darken($note_default_colour, 5%) 0%, $note_default_colour 40%);
+          background: linear-gradient(0deg, $off_grey 0%, var(--mantine-color-default) 40%);
+          border-bottom: 1px solid var(--mantine-color-default-border);
+
+          > .lineno {
+            margin-left: -2.6em;
+          }
+        }
+
+        > .body {
+          padding: 0 1.0em 0.5em 1.0em;
+          // don't allow content to extend outside note boundaries, particularly useful when inserting non-reflowable content like images or diagrams
+          overflow: hidden;
+        }
+      }
+
+      .heading {
+        text-align: center;
+        text-transform: capitalize;
+        margin: 1.0em 0 1.0em 0;
+
+        h3 {
+          margin: 0;
+        }
+      }
+    }
+
+    .unsortedNotes {
+      position: relative;
+
+      .note {
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+    }
+  }
+
+  .note {
+    .headline {
+      // show headlines as simplified HTML
+      h1, h2, h3, ul, li {
+        margin: 0;
+        padding: 0;
+      }
+
+      li {
+        list-style: none;
+      }
+    }
+
+    .linetags {
+      padding: 0 1.0em 0 1.0em;
+    }
+
+    .body {
+      h1, h2, h3 {
+        margin: 0.6em auto 0 auto;
+      }
+
+      ul {
+        padding: 0 0 0 1.3em;
+      }
+    }
+  }
+}

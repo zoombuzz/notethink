@@ -19,7 +19,15 @@
     "web-vitals": "^2.1.4",
     "mdast-util-to-hast": "^13.2.0",
     "hast-util-sanitize": "^5.0.2",
-    "hast-util-to-jsx-runtime": "^2.3.6"
+    "hast-util-to-jsx-runtime": "^2.3.6",
+    "@mantine/core": "^7.14.3",
+    "@mantine/hooks": "^7.14.3",
+    "@mantine/modals": "^7.14.3",
+    "@mantine/notifications": "^7.14.3",
+    "postcss": "^8.4.41",
+    "postcss-preset-mantine": "^1.17.0",
+    "postcss-selector-parser": "^6.1.2",
+    "postcss-simple-vars": "^7.0.1"
   },
   "devDependencies": {    
   },

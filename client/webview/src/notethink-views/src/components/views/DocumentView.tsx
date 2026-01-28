@@ -2,7 +2,6 @@ import master_view_styles from "@/components/ViewRenderer.module.scss"
 import view_specific_styles from "@/components/ViewRenderer.module.scss"
 import {ViewProps} from "../../types/ViewProps";
 import {NoteProps} from "../../types/NoteProps";
-import {renderMenusForThisView} from "../../lib/viewops";
 import Debug from 'debug';
 import DocumentContextBar from "../../components/views/DocumentContextBar";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";

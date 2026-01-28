@@ -14,7 +14,7 @@ const debug = Debug("nextjs:app:GenericNoteWrapper");
  */
 function renderBody(note: NoteProps, additional_props: any = {}) {
     return note.children_body.map((child: MdastNode | NoteProps) => {
-        if (child instanceof NoteProps) {
+        if ('seq' in child && child.seq !== undefined) {
             return <GenericNote
                 key={child.seq}
                 {...child}

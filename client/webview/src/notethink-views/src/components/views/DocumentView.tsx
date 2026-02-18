@@ -1,5 +1,5 @@
-import master_view_styles from "@/components/ViewRenderer.module.scss"
-import view_specific_styles from "@/components/ViewRenderer.module.scss"
+import master_view_styles from "../../components/ViewRenderer.module.scss";
+import view_specific_styles from "../../components/ViewRenderer.module.scss";
 import {ViewProps} from "../../types/ViewProps";
 import {NoteProps} from "../../types/NoteProps";
 import Debug from 'debug';
@@ -44,7 +44,7 @@ export default function DocumentView(props: ViewProps) {
     return (
         <>
             <div className={master_view_styles.menubar}>
-                {props.nested?.menus && renderMenusForThisView(props)}
+                {/* todo: render menus when menu system is implemented */}
             </div>
             <div className={container_styles.join(' ')}
                  id={`v${props.id}-inner`}

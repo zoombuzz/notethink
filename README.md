@@ -1,79 +1,159 @@
-# notethink README
+# NoteThink
 
-This is the README for your extension "notethink". After writing up a brief description, we recommend including the following sections.
+A VS Code extension that renders markdown files as interactive visualizations.
+
+> **Status:** Preview / Beta — this is an early release. Expect rough edges.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Custom Editor**: Open markdown files in a visual editor alongside the standard text editor
+- **Interactive Views**: Notes rendered as structured, interactive components
+- **Component Library**: Reusable React components for building note visualizations
+- **Live Updates**: File changes detected and re-rendered with debounce
+- **GFM Support**: Tables, strikethrough, task lists, footnotes
+- **Frontmatter**: YAML frontmatter parsed and handled
+- **Debug Support**: Built-in debug logging for development
 
-For example if there is an image subfolder under your extension project workspace:
+## Installation
 
-\!\[feature X\]\(images/feature-x.png\)
+### From Marketplace
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+Not yet published. See [Development Install](#development-install) below.
 
-## Requirements
+### Development Install
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+```bash
+# clone the repository
+git clone https://github.com/ZoomBuzz/NoteThink.git
+cd NoteThink
 
-## Extension Settings
+# install dependencies
+pnpm install
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+# compile the extension
+pnpm run compile
 
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Development
-
-```
-npm install
+# open in VS Code
+code .
 ```
 
-### Browser-debugging
-NPM [debug](https://www.npmjs.com/package/debug) library used throughout the code.  To enable browser debugging messages, run in console:
-```
-allow pasting
+Then press `F5` to launch the Extension Development Host.
+
+## Usage
+
+1. Open any markdown file (`.md`)
+2. Use the command palette (`Ctrl+Shift+P`) and run "NoteThink: Open View"
+3. Or right-click on a markdown file and select "Open With..." → "NoteThink"
+
+### Browser Debugging
+
+Enable debug messages in the browser console:
+
+```javascript
 localStorage.debug = 'notethink:*'
 ```
 
+## Project Structure
 
-## Release Notes
+```
+notethink/
+├── client/
+│   ├── extension/           # VS Code extension
+│   │   ├── src/
+│   │   │   ├── extension.ts # entry point
+│   │   │   ├── vscode/      # VS Code integration
+│   │   │   └── lib/         # utilities
+│   │   └── dist/            # compiled output
+│   │
+│   └── webview/             # React webview
+│       ├── src/
+│       │   ├── components/  # webview components
+│       │   └── notethink-views/  # component library
+│       └── dist/            # bundled webview
+│
+├── .github/
+│   └── workflows/ci.yml     # CI pipeline
+│
+├── AGENTS.md                # AI agent guidelines
+├── CODING_STANDARDS.md      # coding conventions
+└── eslint.config.mjs        # linting rules
+```
 
-Users appreciate release notes as you update your extension.
+## Development
 
-### 1.0.0
+### Commands
 
-Initial release of ...
+| Command | Description |
+|---------|-------------|
+| `pnpm install` | Install all dependencies (root + client packages) |
+| `pnpm run compile` | Build the extension |
+| `pnpm run watch` | Watch mode for development |
+| `pnpm run package` | Production build |
+| `pnpm run lint` | Run ESLint |
+| `pnpm test` | Run all tests |
+| `pnpm run chrome` | Test in browser (Chromium) |
 
-### 1.0.1
+### Component Library
 
-Fixed issue #.
+The `notethink-views` package contains reusable React components:
 
-### 1.1.0
+```bash
+cd client/webview/src/notethink-views
 
-Added features X, Y, and Z.
+# run storybook
+pnpm run storybook
 
----
+# run tests
+pnpm test
 
-## Working with Markdown
+# build library
+pnpm run rollup
+```
 
-You can author your README using Visual Studio Code.  Here are some useful editor keyboard shortcuts:
+## Architecture
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        VS Code                              │
+│  ┌───────────────────┐    ┌─────────────────────────────┐   │
+│  │    Extension      │    │        Webview              │   │
+│  │                   │    │                             │   │
+│  │  ┌─────────────┐  │    │  ┌───────────────────────┐  │   │
+│  │  │ notethink   │◄─┼────┼──│  ExtensionReceiver    │  │   │
+│  │  │ Editor.ts   │  │    │  │                       │  │   │
+│  │  └─────────────┘  │    │  └───────────┬───────────┘  │   │
+│  │         │         │    │              │              │   │
+│  │         ▼         │    │              ▼              │   │
+│  │  ┌─────────────┐  │    │  ┌───────────────────────┐  │   │
+│  │  │  parseops   │  │    │  │    NoteRenderer       │  │   │
+│  │  │  crypto     │  │    │  │                       │  │   │
+│  │  └─────────────┘  │    │  └───────────┬───────────┘  │   │
+│  │                   │    │              │              │   │
+│  └───────────────────┘    │              ▼              │   │
+│                           │  ┌───────────────────────┐  │   │
+│                           │  │   notethink-views     │  │   │
+│                           │  │   (component lib)     │  │   │
+│                           │  └───────────────────────┘  │   │
+│                           └─────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## For more information
+**Message Flow:**
+1. Extension reads markdown file and parses it
+2. Parsed data sent to webview via `postMessage`
+3. `ExtensionReceiver` handles messages and updates state
+4. `NoteRenderer` displays notes using `notethink-views` components
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+## Known Limitations
 
-**Enjoy!**
+- **Read-only**: No editing support yet — NoteThink is a viewer, not an editor
+- **Single file view**: No multi-document navigation
+- **No icon**: Extension icon is a placeholder until a proper design is provided
+
+## Contributing
+
+See [CODING_STANDARDS.md](./CODING_STANDARDS.md) for code style guidelines and [AGENTS.md](./AGENTS.md) for project conventions.
+
+## License
+
+Apache-2.0

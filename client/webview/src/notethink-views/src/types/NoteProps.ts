@@ -1,4 +1,46 @@
-import {ReactElement} from "react";
+import {ReactElement, MouseEvent} from "react";
+
+export interface ClickPositionInfo {
+    from: number;
+    to: number | undefined;
+    selection_from: number | undefined;
+    selection_to: number | undefined;
+    type: string;
+}
+
+export type NoteClickHandler = (event: MouseEvent<HTMLElement>, note: NoteProps | undefined, position: ClickPositionInfo) => void;
+
+export interface NoteDisplayOptions {
+    id?: string;
+    view_id?: string;
+    level?: number;
+    parent_context_seq?: number;
+    settings?: {
+        show_context_bars?: boolean;
+        show_linetags_in_headlines?: boolean;
+        show_line_numbers?: boolean;
+    };
+    deepest?: {
+        selectable_level?: number;
+        selectable_note?: NoteProps;
+    };
+    focused_seqs?: number[];
+    selected_seqs?: number[];
+    selected_notes?: NoteProps[];
+    cropped_focused_seqs?: number[];
+    cropped_selected_seqs?: number[];
+    additional_classes?: string[];
+    provided?: {
+        draggableProps?: Record<string, unknown>;
+        dragHandleProps?: Record<string, unknown>;
+        innerRef?: ((instance: HTMLDivElement | null) => void) | { current: HTMLDivElement | null };
+    };
+}
+
+export interface NoteHandlers {
+    click?: NoteClickHandler;
+    setCaretPosition?: (position: number) => void;
+}
 
 export interface NoteProps {
     seq: number;
@@ -36,8 +78,8 @@ export interface NoteProps {
     focused?: boolean;
     selected?: boolean;
     locked?: boolean;
-    display_options?: any;
-    handlers?: any;
+    display_options?: NoteDisplayOptions;
+    handlers?: NoteHandlers;
     selection?: TextSelection;
 }
 
@@ -79,7 +121,7 @@ export interface LineTag {
     updated_by_view?: string,
 
     // fields added at the React render stage
-    handlers?: any,
+    handlers?: NoteHandlers,
 }
 
 export interface TextPosition {

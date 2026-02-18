@@ -1,16 +1,16 @@
 import {ReactElement} from "react";
-import {NoteProps, TextSelection} from "../types/NoteProps";
+import type {NoteProps, NoteDisplayOptions, NoteHandlers, TextSelection} from "../types/NoteProps";
 
 export interface ViewProps {
     id: string;
     type: string;
     role?: string;
-    display_options?: any;
+    display_options?: NoteDisplayOptions;
     nested?: {
-        menus?: any;
-        parent_context?: any;
+        menus?: Record<string, unknown>;
+        parent_context?: NoteProps;
         breadcrumb_trail?: ReactElement;
-        replaced_attributes?: any;
+        replaced_attributes?: Record<string, unknown>;
     }
     // recursive inclusion of parent and child views
     child_views?: Array<ViewProps>;
@@ -23,14 +23,14 @@ export interface ViewProps {
 }
 
 export interface ViewApi {
-    setViewManagedState: (updates: Array<any>) => void;
+    setViewManagedState: (updates: Array<Record<string, unknown>>) => void;
     deleteViewFromManagedState: (view_id?: string) => void;
     revertAllViewsToDefaultState: () => void;
     // other handlers are injected by functional components in certain situations
     setParentContextSeq?: (seq: number) => void;
-    getClearHandler?: any;
-    setCaretPosition?: any;
-    click?: any;
-    singleClick?: any;
-    doubleClick?: any;
+    getClearHandler?: () => void;
+    setCaretPosition?: (position: number) => void;
+    click?: NoteHandlers['click'];
+    singleClick?: NoteHandlers['click'];
+    doubleClick?: NoteHandlers['click'];
 }

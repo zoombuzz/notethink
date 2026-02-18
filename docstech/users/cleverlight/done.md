@@ -201,3 +201,103 @@
       + give the frequency of update
 
 
+### wire notethink-views into rendering pipeline
+
++ [X] build MDAST-to-NoteProps transformer
+  + `convertMdastToNoteHierarchy` in notethink-views/src/lib/
+  + walks MDAST tree, produces NoteProps with seq, level, position, children_body, headline_raw, body_raw
+  + handles headings, code, list, listItem, paragraph-under-listItem
+  + nests notes by position containment
+  + 9 tests covering nesting, boundaries, edge cases
++ [X] replace NoteRenderer internals
+  + NoteRenderer routes through DocumentView when doc.text is available
+  + fallback to raw MDAST→HAST→JSX for docs without text (backwards compatible)
+  + removed double type assertion (`as unknown as`) with MdastInput union type
++ [X] notethink-views consumed directly by webpack
+  + lives inside client/webview/src/ so webpack resolves it via ts-loader
+  + no rollup build needed in the webpack watch chain
+  + rollup still used for standalone npm package builds
+
+
+### get a first basic release of NoteThink extension out
+
++ goal
+  + ship a working 0.1.0 that people can install from the VS Code marketplace
+  + renders markdown files as structured, interactive note hierarchies
+  + no need for editing, just viewing
+  + must feel solid: no crashes, no visible jank on typical markdown repos
+
++ [X] fix client/extension/package.json metadata
+  + publisher → ZoomBuzz, version → 0.1.0, repo URL → NoteThink, description updated
++ [X] add marketplace metadata to root package.json
+  + added license, homepage, bugs; categories → ["Visualization", "Other"]
+  + fixed `vscode:prepublish` to run `package` (production build) instead of `compile`
+  + added `package:vsix` script; installed `@vscode/vsce`
+  + note: `"icon"` field removed — vsce hard-errors without the actual PNG; re-add once icon exists
++ [X] update CHANGELOG.md for 0.1.0
+  + features, known limitations, dated 2026-02-18
++ [X] update README.md for public consumption
+  + npm → pnpm throughout, added Status line (preview/beta), added Known Limitations
+  + "From Marketplace" section notes not yet published
++ [X] review .vscodeignore for production packaging
+  + added exclusions for .github, .claude, docstech, node_modules, client source, test files
+  + `vsce ls --no-dependencies` shows 19 files, no source/node_modules leak
++ [X] verify the production build pipeline
+  + `pnpm run package` — 0 errors, `pnpm run lint` — clean, `pnpm test` — 33 pass
+  + `vsce package --no-dependencies` → `notethink-0.1.0.vsix` (21 files, 496 KB)
+
+
+### bring notethink up to active-dev standard
+
++ [X] migrate from npm to pnpm
+  + updated postinstall script, removed package-lock.json files
+  + generated pnpm-lock.yaml at root, extension, webview, and notethink-views
+  + updated .github/ PR template references from npm to pnpm
++ [X] replace `console.warn` with `debug` library
+  + ExtensionReceiver.tsx now uses `Debug('notethink:ExtensionReceiver')`
+  + fixed debug namespaces in notethink-views (nextjs:app: → notethink-views:)
++ [X] replace `any` types with explicit types
+  + defined `Doc` interface in both extension and webview types/general.ts
+  + `HashMapOf<Doc>` in notethinkEditor.ts, ExtensionReceiver.tsx, NoteRenderer.tsx
+  + `acquireVsCodeApi<VSCodeState>()` typed with proper state generic
+  + defined `NoteDisplayOptions`, `NoteHandlers`, `ClickPositionInfo` in NoteProps.ts
+  + typed `ViewApi` methods, replaced `any` in ViewProps nested fields
+  + typed `RenderOptions` in renderops.tsx, `attrib_key: string` in GenericNoteAttributes
++ [X] review and clean up dist/ files in git status
+  + added `**/dist/` to .gitignore
++ [X] add test scripts and get all tests passing
+  + root `pnpm test` runs both webview (12 tests) and notethink-views (21 tests)
+  + created jest.config.cjs, setupEnv.js, setupTests.ts for client/webview
+  + added NoteRenderer.test.tsx (5 tests), ExtensionReceiver.test.tsx (6 tests)
+  + added GenericNote.test.tsx (7 tests)
+  + fixed pre-existing bugs: CodeNote imports, DocumentView missing function, index.ts export
+  + webpack compiles both configs; eslint 0 errors
++ [X] harden extension security and reliability
+  + replaced Math.random() nonce with crypto.getRandomValues()
+  + removed CSP `style-src 'unsafe-inline'`, switched to nonce-based styles
+  + removed commented-out permissive CSP policies
+  + fixed watcher memory leak (watcher.dispose() on panel close)
+  + added try-catch to all async file operations (initial load, onCreate, onChange)
+  + added 250ms debounce on onDidChangeTextDocument
+  + fixed inconsistent document ID generation (all paths use uri.path)
++ [X] fix CI pipeline
+  + switched from npm to pnpm install --frozen-lockfile
+  + added pnpm/action-setup@v4
+  + added webview test job alongside notethink-views tests
+  + aligned vscode engine version (^1.99.0) between root and extension package.json
++ [X] commit untracked files on bootstrap branch
+  + AGENTS.md, CODING_STANDARDS.md, .github/
+  + test infrastructure (jest configs, setup files, new test files)
+  + client/extension/src/test/suite/lib/
+  + pnpm-lock.yaml files, media/.gitkeep, *.vsix in .gitignore
+
+
+### work on DX
+
++ [X] test with reference sample to see if it's broadly doable
++ [X] fix access: can't inspect HTML
++ [X] fix missing sourcemap
+  + webpack.config.js now uses `source-map` in dev, `nosources-source-map` in production
+  + controlled via `isProduction` flag derived from `NODE_ENV`
+
+

@@ -17,7 +17,7 @@
     "resolveJsonModule": true,                           /* Enable importing .json files. */
     "isolatedModules": true,                             /* Ensure that each file can be safely transpiled without relying on other imports. */
     "noEmit": true,                                      /* Disable emitting files from a compilation. */
-    "jsx": "react",
+    "jsx": "react-jsx",
     "rootDir": "src",                                    /* Specify the root folder within your source files. */
 
     /* deprecated settings */

@@ -32,6 +32,9 @@ nohup.out
 # typescript
 *.tsbuildinfo
 
+# build outputs
+**/dist/
+
 # service workers
 **/public/sw.js
 **/public/sw.js.map
@@ -47,3 +50,4 @@ app/debug.log
 # misc
 .DS_Store
 *.pem
+*.vsix

@@ -1,11 +1,9 @@
 import {MouseEvent} from "react";
 import {NoteProps} from "../../types/NoteProps";
-import {parseCodeNote} from "@zoombuzz/notethink-mast";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import Debug from 'debug';
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
-import note_specific_styles from "../../components/notes/CodeNote.module.scss";
-const debug = Debug("nextjs:app:CodeNote");
+const debug = Debug("notethink-views:CodeNote");
 
 export default function CodeNote(props: NoteProps) {
     const note = props;
@@ -33,12 +31,12 @@ export default function CodeNote(props: NoteProps) {
             { note?.linetags && <GenericNoteAttributes
                 {...note}
             /> }
-            <div className={[view_specific_styles.body, note_specific_styles.noteCode].join(' ')}
-                 onClick={ (event: MouseEvent<HTMLElement>) => { note.handlers?.click(event, props.display_options?.deepest.selectable_note, {
+            <div className={view_specific_styles.body}
+                 onClick={ (event: MouseEvent<HTMLElement>) => { note.handlers?.click?.(event, props.display_options?.deepest?.selectable_note, {
                      from: note.position.end.offset,
                      to: note.position.end_body?.offset,
-                     selection_from: props.display_options?.deepest?.selectable_note.position.start.offset,
-                     selection_to: props.display_options?.deepest?.selectable_note.position.end.offset,
+                     selection_from: props.display_options?.deepest?.selectable_note?.position?.start?.offset,
+                     selection_to: props.display_options?.deepest?.selectable_note?.position?.end?.offset,
                      type: 'note_body',
                  }); }}
             >

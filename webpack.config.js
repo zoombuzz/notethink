@@ -13,6 +13,9 @@ const path = require('path');
 const webpack = require('webpack');
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 
+const isProduction = process.env.NODE_ENV === 'production';
+const devtool = isProduction ? 'nosources-source-map' : 'source-map';
+
 /** @type WebpackConfig */
 const clientExtensionConfig = {
 	context: path.join(__dirname, 'client', 'extension'),
@@ -68,6 +71,10 @@ const clientExtensionConfig = {
 		new webpack.ProvidePlugin({
 			process: 'process/browser', // provide a shim for the global `process` variable
 		}),
+		// strip node: protocol prefix so fallback polyfills can resolve (memfs 4.x+)
+		new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
+			resource.request = resource.request.replace(/^node:/, '');
+		}),
 	],
 	externals: {
 		'vscode': 'commonjs vscode', // ignored because it doesn't exist
@@ -75,7 +82,7 @@ const clientExtensionConfig = {
 	performance: {
 		hints: false
 	},
-	devtool: 'nosources-source-map', // create a source map that points to the original source file
+	devtool,
 	infrastructureLogging: {
 		level: "log", // enables logging required for problem matchers
 	},
@@ -121,6 +128,10 @@ const clientWebviewConfig = {
 				test: /\.css$/,
 				use: ["style-loader", "css-loader"],
 			},
+			{
+				test: /\.scss$/,
+				use: ["style-loader", "css-loader", "sass-loader"],
+			},
 		]
 	},
 	plugins: [
@@ -140,7 +151,7 @@ const clientWebviewConfig = {
 	performance: {
 		hints: false
 	},
-	devtool: 'nosources-source-map', // create a source map that points to the original source file
+	devtool,
 	infrastructureLogging: {
 		level: "log", // enables logging required for problem matchers
 	},

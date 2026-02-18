@@ -20,7 +20,12 @@ export function getStandardNoteDataProps(note: NoteProps) {
     };
 }
 
-export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: any = {}) {
+interface RenderOptions {
+    render?: 'all_children' | 'first_child_only';
+    output_type?: 'html' | 'markdown' | 'string';
+}
+
+export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderOptions = {}) {
     const options = Object.assign({}, {
         render: 'all_children',
         output_type: 'html',
@@ -42,7 +47,7 @@ export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: any = {
             render_target = {
                 ...render_target,
                 children: [render_target.children[0]],
-            }
+            };
         }
         // strip paragraph (note) and instead render nested elements only (like text, link etc.) in virtual 'root'
         const headline_text = renderNodeUnified(render_target,{
@@ -61,16 +66,16 @@ export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: any = {
     return headline;
 }
 
-export function renderNodeUnified(node: MdastNode, options_arg: any = {}): ReactElement {
+export function renderNodeUnified(node: MdastNode, options_arg: RenderOptions = {}): ReactElement {
     const options = Object.assign({}, {
         render: 'all_children',
         output_type: 'html',
     }, options_arg);
-    if (!(node.children?.length > 0)) return <></>;
+    if (!(node.children?.length > 0)) {return <></>;}
     if (options.output_type === 'markdown') {
-        return <>{toMarkdown(node as MdastNodes)}</>
+        return <>{toMarkdown(node as MdastNodes)}</>;
     } else if (options.output_type === 'string') {
-        return <>{toString(node as MdastNodes)}</>
+        return <>{toString(node as MdastNodes)}</>;
     } else {
         const hast = sanitize(toHast(node as MdastNodes));
         // @ts-ignore safe to ignore type error on jsx and jsxs (https://github.com/syntax-tree/hast-util-to-jsx-runtime)

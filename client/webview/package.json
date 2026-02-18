@@ -29,9 +29,14 @@
     "postcss-selector-parser": "^6.1.2",
     "postcss-simple-vars": "^7.0.1"
   },
-  "devDependencies": {    
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "ts-jest": "^29.3.4",
+    "identity-obj-proxy": "^3.0.0"
   },
   "scripts": {
+    "test": "jest --config jest.config.cjs --forceExit"
   },
   "eslintConfig": {
     "extends": [

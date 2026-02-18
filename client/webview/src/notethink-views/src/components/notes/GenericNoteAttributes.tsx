@@ -16,11 +16,11 @@ export default function GenericNoteAttributes(props: NoteProps) {
         <ul className={view_specialised_styles.linetags}
             role={'list'}
         >
-            {Object.keys(linetags).map((attrib_key: any, index: number) => {
+            {Object.keys(linetags).map((attrib_key: string, index: number) => {
                 // don't show attributes already manually rendered
-                if (hiddenAttributes.includes(attrib_key)) return;
+                if (hiddenAttributes.includes(attrib_key)) {return;}
                 // don't show internal attributes
-                if (isInternalAttribute(attrib_key)) return;
+                if (isInternalAttribute(attrib_key)) {return;}
                 // pull out the current value (dynamic typing)
                 const linetag: LineTag = linetags[attrib_key];
                 // allow for custom formatting of identified linetags
@@ -45,7 +45,7 @@ export default function GenericNoteAttributes(props: NoteProps) {
                     >
                         <span className={view_specialised_styles.key}
                               onClick={(event: MouseEvent<HTMLElement>) => {
-                                  props.handlers?.click(event, note, {
+                                  props.handlers?.click?.(event, note, {
                                       from: (note.linetags_from || 0) + linetag.key_offset,
                                       to: (note.linetags_from || 0) + linetag.key_offset + linetag.key.length,
                                       selection_from: note.position.start.offset,
@@ -56,7 +56,7 @@ export default function GenericNoteAttributes(props: NoteProps) {
                         >{attrib_key}:</span>
                         <span className={view_specialised_styles.value}
                               onClick={(event: MouseEvent<HTMLElement>) => {
-                                  props.handlers?.click(event, note, {
+                                  props.handlers?.click?.(event, note, {
                                       from: linetags_from_position + linetag.value_offset,
                                       to: linetags_from_position + linetag.value_offset + linetag.value.length,
                                       selection_from: note.position.start.offset,

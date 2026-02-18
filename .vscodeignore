@@ -3,6 +3,7 @@
 src/**
 out/**
 node_modules/**
+**/node_modules/**
 dist/**/test/**
 .gitignore
 vsc-extension-quickstart.md
@@ -15,3 +16,19 @@ esbuild.js
 **/*.ts
 **/*.tsx
 **/.vscode-test.*
+.github/**
+.claude/**
+.idea/**
+docstech/**
+AGENTS.md
+CODING_STANDARDS.md
+**/jest.config.*
+**/setupTests.*
+**/setupEnv.*
+**/*.test.*
+**/pnpm-lock.yaml
+.npmrc
+client/webview/src/**
+client/webview/public/**
+client/webview/postcss.config.js
+client/extension/src/**

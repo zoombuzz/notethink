@@ -2,7 +2,7 @@ import {NoteProps} from "../../types/NoteProps";
 import GenericNoteWrapper from "../../components/notes/GenericNoteWrapper";
 import Debug from "debug";
 import {lazy} from "react";
-const debug = Debug("nextjs:app:GenericNote");
+const debug = Debug("notethink-views:GenericNote");
 
 const MarkdownNote = lazy(() => import('./MarkdownNote'));
 const CodeNote = lazy(() => import('./CodeNote'));
@@ -32,8 +32,8 @@ export default function GenericNote(props: NoteProps) {
 
     const enriched_props = {
         // calculate default focused and selected status here
-        focused: cropped_focused_seqs?.length && cropped_focused_seqs.includes(note.seq),
-        selected: cropped_selected_seqs?.length && cropped_selected_seqs.includes(note.seq),
+        focused: !!(cropped_focused_seqs?.length && cropped_focused_seqs.includes(note.seq)),
+        selected: !!(cropped_selected_seqs?.length && cropped_selected_seqs.includes(note.seq)),
         // override with props
         ...props,
         display_options: {
@@ -52,7 +52,7 @@ export default function GenericNote(props: NoteProps) {
     switch (props.type) {
         case 'list':
         case 'listItem':
-            return <GenericNoteWrapper type={props.type} {...enriched_props} />
+            return <GenericNoteWrapper type={props.type} {...enriched_props} />;
         case 'code':
             switch (props.lang) {
                 default:

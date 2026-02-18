@@ -9,7 +9,7 @@ import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes"
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 import GenericNote from "../../components/notes/GenericNote";
 import Debug from 'debug';
-const debug = Debug("nextjs:app:MarkdownNote");
+const debug = Debug("notethink-views:MarkdownNote");
 
 export default function MarkdownNote(props: NoteProps) {
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
@@ -43,7 +43,7 @@ export default function MarkdownNote(props: NoteProps) {
               */
              data-level={note.level}
              data-deepest-selectable-level={note.display_options?.deepest?.selectable_level}
-             data-deepest-selectable-note-level={note.display_options?.deepest?.selectable_note.level}
+             data-deepest-selectable-note-level={note.display_options?.deepest?.selectable_note?.level}
              data-focused-seqs={note.display_options?.focused_seqs?.join(',')}
              data-cropped-focused-seqs={note.display_options?.cropped_focused_seqs?.join(',')}
              data-selected-seqs={note.display_options?.selected_seqs?.join(',')}
@@ -56,11 +56,11 @@ export default function MarkdownNote(props: NoteProps) {
         >
             <div className={view_specific_styles.headline}
                  role={'rowheader'}
-                 onClick={ (event: MouseEvent<HTMLElement>) => { note.handlers?.click(event, note.display_options?.deepest?.selectable_note, {
+                 onClick={ (event: MouseEvent<HTMLElement>) => { note.handlers?.click?.(event, note.display_options?.deepest?.selectable_note, {
                      from: note.position.start.offset,
                      to: note.position.end.offset,
-                     selection_from: note.display_options?.deepest?.selectable_note.position.start.offset,
-                     selection_to: note.display_options?.deepest?.selectable_note.position.end_body?.offset || note.display_options?.deepest?.selectable_note.position.end.offset,
+                     selection_from: note.display_options?.deepest?.selectable_note?.position?.start?.offset,
+                     selection_to: note.display_options?.deepest?.selectable_note?.position?.end_body?.offset || note.display_options?.deepest?.selectable_note?.position?.end?.offset,
                      type: 'note_headline',
                  }); }}
             >
@@ -72,11 +72,11 @@ export default function MarkdownNote(props: NoteProps) {
             /> }
             { note.children_body?.length ?
             <div className={view_specific_styles.body}
-                 onClick={ (event: MouseEvent<HTMLElement>) => { note.handlers?.click(event, note.display_options?.deepest?.selectable_note, {
+                 onClick={ (event: MouseEvent<HTMLElement>) => { note.handlers?.click?.(event, note.display_options?.deepest?.selectable_note, {
                      from: note.position.end.offset,
                      to: note.position.end_body?.offset,
-                     selection_from: note.display_options?.deepest?.selectable_note.position.start.offset,
-                     selection_to: note.display_options?.deepest?.selectable_note.position.end_body?.offset || note.display_options?.deepest?.selectable_note.position.end.offset,
+                     selection_from: note.display_options?.deepest?.selectable_note?.position?.start?.offset,
+                     selection_to: note.display_options?.deepest?.selectable_note?.position?.end_body?.offset || note.display_options?.deepest?.selectable_note?.position?.end?.offset,
                      type: 'note_body',
                  }); }}
             >
@@ -87,7 +87,7 @@ export default function MarkdownNote(props: NoteProps) {
                             {...child}
                             display_options={{
                                 ...note.display_options,
-                                id: `v${note.display_options.view_id}-n${child.seq}`,
+                                id: `v${note.display_options?.view_id}-n${child.seq}`,
                                 // don't pass down draggable props as only this (parent) note is draggable
                                 provided: {
                                     draggableProps: undefined,

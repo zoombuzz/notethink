@@ -3,7 +3,7 @@ import {getStandardNoteDataProps, renderNodeUnified} from "../../lib/renderops";
 import GenericNote from "../../components/notes/GenericNote";
 import Debug from 'debug';
 
-const debug = Debug("nextjs:app:GenericNoteWrapper");
+const debug = Debug("notethink-views:GenericNoteWrapper");
 
 /**
  * Render note body
@@ -12,7 +12,7 @@ const debug = Debug("nextjs:app:GenericNoteWrapper");
  * There are certain cases where the parent note influences the rendering of the child notes
  * e.g. listItems with checkboxes
  */
-function renderBody(note: NoteProps, additional_props: any = {}) {
+function renderBody(note: NoteProps, additional_props: Partial<NoteProps> = {}) {
     return note.children_body.map((child: MdastNode | NoteProps) => {
         if ('seq' in child && child.seq !== undefined) {
             return <GenericNote

@@ -1,6 +1,128 @@
 # Todo [](?type=board&ng_level=1&ng_child_type=story&ng_child_status=backlog&ng_view=kanban)
 
 
+### fix critical rendering gaps
+
++ goal
+  + the ported view components are wired in but two things prevent them from working properly
+  + without these fixes, the webview shows broken/incomplete output
++ [X] strip linetag text from rendered headlines
+  + renderops.tsx: added `strip_linetags` render option that filters MDAST children by position offset using `linetags_from`
+  + MarkdownNote.tsx: switched from `first_child_only` to `strip_linetags`, preserving inline formatting (bold, links) before the linetag
+  + the linetag text is hidden from the headline; GenericNoteAttributes renders it as badges
++ [X] uncomment and wire notes_within_parent_context rendering in DocumentView
+  + not needed — child notes already render correctly via recursive `MarkdownNote.children_body` → `GenericNote` rendering
+  + notegit has the same line commented out; this is not a bug
+
+
+### dynamic kanban columns
+
++ goal
+  + kanban columns are hardcoded to untagged/backlog/doing/done
+  + notegit derives columns from the linetags present in the document
+  + users should be able to define columns via linetags or settings
++ [X] derive column definitions from notes' status linetag values
+  + KanbanView columns replaced from useState with useMemo deriving from notes_within_parent_context
+  + scans notes for unique status linetag values, always includes 'untagged' as first pseudo-column
+  + columns sorted alphabetically; dynamic — appear/disappear as notes change
++ [ ] allow column customisation via kanban settings modal (see settings modal story below)
+
+
+### view menu and toolbar
+
++ goal
+  + notegit has a full menu bar with View menu, settings, and view-type switching
+  + NoteThink's menubar div exists but is empty (placeholder comments in DocumentView, KanbanView)
+  + users need UI to switch between document/kanban/auto and toggle display settings
++ [X] implement view type selector using native VS Code controls
+  + registered notethink.setViewAuto/Document/Kanban commands with icons in editor/title menu navigation group
+  + icon buttons appear in VS Code editor tab bar (eye, file-text, project)
+  + commands relay to webview via postMessage, ExtensionReceiver updates viewStates
++ [X] implement display settings toggles using native VS Code controls
+  + registered notethink.toggleLineNumbers and notethink.toggleContextBars commands
+  + appear in editor/title overflow menu under 1_settings group
+  + toggles boolean in viewStates display_options.settings
++ [X] removed empty menubar divs from DocumentView and KanbanView
+  + native VS Code editor/title bar replaces the custom menubar pattern
+
+
+### view state persistence
+
++ goal
+  + when the webview reloads (e.g. tab switch), view state is lost
+  + notegit persists view state in LocalStorage; NoteThink should use VS Code's webview state API
++ [ ] persist view type and parent_context_seq via vscode.getState/setState
+  + save on setViewManagedState calls
+  + restore on webview init in ExtensionReceiver
++ [ ] persist kanban column scroll positions
+
+
+### theme integration
+
++ goal
+  + webview should match VS Code's active colour theme (light/dark/high contrast)
+  + notegit has custom GitHub light/dark themes; NoteThink should inherit from VS Code
++ [X] detect VS Code theme kind and apply to webview
+  + inline script in notethinkEditor.ts reads body.vscode-dark/vscode-high-contrast
+  + sets data-mantine-color-scheme on <html> for dark-mode SCSS selector
+  + MutationObserver syncs attribute on live theme changes
++ [X] CSS variable bridge (vscode-mantine-bridge.css)
+  + maps 7 --mantine-* variables to --vscode-* equivalents
+  + ViewRenderer.module.scss works unchanged in both NoteGit and NoteThink
+  + index.css uses --vscode-font-family, --vscode-editor-foreground, --vscode-editor-background
++ [ ] verify high-contrast themes
+  + test with "High Contrast" and "High Contrast Light" themes
+  + ensure focus/selection outlines have sufficient contrast
+
+
+### keyboard shortcuts for view navigation
+
++ goal
+  + notegit has hotkey pass-through for view operations
+  + NoteThink should support keyboard navigation within the webview
++ [X] implement keyboard handler in GenericView
+  + navigation callback registered via onNavigationCommand ref on ViewApi
+  + Escape: clearFocus — calls getClearHandler to move caret past focused note
+  + Up/Down: navigate between sibling notes via setCaretPosition
+  + Enter: drillIn — calls setParentContextSeq on focused note with children
+  + Backspace: drillOut — navigates to grandparent or root
++ [X] register VS Code keybindings for NoteThink-specific commands
+  + keybindings declared in package.json with `when: "activeCustomEditorId == 'zoombuzz.notethink'"`
+  + escape, up, down, enter, backspace bound to navigation commands
+  + extension.ts registers all 10 commands relaying to active webview panel
+
+
+### insert modal
+
++ goal
+  + notegit has a searchable insert modal (~367 lines) with 40+ templates
+  + quick way to insert headings, linetags, mermaid diagrams, tables, code blocks
+  + this replaces typing boilerplate markdown manually
++ [ ] implement InsertModal component in notethink-views
+  + searchable list of insert templates
+  + preview of what will be inserted
+  + fires postMessage({type: 'editText', changes}) to insert at cursor position
++ [ ] port insert template definitions from notegit
+  + start with English templates; i18n can come later
+  + categories: basic (heading, paragraph, list, link, image), metadata (linetag), diagram (mermaid), structure (table, code block)
++ [ ] wire insert modal trigger
+  + menu bar button and/or keyboard shortcut (Ctrl+I or similar)
+
+
+### settings modals
+
++ goal
+  + notegit has per-view settings modals for display preferences
+  + NoteThink needs at least kanban settings and global display settings
++ [ ] implement kanban settings modal
+  + port from notegit's SettingsKanbanModal (~61 lines)
+  + column definitions (add/remove/reorder columns)
+  + scroll-note-into-view toggle
+  + show-linetags-in-headlines toggle
++ [ ] implement global settings modal
+  + port from notegit's GlobalSettingsModal (~80 lines)
+  + theme preference, default view type, line numbers
+
 
 ### publish NoteThink 0.1.0 to marketplace (requires manual work)
 
@@ -24,6 +146,24 @@
   + verify listing appears correctly
 
 
+### multi-view management [post-v1]
+
++ goal
+  + notegit supports split views (parent_view/child_views), view hierarchy, and a ViewManager
+  + NoteThink currently has a single GenericView entry point per document
+  + multi-view would allow side-by-side document+kanban or document+mermaid
++ [ ] implement ViewManager component
+  + manages array of ViewProps with unique IDs
+  + handles setViewManagedState, deleteViewFromManagedState, revertAllViewsToDefaultState
+  + stores view state in webview state API
++ [ ] implement split view UI
+  + allow adding a child view alongside the current view
+  + drag handle or button to resize split
++ [ ] wire parent_view/child_views relationships
+  + child views inherit display_options from parent
+  + breadcrumb navigation affects the correct view in the hierarchy
+
+
 ### convert top-level 'docs' container to RootNote [post-v1]
 
 + goal
@@ -38,20 +178,6 @@
 + [ ] render RootNote via DocumentView with child_views
   + each child_view represents one document
   + parent_context and breadcrumb_trail for navigation
-
-
-### compute delta on `partial` in ExtensionReceiver [post-v1]
-
-+ `partial` update may be different
-  + but might be the same
-  + want to avoid re-rendering React components if possible
-+ [ ] use hash_sha256 on doc content for change detection
-  + extension already has crypto.ts with generateIdentifier
-  + include hash in doc object sent to webview
-  + ExtensionReceiver compares incoming hash to current state
-    + skip setState for unchanged docs
-+ [ ] consider React.memo on DocumentView / GenericNote
-  + memoize on NoteProps.hash_sha256
 
 
 ### optimisation cycle [post-v1]

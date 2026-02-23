@@ -1,15 +1,16 @@
-import {NoteProps} from "../../types/NoteProps";
-import GenericNoteWrapper from "../../components/notes/GenericNoteWrapper";
+import React, {lazy} from 'react';
 import Debug from "debug";
-import {lazy} from "react";
-const debug = Debug("notethink-views:GenericNote");
+import type {NoteProps} from "../../types/NoteProps";
+import GenericNoteWrapper from "../../components/notes/GenericNoteWrapper";
+const debug = Debug("nodejs:notethink-views:GenericNote");
 
 const MarkdownNote = lazy(() => import('./MarkdownNote'));
 const CodeNote = lazy(() => import('./CodeNote'));
+const MermaidNote = lazy(() => import('./MermaidNote'));
 
-export const selectable_notetypes = ['markdown'];
+export const SELECTABLE_NOTETYPES = ['markdown'];
 
-export default function GenericNote(props: NoteProps) {
+export default React.memo(function GenericNote(props: NoteProps) {
 
     const note = props;
     let deepest_selectable_note = note;
@@ -55,9 +56,11 @@ export default function GenericNote(props: NoteProps) {
             return <GenericNoteWrapper type={props.type} {...enriched_props} />;
         case 'code':
             switch (props.lang) {
+                case 'mermaid':
+                    return <MermaidNote {...enriched_props} />;
                 default:
                     return <CodeNote {...enriched_props} />;
             }
     }
     return <MarkdownNote {...enriched_props} />;
-}
+});

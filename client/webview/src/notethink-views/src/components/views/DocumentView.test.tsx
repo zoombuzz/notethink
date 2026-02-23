@@ -16,10 +16,10 @@ describe('DocumentView', () => {
         expect(container).toBeInTheDocument();
     });
 
-    it('renders menubar element', () => {
+    it('does not render a menubar element (native VS Code controls used instead)', () => {
         const { container } = render(<DocumentView {...default_props} />);
         const menubar = container.querySelector('[class*="menubar"]');
-        expect(menubar).toBeInTheDocument();
+        expect(menubar).not.toBeInTheDocument();
     });
 
     it('applies correct id attribute to container', () => {

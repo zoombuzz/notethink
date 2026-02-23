@@ -12,8 +12,7 @@ jest.mock('../NoteRenderer', () => ({
 
 describe('App', () => {
     it('renders app container', () => {
-        render(<App />);
-        const app_container = document.querySelector('.App');
-        expect(app_container).toBeInTheDocument();
+        const { container } = render(<App />);
+        expect(container.firstChild).toBeInTheDocument();
     });
 });

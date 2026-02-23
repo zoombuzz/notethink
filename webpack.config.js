@@ -104,9 +104,12 @@ const clientWebviewConfig = {
 	},
 	resolve: {
 		mainFields: ['browser', 'module', 'main'], // look for `browser` entry point in imported node modules
-		extensions: ['.tsx', '.ts', '.js'],
+		extensions: ['.tsx', '.ts', '.js', '.mjs'],
 		alias: {
-			// provides alternate implementation for node module and source files
+			// force a single React instance across webview and nested sub-packages (notethink-views)
+			// without this, pnpm's per-package node_modules causes webpack to bundle two copies of React
+			'react': path.resolve(__dirname, 'client', 'webview', 'node_modules', 'react'),
+			'react-dom': path.resolve(__dirname, 'client', 'webview', 'node_modules', 'react-dom'),
 		},
 		fallback: {
 			// Webpack 5 no longer polyfills Node.js core modules automatically.
@@ -117,6 +120,12 @@ const clientWebviewConfig = {
 	},
 	module: {
 		rules: [
+			{
+				test: /\.m?js$/,
+				resolve: {
+					fullySpecified: false,
+				},
+			},
 			{
 				test: /\.tsx?$/,
 				exclude: /node_modules/,

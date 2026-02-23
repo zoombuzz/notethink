@@ -9,6 +9,7 @@ export interface Doc {
     path: string;
     content?: MdastRoot;
     text?: string;
+    hash_sha256?: string;
     updatedAt?: string;
     createdBy?: string;
     updateSentAt?: string;

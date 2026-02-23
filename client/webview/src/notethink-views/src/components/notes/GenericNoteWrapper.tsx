@@ -3,7 +3,7 @@ import {getStandardNoteDataProps, renderNodeUnified} from "../../lib/renderops";
 import GenericNote from "../../components/notes/GenericNote";
 import Debug from 'debug';
 
-const debug = Debug("notethink-views:GenericNoteWrapper");
+const debug = Debug("nodejs:notethink-views:GenericNoteWrapper");
 
 /**
  * Render note body

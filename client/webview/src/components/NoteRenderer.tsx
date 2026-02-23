@@ -5,8 +5,10 @@ import {toJsxRuntime} from "hast-util-to-jsx-runtime";
 import {Fragment, jsx, jsxs} from "react/jsx-runtime";
 import type { HashMapOf, Doc } from "../types/general";
 import { convertMdastToNoteHierarchy } from "../notethink-views/src/lib/convertMdastToNoteHierarchy";
-import { DocumentView } from "../notethink-views/src/components";
+import { GenericView } from "../notethink-views/src/components";
 import type { ViewProps } from "../notethink-views/src/types/ViewProps";
+import type { NoteProps, NoteDisplayOptions, TextSelection } from "../notethink-views/src/types/NoteProps";
+import type { ViewState } from './ExtensionReceiver';
 
 export type MdastNodes = import("mdast").Nodes;
 
@@ -16,27 +18,65 @@ export function renderNodeUnified(node: MdastNodes): ReactElement {
     return toJsxRuntime(hast, {Fragment, jsx, jsxs});
 }
 
-export default function NoteRenderer(props: {
-    notes: HashMapOf<Doc>
-}) {
+interface NoteRendererProps {
+    notes: HashMapOf<Doc>;
+    selections?: { [docPath: string]: TextSelection };
+    postMessage?: (message: unknown) => void;
+    viewStates?: Record<string, ViewState>;
+    setViewManagedState?: (updates: Array<Record<string, unknown>>) => void;
+    onNavigationCommand?: React.MutableRefObject<((direction: string) => void) | undefined>;
+}
+
+export default function NoteRenderer(props: NoteRendererProps) {
     const ref = useRef<HTMLDivElement>(null);
     const rendered_notes = Object.entries(props.notes).map(([note_id, note]) => {
         if (!note.content) {
             return null;
         }
-        // use DocumentView when raw text is available (new path)
+        // use GenericView when raw text is available (new path)
         if (note.text) {
             const root_note = convertMdastToNoteHierarchy(note.content, note.text);
+            // Look up selection state for this document
+            const selection = note.path ? props.selections?.[note.path] : undefined;
+            const all_notes = flattenAllNotes(root_note);
+
+            // Resolve view state: check note-specific state, fall back to __default
+            const view_state = props.viewStates?.[note_id] || props.viewStates?.['__default'];
+            const view_type = view_state?.type || 'auto';
+            const view_display_options: NoteDisplayOptions = {
+                ...view_state?.display_options,
+            };
+
             const view_props: ViewProps = {
                 id: note_id,
-                type: 'document',
-                display_options: {},
+                type: view_type,
+                display_options: view_display_options,
                 nested: {
                     parent_context: root_note,
                 },
+                notes: all_notes,
+                selection,
+                handlers: {
+                    setViewManagedState: props.setViewManagedState || (() => {}),
+                    deleteViewFromManagedState: () => {},
+                    revertAllViewsToDefaultState: () => {},
+                    onNavigationCommand: props.onNavigationCommand,
+                    postMessage: props.postMessage ? (message: unknown) => {
+                        // Inject docId and docPath into outgoing messages
+                        if (message && typeof message === 'object' && 'type' in message) {
+                            props.postMessage!({
+                                ...message,
+                                docId: note_id,
+                                docPath: note.path,
+                            });
+                        } else {
+                            props.postMessage!(message);
+                        }
+                    } : undefined,
+                },
             };
             return <Suspense key={note_id} fallback={<div>Loading...</div>}>
-                <DocumentView {...view_props} />
+                <GenericView {...view_props} />
             </Suspense>;
         }
         // fallback: raw MDAST rendering for docs without text
@@ -47,4 +87,24 @@ export default function NoteRenderer(props: {
     return <div ref={ref} data-testid="NoteRenderer">
         {rendered_notes}
     </div>;
+}
+
+/**
+ * Flatten NoteProps tree into a flat array (root at index 0, children follow by seq).
+ */
+function flattenAllNotes(root: NoteProps): NoteProps[] {
+    const result: NoteProps[] = [root];
+    function walk(items: Array<unknown>) {
+        for (const item of items) {
+            if (item && typeof item === 'object' && 'seq' in item && typeof (item as NoteProps).seq === 'number' && (item as NoteProps).seq > 0) {
+                const note = item as NoteProps;
+                result.push(note);
+                if (note.children_body?.length) {
+                    walk(note.children_body);
+                }
+            }
+        }
+    }
+    if (root.children_body) { walk(root.children_body); }
+    return result;
 }

@@ -190,6 +190,63 @@ describe('convertMdastToNoteHierarchy', () => {
         expect(listItemNotes[1].type).toBe('listItem');
     });
 
+    it('heading with linetags populates note.linetags', () => {
+        const text = '## Task [](?status=doing)\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 2 } },
+            children: [
+                mdastNode('heading', 0, text.length - 1, { depth: 2 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const heading = allNotes[0];
+
+        expect(heading.linetags).toBeDefined();
+        expect(heading.linetags!['status']).toBeDefined();
+        expect(heading.linetags!['status'].value).toBe('doing');
+        expect(heading.linetags!['status'].note_seq).toBe(1);
+        expect(heading.linetags_from).toBeDefined();
+    });
+
+    it('heading without linetags leaves note.linetags undefined', () => {
+        const text = '## Normal heading\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 2 } },
+            children: [
+                mdastNode('heading', 0, 17, { depth: 2 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const heading = allNotes[0];
+
+        expect(heading.linetags).toBeUndefined();
+    });
+
+    it('populates child_notes for parent headings', () => {
+        const text = '# Parent\n## Child A\n## Child B\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('heading', 0, 8, { depth: 1 }),
+                mdastNode('heading', 9, 19, { depth: 2 }),
+                mdastNode('heading', 20, 30, { depth: 2 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const parent = allNotes[0];
+
+        expect(parent.child_notes).toBeDefined();
+        expect(parent.child_notes!.length).toBe(2);
+        expect(parent.child_notes![0].headline_raw).toBe('## Child A');
+        expect(parent.child_notes![1].headline_raw).toBe('## Child B');
+    });
+
     it('heading with body paragraphs includes them in children_body', () => {
         const text = '# Title\nParagraph body\n';
         const mdast: MdastNode = {

@@ -1,4 +1,4 @@
-import {ReactElement} from "react";
+import type {ReactElement} from "react";
 import type {NoteProps, NoteDisplayOptions, NoteHandlers, TextSelection} from "../types/NoteProps";
 
 export interface ViewProps {
@@ -28,9 +28,13 @@ export interface ViewApi {
     revertAllViewsToDefaultState: () => void;
     // other handlers are injected by functional components in certain situations
     setParentContextSeq?: (seq: number) => void;
-    getClearHandler?: () => void;
+    getClearHandler?: (focused_notes?: NoteProps[]) => ((event: import("react").MouseEvent<HTMLElement>) => void);
     setCaretPosition?: (position: number) => void;
     click?: NoteHandlers['click'];
     singleClick?: NoteHandlers['click'];
     doubleClick?: NoteHandlers['click'];
+    // postMessage for extension communication (replaces notegit's sync_view.dispatch())
+    postMessage?: (message: unknown) => void;
+    // navigation callback ref — GenericView registers handler, ExtensionReceiver invokes via ref
+    onNavigationCommand?: import('react').MutableRefObject<((direction: string) => void) | undefined>;
 }

@@ -7,7 +7,7 @@ jest.mock('hast-util-sanitize', () => ({ sanitize: (x: unknown) => x }));
 jest.mock('mdast-util-to-hast', () => ({ toHast: (x: unknown) => x }));
 jest.mock('hast-util-to-jsx-runtime', () => ({ toJsxRuntime: () => null }));
 
-// mock DocumentView and convertMdastToNoteHierarchy to isolate NoteRenderer logic
+// mock convertMdastToNoteHierarchy to isolate NoteRenderer logic
 jest.mock('../notethink-views/src/lib/convertMdastToNoteHierarchy', () => ({
     convertMdastToNoteHierarchy: jest.fn(() => ({
         seq: 0,
@@ -21,8 +21,12 @@ jest.mock('../notethink-views/src/lib/convertMdastToNoteHierarchy', () => ({
     })),
 }));
 
+// mock GenericView (now the entry point instead of DocumentView)
 jest.mock('../notethink-views/src/components', () => ({
     DocumentView: (props: { id: string }) => <div data-testid={`docview-${props.id}`}>DocumentView</div>,
+    GenericView: (props: { id: string }) => <div data-testid={`docview-${props.id}`}>GenericView</div>,
+    AutoView: (props: { id: string }) => <div data-testid={`autoview-${props.id}`}>AutoView</div>,
+    BreadcrumbTrail: () => <div>BreadcrumbTrail</div>,
 }));
 
 // import after mocks are set up
@@ -43,7 +47,7 @@ describe('NoteRenderer', () => {
         expect(container.children).toHaveLength(0);
     });
 
-    it('renders DocumentView when note has both content and text', () => {
+    it('renders GenericView when note has both content and text', () => {
         const notes: HashMapOf<Doc> = {
             'abc': {
                 id: 'abc',

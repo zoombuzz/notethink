@@ -51,3 +51,8 @@ app/debug.log
 .DS_Store
 *.pem
 *.vsix
+
+# jest/swc/playwright
+**/.swc
+**/playwright/tmp
+**/test-results

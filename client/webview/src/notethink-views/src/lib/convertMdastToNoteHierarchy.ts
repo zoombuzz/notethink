@@ -1,4 +1,5 @@
-import { MdastNode, NoteProps, TextPosition } from "../types/NoteProps";
+import type { MdastNode, NoteProps, TextPosition } from "../types/NoteProps";
+import { findLineTags, parseLineTags } from "./linetagops";
 
 type MdastRoot = import("mdast").Root;
 export type MdastInput = MdastNode | MdastRoot;
@@ -148,6 +149,13 @@ function findChildNotes(
             body_raw,
         };
 
+        // Parse linetags from headline (port of Note.parseForLinetags)
+        const linetags_str = findLineTags(headline_raw);
+        if (linetags_str) {
+            note.linetags_from = child.position.start.offset + headline_raw.length - linetags_str.length;
+            note.linetags = parseLineTags(linetags_str, seq);
+        }
+
         // Push to allNotes BEFORE recursing so parent appears before children in nestChildNotes
         allNotes.push(note);
         childrenBodyAccumulator.push(note);
@@ -251,6 +259,17 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
     // Assign levels based on containment
     nestChildNotes(allNotes, 0);
 
+    // Populate child_notes arrays (direct children only, used for kanban column assignment)
+    for (const note of allNotes) {
+        if (note.parent_notes?.length) {
+            const direct_parent = note.parent_notes[note.parent_notes.length - 1];
+            if (!direct_parent.child_notes) {
+                direct_parent.child_notes = [];
+            }
+            direct_parent.child_notes.push(note);
+        }
+    }
+
     // Build the root note
     const root: NoteProps = {
         seq: 0,
@@ -262,6 +281,7 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         },
         children: mdast_children,
         children_body: rootChildrenBody,
+        child_notes: allNotes.filter(n => !n.parent_notes?.length),
         headline_raw: '',
         body_raw: text,
     };

@@ -1,4 +1,4 @@
-import {ReactElement, MouseEvent} from "react";
+import type {ReactElement, MouseEvent} from "react";
 
 export interface ClickPositionInfo {
     from: number;
@@ -19,27 +19,40 @@ export interface NoteDisplayOptions {
         show_context_bars?: boolean;
         show_linetags_in_headlines?: boolean;
         show_line_numbers?: boolean;
+        scroll_text_into_view?: boolean;
+        scroll_note_into_view?: boolean;
     };
     deepest?: {
         selectable_level?: number;
         selectable_note?: NoteProps;
+        rendered_level?: number;
+        note?: NoteProps;
     };
+    focused_notes?: NoteProps[];
     focused_seqs?: number[];
     selected_seqs?: number[];
     selected_notes?: NoteProps[];
     cropped_focused_seqs?: number[];
     cropped_selected_seqs?: number[];
     additional_classes?: string[];
+    total_columns?: number;
     provided?: {
         draggableProps?: Record<string, unknown>;
         dragHandleProps?: Record<string, unknown>;
         innerRef?: ((instance: HTMLDivElement | null) => void) | { current: HTMLDivElement | null };
+        droppableProps?: Record<string, unknown>;
     };
+    [key: string]: unknown;
 }
 
 export interface NoteHandlers {
     click?: NoteClickHandler;
+    singleClick?: NoteClickHandler;
+    doubleClick?: NoteClickHandler;
     setCaretPosition?: (position: number) => void;
+    setParentContextSeq?: (seq: number) => void;
+    postMessage?: (message: unknown) => void;
+    [key: string]: unknown;
 }
 
 export interface NoteProps {

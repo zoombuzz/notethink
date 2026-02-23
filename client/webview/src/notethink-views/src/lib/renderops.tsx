@@ -21,8 +21,9 @@ export function getStandardNoteDataProps(note: NoteProps) {
 }
 
 interface RenderOptions {
-    render?: 'all_children' | 'first_child_only';
+    render?: 'all_children' | 'first_child_only' | 'strip_linetags';
     output_type?: 'html' | 'markdown' | 'string';
+    linetags_from?: number;
 }
 
 export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderOptions = {}) {
@@ -47,6 +48,14 @@ export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderO
             render_target = {
                 ...render_target,
                 children: [render_target.children[0]],
+            };
+        }
+        if (options.render === 'strip_linetags' && options.linetags_from !== undefined) {
+            render_target = {
+                ...render_target,
+                children: render_target.children.filter((child: MdastNode) =>
+                    child.position && child.position.end.offset <= options.linetags_from!
+                ),
             };
         }
         // strip paragraph (note) and instead render nested elements only (like text, link etc.) in virtual 'root'

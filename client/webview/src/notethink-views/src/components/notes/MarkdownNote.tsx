@@ -1,4 +1,4 @@
-import {Fragment, MouseEvent, useMemo} from "react";
+import {Fragment, useMemo} from "react";
 import {MdastNode, NoteProps} from "../../types/NoteProps";
 import {
     getStandardNoteDataProps,
@@ -6,20 +6,23 @@ import {
     renderNodeUnified
 } from "../../lib/renderops";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
+import { buildNoteStyles, headlineClickPosition, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 import GenericNote from "../../components/notes/GenericNote";
 import Debug from 'debug';
-const debug = Debug("notethink-views:MarkdownNote");
+const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
 export default function MarkdownNote(props: NoteProps) {
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(props, {
-            render: props.display_options?.settings?.show_linetags_in_headlines ? 'all_children' : 'first_child_only',
+            render: props.display_options?.settings?.show_linetags_in_headlines ? 'all_children' : 'strip_linetags',
+            linetags_from: props.linetags_from,
         });
     }, [
         props.headline_raw,
-        props.checked, props.display_options?.settings?.show_linetags_in_headlines
+        props.checked, props.display_options?.settings?.show_linetags_in_headlines,
+        props.linetags_from,
     ]);
     // get latest updates: always take the `props` version of `note` attributes, because memoized `parseNote` is only augmenting
     const note: NoteProps = {
@@ -27,15 +30,9 @@ export default function MarkdownNote(props: NoteProps) {
         ...props
     };
 
-    // generate array of CSS classes that apply to this note
-    const note_styles = [view_specific_styles.note].concat(note.display_options?.additional_classes || []);
-    note.focused && note_styles.push(view_specific_styles.focused);
-    note.selected && note_styles.push(view_specific_styles.selected);
-    note.display_options?.settings?.show_line_numbers && note_styles.push(view_specific_styles.addGutter);
-
     // render note
     return (
-        <div className={note_styles.join(' ')}
+        <div className={buildNoteStyles(note, note.display_options?.additional_classes).join(' ')}
              id={note.display_options?.id}
              {...getStandardNoteDataProps(note)}
              /**
@@ -56,13 +53,7 @@ export default function MarkdownNote(props: NoteProps) {
         >
             <div className={view_specific_styles.headline}
                  role={'rowheader'}
-                 onClick={ (event: MouseEvent<HTMLElement>) => { note.handlers?.click?.(event, note.display_options?.deepest?.selectable_note, {
-                     from: note.position.start.offset,
-                     to: note.position.end.offset,
-                     selection_from: note.display_options?.deepest?.selectable_note?.position?.start?.offset,
-                     selection_to: note.display_options?.deepest?.selectable_note?.position?.end_body?.offset || note.display_options?.deepest?.selectable_note?.position?.end?.offset,
-                     type: 'note_headline',
-                 }); }}
+                 onClick={createNoteClickHandler(note, headlineClickPosition(note))}
             >
                 {note.display_options?.settings?.show_line_numbers && (<span className={view_specific_styles.lineno}><span>{note.position.start.line}</span></span>)}
                 {note.headline}
@@ -72,13 +63,7 @@ export default function MarkdownNote(props: NoteProps) {
             /> }
             { note.children_body?.length ?
             <div className={view_specific_styles.body}
-                 onClick={ (event: MouseEvent<HTMLElement>) => { note.handlers?.click?.(event, note.display_options?.deepest?.selectable_note, {
-                     from: note.position.end.offset,
-                     to: note.position.end_body?.offset,
-                     selection_from: note.display_options?.deepest?.selectable_note?.position?.start?.offset,
-                     selection_to: note.display_options?.deepest?.selectable_note?.position?.end_body?.offset || note.display_options?.deepest?.selectable_note?.position?.end?.offset,
-                     type: 'note_body',
-                 }); }}
+                 onClick={createNoteClickHandler(note, bodyClickPosition(note))}
             >
                 { note.children_body?.map((child: NoteProps | MdastNode, index: number) => {
                     if ('seq' in child && child.seq !== undefined) {

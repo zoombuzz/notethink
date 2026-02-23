@@ -301,3 +301,67 @@
   + controlled via `isProduction` flag derived from `NODE_ENV`
 
 
+### compute delta on `partial` in ExtensionReceiver
+
++ [X] use hash_sha256 on doc content for change detection
+  + `generateIdentifier(text)` computed at all 3 doc creation/update points in notethinkEditor.ts
+  + `hash_sha256` added to Doc interface in both extension and webview types
+  + ExtensionReceiver compares incoming hash to current state, skips setState for unchanged docs
+  + 2 new tests: skip on same hash, update on changed hash (35 tests total)
++ [X] add React.memo to DocumentView and GenericNote
+  + DocumentView wrapped in React.memo (shallow prop comparison)
+  + GenericNote wrapped in React.memo (shallow prop comparison)
+
+
+### port notegit features into NoteThink (phases 1-5)
+
++ [X] phase 1: linetag parsing and display
+  + ported linetagops.ts (findLineTags, parseLineTags, calculateTextChangesForOrdering, calculateTextChangesForNewLinetagValue)
+  + integrated linetag parsing into convertMdastToNoteHierarchy
+  + populated child_notes arrays for kanban column assignment
++ [X] phase 2: extension-webview message protocol
+  + defined message types (revealRange, selectRange, editText, selectionChanged)
+  + expanded notethinkEditor.ts onDidReceiveMessage handler
+  + wired ExtensionReceiver to receive selectionChanged and expose postMessage
+  + wired NoteRenderer to pass selection and postMessage to views
++ [X] phase 3: GenericView, focus/selection, BreadcrumbTrail, AutoView
+  + ported noteops.ts (withinNoteHeadlineOrBody, findDeepestNote, findSelectedNotes, aggregateNoteLinetags, noteIsVisible, calculateTextChangesForCheckbox, kanbanNoteOrder)
+  + ported GenericView with click handler state machine, breadcrumb computation, view routing
+  + ported BreadcrumbTrail (clickable ancestor navigation)
+  + ported AutoView (linetag-driven view type selection via ng_view/ng_level)
+  + replaced notegit's CodeMirror dispatch with postMessage
++ [X] phase 4: KanbanView with drag-and-drop
+  + ported KanbanView (column assignment by status linetag, drag-drop reordering)
+  + ported KanbanColumn and KanbanContextBar
+  + added @hello-pangea/dnd dependency
+  + updated CSP for style-src unsafe-inline
++ [X] phase 5: mermaid diagrams
+  + ported MermaidNote and MermaidDiagram components
+  + added mermaid case to GenericNote switch
+  + added mermaid dependency
++ [X] coding standards audit and fixes
+  + fixed 19 violations: import type, variable naming, constants, braces, any→unknown, import organization
+  + fixed noteIsVisible bug (>= should have been <=)
++ [X] comprehensive test suite
+  + 8 new test files: GenericView, AutoView, BreadcrumbTrail, KanbanView, KanbanColumn, KanbanContextBar, MermaidDiagram, MermaidNote
+  + expanded noteops.test.ts (+16 tests: selectionSpans, noteIsVisible, calculateTextChangesForCheckbox, kanbanNoteOrder edge cases)
+  + expanded linetagops.test.ts (+3 tests: ordering weight assignment, cascading)
+  + total: 150 tests (136 notethink-views + 14 webview), 0 lint warnings, 0 compile errors
+
+
+### CSS variable bridge and click/selection fix
+
++ [X] CSS variable bridge (vscode-mantine-bridge.css)
+  + maps 7 --mantine-* vars used in ViewRenderer.module.scss to --vscode-* equivalents
+  + shared SCSS works unchanged in both NoteGit (Mantine) and NoteThink (VS Code)
+  + index.css updated to use --vscode-font-family, --vscode-editor-foreground, --vscode-editor-background
+  + dark mode attribute sync via MutationObserver in notethinkEditor.ts inline script
+  + deleted CRA boilerplate App.css
++ [X] fix click/selection flow
+  + revealRange handler now sets editor.selection (was only scrolling, never placing cursor)
+  + preserveFocus changed to false for both revealRange and selectRange
+  + GenericView click handler fixed: proper singleClick/doubleClick else-if chain
+  + 9 new click state machine tests in GenericView.test.tsx
+  + total: 158 tests (144 notethink-views + 14 webview), 0 compile errors
+
+

@@ -92,6 +92,12 @@ const user_count = users.length;  // snake_case, not a constant
 
 ## Import Organization
 
+### Import Placement
+- **All `import` statements must be at the top of the file**, before any non-import code
+- The only exception is dynamic `import()` expressions used inline, which must include a comment explaining why a static import is not suitable
+
+### Import Grouping
+
 Organize imports in this order:
 
 ```typescript
@@ -243,7 +249,7 @@ import React, { useState, useEffect } from 'react';
 import type { ComponentProps } from './types';
 import styles from './Component.module.scss';
 
-const debug = Debug('notethink:ComponentName');
+const debug = Debug("nodejs:notethink:ComponentName");
 
 interface Props {
     id: string;
@@ -429,4 +435,67 @@ describe('DocumentView', () => {
         expect(handle_click).toHaveBeenCalledTimes(1);
     });
 });
+```
+
+---
+
+## Story Tracking: todo.md and done.md
+
+Each developer has `todo.md` and `done.md` files under `docstech/users/<username>/`.
+
+### Format Rules
+
+- **No blank lines** at the top of the file above the file's label (e.g. `# Todo` or `# Done`).
+- **Exactly two blank lines** before and after each story entry.
+
+### todo.md
+
+- Stories are read **top-to-bottom** — the next story to work on is always the one at the top.
+- Each story may contain tasks as a checklist (`- [ ]`). When completing a task, mark it `[X]` (e.g. `- [X] Task description`).
+- When a story is completed (all tasks done), remove it from `todo.md` and append it to `done.md`.
+
+### done.md
+
+- Completed stories are **appended to the end** of the file.
+- Maintain exactly two blank lines before and after each story entry.
+
+### Example todo.md
+
+```
+# Todo
+
+
+## Current story
+
+Story description here.
+
+- [X] First task already done
+- [ ] Second task still to do
+
+
+## Another story
+
+Another description here.
+
+- [ ] Some task
+- [ ] Another task
+```
+
+### Example done.md
+
+```
+# Done
+
+
+## Completed story
+
+Description of completed work.
+
+- [X] Task one
+- [X] Task two
+
+
+## Another completed story
+
+Description of another completed story.
 ```

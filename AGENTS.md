@@ -143,9 +143,9 @@ Use the `debug` library for logging. Each module should create its own debug ins
 ```typescript
 import Debug from 'debug';
 
-const debug = Debug('notethink:module-name');
+const debug = Debug("nodejs:notethink:module-name");
 // or for views
-const debug = Debug('notethink-views:ComponentName');
+const debug = Debug("nodejs:notethink-views:ComponentName");
 
 // usage
 debug('processing note %s', note.id);
@@ -154,7 +154,7 @@ debug('state update: %O', new_state);
 
 To enable debug output in browser console:
 ```javascript
-localStorage.debug = 'notethink:*'
+localStorage.debug = 'nodejs:*'
 ```
 
 ## Testing Guidelines
@@ -205,3 +205,10 @@ Before marking a task complete, verify:
 - [ ] Types are explicit, not inferred as `any`
 - [ ] Comments are lowercase and placed above code
 - [ ] No unused imports or variables
+
+## Story and Task Tracking
+
+Developer stories and tasks are tracked in `docstech/users/<username>/todo.md` and `done.md`.
+
+- **Mark completed tasks** with `[X]` in `todo.md` (e.g. `- [X] Task description`).
+- **Move completed stories** — when all tasks in a story are done, remove the story from `todo.md` and append it to `done.md` (with exactly two blank lines before and after each story).

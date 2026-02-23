@@ -4,7 +4,7 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
@@ -45,6 +45,105 @@
       {
         "command": "notethink.openview",
         "title": "NoteThink: Open View"
+      },
+      {
+        "command": "notethink.setViewAuto",
+        "title": "NoteThink: Auto View",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "notethink.setViewDocument",
+        "title": "NoteThink: Document View",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "notethink.setViewKanban",
+        "title": "NoteThink: Kanban View",
+        "icon": "$(project)"
+      },
+      {
+        "command": "notethink.toggleLineNumbers",
+        "title": "NoteThink: Toggle Line Numbers"
+      },
+      {
+        "command": "notethink.toggleContextBars",
+        "title": "NoteThink: Toggle Context Bars"
+      },
+      {
+        "command": "notethink.navigateUp",
+        "title": "NoteThink: Navigate Up"
+      },
+      {
+        "command": "notethink.navigateDown",
+        "title": "NoteThink: Navigate Down"
+      },
+      {
+        "command": "notethink.drillIn",
+        "title": "NoteThink: Drill Into Note"
+      },
+      {
+        "command": "notethink.drillOut",
+        "title": "NoteThink: Navigate Back Up"
+      },
+      {
+        "command": "notethink.clearFocus",
+        "title": "NoteThink: Clear Focus"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "notethink.setViewAuto",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "notethink.setViewDocument",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "notethink.setViewKanban",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "navigation@3"
+        },
+        {
+          "command": "notethink.toggleLineNumbers",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "1_settings"
+        },
+        {
+          "command": "notethink.toggleContextBars",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "1_settings"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "notethink.clearFocus",
+        "key": "escape",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      },
+      {
+        "command": "notethink.navigateUp",
+        "key": "up",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      },
+      {
+        "command": "notethink.navigateDown",
+        "key": "down",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      },
+      {
+        "command": "notethink.drillIn",
+        "key": "enter",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      },
+      {
+        "command": "notethink.drillOut",
+        "key": "backspace",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
       }
     ],
     "configuration": [
@@ -69,14 +168,18 @@
     ]
   },
   "scripts": {
+    "bump-version": "npm version patch --no-git-tag-version",
+    "jest-test": "cd client/webview && pnpm test && cd src/notethink-views && pnpm test",
+    "test-playwright": "pnpm run build && npx playwright test",
+    "lint": "eslint",
+    "check-updates": "npx npm-check-updates -u",
     "vscode:prepublish": "pnpm run package",
-    "compile": "webpack",
+    "build": "webpack",
     "watch": "webpack --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
-    "lint": "eslint",
-    "test": "cd client/webview && pnpm test && cd src/notethink-views && pnpm test",
     "postinstall": "cd client/extension && pnpm install && cd ../../ && cd client/webview && pnpm install && cd ../.. && cd client/webview/src/notethink-views && pnpm install && cd ../../../..",
     "package:vsix": "vsce package --no-dependencies",
+    "test-playwright-with-ui": "pnpm run build && npx playwright test --ui",
     "chrome": "pnpm run compile && vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ./docstech"
   },
   "COMMENT-dependencies-are-webpack-browser-polyfills-for-extension": "",
@@ -94,6 +197,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@playwright/test": "^1.58.2",
     "@stylistic/eslint-plugin": "^2.9.0",
     "@types/mocha": "^10.0.10",
     "@types/vscode": "^1.73.0",
@@ -105,6 +209,11 @@
     "css-loader": "^7.1.0",
     "debug": "^4.4.0",
     "eslint": "^9.13.0",
+    "mdast-util-from-markdown": "^2.0.3",
+    "mdast-util-frontmatter": "^2.0.1",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-frontmatter": "^2.0.0",
+    "micromark-extension-gfm": "^3.0.0",
     "mocha": "^11.1.0",
     "path-browserify": "^1.0.1",
     "process": "^0.11.10",

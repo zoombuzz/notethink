@@ -1,15 +1,17 @@
+import React from 'react';
 import master_view_styles from "../../components/ViewRenderer.module.scss";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 import {ViewProps} from "../../types/ViewProps";
 import {NoteProps} from "../../types/NoteProps";
+import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import Debug from 'debug';
 import DocumentContextBar from "../../components/views/DocumentContextBar";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import GenericNote from "../../components/notes/GenericNote";
 
-const debug = Debug("notethink-views:DocumentView");
+const debug = Debug("nodejs:notethink-views:DocumentView");
 
-export default function DocumentView(props: ViewProps) {
+export default React.memo(function DocumentView(props: ViewProps) {
 
     // set up view-level default display_options, overridden by props
     const display_options = Object.assign({
@@ -19,18 +21,7 @@ export default function DocumentView(props: ViewProps) {
         <GenericNote
             key={index}
             {...note}
-            display_options={{
-                ...display_options,
-                ...note?.display_options,
-                view_id: props.id,
-                id: `v${props.id}-n${note.seq}`,
-                deepest: {
-                    ...props.display_options?.deepest,
-                    ...note?.display_options?.deepest,
-                    // override selectable_level to allow us to select nested notes
-                    selectable_level: note.level + 1
-                }
-            }}
+            display_options={buildChildNoteDisplayOptions(display_options, note, props)}
             selection={props.selection}
             handlers={{
                 click: props.handlers?.click,
@@ -43,9 +34,6 @@ export default function DocumentView(props: ViewProps) {
 
     return (
         <>
-            <div className={master_view_styles.menubar}>
-                {/* todo: render menus when menu system is implemented */}
-            </div>
             <div className={container_styles.join(' ')}
                  id={`v${props.id}-inner`}
                  data-testid={`document-${props.id}-inner`}
@@ -63,4 +51,4 @@ export default function DocumentView(props: ViewProps) {
             </div>
         </>
     );
-}
+});

@@ -1,13 +1,9 @@
-import type {LineTag, NoteProps} from "../types/NoteProps";
-
-type HashMapOf<S> = { [key: string]: S };
-
 /**
  * @param input
  * @return string all the linetags ([...))$ in a single string
  * Regex copes with additional characters around first/last linetag, e.g. ('doing' story for Alex)
  */
-export function findLineTags(input: string): string {
+export function findLineTags(input) {
     // use String.match() with regex to pull out all linetags together (https://regexr.com/) if bracketed ([]()) or ('[]()')
     const bracketed_matches = input.match(new RegExp('(\\([^\\]]*\\[.*\\)[^\\]]*\\))[\\n]*$'));
     if (bracketed_matches && bracketed_matches?.length >= 2) {
@@ -20,18 +16,17 @@ export function findLineTags(input: string): string {
     }
     return '';
 }
-
 /**
  * @param input complete linetags, of the form ([]()<any separator>[]()<any separator>[]()<any separator>...)
  * @return object many linetags
  */
-export function parseLineTags(input: string, note_seq: number): HashMapOf<LineTag> | undefined {
+export function parseLineTags(input, note_seq) {
     // create empty linetags object which can accept dynamic keys of any type
-    const linetags: HashMapOf<LineTag> = {};
+    const linetags = {};
     // use RegExp.exec() to pull out all links with position information (https://regexr.com/)
     const regex = RegExp('\\[(?<text>[^\\]]*)\\]\\((?<href>[^\\)]*)\\)', 'dg');
-    let matches: RegExpExecArray | null;
-    while ((matches = regex.exec(input) as RegExpExecArray | null) !== null) {
+    let matches;
+    while ((matches = regex.exec(input)) !== null) {
         if (matches.groups && matches.groups.href) {
             const link_text = matches.groups?.text;
             const link_queryparams = new URLSearchParams(matches.groups?.href);
@@ -39,9 +34,11 @@ export function parseLineTags(input: string, note_seq: number): HashMapOf<LineTa
             // use array as intermediary so as not to require `--downlevelIteration` compiler option
             for (const key of Array.from(link_querykeys)) {
                 const value = link_queryparams.get(key);
-                if (value === null) { continue; }
+                if (value === null) {
+                    continue;
+                }
                 // offsets are relative to the note's linetags_offset
-                const linetag: LineTag = {
+                const linetag = {
                     key: key,
                     value: value,
                     note_seq: note_seq,
@@ -79,34 +76,30 @@ export function parseLineTags(input: string, note_seq: number): HashMapOf<LineTa
     }
     // if there are no attributes, leave linetags? undefined
     const keys = Object.keys(linetags);
-    if (keys.length === 0) { return undefined; }
+    if (keys.length === 0) {
+        return undefined;
+    }
     return linetags;
 }
-
-export function calculateTextChangesForOrdering(column_children: Array<NoteProps>, new_child_position: number, ordering_weight_key_name: string) {
+export function calculateTextChangesForOrdering(column_children, new_child_position, ordering_weight_key_name) {
     // find the minimum weight the inserted node needs to go in beneath its predecessor
     const new_child = column_children[new_child_position];
-    const predecessor = column_children[new_child_position-1];
-    const min_weight = (
-        predecessor ?
-            // min weight is the value of the predecessor, +1 if the sequence numbers don't give us order
-            (
-                (predecessor?.linetags && predecessor?.linetags[ordering_weight_key_name] && predecessor?.linetags[ordering_weight_key_name].value_numeric || 0)
-                + (predecessor.seq > new_child.seq ? 1 : 0)
-            )
-            // or 0 if there's no predecessor
-            : 0
-    );
+    const predecessor = column_children[new_child_position - 1];
+    const min_weight = (predecessor ?
+        // min weight is the value of the predecessor, +1 if the sequence numbers don't give us order
+        ((predecessor?.linetags && predecessor?.linetags[ordering_weight_key_name] && predecessor?.linetags[ordering_weight_key_name].value_numeric || 0)
+            + (predecessor.seq > new_child.seq ? 1 : 0))
+        // or 0 if there's no predecessor
+        : 0);
     // find the maximum weight the inserted node can be to go in above its successor
-    const successor = column_children[new_child_position+1];
+    const successor = column_children[new_child_position + 1];
     const max_weight = (
-        // max weight is either the weight of the successor, -1 if the sequence numbers don't give us order
-        successor ?
-            (successor?.linetags && successor?.linetags[ordering_weight_key_name] && successor?.linetags[ordering_weight_key_name].value_numeric || 0)
+    // max weight is either the weight of the successor, -1 if the sequence numbers don't give us order
+    successor ?
+        (successor?.linetags && successor?.linetags[ordering_weight_key_name] && successor?.linetags[ordering_weight_key_name].value_numeric || 0)
             - (new_child.seq > successor.seq ? 1 : 0)
-            // or min_weight if there's no successor
-            : min_weight
-    );
+        // or min_weight if there's no successor
+        : min_weight);
     // first see if we can get away with making no ordering weight changes whatsoever
     if (min_weight === 0 && max_weight === 0 && (new_child?.linetags && new_child?.linetags[ordering_weight_key_name] && new_child?.linetags[ordering_weight_key_name].value_numeric || 0) === 0) {
         // predecessor seq is < x and successor seq is > x, so can leave to sequence ordering
@@ -120,21 +113,19 @@ export function calculateTextChangesForOrdering(column_children: Array<NoteProps
     // otherwise cascade through rest of children list, setting same weight for all
     else {
         const changes = [];
-        for (let weight_counter = min_weight, i=new_child_position ; i<column_children.length ; ++weight_counter, ++i) {
+        for (let weight_counter = min_weight, i = new_child_position; i < column_children.length; ++weight_counter, ++i) {
             const note = column_children[i];
             changes.push(...calculateTextChangesForNewLinetagValue(note, ordering_weight_key_name, `${weight_counter}`, '0'));
         }
         return changes;
     }
 }
-
-export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name: string, new_value: string, default_value: string) {
+export function calculateTextChangesForNewLinetagValue(note, key_name, new_value, default_value) {
     const changes = [];
     const setting_as_default = (new_value === default_value);
     if (!note.linetags && !setting_as_default) {
         // generate linetag completely of the form
         const new_linetags = ` [](?${key_name}=${new_value})`;
-
         changes.push({
             from: note.position.start.offset + note.headline_raw.length,
             insert: new_linetags,
@@ -167,7 +158,8 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
                 to: headline_end,
                 insert: '',
             });
-        } else {
+        }
+        else {
             // multiple keys — remove just this key=value (and the & separator)
             const removing = note.linetags[key_name];
             const key_abs = linetags_base + removing.key_offset;
@@ -179,7 +171,8 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
             if (rel_value_end < linetags_str.length && linetags_str[rel_value_end] === '&') {
                 // remove key=value& (key is before the separator)
                 changes.push({ from: key_abs, to: value_end_abs + 1, insert: '' });
-            } else {
+            }
+            else {
                 // last key — remove &key=value (separator is before the key)
                 changes.push({ from: key_abs - 1, to: value_end_abs, insert: '' });
             }

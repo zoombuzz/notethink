@@ -1,14 +1,18 @@
 {
     "compilerOptions": {
-        "module": "commonjs",
-        "target": "es2021",
-        "lib": [
-			"WebWorker",
-			"es2021"
-		],
+        "target": "ES2023",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "lib": ["WebWorker", "ES2023"],
+        "strict": true,
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "isolatedModules": true,
+        "resolveJsonModule": true,
+        "noEmit": false,
         "rootDir": "src",
         "sourceMap": true
     },
     "include": ["src"],
-    "exclude": ["node_modules", ".vscode-test-web"],
+    "exclude": ["node_modules", ".vscode-test-web"]
 }

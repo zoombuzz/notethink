@@ -16,6 +16,7 @@ export default [
                 format: "esm",
                 esModule: true,
                 sourcemap: true,
+                inlineDynamicImports: true,
             },
         ],
         plugins: [

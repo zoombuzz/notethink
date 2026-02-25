@@ -42,6 +42,7 @@ const clientExtensionConfig = {
 			// see https://webpack.js.org/configuration/resolve/#resolvefallback
 			// for the list of Node.js core module polyfills.
 			'assert': require.resolve('assert'),
+			'events': require.resolve('events/'),
 			'process/browser': require.resolve('process/browser'),
 			'os': require.resolve('os-browserify/browser'),
 			'buffer': require.resolve('buffer/'),

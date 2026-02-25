@@ -187,6 +187,7 @@
   "dependencies": {
     "browserify-zlib": "^0.2.0",
     "buffer": "^6.0.3",
+    "events": "^3.3.0",
     "https-browserify": "^1.0.0",
     "memfs": "^4.56.10",
     "os-browserify": "^0.3.0",

@@ -21,7 +21,7 @@ if (typeof global.setImmediate === 'undefined') {
 const combineTransform: TransformFunction = (info) => {
     const output: any = { ...info };
     const data: any = info[Symbol.for('splat')];
-    if (data) { output.message = util.format(info.message, ...data); }
+    if (data) { output.message = util.format(String(info.message), ...data); }
     return output;
 };
 

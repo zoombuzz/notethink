@@ -90,6 +90,12 @@ importers:
         specifier: ^2.1.4
         version: 2.1.4
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
       identity-obj-proxy:
         specifier: ^3.0.0
         version: 3.0.0

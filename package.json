@@ -169,7 +169,8 @@
   },
   "scripts": {
     "bump-version": "npm version patch --no-git-tag-version",
-    "jest-test": "cd client/webview && pnpm test && cd src/notethink-views && pnpm test",
+    "jest-test": "cd client/extension && pnpm test && cd ../webview && pnpm test && cd src/notethink-views && pnpm test",
+    "test": "pnpm run jest-test",
     "test-playwright": "pnpm run build && npx playwright test",
     "lint": "eslint . && tsc --noEmit -p client/extension && tsc --noEmit -p client/webview && tsc --noEmit -p client/webview/src/notethink-views",
     "check-updates": "npx npm-check-updates -u",
@@ -180,7 +181,7 @@
     "postinstall": "cd client/extension && pnpm install && cd ../../ && cd client/webview && pnpm install && cd ../.. && cd client/webview/src/notethink-views && pnpm install && cd ../../../..",
     "package:vsix": "vsce package --no-dependencies",
     "test-playwright-with-ui": "pnpm run build && npx playwright test --ui",
-    "chrome": "pnpm run compile && vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ./docstech"
+    "chrome": "pnpm run build && vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ./docstech"
   },
   "COMMENT-dependencies-are-webpack-browser-polyfills-for-extension": "",
   "dependencies": {

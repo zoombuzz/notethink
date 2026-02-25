@@ -41,7 +41,7 @@ jobs:
         run: pnpm run lint
 
       - name: Compile extension
-        run: pnpm run compile
+        run: pnpm run build
 
       - name: Build notethink-views
         run: cd client/webview/src/notethink-views && pnpm run rollup
@@ -72,7 +72,7 @@ jobs:
         run: cd client/extension && pnpm install --frozen-lockfile
 
       - name: Compile extension
-        run: pnpm run compile
+        run: pnpm run build
 
       - name: Run extension tests
         run: xvfb-run -a pnpm run chrome -- --headless

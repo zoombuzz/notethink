@@ -240,6 +240,11 @@ import type { NoteProps } from '@/types/NoteProps';
 import { NoteComponent, type NoteProps } from '@/components';
 ```
 
+### Constants Placement
+- **File-level constants** (e.g. `const MAX_ITERATIONS = 1000`) should be declared **near the head of the file**, below imports and type definitions
+- This makes them easy to find, reuse, review, and change
+- Do not declare the same constant inline within multiple functions — hoist it to module level
+
 ## React Patterns
 
 ### Component Structure
@@ -436,6 +441,35 @@ describe('DocumentView', () => {
     });
 });
 ```
+
+---
+
+## Pre-Push Verification
+
+All tests must pass locally before pushing. After any session where files are updated, run:
+
+```bash
+pnpm run check
+```
+
+This runs, in order:
+1. **Lint** — eslint + `tsc --noEmit` across all three tsconfigs
+2. **Build** — webpack (extension + webview bundles)
+3. **Rollup** — notethink-views component library build
+4. **Jest** — all unit/component tests across extension, webview, and notethink-views
+
+CI only runs lint and build (no tests). Tests are the developer's responsibility before push.
+
+### Individual commands
+
+| What | Command |
+|------|---------|
+| Lint only | `pnpm run lint` |
+| Build only | `pnpm run build` |
+| Rollup only | `cd client/webview/src/notethink-views && pnpm run rollup` |
+| Jest only | `pnpm run jest-test` |
+| Playwright E2E | `pnpm run test-playwright` |
+| Everything | `pnpm run check` |
 
 ---
 

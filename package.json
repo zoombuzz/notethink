@@ -172,7 +172,7 @@
     "test-jest": "bash scripts/test-jest.sh",
     "test-playwright": "pnpm run build && npx playwright test",
     "lint": "eslint . && tsc --noEmit -p client/extension && tsc --noEmit -p client/webview && tsc --noEmit -p client/webview/src/notethink-views",
-    "check": "pnpm run lint && pnpm run build && cd client/webview/src/notethink-views && pnpm run rollup && cd ../../../.. && pnpm run test-jest",
+    "build-and-rollup": "pnpm run build && cd client/webview/src/notethink-views && pnpm run rollup",
     "check-updates": "npx npm-check-updates -u",
     "vscode:prepublish": "pnpm run package",
     "build": "webpack",

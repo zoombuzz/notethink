@@ -10,8 +10,15 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// register command defined in package.json
 	const disposable = vscode.commands.registerCommand('notethink.openview', async () => {
-		// open an editor webview (without a specific file) in a wider context
-		provider.myWebviewPanel(vscode.window.createWebviewPanel('notethink', 'NoteThink', vscode.ViewColumn.One, {}));
+		const active_editor = vscode.window.activeTextEditor;
+		if (!active_editor || !active_editor.document.uri.path.endsWith('.md')) {
+			vscode.window.showWarningMessage('NoteThink: open a .md file first');
+			return;
+		}
+		provider.myWebviewPanel(
+			vscode.window.createWebviewPanel('notethink', 'NoteThink', vscode.ViewColumn.One, {}),
+			active_editor.document,
+		);
 	});
 	context.subscriptions.push(disposable);
 

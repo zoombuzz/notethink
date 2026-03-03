@@ -21,6 +21,7 @@ export interface NoteDisplayOptions {
         show_line_numbers?: boolean;
         scroll_text_into_view?: boolean;
         scroll_note_into_view?: boolean;
+        column_order?: string[];
     };
     deepest?: {
         selectable_level?: number;

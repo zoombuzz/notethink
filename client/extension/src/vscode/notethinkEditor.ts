@@ -6,6 +6,7 @@ import { debug, writeToLog, writeToErrorLog } from "../lib/errorops";
 import { parse } from '../lib/parseops';
 
 const CHANGE_DEBOUNCE_MS = 250;
+const BACKGROUND_BATCH_SIZE = 20;
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
@@ -33,17 +34,13 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 	public async myWebviewPanel(
 		webviewPanel: vscode.WebviewPanel,
+		initialDocument: vscode.TextDocument,
 	): Promise<void> {
 		// track active panel for command relay
 		this.activePanel = webviewPanel;
 		webviewPanel.onDidChangeViewState(() => {
 			if (webviewPanel.active) {
 				this.activePanel = webviewPanel;
-			}
-		});
-		webviewPanel.onDidDispose(() => {
-			if (this.activePanel === webviewPanel) {
-				this.activePanel = undefined;
 			}
 		});
 
@@ -53,12 +50,131 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		};
 		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
-		// load all matching documents in repo
+		// --- helpers ---
+
+		async function buildDoc(document: vscode.TextDocument): Promise<Doc> {
+			const text = document.getText();
+			const mdast = parse(text);
+			return {
+				path: document.uri.path,
+				id: await generateIdentifier(document.uri.path),
+				content: mdast,
+				text,
+				hash_sha256: await generateIdentifier(text),
+				updatedAt: new Date().toISOString(),
+				createdBy: "activeEditor",
+			};
+		}
+
+		function sendDoc(doc: Doc) {
+			const timestamped = { ...doc, updateSentAt: new Date().toISOString() };
+			debug('sendDoc %s', doc.path);
+			webviewPanel.webview.postMessage({
+				type: 'update',
+				partial: { docs: { [doc.id]: timestamped } },
+			});
+		}
+
+		function sendSelection(doc_path: string, head: number, anchor: number) {
+			webviewPanel.webview.postMessage({
+				type: 'selectionChanged',
+				docPath: doc_path,
+				selection: { head, anchor },
+			});
+		}
+
+		// --- single-file view: show only the active document ---
+
+		let active_doc: Doc | undefined;
+		let active_path: string | undefined;
+
+		function sendCurrentSelection() {
+			if (!active_path) { return; }
+			const editor = vscode.window.visibleTextEditors.find(
+				ed => ed.document.uri.path === active_path
+			);
+			if (editor) {
+				const head = editor.document.offsetAt(editor.selection.active);
+				const anchor = editor.document.offsetAt(editor.selection.anchor);
+				sendSelection(active_path, head, anchor);
+			} else {
+				sendSelection(active_path, 0, 0);
+			}
+		}
+
+		// load initial document and send selection for styled first render
+		active_doc = await buildDoc(initialDocument);
+		active_path = initialDocument.uri.path;
+		sendDoc(active_doc);
+		sendCurrentSelection();
+
 		const filter_criterion = '**/*.md';
-		const all_documents_meta_raw = await vscode.workspace.findFiles(filter_criterion);
-		const load_time = new Date().toISOString();
-		const doc_results = await Promise.all(all_documents_meta_raw
-			.map(async (uri): Promise<Doc | null> => {
+		const docs: HashMapOf<Doc> = {};
+
+		/**
+		 * @todo multi-file view: load all workspace docs and watch for new ones.
+		 * Call this when multi-file view context is mature enough.
+		 */
+		async function discoverAllWorkspaceDocs() {
+			// phase 1: load docs from visible text editors for fast first paint
+			const load_time = new Date().toISOString();
+			const visible_md_editors = vscode.window.visibleTextEditors.filter(
+				ed => ed.document.uri.path.endsWith('.md')
+			);
+			for (const editor of visible_md_editors) {
+				try {
+					const uri = editor.document.uri;
+					const text = editor.document.getText();
+					const mdast = parse(text);
+					const doc: Doc = {
+						path: uri.path,
+						id: await generateIdentifier(uri.path),
+						content: mdast,
+						text,
+						hash_sha256: await generateIdentifier(text),
+						updatedAt: load_time,
+						createdBy: "visibleTextEditor",
+					};
+					docs[doc.id] = doc;
+					debug('loaded visible editor document', abbrevDoc(doc));
+				} catch (err) {
+					writeToErrorLog('failed to load visible editor document', editor.document.uri.path, err);
+				}
+			}
+			debug('phase 1: loaded %d visible editor docs', Object.keys(docs).length);
+			updateWebview();
+
+			// listen for new documents being created that match the glob
+			const watcher = vscode.workspace.createFileSystemWatcher(filter_criterion);
+			watcher.onDidCreate(async (uri) => {
+				try {
+					const document = await vscode.workspace.openTextDocument(uri);
+					const text = document.getText();
+					const mdast = parse(text);
+					const doc: Doc = {
+						path: uri.path,
+						createdBy: "onDidCreate",
+						id: await generateIdentifier(uri.path),
+						content: mdast,
+						text,
+						hash_sha256: await generateIdentifier(text),
+					};
+					docs[doc.id] = doc;
+					writeToLog('new matching document added in the background', abbrevDoc(doc));
+					updateWebview({ [doc.id]: doc });
+				} catch (err) {
+					writeToErrorLog('failed to load new document', uri.path, err);
+				}
+			});
+
+			// phase 2: discover remaining *.md files in the background
+			const loaded_paths = new Set(Object.values(docs).map(d => d.path));
+			const all_uris = await vscode.workspace.findFiles(filter_criterion);
+			const remaining = all_uris.filter(uri => !loaded_paths.has(uri.path));
+			debug('phase 2: discovering %d remaining docs (%d already loaded)', remaining.length, loaded_paths.size);
+			let batch: HashMapOf<Doc> = {};
+			let batch_count = 0;
+			for (const uri of remaining) {
 				try {
 					const document = await vscode.workspace.openTextDocument(uri);
 					const text = document.getText();
@@ -69,99 +185,77 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 						content: mdast,
 						text,
 						hash_sha256: await generateIdentifier(text),
-						updatedAt: load_time,
-						createdBy: "openTextDocument",
+						updatedAt: new Date().toISOString(),
+						createdBy: "backgroundDiscovery",
 					};
-					debug('loaded matching document', abbrevDoc(doc));
-					return doc;
+					docs[doc.id] = doc;
+					batch[doc.id] = doc;
+					batch_count++;
+					if (batch_count >= BACKGROUND_BATCH_SIZE) {
+						updateWebview(batch);
+						batch = {};
+						batch_count = 0;
+					}
 				} catch (err) {
-					writeToErrorLog('failed to load document', uri.path, err);
-					return null;
+					writeToErrorLog('failed to load background document', uri.path, err);
 				}
-			})
-		);
-		// convert to hashmap for rapid access, filtering out failed loads
-		const docs: HashMapOf<Doc> = {};
-		for (const doc of doc_results) {
-			if (doc) { docs[doc.id] = doc; }
+			}
+			if (batch_count > 0) {
+				updateWebview(batch);
+			}
+			debug('phase 2: background discovery complete, %d total docs', Object.keys(docs).length);
+
+			return watcher;
 		}
-		debug('initial load of docs', docs);
 
 		/**
-		 * Update the webview content
-		 * @param doc optional doc to update just one document
+		 * Update the webview content (used by multi-file discovery)
+		 * @param partial_docs optional subset of docs to send; defaults to all docs
 		 */
-		function updateWebview(doc?: Doc) {
+		function updateWebview(partial_docs?: HashMapOf<Doc>) {
+			const send_docs = partial_docs ?? docs;
+			const timestamped: HashMapOf<Doc> = {};
+			const now = new Date().toISOString();
+			for (const [id, doc] of Object.entries(send_docs)) {
+				timestamped[id] = { ...doc, updateSentAt: now };
+			}
 			const message = {
 				type: 'update',
-				partial: { docs: (doc ? { [doc.id]: {
-					...doc,
-					updateSentAt: new Date().toISOString(),
-				} } : docs)},
+				partial: { docs: timestamped },
 			};
-			debug('updateWebview', message);
+			debug('updateWebview (%d docs)', Object.keys(send_docs).length);
 			webviewPanel.webview.postMessage(message);
 		}
 
-		// listen for new documents being created that match the glob
-		const watcher = vscode.workspace.createFileSystemWatcher(filter_criterion);
-		watcher.onDidCreate(async (uri) => {
-			try {
-				const document = await vscode.workspace.openTextDocument(uri);
-				const text = document.getText();
-				const mdast = parse(text);
-				const doc: Doc = {
-					path: uri.path,
-					createdBy: "onDidCreate",
-					id: await generateIdentifier(uri.path),
-					content: mdast,
-					text,
-					hash_sha256: await generateIdentifier(text),
-				};
-				// add to hashmap
-				docs[doc.id] = doc;
-				writeToLog('new matching document added in the background', abbrevDoc(doc));
-				updateWebview(doc);
-			} catch (err) {
-				writeToErrorLog('failed to load new document', uri.path, err);
-			}
-		});
-
-		// debounce change handler to avoid re-parsing on every keystroke
+		// debounce change handler — only re-parse the active document
 		let change_timer: ReturnType<typeof setTimeout> | undefined;
 		const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
+			if (e.document.uri.path !== active_path) { return; }
 			if (change_timer) { clearTimeout(change_timer); }
 			change_timer = setTimeout(async () => {
 				try {
-					const doc_path = e.document.uri.path;
-					const document = await vscode.workspace.openTextDocument(e.document.uri);
-					const doc_id = await generateIdentifier(doc_path);
-					let doc = docs[doc_id];
-					if (doc === undefined) {
-						doc = docs[doc_id] = {
-							path: doc_path,
-							id: doc_id,
-						};
-						writeToLog('onDidChangeTextDocument event for unknown document, adding', doc_path, doc_id);
-					} else {
-						writeToLog('Document changed in the background', abbrevDoc(doc));
-					}
-					const text = document.getText();
-					doc.content = parse(text);
-					doc.text = text;
-					doc.hash_sha256 = await generateIdentifier(text);
-					updateWebview(doc);
+					active_doc = await buildDoc(e.document);
+					sendDoc(active_doc);
 				} catch (err) {
 					writeToErrorLog('failed to process document change', e.document.uri.path, err);
 				}
 			}, CHANGE_DEBOUNCE_MS);
 		});
 
-		// make sure we get rid of the listeners when our editor is closed.
-		webviewPanel.onDidDispose(() => {
-			if (change_timer) { clearTimeout(change_timer); }
-			changeDocumentSubscription.dispose();
-			watcher.dispose();
+		// switch displayed document when the user switches to a different .md editor
+		const activeEditorSubscription = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+			if (!editor || !editor.document.uri.path.endsWith('.md')) { return; }
+			if (editor.document.uri.path === active_path) { return; }
+			try {
+				active_doc = await buildDoc(editor.document);
+				active_path = editor.document.uri.path;
+				sendDoc(active_doc);
+				const head = editor.document.offsetAt(editor.selection.active);
+				const anchor = editor.document.offsetAt(editor.selection.anchor);
+				sendSelection(active_path, head, anchor);
+			} catch (err) {
+				writeToErrorLog('failed to switch active document', editor?.document.uri.path, err);
+			}
 		});
 
 		// receive message back from the webview.
@@ -169,11 +263,10 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			debug('onDidReceiveMessage', e.type);
 			switch (e.type) {
 				case 'requestInitialState':
-					// send the current state of the documents to the webview
-					webviewPanel.webview.postMessage({
-						type: 'update',
-						partial: { docs },
-					});
+					if (active_doc) {
+						sendDoc(active_doc);
+						sendCurrentSelection();
+					}
 					return;
 				case 'revealRange':
 				case 'selectRange': {
@@ -249,28 +342,25 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			}
 		});
 
-		// track text editor selection changes and forward to webview
+		// track text editor selection changes — only for the active document
 		const selectionSubscription = vscode.window.onDidChangeTextEditorSelection(e => {
-			const doc_path = e.textEditor.document.uri.path;
-			// check if this document is one we're tracking
-			const tracked_doc = Object.values(docs).find(d => d.path === doc_path);
-			if (!tracked_doc) { return; }
+			if (e.textEditor.document.uri.path !== active_path) { return; }
 			const selection = e.selections[0];
 			const head = e.textEditor.document.offsetAt(selection.active);
 			const anchor = e.textEditor.document.offsetAt(selection.anchor);
-			webviewPanel.webview.postMessage({
-				type: 'selectionChanged',
-				docPath: doc_path,
-				selection: { head, anchor },
-			});
+			sendSelection(e.textEditor.document.uri.path, head, anchor);
 		});
 
+		// clean up all listeners when the editor is closed
 		webviewPanel.onDidDispose(() => {
+			if (this.activePanel === webviewPanel) {
+				this.activePanel = undefined;
+			}
+			if (change_timer) { clearTimeout(change_timer); }
+			changeDocumentSubscription.dispose();
+			activeEditorSubscription.dispose();
 			selectionSubscription.dispose();
 		});
-
-		// first call to initialise content
-		updateWebview();
 	}
 
 	/**
@@ -282,7 +372,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		webviewPanel: vscode.WebviewPanel,
 		_token: vscode.CancellationToken
 	): Promise<void> {
-		return this.myWebviewPanel(webviewPanel);
+		return this.myWebviewPanel(webviewPanel, document);
 	}
 
 	/**

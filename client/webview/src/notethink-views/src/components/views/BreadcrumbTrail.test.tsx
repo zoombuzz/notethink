@@ -101,4 +101,39 @@ describe('BreadcrumbTrail', () => {
         const separators = container.querySelectorAll('[class*="breadcrumbSeparator"]');
         expect(separators).toHaveLength(0);
     });
+
+    it('renders breadcrumb items as button elements', () => {
+        const parent1 = makeNote({ seq: 0, headline_raw: '# Doc' });
+        const parent2 = makeNote({ seq: 1, headline_raw: '## Section' });
+        const current = makeNote({
+            seq: 2,
+            parent_notes: [parent1, parent2],
+        });
+        const { container } = render(<BreadcrumbTrail {...current} />);
+        const buttons = container.querySelectorAll('button');
+        expect(buttons).toHaveLength(2);
+    });
+
+    it('renders breadcrumb buttons with aria-label attributes stripped of markdown', () => {
+        const parent1 = makeNote({ seq: 0, headline_raw: '# Doc' });
+        const parent2 = makeNote({ seq: 1, headline_raw: '## Section' });
+        const current = makeNote({
+            seq: 2,
+            parent_notes: [parent1, parent2],
+        });
+        render(<BreadcrumbTrail {...current} />);
+        expect(screen.getByRole('button', { name: 'Doc' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Section' })).toBeInTheDocument();
+    });
+
+    it('renders breadcrumb container with role="navigation"', () => {
+        const parent1 = makeNote({ seq: 0, headline_raw: '# Doc' });
+        const current = makeNote({
+            seq: 1,
+            parent_notes: [parent1],
+        });
+        render(<BreadcrumbTrail {...current} />);
+        const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
+        expect(nav).toBeInTheDocument();
+    });
 });

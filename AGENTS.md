@@ -192,6 +192,26 @@ describe('DocumentView', () => {
 });
 ```
 
+## Workflow and Commit Messages
+
+**Do not commit unless explicitly asked.** Write code, run lint and tests, and present your changes in the working copy for review. Only create a commit when the user explicitly requests it.
+
+**"What's next?"** means: read `docstech/users/alex.stanhope/todo.md`, take the top story, and prepare an implementation plan. Present the plan for approval. If there are ambiguities, choices, or approvals needed, ask those questions alongside the plan so the user can resolve everything in one go. When the user approves and asks you to implement, launch multiple agents simultaneously to work on independent parts of the plan in parallel.
+
+When committing, messages must be consistent with the existing commit history. Review `git log --oneline` to match the style.
+
+**Rules:**
+- **Never add "Co-authored-by:" lines** to commit messages. No attribution footers of any kind.
+- The message should purely inform the reader what was done — concise, lowercase, descriptive.
+- After the description, append a test summary: `; tests <jest>, <playwright>`
+- Run `pnpm jest-test` for Jest counts and the Playwright suite for E2E counts.
+
+**Examples from this repo's history:**
+```
+sorted out linting config for all modules; tests 157, 21
+added component views including context; added playwright e2e tests; tests 157, 21
+```
+
 ## Pre-Completion Checklist
 
 Before marking a task complete, verify:

@@ -66,6 +66,43 @@ export default function ExtensionReceiver() {
 
     const onMessage = useCallback((event: MessageEvent) => {
         const message = event.data;
+
+        // Validate message envelope: must be a non-null object with a string type
+        if (message === null || message === undefined || typeof message !== 'object' || typeof message.type !== 'string') {
+            console.warn('ExtensionReceiver: discarding message with missing or invalid type', message);
+            return;
+        }
+
+        // Per-type payload validation
+        if (message.type === 'update') {
+            if (
+                message.partial === null || message.partial === undefined ||
+                typeof message.partial !== 'object' ||
+                message.partial.docs === null || message.partial.docs === undefined ||
+                typeof message.partial.docs !== 'object'
+            ) {
+                console.warn('ExtensionReceiver: discarding update message with invalid partial.docs', message);
+                return;
+            }
+        }
+        if (message.type === 'selectionChanged') {
+            if (
+                message.selection === null || message.selection === undefined ||
+                typeof message.selection !== 'object' ||
+                typeof message.selection.head !== 'number' ||
+                typeof message.selection.anchor !== 'number'
+            ) {
+                console.warn('ExtensionReceiver: discarding selectionChanged message with invalid selection', message);
+                return;
+            }
+        }
+        if (message.type === 'command') {
+            if (typeof message.command !== 'string') {
+                console.warn('ExtensionReceiver: discarding command message with invalid command', message);
+                return;
+            }
+        }
+
         debug('onMessage %s', message.type);
         switch (message.type) {
             case 'update':
@@ -73,20 +110,23 @@ export default function ExtensionReceiver() {
                 setState(state => {
                     const incoming_docs = message.partial.docs || {};
                     const current_docs = state.docs || {};
-                    let has_changes = false;
-                    const merged: typeof current_docs = { ...current_docs };
-                    for (const [id, doc] of Object.entries(incoming_docs) as [string, Doc][]) {
-                        const existing = current_docs[id];
-                        if (!existing || !doc.hash_sha256 || existing.hash_sha256 !== doc.hash_sha256) {
-                            merged[id] = doc;
-                            has_changes = true;
+                    // single-file view: check if the incoming doc is unchanged
+                    let has_changes = Object.keys(incoming_docs).length !== Object.keys(current_docs).length;
+                    if (!has_changes) {
+                        for (const [id, doc] of Object.entries(incoming_docs) as [string, Doc][]) {
+                            const existing = current_docs[id];
+                            if (!existing || !doc.hash_sha256 || existing.hash_sha256 !== doc.hash_sha256) {
+                                has_changes = true;
+                                break;
+                            }
                         }
                     }
                     if (!has_changes) {
                         debug('skipping setState, no doc hashes changed');
                         return state;
                     }
-                    return { ...state, docs: merged };
+                    // replace docs entirely — single-file view shows one doc at a time
+                    return { ...state, docs: incoming_docs };
                 });
                 return;
             case 'selectionChanged':

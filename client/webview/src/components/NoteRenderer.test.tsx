@@ -27,6 +27,7 @@ jest.mock('../notethink-views/src/components', () => ({
     GenericView: (props: { id: string }) => <div data-testid={`docview-${props.id}`}>GenericView</div>,
     AutoView: (props: { id: string }) => <div data-testid={`autoview-${props.id}`}>AutoView</div>,
     BreadcrumbTrail: () => <div>BreadcrumbTrail</div>,
+    ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 // import after mocks are set up

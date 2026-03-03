@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import KanbanView from './KanbanView';
 import type { ViewProps } from '../../types/ViewProps';
 import type { NoteProps } from '../../types/NoteProps';
@@ -39,7 +39,20 @@ jest.mock('./KanbanColumn', () => ({
 // mock KanbanContextBar
 jest.mock('./KanbanContextBar', () => ({
     __esModule: true,
-    default: () => <div data-testid="kanban-context-bar">ContextBar</div>,
+    default: (props: { onSettingsClick?: () => void }) => (
+        <div data-testid="kanban-context-bar">
+            ContextBar
+            {props.onSettingsClick && <button data-testid="settings-btn" onClick={props.onSettingsClick}>Settings</button>}
+        </div>
+    ),
+}));
+
+// mock SettingsKanbanModal
+jest.mock('./SettingsKanbanModal', () => ({
+    __esModule: true,
+    default: (props: { opened: boolean }) => (
+        props.opened ? <div data-testid="settings-modal">SettingsModal</div> : null
+    ),
 }));
 
 // mock GenericNote
@@ -219,5 +232,79 @@ describe('KanbanView', () => {
         const backlog_column = screen.getByTestId('column-backlog-notes');
         expect(within(backlog_column).getByTestId('note-1')).toBeInTheDocument();
         expect(within(backlog_column).getByTestId('note-2')).toBeInTheDocument();
+    });
+
+    it('respects custom column_order from display_options', () => {
+        const doing_note = makeNote({
+            seq: 1,
+            headline_raw: '## Task A',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const review_note = makeNote({
+            seq: 2,
+            headline_raw: '## Task B',
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+            linetags: {
+                'status': { key: 'status', value: 'review', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [doing_note, review_note],
+            display_options: {
+                settings: {
+                    column_order: ['review', 'untagged', 'doing'],
+                },
+            },
+        });
+        render(<KanbanView {...props} />);
+        // all columns should be present
+        expect(screen.getByTestId('column-review')).toBeInTheDocument();
+        expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+    });
+
+    it('appends new status values not in column_order', () => {
+        const doing_note = makeNote({
+            seq: 1,
+            headline_raw: '## Task A',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const blocked_note = makeNote({
+            seq: 2,
+            headline_raw: '## Task B',
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+            linetags: {
+                'status': { key: 'status', value: 'blocked', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [doing_note, blocked_note],
+            display_options: {
+                settings: {
+                    column_order: ['untagged', 'doing'],
+                },
+            },
+        });
+        render(<KanbanView {...props} />);
+        // 'blocked' is not in column_order but should still appear
+        expect(screen.getByTestId('column-blocked')).toBeInTheDocument();
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+    });
+
+    it('opens settings modal when context bar settings button is clicked', () => {
+        const props = makeViewProps({
+            display_options: {
+                settings: { show_context_bars: true },
+            },
+        });
+        render(<KanbanView {...props} />);
+        expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('settings-btn'));
+        expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
     });
 });

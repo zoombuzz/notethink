@@ -1,20 +1,6 @@
 # Todo [](?type=board&ng_level=1&ng_child_type=story&ng_child_status=backlog&ng_view=kanban)
 
 
-### fix critical rendering gaps
-
-+ goal
-  + the ported view components are wired in but two things prevent them from working properly
-  + without these fixes, the webview shows broken/incomplete output
-+ [X] strip linetag text from rendered headlines
-  + renderops.tsx: added `strip_linetags` render option that filters MDAST children by position offset using `linetags_from`
-  + MarkdownNote.tsx: switched from `first_child_only` to `strip_linetags`, preserving inline formatting (bold, links) before the linetag
-  + the linetag text is hidden from the headline; GenericNoteAttributes renders it as badges
-+ [X] uncomment and wire notes_within_parent_context rendering in DocumentView
-  + not needed — child notes already render correctly via recursive `MarkdownNote.children_body` → `GenericNote` rendering
-  + notegit has the same line commented out; this is not a bug
-
-
 ### dynamic kanban columns
 
 + goal
@@ -25,25 +11,16 @@
   + KanbanView columns replaced from useState with useMemo deriving from notes_within_parent_context
   + scans notes for unique status linetag values, always includes 'untagged' as first pseudo-column
   + columns sorted alphabetically; dynamic — appear/disappear as notes change
-+ [ ] allow column customisation via kanban settings modal (see settings modal story below)
-
-
-### view menu and toolbar
-
-+ goal
-  + notegit has a full menu bar with View menu, settings, and view-type switching
-  + NoteThink's menubar div exists but is empty (placeholder comments in DocumentView, KanbanView)
-  + users need UI to switch between document/kanban/auto and toggle display settings
-+ [X] implement view type selector using native VS Code controls
-  + registered notethink.setViewAuto/Document/Kanban commands with icons in editor/title menu navigation group
-  + icon buttons appear in VS Code editor tab bar (eye, file-text, project)
-  + commands relay to webview via postMessage, ExtensionReceiver updates viewStates
-+ [X] implement display settings toggles using native VS Code controls
-  + registered notethink.toggleLineNumbers and notethink.toggleContextBars commands
-  + appear in editor/title overflow menu under 1_settings group
-  + toggles boolean in viewStates display_options.settings
-+ [X] removed empty menubar divs from DocumentView and KanbanView
-  + native VS Code editor/title bar replaces the custom menubar pattern
++ [X] allow column customisation via kanban settings modal
+  + [X] create SettingsKanbanModal component (notethink-views/src/components/views/)
+    + native dialog with column reorder list, scroll_note_into_view toggle, show_linetags_in_headlines toggle
+    + on save, calls handlers.setViewManagedState() with updated display_options.settings
+  + [X] add column_order support to KanbanView
+    + new optional display_options.settings.column_order: string[] defines column order
+    + when set, columns follow that order; unknown status values appended
+    + when unset, falls back to current alphabetical sort
+  + [X] wire settings gear button in KanbanContextBar to open SettingsKanbanModal
+  + [X] add tests for SettingsKanbanModal and column ordering
 
 
 ### view state persistence
@@ -73,23 +50,6 @@
 + [ ] verify high-contrast themes
   + test with "High Contrast" and "High Contrast Light" themes
   + ensure focus/selection outlines have sufficient contrast
-
-
-### keyboard shortcuts for view navigation
-
-+ goal
-  + notegit has hotkey pass-through for view operations
-  + NoteThink should support keyboard navigation within the webview
-+ [X] implement keyboard handler in GenericView
-  + navigation callback registered via onNavigationCommand ref on ViewApi
-  + Escape: clearFocus — calls getClearHandler to move caret past focused note
-  + Up/Down: navigate between sibling notes via setCaretPosition
-  + Enter: drillIn — calls setParentContextSeq on focused note with children
-  + Backspace: drillOut — navigates to grandparent or root
-+ [X] register VS Code keybindings for NoteThink-specific commands
-  + keybindings declared in package.json with `when: "activeCustomEditorId == 'zoombuzz.notethink'"`
-  + escape, up, down, enter, backspace bound to navigation commands
-  + extension.ts registers all 10 commands relaying to active webview panel
 
 
 ### insert modal
@@ -190,5 +150,3 @@
 + consider whether parsing (mdast-util-from-markdown) is the bottleneck
   + or whether it's the React re-rendering
   + profile before optimising
-
-

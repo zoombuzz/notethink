@@ -73,7 +73,7 @@ describe('ExtensionReceiver', () => {
         expect(renderer).toHaveAttribute('data-note-count', '1');
     });
 
-    it('merges multiple update messages', () => {
+    it('replaces docs on each update (single-file view)', () => {
         render(<ExtensionReceiver />);
         act(() => {
             window.dispatchEvent(new MessageEvent('message', {
@@ -92,7 +92,8 @@ describe('ExtensionReceiver', () => {
             }));
         });
         const renderer = screen.getByTestId('NoteRenderer');
-        expect(renderer).toHaveAttribute('data-note-count', '2');
+        // second update replaces the first — only one doc at a time
+        expect(renderer).toHaveAttribute('data-note-count', '1');
     });
 
     it('ignores messages with unknown type', () => {
@@ -257,5 +258,182 @@ describe('ExtensionReceiver', () => {
         });
 
         expect(mock_handler).toHaveBeenCalledWith('down');
+    });
+
+    // --- Runtime validation tests ---
+
+    describe('message validation', () => {
+        let warn_spy: jest.SpyInstance;
+
+        beforeEach(() => {
+            warn_spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        });
+
+        afterEach(() => {
+            warn_spy.mockRestore();
+        });
+
+        it('discards message with missing type (no state change)', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { partial: { docs: { 'x': { id: 'x' } } } },
+                }));
+            });
+            const renderer = screen.getByTestId('NoteRenderer');
+            expect(renderer).toHaveAttribute('data-note-count', '0');
+            expect(warn_spy).toHaveBeenCalledWith(
+                expect.stringContaining('missing or invalid type'),
+                expect.anything(),
+            );
+        });
+
+        it('discards message with non-string type', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 42 },
+                }));
+            });
+            const renderer = screen.getByTestId('NoteRenderer');
+            expect(renderer).toHaveAttribute('data-note-count', '0');
+            expect(warn_spy).toHaveBeenCalledWith(
+                expect.stringContaining('missing or invalid type'),
+                expect.anything(),
+            );
+        });
+
+        it('discards null message data', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: null,
+                }));
+            });
+            const renderer = screen.getByTestId('NoteRenderer');
+            expect(renderer).toHaveAttribute('data-note-count', '0');
+            expect(warn_spy).toHaveBeenCalledWith(
+                expect.stringContaining('missing or invalid type'),
+                null,
+            );
+        });
+
+        it('discards update message with missing partial.docs', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'update', partial: {} },
+                }));
+            });
+            const renderer = screen.getByTestId('NoteRenderer');
+            expect(renderer).toHaveAttribute('data-note-count', '0');
+            expect(warn_spy).toHaveBeenCalledWith(
+                expect.stringContaining('invalid partial.docs'),
+                expect.anything(),
+            );
+        });
+
+        it('discards update message with missing partial entirely', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'update' },
+                }));
+            });
+            const renderer = screen.getByTestId('NoteRenderer');
+            expect(renderer).toHaveAttribute('data-note-count', '0');
+            expect(warn_spy).toHaveBeenCalledWith(
+                expect.stringContaining('invalid partial.docs'),
+                expect.anything(),
+            );
+        });
+
+        it('discards selectionChanged message with missing selection', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'selectionChanged', docPath: '/test.md' },
+                }));
+            });
+            expect(warn_spy).toHaveBeenCalledWith(
+                expect.stringContaining('invalid selection'),
+                expect.anything(),
+            );
+        });
+
+        it('discards selectionChanged message with non-numeric head', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: {
+                        type: 'selectionChanged',
+                        docPath: '/test.md',
+                        selection: { head: 'not-a-number', anchor: 0 },
+                    },
+                }));
+            });
+            expect(warn_spy).toHaveBeenCalledWith(
+                expect.stringContaining('invalid selection'),
+                expect.anything(),
+            );
+        });
+
+        it('discards command message with missing command string', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'command' },
+                }));
+            });
+            expect(warn_spy).toHaveBeenCalledWith(
+                expect.stringContaining('invalid command'),
+                expect.anything(),
+            );
+        });
+
+        it('valid update message still works after validation', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: {
+                        type: 'update',
+                        partial: {
+                            docs: { 'doc-v': { id: 'doc-v', path: '/v.md' } },
+                        },
+                    },
+                }));
+            });
+            const renderer = screen.getByTestId('NoteRenderer');
+            expect(renderer).toHaveAttribute('data-note-count', '1');
+            expect(warn_spy).not.toHaveBeenCalled();
+        });
+
+        it('valid selectionChanged message still works after validation', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: {
+                        type: 'selectionChanged',
+                        docPath: '/test.md',
+                        selection: { head: 5, anchor: 10 },
+                    },
+                }));
+            });
+            expect(warn_spy).not.toHaveBeenCalled();
+        });
+
+        it('valid command message still works after validation', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: {
+                        type: 'command',
+                        command: 'setViewType',
+                        viewType: 'document',
+                    },
+                }));
+            });
+            expect(warn_spy).not.toHaveBeenCalled();
+        });
     });
 });

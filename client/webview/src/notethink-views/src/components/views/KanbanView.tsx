@@ -1,4 +1,4 @@
-import React, { type ReactElement, MouseEvent, useEffect, useMemo } from "react";
+import React, { type ReactElement, MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
     DragDropContext,
     Draggable,
@@ -19,6 +19,7 @@ import { calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import KanbanColumn from "./KanbanColumn";
 import KanbanContextBar from "./KanbanContextBar";
+import SettingsKanbanModal from "./SettingsKanbanModal";
 import GenericNote from "../notes/GenericNote";
 import master_view_styles from "../ViewRenderer.module.scss";
 import view_specific_styles from "../ViewRenderer.module.scss";
@@ -61,6 +62,8 @@ export default function KanbanView(props: ViewProps) {
         },
     };
 
+    const [settings_open, setSettingsOpen] = useState(false);
+
     const columns = useMemo<Array<Column>>(() => {
         const status_values = new Set<string>();
         for (const note of (props.notes_within_parent_context || [])) {
@@ -68,12 +71,63 @@ export default function KanbanView(props: ViewProps) {
                 status_values.add(note.linetags.status.value);
             }
         }
+        const custom_order = display_options.settings?.column_order;
+        if (custom_order && custom_order.length > 0) {
+            // start with custom order, then append any new status values not in the order
+            const ordered: Column[] = custom_order.map((value, index) => ({
+                seq: index,
+                value,
+                type: value === 'untagged' ? 'pseudo' : undefined,
+            }));
+            const ordered_values = new Set(custom_order);
+            for (const value of Array.from(status_values).sort()) {
+                if (!ordered_values.has(value)) {
+                    ordered.push({ seq: ordered.length, value });
+                }
+            }
+            // ensure untagged is present
+            if (!ordered_values.has('untagged')) {
+                ordered.unshift({ seq: 0, value: 'untagged', type: 'pseudo' });
+                // re-index seqs
+                ordered.forEach((col, i) => { col.seq = i; });
+            }
+            return ordered;
+        }
+        // default: alphabetical sort
         const result: Column[] = [{ seq: 0, value: "untagged", type: "pseudo" }];
         Array.from(status_values).sort().forEach((value, index) => {
             result.push({ seq: index + 1, value });
         });
         return result;
+    }, [props.notes_within_parent_context, display_options.settings?.column_order]);
+
+    // natural column order (alphabetical, for settings modal comparison)
+    const natural_column_order = useMemo<string[]>(() => {
+        const status_values = new Set<string>();
+        for (const note of (props.notes_within_parent_context || [])) {
+            if (note.linetags?.status?.value) {
+                status_values.add(note.linetags.status.value);
+            }
+        }
+        return ['untagged', ...Array.from(status_values).sort()];
     }, [props.notes_within_parent_context]);
+
+    const handleSettingsSave = useCallback((updated_settings: {
+        show_linetags_in_headlines?: boolean;
+        scroll_note_into_view?: boolean;
+        column_order?: string[];
+    }) => {
+        setSettingsOpen(false);
+        props.handlers?.setViewManagedState?.([{
+            id: props.id,
+            display_options: {
+                settings: {
+                    ...display_options.settings,
+                    ...updated_settings,
+                },
+            },
+        }]);
+    }, [props.handlers, props.id, display_options.settings]);
 
     const dragStartHandler = (start: DragStart, provided: ResponderProvided): void => {
         const dragged_note_seq = Number(start.draggableId);
@@ -200,10 +254,21 @@ export default function KanbanView(props: ViewProps) {
             <div className={container_styles.join(' ')} id={`v${props.id}-inner`}
                  onClick={(display_options.focused_notes?.length ? props.handlers?.getClearHandler?.(display_options.focused_notes) : undefined)}
                  data-level={display_options.level} data-parent-content-seq={display_options.parent_context_seq}>
-                {display_options.settings?.show_context_bars && <KanbanContextBar {...props} />}
+                {display_options.settings?.show_context_bars && <KanbanContextBar {...props} onSettingsClick={() => setSettingsOpen(true)} />}
                 {props.nested?.parent_context && renderTopLevelNoteWithoutChildren(props.nested?.parent_context, props, display_options)}
                 {rendered_board}
             </div>
+            <SettingsKanbanModal
+                opened={settings_open}
+                onClose={() => setSettingsOpen(false)}
+                columnOrder={natural_column_order}
+                settings={{
+                    show_linetags_in_headlines: display_options.settings?.show_linetags_in_headlines,
+                    scroll_note_into_view: display_options.settings?.scroll_note_into_view,
+                    column_order: display_options.settings?.column_order,
+                }}
+                onSave={handleSettingsSave}
+            />
         </>
     );
 }

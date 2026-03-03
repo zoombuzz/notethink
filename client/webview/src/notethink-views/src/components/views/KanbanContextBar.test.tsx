@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import KanbanContextBar from './KanbanContextBar';
 import type { ViewProps } from '../../types/ViewProps';
 
@@ -54,5 +54,19 @@ describe('KanbanContextBar', () => {
         const bar = container.querySelector('#vtest-kanban-context');
         expect(bar).toBeInTheDocument();
         expect(bar?.children).toHaveLength(0);
+    });
+
+    it('renders settings gear button when onSettingsClick provided', () => {
+        const handle_settings = jest.fn();
+        render(<KanbanContextBar {...makeViewProps()} onSettingsClick={handle_settings} />);
+        const button = screen.getByTestId('kanban-settings-button');
+        expect(button).toBeInTheDocument();
+        fireEvent.click(button);
+        expect(handle_settings).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not render settings button when onSettingsClick not provided', () => {
+        render(<KanbanContextBar {...makeViewProps()} />);
+        expect(screen.queryByTestId('kanban-settings-button')).not.toBeInTheDocument();
     });
 });

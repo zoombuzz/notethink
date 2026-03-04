@@ -1,5 +1,6 @@
 import type { ViewProps } from "../../types/ViewProps";
 import master_view_styles from "../ViewRenderer.module.scss";
+import ViewTypeSelector from "./ViewTypeSelector";
 
 interface KanbanContextBarProps extends ViewProps {
     onSettingsClick?: () => void;
@@ -34,6 +35,7 @@ export default function KanbanContextBar(props: KanbanContextBarProps) {
                     &#9881;
                 </button>
             )}
+            <ViewTypeSelector currentType={props.type} handlers={props.handlers} id={props.id} />
         </div>
     );
 }

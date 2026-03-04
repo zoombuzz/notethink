@@ -1,4 +1,24 @@
-# Done
+# Done [](?ng_view=kanban)
+
+
+### child attribute inheritance
+
++ [X] add `inherited?: true` flag to LineTag interface in `notethink-views/src/types/NoteProps.ts`
++ [X] add `applyChildAttributeInheritance(allNotes)` in `convertMdastToNoteHierarchy.ts`
+  + ng_child_ → direct children, ng_child2y_ → grandchildren, ng_childall_ → all descendants
+  + child's own linetags always win (no override)
++ [X] guard edit operations against inherited linetags in `linetagops.ts`
+  + drag-drop on inherited-status notes writes a real linetag into markdown
++ [X] distinguish inherited attributes in `GenericNoteAttributes.tsx` (lighter opacity, italic)
++ [X] unit tests: 8 new tests in `convertMdastToNoteHierarchy.test.ts`
+
+
+### theme tweaks
+
++ [X] make border clearer in dark themes
+  + dark-mode override in `ViewRenderer.module.scss` using `--vscode-editorWidget-border`
++ [X] style checkboxes to match theme
+  + `accent-color: var(--mantine-primary-color-2)` on checkbox input
 
 
 ## Breadcrumb accessibility
@@ -232,3 +252,96 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 
 + [X] CSS variable bridge (vscode-mantine-bridge.css)
 + [X] fix click/selection flow
+
+
+### install notethink-dev to get using it all the time
+
++ symlink
+  + `ln -s /mnt/secure/home/alex/git/github.com/active_development/notethink ~/.vscode/extensions/notethink-dev`
++ can remove that once we've got a deployed version out
++ goal is to establish what I use this for
+  + how useful is it
+  + what features do I rely on
++ no point launching a product that I do not value myself
+
+
+### dynamic kanban columns
+
++ goal
+  + kanban columns are hardcoded to untagged/backlog/doing/done
+  + notegit derives columns from the linetags present in the document
+  + users should be able to define columns via linetags or settings
++ [X] derive column definitions from notes' status linetag values
+  + KanbanView columns replaced from useState with useMemo deriving from notes_within_parent_context
+  + scans notes for unique status linetag values, always includes 'untagged' as first pseudo-column
+  + columns sorted alphabetically; dynamic — appear/disappear as notes change
++ [X] allow column customisation via kanban settings modal
+  + [X] create SettingsKanbanModal component (notethink-views/src/components/views/)
+    + native dialog with column reorder list, scroll_note_into_view toggle, show_linetags_in_headlines toggle
+    + on save, calls handlers.setViewManagedState() with updated display_options.settings
+  + [X] add column_order support to KanbanView
+    + new optional display_options.settings.column_order: string[] defines column order
+    + when set, columns follow that order; unknown status values appended
+    + when unset, falls back to current alphabetical sort
+  + [X] wire settings gear button in KanbanContextBar to open SettingsKanbanModal
+  + [X] add tests for SettingsKanbanModal and column ordering
+
+
+### view state persistence
+
++ goal
+  + when the webview reloads (e.g. tab switch), view state is lost
+  + notegit persists view state in LocalStorage; NoteThink should use VS Code's webview state API
++ [X] persist view type and parent_context_seq via vscode.getState/setState
+  + save on setViewManagedState calls
+  + restore on webview init in ExtensionReceiver
++ [X] persist kanban column scroll positions
+
+
+### view selector
+
++ [X] add view type selector to context bars
+  + created `ViewTypeSelector.tsx` shared component with `<select>` driven by `SELECTABLE_VIEWTYPES`
+  + integrated into both `KanbanContextBar.tsx` and `DocumentContextBar.tsx`
+  + on change: calls `setViewManagedState` to switch view type
++ [X] open "NoteThink: Open view" into editor Group 2
+  + tested 10 approaches via integration test harness (`openview-experiment.test.ts`)
+  + `vscode.openWith` never honours ViewColumn for custom editors (all 4 variants failed)
+  + `createWebviewPanel` + `ViewColumn.Two` works reliably (all 6 variants passed)
+  + final: `createWebviewPanel` with `ViewColumn.Two` + `retainContextWhenHidden` (BetterFountain pattern)
++ [X] increase kanban note spacing
+  + kanban card margin increased from `1.0em` to `1.5em`
+  + added sub-note spacing: `.body > .note { margin-top: 0.5em }`
++ [X] hide empty Untagged column
+  + `KanbanView.tsx`: filter `visible_columns` before rendering
+  + keeps Untagged visible when it's the only column or has notes
++ [X] version display in settings modal
+  + webpack DefinePlugin injects `NOTETHINK_VERSION` from package.json
+  + shown at bottom of `SettingsKanbanModal.tsx`
++ [X] match view font size to editor
+  + body `font-size: var(--vscode-editor-font-size, 14px)` in `index.css`
+  + removed `font-size: 0.925em` from `.viewDocument` and `.viewKanban`
++ [X] add tests
+  + KanbanView: hides empty Untagged, shows when only column, shows when has notes alongside other columns
+  + KanbanContextBar: view selector dispatches setViewManagedState, shows current type
+  + openview-experiment: 10 approaches tested, 6 passed, 4 failed
+
+
+### theme integration
+
++ goal
+  + webview should match VS Code's active colour theme (light/dark/high contrast)
+  + notegit has custom GitHub light/dark themes; NoteThink should inherit from VS Code
++ [X] detect VS Code theme kind and apply to webview
+  + inline script in notethinkEditor.ts reads body.vscode-dark/vscode-high-contrast
+  + sets data-mantine-color-scheme on <html> for dark-mode SCSS selector
+  + MutationObserver syncs attribute on live theme changes
++ [X] CSS variable bridge (vscode-mantine-bridge.css)
+  + maps 7 --mantine-* variables to --vscode-* equivalents
+  + ViewRenderer.module.scss works unchanged in both NoteGit and NoteThink
+  + index.css uses --vscode-font-family, --vscode-editor-foreground, --vscode-editor-background
++ [X] verify high-contrast themes
+  + test with "High Contrast" and "High Contrast Light" themes
+  + ensure focus/selection outlines have sufficient contrast
+
+

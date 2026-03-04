@@ -6,6 +6,7 @@ interface KanbanColumnProps {
     seq: number;
     value: string;
     type?: string;
+    count?: number;
     display_options?: NoteDisplayOptions;
     children?: ReactNode;
 }
@@ -26,6 +27,9 @@ export default function KanbanColumn(props: KanbanColumnProps) {
         >
             <div className={view_specific_styles.heading} role={'columnheader'}>
                 <h3>{props.value}</h3>
+                {props.count !== undefined && (
+                    <span className={view_specific_styles.countBadge} data-testid="count-badge">{props.count}</span>
+                )}
             </div>
             <div className={view_specific_styles.notes}>
                 {props.children}

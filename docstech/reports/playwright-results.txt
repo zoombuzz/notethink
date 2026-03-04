@@ -1,0 +1,38 @@
+# Playwright Test Results
+# Version: 0.1.8
+# Date: 2026-03-04T00:00:00Z
+# Command: npx playwright test
+# ---
+Running 29 tests using 10 workers
+
+  ✓  error-boundary.spec.ts › Error Boundary › shows fallback when malformed MDAST causes render error
+  ✓  error-boundary.spec.ts › Error Boundary › fallback displays friendly message and error details
+  ✓  document-view.spec.ts › Document View › renders document container after injecting basic.md
+  ✓  error-boundary.spec.ts › Error Boundary › fallback includes a Try Again button
+  ✓  error-boundary.spec.ts › Error Boundary › NoteRenderer container remains in the DOM despite error
+  ✓  document-view.spec.ts › Document View › renders notes with data-seq attributes
+  ✓  document-view.spec.ts › Document View › renders note headlines with correct text
+  ✓  document-view.spec.ts › Document View › renders body paragraphs
+  ✓  click-interaction.spec.ts › Click Interaction › clicking a note headline sends revealRange message
+  ✓  click-interaction.spec.ts › Click Interaction › captured messages include docId and docPath
+  ✓  click-interaction.spec.ts › Click Interaction › clicking a note sets aria-current (focused) attribute
+  ✓  click-interaction.spec.ts › Click Interaction › second click on focused note selects it without blanking the view
+  ✓  kanban-view.spec.ts › Kanban View › renders kanban columns via auto view detecting ng_view linetag
+  ✓  kanban-view.spec.ts › Kanban View › places tasks in correct columns
+  ✓  kanban-view.spec.ts › Kanban View › places untagged tasks in untagged column
+  ✓  kanban-drag.spec.ts › Kanban Drag and Drop › dragging a card between columns sends editText with status change
+  ✓  kanban-drag.spec.ts › Kanban Drag and Drop › dragging a card to untagged column sends editText that removes status tag
+  ✓  keyboard-navigation.spec.ts › Keyboard Navigation › clicking different notes produces revealRange messages
+  ✓  kanban-drag.spec.ts › Kanban Drag and Drop › view does not blank after drag completes
+  ✓  kanban-drag.spec.ts › Kanban Drag and Drop › card appears in destination column after extension sends updated doc
+  ✓  view-switching.spec.ts › View Switching › defaults to auto view which resolves to document for plain markdown
+  ✓  keyboard-navigation.spec.ts › Keyboard Navigation › selection feedback updates focused note styling
+  ✓  settings-toggle.spec.ts › Settings Toggle › toggling lineNumbers shows and hides line number elements
+  ✓  settings-toggle.spec.ts › Settings Toggle › toggling contextBars shows and hides context bar elements
+  ✓  view-switching.spec.ts › View Switching › switches to kanban view and back to document
+  ✓  keyboard-navigation.spec.ts › Keyboard Navigation › drillIn on nested doc changes parent context
+  ✓  settings-toggle.spec.ts › Settings Toggle › settings survive view type switch
+  ✓  view-switching.spec.ts › View Switching › switches to auto view
+  ✓  keyboard-navigation.spec.ts › Keyboard Navigation › drillOut returns to parent context
+
+  29 passed (7.5s)

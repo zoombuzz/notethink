@@ -1,4 +1,4 @@
-import type { MdastNode, NoteProps, TextPosition } from "../types/NoteProps";
+import type { LineTag, MdastNode, NoteProps, TextPosition } from "../types/NoteProps";
 import { findLineTags, parseLineTags } from "./linetagops";
 
 type MdastRoot = import("mdast").Root;
@@ -234,6 +234,78 @@ function nestChildNotes(allNotes: NoteProps[], rootLevel: number): void {
 }
 
 /**
+ * Extract inheritable linetags from a note's linetags matching the given prefix.
+ * Returns entries with the prefix stripped (e.g. ng_child_status → status).
+ */
+function collectInheritableLinetags(note: NoteProps, prefix: string): Array<[string, LineTag]> {
+    if (!note.linetags) { return []; }
+    const result: Array<[string, LineTag]> = [];
+    for (const key of Object.keys(note.linetags)) {
+        if (key.startsWith(prefix)) {
+            const stripped = key.slice(prefix.length);
+            if (stripped) {
+                result.push([stripped, note.linetags[key]]);
+            }
+        }
+    }
+    return result;
+}
+
+/**
+ * Create an inherited LineTag from a source tag, with the key stripped to the child-facing name.
+ */
+function makeInheritedTag(strippedKey: string, source: LineTag, targetNoteSeq: number): LineTag {
+    return {
+        key: strippedKey,
+        value: source.value,
+        key_offset: 0,
+        value_offset: 0,
+        linktext_offset: 0,
+        note_seq: targetNoteSeq,
+        inherited: true,
+        ...(source.value_numeric !== undefined ? { value_numeric: source.value_numeric } : {}),
+    };
+}
+
+/**
+ * Propagate ng_child_*, ng_child2y_*, and ng_childall_* linetags from parents to descendants.
+ * Child's own linetags always take precedence over inherited ones.
+ */
+export function applyChildAttributeInheritance(allNotes: NoteProps[]): void {
+    for (const note of allNotes) {
+        if (!note.parent_notes?.length) { continue; }
+
+        const directParent = note.parent_notes[note.parent_notes.length - 1];
+
+        // ng_child_ → inherited by direct children only
+        for (const [strippedKey, sourceTag] of collectInheritableLinetags(directParent, 'ng_child_')) {
+            if (note.linetags?.[strippedKey]) { continue; }
+            if (!note.linetags) { note.linetags = {}; }
+            note.linetags[strippedKey] = makeInheritedTag(strippedKey, sourceTag, note.seq);
+        }
+
+        // ng_child2y_ → inherited by grandchildren only (parent_notes has at least 2 entries)
+        if (note.parent_notes.length >= 2) {
+            const grandparent = note.parent_notes[note.parent_notes.length - 2];
+            for (const [strippedKey, sourceTag] of collectInheritableLinetags(grandparent, 'ng_child2y_')) {
+                if (note.linetags?.[strippedKey]) { continue; }
+                if (!note.linetags) { note.linetags = {}; }
+                note.linetags[strippedKey] = makeInheritedTag(strippedKey, sourceTag, note.seq);
+            }
+        }
+
+        // ng_childall_ → inherited from every ancestor in the chain
+        for (const ancestor of note.parent_notes) {
+            for (const [strippedKey, sourceTag] of collectInheritableLinetags(ancestor, 'ng_childall_')) {
+                if (note.linetags?.[strippedKey]) { continue; }
+                if (!note.linetags) { note.linetags = {}; }
+                note.linetags[strippedKey] = makeInheritedTag(strippedKey, sourceTag, note.seq);
+            }
+        }
+    }
+}
+
+/**
  * Main entry point: convert MDAST root + raw text to a NoteProps hierarchy.
  */
 export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): NoteProps {
@@ -269,6 +341,9 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
             direct_parent.child_notes.push(note);
         }
     }
+
+    // Propagate ng_child_*, ng_child2y_*, ng_childall_* linetags to descendants
+    applyChildAttributeInheritance(allNotes);
 
     // Build the root note
     const root: NoteProps = {

@@ -15,22 +15,23 @@ jest.mock('@hello-pangea/dnd', () => ({
                 placeholder: null,
             })
         }</div>,
-    Draggable: ({ children, draggableId }: { children: (provided: unknown) => React.ReactNode; draggableId: string }) =>
+    Draggable: ({ children, draggableId }: { children: (provided: unknown, snapshot: unknown) => React.ReactNode; draggableId: string }) =>
         <div data-testid={`draggable-${draggableId}`}>{
-            (children as (provided: { draggableProps: Record<string, unknown>; dragHandleProps: Record<string, unknown>; innerRef: () => void }) => React.ReactNode)({
+            (children as (provided: { draggableProps: Record<string, unknown>; dragHandleProps: Record<string, unknown>; innerRef: () => void }, snapshot: { isDragging: boolean }) => React.ReactNode)({
                 draggableProps: {},
                 dragHandleProps: {},
                 innerRef: () => {},
-            })
+            }, { isDragging: false })
         }</div>,
 }));
 
-// mock KanbanColumn to expose children
+// mock KanbanColumn to expose children and count
 jest.mock('./KanbanColumn', () => ({
     __esModule: true,
-    default: (props: { seq: number; value: string; type?: string; children?: React.ReactNode }) => (
+    default: (props: { seq: number; value: string; type?: string; count?: number; children?: React.ReactNode }) => (
         <div data-testid={`column-${props.value}`} role="region" aria-label={props.value}>
             <h3>{props.value}</h3>
+            {props.count !== undefined && <span data-testid={`column-${props.value}-count`}>{props.count}</span>}
             <div data-testid={`column-${props.value}-notes`}>{props.children}</div>
         </div>
     ),
@@ -127,7 +128,8 @@ describe('KanbanView', () => {
             notes_within_parent_context: [doing_note, review_note],
         });
         render(<KanbanView {...props} />);
-        expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+        // empty Untagged column is hidden when other columns have notes
+        expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
         expect(screen.getByTestId('column-review')).toBeInTheDocument();
     });
@@ -259,9 +261,9 @@ describe('KanbanView', () => {
             },
         });
         render(<KanbanView {...props} />);
-        // all columns should be present
+        // columns with notes should be present; empty Untagged hidden
         expect(screen.getByTestId('column-review')).toBeInTheDocument();
-        expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+        expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });
 
@@ -290,10 +292,60 @@ describe('KanbanView', () => {
             },
         });
         render(<KanbanView {...props} />);
-        // 'blocked' is not in column_order but should still appear
+        // 'blocked' is not in column_order but should still appear; empty Untagged hidden
         expect(screen.getByTestId('column-blocked')).toBeInTheDocument();
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
+    });
+
+    it('hides empty Untagged column when other columns have notes', () => {
+        const doing_note = makeNote({
+            seq: 1,
+            headline_raw: '## Task A',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [doing_note],
+        });
+        render(<KanbanView {...props} />);
+        // Untagged column should be hidden since it's empty and other columns exist
+        expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+    });
+
+    it('shows Untagged column when it is the only column', () => {
+        const untagged_note = makeNote({
+            seq: 1,
+            headline_raw: '## No Status',
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [untagged_note],
+        });
+        render(<KanbanView {...props} />);
         expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+    });
+
+    it('shows Untagged column when it has notes even if other columns exist', () => {
+        const untagged_note = makeNote({
+            seq: 1,
+            headline_raw: '## No Status',
+        });
+        const doing_note = makeNote({
+            seq: 2,
+            headline_raw: '## Task B',
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [untagged_note, doing_note],
+        });
+        render(<KanbanView {...props} />);
+        expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });
 
     it('opens settings modal when context bar settings button is clicked', () => {
@@ -306,5 +358,37 @@ describe('KanbanView', () => {
         expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
         fireEvent.click(screen.getByTestId('settings-btn'));
         expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    it('passes correct count to each column', () => {
+        const note1 = makeNote({
+            seq: 1,
+            headline_raw: '## Task 1',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const note2 = makeNote({
+            seq: 2,
+            headline_raw: '## Task 2',
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const note3 = makeNote({
+            seq: 3,
+            headline_raw: '## Task 3',
+            position: { start: { offset: 110, line: 11 }, end: { offset: 120, line: 12 }, end_body: { offset: 150, line: 15 } },
+            linetags: {
+                'status': { key: 'status', value: 'review', note_seq: 3, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [note1, note2, note3],
+        });
+        render(<KanbanView {...props} />);
+        expect(screen.getByTestId('column-doing-count')).toHaveTextContent('2');
+        expect(screen.getByTestId('column-review-count')).toHaveTextContent('1');
     });
 });

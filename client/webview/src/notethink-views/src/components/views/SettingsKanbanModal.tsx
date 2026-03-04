@@ -149,6 +149,10 @@ export default function SettingsKanbanModal(props: SettingsKanbanModalProps) {
                 <button type="button" onClick={handleSave}>Save</button>
                 <button type="button" onClick={handleCancel} style={{ marginLeft: '0.5em' }}>Cancel</button>
             </div>
+
+            <p style={{ marginTop: '1.5em', opacity: 0.5, fontSize: '0.85em' }} data-testid="version-label">
+                NoteThink v{typeof NOTETHINK_VERSION !== 'undefined' ? NOTETHINK_VERSION : 'dev'}
+            </p>
         </dialog>
     );
 }

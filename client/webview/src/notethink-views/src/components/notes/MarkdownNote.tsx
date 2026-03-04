@@ -1,4 +1,4 @@
-import {Fragment, useMemo} from "react";
+import {Fragment, useMemo, useState} from "react";
 import {MdastNode, NoteProps} from "../../types/NoteProps";
 import {
     getStandardNoteDataProps,
@@ -12,7 +12,38 @@ import GenericNote from "../../components/notes/GenericNote";
 import Debug from 'debug';
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
+const ABRIDGE_THRESHOLD = 8;
+const SHOW_TOP = 3;
+const SHOW_BOTTOM = 2;
+
+function renderBodyItems(note: NoteProps, items: (NoteProps | MdastNode)[], baseIndex: number) {
+    return items.map((child, i) => {
+        const index = baseIndex + i;
+        if ('seq' in child && child.seq !== undefined) {
+            return <GenericNote
+                key={child.seq}
+                {...child}
+                display_options={{
+                    ...note.display_options,
+                    id: `v${note.display_options?.view_id}-n${child.seq}`,
+                    provided: {
+                        draggableProps: undefined,
+                        dragHandleProps: undefined,
+                    }
+                }}
+                handlers={note.handlers}
+            />;
+        } else {
+            return <Fragment key={`nn-${index}`}>
+                {renderNodeUnified(child as MdastNode)}
+            </Fragment>;
+        }
+    });
+}
+
 export default function MarkdownNote(props: NoteProps) {
+    const [expanded, setExpanded] = useState(false);
+
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(props, {
@@ -65,29 +96,30 @@ export default function MarkdownNote(props: NoteProps) {
             <div className={view_specific_styles.body}
                  onClick={createNoteClickHandler(note, bodyClickPosition(note))}
             >
-                { note.children_body?.map((child: NoteProps | MdastNode, index: number) => {
-                    if ('seq' in child && child.seq !== undefined) {
-                        return <GenericNote
-                            key={child.seq}
-                            {...child}
-                            display_options={{
-                                ...note.display_options,
-                                id: `v${note.display_options?.view_id}-n${child.seq}`,
-                                // don't pass down draggable props as only this (parent) note is draggable
-                                provided: {
-                                    draggableProps: undefined,
-                                    dragHandleProps: undefined,
-                                }
-                            }}
-                            // note handlers are hydrated by parent view, not in NoteProps, so pass down
-                            handlers={note.handlers}
-                        />;
-                    } else {
-                        return <Fragment key={`nn-${index}`}>
-                            {renderNodeUnified(child as MdastNode)}
-                        </Fragment>;
+                { (() => {
+                    const body = note.children_body!;
+                    const should_abridge = body.length > ABRIDGE_THRESHOLD && !expanded;
+                    if (should_abridge) {
+                        const hidden_count = body.length - SHOW_TOP - SHOW_BOTTOM;
+                        return <>
+                            {renderBodyItems(note, body.slice(0, SHOW_TOP), 0)}
+                            <span className={view_specific_styles.readMoreToggle}
+                                  role="button"
+                                  onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
+                            >&hellip; {hidden_count} more items</span>
+                            {renderBodyItems(note, body.slice(-SHOW_BOTTOM), body.length - SHOW_BOTTOM)}
+                        </>;
                     }
-                })}
+                    return <>
+                        {renderBodyItems(note, body, 0)}
+                        {body.length > ABRIDGE_THRESHOLD && (
+                            <span className={view_specific_styles.readMoreToggle}
+                                  role="button"
+                                  onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
+                            >Show less</span>
+                        )}
+                    </>;
+                })() }
             </div> : ''}
         </div>
     );

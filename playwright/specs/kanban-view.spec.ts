@@ -33,8 +33,8 @@ test.describe('Kanban View', () => {
         const auto_wrapper = page.locator('[data-auto-selected-viewtype="kanban"]');
         await expect(auto_wrapper).toBeVisible({ timeout: 5000 });
 
-        // Check that expected column headers appear
-        const column_headers = page.locator('[role="columnheader"]');
+        // Check that expected column headers appear (use h3 to avoid count badge text)
+        const column_headers = page.locator('[role="columnheader"] h3');
         const header_texts = await column_headers.allTextContents();
         expect(header_texts).toContain('untagged');
         expect(header_texts).toContain('backlog');

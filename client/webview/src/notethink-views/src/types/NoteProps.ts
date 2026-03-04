@@ -130,6 +130,9 @@ export interface LineTag {
     // attachment flags
     note_seq: number,
 
+    // inheritance flag: true when this linetag was propagated from a parent's ng_child_* attribute
+    inherited?: true,
+
     // change flags
     updated?: number,
     updated_by_view?: string,

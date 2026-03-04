@@ -1,55 +1,43 @@
-# Todo [](?type=board&ng_level=1&ng_child_type=story&ng_child_status=backlog&ng_view=kanban)
+# Todo [](?ng_view=kanban&ng_child_status=backlog)
 
 
-### dynamic kanban columns
 
-+ goal
-  + kanban columns are hardcoded to untagged/backlog/doing/done
-  + notegit derives columns from the linetags present in the document
-  + users should be able to define columns via linetags or settings
-+ [X] derive column definitions from notes' status linetag values
-  + KanbanView columns replaced from useState with useMemo deriving from notes_within_parent_context
-  + scans notes for unique status linetag values, always includes 'untagged' as first pseudo-column
-  + columns sorted alphabetically; dynamic — appear/disappear as notes change
-+ [X] allow column customisation via kanban settings modal
-  + [X] create SettingsKanbanModal component (notethink-views/src/components/views/)
-    + native dialog with column reorder list, scroll_note_into_view toggle, show_linetags_in_headlines toggle
-    + on save, calls handlers.setViewManagedState() with updated display_options.settings
-  + [X] add column_order support to KanbanView
-    + new optional display_options.settings.column_order: string[] defines column order
-    + when set, columns follow that order; unknown status values appended
-    + when unset, falls back to current alphabetical sort
-  + [X] wire settings gear button in KanbanContextBar to open SettingsKanbanModal
-  + [X] add tests for SettingsKanbanModal and column ordering
-
-
-### view state persistence
+### kanban visual polish [](?status=reviewingc))
 
 + goal
-  + when the webview reloads (e.g. tab switch), view state is lost
-  + notegit persists view state in LocalStorage; NoteThink should use VS Code's webview state API
-+ [ ] persist view type and parent_context_seq via vscode.getState/setState
-  + save on setViewManagedState calls
-  + restore on webview init in ExtensionReceiver
-+ [ ] persist kanban column scroll positions
-
-
-### theme integration
-
-+ goal
-  + webview should match VS Code's active colour theme (light/dark/high contrast)
-  + notegit has custom GitHub light/dark themes; NoteThink should inherit from VS Code
-+ [X] detect VS Code theme kind and apply to webview
-  + inline script in notethinkEditor.ts reads body.vscode-dark/vscode-high-contrast
-  + sets data-mantine-color-scheme on <html> for dark-mode SCSS selector
-  + MutationObserver syncs attribute on live theme changes
-+ [X] CSS variable bridge (vscode-mantine-bridge.css)
-  + maps 7 --mantine-* variables to --vscode-* equivalents
-  + ViewRenderer.module.scss works unchanged in both NoteGit and NoteThink
-  + index.css uses --vscode-font-family, --vscode-editor-foreground, --vscode-editor-background
-+ [ ] verify high-contrast themes
-  + test with "High Contrast" and "High Contrast Light" themes
-  + ensure focus/selection outlines have sufficient contrast
+  + bring the Kanban view closer to the look of established tools (Jira, Trello, Linear, GitHub Projects)
+  + current state: flat cards with basic borders, no hover/drag feedback, plain column headers
+  + target: elevated cards with shadows, hover lift, polished column headers with count badges
++ research summary (Jira, Trello, Linear, Monday, GitHub Projects, Notion, Asana)
+  + cards: 8px border-radius, subtle resting shadow, hover lift with larger shadow, 12-16px padding
+  + columns: sunken background distinct from both page and card, 12px border-radius, 280-300px width, sticky headers
+  + drag: card lifts (larger shadow + slight rotation), drop zone indicated by placeholder
+  + headers: semibold title + count badge + optional add/menu buttons, sticky at top
+  + dark mode: elevation via surface lightness, increased shadow opacity, VS Code CSS variable integration
+  + typography: card title 14px/500, metadata 12px/400 muted, column header 13px/600
++ [X] card elevation and hover
+  + `box-shadow: 0 1px 3px rgba(0,0,0,0.08)` resting, `0 4px 12px rgba(0,0,0,0.12)` hover with `translateY(-1px)`
+  + `transition: box-shadow 200ms ease, transform 150ms ease`
+  + `border-radius: 8px` (was `0 0 15px 0`)
+  + dark mode: `rgba(0,0,0,0.3)` / `rgba(0,0,0,0.35)` shadow opacity
++ [X] card internal layout
+  + uniform `8px 16px` headline / `4px 16px 12px 16px` body padding
+  + removed gradient headline background, kept border-bottom separator
++ [X] column styling
+  + sunken background via `color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 4%)`
+  + `gap: 8px` on column flex container via `.notes` class, removed card margins
+  + `border-radius: 12px`, board uses `gap: 8px` + `overflow-x: auto`
++ [X] column headers
+  + count badge next to column title via `KanbanColumn.tsx` `count` prop
+  + sticky header with `position: sticky; top: 0; z-index: 1`
+  + left-aligned, `font-size: 13px; font-weight: 600`
++ [X] drag-and-drop feedback
+  + `.dragging` class: `box-shadow: 0 8px 24px`, `rotate(2deg) scale(1.02)`
+  + `snapshot_drag.isDragging` from hello-pangea/dnd applied via `additional_classes`
++ [X] add tests
+  + count badge test: verifies correct count per column
+  + updated Draggable mock to provide `snapshot` with `isDragging`
+  + 196 tests passing
 
 
 ### insert modal

@@ -13,6 +13,7 @@ const path = require('path');
 const webpack = require('webpack');
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 
+const pkg = require('./package.json');
 const isProduction = process.env.NODE_ENV === 'production';
 const devtool = isProduction ? 'nosources-source-map' : 'source-map';
 
@@ -150,6 +151,9 @@ const clientWebviewConfig = {
 		}),
 		new webpack.ProvidePlugin({
 			process: 'process/browser', // provide a shim for the global `process` variable
+		}),
+		new webpack.DefinePlugin({
+			NOTETHINK_VERSION: JSON.stringify(pkg.version),
 		}),
 		new CopyWebpackPlugin({
 			patterns: [{ from: "public" }],

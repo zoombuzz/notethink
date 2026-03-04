@@ -49,11 +49,9 @@ describe('KanbanContextBar', () => {
         expect(screen.getByTestId('breadcrumb')).toBeInTheDocument();
     });
 
-    it('renders empty when no breadcrumb trail', () => {
-        const { container } = render(<KanbanContextBar {...makeViewProps()} />);
-        const bar = container.querySelector('#vtest-kanban-context');
-        expect(bar).toBeInTheDocument();
-        expect(bar?.children).toHaveLength(0);
+    it('renders view type selector when no breadcrumb trail', () => {
+        render(<KanbanContextBar {...makeViewProps()} />);
+        expect(screen.getByTestId('view-type-selector')).toBeInTheDocument();
     });
 
     it('renders settings gear button when onSettingsClick provided', () => {
@@ -68,5 +66,29 @@ describe('KanbanContextBar', () => {
     it('does not render settings button when onSettingsClick not provided', () => {
         render(<KanbanContextBar {...makeViewProps()} />);
         expect(screen.queryByTestId('kanban-settings-button')).not.toBeInTheDocument();
+    });
+
+    it('view type selector dispatches setViewManagedState on change', () => {
+        const setViewManagedState = jest.fn();
+        const props = makeViewProps({
+            handlers: {
+                setViewManagedState,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+            },
+        });
+        render(<KanbanContextBar {...props} />);
+        const selector = screen.getByTestId('view-type-selector');
+        fireEvent.change(selector, { target: { value: 'document' } });
+        expect(setViewManagedState).toHaveBeenCalledWith([{
+            id: 'test-kanban',
+            type: 'document',
+        }]);
+    });
+
+    it('view type selector shows current view type', () => {
+        render(<KanbanContextBar {...makeViewProps()} />);
+        const selector = screen.getByTestId('view-type-selector') as HTMLSelectElement;
+        expect(selector.value).toBe('kanban');
     });
 });

@@ -1,5 +1,6 @@
-import { convertMdastToNoteHierarchy } from './convertMdastToNoteHierarchy';
+import { convertMdastToNoteHierarchy, applyChildAttributeInheritance } from './convertMdastToNoteHierarchy';
 import { MdastNode } from '../types/NoteProps';
+import { calculateTextChangesForNewLinetagValue } from './linetagops';
 
 /**
  * Helper to create a minimal MDAST node with position info.
@@ -265,6 +266,177 @@ describe('convertMdastToNoteHierarchy', () => {
         expect(heading.children_body.length).toBeGreaterThan(0);
         const bodyPara = heading.children_body.find((c: any) => !('seq' in c) && c.type === 'paragraph');
         expect(bodyPara).toBeDefined();
+    });
+});
+
+describe('child attribute inheritance', () => {
+
+    it('ng_child_ attributes are inherited by direct children', () => {
+        // # Parent [](?ng_child_status=backlog)\n## Child\n
+        const text = '# Parent [](?ng_child_status=backlog)\n## Child\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
+            children: [
+                mdastNode('heading', 0, 37, { depth: 1 }),
+                mdastNode('heading', 38, 46, { depth: 2 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const child = allNotes.find((n: any) => n.depth === 2);
+
+        expect(child.linetags).toBeDefined();
+        expect(child.linetags!['status']).toBeDefined();
+        expect(child.linetags!['status'].value).toBe('backlog');
+        expect(child.linetags!['status'].inherited).toBe(true);
+    });
+
+    it('ng_child_ attributes are NOT inherited by grandchildren', () => {
+        // # GrandParent [](?ng_child_status=backlog)\n## Parent\n### GrandChild\n
+        const text = '# GrandParent [](?ng_child_status=backlog)\n## Parent\n### GrandChild\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('heading', 0, 42, { depth: 1 }),
+                mdastNode('heading', 43, 52, { depth: 2 }),
+                mdastNode('heading', 53, 68, { depth: 3 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const grandchild = allNotes.find((n: any) => n.depth === 3);
+
+        // Grandchild should NOT have inherited status from ng_child_
+        expect(grandchild.linetags?.['status']).toBeUndefined();
+    });
+
+    it('ng_child2y_ attributes are inherited only by grandchildren', () => {
+        const text = '# GrandParent [](?ng_child2y_priority=high)\n## Parent\n### GrandChild\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('heading', 0, 43, { depth: 1 }),
+                mdastNode('heading', 44, 53, { depth: 2 }),
+                mdastNode('heading', 54, 69, { depth: 3 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const parent = allNotes.find((n: any) => n.depth === 2);
+        const grandchild = allNotes.find((n: any) => n.depth === 3);
+
+        // Direct child should NOT have it
+        expect(parent.linetags?.['priority']).toBeUndefined();
+        // Grandchild should have it
+        expect(grandchild.linetags!['priority']).toBeDefined();
+        expect(grandchild.linetags!['priority'].value).toBe('high');
+        expect(grandchild.linetags!['priority'].inherited).toBe(true);
+    });
+
+    it('ng_childall_ attributes are inherited by all descendants', () => {
+        const text = '# Root [](?ng_childall_team=alpha)\n## Child\n### GrandChild\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('heading', 0, 34, { depth: 1 }),
+                mdastNode('heading', 35, 43, { depth: 2 }),
+                mdastNode('heading', 44, 58, { depth: 3 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const child = allNotes.find((n: any) => n.depth === 2);
+        const grandchild = allNotes.find((n: any) => n.depth === 3);
+
+        expect(child.linetags!['team'].value).toBe('alpha');
+        expect(child.linetags!['team'].inherited).toBe(true);
+        expect(grandchild.linetags!['team'].value).toBe('alpha');
+        expect(grandchild.linetags!['team'].inherited).toBe(true);
+    });
+
+    it('child own linetag overrides inherited value', () => {
+        const text = '# Parent [](?ng_child_status=backlog)\n## Child [](?status=doing)\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
+            children: [
+                mdastNode('heading', 0, 37, { depth: 1 }),
+                mdastNode('heading', 38, 64, { depth: 2 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const child = allNotes.find((n: any) => n.depth === 2);
+
+        expect(child.linetags!['status'].value).toBe('doing');
+        expect(child.linetags!['status'].inherited).toBeUndefined();
+    });
+
+    it('inherited linetags have inherited: true flag', () => {
+        const text = '# Parent [](?ng_child_status=backlog)\n## Child\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
+            children: [
+                mdastNode('heading', 0, 37, { depth: 1 }),
+                mdastNode('heading', 38, 46, { depth: 2 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const child = allNotes.find((n: any) => n.depth === 2);
+
+        expect(child.linetags!['status'].inherited).toBe(true);
+        // Parent should NOT have inherited flag on ng_child_status
+        const parent = allNotes.find((n: any) => n.depth === 1);
+        expect(parent.linetags!['ng_child_status'].inherited).toBeUndefined();
+    });
+});
+
+describe('drag-drop on inherited-status notes', () => {
+
+    it('dragging a note with inherited status writes a new linetag', () => {
+        const text = '# Parent [](?ng_child_status=backlog)\n## Child\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
+            children: [
+                mdastNode('heading', 0, 37, { depth: 1 }),
+                mdastNode('heading', 38, 46, { depth: 2 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const child = allNotes.find((n: any) => n.depth === 2);
+
+        // Simulate dragging to "doing" column
+        const changes = calculateTextChangesForNewLinetagValue(child, 'status', 'doing', 'untagged');
+        expect(changes.length).toBeGreaterThan(0);
+        // Should insert a new linetag block since the child has no real linetags
+        expect(changes[0].insert).toContain('status=doing');
+    });
+
+    it('setting inherited status back to default produces no changes', () => {
+        const text = '# Parent [](?ng_child_status=backlog)\n## Child\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
+            children: [
+                mdastNode('heading', 0, 37, { depth: 1 }),
+                mdastNode('heading', 38, 46, { depth: 2 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        const child = allNotes.find((n: any) => n.depth === 2);
+
+        // Setting back to "default" value should produce no edits
+        const changes = calculateTextChangesForNewLinetagValue(child, 'status', 'untagged', 'untagged');
+        expect(changes).toHaveLength(0);
     });
 });
 

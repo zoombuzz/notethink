@@ -131,6 +131,34 @@ export function calculateTextChangesForOrdering(column_children: Array<NoteProps
 export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name: string, new_value: string, default_value: string) {
     const changes = [];
     const setting_as_default = (new_value === default_value);
+
+    // If the existing linetag is inherited (from a parent's ng_child_* attribute),
+    // treat it as if the note has no linetag for this key — either generate a new one
+    // or skip if setting back to default (inherited value handles it)
+    const existingTag = note.linetags?.[key_name];
+    if (existingTag?.inherited) {
+        if (setting_as_default) { return []; }
+        // Write a real linetag: if note has other (non-inherited) linetags, append to them;
+        // otherwise generate a fresh linetag block
+        const hasRealLinetags = note.linetags && Object.keys(note.linetags).some(k => !note.linetags![k].inherited);
+        if (hasRealLinetags) {
+            const firstRealKey = Object.keys(note.linetags!).find(k => !note.linetags![k].inherited)!;
+            const firstRealTag = note.linetags![firstRealKey];
+            const first_position = (note.linetags_from || 0) + firstRealTag.key_offset;
+            changes.push({
+                from: first_position,
+                insert: `${key_name}=${new_value}&`,
+            });
+            return changes;
+        }
+        // No real linetags at all — generate a new linetag block
+        changes.push({
+            from: note.position.start.offset + note.headline_raw.length,
+            insert: ` [](?${key_name}=${new_value})`,
+        });
+        return changes;
+    }
+
     if (!note.linetags && !setting_as_default) {
         // generate linetag completely of the form
         const new_linetags = ` [](?${key_name}=${new_value})`;

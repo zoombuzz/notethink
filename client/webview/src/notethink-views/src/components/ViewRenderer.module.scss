@@ -279,6 +279,19 @@ body.disableAddressBarHidingOnScroll {
       margin: 0 -1.0em 0 -1.0em;
       padding: 0.5em 0 0.5em 1.5em;
     }
+
+    .readMoreToggle {
+      display: block;
+      font-size: 85%;
+      color: var(--mantine-primary-color-filled, var(--mantine-primary-color-2));
+      cursor: pointer;
+      padding: 0.2em 0;
+      user-select: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
   }
 
   .leafNote {
@@ -312,7 +325,33 @@ body.disableAddressBarHidingOnScroll {
       }
 
       input[type=checkbox] {
+        appearance: none;
+        width: 1em;
+        height: 1em;
         margin-right: 0.4em;
+        vertical-align: middle;
+        border: 1px solid var(--vscode-checkbox-border, var(--mantine-color-default-border));
+        border-radius: 3px;
+        background: var(--vscode-checkbox-background, var(--mantine-color-default));
+        cursor: pointer;
+        position: relative;
+
+        &:checked {
+          background: var(--vscode-checkbox-selectBackground, var(--mantine-primary-color-2));
+          border-color: var(--vscode-checkbox-selectBorder, var(--mantine-primary-color-2));
+
+          &::after {
+            content: '';
+            position: absolute;
+            left: 3px;
+            top: 0px;
+            width: 4px;
+            height: 8px;
+            border: solid var(--vscode-checkbox-foreground, #fff);
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+          }
+        }
       }
 
       > ul, > div > ul, > div > div > ul {
@@ -354,6 +393,29 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
+// dark-mode: use a stronger border token so kanban cards/columns stand out from the background
+[data-mantine-color-scheme='dark'] .viewKanban .board {
+  .column {
+    border-color: var(--vscode-editorWidget-border, var(--mantine-color-default-border));
+  }
+  .column > div > .note {
+    border-color: var(--vscode-editorWidget-border, var(--mantine-color-default-border));
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+
+    &:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    }
+
+    &.dragging {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    > .headline {
+      border-bottom-color: var(--vscode-editorWidget-border, var(--mantine-color-default-border));
+    }
+  }
+}
+
 
 // Note components
 
@@ -375,6 +437,11 @@ body.disableAddressBarHidingOnScroll {
     .value {
 
     }
+
+    &.inherited {
+      opacity: 0.55;
+      font-style: italic;
+    }
   }
 }
 
@@ -385,7 +452,6 @@ body.disableAddressBarHidingOnScroll {
 
 .viewDocument {
   padding: 0 0.8em 1.2em 0.8em;
-  font-size: 0.925em;
   color: var(--mantine-color-default-color);
 
   // support indenting on wide screens
@@ -445,7 +511,6 @@ body.disableAddressBarHidingOnScroll {
 
 .viewKanban {
   padding: 0 0.8em 0 0.8em;
-  font-size: 0.925em;
   color: var(--mantine-color-default-color);
 
   .contextBar {
@@ -463,23 +528,19 @@ body.disableAddressBarHidingOnScroll {
 
   .board {
     display: flex;
-    justify-content: space-between;
+    gap: 8px;
     margin-top: 0.8em;
+    overflow-x: auto;
 
     .column {
       flex: 1;
-      background: $off_grey;
+      background: color-mix(in srgb, var(--vscode-editor-background, var(--mantine-color-default)), var(--vscode-editor-foreground, var(--mantine-color-default-color)) 4%);
       min-width: 17.0em;
 
-      padding: 0 1.0em 0 1.0em;
-      margin: 0 0 0.5em 1.0em;
+      padding: 0 12px 12px 12px;
 
       border: 1px solid var(--mantine-color-default-border);
-      border-radius: 1.0em;
-
-      &:first-of-type {
-        margin-left: 0;
-      }
+      border-radius: 12px;
 
       &.pseudo {
         border-style: dashed;
@@ -494,20 +555,27 @@ body.disableAddressBarHidingOnScroll {
       }
 
       > div > .note {
-        margin: 0 0 1.0em 0;
         background: var(--mantine-color-default);
         border: 1px solid var(--mantine-color-default-border);
-        border-radius: 0 0 15px 0;
+        border-radius: 8px;
         user-select: none;
-        //cursor: move;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        transition: box-shadow 200ms ease, transform 150ms ease;
+
+        &:hover {
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+          transform: translateY(-1px);
+        }
+
+        // hello-pangea/dnd sets [data-rbd-draggable-id] on dragging items
+        &.dragging {
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+          transform: rotate(2deg) scale(1.02);
+        }
 
         // only the first level
         > .headline {
-          padding: 0.2em 1.0em 0.2em 1.0em;
-          //background: darken(var(--mantine-color-default), 2%);
-          background: color-mix(in srgb, var(--mantine-color-default), var(--mantine-color-default-color) 2%);
-          //background: linear-gradient(0deg, darken($note_default_colour, 5%) 0%, $note_default_colour 40%);
-          background: linear-gradient(0deg, $off_grey 0%, var(--mantine-color-default) 40%);
+          padding: 8px 16px;
           border-bottom: 1px solid var(--mantine-color-default-border);
 
           > .lineno {
@@ -516,19 +584,49 @@ body.disableAddressBarHidingOnScroll {
         }
 
         > .body {
-          padding: 0 1.0em 0.5em 1.0em;
+          padding: 4px 16px 12px 16px;
           // don't allow content to extend outside note boundaries, particularly useful when inserting non-reflowable content like images or diagrams
           overflow: hidden;
+
+          // spacing between sub-notes within a kanban card
+          > .note {
+            margin-top: 0.5em;
+          }
         }
       }
 
+      .notes {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
       .heading {
-        text-align: center;
+        text-align: left;
         text-transform: capitalize;
-        margin: 1.0em 0 1.0em 0;
+        margin: 0;
+        padding: 12px 4px 8px 4px;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: inherit;
 
         h3 {
           margin: 0;
+          font-size: 13px;
+          font-weight: 600;
+          display: inline;
+        }
+
+        .countBadge {
+          display: inline-block;
+          margin-left: 8px;
+          padding: 1px 8px;
+          font-size: 12px;
+          font-weight: 500;
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--vscode-editor-background, var(--mantine-color-default)), var(--vscode-editor-foreground, var(--mantine-color-default-color)) 10%);
+          color: color-mix(in srgb, var(--vscode-editor-foreground, var(--mantine-color-default-color)), transparent 30%);
         }
       }
     }

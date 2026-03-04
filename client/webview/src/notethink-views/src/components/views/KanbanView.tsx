@@ -198,15 +198,21 @@ export default function KanbanView(props: ViewProps) {
             .sort(kanbanNoteOrder);
     });
 
-    const rendered_board: ReactElement = <div className={view_specific_styles.board} data-total-columns={columns.length}>
+    // hide empty Untagged column when other columns exist with notes
+    const visible_columns = columns.filter(col =>
+        col.value !== 'untagged' || (col.child_notes?.length ?? 0) > 0 || columns.length === 1
+    );
+
+    const rendered_board: ReactElement = <div className={view_specific_styles.board} data-total-columns={visible_columns.length}>
         <DragDropContext onDragEnd={dragEndHandler} onDragStart={dragStartHandler}>
-            {columns.map((column: Column, i: number, column_array: Array<Column>) => (
+            {visible_columns.map((column: Column, i: number, column_array: Array<Column>) => (
                 <Droppable key={i} droppableId={`${column.seq}`}>
                     {(provided_drop) => (
                         <KanbanColumn
                             seq={column.seq || i}
                             value={column.value}
                             type={column.type}
+                            count={column.child_notes?.length ?? 0}
                             display_options={{
                                 ...column?.display_options,
                                 total_columns: column_array.length,
@@ -219,11 +225,12 @@ export default function KanbanView(props: ViewProps) {
                             {(column.child_notes || [])
                                 .map((note: NoteProps, index: number) => (
                                     <Draggable key={note.seq} draggableId={`${note.seq}`} index={index}>
-                                        {(provided_drag) => (
+                                        {(provided_drag, snapshot_drag) => (
                                             <GenericNote
                                                 {...note}
                                                 display_options={{
                                                     ...buildChildNoteDisplayOptions(display_options, note, props),
+                                                    additional_classes: snapshot_drag.isDragging ? ['dragging'] : undefined,
                                                     provided: {
                                                         draggableProps: { ...provided_drag.draggableProps },
                                                         dragHandleProps: provided_drag.dragHandleProps ? { ...provided_drag.dragHandleProps } : undefined,

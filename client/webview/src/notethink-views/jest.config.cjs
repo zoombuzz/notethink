@@ -28,6 +28,9 @@ const esm_packages = [
 
 // eslint-disable-next-line no-undef
 module.exports = {
+  globals: {
+    NOTETHINK_VERSION: 'test',
+  },
   testEnvironment: 'jsdom',
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {

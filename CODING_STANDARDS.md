@@ -460,6 +460,10 @@ This runs, in order:
 
 CI only runs lint and build (no tests). Tests are the developer's responsibility before push.
 
+### After every code change
+
+Always rebuild the extension after each code change so the developer can preview it in the VS Code dev host. Run `pnpm run build` (or `pnpm run check` which includes the build) before considering a change complete.
+
 ### Individual commands
 
 | What | Command |
@@ -533,3 +537,14 @@ Description of completed work.
 
 Description of another completed story.
 ```
+
+## Version Bumps
+
+- **Always bump the version** in the governing `package.json` when implementing code changes.
+- **Only increment the patch version** (e.g. 2.11.2 → 2.11.3). Major and minor version changes are the user's decision.
+- After completing work, show the updated version number in your output.
+
+## Commit Messages
+
+- Commit messages must be a **single line** — no newlines or multi-line bodies.
+- **Never** include a `Co-Authored-By` tag.

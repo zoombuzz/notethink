@@ -35,11 +35,13 @@ export default function GenericNoteAttributes(props: NoteProps) {
                         break;
                 }
                 const linetags_from_position = note.linetags_from || 0;
+                const linetag_classes = [view_specialised_styles.linetag];
+                if (linetag.inherited) { linetag_classes.push(view_specialised_styles.inherited); }
                 return (
                     <li key={index}
                         role={'listitem'}
                         aria-label={attrib_key}
-                        className={view_specialised_styles.linetag}
+                        className={linetag_classes.join(' ')}
                         data-updated={linetag.updated} data-updated-by-view={linetag.updated_by_view}
                         data-value-previous={linetag.value_previous}
                     >

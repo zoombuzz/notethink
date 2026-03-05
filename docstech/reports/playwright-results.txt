@@ -1,0 +1,17 @@
+# Playwright Test Results
+# Version: 0.1.10
+# Date: 2026-03-05T00:00:00Z
+# Command: npx playwright test
+# ---
+Running 29 tests using 10 workers
+
+  click-interaction.spec.ts: 4 passed
+  document-view.spec.ts: 4 passed
+  error-boundary.spec.ts: 4 passed
+  kanban-drag.spec.ts: 4 passed
+  kanban-view.spec.ts: 3 passed
+  keyboard-navigation.spec.ts: 4 passed
+  settings-toggle.spec.ts: 3 passed
+  view-switching.spec.ts: 3 passed
+
+  29 passed (7.3s)

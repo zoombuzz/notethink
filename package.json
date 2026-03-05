@@ -1,63 +1,231 @@
 {
   "name": "notethink",
   "displayName": "NoteThink",
-  "description": "Everything-as-code",
-  "version": "0.0.1",
+  "author": "Zoom Buzz Ltd.",
+  "publisher": "ZoomBuzz",
+  "description": "Notes in markdown, visualised as anything",
+  "version": "0.1.10",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ZoomBuzz/NoteThink",
+  "bugs": {
+    "url": "https://github.com/ZoomBuzz/NoteThink/issues"
+  },
   "engines": {
-    "vscode": "^1.97.0"
+    "vscode": "^1.99.0"
   },
   "categories": [
+    "Visualization",
     "Other"
   ],
-  "activationEvents": [],
-  "browser": "./dist/web/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZoomBuzz/NoteThink.git"
+  },
+  "keywords": [
+    "multi-root ready"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "browser": "./client/extension/dist/extension",
   "contributes": {
-		"customEditors": [
-			{
-				"viewType": "zoombuzz.notethink",
-				"displayName": "NoteThink",
-				"selector": [
-					{
-						"filenamePattern": "*.md"
-					}
-				],
+    "customEditors": [
+      {
+        "viewType": "zoombuzz.notethink",
+        "displayName": "NoteThink",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          }
+        ],
         "priority": "option"
-			}
-		],
+      }
+    ],
     "commands": [
       {
         "command": "notethink.openview",
         "title": "NoteThink: Open View"
+      },
+      {
+        "command": "notethink.setViewAuto",
+        "title": "NoteThink: Auto View",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "notethink.setViewDocument",
+        "title": "NoteThink: Document View",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "notethink.setViewKanban",
+        "title": "NoteThink: Kanban View",
+        "icon": "$(project)"
+      },
+      {
+        "command": "notethink.toggleLineNumbers",
+        "title": "NoteThink: Toggle Line Numbers"
+      },
+      {
+        "command": "notethink.toggleContextBars",
+        "title": "NoteThink: Toggle Context Bars"
+      },
+      {
+        "command": "notethink.navigateUp",
+        "title": "NoteThink: Navigate Up"
+      },
+      {
+        "command": "notethink.navigateDown",
+        "title": "NoteThink: Navigate Down"
+      },
+      {
+        "command": "notethink.drillIn",
+        "title": "NoteThink: Drill Into Note"
+      },
+      {
+        "command": "notethink.drillOut",
+        "title": "NoteThink: Navigate Back Up"
+      },
+      {
+        "command": "notethink.clearFocus",
+        "title": "NoteThink: Clear Focus"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "notethink.setViewAuto",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "notethink.setViewDocument",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "notethink.setViewKanban",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "navigation@3"
+        },
+        {
+          "command": "notethink.toggleLineNumbers",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "1_settings"
+        },
+        {
+          "command": "notethink.toggleContextBars",
+          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "group": "1_settings"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "notethink.clearFocus",
+        "key": "escape",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      },
+      {
+        "command": "notethink.navigateUp",
+        "key": "up",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      },
+      {
+        "command": "notethink.navigateDown",
+        "key": "down",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      },
+      {
+        "command": "notethink.drillIn",
+        "key": "enter",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      },
+      {
+        "command": "notethink.drillOut",
+        "key": "backspace",
+        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      }
+    ],
+    "configuration": [
+      {
+        "order": 22,
+        "id": "notethink-extension",
+        "title": "notethink-extension",
+        "properties": {
+          "notethink-extension.trace.server": {
+            "type": "string",
+            "scope": "window",
+            "enum": [
+              "off",
+              "messages",
+              "verbose"
+            ],
+            "default": "verbose",
+            "description": "Traces the communication between VS Code and the extension."
+          }
+        }
       }
     ]
   },
   "scripts": {
-    "test": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/suite/extensionTests.js",
-    "pretest": "pnpm run compile-web",
-    "vscode:prepublish": "pnpm run package-web",
-    "compile-web": "pnpm run check-types && pnpm run lint && node esbuild.js",
-    "watch-web": "npm-run-all -p watch-web:*",
-    "watch-web:esbuild": "node esbuild.js --watch",
-    "watch-web:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package-web": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
-    "check-types": "tsc --noEmit",
-    "lint": "eslint src",
-    "run-in-browser": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ."
+    "bump-version": "npm version patch --no-git-tag-version",
+    "test-jest": "bash scripts/test-jest.sh",
+    "test-playwright": "pnpm run build && npx playwright test",
+    "lint": "eslint . && tsc --noEmit -p client/extension && tsc --noEmit -p client/webview && tsc --noEmit -p client/webview/src/notethink-views",
+    "build-and-rollup": "pnpm run build && cd client/webview/src/notethink-views && pnpm run rollup",
+    "check-updates": "npx npm-check-updates -u",
+    "vscode:prepublish": "pnpm run package",
+    "build": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "postinstall": "cd client/extension && pnpm install && cd ../../ && cd client/webview && pnpm install && cd ../.. && cd client/webview/src/notethink-views && pnpm install && cd ../../../..",
+    "package:vsix": "vsce package --no-dependencies",
+    "test-playwright-with-ui": "pnpm run build && npx playwright test --ui",
+    "chrome": "pnpm run build && vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ./docstech"
+  },
+  "COMMENT-dependencies-are-webpack-browser-polyfills-for-extension": "",
+  "dependencies": {
+    "browserify-zlib": "^0.2.0",
+    "buffer": "^6.0.3",
+    "events": "^3.3.0",
+    "https-browserify": "^1.0.0",
+    "memfs": "^4.56.10",
+    "os-browserify": "^0.3.0",
+    "path-browserify": "^1.0.1",
+    "stream-browserify": "^3.0.0",
+    "stream-http": "^3.2.0",
+    "url": "^0.11.4",
+    "util": "^0.12.5"
   },
   "devDependencies": {
-    "@types/vscode": "^1.97.0",
+    "@eslint/js": "9.39.2",
+    "@playwright/test": "^1.58.2",
+    "@stylistic/eslint-plugin": "^5.9.0",
     "@types/mocha": "^10.0.10",
-    "@types/assert": "^1.5.11",
-    "eslint": "^9.19.0",
-    "@typescript-eslint/eslint-plugin": "^8.22.0",
-    "@typescript-eslint/parser": "^8.22.0",
-    "mocha": "^11.1.0",
-    "typescript": "^5.7.3",
-    "@vscode/test-web": "^0.0.66",
-    "esbuild": "^0.24.2",
-    "glob": "^11.0.1",
-    "npm-run-all": "^4.1.5",
-    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
-    "assert": "^2.1.0"
+    "@types/vscode": "^1.109.0",
+    "@types/webpack-env": "^1.18.8",
+    "@vscode/test-web": "^0.0.79",
+    "@vscode/vsce": "^3.7.1",
+    "assert": "^2.1.0",
+    "copy-webpack-plugin": "13.0.1",
+    "css-loader": "^7.1.4",
+    "debug": "^4.4.3",
+    "eslint": "9.39.2",
+    "mdast-util-from-markdown": "^2.0.3",
+    "mdast-util-frontmatter": "^2.0.1",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-frontmatter": "^2.0.0",
+    "micromark-extension-gfm": "^3.0.0",
+    "mocha": "^11.7.5",
+    "path-browserify": "^1.0.1",
+    "process": "^0.11.10",
+    "sass": "^1.97.3",
+    "sass-loader": "^16.0.7",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.0",
+    "webpack": "^5.105.2",
+    "webpack-cli": "^6.0.1"
   }
 }

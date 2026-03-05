@@ -1,0 +1,18 @@
+/*
+ * VS Code ↔ Mantine CSS Variable Bridge
+ *
+ * Maps the --mantine-* variables used in ViewRenderer.module.scss
+ * to --vscode-* equivalents provided by the VS Code webview host.
+ * This lets the shared SCSS work unchanged in both NoteGit (Mantine)
+ * and NoteThink (VS Code).
+ */
+
+:root {
+  --mantine-color-default: var(--vscode-editor-background);
+  --mantine-color-default-color: var(--vscode-editor-foreground);
+  --mantine-color-default-border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  --mantine-primary-color-2: var(--vscode-focusBorder);
+  --mantine-primary-color-8: var(--vscode-focusBorder);
+  --mantine-color-red-outline: var(--vscode-errorForeground);
+  --mantine-spacing-xs: 0.625rem;
+}

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoteThink E2E Harness</title>
+    <style>
+        /* Stub VS Code CSS variables so the bridge CSS resolves */
+        :root {
+            --vscode-editor-background: #1e1e1e;
+            --vscode-editor-foreground: #d4d4d4;
+            --vscode-panel-border: rgba(128, 128, 128, 0.35);
+            --vscode-focusBorder: #007fd4;
+            --vscode-errorForeground: #f48771;
+            --vscode-font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            font-family: var(--vscode-font-family);
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body class="vscode-dark">
+    <div id="root"></div>
+    <script>
+        // Mock VS Code API
+        window.__captured_messages = [];
+        window.__vsCodeState = { docs: {} };
+        window.acquireVsCodeApi = function() {
+            return {
+                getState: function() { return window.__vsCodeState; },
+                setState: function(s) { window.__vsCodeState = s; },
+                postMessage: function(msg) { window.__captured_messages.push(msg); },
+            };
+        };
+        // Mantine color scheme sync
+        (function() {
+            function syncColorScheme() {
+                var isDark = document.body.classList.contains('vscode-dark')
+                    || document.body.classList.contains('vscode-high-contrast');
+                document.documentElement.setAttribute(
+                    'data-mantine-color-scheme',
+                    isDark ? 'dark' : 'light'
+                );
+            }
+            syncColorScheme();
+            new MutationObserver(syncColorScheme).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        })();
+        // Required shim for webpack commonjs output
+        var exports = {};
+    </script>
+    <script src="/client/webview/dist/index.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Editor config (root only)
 .idea
-.vscode
+.vscode-test-web
 
 # Github pages/MM
 docs/_site
@@ -18,6 +18,8 @@ nohup.out
 
 # Node.js dev
 **/node_modules
+/.pnp
+.pnp.js
 .env
 .env*.local
 .env*.local-docker
@@ -29,6 +31,9 @@ nohup.out
 
 # typescript
 *.tsbuildinfo
+
+# build outputs
+**/dist/
 
 # service workers
 **/public/sw.js
@@ -45,3 +50,9 @@ app/debug.log
 # misc
 .DS_Store
 *.pem
+*.vsix
+
+# jest/swc/playwright
+**/.swc
+**/playwright/tmp
+**/test-results

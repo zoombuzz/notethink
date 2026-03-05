@@ -4,7 +4,6 @@ import {toHast} from "mdast-util-to-hast";
 import {toMarkdown} from "mdast-util-to-markdown";
 import {toString} from "mdast-util-to-string";
 import {ReactElement} from "react";
-import {renderToStaticMarkup} from "react-dom/server";
 import {toJsxRuntime} from "hast-util-to-jsx-runtime";
 import {Fragment, jsx, jsxs} from "react/jsx-runtime";
 
@@ -71,9 +70,11 @@ export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderO
             </>;
         }
     }
-    const debugging_only = renderToStaticMarkup(headline);
     return headline;
 }
+
+// Cache rendered JSX by node reference — nodes from unchanged MDAST trees keep the same identity
+const renderCache = new WeakMap<MdastNode, ReactElement>();
 
 export function renderNodeUnified(node: MdastNode, options_arg: RenderOptions = {}): ReactElement {
     const options = Object.assign({}, {
@@ -86,9 +87,13 @@ export function renderNodeUnified(node: MdastNode, options_arg: RenderOptions = 
     } else if (options.output_type === 'string') {
         return <>{toString(node as MdastNodes)}</>;
     } else {
+        const cached = renderCache.get(node);
+        if (cached) { return cached; }
         const hast = sanitize(toHast(node as MdastNodes));
         // @ts-ignore safe to ignore type error on jsx and jsxs (https://github.com/syntax-tree/hast-util-to-jsx-runtime)
-        return toJsxRuntime(hast, {Fragment, jsx, jsxs});
+        const result = toJsxRuntime(hast, {Fragment, jsx, jsxs});
+        renderCache.set(node, result);
+        return result;
     }
 }
 

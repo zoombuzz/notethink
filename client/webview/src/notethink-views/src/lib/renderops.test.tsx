@@ -1,4 +1,4 @@
-import { renderMarkdownNoteHeadline } from './renderops';
+import { renderMarkdownNoteHeadline, renderNodeUnified } from './renderops';
 import { NoteProps, MdastNode } from '../types/NoteProps';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -48,6 +48,54 @@ function mdastStrong(children: MdastNode[], startOffset: number, endOffset: numb
         children,
     };
 }
+
+describe('renderNodeUnified cache', () => {
+
+    it('returns the same React element reference for the same MdastNode (WeakMap cache)', () => {
+        const node: MdastNode = {
+            type: 'heading',
+            position: {
+                start: { offset: 0, line: 1 },
+                end: { offset: 10, line: 1 },
+            },
+            children: [mdastText('cached text', 0, 11)],
+        };
+
+        const first = renderNodeUnified(node);
+        const second = renderNodeUnified(node);
+        expect(first).toBe(second); // same reference = cache hit
+    });
+
+    it('returns different elements for different MdastNode objects with same content', () => {
+        const makeNode = () => ({
+            type: 'heading',
+            position: {
+                start: { offset: 0, line: 1 },
+                end: { offset: 10, line: 1 },
+            },
+            children: [mdastText('same text', 0, 9)],
+        } as MdastNode);
+
+        const first = renderNodeUnified(makeNode());
+        const second = renderNodeUnified(makeNode());
+        // Different object references → different cache entries
+        expect(first).not.toBe(second);
+    });
+
+    it('returns empty fragment for nodes with no children', () => {
+        const node: MdastNode = {
+            type: 'heading',
+            position: {
+                start: { offset: 0, line: 1 },
+                end: { offset: 5, line: 1 },
+            },
+            children: [],
+        };
+        const result = renderNodeUnified(node);
+        const html = renderToStaticMarkup(result);
+        expect(html).toBe('');
+    });
+});
 
 describe('renderMarkdownNoteHeadline', () => {
 

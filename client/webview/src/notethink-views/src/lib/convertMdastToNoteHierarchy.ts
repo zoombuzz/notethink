@@ -15,12 +15,30 @@ interface SeqCounter {
     value: number;
 }
 
-function makePosition(offset: number, text: string): TextPosition {
-    let line = 1;
-    for (let i = 0; i < offset && i < text.length; i++) {
-        if (text[i] === '\n') { line++; }
+/**
+ * Pre-compute an array of newline offsets for O(1) offset→line lookup via binary search.
+ * Returns an array where lineBreaks[i] is the offset of the i-th newline character.
+ */
+function buildLineIndex(text: string): number[] {
+    const breaks: number[] = [];
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '\n') { breaks.push(i); }
     }
-    return { offset, line };
+    return breaks;
+}
+
+/**
+ * Convert a character offset to a TextPosition using a pre-computed line index.
+ * Uses binary search: O(log n) instead of O(offset).
+ */
+function makePosition(offset: number, _text: string, lineIndex: number[]): TextPosition {
+    // binary search for the number of newlines before `offset`
+    let lo = 0, hi = lineIndex.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (lineIndex[mid] < offset) { lo = mid + 1; } else { hi = mid; }
+    }
+    return { offset, line: lo + 1 };
 }
 
 /**
@@ -91,6 +109,7 @@ function findChildNotes(
     parentEndOffset: number,
     allNotes: NoteProps[],
     childrenBodyAccumulator: Array<NoteProps | MdastNode>,
+    lineIndex: number[],
 ): void {
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
@@ -137,10 +156,10 @@ function findChildNotes(
             value: child.value,
             checked: child.checked,
             position: {
-                start: makePosition(child.position.start.offset, text),
-                end: makePosition(child.position.end.offset, text),
+                start: makePosition(child.position.start.offset, text, lineIndex),
+                end: makePosition(child.position.end.offset, text, lineIndex),
                 ...(end_body_offset !== undefined ? {
-                    end_body: makePosition(end_body_offset, text),
+                    end_body: makePosition(end_body_offset, text, lineIndex),
                 } : {}),
             },
             children: child.children || [],
@@ -181,6 +200,7 @@ function findChildNotes(
                     end_body_offset,
                     allNotes,
                     noteChildrenBody,
+                    lineIndex,
                 );
             }
         } else if ((child.type === 'list' || child.type === 'listItem') && child.children?.length) {
@@ -192,44 +212,39 @@ function findChildNotes(
                 child.position.end.offset,
                 allNotes,
                 noteChildrenBody,
+                lineIndex,
             );
         }
     }
 }
 
 /**
- * Check if noteB is subsumed by noteA (noteB falls within noteA's range).
- */
-function subsumedBy(noteA: NoteProps, noteB: NoteProps): boolean {
-    const aStart = noteA.position.start.offset;
-    const aEnd = noteA.position.end_body?.offset ?? noteA.position.end.offset;
-    const bStart = noteB.position.start.offset;
-    return bStart > aStart && bStart < aEnd;
-}
-
-/**
  * Assign levels to notes based on position containment.
- * Port of Note.nestChildNotes from notegit.
+ * Uses an ancestor stack for O(n) instead of O(n²) backward scan.
  */
 function nestChildNotes(allNotes: NoteProps[], rootLevel: number): void {
-    for (let i = 0; i < allNotes.length; i++) {
-        const note = allNotes[i];
-        // Find the closest ancestor (last note before this one that subsumes it)
-        let parentLevel = rootLevel;
-        const parentNotes: NoteProps[] = [];
-        for (let j = i - 1; j >= 0; j--) {
-            if (subsumedBy(allNotes[j], note)) {
-                parentLevel = allNotes[j].level;
-                // Build parent chain
-                parentNotes.unshift(allNotes[j]);
-                if (allNotes[j].parent_notes?.length) {
-                    parentNotes.unshift(...allNotes[j].parent_notes!);
-                }
-                break;
-            }
+    // Stack of open ancestors — each note's range must contain the current note
+    const stack: NoteProps[] = [];
+    for (const note of allNotes) {
+        const noteStart = note.position.start.offset;
+        // Pop ancestors whose range has ended (no longer contain this note)
+        while (stack.length > 0) {
+            const top = stack[stack.length - 1];
+            const topEnd = top.position.end_body?.offset ?? top.position.end.offset;
+            if (noteStart < topEnd) { break; }
+            stack.pop();
         }
-        note.level = parentLevel + 1;
-        note.parent_notes = parentNotes.length > 0 ? parentNotes : undefined;
+        if (stack.length > 0) {
+            const parent = stack[stack.length - 1];
+            note.level = parent.level + 1;
+            note.parent_notes = parent.parent_notes
+                ? [...parent.parent_notes, parent]
+                : [parent];
+        } else {
+            note.level = rootLevel + 1;
+            note.parent_notes = undefined;
+        }
+        stack.push(note);
     }
 }
 
@@ -313,6 +328,9 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
     const allNotes: NoteProps[] = [];
     const rootChildrenBody: Array<NoteProps | MdastNode> = [];
 
+    // Pre-compute line-offset index for O(log n) position lookups
+    const lineIndex = buildLineIndex(text);
+
     // normalise children from either MdastRoot (typed) or MdastNode (local)
     const mdast_children = (mdast.children || []) as MdastNode[];
     const rootEndOffset = mdast.position?.end?.offset ?? text.length;
@@ -326,6 +344,7 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         rootEndOffset,
         allNotes,
         rootChildrenBody,
+        lineIndex,
     );
 
     // Assign levels based on containment
@@ -351,8 +370,8 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         level: 0,
         type: 'root',
         position: {
-            start: makePosition(mdast.position?.start?.offset ?? 0, text),
-            end: makePosition(rootEndOffset, text),
+            start: makePosition(mdast.position?.start?.offset ?? 0, text, lineIndex),
+            end: makePosition(rootEndOffset, text, lineIndex),
         },
         children: mdast_children,
         children_body: rootChildrenBody,

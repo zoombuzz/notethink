@@ -478,7 +478,12 @@ describe('NotethinkEditorProvider', () => {
 		let onSelectionCallback: (e: any) => void;
 
 		beforeEach(() => {
+			jest.useFakeTimers();
 			onSelectionCallback = (vscode.window.onDidChangeTextEditorSelection as jest.Mock).mock.calls[0][0];
+		});
+
+		afterEach(() => {
+			jest.useRealTimers();
 		});
 
 		it('forwards selection changes for the active document', () => {
@@ -493,9 +498,34 @@ describe('NotethinkEditorProvider', () => {
 				selections: [new Selection(new Position(0, 5), new Position(0, 10))],
 			});
 
+			jest.advanceTimersByTime(150);
+
 			const selection = panelHelper.postedMessages.find((m: any) => m.type === 'selectionChanged');
 			expect(selection).toBeDefined();
 			expect(selection.docPath).toBe(defaultDocPath);
+		});
+
+		it('debounces rapid selection changes and only sends the last one', () => {
+			const doc = mockTextDocument(defaultDocText, defaultDocPath);
+			panelHelper.postedMessages.length = 0;
+
+			// Fire three rapid selection changes
+			for (const offset of [5, 10, 15]) {
+				onSelectionCallback({
+					textEditor: {
+						document: doc,
+						selection: new Selection(new Position(0, offset), new Position(0, offset)),
+					},
+					selections: [new Selection(new Position(0, offset), new Position(0, offset))],
+				});
+			}
+
+			jest.advanceTimersByTime(150);
+
+			// Only the last one should have been sent
+			const selectionMessages = panelHelper.postedMessages.filter((m: any) => m.type === 'selectionChanged');
+			expect(selectionMessages).toHaveLength(1);
+			expect(selectionMessages[0].selection.head).toBe(15);
 		});
 
 		it('ignores selection changes for non-active documents', () => {
@@ -509,6 +539,8 @@ describe('NotethinkEditorProvider', () => {
 				},
 				selections: [new Selection(new Position(0, 0), new Position(0, 0))],
 			});
+
+			jest.advanceTimersByTime(150);
 
 			expect(panelHelper.postedMessages.length).toBe(0);
 		});

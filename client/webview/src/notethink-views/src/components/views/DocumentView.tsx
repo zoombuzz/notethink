@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import master_view_styles from "../../components/ViewRenderer.module.scss";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 import {ViewProps} from "../../types/ViewProps";
@@ -17,16 +17,19 @@ export default React.memo(function DocumentView(props: ViewProps) {
     const display_options = Object.assign({
     }, props.display_options);
 
+    // Stabilise handlers reference to avoid unnecessary child re-renders
+    const note_handlers = useMemo(() => ({
+        click: props.handlers?.click,
+        setCaretPosition: props.handlers?.setCaretPosition,
+    }), [props.handlers?.click, props.handlers?.setCaretPosition]);
+
     const renderNote = (note: NoteProps, index: number) => (
         <GenericNote
             key={index}
             {...note}
             display_options={buildChildNoteDisplayOptions(display_options, note, props)}
             selection={props.selection}
-            handlers={{
-                click: props.handlers?.click,
-                setCaretPosition: props.handlers?.setCaretPosition,
-            }}
+            handlers={note_handlers}
         />
     );
 

@@ -6,6 +6,7 @@ import { debug, writeToLog, writeToErrorLog } from "../lib/errorops";
 import { parse } from '../lib/parseops';
 
 const CHANGE_DEBOUNCE_MS = 250;
+const SELECTION_DEBOUNCE_MS = 120;
 const BACKGROUND_BATCH_SIZE = 20;
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
@@ -342,13 +343,17 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			}
 		});
 
-		// track text editor selection changes — only for the active document
+		// track text editor selection changes — debounced to avoid flooding the webview
+		let selection_timer: ReturnType<typeof setTimeout> | undefined;
 		const selectionSubscription = vscode.window.onDidChangeTextEditorSelection(e => {
 			if (e.textEditor.document.uri.path !== active_path) { return; }
-			const selection = e.selections[0];
-			const head = e.textEditor.document.offsetAt(selection.active);
-			const anchor = e.textEditor.document.offsetAt(selection.anchor);
-			sendSelection(e.textEditor.document.uri.path, head, anchor);
+			if (selection_timer) { clearTimeout(selection_timer); }
+			selection_timer = setTimeout(() => {
+				const selection = e.selections[0];
+				const head = e.textEditor.document.offsetAt(selection.active);
+				const anchor = e.textEditor.document.offsetAt(selection.anchor);
+				sendSelection(e.textEditor.document.uri.path, head, anchor);
+			}, SELECTION_DEBOUNCE_MS);
 		});
 
 		// clean up all listeners when the editor is closed
@@ -357,6 +362,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				this.activePanel = undefined;
 			}
 			if (change_timer) { clearTimeout(change_timer); }
+			if (selection_timer) { clearTimeout(selection_timer); }
 			changeDocumentSubscription.dispose();
 			activeEditorSubscription.dispose();
 			selectionSubscription.dispose();

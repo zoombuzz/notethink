@@ -1,8 +1,55 @@
 # Todo [](?ng_view=kanban&ng_child_status=backlog)
 
 
+### performance: large file rendering [](?status=reviewing)
 
-### kanban visual polish [](?status=reviewingc))
++ problem
+  + NoteThink UI is sluggish for big files (e.g. shopify-uncomplicated todo.md: 2761 lines, 274 headings)
+  + full re-parse → full hierarchy conversion → full React re-render on every edit (after 250ms debounce)
++ profiled hotspots (ordered by estimated impact)
+  1. `makePosition` linear scan: O(offset) per call, called ~3× per note
+     + for 274 headings in a 100KB file: ~274 × 3 × 50K chars = ~41M char iterations
+     + fix: pre-compute a line-offset index array in a single pass, then binary search
+     + file: `convertMdastToNoteHierarchy.ts:18-24`
+  2. `nestChildNotes` backward scan: O(n²) worst case for flat structures
+     + 274 notes × backward scan = up to ~37K iterations
+     + fix: maintain a stack of open ancestors, push/pop as sections open/close — O(n)
+     + file: `convertMdastToNoteHierarchy.ts:214-234`
+  3. full React re-render on every doc update
+     + GenericNote wrapped in React.memo but props always new objects (display_options, handlers)
+     + fix: stabilise prop references with useRef/useMemo in parent views; skip re-render when note content unchanged
+     + files: `GenericView.tsx`, `DocumentView.tsx`, `KanbanView.tsx`
+  4. `renderNodeUnified` per body item: mdast→hast→sanitize→jsx per non-note child
+     + each call walks entire subtree; duplicated across re-renders
+     + fix: memoize rendered JSX keyed on mdast node identity (reference equality or position hash)
+     + file: `renderops.tsx:78-93`
+  5. selection messages sent on every cursor move with no debounce
+     + each triggers `findSelectedNotes` traversal in webview
+     + fix: debounce selection updates (100-150ms) in extension
+     + file: `notethinkEditor.ts:346-352`
+  6. single webpack chunk (maxChunks: 1) loads mermaid + dnd for every file
+     + fix: lazy-load mermaid (only needed for files containing mermaid blocks)
+     + file: `webpack.config.js:150`
++ implementation phases
+  + phase 1: algorithmic fixes (items 1-2) — biggest bang, no API changes
+    + [X] pre-compute line-offset index in `convertMdastToNoteHierarchy`
+    + [X] replace `nestChildNotes` backward scan with ancestor stack
+    + [ ] add benchmark test: parse shopify-uncomplicated todo.md, assert < 50ms
+  + phase 2: React rendering (items 3-4) — moderate effort
+    + [X] stabilise display_options and handlers references in DocumentView
+    + [X] memoize `renderNodeUnified` output keyed on node reference
+    + [X] remove `renderToStaticMarkup` debugging call from renderops.tsx
+    + [ ] add React profiler measurement in dev mode
+  + phase 3: messaging and bundle (items 5-6) — polish
+    + [X] debounce selection updates in notethinkEditor.ts
+    + [ ] lazy-import mermaid behind dynamic import() (blocked by maxChunks: 1)
++ verification
+  + open shopify-uncomplicated todo.md in VS Code dev host, confirm responsive scrolling and editing
+  + run `pnpm run test-jest` — all tests pass
+  + run `npx playwright test` — all tests pass
+
+
+### kanban visual polish [](?status=reviewing)
 
 + goal
   + bring the Kanban view closer to the look of established tools (Jira, Trello, Linear, GitHub Projects)

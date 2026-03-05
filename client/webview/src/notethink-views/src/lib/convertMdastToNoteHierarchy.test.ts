@@ -440,6 +440,148 @@ describe('drag-drop on inherited-status notes', () => {
     });
 });
 
+describe('makePosition line computation (binary search)', () => {
+
+    it('computes correct line numbers for single-line text', () => {
+        const text = '# Hello\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 2 } },
+            children: [
+                mdastNode('heading', 0, 7, { depth: 1 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        expect(root.position.start.line).toBe(1);
+        const heading = flattenNotes(root)[0];
+        expect(heading.position.start.line).toBe(1);
+        expect(heading.position.end.line).toBe(1);
+    });
+
+    it('computes correct line numbers for multi-line text', () => {
+        // line 1: "# A\n"  offsets 0-3, newline at 3
+        // line 2: "body\n"  offsets 4-8, newline at 8
+        // line 3: "# B\n"  offsets 9-12, newline at 12
+        const text = '# A\nbody\n# B\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('heading', 0, 3, { depth: 1 }),
+                mdastNode('paragraph', 4, 8),
+                mdastNode('heading', 9, 12, { depth: 1 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+
+        // First heading at offset 0 → line 1
+        expect(allNotes[0].position.start.line).toBe(1);
+        // Second heading at offset 9 → line 3 (after newlines at 3, 8)
+        expect(allNotes[1].position.start.line).toBe(3);
+    });
+
+    it('computes line numbers correctly at newline boundaries', () => {
+        // offset 0: "a", offset 1: "\n", offset 2: "b", offset 3: "\n"
+        const text = 'a\nb\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
+            children: [
+                mdastNode('heading', 0, 1, { depth: 1 }),
+                mdastNode('heading', 2, 3, { depth: 1 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        // offset 0 is before any newline → line 1
+        expect(allNotes[0].position.start.line).toBe(1);
+        // offset 2 is after newline at 1 → line 2
+        expect(allNotes[1].position.start.line).toBe(2);
+    });
+});
+
+describe('nestChildNotes stack-based nesting', () => {
+
+    it('assigns correct levels for 3+ nesting depth', () => {
+        // # A → level 1, ## B → level 2, ### C → level 3
+        const text = '# A\n## B\n### C\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('heading', 0, 3, { depth: 1 }),
+                mdastNode('heading', 4, 8, { depth: 2 }),
+                mdastNode('heading', 9, 14, { depth: 3 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        expect(allNotes.map((n: any) => n.level)).toEqual([1, 2, 3]);
+    });
+
+    it('pops stack correctly when sibling follows nested child (h1 → h2 → h1)', () => {
+        // # A → level 1, ## B (under A) → level 2, # C (sibling of A) → level 1
+        const text = '# A\n## B\n# C\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('heading', 0, 3, { depth: 1 }),
+                mdastNode('heading', 4, 8, { depth: 2 }),
+                mdastNode('heading', 9, 12, { depth: 1 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        expect(allNotes.map((n: any) => n.level)).toEqual([1, 2, 1]);
+    });
+
+    it('parent_notes chain is built correctly for deep nesting', () => {
+        const text = '# A\n## B\n### C\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('heading', 0, 3, { depth: 1 }),
+                mdastNode('heading', 4, 8, { depth: 2 }),
+                mdastNode('heading', 9, 14, { depth: 3 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+
+        // A has no parent_notes
+        expect(allNotes[0].parent_notes).toBeUndefined();
+        // B's parent is A
+        expect(allNotes[1].parent_notes).toHaveLength(1);
+        expect(allNotes[1].parent_notes[0].seq).toBe(allNotes[0].seq);
+        // C's parent chain is [A, B]
+        expect(allNotes[2].parent_notes).toHaveLength(2);
+        expect(allNotes[2].parent_notes[0].seq).toBe(allNotes[0].seq);
+        expect(allNotes[2].parent_notes[1].seq).toBe(allNotes[1].seq);
+    });
+
+    it('stack resets for non-overlapping sections', () => {
+        // # A (0-3, end_body 4)\n# B (4-7)\n  → both level 1, no parent relationship
+        const text = '# A\n# B\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
+            children: [
+                mdastNode('heading', 0, 3, { depth: 1 }),
+                mdastNode('heading', 4, 7, { depth: 1 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        expect(allNotes[0].level).toBe(1);
+        expect(allNotes[1].level).toBe(1);
+        expect(allNotes[0].parent_notes).toBeUndefined();
+        expect(allNotes[1].parent_notes).toBeUndefined();
+    });
+});
+
 /**
  * Helper to extract all NoteProps (by seq) from a root note's children_body tree.
  */

@@ -8,6 +8,7 @@ const debug = Debug("nodejs:notethink:ExtensionReceiver");
 
 type VSCodeState = {
     docs?: HashMapOf<Doc>;
+    viewStates?: Record<string, ViewState>;
 }
 
 interface SelectionState {
@@ -25,11 +26,13 @@ export function postMessageToExtension(message: unknown) {
     vscode.postMessage(message);
 }
 
+const saved_state = vscode.getState();
+
 export default function ExtensionReceiver() {
-    // state originates from `vscode.getState` when a webview is reloaded, cached in setState
-	const [state, setState] = useState<VSCodeState>(vscode.getState() || { docs: {} });
+    // state originates from `vscode.getState` when a webview is reloaded
+	const [state, setState] = useState<VSCodeState>(saved_state || { docs: {} });
     const [selections, setSelections] = useState<SelectionState>({});
-    const [viewStates, setViewStates] = useState<Record<string, ViewState>>({});
+    const [viewStates, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
     const navigationCallbackRef = useRef<((direction: string) => void) | undefined>(undefined);
 
     const updateAllViewStates = useCallback((updater: (view_state: ViewState) => ViewState) => {
@@ -178,6 +181,11 @@ export default function ExtensionReceiver() {
                 return;
         }
     }, []);
+
+    // persist state so the webview can restore instantly if VS Code recreates it
+    useEffect(() => {
+        vscode.setState({ docs: state.docs, viewStates });
+    }, [state.docs, viewStates]);
 
     // listen for messages sent from the extension to the webview
     useEffect(() => {

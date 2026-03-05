@@ -16,7 +16,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
 		const provider = new NotethinkEditorProvider(context);
-		const providerRegistration = vscode.window.registerCustomEditorProvider(NotethinkEditorProvider.viewType, provider);
+		const providerRegistration = vscode.window.registerCustomEditorProvider(
+			NotethinkEditorProvider.viewType,
+			provider,
+			{ webviewOptions: { retainContextWhenHidden: true } },
+		);
 		return providerRegistration;
 	}
 

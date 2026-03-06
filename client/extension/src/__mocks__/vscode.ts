@@ -108,6 +108,13 @@ export const workspace = {
 	})),
 	onDidChangeTextDocument: jest.fn(() => ({ dispose: jest.fn() })),
 	applyEdit: jest.fn(async () => true),
+	getWorkspaceFolder: jest.fn(() => undefined),
+	workspaceFolders: undefined as any,
+	asRelativePath: jest.fn((pathOrUri: any) => {
+		// Default mock: return the path unchanged (no workspace folder to relativize against)
+		const p = typeof pathOrUri === 'string' ? pathOrUri : pathOrUri?.path || pathOrUri?.toString?.() || '';
+		return p;
+	}),
 };
 
 export const commands = {

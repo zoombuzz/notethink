@@ -4,7 +4,12 @@ import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { parse } from './parse-markdown';
 
-export async function injectDocsFromFixture(page: Page, fixture_name: string, doc_path?: string) {
+interface InjectOptions {
+    workspace_root?: string;
+    relative_path?: string;
+}
+
+export async function injectDocsFromFixture(page: Page, fixture_name: string, doc_path?: string, workspace_root_or_options?: string | InjectOptions) {
     const fixture_path = path.join(__dirname, '..', 'fixtures', fixture_name);
     const text = fs.readFileSync(fixture_path, 'utf-8');
     const resolved_path = doc_path || `/workspace/${fixture_name}`;
@@ -14,7 +19,11 @@ export async function injectDocsFromFixture(page: Page, fixture_name: string, do
     // Parse markdown server-side using the same mdast libraries as the extension
     const mdast = parse(text);
 
-    await page.evaluate(({ doc, mdast_json }) => {
+    const options: InjectOptions = typeof workspace_root_or_options === 'string'
+        ? { workspace_root: workspace_root_or_options }
+        : (workspace_root_or_options || {});
+
+    await page.evaluate(({ doc, mdast_json, ws_root }) => {
         window.dispatchEvent(new MessageEvent('message', {
             data: {
                 type: 'update',
@@ -26,11 +35,19 @@ export async function injectDocsFromFixture(page: Page, fixture_name: string, do
                         },
                     },
                 },
+                workspace_root: ws_root,
             },
         }));
     }, {
-        doc: { id, path: resolved_path, text, hash_sha256: hash },
+        doc: {
+            id,
+            path: resolved_path,
+            relative_path: options.relative_path,
+            text,
+            hash_sha256: hash,
+        },
         mdast_json: JSON.stringify(mdast),
+        ws_root: options.workspace_root || '',
     });
 
     return { id, path: resolved_path };

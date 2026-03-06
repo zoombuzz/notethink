@@ -14,5 +14,5 @@
         "sourceMap": true
     },
     "include": ["src"],
-    "exclude": ["node_modules", ".vscode-test-web"]
+    "exclude": ["node_modules", ".vscode-test-web", "src/__mocks__"]
 }

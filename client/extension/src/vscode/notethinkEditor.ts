@@ -60,8 +60,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		async function buildDoc(document: vscode.TextDocument): Promise<Doc> {
 			const text = document.getText();
 			const mdast = parse(text);
+			// asRelativePath handles symlinks — returns path relative to workspace root
+			const relative = vscode.workspace.asRelativePath(document.uri, false);
 			return {
 				path: document.uri.path,
+				relative_path: !relative.startsWith('/') ? relative : undefined,
 				id: await generateIdentifier(document.uri.path),
 				content: mdast,
 				text,
@@ -77,6 +80,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			webviewPanel.webview.postMessage({
 				type: 'update',
 				partial: { docs: { [doc.id]: timestamped } },
+				workspace_root,
 			});
 		}
 
@@ -106,6 +110,14 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				sendSelection(active_path, 0, 0);
 			}
 		}
+
+		// resolve workspace root for breadcrumb display
+		// Use asRelativePath to handle symlinks correctly — it returns a path relative
+		// to the workspace folder regardless of how the folder was opened (symlink or real path).
+		// getWorkspaceFolder may also return undefined in web extension hosts.
+		const workspace_folder = vscode.workspace.getWorkspaceFolder(initialDocument.uri)
+			|| vscode.workspace.workspaceFolders?.[0];
+		const workspace_root = workspace_folder?.uri.path || '';
 
 		// load initial document and send selection for styled first render
 		active_doc = await buildDoc(initialDocument);
@@ -227,6 +239,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			const message = {
 				type: 'update',
 				partial: { docs: timestamped },
+				workspace_root,
 			};
 			debug('updateWebview (%d docs)', Object.keys(send_docs).length);
 			webviewPanel.webview.postMessage(message);
@@ -297,6 +310,31 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 						existing.revealRange(new vscode.Range(start_pos, end_pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 					} catch (err) {
 						writeToErrorLog(`${e.type} failed`, doc_path, err);
+					}
+					return;
+				}
+				case 'setIntegration': {
+					const mode = e.mode as string;
+					const dir_path = e.path as string;
+					if (mode === 'directory' && dir_path) {
+						try {
+							const pattern = new vscode.RelativePattern(vscode.Uri.file(dir_path), '**/*.md');
+							const uris = await vscode.workspace.findFiles(pattern);
+							const dir_docs: HashMapOf<Doc> = {};
+							for (const uri of uris) {
+								const document = await vscode.workspace.openTextDocument(uri);
+								const doc = await buildDoc(document);
+								dir_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
+							}
+							debug('setIntegration directory: %d docs from %s', Object.keys(dir_docs).length, dir_path);
+							webviewPanel.webview.postMessage({
+								type: 'update',
+								partial: { docs: dir_docs },
+								workspace_root,
+							});
+						} catch (err) {
+							writeToErrorLog('setIntegration directory failed', dir_path, err);
+						}
 					}
 					return;
 				}

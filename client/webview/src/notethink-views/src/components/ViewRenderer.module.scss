@@ -137,6 +137,32 @@ body.disableAddressBarHidingOnScroll {
 // Context bars
 //
 
+.viewToolbar {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--vscode-breadcrumb-background, transparent);
+  background: var(--vscode-breadcrumb-background, var(--vscode-editor-background, var(--mantine-color-default)));
+  color: var(--vscode-breadcrumb-foregroundColor, var(--vscode-foreground, inherit));
+}
+
+.viewToolbarBreadcrumb {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+
+  > * {
+    direction: ltr;
+  }
+}
+
 .contextBar {
   height: 2.3rem;
   //background: darken(var(--mantine-color-default), 2%);

@@ -2,8 +2,13 @@ import type { ChangeEvent } from "react";
 import type { ViewProps } from "../../types/ViewProps";
 import { SELECTABLE_VIEWTYPES } from "./GenericView";
 
+function capitalize(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 interface ViewTypeSelectorProps {
     currentType: string;
+    autoResolvedType?: string;
     handlers?: ViewProps['handlers'];
     id: string;
 }
@@ -24,19 +29,20 @@ export default function ViewTypeSelector(props: ViewTypeSelectorProps) {
             onChange={handleChange}
             aria-label="View type"
             style={{
-                background: 'none',
-                border: 'none',
+                background: 'var(--vscode-dropdown-background)',
+                border: '1px solid var(--vscode-dropdown-border)',
+                borderRadius: '2px',
                 cursor: 'pointer',
                 fontSize: '0.85em',
-                padding: '0 0.3em',
-                color: 'inherit',
-                opacity: 0.7,
-                float: 'right',
+                padding: '2px 0.3em',
+                color: 'var(--vscode-dropdown-foreground)',
             }}
         >
             {SELECTABLE_VIEWTYPES.map((vt) => (
                 <option key={vt} value={vt}>
-                    {vt.charAt(0).toUpperCase() + vt.slice(1)}
+                    {vt === 'auto' && props.autoResolvedType
+                        ? `Auto (${capitalize(props.autoResolvedType)})`
+                        : capitalize(vt)}
                 </option>
             ))}
         </select>

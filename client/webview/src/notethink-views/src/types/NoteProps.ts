@@ -35,6 +35,7 @@ export interface NoteDisplayOptions {
     selected_notes?: NoteProps[];
     cropped_focused_seqs?: number[];
     cropped_selected_seqs?: number[];
+    integration_mode?: string;
     additional_classes?: string[];
     total_columns?: number;
     provided?: {

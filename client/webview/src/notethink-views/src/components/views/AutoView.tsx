@@ -46,6 +46,7 @@ export default function AutoView(props: ViewProps) {
                 nested={{
                     ...props.nested,
                     replaced_attributes: replaced_attributes,
+                    auto_resolved_type: derived_attributes.type,
                 }}
             />
         </div>

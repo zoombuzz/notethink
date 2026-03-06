@@ -37,17 +37,6 @@ jest.mock('./KanbanColumn', () => ({
     ),
 }));
 
-// mock KanbanContextBar
-jest.mock('./KanbanContextBar', () => ({
-    __esModule: true,
-    default: (props: { onSettingsClick?: () => void }) => (
-        <div data-testid="kanban-context-bar">
-            ContextBar
-            {props.onSettingsClick && <button data-testid="settings-btn" onClick={props.onSettingsClick}>Settings</button>}
-        </div>
-    ),
-}));
-
 // mock SettingsKanbanModal
 jest.mock('./SettingsKanbanModal', () => ({
     __esModule: true,
@@ -103,9 +92,32 @@ describe('KanbanView', () => {
     it('renders only untagged column when no notes have status', () => {
         render(<KanbanView {...makeViewProps()} />);
         expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
-        expect(screen.queryByTestId('column-backlog')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('column-doing')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('column-done')).not.toBeInTheDocument();
+    });
+
+    it('renders untagged column last in default order', () => {
+        const doing_note = makeNote({
+            seq: 1,
+            headline_raw: '## Task A',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const untagged_note = makeNote({
+            seq: 2,
+            headline_raw: '## Untagged',
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [doing_note, untagged_note],
+        });
+        const { container } = render(<KanbanView {...props} />);
+        const columns = container.querySelectorAll('[data-testid^="column-"]');
+        const column_names = Array.from(columns).map(el => el.getAttribute('data-testid')?.replace('column-', '').replace('-notes', '').replace('-count', ''));
+        // filter to unique top-level column testids
+        const top_level = Array.from(columns)
+            .filter(el => !el.getAttribute('data-testid')?.includes('-notes') && !el.getAttribute('data-testid')?.includes('-count'))
+            .map(el => el.getAttribute('data-testid')?.replace('column-', ''));
+        expect(top_level[top_level.length - 1]).toBe('untagged');
     });
 
     it('derives columns from note status linetags', () => {
@@ -179,26 +191,6 @@ describe('KanbanView', () => {
     it('renders drag-drop context', () => {
         render(<KanbanView {...makeViewProps()} />);
         expect(screen.getByTestId('drag-drop-context')).toBeInTheDocument();
-    });
-
-    it('renders context bar when show_context_bars is enabled', () => {
-        const props = makeViewProps({
-            display_options: {
-                settings: { show_context_bars: true },
-            },
-        });
-        render(<KanbanView {...props} />);
-        expect(screen.getByTestId('kanban-context-bar')).toBeInTheDocument();
-    });
-
-    it('does not render context bar when show_context_bars is disabled', () => {
-        const props = makeViewProps({
-            display_options: {
-                settings: { show_context_bars: false },
-            },
-        });
-        render(<KanbanView {...props} />);
-        expect(screen.queryByTestId('kanban-context-bar')).not.toBeInTheDocument();
     });
 
     it('renders parent context note when provided', () => {
@@ -348,15 +340,23 @@ describe('KanbanView', () => {
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });
 
-    it('opens settings modal when context bar settings button is clicked', () => {
+    it('registers settings handler on onSettingsClick ref', () => {
+        const settings_ref = { current: undefined } as React.MutableRefObject<(() => void) | undefined>;
         const props = makeViewProps({
-            display_options: {
-                settings: { show_context_bars: true },
+            handlers: {
+                setViewManagedState: jest.fn(),
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                onSettingsClick: settings_ref,
             },
         });
         render(<KanbanView {...props} />);
+        expect(settings_ref.current).toBeInstanceOf(Function);
         expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('settings-btn'));
+        // invoke the registered handler to open settings (wrapped in act for state update)
+        React.act(() => {
+            settings_ref.current!();
+        });
         expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
     });
 

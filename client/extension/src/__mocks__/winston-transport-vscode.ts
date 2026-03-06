@@ -1,15 +1,16 @@
 /**
  * Mock for winston-transport-vscode which depends on the vscode module.
  * Provides a minimal LogOutputChannelTransport that acts as a no-op transport.
+ * Must extend Transport so winston can call .on() / .pipe() etc.
  */
 import Transport from 'winston-transport';
 
 export class LogOutputChannelTransport extends Transport {
-	constructor(opts?: any) {
-		super(opts);
+	constructor(opts?: Record<string, unknown>) {
+		super(opts as any);
 	}
 
-	log(info: any, callback: () => void) {
+	log(info: Record<string, unknown>, callback: () => void) {
 		if (callback) { callback(); }
 	}
 

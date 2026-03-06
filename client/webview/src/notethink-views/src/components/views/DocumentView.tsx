@@ -5,7 +5,6 @@ import {ViewProps} from "../../types/ViewProps";
 import {NoteProps} from "../../types/NoteProps";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import Debug from 'debug';
-import DocumentContextBar from "../../components/views/DocumentContextBar";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import GenericNote from "../../components/notes/GenericNote";
 
@@ -43,7 +42,6 @@ export default React.memo(function DocumentView(props: ViewProps) {
                  data-level={display_options.level}
                  data-parent-content-seq={display_options.parent_context_seq}
             >
-                {display_options.settings?.show_context_bars && <DocumentContextBar {...props} />}
                 <div className={view_specific_styles.centredPane}>
                     {props.nested?.parent_context?.linetags && <GenericNoteAttributes
                         {...props.nested?.parent_context}

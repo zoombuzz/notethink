@@ -1,6 +1,78 @@
 # Todo [](?ng_view=kanban&ng_child_status=backlog)
 
 
+### view toolbar, breadcrumbs, and integration selector [](?status=backlog)
+
++ goal
+  + improve the top-of-view toolbar: breadcrumb context, smarter view selector, and a new ViewIntegrationSelector
+  + currently breadcrumbs render inside DocumentContextBar/KanbanContextBar but are hidden when `show_context_bars` is off
+  + the view type selector shows raw type names; when Auto is selected it should show the resolved view, e.g. "Auto (Kanban)"
+  + introduce a ViewIntegrationSelector that controls what data the view displays (current file, directory, etc.)
+  + kanban Untagged column should appear last, not first
++ architecture
+  + BreadcrumbTrail already exists in `notethink-views/src/components/views/BreadcrumbTrail.tsx`
+  + GenericView builds `breadcrumb_trail` and passes it via `nested.breadcrumb_trail`
+  + DocumentContextBar and KanbanContextBar render `nested.breadcrumb_trail` + ViewTypeSelector
+  + AutoView wraps GenericView and sets `data-auto-selected-viewtype` on a wrapper div
+  + ViewTypeSelector is a `<select>` driven by `SELECTABLE_VIEWTYPES` from GenericView
+  + KanbanView builds columns in `useMemo`; Untagged is hardcoded at `seq: 0` / first position
+  + ExtensionReceiver manages viewStates and sends docs via postMessage
++ phase 1: kanban untagged column last
+  + [X] move Untagged to the end of the default column order in KanbanView `useMemo`
+    + change default sort: named columns alphabetically first, then Untagged at the end
+    + when `custom_order` is set, respect user order (no change needed)
+  + [X] update `visible_columns` filter: keep hiding empty Untagged, but now at end position
+  + [X] update KanbanView tests for new column order
++ phase 2: always-visible breadcrumb bar
+  + [X] extract breadcrumb + toolbar into a shared top bar rendered by GenericView itself
+    + render `breadcrumb_trail` above the view type switch, outside the context bar toggle
+    + ensures breadcrumbs are always visible regardless of `show_context_bars` setting
+  + [ ] add file path breadcrumb segment
+    + show the document file path (from `Doc.path`) as the root breadcrumb segment
+    + clicking a directory segment in the path triggers ViewIntegrationSelector change (phase 4)
+  + [ ] fix breadcrumb root to coincide with VSCode folder root
+    + so should only show the first folder within that root
+      + e.g. notethink > docstech > users > alex.stanhope > todo.md
+      + not mnt > secure > home > alex > git > github.com > active_development > ...
+    + match Markdown editor breadcrumb
+      + increase breadcrumb font size
+  + [X] style: breadcrumb bar should be compact, single-line, with overflow ellipsis
++ phase 3: auto view label in selector
+  + [X] pass the auto-resolved view type up from AutoView to the toolbar
+    + AutoView passes `derived_attributes.type` via `nested.auto_resolved_type`
+  + [X] update ViewTypeSelector to display "Auto (Document)" / "Auto (Kanban)" when type is auto
+    + only the display label changes; the `<option value="auto">` value stays the same
+  + [X] add test: when auto resolves to kanban, selector shows "Auto (Kanban)"
++ phase 4: ViewIntegrationSelector
+  + [X] create `ViewIntegrationSelector.tsx` in `notethink-views/src/components/views/`
+    + `<select>` dropdown with options: "Current file" (default), "Directory"
+    + rendered left of the breadcrumb in the top bar
+    + fires a new message type or state update when changed
+  + [X] "Current file" mode (default, existing behaviour)
+    + shows the single file currently open in the editor
+    + no changes to existing data flow
+  + [X] "Directory" mode
+    + extension sends all markdown files in the selected directory to the webview
+    + webview renders them as a multi-doc view (similar to how NoteRenderer loops over `props.notes`)
+    + `setIntegration` message sends directory path to extension
+  + [ ] wire directory breadcrumb click to ViewIntegrationSelector
+    + clicking a directory segment in the file path breadcrumb sets integration to "Directory"
+    + requires file path breadcrumb segment (phase 2 remaining task)
+  + [X] add extension handler for directory integration
+    + `notethinkEditor.ts`: handle `setIntegration` message
+    + use `vscode.workspace.findFiles` scoped to the requested directory
+    + parse and send all matching docs to the webview
+  + [X] add tests for ViewIntegrationSelector component
+  + [ ] add test for directory breadcrumb click triggering integration change
++ verification
+  + kanban Untagged column renders last in default order
+  + breadcrumb always visible at top of view
+  + auto view selector shows resolved type in parentheses
+  + ViewIntegrationSelector defaults to "Current file"
+  + clicking directory in breadcrumb switches to Directory mode and loads sibling docs
+  + all existing tests still pass
+
+
 ### performance: large file rendering [](?status=reviewing)
 
 + problem

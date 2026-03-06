@@ -5,12 +5,16 @@ export interface ViewProps {
     id: string;
     type: string;
     role?: string;
+    doc_path?: string;
+    doc_relative_path?: string;
+    workspace_root?: string;
     display_options?: NoteDisplayOptions;
     nested?: {
         menus?: Record<string, unknown>;
         parent_context?: NoteProps;
         breadcrumb_trail?: ReactElement;
         replaced_attributes?: Record<string, unknown>;
+        auto_resolved_type?: string;
     }
     // recursive inclusion of parent and child views
     child_views?: Array<ViewProps>;
@@ -37,4 +41,6 @@ export interface ViewApi {
     postMessage?: (message: unknown) => void;
     // navigation callback ref — GenericView registers handler, ExtensionReceiver invokes via ref
     onNavigationCommand?: import('react').MutableRefObject<((direction: string) => void) | undefined>;
+    // settings callback ref — views register their settings handler, toolbar gear button invokes it
+    onSettingsClick?: import('react').MutableRefObject<(() => void) | undefined>;
 }

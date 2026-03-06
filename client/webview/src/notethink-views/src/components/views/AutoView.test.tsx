@@ -13,6 +13,7 @@ jest.mock('./GenericView', () => ({
             data-type={props.type}
             data-parent-context-seq={props.display_options?.parent_context_seq}
             data-level={props.display_options?.level}
+            data-auto-resolved-type={props.nested?.auto_resolved_type || ''}
         >
             GenericView type={props.type}
         </div>
@@ -120,6 +121,24 @@ describe('AutoView', () => {
         render(<AutoView {...props} />);
         const view = screen.getByTestId('generic-view');
         expect(view).toHaveAttribute('data-level', '3');
+    });
+
+    it('passes auto_resolved_type via nested prop', () => {
+        const focused_note = makeNote({
+            seq: 1,
+            linetags: {
+                'ng_view': { key: 'ng_view', value: 'kanban', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes: [makeNote(), focused_note],
+            display_options: {
+                focused_notes: [focused_note],
+            },
+        });
+        render(<AutoView {...props} />);
+        const view = screen.getByTestId('generic-view');
+        expect(view).toHaveAttribute('data-auto-resolved-type', 'kanban');
     });
 
     it('updates data-auto-selected-viewtype attribute when kanban derived', () => {

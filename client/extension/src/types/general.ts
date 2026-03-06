@@ -7,6 +7,7 @@ export type EmptyObject = Record<string, never>;
 export interface Doc {
     id: string;
     path: string;
+    relative_path?: string;
     content?: MdastRoot;
     text?: string;
     hash_sha256?: string;

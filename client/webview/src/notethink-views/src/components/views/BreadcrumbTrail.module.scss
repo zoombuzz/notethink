@@ -1,22 +1,29 @@
 .breadcrumbTrail {
+  display: inline-flex;
+  align-items: center;
   margin: 0;
-  line-height: 1.0em;
-  padding: 0 0.1em;
-
-  * {
-    margin: 0;
-    font-size: 10pt;
-    font-weight: normal;
-    display: inline;
-  }
+  padding: 0;
+  line-height: 1.4em;
+  white-space: nowrap;
+  color: var(--vscode-breadcrumb-foregroundColor, var(--vscode-foreground, inherit));
 
   button {
     background: none;
     border: none;
-    padding: 0;
+    padding: 1px 2px;
     font: inherit;
-    color: inherit;
+    font-size: inherit;
+    color: var(--vscode-breadcrumb-foregroundColor, var(--vscode-foreground, inherit));
     cursor: pointer;
+
+    &:hover {
+      color: var(--vscode-breadcrumb-focusForegroundColor, var(--vscode-foreground, inherit));
+    }
+
+    &:active, &:focus {
+      color: var(--vscode-breadcrumb-activeSelectionForegroundColor, var(--vscode-foreground, inherit));
+      outline: none;
+    }
   }
 
   .breadcrumbItem {
@@ -24,10 +31,14 @@
       cursor: pointer;
     }
   }
-  // clear float on items for next element
-  + * { clear: both; }
+
+  .pathSegment {
+    opacity: 0.8;
+  }
 
   .breadcrumbSeparator {
-    margin: 0 0.5em 0 0.5em;
+    margin: 0 0.15em;
+    opacity: 0.6;
+    font-size: inherit;
   }
 }

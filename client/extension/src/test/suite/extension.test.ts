@@ -192,6 +192,87 @@ suite('Web Extension Test Suite', () => {
 	});
 
 	// ---------------------------------------------------------------
+	// Workspace root resolution (breadcrumb stripping)
+	// ---------------------------------------------------------------
+
+	suite('Workspace Root Resolution', () => {
+
+		test('workspaceFolders should be available', () => {
+			const folders = vscode.workspace.workspaceFolders;
+			console.log('[DIAG] workspaceFolders:', JSON.stringify(folders?.map(f => ({
+				name: f.name,
+				uri: f.uri.toString(),
+				path: f.uri.path,
+				scheme: f.uri.scheme,
+			}))));
+			assert.ok(folders, 'workspaceFolders should not be undefined');
+			assert.ok(folders.length > 0, 'workspaceFolders should have at least one entry');
+		});
+
+		test('getWorkspaceFolder should resolve for workspace files', async () => {
+			// find a .md file in the workspace
+			const uris = await vscode.workspace.findFiles('**/*.md', undefined, 1);
+			console.log('[DIAG] findFiles result:', JSON.stringify(uris.map(u => ({
+				uri: u.toString(),
+				path: u.path,
+				scheme: u.scheme,
+			}))));
+			assert.ok(uris.length > 0, 'Should find at least one .md file');
+
+			const doc = await vscode.workspace.openTextDocument(uris[0]);
+			console.log('[DIAG] doc.uri:', doc.uri.toString(), 'path:', doc.uri.path, 'scheme:', doc.uri.scheme);
+
+			const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+			console.log('[DIAG] getWorkspaceFolder:', folder ? JSON.stringify({
+				name: folder.name,
+				uri: folder.uri.toString(),
+				path: folder.uri.path,
+				scheme: folder.uri.scheme,
+			}) : 'undefined');
+
+			assert.ok(folder, 'getWorkspaceFolder should return a folder for workspace documents');
+
+			// The doc path should start with the workspace folder path
+			const starts_with = doc.uri.path.startsWith(folder.uri.path);
+			console.log('[DIAG] doc.uri.path.startsWith(folder.uri.path):', starts_with,
+				'docPath:', doc.uri.path, 'folderPath:', folder.uri.path);
+			assert.ok(starts_with, `doc path "${doc.uri.path}" should start with workspace folder path "${folder.uri.path}"`);
+		});
+
+		test('workspace root stripping should produce correct relative segments', async () => {
+			const uris = await vscode.workspace.findFiles('**/*.md', undefined, 1);
+			assert.ok(uris.length > 0);
+
+			const doc = await vscode.workspace.openTextDocument(uris[0]);
+			const folder = vscode.workspace.getWorkspaceFolder(doc.uri)
+				|| vscode.workspace.workspaceFolders?.[0];
+			const workspace_root = folder?.uri.path || '';
+
+			const doc_path = doc.uri.path;
+			let relative_path = doc_path;
+			if (workspace_root && doc_path.startsWith(workspace_root)) {
+				relative_path = doc_path.slice(workspace_root.length);
+			}
+			const segments = relative_path.split('/').filter(Boolean);
+
+			console.log('[DIAG] workspace_root:', workspace_root);
+			console.log('[DIAG] doc_path:', doc_path);
+			console.log('[DIAG] relative_path:', relative_path);
+			console.log('[DIAG] segments:', JSON.stringify(segments));
+
+			assert.ok(segments.length > 0, 'Should have at least one path segment');
+			// The workspace root folder name itself should NOT appear in the segments
+			if (workspace_root) {
+				const ws_name = workspace_root.split('/').filter(Boolean).pop();
+				assert.ok(
+					segments[0] !== ws_name,
+					`First segment "${segments[0]}" should not be the workspace folder name "${ws_name}"`
+				);
+			}
+		});
+	});
+
+	// ---------------------------------------------------------------
 	// Document API interactions
 	// ---------------------------------------------------------------
 

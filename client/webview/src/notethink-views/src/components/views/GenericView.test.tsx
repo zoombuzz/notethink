@@ -39,6 +39,34 @@ jest.mock('./BreadcrumbTrail', () => ({
     default: (props: NoteProps) => <div data-testid="breadcrumb-trail">BreadcrumbTrail</div>,
 }));
 
+// mock ViewTypeSelector
+jest.mock('./ViewTypeSelector', () => ({
+    __esModule: true,
+    default: (props: { currentType: string; autoResolvedType?: string }) => (
+        <select data-testid="view-type-selector" data-auto-resolved={props.autoResolvedType || ''}>
+            <option value={props.currentType}>{props.currentType}</option>
+        </select>
+    ),
+}));
+
+// mock ViewIntegrationSelector
+jest.mock('./ViewIntegrationSelector', () => ({
+    __esModule: true,
+    default: (props: { currentMode: string }) => (
+        <select data-testid="view-integration-selector" value={props.currentMode}>
+            <option value={props.currentMode}>{props.currentMode}</option>
+        </select>
+    ),
+}));
+
+// mock ViewRenderer styles
+jest.mock('../ViewRenderer.module.scss', () => ({
+    viewToolbar: 'viewToolbar',
+    viewToolbarBreadcrumb: 'viewToolbarBreadcrumb',
+    contextBar: 'contextBar',
+    content: 'content',
+}));
+
 function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
     return {
         seq: 0,
@@ -156,13 +184,51 @@ describe('GenericView', () => {
         await waitFor(() => expect(screen.getByTestId('document-view')).toBeInTheDocument());
     });
 
-    it('does not render any view for unknown type', async () => {
-        const { container } = render(
+    it('renders always-visible toolbar with view type selector', async () => {
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({ type: 'document' })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('view-toolbar')).toBeInTheDocument());
+        expect(screen.getByTestId('view-type-selector')).toBeInTheDocument();
+    });
+
+    it('renders view integration selector in toolbar', async () => {
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({ type: 'document' })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('view-integration-selector')).toBeInTheDocument());
+    });
+
+    it('passes auto_resolved_type to view type selector when set', async () => {
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'kanban',
+                    nested: { auto_resolved_type: 'kanban' },
+                })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('view-type-selector')).toBeInTheDocument());
+        const selector = screen.getByTestId('view-type-selector');
+        expect(selector).toHaveAttribute('data-auto-resolved', 'kanban');
+    });
+
+    it('does not render any view for unknown type but still shows toolbar', async () => {
+        render(
             <Suspense fallback={<div>loading</div>}>
                 <GenericView {...makeViewProps({ type: 'unknown' })} />
             </Suspense>
         );
-        expect(container.querySelector('[data-testid]')).toBeNull();
+        // toolbar is always rendered
+        expect(screen.getByTestId('view-toolbar')).toBeInTheDocument();
+        // but no view component is rendered
+        expect(screen.queryByTestId('document-view')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('auto-view')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('kanban-view')).not.toBeInTheDocument();
     });
 });
 

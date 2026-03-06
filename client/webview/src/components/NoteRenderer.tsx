@@ -25,6 +25,7 @@ interface NoteRendererProps {
     viewStates?: Record<string, ViewState>;
     setViewManagedState?: (updates: Array<Record<string, unknown>>) => void;
     onNavigationCommand?: React.MutableRefObject<((direction: string) => void) | undefined>;
+    workspace_root?: string;
 }
 
 /**
@@ -46,6 +47,9 @@ function NoteView({ note_id, note, props }: { note_id: string; note: Doc; props:
     const view_props: ViewProps = {
         id: note_id,
         type: view_type,
+        doc_path: note.path,
+        doc_relative_path: note.relative_path,
+        workspace_root: props.workspace_root,
         display_options: view_display_options,
         nested: {
             parent_context: root_note,

@@ -32,6 +32,7 @@ export default function ExtensionReceiver() {
     // state originates from `vscode.getState` when a webview is reloaded
 	const [state, setState] = useState<VSCodeState>(saved_state || { docs: {} });
     const [selections, setSelections] = useState<SelectionState>({});
+    const [workspace_root, setWorkspaceRoot] = useState<string>('');
     const [viewStates, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
     const navigationCallbackRef = useRef<((direction: string) => void) | undefined>(undefined);
 
@@ -110,6 +111,9 @@ export default function ExtensionReceiver() {
         switch (message.type) {
             case 'update':
                 debug('received update, docs: %O', Object.keys(message.partial.docs || {}));
+                if (message.workspace_root) {
+                    setWorkspaceRoot(message.workspace_root);
+                }
                 setState(state => {
                     const incoming_docs = message.partial.docs || {};
                     const current_docs = state.docs || {};
@@ -209,5 +213,6 @@ export default function ExtensionReceiver() {
         viewStates={viewStates}
         setViewManagedState={handleSetViewManagedState}
         onNavigationCommand={navigationCallbackRef}
+        workspace_root={workspace_root}
     />;
 }

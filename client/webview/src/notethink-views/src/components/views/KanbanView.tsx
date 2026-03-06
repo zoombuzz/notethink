@@ -1,4 +1,4 @@
-import React, { type ReactElement, MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
+import React, { type ReactElement, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     DragDropContext,
     Draggable,
@@ -18,7 +18,6 @@ import {
 import { calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering } from "../../lib/linetagops";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import KanbanColumn from "./KanbanColumn";
-import KanbanContextBar from "./KanbanContextBar";
 import SettingsKanbanModal from "./SettingsKanbanModal";
 import GenericNote from "../notes/GenericNote";
 import master_view_styles from "../ViewRenderer.module.scss";
@@ -64,6 +63,18 @@ export default function KanbanView(props: ViewProps) {
 
     const [settings_open, setSettingsOpen] = useState(false);
 
+    // register settings handler on the ref so the toolbar gear button can invoke it
+    useEffect(() => {
+        if (props.handlers?.onSettingsClick) {
+            props.handlers.onSettingsClick.current = () => setSettingsOpen(true);
+        }
+        return () => {
+            if (props.handlers?.onSettingsClick) {
+                props.handlers.onSettingsClick.current = undefined;
+            }
+        };
+    }, [props.handlers?.onSettingsClick]);
+
     const columns = useMemo<Array<Column>>(() => {
         const status_values = new Set<string>();
         for (const note of (props.notes_within_parent_context || [])) {
@@ -85,19 +96,18 @@ export default function KanbanView(props: ViewProps) {
                     ordered.push({ seq: ordered.length, value });
                 }
             }
-            // ensure untagged is present
+            // ensure untagged is present (at end if not explicitly placed)
             if (!ordered_values.has('untagged')) {
-                ordered.unshift({ seq: 0, value: 'untagged', type: 'pseudo' });
-                // re-index seqs
-                ordered.forEach((col, i) => { col.seq = i; });
+                ordered.push({ seq: ordered.length, value: 'untagged', type: 'pseudo' });
             }
             return ordered;
         }
-        // default: alphabetical sort
-        const result: Column[] = [{ seq: 0, value: "untagged", type: "pseudo" }];
+        // default: named columns alphabetically, then untagged last
+        const result: Column[] = [];
         Array.from(status_values).sort().forEach((value, index) => {
-            result.push({ seq: index + 1, value });
+            result.push({ seq: index, value });
         });
+        result.push({ seq: result.length, value: "untagged", type: "pseudo" });
         return result;
     }, [props.notes_within_parent_context, display_options.settings?.column_order]);
 
@@ -109,7 +119,7 @@ export default function KanbanView(props: ViewProps) {
                 status_values.add(note.linetags.status.value);
             }
         }
-        return ['untagged', ...Array.from(status_values).sort()];
+        return [...Array.from(status_values).sort(), 'untagged'];
     }, [props.notes_within_parent_context]);
 
     const handleSettingsSave = useCallback((updated_settings: {
@@ -261,7 +271,6 @@ export default function KanbanView(props: ViewProps) {
             <div className={container_styles.join(' ')} id={`v${props.id}-inner`}
                  onClick={(display_options.focused_notes?.length ? props.handlers?.getClearHandler?.(display_options.focused_notes) : undefined)}
                  data-level={display_options.level} data-parent-content-seq={display_options.parent_context_seq}>
-                {display_options.settings?.show_context_bars && <KanbanContextBar {...props} onSettingsClick={() => setSettingsOpen(true)} />}
                 {props.nested?.parent_context && renderTopLevelNoteWithoutChildren(props.nested?.parent_context, props, display_options)}
                 {rendered_board}
             </div>

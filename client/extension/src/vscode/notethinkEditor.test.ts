@@ -102,6 +102,13 @@ describe('NotethinkEditorProvider', () => {
 			expect(doc_entries[0].text).toBe(defaultDocText);
 		});
 
+		it('sends workspace_root in the update message', () => {
+			const updates = panelHelper.postedMessages.filter((m: any) => m.type === 'update');
+			expect(updates.length).toBeGreaterThanOrEqual(1);
+			// When getWorkspaceFolder returns undefined, workspace_root should be ''
+			expect(updates[0].workspace_root).toBe('');
+		});
+
 		it('sends an initial selectionChanged message for styled first render', () => {
 			const selections = panelHelper.postedMessages.filter((m: any) => m.type === 'selectionChanged');
 			expect(selections.length).toBeGreaterThanOrEqual(1);
@@ -109,6 +116,90 @@ describe('NotethinkEditorProvider', () => {
 			expect(first_selection.docPath).toBe(defaultDocPath);
 			expect(typeof first_selection.selection.head).toBe('number');
 			expect(typeof first_selection.selection.anchor).toBe('number');
+		});
+	});
+
+	describe('workspace_root with real workspace folder', () => {
+		it('sends workspace_root from getWorkspaceFolder when available', async () => {
+			// Set up getWorkspaceFolder to return a workspace folder
+			const workspaceRoot = '/mnt/secure/home/alex/git/github.com/active_development';
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({
+				uri: Uri.file(workspaceRoot),
+				name: 'active_development',
+				index: 0,
+			});
+
+			const docPath = workspaceRoot + '/countingsheet/nodejs/ledger/docs/todo.md';
+			const doc = mockTextDocument('# Todo', docPath);
+			const editor = mockTextEditor(doc);
+			(vscode.window as any).visibleTextEditors = [editor];
+
+			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
+			const newPanel = createMockWebviewPanel();
+			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+
+			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
+			expect(updates.length).toBeGreaterThanOrEqual(1);
+			expect(updates[0].workspace_root).toBe(workspaceRoot);
+
+			// Restore mock
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue(undefined);
+		});
+
+		it('sets relative_path on doc when asRelativePath returns a relative path', async () => {
+			const workspaceRoot = '/mnt/secure/home/alex/git/github.com/active_development';
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({
+				uri: Uri.file(workspaceRoot),
+				name: 'active_development',
+				index: 0,
+			});
+			// Simulate asRelativePath returning a relative path (no leading /)
+			(vscode.workspace.asRelativePath as jest.Mock).mockReturnValue('countingsheet/nodejs/ledger/docs/todo.md');
+
+			const docPath = workspaceRoot + '/countingsheet/nodejs/ledger/docs/todo.md';
+			const doc = mockTextDocument('# Todo', docPath);
+			const editor = mockTextEditor(doc);
+			(vscode.window as any).visibleTextEditors = [editor];
+
+			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
+			const newPanel = createMockWebviewPanel();
+			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+
+			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
+			expect(updates.length).toBeGreaterThanOrEqual(1);
+			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			expect(doc_entries[0].relative_path).toBe('countingsheet/nodejs/ledger/docs/todo.md');
+
+			// Restore mocks
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue(undefined);
+			(vscode.workspace.asRelativePath as jest.Mock).mockImplementation((pathOrUri: any) => {
+				const p = typeof pathOrUri === 'string' ? pathOrUri : pathOrUri?.path || pathOrUri?.toString?.() || '';
+				return p;
+			});
+		});
+
+		it('does NOT set relative_path when asRelativePath returns an absolute path', async () => {
+			// When file is outside workspace, asRelativePath returns the full absolute path
+			const docPath = '/other/location/file.md';
+			(vscode.workspace.asRelativePath as jest.Mock).mockReturnValue(docPath);
+
+			const doc = mockTextDocument('# Test', docPath);
+			const editor = mockTextEditor(doc);
+			(vscode.window as any).visibleTextEditors = [editor];
+
+			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
+			const newPanel = createMockWebviewPanel();
+			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+
+			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
+			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			expect(doc_entries[0].relative_path).toBeUndefined();
+
+			// Restore mock
+			(vscode.workspace.asRelativePath as jest.Mock).mockImplementation((pathOrUri: any) => {
+				const p = typeof pathOrUri === 'string' ? pathOrUri : pathOrUri?.path || pathOrUri?.toString?.() || '';
+				return p;
+			});
 		});
 	});
 

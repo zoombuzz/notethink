@@ -1,4 +1,4 @@
-import React, { lazy, MouseEvent, useCallback, useEffect, useMemo } from "react";
+import React, { lazy, MouseEvent, useCallback, useEffect, useMemo, useRef } from "react";
 import Debug from "debug";
 import type { ViewProps, ViewApi } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions, NoteHandlers, ClickPositionInfo } from "../../types/NoteProps";
@@ -11,6 +11,9 @@ import {
 } from "../../lib/noteops";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import BreadcrumbTrail from "./BreadcrumbTrail";
+import ViewTypeSelector from "./ViewTypeSelector";
+import ViewIntegrationSelector, { type IntegrationMode } from "./ViewIntegrationSelector";
+import master_view_styles from "../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:GenericView");
 
@@ -194,13 +197,32 @@ export default function GenericView(props: ViewProps) {
 
     }, props.handlers);
 
+    // handle breadcrumb directory click — switch to directory integration mode
+    const handleDirectoryClick = useCallback((dir_path: string) => {
+        handlers.setViewManagedState([{
+            id: props.id,
+            display_options: {
+                integration_mode: 'directory',
+            },
+        }]);
+        handlers.postMessage?.({
+            type: 'setIntegration',
+            mode: 'directory',
+            path: dir_path,
+        });
+    }, [handlers, props.id]);
+
     // create standard breadcrumb component for display in views
-    const breadcrumb_trail = parent_context && <BreadcrumbTrail
-        {...parent_context}
+    const breadcrumb_trail = <BreadcrumbTrail
+        {...(parent_context || { seq: 0, level: 0, children_body: [], children: [], position: { start: { offset: 0, line: 0 }, end: { offset: 0, line: 0 } }, headline_raw: '', body_raw: '' })}
+        doc_path={props.doc_path}
+        doc_relative_path={props.doc_relative_path}
+        workspace_root={props.workspace_root}
+        onDirectoryClick={handleDirectoryClick}
         handlers={{
             setParentContextSeq: handlers?.setParentContextSeq
         }}
-        parent_notes={parent_context.parent_notes?.concat([parent_context])}
+        parent_notes={parent_context ? parent_context.parent_notes?.concat([parent_context]) : []}
     />;
 
     // navigation callback — registered on the ref so ExtensionReceiver can invoke it
@@ -280,6 +302,72 @@ export default function GenericView(props: ViewProps) {
         };
     }, [handleNavigation, props.handlers?.onNavigationCommand]);
 
+    // determine the auto-resolved type label for the view selector
+    const auto_resolved_type = props.nested?.auto_resolved_type;
+
+    // integration mode (current_file vs directory)
+    const integration_mode: IntegrationMode = (props.display_options?.integration_mode as IntegrationMode) || 'current_file';
+
+    const handleIntegrationChange = useCallback((mode: IntegrationMode) => {
+        handlers.setViewManagedState([{
+            id: props.id,
+            display_options: {
+                integration_mode: mode,
+            },
+        }]);
+        if (mode === 'directory' && props.doc_path) {
+            const dir_path = props.doc_path.replace(/\/[^/]+$/, '');
+            handlers.postMessage?.({
+                type: 'setIntegration',
+                mode: 'directory',
+                path: dir_path,
+            });
+        }
+    }, [handlers, props.id, props.doc_path]);
+
+    // settings callback ref — child views (e.g. KanbanView) register their handler
+    const settingsClickRef = useRef<(() => void) | undefined>(undefined);
+
+    // render toolbar at the leaf level only — when type is 'auto', AutoView will delegate
+    // to a concrete type which renders GenericView again with the toolbar
+    const show_toolbar = props.type !== 'auto';
+
+    const toolbar = show_toolbar ? (
+        <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
+            <ViewIntegrationSelector
+                currentMode={integration_mode}
+                onChange={handleIntegrationChange}
+            />
+            <div className={master_view_styles.viewToolbarBreadcrumb}>
+                {breadcrumb_trail}
+            </div>
+            <ViewTypeSelector
+                currentType={(props.nested?.replaced_attributes?.type as string) || props.type}
+                autoResolvedType={auto_resolved_type}
+                handlers={handlers}
+                id={props.id}
+            />
+            <button
+                data-testid="view-settings-button"
+                onClick={(e) => { e.stopPropagation(); settingsClickRef.current?.(); }}
+                style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '1.1em',
+                    padding: '0 0.3em',
+                    color: 'var(--vscode-foreground, inherit)',
+                    opacity: 0.6,
+                    marginLeft: '0.3em',
+                }}
+                title="Settings"
+                aria-label="Settings"
+            >
+                &#9881;
+            </button>
+        </div>
+    ) : null;
+
     const enriched_props: ViewProps = {
         ...props,
         display_options: {
@@ -292,12 +380,17 @@ export default function GenericView(props: ViewProps) {
             ...props.nested,
             parent_context,
             breadcrumb_trail,
+            auto_resolved_type,
         },
-        handlers: handlers,
+        handlers: {
+            ...handlers,
+            onSettingsClick: settingsClickRef,
+        },
     };
 
     return (
         <>
+            {toolbar}
             {props.type === 'auto' && <AutoView {...enriched_props} />}
             {props.type === 'document' && <DocumentView {...enriched_props} />}
             {props.type === 'kanban' && <KanbanView {...enriched_props} />}

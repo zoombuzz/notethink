@@ -1,4 +1,4 @@
-import React, { ReactElement, Suspense, useRef } from 'react';
+import React, { ReactElement, Suspense, useCallback, useRef } from 'react';
 import {sanitize} from "hast-util-sanitize";
 import {toHast} from "mdast-util-to-hast";
 import {toJsxRuntime} from "hast-util-to-jsx-runtime";
@@ -85,13 +85,22 @@ function NoteView({ note_id, note, props }: { note_id: string; note: Doc; props:
 
 export default function NoteRenderer(props: NoteRendererProps) {
     const ref = useRef<HTMLDivElement>(null);
+
+    const handleRenderError = useCallback((error: Error) => {
+        props.postMessage?.({
+            type: 'renderError',
+            message: error.message,
+            stack: error.stack,
+        });
+    }, [props.postMessage]);
+
     const rendered_notes = Object.entries(props.notes).map(([note_id, note]) => {
         if (!note.content) {
             return null;
         }
         if (note.text) {
             return <Suspense key={note_id} fallback={<div>Loading...</div>}>
-                <ErrorBoundary>
+                <ErrorBoundary onError={handleRenderError}>
                     <NoteView note_id={note_id} note={note} props={props} />
                 </ErrorBoundary>
             </Suspense>;

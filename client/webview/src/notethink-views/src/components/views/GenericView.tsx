@@ -133,19 +133,24 @@ export default function GenericView(props: ViewProps) {
             } else if (event.detail === 2 && note.handlers?.doubleClick) {
                 note.handlers.doubleClick(event, note, click_profile);
             } else if ((event.target as HTMLInputElement)?.type === 'checkbox') {
-                const target = event.target as HTMLInputElement | undefined;
-                const checkbox_text = target?.nextSibling?.textContent || '';
-                const text_context: string[] = [];
-                target?.parentElement && text_context.push(target?.parentElement?.textContent as string);
-                const changes = calculateTextChangesForCheckbox(note, target?.checked || false, checkbox_text, text_context);
-                // fire text edit via postMessage
-                if (props.handlers?.postMessage && changes.length > 0) {
-                    // optimistic: toggle checkbox visually before round-trip completes
-                    if (target) { target.checked = !target.checked; }
-                    props.handlers.postMessage({
-                        type: 'editText',
-                        changes: changes,
-                    });
+                try {
+                    const target = event.target as HTMLInputElement | undefined;
+                    const checkbox_text = target?.nextSibling?.textContent || '';
+                    const text_context: string[] = [];
+                    target?.parentElement && text_context.push(target?.parentElement?.textContent as string);
+                    debug('checkbox click: checked=%s text=%s note.seq=%d note.type=%s body_raw.length=%d',
+                        target?.checked, checkbox_text, note.seq, note.type, note.body_raw?.length ?? -1);
+                    const changes = calculateTextChangesForCheckbox(note, target?.checked || false, checkbox_text, text_context);
+                    debug('checkbox changes: %O', changes);
+                    // fire text edit via postMessage
+                    if (props.handlers?.postMessage && changes.length > 0) {
+                        props.handlers.postMessage({
+                            type: 'editText',
+                            changes: changes,
+                        });
+                    }
+                } catch (err) {
+                    console.error('checkbox click handler failed:', err);
                 }
             } else {
                 // click note to reveal in editor

@@ -15,14 +15,14 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showWarningMessage('NoteThink: open a .md file first');
 			return;
 		}
-		// createWebviewPanel honours ViewColumn (tested); vscode.openWith does not
-		const panel = vscode.window.createWebviewPanel(
-			'notethink',
-			'NoteThink',
-			vscode.ViewColumn.Two,
-			{ enableScripts: true, retainContextWhenHidden: true },
+		// use vscode.openWith to create a proper custom editor (auto-restored on window reload),
+		// then move it to the next group so the text editor stays in Group 1
+		await vscode.commands.executeCommand(
+			'vscode.openWith',
+			active_editor.document.uri,
+			NotethinkEditorProvider.viewType,
 		);
-		provider.myWebviewPanel(panel, active_editor.document);
+		await vscode.commands.executeCommand('workbench.action.moveEditorToNextGroup');
 	});
 	context.subscriptions.push(disposable);
 

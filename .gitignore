@@ -46,6 +46,7 @@ nohup.out
 # ignore spurious logs
 app/debug.log
 **/newrelic_agent.log
+**/notethink-extension.log
 
 # misc
 .DS_Store

@@ -311,6 +311,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							? new vscode.Selection(start_pos, end_pos)
 							: new vscode.Selection(end_pos, start_pos);
 						existing.revealRange(new vscode.Range(start_pos, end_pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+						// focus the text editor so the user can immediately type
+						vscode.window.showTextDocument(existing.document, existing.viewColumn, false);
 					} catch (err) {
 						writeToErrorLog(`${e.type} failed`, doc_path, err);
 					}
@@ -348,6 +350,24 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					try {
 						const uri = vscode.Uri.file(doc_path);
 						const document = await vscode.workspace.openTextDocument(uri);
+						const doc_length = document.getText().length;
+
+						// validate all change offsets before applying
+						for (const change of changes) {
+							const to = change.to ?? change.from;
+							if (change.from < 0 || to < 0 || change.from > doc_length || to > doc_length || change.from > to) {
+								writeToErrorLog('editText: invalid offsets, skipping',
+									`from=${change.from} to=${to} len=${doc_length} insert="${change.insert}"`);
+								return;
+							}
+						}
+
+						writeToLog('editText', `${changes.length} changes on ${doc_path} (len=${doc_length})`);
+						for (const change of changes) {
+							const ctx = document.getText().slice(Math.max(0, change.from - 10), (change.to ?? change.from) + 10);
+							writeToLog('editText', `from=${change.from} to=${change.to} insert="${change.insert}" ctx="${ctx}"`);
+						}
+
 						// apply changes end-to-start to preserve offsets
 						const sorted_changes = [...changes].sort((a, b) => (b.from) - (a.from));
 
@@ -390,6 +410,10 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					} catch (err) {
 						writeToErrorLog('editText failed', doc_path, err);
 					}
+					return;
+				}
+				case 'renderError': {
+					writeToErrorLog('webview render error', e.message as string, e.stack as string);
 					return;
 				}
 			}

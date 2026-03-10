@@ -94,26 +94,38 @@ export function resolveCaretPosition(ncp: ClickPositionInfo, note?: NoteProps): 
 
 /**
  * Calculate text changes for a checkbox action.
+ * Searches for `- [ ] text` or `- [x] text` patterns in the note's body_raw,
+ * using a regex to avoid matching linetags or markdown links.
  */
 export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check: boolean, match_text: string, match_context: Array<string>) {
-    const changes = [];
     const content = note.body_raw;
+    if (!content) { return []; }
     let content_start_position = note.position.end;
     if (!note.position.end_body) {
         content_start_position = note.position.start;
     }
-    let match_position = content.indexOf(`]${match_text}`);
-    if (match_position === -1) {
-        match_position = content.indexOf(`] ${match_text}`);
+    // Find all checkbox patterns: `[x]` or `[ ]` preceded by `- ` on the same line
+    const checkbox_re = /- \[([ xX])\]/g;
+    let match: RegExpExecArray | null;
+    while ((match = checkbox_re.exec(content)) !== null) {
+        // Check if the text after this checkbox matches match_text
+        const bracket_close = match.index + match[0].length; // position after `]`
+        const text_after = content.slice(bracket_close);
+        if (match_text && (text_after.startsWith(match_text) || text_after.startsWith(` ${match_text}`))) {
+            // bracket_start is the position of `[`, the char to replace is at bracket_start + 1
+            const bracket_start = match.index + 2; // `- [`  →  index of `[`
+            const from = content_start_position.offset + bracket_start + 1;
+            const to = content_start_position.offset + bracket_start + 2;
+            // Validate: from < to and the replacement makes sense
+            if (from >= to || to - from !== 1) { return []; }
+            return [{
+                from,
+                to,
+                insert: action_is_check ? 'x' : ' ',
+            }];
+        }
     }
-    const checkbox_start_position = content.lastIndexOf('[', match_position - 1);
-    if (match_position === -1 || checkbox_start_position === -1) { return []; }
-    changes.push({
-        from: content_start_position.offset + checkbox_start_position + 1,
-        to: content_start_position.offset + match_position,
-        insert: action_is_check ? 'x' : ' ',
-    });
-    return changes;
+    return [];
 }
 
 /**

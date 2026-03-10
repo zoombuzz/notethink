@@ -1,43 +1,43 @@
 # Playwright Test Results
-# Version: 0.1.12
+# Version: 0.1.13
 # Date: 2026-03-10T00:00:00Z
 # Command: npx playwright test
 # ---
 Running 34 tests using 10 workers
 
-  ✓  breadcrumb.spec.ts - relative_path data-path attributes use full absolute paths for directory loading
-  ✓  breadcrumb.spec.ts - breadcrumb with countingsheet path shows countingsheet as first segment
   ✓  breadcrumb.spec.ts - uses relative_path for breadcrumb (symlink-safe)
   ✓  breadcrumb.spec.ts - strips workspace_root prefix from breadcrumb
+  ✓  breadcrumb.spec.ts - breadcrumb with countingsheet path shows countingsheet as first segment
+  ✓  breadcrumb.spec.ts - relative_path data-path attributes use full absolute paths for directory loading
   ✓  breadcrumb.spec.ts - shows full path when no workspace_root is provided
-  ✓  document-view.spec.ts - renders document container after injecting basic.md
-  ✓  error-boundary.spec.ts - shows fallback when malformed MDAST causes render error
-  ✓  error-boundary.spec.ts - fallback includes a Try Again button
-  ✓  error-boundary.spec.ts - fallback displays friendly message and error details
-  ✓  click-interaction.spec.ts - captured messages include docId and docPath
   ✓  click-interaction.spec.ts - clicking a note headline sends revealRange message
-  ✓  error-boundary.spec.ts - NoteRenderer container remains in the DOM despite error
+  ✓  click-interaction.spec.ts - captured messages include docId and docPath
   ✓  click-interaction.spec.ts - clicking a note sets aria-current (focused) attribute
   ✓  click-interaction.spec.ts - second click on focused note selects it without blanking the view
+  ✓  document-view.spec.ts - renders document container after injecting basic.md
   ✓  document-view.spec.ts - renders note headlines with correct text
   ✓  document-view.spec.ts - renders notes with data-seq attributes
   ✓  document-view.spec.ts - renders body paragraphs
-  ✓  kanban-view.spec.ts - renders kanban columns via auto view detecting ng_view linetag
-  ✓  kanban-view.spec.ts - places tasks in correct columns
-  ✓  kanban-view.spec.ts - places untagged tasks in untagged column
+  ✓  error-boundary.spec.ts - shows fallback when malformed MDAST causes render error
+  ✓  error-boundary.spec.ts - fallback displays friendly message and error details
+  ✓  error-boundary.spec.ts - fallback includes a Try Again button
+  ✓  error-boundary.spec.ts - NoteRenderer container remains in the DOM despite error
   ✓  kanban-drag.spec.ts - dragging a card to untagged column sends editText that removes status tag
   ✓  kanban-drag.spec.ts - dragging a card between columns sends editText with status change
   ✓  kanban-drag.spec.ts - card appears in destination column after extension sends updated doc
-  ✓  keyboard-navigation.spec.ts - clicking different notes produces revealRange messages
   ✓  kanban-drag.spec.ts - view does not blank after drag completes
+  ✓  kanban-view.spec.ts - renders kanban columns via auto view detecting ng_view linetag
+  ✓  kanban-view.spec.ts - places tasks in correct columns
+  ✓  kanban-view.spec.ts - places untagged tasks in untagged column
+  ✓  keyboard-navigation.spec.ts - clicking different notes produces revealRange messages
   ✓  keyboard-navigation.spec.ts - selection feedback updates focused note styling
-  ✓  view-switching.spec.ts - defaults to auto view which resolves to document for plain markdown
   ✓  keyboard-navigation.spec.ts - drillIn on nested doc changes parent context
+  ✓  keyboard-navigation.spec.ts - drillOut returns to parent context
   ✓  settings-toggle.spec.ts - toggling lineNumbers shows and hides line number elements
   ✓  settings-toggle.spec.ts - toggling contextBars shows and hides context bar elements
-  ✓  view-switching.spec.ts - switches to kanban view and back to document
   ✓  settings-toggle.spec.ts - settings survive view type switch
+  ✓  view-switching.spec.ts - defaults to auto view which resolves to document for plain markdown
+  ✓  view-switching.spec.ts - switches to kanban view and back to document
   ✓  view-switching.spec.ts - switches to auto view
-  ✓  keyboard-navigation.spec.ts - drillOut returns to parent context
 
-  34 passed (7.6s)
+  34 passed (7.5s)

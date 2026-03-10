@@ -2,6 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from "react";
 
 interface ErrorBoundaryProps {
     children: ReactNode;
+    onError?: (error: Error, info: ErrorInfo) => void;
 }
 
 interface ErrorBoundaryState {
@@ -21,9 +22,8 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     }
 
     componentDidCatch(error: Error, info: ErrorInfo): void {
-        // Log to console for debugging; in a VS Code webview there is no
-        // external error reporting service, so console is the best we can do.
         console.error("ErrorBoundary caught an error:", error, info);
+        this.props.onError?.(error, info);
     }
 
     handleTryAgain = (): void => {

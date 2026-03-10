@@ -9,6 +9,37 @@ const outputChannel = vscode.window.createOutputChannel('NoteThink', {
     log: true,
 });
 
+// --- Dev file log: buffer lines and flush to docstech/reports/notethink-extension.log ---
+const LOG_BUFFER_MAX = 500;
+const LOG_FLUSH_MS = 1000;
+const logBuffer: string[] = [];
+let logFlushTimer: ReturnType<typeof setTimeout> | undefined;
+
+function flushLogBuffer() {
+    logFlushTimer = undefined;
+    if (logBuffer.length === 0) { return; }
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) { return; }
+    const logUri = vscode.Uri.joinPath(folder.uri, 'docstech', 'reports', 'notethink-extension.log');
+    const content = logBuffer.join('\n') + '\n';
+    // fire-and-forget; never block logging on I/O
+    vscode.workspace.fs.writeFile(logUri, new TextEncoder().encode(content)).then(
+        undefined,
+        () => {} // silently ignore write failures
+    );
+}
+
+function appendToFileLog(line: string) {
+    if (typeof NOTETHINK_DEV !== 'undefined' && !NOTETHINK_DEV) { return; }
+    logBuffer.push(line);
+    if (logBuffer.length > LOG_BUFFER_MAX) {
+        logBuffer.splice(0, logBuffer.length - LOG_BUFFER_MAX);
+    }
+    if (!logFlushTimer) {
+        logFlushTimer = setTimeout(flushLogBuffer, LOG_FLUSH_MS);
+    }
+}
+
 // polyfill for winston call to `setImmediate()` as undefined in browser, https://github.com/webpack/webpack/issues/8280
 if (typeof global.setImmediate === 'undefined') {
     // @ts-ignore method signature doesn't exactly match Node.js `setImmediate()`
@@ -115,11 +146,16 @@ function formatFirstArg(arg: any, length: number) {
  */
 export function writeToLogAtLevel(level: string, ...data: Array<any>) {
     // format the first argument as a source
+    const raw_data = [...data];
     let source = '';
     if (data[0]) {
         source = formatFirstArg(data.shift(), logSourceMaxLen);
     }
     logger.log(level, source, ...data);
+    // mirror to file log for CLI access
+    const ts = new Date().toISOString();
+    const msg = raw_data.map(d => typeof d === 'string' ? d : JSON.stringify(d)).join(' ');
+    appendToFileLog(`${ts} ${level.toUpperCase().padEnd(5)} ${msg}`);
 }
 
 export function writeToLog(...data: Array<any>) {

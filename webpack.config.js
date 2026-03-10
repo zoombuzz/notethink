@@ -77,6 +77,9 @@ const clientExtensionConfig = {
 		new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
 			resource.request = resource.request.replace(/^node:/, '');
 		}),
+		new webpack.DefinePlugin({
+			NOTETHINK_DEV: JSON.stringify(!isProduction),
+		}),
 	],
 	externals: {
 		'vscode': 'commonjs vscode', // ignored because it doesn't exist

@@ -66,7 +66,7 @@ export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderO
         if (note.type === 'paragraph' && checked_set) {
             // render checkbox for list items with a checkbox
             headline = <>
-                <input type="checkbox" role="checkbox" checked={note.checked} readOnly/>{headline_text}
+                <input type="checkbox" role="checkbox" checked={note.checked ?? false} onChange={() => {}}/>{headline_text}
             </>;
         }
     }

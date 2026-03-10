@@ -1,7 +1,7 @@
 # Todo [](?ng_view=kanban&ng_child_status=backlog)
 
 
-### view toolbar, breadcrumbs, and integration selector [](?status=backlog)
+### view toolbar, breadcrumbs, and integration selector
 
 + goal
   + improve the top-of-view toolbar: breadcrumb context, smarter view selector, and a new ViewIntegrationSelector

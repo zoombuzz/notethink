@@ -89,11 +89,16 @@ export function renderNodeUnified(node: MdastNode, options_arg: RenderOptions = 
     } else {
         const cached = renderCache.get(node);
         if (cached) { return cached; }
-        const hast = sanitize(toHast(node as MdastNodes));
-        // @ts-ignore safe to ignore type error on jsx and jsxs (https://github.com/syntax-tree/hast-util-to-jsx-runtime)
-        const result = toJsxRuntime(hast, {Fragment, jsx, jsxs});
-        renderCache.set(node, result);
-        return result;
+        try {
+            const hast = sanitize(toHast(node as MdastNodes));
+            // @ts-ignore safe to ignore type error on jsx and jsxs (https://github.com/syntax-tree/hast-util-to-jsx-runtime)
+            const result = toJsxRuntime(hast, {Fragment, jsx, jsxs});
+            renderCache.set(node, result);
+            return result;
+        } catch (err) {
+            console.error('renderNodeUnified failed:', err);
+            return <></>;
+        }
     }
 }
 

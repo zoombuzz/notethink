@@ -242,3 +242,13 @@ Multiple projects in this workspace use Next.js and share similar process names.
 - When starting a dev server (`pnpm dev`, `pnpm dev:worker`, etc.) via `run_in_background`, capture the new process's **PID** immediately afterwards (e.g. `lsof -ti :PORT`) and **store it in memory**.
 - When stopping a dev server, **kill only the specific PID** — never use `pkill node`, `pkill next`, `killall node`, or any pattern-based kill that could match other running servers.
 - If you don't have the PID, use `lsof -ti :PORT` for the specific port to find the correct process before killing it.
+
+## Screenshots
+
+Ubuntu screenshots are saved to `~/Pictures/Screenshots/`. When the user refers to "the latest screenshot", "my screenshot", or similar, find the most recent file:
+
+```
+ls -t ~/Pictures/Screenshots/*.png | head -1
+```
+
+Then read it with the Read tool and include it in your analysis.

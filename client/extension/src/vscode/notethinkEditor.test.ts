@@ -19,6 +19,7 @@ function mockExtensionContext(): vscode.ExtensionContext {
 	return {
 		extensionUri: Uri.file('/mock/extension'),
 		subscriptions: [],
+		extension: { packageJSON: { version: '0.0.0-test' } },
 	} as unknown as vscode.ExtensionContext;
 }
 

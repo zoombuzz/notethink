@@ -140,6 +140,8 @@ export default function GenericView(props: ViewProps) {
                 const changes = calculateTextChangesForCheckbox(note, target?.checked || false, checkbox_text, text_context);
                 // fire text edit via postMessage
                 if (props.handlers?.postMessage && changes.length > 0) {
+                    // optimistic: toggle checkbox visually before round-trip completes
+                    if (target) { target.checked = !target.checked; }
                     props.handlers.postMessage({
                         type: 'editText',
                         changes: changes,

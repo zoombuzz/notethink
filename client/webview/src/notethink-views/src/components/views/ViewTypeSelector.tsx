@@ -33,7 +33,7 @@ export default function ViewTypeSelector(props: ViewTypeSelectorProps) {
                 border: '1px solid var(--vscode-dropdown-border)',
                 borderRadius: '2px',
                 cursor: 'pointer',
-                fontSize: '0.85em',
+                fontSize: 'inherit',
                 padding: '2px 0.3em',
                 color: 'var(--vscode-dropdown-foreground)',
             }}

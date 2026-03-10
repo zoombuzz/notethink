@@ -28,6 +28,8 @@ export function postMessageToExtension(message: unknown) {
 
 const saved_state = vscode.getState();
 
+const CONNECTION_TIMEOUT_MS = 5000;
+
 export default function ExtensionReceiver() {
     // state originates from `vscode.getState` when a webview is reloaded
 	const [state, setState] = useState<VSCodeState>(saved_state || { docs: {} });
@@ -35,6 +37,8 @@ export default function ExtensionReceiver() {
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
     const [viewStates, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
     const navigationCallbackRef = useRef<((direction: string) => void) | undefined>(undefined);
+    const [connected, setConnected] = useState(!!saved_state?.docs && Object.keys(saved_state.docs).length > 0);
+    const [timed_out, setTimedOut] = useState(false);
 
     const updateAllViewStates = useCallback((updater: (view_state: ViewState) => ViewState) => {
         setViewStates(prev => {
@@ -70,6 +74,9 @@ export default function ExtensionReceiver() {
 
     const onMessage = useCallback((event: MessageEvent) => {
         const message = event.data;
+
+        // any message from the extension host proves it's alive
+        setConnected(true);
 
         // Validate message envelope: must be a non-null object with a string type
         if (message === null || message === undefined || typeof message !== 'object' || typeof message.type !== 'string') {
@@ -113,6 +120,9 @@ export default function ExtensionReceiver() {
                 debug('received update, docs: %O', Object.keys(message.partial.docs || {}));
                 if (message.workspace_root) {
                     setWorkspaceRoot(message.workspace_root);
+                }
+                if (message.extension_version) {
+                    (window as unknown as Record<string, unknown>).__NOTETHINK_EXTENSION_VERSION__ = message.extension_version;
                 }
                 setState(state => {
                     const incoming_docs = message.partial.docs || {};
@@ -205,6 +215,26 @@ export default function ExtensionReceiver() {
             window.removeEventListener('message', onMessage);
         };
     }, []);
+
+    // show a helpful message if the extension host never responds
+    useEffect(() => {
+        if (connected) { return; }
+        const timer = setTimeout(() => {
+            debug('extension host did not respond within %dms', CONNECTION_TIMEOUT_MS);
+            setTimedOut(true);
+        }, CONNECTION_TIMEOUT_MS);
+        return () => clearTimeout(timer);
+    }, [connected]);
+
+    const has_docs = state.docs && Object.keys(state.docs).length > 0;
+    if (!has_docs && !connected && timed_out) {
+        return <div style={{ padding: '24px', color: 'var(--vscode-foreground)', fontFamily: 'var(--vscode-font-family)' }}>
+            <p>Waiting for extension host...</p>
+            <p style={{ fontSize: '12px', opacity: 0.7 }}>
+                If this persists, reload the window: Ctrl+Shift+P → &quot;Developer: Reload Window&quot;
+            </p>
+        </div>;
+    }
 
     return <NoteRenderer
         notes={state.docs || {}}

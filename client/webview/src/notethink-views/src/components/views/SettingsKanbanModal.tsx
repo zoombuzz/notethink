@@ -152,6 +152,7 @@ export default function SettingsKanbanModal(props: SettingsKanbanModalProps) {
 
             <p style={{ marginTop: '1.5em', opacity: 0.5, fontSize: '0.85em' }} data-testid="version-label">
                 NoteThink v{typeof NOTETHINK_VERSION !== 'undefined' ? NOTETHINK_VERSION : 'dev'}
+                {' '}(ext: {(window as unknown as Record<string, unknown>).__NOTETHINK_EXTENSION_VERSION__ as string || '?'})
             </p>
         </dialog>
     );

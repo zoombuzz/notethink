@@ -142,7 +142,7 @@ body.disableAddressBarHidingOnScroll {
   align-items: center;
   height: 22px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: 13px;
   overflow: hidden;
   white-space: nowrap;
   border-bottom: 1px solid var(--vscode-breadcrumb-background, transparent);
@@ -440,6 +440,48 @@ body.disableAddressBarHidingOnScroll {
       border-bottom-color: var(--vscode-editorWidget-border, var(--mantine-color-default-border));
     }
   }
+}
+
+
+// Code blocks (fenced ``` ... ```)
+
+.codeBlock {
+  position: relative;
+  margin: 0.5em 0;
+  border-radius: 6px;
+  background: var(--vscode-textCodeBlock-background, $off_grey);
+  border: 1px solid var(--mantine-color-default-border);
+  overflow: hidden;
+
+  pre {
+    margin: 0;
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.45;
+
+    code {
+      font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace);
+      font-size: var(--vscode-editor-font-size, 13px);
+      white-space: pre;
+      word-wrap: normal;
+      background: none;
+      padding: 0;
+      margin: 0;
+      border: none;
+    }
+  }
+}
+
+.codeBlockLang {
+  display: block;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-family: var(--vscode-font-family, sans-serif);
+  color: color-mix(in srgb, var(--vscode-editor-foreground, var(--mantine-color-default-color)), transparent 40%);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  user-select: none;
+  text-transform: lowercase;
 }
 
 

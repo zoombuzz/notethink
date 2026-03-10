@@ -1,43 +1,43 @@
 # Playwright Test Results
-# Version: 0.1.11
-# Date: 2026-03-06T15:00:00Z
+# Version: 0.1.12
+# Date: 2026-03-10T00:00:00Z
 # Command: npx playwright test
 # ---
 Running 34 tests using 10 workers
 
-  ✓  [chromium] breadcrumb.spec.ts - breadcrumb with countingsheet path shows countingsheet as first segment (897ms)
-  ✓  [chromium] breadcrumb.spec.ts - relative_path data-path attributes use full absolute paths for directory loading (902ms)
-  ✓  [chromium] document-view.spec.ts - renders document container after injecting basic.md (907ms)
-  ✓  [chromium] breadcrumb.spec.ts - uses relative_path for breadcrumb (symlink-safe) (912ms)
-  ✓  [chromium] breadcrumb.spec.ts - strips workspace_root prefix from breadcrumb (946ms)
-  ✓  [chromium] breadcrumb.spec.ts - shows full path when no workspace_root is provided (957ms)
-  ✓  [chromium] error-boundary.spec.ts - shows fallback when malformed MDAST causes render error (405ms)
-  ✓  [chromium] error-boundary.spec.ts - fallback includes a Try Again button (402ms)
-  ✓  [chromium] error-boundary.spec.ts - fallback displays friendly message and error details (424ms)
-  ✓  [chromium] click-interaction.spec.ts - captured messages include docId and docPath (1.6s)
-  ✓  [chromium] click-interaction.spec.ts - clicking a note headline sends revealRange message (1.6s)
-  ✓  [chromium] error-boundary.spec.ts - NoteRenderer container remains in the DOM despite error (401ms)
-  ✓  [chromium] click-interaction.spec.ts - clicking a note sets aria-current (focused) attribute (1.9s)
-  ✓  [chromium] document-view.spec.ts - renders note headlines with correct text (1.2s)
-  ✓  [chromium] document-view.spec.ts - renders notes with data-seq attributes (1.2s)
-  ✓  [chromium] document-view.spec.ts - renders body paragraphs (1.2s)
-  ✓  [chromium] click-interaction.spec.ts - second click on focused note selects it without blanking the view (2.4s)
-  ✓  [chromium] kanban-view.spec.ts - renders kanban columns via auto view detecting ng_view linetag (1.7s)
-  ✓  [chromium] kanban-view.spec.ts - places tasks in correct columns (1.7s)
-  ✓  [chromium] kanban-view.spec.ts - places untagged tasks in untagged column (1.7s)
-  ✓  [chromium] kanban-drag.spec.ts - dragging a card between columns sends editText with status change (2.5s)
-  ✓  [chromium] kanban-drag.spec.ts - dragging a card to untagged column sends editText that removes status tag (2.5s)
-  ✓  [chromium] kanban-drag.spec.ts - card appears in destination column after extension sends updated doc (2.5s)
-  ✓  [chromium] keyboard-navigation.spec.ts - clicking different notes produces revealRange messages (2.1s)
-  ✓  [chromium] kanban-drag.spec.ts - view does not blank after drag completes (2.8s)
-  ✓  [chromium] keyboard-navigation.spec.ts - selection feedback updates focused note styling (2.4s)
-  ✓  [chromium] view-switching.spec.ts - defaults to auto view which resolves to document for plain markdown (739ms)
-  ✓  [chromium] settings-toggle.spec.ts - toggling lineNumbers shows and hides line number elements (1.8s)
-  ✓  [chromium] keyboard-navigation.spec.ts - drillIn on nested doc changes parent context (3.0s)
-  ✓  [chromium] settings-toggle.spec.ts - toggling contextBars shows and hides context bar elements (1.8s)
-  ✓  [chromium] view-switching.spec.ts - switches to kanban view and back to document (1.5s)
-  ✓  [chromium] settings-toggle.spec.ts - settings survive view type switch (2.0s)
-  ✓  [chromium] view-switching.spec.ts - switches to auto view (2.0s)
-  ✓  [chromium] keyboard-navigation.spec.ts - drillOut returns to parent context (3.5s)
+  ✓  breadcrumb.spec.ts - relative_path data-path attributes use full absolute paths for directory loading
+  ✓  breadcrumb.spec.ts - breadcrumb with countingsheet path shows countingsheet as first segment
+  ✓  breadcrumb.spec.ts - uses relative_path for breadcrumb (symlink-safe)
+  ✓  breadcrumb.spec.ts - strips workspace_root prefix from breadcrumb
+  ✓  breadcrumb.spec.ts - shows full path when no workspace_root is provided
+  ✓  document-view.spec.ts - renders document container after injecting basic.md
+  ✓  error-boundary.spec.ts - shows fallback when malformed MDAST causes render error
+  ✓  error-boundary.spec.ts - fallback includes a Try Again button
+  ✓  error-boundary.spec.ts - fallback displays friendly message and error details
+  ✓  click-interaction.spec.ts - captured messages include docId and docPath
+  ✓  click-interaction.spec.ts - clicking a note headline sends revealRange message
+  ✓  error-boundary.spec.ts - NoteRenderer container remains in the DOM despite error
+  ✓  click-interaction.spec.ts - clicking a note sets aria-current (focused) attribute
+  ✓  click-interaction.spec.ts - second click on focused note selects it without blanking the view
+  ✓  document-view.spec.ts - renders note headlines with correct text
+  ✓  document-view.spec.ts - renders notes with data-seq attributes
+  ✓  document-view.spec.ts - renders body paragraphs
+  ✓  kanban-view.spec.ts - renders kanban columns via auto view detecting ng_view linetag
+  ✓  kanban-view.spec.ts - places tasks in correct columns
+  ✓  kanban-view.spec.ts - places untagged tasks in untagged column
+  ✓  kanban-drag.spec.ts - dragging a card to untagged column sends editText that removes status tag
+  ✓  kanban-drag.spec.ts - dragging a card between columns sends editText with status change
+  ✓  kanban-drag.spec.ts - card appears in destination column after extension sends updated doc
+  ✓  keyboard-navigation.spec.ts - clicking different notes produces revealRange messages
+  ✓  kanban-drag.spec.ts - view does not blank after drag completes
+  ✓  keyboard-navigation.spec.ts - selection feedback updates focused note styling
+  ✓  view-switching.spec.ts - defaults to auto view which resolves to document for plain markdown
+  ✓  keyboard-navigation.spec.ts - drillIn on nested doc changes parent context
+  ✓  settings-toggle.spec.ts - toggling lineNumbers shows and hides line number elements
+  ✓  settings-toggle.spec.ts - toggling contextBars shows and hides context bar elements
+  ✓  view-switching.spec.ts - switches to kanban view and back to document
+  ✓  settings-toggle.spec.ts - settings survive view type switch
+  ✓  view-switching.spec.ts - switches to auto view
+  ✓  keyboard-navigation.spec.ts - drillOut returns to parent context
 
-  34 passed (7.8s)
+  34 passed (7.6s)

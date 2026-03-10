@@ -81,6 +81,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				type: 'update',
 				partial: { docs: { [doc.id]: timestamped } },
 				workspace_root,
+				extension_version,
 			});
 		}
 
@@ -118,6 +119,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		const workspace_folder = vscode.workspace.getWorkspaceFolder(initialDocument.uri)
 			|| vscode.workspace.workspaceFolders?.[0];
 		const workspace_root = workspace_folder?.uri.path || '';
+		const extension_version = this.context.extension.packageJSON.version as string || '';
 
 		// load initial document and send selection for styled first render
 		active_doc = await buildDoc(initialDocument);
@@ -240,6 +242,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				type: 'update',
 				partial: { docs: timestamped },
 				workspace_root,
+				extension_version,
 			};
 			debug('updateWebview (%d docs)', Object.keys(send_docs).length);
 			webviewPanel.webview.postMessage(message);
@@ -331,6 +334,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 								type: 'update',
 								partial: { docs: dir_docs },
 								workspace_root,
+								extension_version,
 							});
 						} catch (err) {
 							writeToErrorLog('setIntegration directory failed', dir_path, err);
@@ -377,6 +381,12 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							}
 							await vscode.workspace.applyEdit(wsEdit);
 						}
+						// bypass debounce: immediately re-parse and send the updated doc
+						// (the edit above already fired onDidChangeTextDocument which set a
+						// debounce timer — clear it to avoid a redundant delayed update)
+						if (change_timer) { clearTimeout(change_timer); }
+						active_doc = await buildDoc(existing?.document ?? document);
+						sendDoc(active_doc);
 					} catch (err) {
 						writeToErrorLog('editText failed', doc_path, err);
 					}

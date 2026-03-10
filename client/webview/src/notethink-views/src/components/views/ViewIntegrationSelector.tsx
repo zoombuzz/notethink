@@ -29,7 +29,7 @@ export default function ViewIntegrationSelector(props: ViewIntegrationSelectorPr
                 border: '1px solid var(--vscode-dropdown-border)',
                 borderRadius: '2px',
                 cursor: 'pointer',
-                fontSize: '1em',
+                fontSize: 'inherit',
                 padding: '2px 0.3em',
                 color: 'var(--vscode-dropdown-foreground)',
                 marginRight: '0.5em',

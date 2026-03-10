@@ -13,9 +13,14 @@ import type { ViewState } from './ExtensionReceiver';
 export type MdastNodes = import("mdast").Nodes;
 
 export function renderNodeUnified(node: MdastNodes): ReactElement {
-    const hast = sanitize(toHast(node));
-    // @ts-ignore safe to ignore type error on jsx and jsxs (https://github.com/syntax-tree/hast-util-to-jsx-runtime)
-    return toJsxRuntime(hast, {Fragment, jsx, jsxs});
+    try {
+        const hast = sanitize(toHast(node));
+        // @ts-ignore safe to ignore type error on jsx and jsxs (https://github.com/syntax-tree/hast-util-to-jsx-runtime)
+        return toJsxRuntime(hast, {Fragment, jsx, jsxs});
+    } catch (err) {
+        console.error('renderNodeUnified failed:', err);
+        return <></>;
+    }
 }
 
 interface NoteRendererProps {

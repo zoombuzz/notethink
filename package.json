@@ -4,7 +4,7 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
@@ -25,7 +25,8 @@
     "multi-root ready"
   ],
   "activationEvents": [
-    "onLanguage:markdown"
+    "onLanguage:markdown",
+    "onCustomEditor:zoombuzz.notethink"
   ],
   "browser": "./client/extension/dist/extension",
   "contributes": {

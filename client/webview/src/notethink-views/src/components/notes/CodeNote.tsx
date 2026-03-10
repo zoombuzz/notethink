@@ -7,6 +7,7 @@ const debug = Debug("nodejs:notethink-views:CodeNote");
 
 export default function CodeNote(props: NoteProps) {
     const note = props;
+    const lang_label = note.lang || '';
 
     // render note
     return (
@@ -25,10 +26,11 @@ export default function CodeNote(props: NoteProps) {
             { note?.linetags && <GenericNoteAttributes
                 {...note}
             /> }
-            <div className={view_specific_styles.body}
+            <div className={view_specific_styles.codeBlock}
                  onClick={createNoteClickHandler(note, bodyClickPosition(note))}
             >
-                {note.body_raw}
+                {lang_label && <span className={view_specific_styles.codeBlockLang}>{lang_label}</span>}
+                <pre><code className={lang_label ? `language-${lang_label}` : undefined}>{note.body_raw}</code></pre>
             </div>
         </div>
     );

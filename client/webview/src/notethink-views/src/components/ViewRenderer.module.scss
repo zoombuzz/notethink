@@ -227,20 +227,23 @@ body.disableAddressBarHidingOnScroll {
 //
 
 .note {
+  outline-offset: 6px;
+  border-radius: 6px;
 
   &.focused {
     outline: dashed 2px var(--mantine-primary-color-2);
-    outline-offset: 6px;
 
     .note.focused {
-      outline-offset: 2px;
+      outline-offset: 8px;
     }
   }
 
   &.selected {
-    // solid is the only change, but repeat the whole style for nodes that are selected without being focused
     outline: solid 2px var(--mantine-primary-color-2);
-    outline-offset: 3px;
+
+    .note.selected {
+      outline-offset: 8px;
+    }
   }
 
   &.unclickable {
@@ -571,7 +574,6 @@ body.disableAddressBarHidingOnScroll {
       &.selected {
         // while notes in all views show their selection, leafNotes only show it in DocumentView
         outline: solid 2px var(--mantine-primary-color-2);
-        outline-offset: 3px;
       }
     }
   }
@@ -632,7 +634,8 @@ body.disableAddressBarHidingOnScroll {
 
         &:hover {
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-          transform: translateY(-1px);
+          // don't lift the note up on hover, just glow
+          //transform: translateY(-1px);
         }
 
         // hello-pangea/dnd sets [data-rbd-draggable-id] on dragging items
@@ -656,9 +659,11 @@ body.disableAddressBarHidingOnScroll {
           // don't allow content to extend outside note boundaries, particularly useful when inserting non-reflowable content like images or diagrams
           overflow: hidden;
 
-          // spacing between sub-notes within a kanban card
+          // spacing between sub-notes within a kanban card;
+          // must exceed 2× outline-offset (8px) + 2× outline-width (2px) to prevent overlap
           > .note {
-            margin-top: 0.5em;
+            margin-top: 22px;
+            overflow: hidden;
           }
         }
       }

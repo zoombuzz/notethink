@@ -1,12 +1,33 @@
 import * as vscode from 'vscode';
 import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 
+const PANEL_VIEWTYPE = 'notethink';
+
 export function activate(context: vscode.ExtensionContext) {
 
-	// register our editor for opening specific files in wider context
+	// register our custom editor for "Open With..." right-click
 	const provider = new NotethinkEditorProvider(context);
 	const providerRegistration = vscode.window.registerCustomEditorProvider(NotethinkEditorProvider.viewType, provider);
 	context.subscriptions.push(providerRegistration);
+
+	// register serializer to restore panels after window reload
+	context.subscriptions.push(vscode.window.registerWebviewPanelSerializer(PANEL_VIEWTYPE, {
+		async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: unknown) {
+			// extract document path from persisted webview state
+			const saved = state as { docs?: Record<string, { path?: string }> } | undefined;
+			const first_doc = saved?.docs ? Object.values(saved.docs)[0] : undefined;
+			const doc_path = first_doc?.path;
+			if (!doc_path) { return; }
+			try {
+				const uri = vscode.Uri.file(doc_path);
+				const document = await vscode.workspace.openTextDocument(uri);
+				await provider.myWebviewPanel(panel, document);
+			} catch {
+				// document may have been deleted since last session
+				panel.dispose();
+			}
+		}
+	}));
 
 	// register command defined in package.json
 	const disposable = vscode.commands.registerCommand('notethink.openview', async () => {
@@ -15,14 +36,15 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showWarningMessage('NoteThink: open a .md file first');
 			return;
 		}
-		// use vscode.openWith to create a proper custom editor (auto-restored on window reload),
-		// then move it to the next group so the text editor stays in Group 1
-		await vscode.commands.executeCommand(
-			'vscode.openWith',
-			active_editor.document.uri,
-			NotethinkEditorProvider.viewType,
+		// createWebviewPanel avoids the VS Code breadcrumb bar that custom editors show;
+		// the WebviewPanelSerializer registered above handles restoring after window reload
+		const panel = vscode.window.createWebviewPanel(
+			PANEL_VIEWTYPE,
+			'NoteThink',
+			vscode.ViewColumn.Two,
+			{ enableScripts: true, retainContextWhenHidden: true },
 		);
-		await vscode.commands.executeCommand('workbench.action.moveEditorToNextGroup');
+		await provider.myWebviewPanel(panel, active_editor.document);
 	});
 	context.subscriptions.push(disposable);
 

@@ -12,7 +12,7 @@ import GenericNote from "../../components/notes/GenericNote";
 import Debug from 'debug';
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
-const ABRIDGE_THRESHOLD = 8;
+const ABRIDGE_THRESHOLD = 4;
 const SHOW_TOP = 3;
 const SHOW_BOTTOM = 2;
 

@@ -39,6 +39,7 @@ export default function GenericView(props: ViewProps) {
             show_line_numbers: false,
             show_context_bars: true,
             scroll_text_into_view: true,
+            scroll_note_into_view: true,
             ...props.parent_view?.parent_view?.parent_view?.display_options?.settings,
             ...props.parent_view?.parent_view?.display_options?.settings,
             ...props.parent_view?.display_options?.settings,
@@ -95,14 +96,13 @@ export default function GenericView(props: ViewProps) {
         display_options.focused_seqs = display_options.focused_notes.map((note: NoteProps) => note.seq);
     }
 
-    // find the set of notes within this view that are currently selected
+    // find the set of notes within this view that are currently selected (use full notes list so subnotes are included)
     display_options.selected_notes = useMemo(() => {
         if (props.selection?.main.head === undefined || props.selection?.main.anchor === undefined) { return []; }
         if (props.selection?.main.head === props.selection?.main.anchor) { return []; }
-        return findSelectedNotes([parent_context as NoteProps, ...(notes_within_parent_context || [])], props.selection);
+        return findSelectedNotes(props.notes || [], props.selection);
     }, [
-        parent_context,
-        notes_within_parent_context,
+        props.notes,
         props.selection
     ]);
     display_options.selected_seqs = display_options.selected_notes?.map((note: NoteProps) => note.seq) || [];
@@ -155,7 +155,14 @@ export default function GenericView(props: ViewProps) {
             } else {
                 // click note to reveal in editor
                 const caret_pos = resolveCaretPosition(click_profile, note);
-                if (note.selected) {
+                if (event.detail === 2) {
+                    // double-click selects the note immediately
+                    props.handlers?.postMessage?.({
+                        type: 'selectRange',
+                        from: click_profile.selection_from ?? click_profile.from,
+                        to: click_profile.selection_to ?? click_profile.to,
+                    });
+                } else if (note.selected) {
                     // click deselects and returns to focused
                     props.handlers?.postMessage?.({
                         type: 'revealRange',

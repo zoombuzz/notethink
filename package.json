@@ -4,7 +4,7 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.14",
+  "version": "0.1.16",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
@@ -27,7 +27,8 @@
   "activationEvents": [
     "onLanguage:markdown",
     "onCustomEditor:zoombuzz.notethink",
-    "onWebviewPanel:notethink"
+    "onWebviewPanel:notethink",
+    "onStartupFinished"
   ],
   "browser": "./client/extension/dist/extension",
   "contributes": {
@@ -90,6 +91,11 @@
       {
         "command": "notethink.clearFocus",
         "title": "NoteThink: Clear Focus"
+      },
+      {
+        "command": "dulcet.saveToGitHub",
+        "title": "Dulcet: Save to GitHub",
+        "icon": "$(cloud-upload)"
       }
     ],
     "menus": {
@@ -146,6 +152,12 @@
         "command": "notethink.drillOut",
         "key": "backspace",
         "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+      },
+      {
+        "command": "dulcet.saveToGitHub",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "dulcet.active && editorTextFocus"
       }
     ],
     "configuration": [

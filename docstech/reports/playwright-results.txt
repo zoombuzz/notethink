@@ -1,28 +1,27 @@
 # Playwright Test Results
-# Version: 0.1.14
-# Date: 2026-03-11T00:00:00Z
-# Command: npx playwright test
+# Version: 0.1.16
+# Date: 2026-03-12T00:00:00Z
+# Command: npx playwright test --reporter=list
 # ---
-
 Running 34 tests using 10 workers
 
-  ✓   2 [chromium] › playwright/specs/breadcrumb.spec.ts:11:9 › Breadcrumb workspace root stripping › shows full path when no workspace_root is provided (899ms)
-  ✓   3 [chromium] › playwright/specs/breadcrumb.spec.ts:26:9 › Breadcrumb workspace root stripping › strips workspace_root prefix from breadcrumb (923ms)
-  ✓   4 [chromium] › playwright/specs/breadcrumb.spec.ts:40:9 › Breadcrumb workspace root stripping › uses relative_path for breadcrumb (symlink-safe) (919ms)
-  ✓   7 [chromium] › playwright/specs/breadcrumb.spec.ts:82:9 › Breadcrumb workspace root stripping › breadcrumb with countingsheet path shows countingsheet as first segment (867ms)
-  ✓   8 [chromium] › playwright/specs/document-view.spec.ts:12:9 › Document View › renders document container after injecting basic.md (868ms)
-  ✓  10 [chromium] › playwright/specs/breadcrumb.spec.ts:66:9 › Breadcrumb workspace root stripping › relative_path data-path attributes use full absolute paths for directory loading (906ms)
-  ✓  15 [chromium] › playwright/specs/error-boundary.spec.ts:56:9 › Error Boundary › fallback displays friendly message and error details (408ms)
-  ✓  14 [chromium] › playwright/specs/error-boundary.spec.ts:48:9 › Error Boundary › shows fallback when malformed MDAST causes render error (413ms)
-  ✓  16 [chromium] › playwright/specs/error-boundary.spec.ts:80:9 › Error Boundary › fallback includes a Try Again button (401ms)
-  ✓   1 [chromium] › playwright/specs/click-interaction.spec.ts:13:9 › Click Interaction › clicking a note headline sends revealRange message (1.6s)
-  ✓   5 [chromium] › playwright/specs/click-interaction.spec.ts:96:9 › Click Interaction › captured messages include docId and docPath (1.6s)
-  ✓  17 [chromium] › playwright/specs/error-boundary.spec.ts:90:9 › Error Boundary › NoteRenderer container remains in the DOM despite error (396ms)
-  ✓   6 [chromium] › playwright/specs/click-interaction.spec.ts:29:9 › Click Interaction › clicking a note sets aria-current (focused) attribute (1.9s)
+  ✓   4 [chromium] › playwright/specs/document-view.spec.ts:12:9 › Document View › renders document container after injecting basic.md (890ms)
+  ✓   2 [chromium] › playwright/specs/breadcrumb.spec.ts:11:9 › Breadcrumb workspace root stripping › shows full path when no workspace_root is provided (893ms)
+  ✓   3 [chromium] › playwright/specs/breadcrumb.spec.ts:66:9 › Breadcrumb workspace root stripping › relative_path data-path attributes use full absolute paths for directory loading (904ms)
+  ✓   6 [chromium] › playwright/specs/breadcrumb.spec.ts:26:9 › Breadcrumb workspace root stripping › strips workspace_root prefix from breadcrumb (914ms)
+  ✓   5 [chromium] › playwright/specs/breadcrumb.spec.ts:82:9 › Breadcrumb workspace root stripping › breadcrumb with countingsheet path shows countingsheet as first segment (908ms)
+  ✓   7 [chromium] › playwright/specs/breadcrumb.spec.ts:40:9 › Breadcrumb workspace root stripping › uses relative_path for breadcrumb (symlink-safe) (921ms)
+  ✓  14 [chromium] › playwright/specs/error-boundary.spec.ts:48:9 › Error Boundary › shows fallback when malformed MDAST causes render error (394ms)
+  ✓  15 [chromium] › playwright/specs/error-boundary.spec.ts:56:9 › Error Boundary › fallback displays friendly message and error details (396ms)
+  ✓  16 [chromium] › playwright/specs/error-boundary.spec.ts:80:9 › Error Boundary › fallback includes a Try Again button (390ms)
+  ✓  10 [chromium] › playwright/specs/click-interaction.spec.ts:96:9 › Click Interaction › captured messages include docId and docPath (1.5s)
+  ✓   8 [chromium] › playwright/specs/click-interaction.spec.ts:13:9 › Click Interaction › clicking a note headline sends revealRange message (1.5s)
+  ✓  17 [chromium] › playwright/specs/error-boundary.spec.ts:90:9 › Error Boundary › NoteRenderer container remains in the DOM despite error (391ms)
+  ✓   1 [chromium] › playwright/specs/click-interaction.spec.ts:29:9 › Click Interaction › clicking a note sets aria-current (focused) attribute (1.9s)
+  ✓   9 [chromium] › playwright/specs/click-interaction.spec.ts:53:9 › Click Interaction › second click on focused note selects it without blanking the view (1.9s)
   ✓  11 [chromium] › playwright/specs/document-view.spec.ts:19:9 › Document View › renders note headlines with correct text (1.2s)
   ✓  12 [chromium] › playwright/specs/document-view.spec.ts:32:9 › Document View › renders notes with data-seq attributes (1.2s)
   ✓  13 [chromium] › playwright/specs/document-view.spec.ts:41:9 › Document View › renders body paragraphs (1.2s)
-  ✓   9 [chromium] › playwright/specs/click-interaction.spec.ts:53:9 › Click Interaction › second click on focused note selects it without blanking the view (2.3s)
   ✓  22 [chromium] › playwright/specs/kanban-view.spec.ts:29:9 › Kanban View › renders kanban columns via auto view detecting ng_view linetag (1.7s)
   ✓  23 [chromium] › playwright/specs/kanban-view.spec.ts:45:9 › Kanban View › places tasks in correct columns (1.7s)
   ✓  24 [chromium] › playwright/specs/kanban-view.spec.ts:62:9 › Kanban View › places untagged tasks in untagged column (1.7s)
@@ -32,13 +31,13 @@ Running 34 tests using 10 workers
   ✓  25 [chromium] › playwright/specs/keyboard-navigation.spec.ts:14:9 › Keyboard Navigation › clicking different notes produces revealRange messages (2.1s)
   ✓  20 [chromium] › playwright/specs/kanban-drag.spec.ts:108:9 › Kanban Drag and Drop › view does not blank after drag completes (2.8s)
   ✓  26 [chromium] › playwright/specs/keyboard-navigation.spec.ts:38:9 › Keyboard Navigation › selection feedback updates focused note styling (2.4s)
-  ✓  32 [chromium] › playwright/specs/view-switching.spec.ts:12:9 › View Switching › defaults to auto view which resolves to document for plain markdown (742ms)
-  ✓  29 [chromium] › playwright/specs/settings-toggle.spec.ts:12:9 › Settings Toggle › toggling lineNumbers shows and hides line number elements (1.8s)
+  ✓  32 [chromium] › playwright/specs/view-switching.spec.ts:12:9 › View Switching › defaults to auto view which resolves to document for plain markdown (740ms)
   ✓  27 [chromium] › playwright/specs/keyboard-navigation.spec.ts:60:9 › Keyboard Navigation › drillIn on nested doc changes parent context (3.0s)
+  ✓  29 [chromium] › playwright/specs/settings-toggle.spec.ts:12:9 › Settings Toggle › toggling lineNumbers shows and hides line number elements (1.8s)
   ✓  30 [chromium] › playwright/specs/settings-toggle.spec.ts:40:9 › Settings Toggle › toggling contextBars shows and hides context bar elements (1.8s)
   ✓  33 [chromium] › playwright/specs/view-switching.spec.ts:22:9 › View Switching › switches to kanban view and back to document (1.5s)
   ✓  31 [chromium] › playwright/specs/settings-toggle.spec.ts:59:9 › Settings Toggle › settings survive view type switch (2.0s)
   ✓  34 [chromium] › playwright/specs/view-switching.spec.ts:39:9 › View Switching › switches to auto view (2.0s)
   ✓  28 [chromium] › playwright/specs/keyboard-navigation.spec.ts:88:9 › Keyboard Navigation › drillOut returns to parent context (3.5s)
 
-  34 passed (7.9s)
+  34 passed (7.8s)

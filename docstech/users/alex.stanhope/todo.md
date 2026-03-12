@@ -159,6 +159,33 @@
   + 196 tests passing
 
 
+### descendant-aware abridging [](?status=doing)
+
++ problem
+  + abridging only checks direct `children_body.length` against `ABRIDGE_THRESHOLD` (4)
+  + a note with 3 children, each with 3 children, each with 3 children = 27 rendered items
+  + no level triggers abridging because 3 < 4 at every level
+  + consequence: deeply nested notes render very large without ever being abridged
++ approach: render budget based on descendant count
+  + pre-compute `descendant_note_count` on each NoteProps (bottom-up after tree construction)
+  + add a second abridge trigger: cumulative descendants of visible children exceeds `MAX_VISIBLE_DESCENDANTS` (12)
+  + iterate children_body, track running descendant total, abridge when budget exceeded
+  + each nested MarkdownNote independently evaluates its own budget (recursive constraint)
++ [ ] add `descendant_note_count` field to NoteProps interface
++ [ ] compute descendant counts bottom-up in `convertMdastToNoteHierarchy.ts`
+  + after `nestChildNotes` and `child_notes` population, walk allNotes in reverse
+  + each note's count = sum of (1 + child.descendant_note_count) for NoteProps children in children_body
++ [ ] add `MAX_VISIBLE_DESCENDANTS` constant and budget-based abridge in `MarkdownNote.tsx`
+  + keep existing `ABRIDGE_THRESHOLD` trigger (wide notes)
+  + add second trigger: iterate body items, sum descendant_note_count, find cutoff point
+  + show items up to cutoff + last SHOW_BOTTOM items, with "... N more items" between
+  + "Show less" button appears when expanded and either trigger applies
++ [ ] add tests
+  + descendant count computation in convertMdastToNoteHierarchy.test.ts
+  + deep-but-narrow tree abridged by budget in GenericView/DocumentView tests
+  + existing abridge behaviour preserved
+
+
 ### insert modal
 
 + goal

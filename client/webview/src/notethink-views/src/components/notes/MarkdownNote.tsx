@@ -13,6 +13,7 @@ import Debug from 'debug';
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
 const ABRIDGE_THRESHOLD = 4;
+const MAX_VISIBLE_DESCENDANTS = 12;
 const SHOW_TOP = 3;
 const SHOW_BOTTOM = 2;
 
@@ -98,21 +99,45 @@ export default function MarkdownNote(props: NoteProps) {
             >
                 { (() => {
                     const body = note.children_body!;
-                    const should_abridge = body.length > ABRIDGE_THRESHOLD && !expanded;
+                    // determine abridge cutoff: either by direct child count or by descendant budget
+                    let cutoff = body.length;
+                    const abridge_by_count = body.length > ABRIDGE_THRESHOLD;
+                    if (abridge_by_count) {
+                        cutoff = SHOW_TOP;
+                    }
+                    // budget-based cutoff: walk children, sum descendant counts, find where budget is exceeded
+                    if (!abridge_by_count && body.length > 1) {
+                        let running = 0;
+                        for (let i = 0; i < body.length; i++) {
+                            const child = body[i];
+                            const child_cost = ('seq' in child && (child as NoteProps).seq !== undefined)
+                                ? 1 + ((child as NoteProps).descendant_note_count ?? 0)
+                                : 1;
+                            running += child_cost;
+                            if (running > MAX_VISIBLE_DESCENDANTS && i < body.length - 1) {
+                                cutoff = i + 1;
+                                break;
+                            }
+                        }
+                    }
+                    const should_abridge = cutoff < body.length && !expanded;
                     if (should_abridge) {
-                        const hidden_count = body.length - SHOW_TOP - SHOW_BOTTOM;
+                        const tail = Math.min(SHOW_BOTTOM, body.length - cutoff);
+                        const hidden_count = body.length - cutoff - tail;
                         return <>
-                            {renderBodyItems(note, body.slice(0, SHOW_TOP), 0)}
-                            <span className={view_specific_styles.readMoreToggle}
-                                  role="button"
-                                  onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
-                            >&hellip; {hidden_count} more items</span>
-                            {renderBodyItems(note, body.slice(-SHOW_BOTTOM), body.length - SHOW_BOTTOM)}
+                            {renderBodyItems(note, body.slice(0, cutoff), 0)}
+                            {hidden_count > 0 && (
+                                <span className={view_specific_styles.readMoreToggle}
+                                      role="button"
+                                      onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
+                                >&hellip; {hidden_count} more items</span>
+                            )}
+                            {tail > 0 && renderBodyItems(note, body.slice(-tail), body.length - tail)}
                         </>;
                     }
                     return <>
                         {renderBodyItems(note, body, 0)}
-                        {body.length > ABRIDGE_THRESHOLD && (
+                        {cutoff < body.length && (
                             <span className={view_specific_styles.readMoreToggle}
                                   role="button"
                                   onClick={(e) => { e.stopPropagation(); setExpanded(false); }}

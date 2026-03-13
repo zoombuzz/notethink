@@ -1,124 +1,90 @@
 # Todo [](?ng_view=kanban&ng_child_status=backlog)
 
 
-### view toolbar, breadcrumbs, and integration selector
+### cursor positioning: editor caret position to NoteThink view
 
 + goal
-  + improve the top-of-view toolbar: breadcrumb context, smarter view selector, and a new ViewIntegrationSelector
-  + currently breadcrumbs render inside DocumentContextBar/KanbanContextBar but are hidden when `show_context_bars` is off
-  + the view type selector shows raw type names; when Auto is selected it should show the resolved view, e.g. "Auto (Kanban)"
-  + introduce a ViewIntegrationSelector that controls what data the view displays (current file, directory, etc.)
-  + kanban Untagged column should appear last, not first
+  + when the editor caret is inside a long note, scroll the NoteThink view to show the relevant part
+  + currently `DocumentView` scrolls the focused note element into view, but for long notes the caret may be at the bottom while only the top is visible
+  + need sub-note scroll precision: scroll the specific body item (paragraph, list, etc.) that contains the caret
 + architecture
-  + BreadcrumbTrail already exists in `notethink-views/src/components/views/BreadcrumbTrail.tsx`
-  + GenericView builds `breadcrumb_trail` and passes it via `nested.breadcrumb_trail`
-  + DocumentContextBar and KanbanContextBar render `nested.breadcrumb_trail` + ViewTypeSelector
-  + AutoView wraps GenericView and sets `data-auto-selected-viewtype` on a wrapper div
-  + ViewTypeSelector is a `<select>` driven by `SELECTABLE_VIEWTYPES` from GenericView
-  + KanbanView builds columns in `useMemo`; Untagged is hardcoded at `seq: 0` / first position
-  + ExtensionReceiver manages viewStates and sends docs via postMessage
-+ phase 1: kanban untagged column last
-  + [X] move Untagged to the end of the default column order in KanbanView `useMemo`
-    + change default sort: named columns alphabetically first, then Untagged at the end
-    + when `custom_order` is set, respect user order (no change needed)
-  + [X] update `visible_columns` filter: keep hiding empty Untagged, but now at end position
-  + [X] update KanbanView tests for new column order
-+ phase 2: always-visible breadcrumb bar
-  + [X] extract breadcrumb + toolbar into a shared top bar rendered by GenericView itself
-    + render `breadcrumb_trail` above the view type switch, outside the context bar toggle
-    + ensures breadcrumbs are always visible regardless of `show_context_bars` setting
-  + [ ] add file path breadcrumb segment
-    + show the document file path (from `Doc.path`) as the root breadcrumb segment
-    + clicking a directory segment in the path triggers ViewIntegrationSelector change (phase 4)
-  + [ ] fix breadcrumb root to coincide with VSCode folder root
-    + so should only show the first folder within that root
-      + e.g. notethink > docstech > users > alex.stanhope > todo.md
-      + not mnt > secure > home > alex > git > github.com > active_development > ...
-    + match Markdown editor breadcrumb
-      + increase breadcrumb font size
-  + [X] style: breadcrumb bar should be compact, single-line, with overflow ellipsis
-+ phase 3: auto view label in selector
-  + [X] pass the auto-resolved view type up from AutoView to the toolbar
-    + AutoView passes `derived_attributes.type` via `nested.auto_resolved_type`
-  + [X] update ViewTypeSelector to display "Auto (Document)" / "Auto (Kanban)" when type is auto
-    + only the display label changes; the `<option value="auto">` value stays the same
-  + [X] add test: when auto resolves to kanban, selector shows "Auto (Kanban)"
-+ phase 4: ViewIntegrationSelector
-  + [X] create `ViewIntegrationSelector.tsx` in `notethink-views/src/components/views/`
-    + `<select>` dropdown with options: "Current file" (default), "Directory"
-    + rendered left of the breadcrumb in the top bar
-    + fires a new message type or state update when changed
-  + [X] "Current file" mode (default, existing behaviour)
-    + shows the single file currently open in the editor
-    + no changes to existing data flow
-  + [X] "Directory" mode
-    + extension sends all markdown files in the selected directory to the webview
-    + webview renders them as a multi-doc view (similar to how NoteRenderer loops over `props.notes`)
-    + `setIntegration` message sends directory path to extension
-  + [ ] wire directory breadcrumb click to ViewIntegrationSelector
-    + clicking a directory segment in the file path breadcrumb sets integration to "Directory"
-    + requires file path breadcrumb segment (phase 2 remaining task)
-  + [X] add extension handler for directory integration
-    + `notethinkEditor.ts`: handle `setIntegration` message
-    + use `vscode.workspace.findFiles` scoped to the requested directory
-    + parse and send all matching docs to the webview
-  + [X] add tests for ViewIntegrationSelector component
-  + [ ] add test for directory breadcrumb click triggering integration change
+  + `selectionChanged` message from extension carries `{head, anchor}` offsets (debounced 120ms)
+  + `GenericView` calls `findDeepestNote(notes, head)` to determine the focused note
+  + `DocumentView.useEffect` scrolls the focused note element via `scrollIntoView`
+  + body items are MDAST nodes with `position.start.offset` / `position.end.offset` but these offsets are not exposed in the DOM
+  + `renderNodeUnified` in `renderops.tsx` converts MDAST → HAST → JSX but does not attach position data attributes
+  + `MarkdownNote.renderBodyItems` wraps each rendered body item in a `<Fragment>` with no DOM element to attach attributes to
++ shared foundation: position-aware body items
+  + [ ] add `data-offset-start` and `data-offset-end` attributes to rendered body items
+    + in `MarkdownNote.renderBodyItems`: wrap non-note body items in a `<span>` (inline) or `<div>` (block) instead of bare `<Fragment>`
+    + read `position.start.offset` and `position.end.offset` from the MDAST node and set as data attributes
+    + child notes already have position data via their note element; no change needed for those
+  + [ ] add tests: rendered body items have `data-offset-start`/`data-offset-end` attributes matching MDAST positions
++ phase 1: sub-note scroll in DocumentView
+  + [ ] update `DocumentView.useEffect` scroll logic
+    + after finding the focused note element, query within it for `[data-offset-start]` elements
+    + find the body item whose offset range contains `selection.head`
+    + scroll that element into view instead of the note-level element
+    + fallback: if no matching body item found, scroll the note element (current behaviour)
+  + [ ] handle edge case: caret in headline (offset < first body item start)
+    + scroll to the note headline element (`.headline` div)
+  + [ ] add tests: verify sub-note scroll targets the correct body item element
++ phase 2: smooth scroll and abridged notes
+  + [ ] when a note is abridged (height-clipped), auto-expand it before scrolling to the body item
+    + the existing focus-driven expansion handles this: `should_clip = !props.focused && overflow_state.overflows`
+    + verify that expansion completes before scroll (may need a brief delay or `requestAnimationFrame`)
+  + [ ] ensure scroll behaviour is smooth and doesn't jump between items on rapid cursor movement
+    + consider debouncing the sub-note scroll separately from the note-level scroll
 + verification
-  + kanban Untagged column renders last in default order
-  + breadcrumb always visible at top of view
-  + auto view selector shows resolved type in parentheses
-  + ViewIntegrationSelector defaults to "Current file"
-  + clicking directory in breadcrumb switches to Directory mode and loads sibling docs
+  + open a long note (e.g. todo.md performance story) in VS Code
+  + move caret to the bottom of the note — NoteThink view should scroll to show that section
+  + move caret to headline — view should show the top of the note
+  + abridged note should expand then scroll when caret enters a lower section
   + all existing tests still pass
 
 
-### performance: large file rendering [](?status=reviewing)
+### cursor positioning: Notethink view to editor caret position
 
-+ problem
-  + NoteThink UI is sluggish for big files (e.g. shopify-uncomplicated todo.md: 2761 lines, 274 headings)
-  + full re-parse → full hierarchy conversion → full React re-render on every edit (after 250ms debounce)
-+ profiled hotspots (ordered by estimated impact)
-  1. `makePosition` linear scan: O(offset) per call, called ~3× per note
-     + for 274 headings in a 100KB file: ~274 × 3 × 50K chars = ~41M char iterations
-     + fix: pre-compute a line-offset index array in a single pass, then binary search
-     + file: `convertMdastToNoteHierarchy.ts:18-24`
-  2. `nestChildNotes` backward scan: O(n²) worst case for flat structures
-     + 274 notes × backward scan = up to ~37K iterations
-     + fix: maintain a stack of open ancestors, push/pop as sections open/close — O(n)
-     + file: `convertMdastToNoteHierarchy.ts:214-234`
-  3. full React re-render on every doc update
-     + GenericNote wrapped in React.memo but props always new objects (display_options, handlers)
-     + fix: stabilise prop references with useRef/useMemo in parent views; skip re-render when note content unchanged
-     + files: `GenericView.tsx`, `DocumentView.tsx`, `KanbanView.tsx`
-  4. `renderNodeUnified` per body item: mdast→hast→sanitize→jsx per non-note child
-     + each call walks entire subtree; duplicated across re-renders
-     + fix: memoize rendered JSX keyed on mdast node identity (reference equality or position hash)
-     + file: `renderops.tsx:78-93`
-  5. selection messages sent on every cursor move with no debounce
-     + each triggers `findSelectedNotes` traversal in webview
-     + fix: debounce selection updates (100-150ms) in extension
-     + file: `notethinkEditor.ts:346-352`
-  6. single webpack chunk (maxChunks: 1) loads mermaid + dnd for every file
-     + fix: lazy-load mermaid (only needed for files containing mermaid blocks)
-     + file: `webpack.config.js:150`
-+ implementation phases
-  + phase 1: algorithmic fixes (items 1-2) — biggest bang, no API changes
-    + [X] pre-compute line-offset index in `convertMdastToNoteHierarchy`
-    + [X] replace `nestChildNotes` backward scan with ancestor stack
-    + [ ] add benchmark test: parse shopify-uncomplicated todo.md, assert < 50ms
-  + phase 2: React rendering (items 3-4) — moderate effort
-    + [X] stabilise display_options and handlers references in DocumentView
-    + [X] memoize `renderNodeUnified` output keyed on node reference
-    + [X] remove `renderToStaticMarkup` debugging call from renderops.tsx
-    + [ ] add React profiler measurement in dev mode
-  + phase 3: messaging and bundle (items 5-6) — polish
-    + [X] debounce selection updates in notethinkEditor.ts
-    + [ ] lazy-import mermaid behind dynamic import() (blocked by maxChunks: 1)
++ goal
+  + clicking in the NoteThink view should jump the editor caret to the precise position within the note, not just the note start
+  + currently `bodyClickPosition` returns `note.position.end.offset` (headline end) as `from`, so clicking anywhere in the body sends the caret to the same position
+  + need to map the click target back to the corresponding MDAST offset
++ architecture
+  + `createNoteClickHandler` in `noteui.ts` builds an onClick that calls `note.handlers.click(event, note, position)`
+  + `GenericView.handlers.click` sends a `revealRange` message with `{from, to}` offsets to the extension
+  + extension calls `editor.revealRange` to move the caret
+  + the click event's `target` is a DOM element rendered by `renderNodeUnified` (e.g. `<p>`, `<li>`, `<code>`)
+  + these elements currently have no offset data — need the `data-offset-start`/`data-offset-end` attributes from the shared foundation
++ depends on
+  + shared foundation from "editor caret → NoteThink view" story (position-aware body items)
++ phase 1: offset-aware click handler
+  + [ ] update `createNoteClickHandler` (or add a new handler) to extract offset from click target
+    + walk up from `event.target` to find the nearest ancestor with `data-offset-start`
+    + if found, use that offset as `from` in the `revealRange` message
+    + if not found (e.g. click on headline or gap between items), fall back to current behaviour
+  + [ ] update `bodyClickPosition` to accept an optional `offset` override
+    + when the click handler finds a `data-offset-start`, pass it through as `from`
+  + [ ] add tests: clicking a body item with `data-offset-start=150` sends `revealRange` with `from: 150`
++ phase 2: fine-grained position within body items
+  + [ ] for text-heavy elements (paragraphs, list items), use `window.getSelection()` to approximate character offset within the element
+    + get the selection range from the click
+    + count characters from the element start to the selection point
+    + add that to `data-offset-start` for a more precise offset
+  + [ ] handle inline elements (bold, italic, links) that nest within a paragraph
+    + the `data-offset-start` is on the paragraph wrapper, not the inline span
+    + character counting needs to walk the text nodes within the element
+  + [ ] add tests: clicking in the middle of a paragraph sends an offset that corresponds to that character position
++ phase 3: double-click selection sync
+  + [ ] when double-clicking a word in the NoteThink view, send a `selectRange` message (not `revealRange`)
+    + use `data-offset-start` + character offset to compute `from` and `to` for the word
+    + this selects the corresponding text in the editor
+  + [ ] add test: double-click on a word sends `selectRange` with correct `from`/`to` offsets
 + verification
-  + open shopify-uncomplicated todo.md in VS Code dev host, confirm responsive scrolling and editing
-  + run `pnpm run test-jest` — all tests pass
-  + run `npx playwright test` — all tests pass
+  + click on a specific paragraph in a multi-paragraph note — editor caret should jump to that paragraph
+  + click on a list item deep in a note — caret should land at that list item
+  + click on headline — caret should go to note start (existing behaviour preserved)
+  + double-click a word — editor should select that word
+  + all existing tests still pass
 
 
 ### insert modal

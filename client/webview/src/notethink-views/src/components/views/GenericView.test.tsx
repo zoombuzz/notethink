@@ -33,10 +33,14 @@ jest.mock('./KanbanView', () => ({
     },
 }));
 
-// mock BreadcrumbTrail
+// mock BreadcrumbTrail — capture onDirectoryClick for integration testing
+let capturedOnDirectoryClick: ((dir_path: string) => void) | undefined;
 jest.mock('./BreadcrumbTrail', () => ({
     __esModule: true,
-    default: (props: NoteProps) => <div data-testid="breadcrumb-trail">BreadcrumbTrail</div>,
+    default: (props: NoteProps & { onDirectoryClick?: (dir_path: string) => void }) => {
+        capturedOnDirectoryClick = props.onDirectoryClick;
+        return <div data-testid="breadcrumb-trail">BreadcrumbTrail</div>;
+    },
 }));
 
 // mock ViewTypeSelector
@@ -118,6 +122,7 @@ beforeEach(() => {
     mockDocViewRender.mockClear();
     mockKanbanViewRender.mockClear();
     mockAutoViewRender.mockClear();
+    capturedOnDirectoryClick = undefined;
 });
 
 describe('GenericView', () => {
@@ -740,6 +745,45 @@ describe('GenericView navigation callback', () => {
         expect(post_message).toHaveBeenCalledWith({
             type: 'revealRange',
             from: 10,
+        });
+    });
+
+    it('directory breadcrumb click sends setIntegration message and updates integration mode', async () => {
+        const post_message = jest.fn();
+        const set_view_managed_state = jest.fn();
+        const root = makeNote({ seq: 0, level: 1 });
+
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'document',
+                    notes: [root],
+                    doc_path: '/workspace/project/docs/todo.md',
+                    handlers: {
+                        setViewManagedState: set_view_managed_state,
+                        deleteViewFromManagedState: jest.fn(),
+                        revertAllViewsToDefaultState: jest.fn(),
+                        postMessage: post_message,
+                    },
+                })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
+
+        // BreadcrumbTrail mock captured onDirectoryClick
+        expect(capturedOnDirectoryClick).toBeInstanceOf(Function);
+        capturedOnDirectoryClick!('/workspace/project/docs');
+
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: 'test-view',
+            display_options: {
+                integration_mode: 'directory',
+            },
+        }]);
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'setIntegration',
+            mode: 'directory',
+            path: '/workspace/project/docs',
         });
     });
 

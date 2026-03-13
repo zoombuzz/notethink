@@ -582,6 +582,94 @@ describe('nestChildNotes stack-based nesting', () => {
     });
 });
 
+describe('benchmark: large file parsing', () => {
+
+    /**
+     * Generate a synthetic markdown string and MDAST tree simulating a large file
+     * (similar to shopify-uncomplicated todo.md: ~274 headings across 2700+ lines).
+     */
+    function generateLargeMdast(headingCount: number): { text: string; mdast: MdastNode } {
+        const lines: string[] = [];
+        const children: MdastNode[] = [];
+        let offset = 0;
+
+        for (let i = 0; i < headingCount; i++) {
+            // alternate between h2 and h3 to create nesting
+            const depth = (i % 5 === 0) ? 2 : 3;
+            const prefix = '#'.repeat(depth) + ' ';
+            const heading_text = `${prefix}heading ${i}`;
+            const heading_start = offset;
+            const heading_end = offset + heading_text.length;
+            lines.push(heading_text);
+            offset = heading_end + 1; // +1 for newline
+
+            children.push({
+                type: 'heading',
+                depth,
+                position: {
+                    start: { offset: heading_start, line: lines.length },
+                    end: { offset: heading_end, line: lines.length },
+                },
+                children: [],
+            });
+
+            // add 5-10 lines of body text per heading
+            const body_line_count = 5 + (i % 6);
+            for (let j = 0; j < body_line_count; j++) {
+                const body_line = `+ item ${i}-${j} with some content to simulate real text`;
+                lines.push(body_line);
+                offset += body_line.length + 1;
+            }
+            lines.push('');
+            offset += 1;
+        }
+
+        const text = lines.join('\n');
+        const mdast: MdastNode = {
+            type: 'root',
+            position: {
+                start: { offset: 0, line: 1 },
+                end: { offset: text.length, line: lines.length },
+            },
+            children,
+        };
+        return { text, mdast };
+    }
+
+    it('parses 274 headings (simulating large file) in under 50ms', () => {
+        const { text, mdast } = generateLargeMdast(274);
+        expect(text.length).toBeGreaterThan(20000); // sanity: confirm non-trivial size
+
+        // warm-up run (JIT compilation)
+        convertMdastToNoteHierarchy(mdast, text);
+
+        // timed run
+        const start = performance.now();
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const elapsed = performance.now() - start;
+
+        expect(elapsed).toBeLessThan(50);
+        // verify correctness
+        const all_notes = flattenNotes(root);
+        expect(all_notes.length).toBe(274);
+    });
+
+    it('parses 500 headings in under 100ms', () => {
+        const { text, mdast } = generateLargeMdast(500);
+
+        // warm-up
+        convertMdastToNoteHierarchy(mdast, text);
+
+        const start = performance.now();
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const elapsed = performance.now() - start;
+
+        expect(elapsed).toBeLessThan(100);
+        const all_notes = flattenNotes(root);
+        expect(all_notes.length).toBe(500);
+    });
+});
+
 /**
  * Helper to extract all NoteProps (by seq) from a root note's children_body tree.
  */

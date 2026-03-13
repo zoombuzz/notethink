@@ -157,6 +157,7 @@ const clientWebviewConfig = {
 		}),
 		new webpack.DefinePlugin({
 			NOTETHINK_VERSION: JSON.stringify(pkg.version),
+			NOTETHINK_DEV: JSON.stringify(!isProduction),
 		}),
 		new CopyWebpackPlugin({
 			patterns: [{ from: "public" }],

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { Profiler, useEffect, useMemo } from 'react';
 import master_view_styles from "../../components/ViewRenderer.module.scss";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 import {ViewProps} from "../../types/ViewProps";
@@ -9,7 +9,14 @@ import Debug from 'debug';
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import GenericNote from "../../components/notes/GenericNote";
 
+declare const NOTETHINK_DEV: boolean | undefined;
 const debug = Debug("nodejs:notethink-views:DocumentView");
+
+const onProfilerRender = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV)
+    ? (id: string, phase: string, actualDuration: number) => {
+        debug('Profiler %s %s %dms', id, phase, actualDuration.toFixed(1));
+    }
+    : undefined;
 
 export default React.memo(function DocumentView(props: ViewProps) {
 
@@ -53,22 +60,24 @@ export default React.memo(function DocumentView(props: ViewProps) {
 
     const container_styles: Array<string> = [view_specific_styles.viewDocument, master_view_styles.content];
 
-    return (
-        <>
-            <div className={container_styles.join(' ')}
-                 id={`v${props.id}-inner`}
-                 data-testid={`document-${props.id}-inner`}
-                 data-level={display_options.level}
-                 data-parent-content-seq={display_options.parent_context_seq}
-            >
-                <div className={view_specific_styles.centredPane}>
-                    {props.nested?.parent_context?.linetags && <GenericNoteAttributes
-                        {...props.nested?.parent_context}
-                    />}
-                    {props.nested?.parent_context && renderNote(props.nested?.parent_context, 0)}
-                    {/*{(props.notes_within_parent_context || []).map(render_note)}*/}
-                </div>
+    const content = (
+        <div className={container_styles.join(' ')}
+             id={`v${props.id}-inner`}
+             data-testid={`document-${props.id}-inner`}
+             data-level={display_options.level}
+             data-parent-content-seq={display_options.parent_context_seq}
+        >
+            <div className={view_specific_styles.centredPane}>
+                {props.nested?.parent_context?.linetags && <GenericNoteAttributes
+                    {...props.nested?.parent_context}
+                />}
+                {props.nested?.parent_context && renderNote(props.nested?.parent_context, 0)}
             </div>
-        </>
+        </div>
     );
+
+    if (onProfilerRender) {
+        return <Profiler id="DocumentView" onRender={onProfilerRender}>{content}</Profiler>;
+    }
+    return content;
 });

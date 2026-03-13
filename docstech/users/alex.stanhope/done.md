@@ -383,6 +383,49 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + 196 tests passing
 
 
+### view toolbar, breadcrumbs, and integration selector
+
++ goal
+  + improve the top-of-view toolbar: breadcrumb context, smarter view selector, and a new ViewIntegrationSelector
+  + kanban Untagged column should appear last, not first
++ [X] phase 1: kanban untagged column last
+  + moved Untagged to end of default column order in KanbanView
+  + updated visible_columns filter and tests
++ [X] phase 2: always-visible breadcrumb bar
+  + extracted breadcrumb + toolbar into shared top bar in GenericView
+  + added file path breadcrumb segment via `splitPathSegments` in BreadcrumbTrail.tsx
+  + fixed breadcrumb root to coincide with VSCode folder root using `doc_relative_path` from `asRelativePath()`
+  + workspace_root stripping handles symlinks correctly
+  + compact single-line style with overflow ellipsis
++ [X] phase 3: auto view label in selector
+  + AutoView passes resolved type via `nested.auto_resolved_type`
+  + ViewTypeSelector shows "Auto (Document)" / "Auto (Kanban)"
++ [X] phase 4: ViewIntegrationSelector
+  + created ViewIntegrationSelector.tsx with "Current file" / "Directory" modes
+  + extension handler for directory integration using `vscode.workspace.findFiles`
+  + wired directory breadcrumb click → handleDirectoryClick → setIntegration message
+  + GenericView integration test verifies breadcrumb click triggers setIntegration + setViewManagedState
+
+
+### performance: large file rendering
+
++ problem
+  + NoteThink UI sluggish for big files (shopify-uncomplicated todo.md: 2761 lines, 274 headings)
++ [X] phase 1: algorithmic fixes
+  + pre-computed line-offset index for O(log n) binary search in makePosition
+  + replaced nestChildNotes O(n²) backward scan with O(n) ancestor stack
+  + added benchmark tests: 274 headings < 50ms, 500 headings < 100ms
++ [X] phase 2: React rendering
+  + stabilised display_options and handlers references in DocumentView
+  + memoized renderNodeUnified output via WeakMap keyed on node reference
+  + removed renderToStaticMarkup debugging call
+  + added React.Profiler wrapping in DocumentView and KanbanView behind NOTETHINK_DEV flag
+  + added NOTETHINK_DEV to webview webpack DefinePlugin
++ [X] phase 3: messaging
+  + debounced selection updates in notethinkEditor.ts (120ms)
+  + lazy-import mermaid deferred (blocked by maxChunks: 1 requirement for web extensions)
+
+
 ### height-based abridging
 
 + problem

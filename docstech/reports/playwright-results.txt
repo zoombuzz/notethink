@@ -1,43 +1,43 @@
 # Playwright Test Results
-# Version: 0.1.17
-# Date: 2026-03-13T00:00:00Z
+# Version: 0.1.18
+# Date: 2026-03-13
 # Command: npx playwright test
 # ---
 Running 34 tests using 10 workers
 
-  ✓ [chromium] breadcrumb.spec.ts › relative_path data-path attributes use full absolute paths for directory loading
-  ✓ [chromium] breadcrumb.spec.ts › strips workspace_root prefix from breadcrumb
-  ✓ [chromium] breadcrumb.spec.ts › breadcrumb with countingsheet path shows countingsheet as first segment
-  ✓ [chromium] breadcrumb.spec.ts › shows full path when no workspace_root is provided
-  ✓ [chromium] document-view.spec.ts › renders document container after injecting basic.md
-  ✓ [chromium] breadcrumb.spec.ts › uses relative_path for breadcrumb (symlink-safe)
-  ✓ [chromium] error-boundary.spec.ts › shows fallback when malformed MDAST causes render error
-  ✓ [chromium] error-boundary.spec.ts › fallback displays friendly message and error details
-  ✓ [chromium] error-boundary.spec.ts › fallback includes a Try Again button
-  ✓ [chromium] click-interaction.spec.ts › captured messages include docId and docPath
-  ✓ [chromium] click-interaction.spec.ts › clicking a note headline sends revealRange message
-  ✓ [chromium] error-boundary.spec.ts › NoteRenderer container remains in the DOM despite error
-  ✓ [chromium] click-interaction.spec.ts › clicking a note sets aria-current (focused) attribute
-  ✓ [chromium] document-view.spec.ts › renders note headlines with correct text
-  ✓ [chromium] document-view.spec.ts › renders notes with data-seq attributes
-  ✓ [chromium] document-view.spec.ts › renders body paragraphs
-  ✓ [chromium] click-interaction.spec.ts › second click on focused note selects it without blanking the view
-  ✓ [chromium] kanban-view.spec.ts › renders kanban columns via auto view detecting ng_view linetag
-  ✓ [chromium] kanban-view.spec.ts › places tasks in correct columns
-  ✓ [chromium] kanban-view.spec.ts › places untagged tasks in untagged column
-  ✓ [chromium] kanban-drag.spec.ts › dragging a card to untagged column sends editText that removes status tag
-  ✓ [chromium] kanban-drag.spec.ts › dragging a card between columns sends editText with status change
-  ✓ [chromium] kanban-drag.spec.ts › card appears in destination column after extension sends updated doc
-  ✓ [chromium] keyboard-navigation.spec.ts › clicking different notes produces revealRange messages
-  ✓ [chromium] kanban-drag.spec.ts › view does not blank after drag completes
-  ✓ [chromium] keyboard-navigation.spec.ts › selection feedback updates focused note styling
-  ✓ [chromium] view-switching.spec.ts › defaults to auto view which resolves to document for plain markdown
-  ✓ [chromium] settings-toggle.spec.ts › toggling lineNumbers shows and hides line number elements
-  ✓ [chromium] keyboard-navigation.spec.ts › drillIn on nested doc changes parent context
-  ✓ [chromium] settings-toggle.spec.ts › toggling contextBars shows and hides context bar elements
-  ✓ [chromium] view-switching.spec.ts › switches to kanban view and back to document
-  ✓ [chromium] settings-toggle.spec.ts › settings survive view type switch
-  ✓ [chromium] view-switching.spec.ts › switches to auto view
-  ✓ [chromium] keyboard-navigation.spec.ts › drillOut returns to parent context
+  ✓   2 [chromium] › playwright/specs/breadcrumb.spec.ts:82:9 › Breadcrumb workspace root stripping › breadcrumb with countingsheet path shows countingsheet as first segment (856ms)
+  ✓   1 [chromium] › playwright/specs/breadcrumb.spec.ts:11:9 › Breadcrumb workspace root stripping › shows full path when no workspace_root is provided (860ms)
+  ✓   4 [chromium] › playwright/specs/document-view.spec.ts:12:9 › Document View › renders document container after injecting basic.md (852ms)
+  ✓   5 [chromium] › playwright/specs/breadcrumb.spec.ts:66:9 › Breadcrumb workspace root stripping › relative_path data-path attributes use full absolute paths for directory loading (852ms)
+  ✓   3 [chromium] › playwright/specs/breadcrumb.spec.ts:26:9 › Breadcrumb workspace root stripping › strips workspace_root prefix from breadcrumb (879ms)
+  ✓   7 [chromium] › playwright/specs/breadcrumb.spec.ts:40:9 › Breadcrumb workspace root stripping › uses relative_path for breadcrumb (symlink-safe) (880ms)
+  ✓  14 [chromium] › playwright/specs/error-boundary.spec.ts:48:9 › Error Boundary › shows fallback when malformed MDAST causes render error (394ms)
+  ✓  15 [chromium] › playwright/specs/error-boundary.spec.ts:56:9 › Error Boundary › fallback displays friendly message and error details (395ms)
+  ✓  16 [chromium] › playwright/specs/error-boundary.spec.ts:80:9 › Error Boundary › fallback includes a Try Again button (391ms)
+  ✓   8 [chromium] › playwright/specs/click-interaction.spec.ts:29:9 › Click Interaction › clicking a note sets aria-current (focused) attribute (1.4s)
+  ✓  10 [chromium] › playwright/specs/click-interaction.spec.ts:13:9 › Click Interaction › clicking a note headline sends revealRange message (1.5s)
+  ✓   6 [chromium] › playwright/specs/click-interaction.spec.ts:96:9 › Click Interaction › captured messages include docId and docPath (1.5s)
+  ✓  17 [chromium] › playwright/specs/error-boundary.spec.ts:90:9 › Error Boundary › NoteRenderer container remains in the DOM despite error (382ms)
+  ✓  12 [chromium] › playwright/specs/document-view.spec.ts:32:9 › Document View › renders notes with data-seq attributes (1.2s)
+  ✓  11 [chromium] › playwright/specs/document-view.spec.ts:19:9 › Document View › renders note headlines with correct text (1.2s)
+  ✓  13 [chromium] › playwright/specs/document-view.spec.ts:41:9 › Document View › renders body paragraphs (1.2s)
+  ✓   9 [chromium] › playwright/specs/click-interaction.spec.ts:53:9 › Click Interaction › second click on focused note selects it without blanking the view (2.3s)
+  ✓  22 [chromium] › playwright/specs/kanban-view.spec.ts:29:9 › Kanban View › renders kanban columns via auto view detecting ng_view linetag (1.7s)
+  ✓  23 [chromium] › playwright/specs/kanban-view.spec.ts:45:9 › Kanban View › places tasks in correct columns (1.7s)
+  ✓  24 [chromium] › playwright/specs/kanban-view.spec.ts:62:9 › Kanban View › places untagged tasks in untagged column (1.7s)
+  ✓  19 [chromium] › playwright/specs/kanban-drag.spec.ts:81:9 › Kanban Drag and Drop › dragging a card to untagged column sends editText that removes status tag (2.5s)
+  ✓  18 [chromium] › playwright/specs/kanban-drag.spec.ts:47:9 › Kanban Drag and Drop › dragging a card between columns sends editText with status change (2.5s)
+  ✓  21 [chromium] › playwright/specs/kanban-drag.spec.ts:135:9 › Kanban Drag and Drop › card appears in destination column after extension sends updated doc (2.5s)
+  ✓  25 [chromium] › playwright/specs/keyboard-navigation.spec.ts:14:9 › Keyboard Navigation › clicking different notes produces revealRange messages (2.1s)
+  ✓  20 [chromium] › playwright/specs/kanban-drag.spec.ts:108:9 › Kanban Drag and Drop › view does not blank after drag completes (2.8s)
+  ✓  26 [chromium] › playwright/specs/keyboard-navigation.spec.ts:38:9 › Keyboard Navigation › selection feedback updates focused note styling (2.4s)
+  ✓  32 [chromium] › playwright/specs/view-switching.spec.ts:12:9 › View Switching › defaults to auto view which resolves to document for plain markdown (735ms)
+  ✓  29 [chromium] › playwright/specs/settings-toggle.spec.ts:12:9 › Settings Toggle › toggling lineNumbers shows and hides line number elements (1.8s)
+  ✓  27 [chromium] › playwright/specs/keyboard-navigation.spec.ts:60:9 › Keyboard Navigation › drillIn on nested doc changes parent context (3.0s)
+  ✓  30 [chromium] › playwright/specs/settings-toggle.spec.ts:40:9 › Settings Toggle › toggling contextBars shows and hides context bar elements (1.8s)
+  ✓  33 [chromium] › playwright/specs/view-switching.spec.ts:22:9 › View Switching › switches to kanban view and back to document (1.6s)
+  ✓  31 [chromium] › playwright/specs/settings-toggle.spec.ts:59:9 › Settings Toggle › settings survive view type switch (2.0s)
+  ✓  34 [chromium] › playwright/specs/view-switching.spec.ts:39:9 › View Switching › switches to auto view (2.0s)
+  ✓  28 [chromium] › playwright/specs/keyboard-navigation.spec.ts:88:9 › Keyboard Navigation › drillOut returns to parent context (3.5s)
 
-  34 passed (7.9s)
+  34 passed (7.6s)

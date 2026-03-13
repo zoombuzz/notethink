@@ -1,4 +1,4 @@
-import React, { type ReactElement, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { type ReactElement, MouseEvent, Profiler, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     DragDropContext,
     Draggable,
@@ -7,6 +7,7 @@ import {
     type DropResult,
     type ResponderProvided,
 } from '@hello-pangea/dnd';
+import Debug from 'debug';
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
 import {
@@ -22,6 +23,15 @@ import SettingsKanbanModal from "./SettingsKanbanModal";
 import GenericNote from "../notes/GenericNote";
 import master_view_styles from "../ViewRenderer.module.scss";
 import view_specific_styles from "../ViewRenderer.module.scss";
+
+declare const NOTETHINK_DEV: boolean | undefined;
+const debug = Debug("nodejs:notethink-views:KanbanView");
+
+const onProfilerRender = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV)
+    ? (id: string, phase: string, actualDuration: number) => {
+        debug('Profiler %s %s %dms', id, phase, actualDuration.toFixed(1));
+    }
+    : undefined;
 
 interface Column {
     seq?: number;
@@ -266,7 +276,7 @@ export default function KanbanView(props: ViewProps) {
 
     const container_styles: Array<string> = [view_specific_styles.viewKanban, master_view_styles.content];
 
-    return (
+    const content = (
         <>
             <div className={container_styles.join(' ')} id={`v${props.id}-inner`}
                  onClick={(display_options.focused_notes?.length ? props.handlers?.getClearHandler?.(display_options.focused_notes) : undefined)}
@@ -287,4 +297,9 @@ export default function KanbanView(props: ViewProps) {
             />
         </>
     );
+
+    if (onProfilerRender) {
+        return <Profiler id="KanbanView" onRender={onProfilerRender}>{content}</Profiler>;
+    }
+    return content;
 }

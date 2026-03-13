@@ -308,18 +308,40 @@ body.disableAddressBarHidingOnScroll {
       margin: 0 -1.0em 0 -1.0em;
       padding: 0.5em 0 0.5em 1.5em;
     }
+  }
 
-    .readMoreToggle {
-      display: block;
-      font-size: 85%;
-      color: var(--mantine-primary-color-filled, var(--mantine-primary-color-2));
-      cursor: pointer;
-      padding: 0.2em 0;
-      user-select: none;
+  .readMoreToggle {
+    display: block;
+    font-size: 85%;
+    color: var(--mantine-primary-color-filled, var(--mantine-primary-color-2));
+    cursor: pointer;
+    padding: 0.2em 0;
+    user-select: none;
 
-      &:hover {
-        text-decoration: underline;
-      }
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .abridgeFade {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 6em;
+    background: linear-gradient(
+      transparent 0%,
+      color-mix(in srgb, var(--vscode-editor-background, var(--mantine-color-default)), transparent 50%) 40%,
+      var(--vscode-editor-background, var(--mantine-color-default)) 75%
+    );
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 0.5em;
+    pointer-events: none;
+
+    > * {
+      pointer-events: auto;
     }
   }
 

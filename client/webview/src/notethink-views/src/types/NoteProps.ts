@@ -82,8 +82,6 @@ export interface NoteProps {
     linetags_from?: number;
     headline_raw: string;
     body_raw: string;
-    // descendant metrics (computed post-parse)
-    descendant_note_count?: number;
     // change flags
     hash_sha256?: string;
     updated?: number;

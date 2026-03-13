@@ -1,48 +1,15 @@
 # Jest Test Results
-# Version: 0.1.16
-# Date: 2026-03-12T00:00:00Z
+# Version: 0.1.17
+# Date: 2026-03-13T00:00:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
-> notethink@0.1.16 test-jest
-> bash scripts/test-jest.sh
+Test Suites: 7 passed, 7 total (extension)
+Tests:       126 passed, 126 total
 
-> notethink-client-extension@0.1.0 test
-> jest --config jest.config.cjs --forceExit
-
-PASS src/lib/utils.test.ts
-PASS src/vscode/githubFileSystemProvider.test.ts
-PASS src/lib/errorops.test.ts
-PASS src/lib/parseops.test.ts
-PASS src/vscode/notethinkEditor.test.ts
-PASS src/vscode/dulcetSaveToGitHub.test.ts
-
-Test Suites: 6 passed, 6 total
-Tests:       108 passed, 108 total
-Snapshots:   0 total
-Time:        2.736 s, estimated 3 s
-
-> notethink-client-display@0.1.0 test
-> jest --config jest.config.cjs --forceExit
-
-PASS src/components/ExtensionReceiver.test.tsx
-PASS src/components/NoteRenderer.test.tsx
-PASS src/components/base/App.test.tsx
-
-Test Suites: 3 passed, 3 total
+Test Suites: 3 passed, 3 total (webview)
 Tests:       30 passed, 30 total
-Snapshots:   0 total
-Time:        0.597 s
 
-> @zoombuzz/notethink-views@0.1.0 test
-> jest --config jest.config.cjs --forceExit
+Test Suites: 18 passed, 18 total (notethink-views)
+Tests:       232 passed, 232 total
 
-PASS src/lib/noteops.test.ts
-PASS src/lib/linetagops.test.ts
-PASS src/lib/convertMdastToNoteHierarchy.test.ts
-
-Test Suites: 3 passed, 3 total
-Tests:       16 passed, 16 total
-Snapshots:   0 total
-Time:        0.327 s
-
-All 3 sub-packages: 12 suites, 154 tests passed.
+Total: 388 passed, 388 total (28 suites)

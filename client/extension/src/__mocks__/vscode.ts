@@ -163,6 +163,11 @@ export enum ViewColumn {
 	Three = 3,
 }
 
+export enum QuickPickItemKind {
+	Separator = -1,
+	Default = 0,
+}
+
 export const window = {
 	createOutputChannel: jest.fn(() => ({
 		appendLine: jest.fn(),
@@ -177,6 +182,7 @@ export const window = {
 	showErrorMessage: jest.fn(),
 	showWarningMessage: jest.fn(),
 	showInputBox: jest.fn(),
+	showQuickPick: jest.fn(),
 	showTextDocument: jest.fn(),
 	createWebviewPanel: jest.fn(),
 	registerWebviewPanelSerializer: jest.fn(() => ({ dispose: jest.fn() })),
@@ -204,6 +210,9 @@ export const workspace = {
 		const p = typeof pathOrUri === 'string' ? pathOrUri : pathOrUri?.path || pathOrUri?.toString?.() || '';
 		return p;
 	}),
+	getConfiguration: jest.fn(() => ({
+		get: jest.fn(() => undefined),
+	})),
 	registerFileSystemProvider: jest.fn(() => ({ dispose: jest.fn() })),
 	fs: {
 		readFile: jest.fn(async () => new Uint8Array()),

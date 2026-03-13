@@ -4,7 +4,7 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
@@ -96,6 +96,11 @@
         "command": "dulcet.saveToGitHub",
         "title": "Dulcet: Save to GitHub",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "dulcet.openFromGitHub",
+        "title": "Dulcet: Open from GitHub",
+        "icon": "$(cloud-download)"
       }
     ],
     "menus": {
@@ -176,6 +181,18 @@
             ],
             "default": "verbose",
             "description": "Traces the communication between VS Code and the extension."
+          }
+        }
+      },
+      {
+        "order": 23,
+        "id": "dulcet",
+        "title": "Dulcet",
+        "properties": {
+          "dulcet.openFile": {
+            "type": "string",
+            "default": "",
+            "description": "GitHub file to open on startup (owner/repo/branch/path). Set via URL hash."
           }
         }
       }

@@ -1,4 +1,4 @@
-import {Fragment, useMemo, useState} from "react";
+import {Fragment, useCallback, useEffect, useRef, useMemo, useState} from "react";
 import {MdastNode, NoteProps} from "../../types/NoteProps";
 import {
     getStandardNoteDataProps,
@@ -12,10 +12,8 @@ import GenericNote from "../../components/notes/GenericNote";
 import Debug from 'debug';
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
-const ABRIDGE_THRESHOLD = 4;
-const MAX_VISIBLE_DESCENDANTS = 12;
-const SHOW_TOP = 3;
-const SHOW_BOTTOM = 2;
+// abridge when rendered height exceeds this multiple of width (top-level notes only)
+const HEIGHT_RATIO = 2;
 
 function renderBodyItems(note: NoteProps, items: (NoteProps | MdastNode)[], baseIndex: number) {
     return items.map((child, i) => {
@@ -43,7 +41,48 @@ function renderBodyItems(note: NoteProps, items: (NoteProps | MdastNode)[], base
 }
 
 export default function MarkdownNote(props: NoteProps) {
-    const [expanded, setExpanded] = useState(false);
+    const [overflow_state, setOverflowState] = useState<{ overflows: boolean; max_height: number }>({ overflows: false, max_height: 0 });
+    const note_ref = useRef<HTMLDivElement>(null);
+
+    // top-level = direct child of the parent context note
+    const parent_seq = props.parent_notes?.length ? props.parent_notes[props.parent_notes.length - 1].seq : undefined;
+    const is_top_level = parent_seq !== undefined && parent_seq === props.display_options?.parent_context_seq;
+
+    // merge refs: our measurement ref + drag-and-drop innerRef
+    const set_refs = useCallback((el: HTMLDivElement | null) => {
+        note_ref.current = el;
+        const inner_ref = props.display_options?.provided?.innerRef;
+        if (typeof inner_ref === 'function') {
+            inner_ref(el);
+        } else if (inner_ref && typeof inner_ref === 'object' && 'current' in inner_ref) {
+            (inner_ref as { current: HTMLDivElement | null }).current = el;
+        }
+    }, [props.display_options?.provided?.innerRef]);
+
+    // measure rendered dimensions and detect overflow (runs regardless of focus so we always know)
+    useEffect(() => {
+        if (!is_top_level || !note_ref.current) {
+            setOverflowState({ overflows: false, max_height: 0 });
+            return;
+        }
+        const el = note_ref.current;
+        const check = () => {
+            const width = el.offsetWidth;
+            const max_h = width * HEIGHT_RATIO;
+            const naturally_overflows = el.scrollHeight > max_h;
+            setOverflowState(prev => {
+                if (prev.overflows === naturally_overflows && prev.max_height === max_h) { return prev; }
+                return { overflows: naturally_overflows, max_height: max_h };
+            });
+        };
+        const observer = new ResizeObserver(check);
+        observer.observe(el);
+        check();
+        return () => observer.disconnect();
+    }, [is_top_level]);
+
+    // expand when focused, clip when unfocused and overflowing
+    const should_clip = is_top_level && !props.focused && overflow_state.overflows;
 
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
     const memoized_headline = useMemo(() => {
@@ -80,8 +119,9 @@ export default function MarkdownNote(props: NoteProps) {
              // passed-on inherited props (such as draggable)
              {...props.display_options?.provided?.draggableProps}
              {...props.display_options?.provided?.dragHandleProps}
-             ref={props.display_options?.provided?.innerRef}
+             ref={set_refs}
              role={'row'} aria-current={note.focused} aria-selected={note.selected}
+             style={should_clip ? { maxHeight: `${overflow_state.max_height}px`, overflow: 'hidden', position: 'relative' } : undefined}
         >
             <div className={view_specific_styles.headline}
                  role={'rowheader'}
@@ -97,55 +137,13 @@ export default function MarkdownNote(props: NoteProps) {
             <div className={view_specific_styles.body}
                  onClick={createNoteClickHandler(note, bodyClickPosition(note))}
             >
-                { (() => {
-                    const body = note.children_body!;
-                    // determine abridge cutoff: either by direct child count or by descendant budget
-                    let cutoff = body.length;
-                    const abridge_by_count = body.length > ABRIDGE_THRESHOLD;
-                    if (abridge_by_count) {
-                        cutoff = SHOW_TOP;
-                    }
-                    // budget-based cutoff: walk children, sum descendant counts, find where budget is exceeded
-                    if (!abridge_by_count && body.length > 1) {
-                        let running = 0;
-                        for (let i = 0; i < body.length; i++) {
-                            const child = body[i];
-                            const child_cost = ('seq' in child && (child as NoteProps).seq !== undefined)
-                                ? 1 + ((child as NoteProps).descendant_note_count ?? 0)
-                                : 1;
-                            running += child_cost;
-                            if (running > MAX_VISIBLE_DESCENDANTS && i < body.length - 1) {
-                                cutoff = i + 1;
-                                break;
-                            }
-                        }
-                    }
-                    const should_abridge = cutoff < body.length && !expanded;
-                    if (should_abridge) {
-                        const tail = Math.min(SHOW_BOTTOM, body.length - cutoff);
-                        const hidden_count = body.length - cutoff - tail;
-                        return <>
-                            {renderBodyItems(note, body.slice(0, cutoff), 0)}
-                            {hidden_count > 0 && (
-                                <span className={view_specific_styles.readMoreToggle}
-                                      role="button"
-                                      onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
-                                >&hellip; {hidden_count} more items</span>
-                            )}
-                            {tail > 0 && renderBodyItems(note, body.slice(-tail), body.length - tail)}
-                        </>;
-                    }
-                    return <>
-                        {renderBodyItems(note, body, 0)}
-                        {cutoff < body.length && (
-                            <span className={view_specific_styles.readMoreToggle}
-                                  role="button"
-                                  onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
-                            >Show less</span>
-                        )}
-                    </>;
-                })() }
+                {renderBodyItems(note, note.children_body, 0)}
             </div> : ''}
+            {should_clip && (
+                <div className={view_specific_styles.abridgeFade}>
+                    <span className={view_specific_styles.readMoreToggle}>Show more</span>
+                </div>
+            )}
         </div>
     );
 }

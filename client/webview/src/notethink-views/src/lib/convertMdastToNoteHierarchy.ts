@@ -321,23 +321,6 @@ export function applyChildAttributeInheritance(allNotes: NoteProps[]): void {
 }
 
 /**
- * Compute descendant_note_count for each note by walking allNotes in reverse.
- * Each note's count = sum of (1 + child.descendant_note_count) for NoteProps children in children_body.
- */
-function computeDescendantCounts(allNotes: NoteProps[]): void {
-    for (let i = allNotes.length - 1; i >= 0; i--) {
-        const note = allNotes[i];
-        let count = 0;
-        for (const child of note.children_body) {
-            if ('seq' in child && (child as NoteProps).seq !== undefined) {
-                count += 1 + ((child as NoteProps).descendant_note_count ?? 0);
-            }
-        }
-        note.descendant_note_count = count;
-    }
-}
-
-/**
  * Main entry point: convert MDAST root + raw text to a NoteProps hierarchy.
  */
 export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): NoteProps {
@@ -377,9 +360,6 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
             direct_parent.child_notes.push(note);
         }
     }
-
-    // Compute descendant_note_count bottom-up (reverse order so children are counted before parents)
-    computeDescendantCounts(allNotes);
 
     // Propagate ng_child_*, ng_child2y_*, ng_childall_* linetags to descendants
     applyChildAttributeInheritance(allNotes);

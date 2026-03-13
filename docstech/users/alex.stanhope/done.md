@@ -345,3 +345,64 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + ensure focus/selection outlines have sufficient contrast
 
 
+### kanban visual polish
+
++ goal
+  + bring the Kanban view closer to the look of established tools (Jira, Trello, Linear, GitHub Projects)
+  + current state: flat cards with basic borders, no hover/drag feedback, plain column headers
+  + target: elevated cards with shadows, hover lift, polished column headers with count badges
++ research summary (Jira, Trello, Linear, Monday, GitHub Projects, Notion, Asana)
+  + cards: 8px border-radius, subtle resting shadow, hover lift with larger shadow, 12-16px padding
+  + columns: sunken background distinct from both page and card, 12px border-radius, 280-300px width, sticky headers
+  + drag: card lifts (larger shadow + slight rotation), drop zone indicated by placeholder
+  + headers: semibold title + count badge + optional add/menu buttons, sticky at top
+  + dark mode: elevation via surface lightness, increased shadow opacity, VS Code CSS variable integration
+  + typography: card title 14px/500, metadata 12px/400 muted, column header 13px/600
++ [X] card elevation and hover
+  + `box-shadow: 0 1px 3px rgba(0,0,0,0.08)` resting, `0 4px 12px rgba(0,0,0,0.12)` hover with `translateY(-1px)`
+  + `transition: box-shadow 200ms ease, transform 150ms ease`
+  + `border-radius: 8px` (was `0 0 15px 0`)
+  + dark mode: `rgba(0,0,0,0.3)` / `rgba(0,0,0,0.35)` shadow opacity
++ [X] card internal layout
+  + uniform `8px 16px` headline / `4px 16px 12px 16px` body padding
+  + removed gradient headline background, kept border-bottom separator
++ [X] column styling
+  + sunken background via `color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 4%)`
+  + `gap: 8px` on column flex container via `.notes` class, removed card margins
+  + `border-radius: 12px`, board uses `gap: 8px` + `overflow-x: auto`
++ [X] column headers
+  + count badge next to column title via `KanbanColumn.tsx` `count` prop
+  + sticky header with `position: sticky; top: 0; z-index: 1`
+  + left-aligned, `font-size: 13px; font-weight: 600`
++ [X] drag-and-drop feedback
+  + `.dragging` class: `box-shadow: 0 8px 24px`, `rotate(2deg) scale(1.02)`
+  + `snapshot_drag.isDragging` from hello-pangea/dnd applied via `additional_classes`
++ [X] add tests
+  + count badge test: verifies correct count per column
+  + updated Draggable mock to provide `snapshot` with `isDragging`
+  + 196 tests passing
+
+
+### height-based abridging
+
++ problem
+  + count-based abridging (ABRIDGE_THRESHOLD, descendant budget) didn't adapt to visual size
+  + deeply nested or content-heavy notes could grow very tall without triggering abridging
++ approach: measure rendered height vs width using ResizeObserver
+  + abridge top-level notes only (direct children of parent context)
+  + if rendered height > 2× width, apply CSS max-height with overflow hidden
+  + gradient fade overlay with "Show more" toggle, "Show less" when expanded
++ [X] replace count-based abridging with height-based in MarkdownNote.tsx
+  + removed ABRIDGE_THRESHOLD, MAX_VISIBLE_DESCENDANTS, SHOW_TOP, SHOW_BOTTOM
+  + added HEIGHT_RATIO constant, ResizeObserver measurement, overflow_state
+  + top-level detection via parent_notes seq vs parent_context_seq
+  + merged refs (measurement + drag-and-drop innerRef)
++ [X] add .abridgeFade CSS in ViewRenderer.module.scss
+  + absolute-positioned gradient overlay at bottom of clipped note
+  + pointer-events: none with auto on child toggle
++ [X] remove descendant_note_count infrastructure
+  + removed computeDescendantCounts from convertMdastToNoteHierarchy.ts
+  + removed descendant_note_count from NoteProps interface
+  + removed 5 descendant_note_count tests
+
+

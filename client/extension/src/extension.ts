@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 import { GitHubFileSystemProvider } from './vscode/githubFileSystemProvider';
 import { registerSaveToGitHub } from './vscode/dulcetSaveToGitHub';
+import { registerOpenFromGitHub, handleUrlOpening } from './vscode/dulcetOpenFromGitHub';
 
 const PANEL_VIEWTYPE = 'notethink';
 
@@ -71,7 +72,15 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.workspace.registerFileSystemProvider('github', github_fs, { isCaseSensitive: true }),
 		);
 		registerSaveToGitHub(context, github_fs, api_base);
-		dulcetStartup(context, provider);
+		registerOpenFromGitHub(context, github_fs, api_base);
+
+		// URL-based opening takes precedence over default template experience
+		const has_url_file = vscode.workspace.getConfiguration('dulcet').get<string>('openFile');
+		if (has_url_file) {
+			handleUrlOpening(context);
+		} else {
+			dulcetStartup(context, provider);
+		}
 	}
 
 	// register serializer to restore panels after window reload

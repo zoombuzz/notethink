@@ -57,3 +57,4 @@ app/debug.log
 **/.swc
 **/playwright/tmp
 **/test-results
+.playwright-mcp/

@@ -4,7 +4,7 @@ import view_specific_styles from "../../components/ViewRenderer.module.scss";
 import {ViewProps} from "../../types/ViewProps";
 import {NoteProps} from "../../types/NoteProps";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
-import { noteIsVisible } from "../../lib/noteops";
+import { noteIsVisible, findBodyItemElement } from "../../lib/noteops";
 import Debug from 'debug';
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import GenericNote from "../../components/notes/GenericNote";
@@ -24,22 +24,35 @@ export default React.memo(function DocumentView(props: ViewProps) {
     const display_options = Object.assign({
     }, props.display_options);
 
-    // scroll focused note into view when caret moves
+    // scroll focused note (and body item) into view when caret moves
     useEffect(() => {
-        if (display_options.settings?.scroll_note_into_view && display_options.focused_seqs?.length) {
-            const view_element = window?.document?.getElementById(`v${props.id}-inner`);
-            const note_element_id = `v${props.id}-n${display_options.focused_seqs[display_options.focused_seqs.length - 1]}`;
-            const note_element = window?.document?.getElementById(note_element_id);
-            if (note_element && view_element) {
-                if (!noteIsVisible(note_element, view_element)) {
-                    note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
+        if (!display_options.settings?.scroll_note_into_view || !display_options.focused_seqs?.length) { return; }
+        const view_element = window?.document?.getElementById(`v${props.id}-inner`);
+        const note_element_id = `v${props.id}-n${display_options.focused_seqs[display_options.focused_seqs.length - 1]}`;
+        const note_element = window?.document?.getElementById(note_element_id);
+        if (!note_element || !view_element) { return; }
+
+        // try to scroll the specific body item containing the caret
+        const caret_offset = props.selection?.main.head;
+        if (caret_offset !== undefined) {
+            const body_item = findBodyItemElement(note_element, caret_offset);
+            if (body_item) {
+                if (!noteIsVisible(body_item, view_element)) {
+                    body_item.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
                 }
+                return;
             }
+        }
+
+        // fallback: scroll the note element itself
+        if (!noteIsVisible(note_element, view_element)) {
+            note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
         }
     }, [
         display_options.settings?.scroll_note_into_view,
         display_options.focused_seqs?.length && display_options.focused_seqs[display_options.focused_seqs.length - 1],
         props.id,
+        props.selection?.main.head,
     ]);
 
     // Stabilise handlers reference to avoid unnecessary child re-renders

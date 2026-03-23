@@ -33,9 +33,13 @@ function renderBodyItems(note: NoteProps, items: (NoteProps | MdastNode)[], base
                 handlers={note.handlers}
             />;
         } else {
-            return <Fragment key={`nn-${index}`}>
-                {renderNodeUnified(child as MdastNode)}
-            </Fragment>;
+            const mdast = child as MdastNode;
+            return <div key={`nn-${index}`}
+                data-offset-start={mdast.position?.start?.offset}
+                data-offset-end={mdast.position?.end?.offset}
+            >
+                {renderNodeUnified(mdast)}
+            </div>;
         }
     });
 }

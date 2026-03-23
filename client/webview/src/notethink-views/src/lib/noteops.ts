@@ -93,6 +93,24 @@ export function resolveCaretPosition(ncp: ClickPositionInfo, note?: NoteProps): 
 }
 
 /**
+ * Within a note DOM element, find the body item (paragraph, list, etc.) whose
+ * data-offset-start/data-offset-end range contains the given caret offset.
+ * Returns the matching element, or undefined if the caret is in the headline.
+ */
+export function findBodyItemElement(note_element: HTMLElement, caret_offset: number): HTMLElement | undefined {
+    const candidates = note_element.querySelectorAll<HTMLElement>('[data-offset-start]');
+    for (let i = candidates.length - 1; i >= 0; --i) {
+        const el = candidates[i];
+        const start = Number(el.dataset.offsetStart);
+        const end = Number(el.dataset.offsetEnd);
+        if (!isNaN(start) && !isNaN(end) && caret_offset >= start && caret_offset <= end) {
+            return el;
+        }
+    }
+    return undefined;
+}
+
+/**
  * Calculate text changes for a checkbox action.
  * Searches for `- [ ] text` or `- [x] text` patterns in the note's body_raw,
  * using a regex to avoid matching linetags or markdown links.

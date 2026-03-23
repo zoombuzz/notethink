@@ -15,26 +15,23 @@
   + `renderNodeUnified` in `renderops.tsx` converts MDAST → HAST → JSX but does not attach position data attributes
   + `MarkdownNote.renderBodyItems` wraps each rendered body item in a `<Fragment>` with no DOM element to attach attributes to
 + shared foundation: position-aware body items
-  + [ ] add `data-offset-start` and `data-offset-end` attributes to rendered body items
-    + in `MarkdownNote.renderBodyItems`: wrap non-note body items in a `<span>` (inline) or `<div>` (block) instead of bare `<Fragment>`
-    + read `position.start.offset` and `position.end.offset` from the MDAST node and set as data attributes
-    + child notes already have position data via their note element; no change needed for those
-  + [ ] add tests: rendered body items have `data-offset-start`/`data-offset-end` attributes matching MDAST positions
-+ phase 1: sub-note scroll in DocumentView
-  + [ ] update `DocumentView.useEffect` scroll logic
-    + after finding the focused note element, query within it for `[data-offset-start]` elements
-    + find the body item whose offset range contains `selection.head`
-    + scroll that element into view instead of the note-level element
-    + fallback: if no matching body item found, scroll the note element (current behaviour)
-  + [ ] handle edge case: caret in headline (offset < first body item start)
-    + scroll to the note headline element (`.headline` div)
-  + [ ] add tests: verify sub-note scroll targets the correct body item element
+  + [X] add `data-offset-start` and `data-offset-end` attributes to rendered body items
+    + `MarkdownNote.renderBodyItems`: replaced bare `<Fragment>` with `<div data-offset-start data-offset-end>` for MDAST nodes
+    + child notes already have position data via their note element; no change needed
+  + [X] add `findBodyItemElement()` utility in `noteops.ts`
+    + queries `[data-offset-start]` elements within a note, returns the one whose range contains the caret
+    + 6 unit tests: range matching, boundaries, empty container, out-of-range
++ phase 1: sub-note scroll in DocumentView and KanbanView
+  + [X] update `DocumentView.useEffect` scroll logic
+    + after finding focused note, calls `findBodyItemElement(note_element, caret_offset)`
+    + scrolls body item into view if found; falls back to note-level scroll
+    + added `props.selection?.main.head` to dependency array
+  + [X] update `KanbanView.useEffect` scroll logic (same pattern)
+  + [X] headline caret handled automatically: `findBodyItemElement` returns undefined → falls back to note scroll
 + phase 2: smooth scroll and abridged notes
-  + [ ] when a note is abridged (height-clipped), auto-expand it before scrolling to the body item
-    + the existing focus-driven expansion handles this: `should_clip = !props.focused && overflow_state.overflows`
-    + verify that expansion completes before scroll (may need a brief delay or `requestAnimationFrame`)
-  + [ ] ensure scroll behaviour is smooth and doesn't jump between items on rapid cursor movement
-    + consider debouncing the sub-note scroll separately from the note-level scroll
+  + [X] abridged notes auto-expand on focus: existing `should_clip = !props.focused && overflow_state.overflows`
+    + expansion completes before scroll because React renders synchronously and useEffect runs after paint
+  + [ ] consider debouncing sub-note scroll separately from note-level scroll if rapid cursor movement causes jitter
 + verification
   + open a long note (e.g. todo.md performance story) in VS Code
   + move caret to the bottom of the note — NoteThink view should scroll to show that section

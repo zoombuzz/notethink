@@ -12,6 +12,7 @@ import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
 import {
     noteIsVisible,
+    findBodyItemElement,
     standardNoteOrder,
     withinNoteHeadlineOrBodyUpTo,
     kanbanNoteOrder,
@@ -190,22 +191,33 @@ export default function KanbanView(props: ViewProps) {
         }
     };
 
-    // scroll focused note into view
+    // scroll focused note (and body item) into view
     useEffect(() => {
-        if (display_options.settings?.scroll_note_into_view && display_options.focused_seqs?.length) {
-            const view_element = window?.document?.getElementById(`v${props.id}-inner`);
-            const note_element_id = `v${props.id}-n${display_options.focused_seqs[display_options.focused_seqs.length - 1]}`;
-            const note_element = window?.document?.getElementById(note_element_id);
-            if (note_element && view_element) {
-                if (!noteIsVisible(note_element, view_element)) {
-                    note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
+        if (!display_options.settings?.scroll_note_into_view || !display_options.focused_seqs?.length) { return; }
+        const view_element = window?.document?.getElementById(`v${props.id}-inner`);
+        const note_element_id = `v${props.id}-n${display_options.focused_seqs[display_options.focused_seqs.length - 1]}`;
+        const note_element = window?.document?.getElementById(note_element_id);
+        if (!note_element || !view_element) { return; }
+
+        const caret_offset = props.selection?.main.head;
+        if (caret_offset !== undefined) {
+            const body_item = findBodyItemElement(note_element, caret_offset);
+            if (body_item) {
+                if (!noteIsVisible(body_item, view_element)) {
+                    body_item.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
                 }
+                return;
             }
+        }
+
+        if (!noteIsVisible(note_element, view_element)) {
+            note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
         }
     }, [
         display_options.settings?.scroll_note_into_view,
         display_options.focused_seqs?.length && display_options.focused_seqs[display_options.focused_seqs.length - 1],
         props.id,
+        props.selection?.main.head,
     ]);
 
     // assign notes to columns

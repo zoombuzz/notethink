@@ -543,8 +543,3 @@ Description of another completed story.
 - **Always bump the version** in the governing `package.json` when implementing code changes.
 - **Only increment the patch version** (e.g. 2.11.2 → 2.11.3). Major and minor version changes are the user's decision.
 - After completing work, show the updated version number in your output.
-
-## Commit Messages
-
-- Commit messages must be a **single line** — no newlines or multi-line bodies.
-- **Never** include a `Co-Authored-By` tag.

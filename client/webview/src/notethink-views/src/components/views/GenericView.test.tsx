@@ -57,7 +57,7 @@ jest.mock('./ViewTypeSelector', () => ({
 jest.mock('./ViewIntegrationSelector', () => ({
     __esModule: true,
     default: (props: { currentMode: string }) => (
-        <select data-testid="view-integration-selector" value={props.currentMode}>
+        <select data-testid="view-integration-selector" value={props.currentMode} onChange={() => {}}>
             <option value={props.currentMode}>{props.currentMode}</option>
         </select>
     ),

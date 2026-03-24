@@ -1,44 +1,11 @@
 # Jest Test Results
-# Version: 0.1.20
-# Date: 2026-03-24T17:35:00+0000
+# Version: 0.1.21
+# Date: 2026-03-24T18:45:00+0000
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
-Suite: extension (7 files)
-  PASS src/lib/utils.test.ts
-  PASS src/vscode/dulcetOpenFromGitHub.test.ts
-  PASS src/vscode/githubFileSystemProvider.test.ts
-  PASS src/lib/errorops.test.ts
-  PASS src/lib/parseops.test.ts
-  PASS src/vscode/notethinkEditor.test.ts
-  PASS src/vscode/dulcetSaveToGitHub.test.ts
-  Tests: 126 passed, 126 total (3.019s)
-
-Suite: webview (3 files)
-  PASS src/components/NoteRenderer.test.tsx
-  PASS src/components/base/App.test.tsx
-  PASS src/components/ExtensionReceiver.test.tsx
-  Tests: 30 passed, 30 total (1.41s)
-
-Suite: notethink-views (18 files)
-  PASS src/lib/linetagops.test.ts
-  PASS src/lib/noteops.test.ts
-  PASS src/lib/convertMdastToNoteHierarchy.test.ts
-  PASS src/lib/renderops.test.tsx
-  PASS src/components/views/KanbanContextBar.test.tsx
-  PASS src/components/notes/CodeNote.test.tsx
-  PASS src/components/views/AutoView.test.tsx
-  PASS src/components/views/ViewIntegrationSelector.test.tsx
-  PASS src/components/notes/MermaidDiagram.test.tsx
-  PASS src/components/views/KanbanColumn.test.tsx
-  PASS src/components/views/KanbanView.test.tsx
-  PASS src/components/views/BreadcrumbTrail.test.tsx
-  PASS src/components/views/DocumentView.test.tsx
-  PASS src/components/views/SettingsKanbanModal.test.tsx
-  PASS src/components/notes/MermaidNote.test.tsx
-  PASS src/components/ErrorBoundary.test.tsx
-  PASS src/components/notes/GenericNote.test.tsx
-  PASS src/components/views/GenericView.test.tsx
-  Tests: 241 passed, 241 total (4.979s)
+Suite: extension (7 files) — 126 passed, 126 total (2.756s)
+Suite: webview (3 files) — 30 passed, 30 total (0.643s)
+Suite: notethink-views (18 files) — 241 passed, 241 total (2.723s)
 
 TOTAL: 28 suites, 397 passed, 0 failed

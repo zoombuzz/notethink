@@ -491,16 +491,25 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 						}
 						syncColorScheme();
 						new MutationObserver(syncColorScheme).observe(document.body, { attributes: true, attributeFilter: ['class'] });
-						// early-acquire API and expose on window so ExtensionReceiver.tsx can reuse it
-						window.__notethinkVscodeApi = acquireVsCodeApi();
+						// early-acquire API and expose on window so ExtensionReceiver.tsx can reuse it;
+						// guard with try/catch in case the webview is restored from cache (acquireVsCodeApi throws on second call)
+						try {
+							if (!window.__notethinkVscodeApi) {
+								window.__notethinkVscodeApi = acquireVsCodeApi();
+							}
+						} catch(e) {
+							// already acquired — reuse existing instance
+						}
 						// capture uncaught errors that escape React ErrorBoundary
-						window.onerror = function(msg, source, line, col, error) {
-							window.__notethinkVscodeApi.postMessage({ type: 'renderError', message: String(msg), stack: error ? error.stack : source + ':' + line });
-						};
-						window.onunhandledrejection = function(event) {
-							var reason = event.reason;
-							window.__notethinkVscodeApi.postMessage({ type: 'renderError', message: String(reason), stack: reason && reason.stack ? reason.stack : '' });
-						};
+						if (window.__notethinkVscodeApi) {
+							window.onerror = function(msg, source, line, col, error) {
+								window.__notethinkVscodeApi.postMessage({ type: 'renderError', message: String(msg), stack: error ? error.stack : source + ':' + line });
+							};
+							window.onunhandledrejection = function(event) {
+								var reason = event.reason;
+								window.__notethinkVscodeApi.postMessage({ type: 'renderError', message: String(reason), stack: reason && reason.stack ? reason.stack : '' });
+							};
+						}
 					})();
 					var exports = {};
 				</script>

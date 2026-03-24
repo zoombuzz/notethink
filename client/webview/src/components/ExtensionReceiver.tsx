@@ -22,8 +22,15 @@ export interface ViewState {
 
 // reuse the API instance acquired in the inline boot script (notethinkEditor.ts);
 // fall back to acquireVsCodeApi() for test environments where the inline script doesn't run
-const vscode = ((window as any).__notethinkVscodeApi as ReturnType<typeof acquireVsCodeApi<VSCodeState>> | undefined)
-    ?? acquireVsCodeApi<VSCodeState>();
+function getVscodeApi(): ReturnType<typeof acquireVsCodeApi<VSCodeState>> {
+    if ((window as any).__notethinkVscodeApi) {
+        return (window as any).__notethinkVscodeApi;
+    }
+    const api = acquireVsCodeApi<VSCodeState>();
+    (window as any).__notethinkVscodeApi = api;
+    return api;
+}
+const vscode = getVscodeApi();
 
 export function postMessageToExtension(message: unknown) {
     vscode.postMessage(message);

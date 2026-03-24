@@ -1,44 +1,7 @@
 # Playwright Test Results
-# Version: 0.1.20
-# Date: 2026-03-24T17:35:00+0000
+# Version: 0.1.21
+# Date: 2026-03-24T18:45:00+0000
 # Command: npx playwright test
 # ---
 
-Running 34 tests using 10 workers
-
-  ✓  [chromium] breadcrumb.spec.ts - shows full path when no workspace_root
-  ✓  [chromium] breadcrumb.spec.ts - strips workspace_root prefix
-  ✓  [chromium] breadcrumb.spec.ts - uses relative_path for breadcrumb
-  ✓  [chromium] breadcrumb.spec.ts - relative_path data-path attributes
-  ✓  [chromium] breadcrumb.spec.ts - breadcrumb with countingsheet path
-  ✓  [chromium] click-interaction.spec.ts - clicking a note headline sends revealRange
-  ✓  [chromium] click-interaction.spec.ts - clicking a note sets aria-current
-  ✓  [chromium] click-interaction.spec.ts - second click on focused note selects it
-  ✓  [chromium] click-interaction.spec.ts - captured messages include docId and docPath
-  ✓  [chromium] document-view.spec.ts - renders document container
-  ✓  [chromium] document-view.spec.ts - renders note headlines
-  ✓  [chromium] document-view.spec.ts - renders notes with data-seq attributes
-  ✓  [chromium] document-view.spec.ts - renders body paragraphs
-  ✓  [chromium] error-boundary.spec.ts - shows fallback when malformed MDAST
-  ✓  [chromium] error-boundary.spec.ts - fallback displays friendly message
-  ✓  [chromium] error-boundary.spec.ts - fallback includes a Try Again button
-  ✓  [chromium] error-boundary.spec.ts - NoteRenderer container remains in DOM
-  ✓  [chromium] kanban-drag.spec.ts - dragging a card between columns sends editText
-  ✓  [chromium] kanban-drag.spec.ts - dragging to untagged removes status tag
-  ✓  [chromium] kanban-drag.spec.ts - view does not blank after drag
-  ✓  [chromium] kanban-drag.spec.ts - card appears in destination column
-  ✓  [chromium] kanban-view.spec.ts - renders kanban columns via auto view
-  ✓  [chromium] kanban-view.spec.ts - places tasks in correct columns
-  ✓  [chromium] kanban-view.spec.ts - places untagged tasks in untagged column
-  ✓  [chromium] keyboard-navigation.spec.ts - clicking different notes produces revealRange
-  ✓  [chromium] keyboard-navigation.spec.ts - selection feedback updates focused note styling
-  ✓  [chromium] keyboard-navigation.spec.ts - drillIn on nested doc changes parent context
-  ✓  [chromium] keyboard-navigation.spec.ts - drillOut returns to parent context
-  ✓  [chromium] settings-toggle.spec.ts - toggling lineNumbers
-  ✓  [chromium] settings-toggle.spec.ts - toggling contextBars
-  ✓  [chromium] settings-toggle.spec.ts - settings survive view type switch
-  ✓  [chromium] view-switching.spec.ts - defaults to auto view
-  ✓  [chromium] view-switching.spec.ts - switches to kanban view and back
-  ✓  [chromium] view-switching.spec.ts - switches to auto view
-
-34 passed (7.8s)
+34 passed (7.7s)

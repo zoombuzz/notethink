@@ -1,4 +1,4 @@
-import React, { Profiler, useEffect, useMemo } from 'react';
+import React, { Profiler, useEffect, useMemo, useRef } from 'react';
 import master_view_styles from "../../components/ViewRenderer.module.scss";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 import {ViewProps} from "../../types/ViewProps";
@@ -25,29 +25,37 @@ export default React.memo(function DocumentView(props: ViewProps) {
     }, props.display_options);
 
     // scroll focused note (and body item) into view when caret moves
+    const scroll_raf_ref = useRef<number>(0);
     useEffect(() => {
         if (!display_options.settings?.scroll_note_into_view || !display_options.focused_seqs?.length) { return; }
-        const view_element = window?.document?.getElementById(`v${props.id}-inner`);
-        const note_element_id = `v${props.id}-n${display_options.focused_seqs[display_options.focused_seqs.length - 1]}`;
-        const note_element = window?.document?.getElementById(note_element_id);
-        if (!note_element || !view_element) { return; }
-
-        // try to scroll the specific body item containing the caret
+        // capture values before rAF so TypeScript can narrow them
+        const focused_seq = display_options.focused_seqs[display_options.focused_seqs.length - 1];
+        const view_id = props.id;
         const caret_offset = props.selection?.main.head;
-        if (caret_offset !== undefined) {
-            const body_item = findBodyItemElement(note_element, caret_offset);
-            if (body_item) {
-                if (!noteIsVisible(body_item, view_element)) {
-                    body_item.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
-                }
-                return;
-            }
-        }
+        // defer DOM query to next animation frame to avoid blocking the renderer
+        cancelAnimationFrame(scroll_raf_ref.current);
+        scroll_raf_ref.current = requestAnimationFrame(() => {
+            const view_element = window?.document?.getElementById(`v${view_id}-inner`);
+            const note_element = window?.document?.getElementById(`v${view_id}-n${focused_seq}`);
+            if (!note_element || !view_element) { return; }
 
-        // fallback: scroll the note element itself
-        if (!noteIsVisible(note_element, view_element)) {
-            note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
-        }
+            // try to scroll the specific body item containing the caret
+            if (caret_offset !== undefined) {
+                const body_item = findBodyItemElement(note_element, caret_offset);
+                if (body_item) {
+                    if (!noteIsVisible(body_item, view_element)) {
+                        body_item.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
+                    }
+                    return;
+                }
+            }
+
+            // fallback: scroll the note element itself
+            if (!noteIsVisible(note_element, view_element)) {
+                note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
+            }
+        });
+        return () => cancelAnimationFrame(scroll_raf_ref.current);
     }, [
         display_options.settings?.scroll_note_into_view,
         display_options.focused_seqs?.length && display_options.focused_seqs[display_options.focused_seqs.length - 1],

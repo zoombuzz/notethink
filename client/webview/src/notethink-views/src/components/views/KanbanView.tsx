@@ -192,27 +192,32 @@ export default function KanbanView(props: ViewProps) {
     };
 
     // scroll focused note (and body item) into view
+    const scroll_raf_ref = useRef<number>(0);
     useEffect(() => {
         if (!display_options.settings?.scroll_note_into_view || !display_options.focused_seqs?.length) { return; }
-        const view_element = window?.document?.getElementById(`v${props.id}-inner`);
-        const note_element_id = `v${props.id}-n${display_options.focused_seqs[display_options.focused_seqs.length - 1]}`;
-        const note_element = window?.document?.getElementById(note_element_id);
-        if (!note_element || !view_element) { return; }
-
+        const focused_seq = display_options.focused_seqs[display_options.focused_seqs.length - 1];
+        const view_id = props.id;
         const caret_offset = props.selection?.main.head;
-        if (caret_offset !== undefined) {
-            const body_item = findBodyItemElement(note_element, caret_offset);
-            if (body_item) {
-                if (!noteIsVisible(body_item, view_element)) {
-                    body_item.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
+        cancelAnimationFrame(scroll_raf_ref.current);
+        scroll_raf_ref.current = requestAnimationFrame(() => {
+            const view_element = window?.document?.getElementById(`v${view_id}-inner`);
+            const note_element = window?.document?.getElementById(`v${view_id}-n${focused_seq}`);
+            if (!note_element || !view_element) { return; }
+            if (caret_offset !== undefined) {
+                const body_item = findBodyItemElement(note_element, caret_offset);
+                if (body_item) {
+                    if (!noteIsVisible(body_item, view_element)) {
+                        body_item.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
+                    }
+                    return;
                 }
-                return;
             }
-        }
 
-        if (!noteIsVisible(note_element, view_element)) {
-            note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
-        }
+            if (!noteIsVisible(note_element, view_element)) {
+                note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
+            }
+        });
+        return () => cancelAnimationFrame(scroll_raf_ref.current);
     }, [
         display_options.settings?.scroll_note_into_view,
         display_options.focused_seqs?.length && display_options.focused_seqs[display_options.focused_seqs.length - 1],

@@ -491,6 +491,16 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 						}
 						syncColorScheme();
 						new MutationObserver(syncColorScheme).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+						// early-acquire API and expose on window so ExtensionReceiver.tsx can reuse it
+						window.__notethinkVscodeApi = acquireVsCodeApi();
+						// capture uncaught errors that escape React ErrorBoundary
+						window.onerror = function(msg, source, line, col, error) {
+							window.__notethinkVscodeApi.postMessage({ type: 'renderError', message: String(msg), stack: error ? error.stack : source + ':' + line });
+						};
+						window.onunhandledrejection = function(event) {
+							var reason = event.reason;
+							window.__notethinkVscodeApi.postMessage({ type: 'renderError', message: String(reason), stack: reason && reason.stack ? reason.stack : '' });
+						};
 					})();
 					var exports = {};
 				</script>

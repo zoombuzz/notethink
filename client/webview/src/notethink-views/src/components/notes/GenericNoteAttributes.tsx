@@ -55,7 +55,7 @@ export default function GenericNoteAttributes(props: NoteProps) {
                                       type: 'linetag',
                                   });
                               }}
-                        >{attrib_key}:</span>
+                        >{attrib_key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())}:</span>
                         <span className={view_specialised_styles.value}
                               onClick={(event: MouseEvent<HTMLElement>) => {
                                   props.handlers?.click?.(event, note, {

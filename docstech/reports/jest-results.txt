@@ -1,11 +1,11 @@
 # Jest Test Results
-# Version: 0.1.21
-# Date: 2026-03-24T18:45:00+0000
+# Version: 0.1.22
+# Date: 2026-03-24T19:00:00+0000
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
-Suite: extension (7 files) — 126 passed, 126 total (2.756s)
-Suite: webview (3 files) — 30 passed, 30 total (0.643s)
-Suite: notethink-views (18 files) — 241 passed, 241 total (2.723s)
+Suite: extension (7 files) — 126 passed, 126 total (2.718s)
+Suite: webview (3 files) — 30 passed, 30 total (0.613s)
+Suite: notethink-views (18 files) — 241 passed, 241 total (2.812s)
 
 TOTAL: 28 suites, 397 passed, 0 failed

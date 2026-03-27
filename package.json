@@ -1,10 +1,10 @@
 {
-  "name": "notethink",
+  "name": "@zoombuzz/notethink",
   "displayName": "NoteThink",
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
@@ -19,7 +19,18 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/ZoomBuzz/NoteThink.git"
+    "url": "https://github.com/zoombuzz/NoteThink.git"
+  },
+  "files": [
+    "client/extension/dist/",
+    "!client/extension/dist/test/",
+    "!client/extension/dist/**/*.map",
+    "client/webview/dist/",
+    "!client/webview/dist/**/*.map",
+    "templates/"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "keywords": [
     "multi-root ready"
@@ -91,16 +102,6 @@
       {
         "command": "notethink.clearFocus",
         "title": "NoteThink: Clear Focus"
-      },
-      {
-        "command": "dulcet.saveToGitHub",
-        "title": "Dulcet: Save to GitHub",
-        "icon": "$(cloud-upload)"
-      },
-      {
-        "command": "dulcet.openFromGitHub",
-        "title": "Dulcet: Open from GitHub",
-        "icon": "$(cloud-download)"
       }
     ],
     "menus": {
@@ -157,12 +158,6 @@
         "command": "notethink.drillOut",
         "key": "backspace",
         "when": "activeCustomEditorId == 'zoombuzz.notethink'"
-      },
-      {
-        "command": "dulcet.saveToGitHub",
-        "key": "ctrl+s",
-        "mac": "cmd+s",
-        "when": "dulcet.active && editorTextFocus"
       }
     ],
     "configuration": [
@@ -183,22 +178,11 @@
             "description": "Traces the communication between VS Code and the extension."
           }
         }
-      },
-      {
-        "order": 23,
-        "id": "dulcet",
-        "title": "Dulcet",
-        "properties": {
-          "dulcet.openFile": {
-            "type": "string",
-            "default": "",
-            "description": "GitHub file to open on startup (owner/repo/branch/path). Set via URL hash."
-          }
-        }
       }
     ]
   },
   "scripts": {
+    "prepublishOnly": "pnpm run package",
     "bump-version": "npm version patch --no-git-tag-version",
     "test-jest": "bash scripts/test-jest.sh",
     "test-playwright": "pnpm run build && npx playwright test",

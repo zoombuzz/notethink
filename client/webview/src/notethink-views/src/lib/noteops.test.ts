@@ -80,6 +80,30 @@ describe('findDeepestNote', () => {
         const note = makeNote();
         expect(findDeepestNote([note], 100)).toBeUndefined();
     });
+
+    it('finds note when position equals end_body offset (inclusive boundary)', () => {
+        const note = makeNote({
+            seq: 1,
+            position: {
+                start: { offset: 0, line: 1 },
+                end: { offset: 10, line: 1 },
+                end_body: { offset: 50, line: 5 },
+            },
+        });
+        expect(findDeepestNote([note], 50)?.seq).toBe(1);
+    });
+
+    it('returns undefined when position is one past end_body offset', () => {
+        const note = makeNote({
+            seq: 1,
+            position: {
+                start: { offset: 0, line: 1 },
+                end: { offset: 10, line: 1 },
+                end_body: { offset: 50, line: 5 },
+            },
+        });
+        expect(findDeepestNote([note], 51)).toBeUndefined();
+    });
 });
 
 describe('findSelectedNotes', () => {
@@ -284,7 +308,7 @@ describe('calculateTextChangesForCheckbox', () => {
         });
         const changes = calculateTextChangesForCheckbox(note, true, ' buy milk', []);
         expect(changes).toHaveLength(1);
-        expect(changes[0].insert).toBe('x');
+        expect(changes[0].insert).toBe('X');
     });
 
     it('generates change to uncheck a checkbox', () => {

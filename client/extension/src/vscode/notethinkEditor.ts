@@ -254,9 +254,12 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			if (e.document.uri.path !== active_path) { return; }
 			if (change_timer) { clearTimeout(change_timer); }
 			change_timer = setTimeout(async () => {
+				change_timer = undefined;
 				try {
 					active_doc = await buildDoc(e.document);
 					sendDoc(active_doc);
+					// send selection after doc update so webview never has stale MDAST with fresh caret
+					sendCurrentSelection();
 				} catch (err) {
 					writeToErrorLog('failed to process document change', e.document.uri.path, err);
 				}
@@ -404,9 +407,10 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 						// bypass debounce: immediately re-parse and send the updated doc
 						// (the edit above already fired onDidChangeTextDocument which set a
 						// debounce timer — clear it to avoid a redundant delayed update)
-						if (change_timer) { clearTimeout(change_timer); }
+						if (change_timer) { clearTimeout(change_timer); change_timer = undefined; }
 						active_doc = await buildDoc(existing?.document ?? document);
 						sendDoc(active_doc);
+						sendCurrentSelection();
 					} catch (err) {
 						writeToErrorLog('editText failed', doc_path, err);
 					}
@@ -423,6 +427,9 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		let selection_timer: ReturnType<typeof setTimeout> | undefined;
 		const selectionSubscription = vscode.window.onDidChangeTextEditorSelection(e => {
 			if (e.textEditor.document.uri.path !== active_path) { return; }
+			// suppress selection while a document change is pending — the change
+			// handler sends selection after re-parse to keep MDAST and caret in sync
+			if (change_timer) { return; }
 			if (selection_timer) { clearTimeout(selection_timer); }
 			selection_timer = setTimeout(() => {
 				const selection = e.selections[0];

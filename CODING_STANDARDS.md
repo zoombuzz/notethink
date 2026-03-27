@@ -490,12 +490,15 @@ Each developer has `todo.md` and `done.md` files under `docstech/users/<username
 
 - Stories are read **top-to-bottom** — the next story to work on is always the one at the top.
 - Each story may contain tasks as a checklist (`- [ ]`). When completing a task, mark it `[X]` (e.g. `- [X] Task description`).
+- When a story is being actively implemented, attach a status linetag to its heading: `### Story title [](?status=doing)`.
+- Linetags use the format `[](?key=value&key2=value2)` appended to the story heading line.
 - When a story is completed (all tasks done), remove it from `todo.md` and append it to `done.md`.
 
 ### done.md
 
 - Completed stories are **appended to the end** of the file.
 - Maintain exactly two blank lines before and after each story entry.
+- When moving a story to done.md, remove any `status` attribute from its linetag — all stories in done.md are implicitly `status=done`.
 
 ### Example todo.md
 
@@ -503,7 +506,7 @@ Each developer has `todo.md` and `done.md` files under `docstech/users/<username
 # Todo
 
 
-## Current story
+## Current story [](?status=doing)
 
 Story description here.
 

@@ -139,7 +139,7 @@ export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check
             return [{
                 from,
                 to,
-                insert: action_is_check ? 'x' : ' ',
+                insert: action_is_check ? 'X' : ' ',
             }];
         }
     }

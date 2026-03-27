@@ -109,3 +109,47 @@ export function isInternalAttribute(key: string) {
 export function isChildNote(child: NoteProps | MdastNode) {
     return ('seq' in child && child.seq !== undefined);
 }
+
+// lazy import to break circular dependency: renderops → GenericNote → MarkdownNote → renderops
+let LazyGenericNote: React.ComponentType<NoteProps> | undefined;
+function getGenericNote() {
+    if (!LazyGenericNote) {
+        LazyGenericNote = require("../components/notes/GenericNote").default; // lazy to break circular dep
+    }
+    return LazyGenericNote!;
+}
+
+/**
+ * Render a note's children_body array: child notes as GenericNote with IDs,
+ * MDAST body nodes as divs with data-offset-start/end for caret tracking.
+ */
+export function renderBodyItems(note: NoteProps, items: (NoteProps | MdastNode)[], additional_props: Partial<NoteProps> = {}) {
+    const GenericNote = getGenericNote();
+    return items.map((child: MdastNode | NoteProps, i: number) => {
+        if (isChildNote(child)) {
+            const child_note = child as NoteProps;
+            return <GenericNote
+                key={child_note.seq}
+                {...child_note}
+                {...additional_props}
+                display_options={{
+                    ...note.display_options,
+                    id: `v${note.display_options?.view_id}-n${child_note.seq}`,
+                    provided: {
+                        draggableProps: undefined,
+                        dragHandleProps: undefined,
+                    }
+                }}
+                handlers={note.handlers}
+            />;
+        } else {
+            const mdast = child as MdastNode;
+            return <div key={`body-${mdast.position?.start?.offset ?? i}`}
+                data-offset-start={mdast.position?.start?.offset}
+                data-offset-end={mdast.position?.end?.offset}
+            >
+                {renderNodeUnified(mdast)}
+            </div>;
+        }
+    });
+}

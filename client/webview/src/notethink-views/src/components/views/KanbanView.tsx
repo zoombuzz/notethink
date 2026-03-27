@@ -11,12 +11,11 @@ import Debug from 'debug';
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
 import {
-    noteIsVisible,
-    findBodyItemElement,
     standardNoteOrder,
     withinNoteHeadlineOrBodyUpTo,
     kanbanNoteOrder,
 } from "../../lib/noteops";
+import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
 import { calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering } from "../../lib/linetagops";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import KanbanColumn from "./KanbanColumn";
@@ -191,39 +190,11 @@ export default function KanbanView(props: ViewProps) {
         }
     };
 
-    // scroll focused note (and body item) into view
-    const scroll_raf_ref = useRef<number>(0);
-    useEffect(() => {
-        if (!display_options.settings?.scroll_note_into_view || !display_options.focused_seqs?.length) { return; }
-        const focused_seq = display_options.focused_seqs[display_options.focused_seqs.length - 1];
-        const view_id = props.id;
-        const caret_offset = props.selection?.main.head;
-        cancelAnimationFrame(scroll_raf_ref.current);
-        scroll_raf_ref.current = requestAnimationFrame(() => {
-            const view_element = window?.document?.getElementById(`v${view_id}-inner`);
-            const note_element = window?.document?.getElementById(`v${view_id}-n${focused_seq}`);
-            if (!note_element || !view_element) { return; }
-            if (caret_offset !== undefined) {
-                const body_item = findBodyItemElement(note_element, caret_offset);
-                if (body_item) {
-                    if (!noteIsVisible(body_item, view_element)) {
-                        body_item.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
-                    }
-                    return;
-                }
-            }
+    // scroll focused note (and body item) into view when caret moves
+    useScrollToCaret(display_options, props.id, props.selection);
 
-            if (!noteIsVisible(note_element, view_element)) {
-                note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
-            }
-        });
-        return () => cancelAnimationFrame(scroll_raf_ref.current);
-    }, [
-        display_options.settings?.scroll_note_into_view,
-        display_options.focused_seqs?.length && display_options.focused_seqs[display_options.focused_seqs.length - 1],
-        props.id,
-        props.selection?.main.head,
-    ]);
+    // virtual caret indicator: pulse-highlight the body item containing the editor caret
+    useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
 
     // assign notes to columns
     columns.map((column: Column) => {

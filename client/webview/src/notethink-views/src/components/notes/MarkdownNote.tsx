@@ -1,50 +1,20 @@
-import {Fragment, useCallback, useEffect, useRef, useMemo, useState} from "react";
+import {Fragment, memo, useCallback, useEffect, useRef, useMemo, useState} from "react";
 import {MdastNode, NoteProps} from "../../types/NoteProps";
 import {
     getStandardNoteDataProps,
     renderMarkdownNoteHeadline,
-    renderNodeUnified
+    renderBodyItems,
 } from "../../lib/renderops";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import { buildNoteStyles, headlineClickPosition, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
-import GenericNote from "../../components/notes/GenericNote";
 import Debug from 'debug';
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
 // abridge when rendered height exceeds this multiple of width (top-level notes only)
-const HEIGHT_RATIO = 2;
+const HEIGHT_RATIO = 1;
 
-function renderBodyItems(note: NoteProps, items: (NoteProps | MdastNode)[], baseIndex: number) {
-    return items.map((child, i) => {
-        const index = baseIndex + i;
-        if ('seq' in child && child.seq !== undefined) {
-            return <GenericNote
-                key={child.seq}
-                {...child}
-                display_options={{
-                    ...note.display_options,
-                    id: `v${note.display_options?.view_id}-n${child.seq}`,
-                    provided: {
-                        draggableProps: undefined,
-                        dragHandleProps: undefined,
-                    }
-                }}
-                handlers={note.handlers}
-            />;
-        } else {
-            const mdast = child as MdastNode;
-            return <div key={`nn-${index}`}
-                data-offset-start={mdast.position?.start?.offset}
-                data-offset-end={mdast.position?.end?.offset}
-            >
-                {renderNodeUnified(mdast)}
-            </div>;
-        }
-    });
-}
-
-export default function MarkdownNote(props: NoteProps) {
+export default memo(function MarkdownNote(props: NoteProps) {
     const [overflow_state, setOverflowState] = useState<{ overflows: boolean; max_height: number }>({ overflows: false, max_height: 0 });
     const note_ref = useRef<HTMLDivElement>(null);
 
@@ -129,6 +99,8 @@ export default function MarkdownNote(props: NoteProps) {
         >
             <div className={view_specific_styles.headline}
                  role={'rowheader'}
+                 data-offset-start={note.position.start.offset}
+                 data-offset-end={note.position.end.offset}
                  onClick={createNoteClickHandler(note, headlineClickPosition(note))}
             >
                 {note.display_options?.settings?.show_line_numbers && (<span className={view_specific_styles.lineno}><span>{note.position.start.line}</span></span>)}
@@ -141,7 +113,7 @@ export default function MarkdownNote(props: NoteProps) {
             <div className={view_specific_styles.body}
                  onClick={createNoteClickHandler(note, bodyClickPosition(note))}
             >
-                {renderBodyItems(note, note.children_body, 0)}
+                {renderBodyItems(note, note.children_body)}
             </div> : ''}
             {should_clip && (
                 <div className={view_specific_styles.abridgeFade}>
@@ -150,4 +122,25 @@ export default function MarkdownNote(props: NoteProps) {
             )}
         </div>
     );
+}, areMarkdownNotePropsEqual);
+
+function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
+    if (prev.seq !== next.seq) { return false; }
+    if (prev.headline_raw !== next.headline_raw) { return false; }
+    if (prev.body_raw !== next.body_raw) { return false; }
+    if (prev.focused !== next.focused) { return false; }
+    if (prev.selected !== next.selected) { return false; }
+    if (prev.checked !== next.checked) { return false; }
+    if (prev.level !== next.level) { return false; }
+    if (prev.linetags_from !== next.linetags_from) { return false; }
+    if (!!prev.linetags !== !!next.linetags) { return false; }
+    if (prev.position.start.offset !== next.position.start.offset) { return false; }
+    if (prev.position.end.offset !== next.position.end.offset) { return false; }
+    if (prev.position.end_body?.offset !== next.position.end_body?.offset) { return false; }
+    if ((prev.children_body?.length ?? 0) !== (next.children_body?.length ?? 0)) { return false; }
+    if (prev.display_options?.id !== next.display_options?.id) { return false; }
+    if (prev.display_options?.parent_context_seq !== next.display_options?.parent_context_seq) { return false; }
+    if (prev.display_options?.settings?.show_linetags_in_headlines !== next.display_options?.settings?.show_linetags_in_headlines) { return false; }
+    if (prev.display_options?.settings?.show_line_numbers !== next.display_options?.settings?.show_line_numbers) { return false; }
+    return true;
 }

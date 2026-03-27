@@ -310,6 +310,24 @@ body.disableAddressBarHidingOnScroll {
     }
   }
 
+  .caretTarget {
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      animation: caretPulse 800ms ease-out forwards;
+    }
+  }
+
+  @keyframes caretPulse {
+    0% { background: color-mix(in srgb, var(--mantine-primary-color-2), transparent 60%); }
+    100% { background: transparent; }
+  }
+
   .readMoreToggle {
     display: block;
     font-size: 85%;
@@ -368,6 +386,8 @@ body.disableAddressBarHidingOnScroll {
     > li {
       // explicitly set text-indent (to default) so that it doesn't inherit checkbox style for non-checkbox li tags
       text-indent: 0;
+      // restore bullet explicitly — framework CSS resets may remove it
+      list-style-type: disc;
 
       // hide discs on todo items (that contain checkboxes), either in note or nested note
       &:has(> input[type=checkbox]), &:has(div > input[type=checkbox]) {
@@ -381,15 +401,17 @@ body.disableAddressBarHidingOnScroll {
         height: 1em;
         margin-right: 0.4em;
         vertical-align: middle;
-        border: 1px solid var(--vscode-checkbox-border, var(--mantine-color-default-border));
+        // unchecked: prominent border — outstanding task, needs attention
+        border: 1px solid var(--vscode-foreground, var(--mantine-color-default-color));
         border-radius: 3px;
         background: var(--vscode-checkbox-background, var(--mantine-color-default));
         cursor: pointer;
         position: relative;
 
         &:checked {
-          background: var(--vscode-checkbox-selectBackground, var(--mantine-primary-color-2));
-          border-color: var(--vscode-checkbox-selectBorder, var(--mantine-primary-color-2));
+          // checked: subdued — task is done, no longer needs attention
+          background: var(--vscode-checkbox-background, var(--mantine-color-default));
+          border-color: var(--vscode-checkbox-border, var(--mantine-color-default-border));
 
           &::after {
             content: '';
@@ -398,7 +420,8 @@ body.disableAddressBarHidingOnScroll {
             top: 0px;
             width: 4px;
             height: 8px;
-            border: solid var(--vscode-checkbox-foreground, #fff);
+            // tick slightly brighter than the border so it reads as "done" without drawing focus
+            border: solid color-mix(in srgb, var(--vscode-foreground, var(--mantine-color-default-color)) 40%, var(--vscode-checkbox-border, var(--mantine-color-default-border)));
             border-width: 0 2px 2px 0;
             transform: rotate(45deg);
           }

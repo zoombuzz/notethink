@@ -1,4 +1,4 @@
-import React, { ReactElement, Suspense, useCallback, useRef } from 'react';
+import React, { ReactElement, Suspense, useCallback, useMemo, useRef } from 'react';
 import {sanitize} from "hast-util-sanitize";
 import {toHast} from "mdast-util-to-hast";
 import {toJsxRuntime} from "hast-util-to-jsx-runtime";
@@ -39,7 +39,11 @@ interface NoteRendererProps {
  * thrown by convertMdastToNoteHierarchy are caught by the parent ErrorBoundary.
  */
 function NoteView({ note_id, note, props }: { note_id: string; note: Doc; props: NoteRendererProps }) {
-    const root_note = convertMdastToNoteHierarchy(note.content!, note.text!);
+    // memoize conversion keyed on content hash — avoids redundant work when only selection changes
+    const root_note = useMemo(
+        () => convertMdastToNoteHierarchy(note.content!, note.text!),
+        [note.hash_sha256]
+    );
     const selection = note.path ? props.selections?.[note.path] : undefined;
     const all_notes = flattenAllNotes(root_note);
 

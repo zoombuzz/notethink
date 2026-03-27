@@ -222,6 +222,34 @@ describe('GenericView', () => {
         expect(selector).toHaveAttribute('data-auto-resolved', 'kanban');
     });
 
+    it('clamps caret position that exceeds root note end offset', async () => {
+        const child_note = makeNote({
+            seq: 1, level: 2,
+            position: { start: { offset: 10, line: 2 }, end: { offset: 30, line: 3 }, end_body: { offset: 50, line: 5 } },
+        });
+        const root_note = makeNote({
+            seq: 0, level: 1,
+            child_notes: [child_note],
+            position: { start: { offset: 0, line: 1 }, end: { offset: 50, line: 5 }, end_body: { offset: 50, line: 5 } },
+        });
+        // caret at 60 exceeds root end (50) — simulates selection arriving before MDAST re-parse
+        const props = makeViewProps({
+            type: 'document',
+            notes: [root_note, child_note],
+            selection: { main: { head: 60, anchor: 60 } },
+        });
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...props} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('document-view')).toBeInTheDocument());
+        // clamped to root end → still finds a note (does not leave focused_seqs empty)
+        const last_call = mockDocViewRender.mock.calls[mockDocViewRender.mock.calls.length - 1][0];
+        expect(last_call.display_options.focused_seqs).toBeDefined();
+        expect(last_call.display_options.focused_seqs.length).toBeGreaterThan(0);
+    });
+
     it('does not render any view for unknown type but still shows toolbar', async () => {
         render(
             <Suspense fallback={<div>loading</div>}>
@@ -533,6 +561,79 @@ describe('GenericView click state machine', () => {
         expect(post_message).toHaveBeenCalledWith(expect.objectContaining({
             type: 'editText',
         }));
+    });
+
+    it('checkbox click via selectable_note resolves to parent with body_raw', async () => {
+        const post_message = jest.fn();
+        const root = makeNote({ seq: 0, level: 0 });
+        const heading = makeNote({
+            seq: 1, level: 2,
+            body_raw: '- [ ] buy milk\n- [x] buy eggs\n',
+            position: { start: { offset: 0, line: 1 }, end: { offset: 15, line: 1 }, end_body: { offset: 50, line: 4 } },
+        });
+        const paragraph = makeNote({
+            seq: 2, level: 4, type: 'paragraph',
+            headline_raw: 'buy milk',
+            body_raw: '',
+            parent_notes: [heading],
+            position: { start: { offset: 18, line: 2 }, end: { offset: 30, line: 2 } },
+        });
+
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'document',
+                    notes: [root, heading, paragraph],
+                    handlers: {
+                        setViewManagedState: jest.fn(),
+                        deleteViewFromManagedState: jest.fn(),
+                        revertAllViewsToDefaultState: jest.fn(),
+                        postMessage: post_message,
+                    },
+                })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
+
+        const handlers = getDocViewHandlers();
+        // simulate checkbox element within a paragraph rendered by MarkdownNote
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true;
+        const text = document.createTextNode(' buy milk');
+        const wrapper = document.createElement('span');
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(text);
+
+        // calling the handler with the PARAGRAPH note (empty body_raw) should still work
+        // because createNoteClickHandler passes selectable_note (the heading) to the handler
+        const click_profile: ClickPositionInfo = {
+            from: 18, to: 30,
+            selection_from: 18, selection_to: 30,
+            type: 'note_headline',
+        };
+        // simulate what createNoteClickHandler does: pass selectable_note if available
+        handlers.click!(
+            mockClickEvent({ target: checkbox }),
+            heading,
+            click_profile,
+        );
+
+        expect(post_message).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'editText',
+            changes: expect.arrayContaining([
+                expect.objectContaining({ insert: 'X' }),
+            ]),
+        }));
+
+        // verify that passing the paragraph directly (no selectable_note) returns no changes
+        post_message.mockClear();
+        handlers.click!(
+            mockClickEvent({ target: checkbox }),
+            paragraph,
+            click_profile,
+        );
+        expect(post_message).not.toHaveBeenCalled();
     });
 
     it('getClearHandler sends revealRange past the focused note end', async () => {

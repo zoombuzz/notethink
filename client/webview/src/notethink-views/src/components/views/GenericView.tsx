@@ -82,7 +82,13 @@ export default function GenericView(props: ViewProps) {
     // look for the deepest note that the caret lies within
     deepest.note = useMemo(() => {
         if (props.selection !== undefined) {
-            return findDeepestNote(props.notes || [], props.selection?.main.head) || parent_context;
+            let caret_pos = props.selection?.main.head;
+            // clamp caret to document bounds — selection may arrive before MDAST re-parse
+            const root_end = props.notes?.[0]?.position?.end?.offset;
+            if (caret_pos !== undefined && root_end !== undefined && caret_pos > root_end) {
+                caret_pos = root_end;
+            }
+            return findDeepestNote(props.notes || [], caret_pos) || parent_context;
         }
         return parent_context;
     }, [

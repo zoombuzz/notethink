@@ -4,7 +4,7 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.27",
+  "version": "0.1.28",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
@@ -21,14 +21,6 @@
     "type": "git",
     "url": "https://github.com/zoombuzz/NoteThink.git"
   },
-  "files": [
-    "client/extension/dist/",
-    "!client/extension/dist/test/",
-    "!client/extension/dist/**/*.map",
-    "client/webview/dist/",
-    "!client/webview/dist/**/*.map",
-    "templates/"
-  ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },

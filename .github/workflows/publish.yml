@@ -41,6 +41,10 @@ jobs:
         if: steps.check.outputs.published == 'false'
         run: pnpm install
 
+      - name: Set scoped package name for npm
+        if: steps.check.outputs.published == 'false'
+        run: node -e "const p=require('./package.json'); p.name='@zoombuzz/notethink'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2)+'\n')"
+
       - name: Publish
         if: steps.check.outputs.published == 'false'
         run: npm publish

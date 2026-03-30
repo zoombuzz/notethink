@@ -165,6 +165,28 @@
   + theme preference, default view type, line numbers
 
 
+### Test engines.vscode lower bound against vscode-web and VS Code desktop
+
++ `engines.vscode` was lowered from `^1.109.0` to `^1.91.1` for dulcet compatibility
+  + `vscode-web` npm package tops out at 1.91.1 — NoteThink must be compatible with it
+  + VS Code desktop is currently ~1.96+ — the `^1.91.1` range covers both
++ risk: NoteThink may use VS Code APIs introduced after 1.91
+  + quick audit found only standard APIs (commands, window, workspace, Uri)
+  + `window.tabGroups` (introduced 1.77) used only in test code
+  + but a deeper audit is needed to be certain
++ [ ] test NoteThink in dulcet (vscode-web 1.91.1)
+  + install `@zoombuzz/notethink` in dulcet, load in browser
+  + verify: extension activates, Auto/Document/Kanban views render, keyboard nav works
+  + verify: no "Extension is not compatible" errors in console
++ [ ] test NoteThink in VS Code desktop (latest stable)
+  + install via `code --install-extension notethink-0.x.x.vsix`
+  + verify: all existing functionality works (views, editing, drag-drop, theme sync)
++ [X] audit VS Code API usage against 1.91 API surface
+  + all APIs available since 1.40 or earlier, except `createOutputChannel({ log: true })` (1.74)
+  + no APIs introduced after 1.91 — fully compatible
++ if issues found, raise `engines.vscode` to the minimum version that works for both hosts
+
+
 ### Publish NoteThink 0.1.0 to marketplace (requires manual work)
 
 + [ ] create extension icon

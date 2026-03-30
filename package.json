@@ -4,14 +4,14 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.29",
+  "version": "0.1.30",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
     "url": "https://github.com/ZoomBuzz/NoteThink/issues"
   },
   "engines": {
-    "vscode": "^1.109.0"
+    "vscode": "^1.91.1"
   },
   "categories": [
     "Visualization",

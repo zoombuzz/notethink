@@ -55,7 +55,7 @@ importers:
         specifier: ^10.0.10
         version: 10.0.10
       '@types/vscode':
-        specifier: ^1.109.0
+        specifier: ^1.91.1
         version: 1.109.0
       '@types/webpack-env':
         specifier: ^1.18.8

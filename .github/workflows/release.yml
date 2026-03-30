@@ -43,7 +43,7 @@ jobs:
         with:
           name: notethink-vsix
           path: '*.vsix'
-          retention-days: 30
+          retention-days: 3
 
   release:
     name: Publish Release

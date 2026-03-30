@@ -209,7 +209,7 @@
     "@playwright/test": "^1.58.2",
     "@stylistic/eslint-plugin": "^5.9.0",
     "@types/mocha": "^10.0.10",
-    "@types/vscode": "^1.109.0",
+    "@types/vscode": "^1.91.1",
     "@types/webpack-env": "^1.18.8",
     "@vscode/test-web": "^0.0.79",
     "@vscode/vsce": "^3.7.1",

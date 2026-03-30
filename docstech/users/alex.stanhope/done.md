@@ -449,3 +449,27 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + removed 5 descendant_note_count tests
 
 
+### Publish NoteThink as npm package for dulcet
+
++ goal
+  + publish `@zoombuzz/notethink` to GitHub Packages so dulcet can consume it as an npm dependency
+  + follows the `@zoombuzz/calfam-shared` pattern: push to main → GitHub Actions → `npm publish`
+  + eliminates manual `COPY notethink-extension/` step in dulcet's Dockerfile
++ [X] add `publishConfig` to root `package.json`
++ [X] add `prepublishOnly` script to root `package.json`
++ [X] update `repository.url` casing (`ZoomBuzz` → `zoombuzz`)
++ [X] remove dulcet-specific code from NoteThink
+  + removed `dulcet.saveToGitHub`, `dulcet.openFromGitHub` commands, keybinding, and `dulcet.openFile` config from `package.json`
+  + deleted `dulcetSaveToGitHub.ts`, `dulcetOpenFromGitHub.ts`, `githubFileSystemProvider.ts` and their 3 test files
+  + removed `isDulcetContext()`, `dulcetStartup()`, and dulcet activation block from `extension.ts`
++ [X] create `.github/workflows/publish.yml`
+  + follows calfam-shared pattern: check version → pnpm install → npm publish
+  + dynamically injects scoped name (`@zoombuzz/notethink`) and `files` array before `npm publish`
+  + needed because vsce rejects scoped names and `files` alongside `.vscodeignore`
++ [X] fix release.yml version extraction
+  + swapped quote nesting in `node -p` to avoid GitHub Actions escaping backslash-quotes
++ [X] test locally with `npm pack` (2.5MB tarball, 14 files, no source maps or test bundles)
++ first published version: `@zoombuzz/notethink@0.1.29`
++ consumers: dulcet adds `"@zoombuzz/notethink": "^0.1.29"` with `@zoombuzz:registry=https://npm.pkg.github.com` in `.npmrc`
+
+

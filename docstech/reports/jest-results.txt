@@ -1,10 +1,10 @@
 # Jest Test Results
-# Version: 0.1.26
-# Date: 2026-03-27T00:00:00Z
+# Version: 0.1.29
+# Date: 2026-03-27T19:35:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 Suite            | Files | Passed | Failed | Time
-extension        |     4 |     74 |      0 | 2.054 s
-webview          |     3 |     30 |      0 | 0.585 s
-notethink-views  |    18 |    252 |      0 | 2.767 s
+extension        |     4 |     74 |      0 | 2.792 s
+webview          |     3 |     30 |      0 | 1.431 s
+notethink-views  |    18 |    252 |      0 | 5.183 s
 TOTAL            |    25 |    356 |      0 |

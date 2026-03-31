@@ -31,6 +31,11 @@ interface ViewDisplayDeepestProps {
 
 export default function GenericView(props: ViewProps) {
 
+    // ref for current selection — the click handler reads this to avoid stale closures
+    // when MarkdownNote's memo prevents re-render after a selection-only change
+    const selection_ref = useRef(props.selection);
+    selection_ref.current = props.selection;
+
     // set up all-view-level (global) default display_options, overridden by props (ViewManager state) and parent view props
     const display_options: NoteDisplayOptions = {
         parent_context_seq: 0,
@@ -40,6 +45,7 @@ export default function GenericView(props: ViewProps) {
             show_context_bars: true,
             scroll_text_into_view: true,
             scroll_note_into_view: true,
+            auto_expand_focused_note: false,
             ...props.parent_view?.parent_view?.parent_view?.display_options?.settings,
             ...props.parent_view?.parent_view?.display_options?.settings,
             ...props.parent_view?.display_options?.settings,
@@ -159,8 +165,10 @@ export default function GenericView(props: ViewProps) {
                     console.error('checkbox click handler failed:', err);
                 }
             } else {
-                // click note to reveal in editor
+                // click note to reveal in editor;
+                // read selection from ref to avoid stale closure when memo prevents re-render
                 const caret_pos = resolveCaretPosition(click_profile, note);
+                const current_head = selection_ref.current?.main.head;
                 if (event.detail === 2) {
                     // double-click selects the note immediately
                     props.handlers?.postMessage?.({
@@ -174,7 +182,7 @@ export default function GenericView(props: ViewProps) {
                         type: 'revealRange',
                         from: caret_pos,
                     });
-                } else if (props.selection?.main.head === caret_pos) {
+                } else if (current_head === caret_pos) {
                     // click focused note to make selected
                     props.handlers?.postMessage?.({
                         type: 'selectRange',

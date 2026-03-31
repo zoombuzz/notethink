@@ -135,6 +135,7 @@ export default function KanbanView(props: ViewProps) {
     const handleSettingsSave = useCallback((updated_settings: {
         show_linetags_in_headlines?: boolean;
         scroll_note_into_view?: boolean;
+        auto_expand_focused_note?: boolean;
         column_order?: string[];
     }) => {
         setSettingsOpen(false);
@@ -279,6 +280,7 @@ export default function KanbanView(props: ViewProps) {
                 settings={{
                     show_linetags_in_headlines: display_options.settings?.show_linetags_in_headlines,
                     scroll_note_into_view: display_options.settings?.scroll_note_into_view,
+                    auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
                     column_order: display_options.settings?.column_order,
                 }}
                 onSave={handleSettingsSave}

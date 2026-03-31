@@ -10,6 +10,7 @@ const hiddenAttributes = [
 
 export default function GenericNoteAttributes(props: NoteProps) {
     const note = props;
+    const selectable = note.display_options?.deepest?.selectable_note || note;
     const linetags: { [key: string]: LineTag } = note.linetags || {};
     // render attributes, one at a time
     return (
@@ -47,22 +48,22 @@ export default function GenericNoteAttributes(props: NoteProps) {
                     >
                         <span className={view_specialised_styles.key}
                               onClick={(event: MouseEvent<HTMLElement>) => {
-                                  props.handlers?.click?.(event, note, {
+                                  props.handlers?.click?.(event, selectable, {
                                       from: (note.linetags_from || 0) + linetag.key_offset,
                                       to: (note.linetags_from || 0) + linetag.key_offset + linetag.key.length,
-                                      selection_from: note.position.start.offset,
-                                      selection_to: note.position.end.offset,
+                                      selection_from: selectable.position.start.offset,
+                                      selection_to: selectable.position.end_body?.offset ?? selectable.position.end.offset,
                                       type: 'linetag',
                                   });
                               }}
                         >{attrib_key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())}:</span>
                         <span className={view_specialised_styles.value}
                               onClick={(event: MouseEvent<HTMLElement>) => {
-                                  props.handlers?.click?.(event, note, {
+                                  props.handlers?.click?.(event, selectable, {
                                       from: linetags_from_position + linetag.value_offset,
                                       to: linetags_from_position + linetag.value_offset + linetag.value.length,
-                                      selection_from: note.position.start.offset,
-                                      selection_to: note.position.end.offset,
+                                      selection_from: selectable.position.start.offset,
+                                      selection_to: selectable.position.end_body?.offset ?? selectable.position.end.offset,
                                       type: 'linetag',
                                   });
                               }}

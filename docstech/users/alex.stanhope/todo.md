@@ -150,6 +150,23 @@
   + menu bar button and/or keyboard shortcut (Ctrl+I or similar)
 
 
+### Auto-expand note setting
+
++ [X] add `auto_expand_focused_note?: boolean` to `NoteDisplayOptions.settings`, default `false` in `GenericView`
++ [X] add to `areMarkdownNotePropsEqual` comparator
++ [X] implement in `MarkdownNote`: auto-expand ON → expand on focus (old behaviour); OFF → respect `manually_expanded` state
++ [X] "Show more" onClick sets `manually_expanded = true`, reset on `body_raw` change
++ [X] add checkbox to `SettingsKanbanModal`
++ [X] create `SettingsDocumentModal` with common settings (scroll, linetags, auto-expand)
++ [X] wire DocumentView to open `SettingsDocumentModal` via `settingsClickRef`
++ [X] 7 new tests for `SettingsDocumentModal` (open/close, checkbox state, save, cancel, no column controls)
++ verification
+  + with setting ON: move cursor into a long note — it auto-expands; move cursor out — it clips back
+  + with setting OFF: move cursor into a long note — it stays clipped; click "Show more" — it expands and stays expanded
+  + edit the note content — manually-expanded state resets
+  + all existing tests pass (363 jest, 34 playwright)
+
+
 ### Settings modals
 
 + goal

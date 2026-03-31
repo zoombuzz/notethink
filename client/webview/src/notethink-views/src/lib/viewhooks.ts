@@ -20,6 +20,26 @@ function resolveCaretTarget(
 }
 
 /**
+ * Check whether an element is clipped by an ancestor with overflow:hidden.
+ * Returns true if the element's bottom extends beyond the ancestor's visible area.
+ */
+function isClippedByAncestor(el: HTMLElement): boolean {
+    let ancestor = el.parentElement;
+    while (ancestor) {
+        const style = getComputedStyle(ancestor);
+        if (style.overflow === 'hidden' || style.overflowY === 'hidden') {
+            const ancestor_rect = ancestor.getBoundingClientRect();
+            const el_rect = el.getBoundingClientRect();
+            if (el_rect.bottom > ancestor_rect.bottom || el_rect.top < ancestor_rect.top) {
+                return true;
+            }
+        }
+        ancestor = ancestor.parentElement;
+    }
+    return false;
+}
+
+/**
  * Scroll the focused note (and body item) into view when the caret moves.
  */
 export function useScrollToCaret(
@@ -36,6 +56,8 @@ export function useScrollToCaret(
             const resolved = resolveCaretTarget(display_options.focused_seqs, view_id, caret_offset);
             if (!resolved) { return; }
             const scroll_target = resolved.body_item || resolved.note_element;
+            // don't scroll to an element that's clipped by an ancestor (e.g. abridged note)
+            if (isClippedByAncestor(scroll_target)) { return; }
             scroll_target.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
         });
         return () => cancelAnimationFrame(scroll_raf_ref.current);
@@ -70,6 +92,9 @@ export function useCaretIndicator(
         // rendered content so nothing should flash
         const target = resolved.body_item;
         if (!target) { return; }
+
+        // skip flash if the target is clipped by an ancestor (e.g. abridged note)
+        if (isClippedByAncestor(target)) { return; }
 
         // skip re-flash if the caret moved within the same element
         if (target === prev_target_ref.current) { return; }

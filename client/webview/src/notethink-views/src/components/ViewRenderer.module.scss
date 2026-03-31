@@ -365,6 +365,12 @@ body.disableAddressBarHidingOnScroll {
     }
   }
 
+  .showLessBar {
+    display: flex;
+    justify-content: center;
+    padding: 0.2em 0 0.5em 0;
+  }
+
   .leafNote {
     &.addGutter {
       margin: 0 0 0 1.0em;
@@ -545,6 +551,7 @@ body.disableAddressBarHidingOnScroll {
   .linetag {
     margin: 0;
     font-size: 80%;
+    list-style-type: none;
     .key {
       display: inline-block;
       width: 50%;

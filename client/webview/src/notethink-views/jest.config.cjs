@@ -34,7 +34,7 @@ module.exports = {
   testEnvironment: 'jsdom',
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
-      tsconfig: 'tsconfig.json',
+      tsconfig: 'tsconfig.jest.json',
     }],
     // transform ESM-only node_modules with babel
     '^.+\\.js$': ['babel-jest', {

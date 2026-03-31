@@ -171,14 +171,15 @@
 + breaks: `acquireVsCodeApi` global (needs `.d.ts`), `jest`/`describe`/`it` globals, CSS module imports, `require()` calls
 + requires restructuring tsconfigs to separate production/jest/mocha compilation targets
 + `@types/jest` and `@types/mocha` conflict when both in scope — need per-entry-point tsconfigs
-+ attempted migration; reverted due to scope — needs dedicated story
-+ [ ] create separate tsconfigs: `tsconfig.build.json` (production), `tsconfig.test-jest.json`, `tsconfig.test-mocha.json`
-+ [ ] add `vscode-webview.d.ts` with `declare function acquireVsCodeApi`
-+ [ ] add `react-app-env.d.ts` CSS/SCSS module declarations
-+ [ ] add `declare const require` for webpack lazy imports in renderops.tsx
-+ [ ] update webpack configs to reference appropriate tsconfigs
-+ [ ] bump typescript to ^6.0 in root and notethink-views
-+ [ ] verify build, lint, jest, playwright all pass
++ [X] exclude test files from lint tsconfigs (extension, webview, notethink-views)
++ [X] add `tsconfig.jest.json` files for webview and notethink-views (re-includes tests, adds `ignoreDeprecations: "6.0"`)
++ [X] add `vscode-webview.d.ts` with `declare function acquireVsCodeApi`
++ [X] add CSS/SCSS module declarations in `react-app-env.d.ts`
++ [X] add `declare const require` for webpack lazy import in renderops.tsx
++ [X] set `transpileOnly: true` in webpack ts-loader (skips type-checking, lint handles it)
++ [X] fix extension jest.config: `moduleResolution: 'node10'` + `ignoreDeprecations: '6.0'`
++ [X] bump typescript to ^6.0 in root and notethink-views
++ [X] verify build, lint (356 jest, 34 playwright) all pass
 
 
 ### Publish NoteThink 0.1.x to marketplace (requires manual work)

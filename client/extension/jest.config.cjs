@@ -28,7 +28,8 @@ module.exports = {
       tsconfig: {
         target: 'ES2023',
         module: 'commonjs',
-        moduleResolution: 'node',
+        moduleResolution: 'node10',
+        ignoreDeprecations: '6.0',
         esModuleInterop: true,
         strict: true,
         skipLibCheck: true,

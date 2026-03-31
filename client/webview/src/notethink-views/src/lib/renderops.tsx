@@ -110,7 +110,9 @@ export function isChildNote(child: NoteProps | MdastNode) {
     return ('seq' in child && child.seq !== undefined);
 }
 
-// lazy import to break circular dependency: renderops → GenericNote → MarkdownNote → renderops
+// lazy import to break circular dependency: renderops → GenericNote → MarkdownNote → renderops;
+// declare require for webpack's runtime (avoids @types/node in this browser-targeted package)
+declare const require: (id: string) => { default: React.ComponentType<NoteProps> };
 let LazyGenericNote: React.ComponentType<NoteProps> | undefined;
 function getGenericNote() {
     if (!LazyGenericNote) {

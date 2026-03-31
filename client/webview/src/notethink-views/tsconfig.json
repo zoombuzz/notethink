@@ -16,5 +16,6 @@
         "forceConsistentCasingInFileNames": true,
         "rootDir": "src"
     },
-    "include": ["src", "jest.setup.ts"]
+    "include": ["src"],
+    "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

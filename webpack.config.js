@@ -62,7 +62,8 @@ const clientExtensionConfig = {
 			test: /\.ts$/,
 			exclude: /node_modules/,
 			use: [{
-				loader: 'ts-loader'
+				loader: 'ts-loader',
+				options: { transpileOnly: true },
 			}]
 		}]
 	},
@@ -135,7 +136,8 @@ const clientWebviewConfig = {
 				test: /\.tsx?$/,
 				exclude: /node_modules/,
 				use: [{
-					loader: 'ts-loader'
+					loader: 'ts-loader',
+					options: { transpileOnly: true },
 				}]
 			},
 			{

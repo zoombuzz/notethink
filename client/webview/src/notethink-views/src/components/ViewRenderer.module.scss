@@ -207,17 +207,19 @@ body.disableAddressBarHidingOnScroll {
     width: 100%;
   }
 
-  // match views that are full-height and also views that contain full-height views (like AutoView)
-  &.fullheight, .fullheight {
-    height: 100%;
+}
 
-    .spacerminus {
-      height: calc(100% - 100px);
-    }
+// standalone fullheight class — used on views and their wrappers (e.g. AutoView);
+// extracted from .view nesting to ensure css-loader exports the class name correctly
+.fullheight {
+  height: 100%;
 
-    .spacer {
-      height: 100px;
-    }
+  .spacerminus {
+    height: calc(100% - 100px);
+  }
+
+  .spacer {
+    height: 100px;
   }
 }
 

@@ -4,7 +4,7 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
@@ -226,7 +226,7 @@
     "mocha": "^11.7.5",
     "path-browserify": "^1.0.1",
     "process": "^0.11.10",
-    "sass": "^1.97.3",
+    "sass": "^1.98.0",
     "sass-loader": "^16.0.7",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.4",

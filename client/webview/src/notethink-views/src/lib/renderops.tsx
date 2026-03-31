@@ -114,7 +114,7 @@ export function isChildNote(child: NoteProps | MdastNode) {
 let LazyGenericNote: React.ComponentType<NoteProps> | undefined;
 function getGenericNote() {
     if (!LazyGenericNote) {
-        LazyGenericNote = require("../components/notes/GenericNote").default; // lazy to break circular dep
+        LazyGenericNote = require("../components/notes/GenericNote").default;
     }
     return LazyGenericNote!;
 }

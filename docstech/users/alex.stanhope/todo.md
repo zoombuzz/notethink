@@ -165,29 +165,23 @@
   + theme preference, default view type, line numbers
 
 
-### Test engines.vscode lower bound against vscode-web and VS Code desktop
+### Migrate TypeScript 5.9 to 6.x
 
-+ `engines.vscode` was lowered from `^1.109.0` to `^1.91.1` for dulcet compatibility
-  + `vscode-web` npm package tops out at 1.91.1 — NoteThink must be compatible with it
-  + VS Code desktop is currently ~1.96+ — the `^1.91.1` range covers both
-+ risk: NoteThink may use VS Code APIs introduced after 1.91
-  + quick audit found only standard APIs (commands, window, workspace, Uri)
-  + `window.tabGroups` (introduced 1.77) used only in test code
-  + but a deeper audit is needed to be certain
-+ [ ] test NoteThink in dulcet (vscode-web 1.91.1)
-  + install `@zoombuzz/notethink` in dulcet, load in browser
-  + verify: extension activates, Auto/Document/Kanban views render, keyboard nav works
-  + verify: no "Extension is not compatible" errors in console
-+ [ ] test NoteThink in VS Code desktop (latest stable)
-  + install via `code --install-extension notethink-0.x.x.vsix`
-  + verify: all existing functionality works (views, editing, drag-drop, theme sync)
-+ [X] audit VS Code API usage against 1.91 API surface
-  + all APIs available since 1.40 or earlier, except `createOutputChannel({ log: true })` (1.74)
-  + no APIs introduced after 1.91 — fully compatible
-+ if issues found, raise `engines.vscode` to the minimum version that works for both hosts
++ problem: TypeScript 6.0 no longer auto-discovers `@types/*` — requires explicit `types` in tsconfig
++ breaks: `acquireVsCodeApi` global (needs `.d.ts`), `jest`/`describe`/`it` globals, CSS module imports, `require()` calls
++ requires restructuring tsconfigs to separate production/jest/mocha compilation targets
++ `@types/jest` and `@types/mocha` conflict when both in scope — need per-entry-point tsconfigs
++ attempted migration; reverted due to scope — needs dedicated story
++ [ ] create separate tsconfigs: `tsconfig.build.json` (production), `tsconfig.test-jest.json`, `tsconfig.test-mocha.json`
++ [ ] add `vscode-webview.d.ts` with `declare function acquireVsCodeApi`
++ [ ] add `react-app-env.d.ts` CSS/SCSS module declarations
++ [ ] add `declare const require` for webpack lazy imports in renderops.tsx
++ [ ] update webpack configs to reference appropriate tsconfigs
++ [ ] bump typescript to ^6.0 in root and notethink-views
++ [ ] verify build, lint, jest, playwright all pass
 
 
-### Publish NoteThink 0.1.0 to marketplace (requires manual work)
+### Publish NoteThink 0.1.x to marketplace (requires manual work)
 
 + [ ] create extension icon
   + 128x128 or 256x256 PNG in `media/icon.png`
@@ -205,7 +199,7 @@
   + workspace with 100+ markdown files (performance check)
   + verify no console errors in developer tools
 + [ ] publish to marketplace
-  + `vsce publish 0.1.0`
+  + `vsce publish 0.1.x`
   + verify listing appears correctly
 
 

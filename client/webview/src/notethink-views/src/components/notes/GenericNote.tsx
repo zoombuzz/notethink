@@ -31,6 +31,14 @@ export default React.memo(function GenericNote(props: NoteProps) {
             .map((selected_note: NoteProps) => selected_note.seq);
     }
 
+    // enrich selectable_note with selected/focused flags so click handlers
+    // can read the correct state (the original note ref lacks these flags)
+    const enriched_selectable: NoteProps = {
+        ...deepest_selectable_note,
+        selected: !!(cropped_selected_seqs?.length && cropped_selected_seqs.includes(deepest_selectable_note.seq)),
+        focused: !!(cropped_focused_seqs?.length && cropped_focused_seqs.includes(deepest_selectable_note.seq)),
+    };
+
     const enriched_props = {
         // calculate default focused and selected status here
         focused: !!(cropped_focused_seqs?.length && cropped_focused_seqs.includes(note.seq)),
@@ -41,7 +49,7 @@ export default React.memo(function GenericNote(props: NoteProps) {
             ...props.display_options,
             deepest: {
                 ...props.display_options?.deepest,
-                selectable_note: deepest_selectable_note,
+                selectable_note: enriched_selectable,
                 selectable_level: props.display_options?.deepest?.selectable_level || deepest_selectable_note.level,
             },
             cropped_focused_seqs,

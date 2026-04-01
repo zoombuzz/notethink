@@ -3,10 +3,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import GenericNote from './GenericNote';
 import type { NoteProps, MdastNode } from '../../types/NoteProps';
 
+// capture enriched props from the mock
+let last_markdown_props: NoteProps | undefined;
+
 // mock lazy-loaded components
 jest.mock('./MarkdownNote', () => ({
     __esModule: true,
-    default: (props: NoteProps) => <div data-testid={`markdown-${props.seq}`} data-level={props.level}>MarkdownNote</div>,
+    default: (props: NoteProps) => { last_markdown_props = props; return <div data-testid={`markdown-${props.seq}`} data-level={props.level}>MarkdownNote</div>; },
 }));
 
 jest.mock('./CodeNote', () => ({
@@ -79,5 +82,41 @@ describe('GenericNote', () => {
         });
         render(<Suspense fallback={<div>loading</div>}><GenericNote {...child_note} /></Suspense>);
         await waitFor(() => expect(screen.getByTestId('markdown-2')).toBeInTheDocument());
+    });
+
+    it('enriches selectable_note with selected flag from cropped_selected_seqs', async () => {
+        last_markdown_props = undefined;
+        const note = makeNote({
+            seq: 5,
+            level: 2,
+            display_options: {
+                selected_seqs: [5],
+                selected_notes: [makeNote({ seq: 5, level: 2 })],
+                focused_seqs: [5],
+                deepest: { selectable_level: 2 },
+            },
+        });
+        render(<Suspense fallback={<div>loading</div>}><GenericNote {...note} /></Suspense>);
+        await waitFor(() => expect(screen.getByTestId('markdown-5')).toBeInTheDocument());
+        expect(last_markdown_props?.display_options?.deepest?.selectable_note?.selected).toBe(true);
+        expect(last_markdown_props?.display_options?.deepest?.selectable_note?.focused).toBe(true);
+    });
+
+    it('enriches selectable_note with selected=false when not in selected_seqs', async () => {
+        last_markdown_props = undefined;
+        const note = makeNote({
+            seq: 3,
+            level: 2,
+            display_options: {
+                selected_seqs: [],
+                selected_notes: [],
+                focused_seqs: [],
+                deepest: { selectable_level: 2 },
+            },
+        });
+        render(<Suspense fallback={<div>loading</div>}><GenericNote {...note} /></Suspense>);
+        await waitFor(() => expect(screen.getByTestId('markdown-3')).toBeInTheDocument());
+        expect(last_markdown_props?.display_options?.deepest?.selectable_note?.selected).toBe(false);
+        expect(last_markdown_props?.display_options?.deepest?.selectable_note?.focused).toBe(false);
     });
 });

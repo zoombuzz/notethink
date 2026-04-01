@@ -1,7 +1,7 @@
 # Playwright Test Results
-# Version: 0.1.33
-# Date: 2026-03-31T19:00:00Z
-# Command: npx playwright test
+# Version: 0.1.34
+# Date: 2026-04-01T19:35:00Z
+# Command: npx playwright test --config playwright.config.ts
 # ---
 Running 34 tests using 10 workers
 34 passed (7.7s)

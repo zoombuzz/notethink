@@ -90,22 +90,21 @@
 + depends on
   + shared foundation from "editor caret → NoteThink view" story (position-aware body items)
 + phase 1: offset-aware click handler
-  + [ ] update `createNoteClickHandler` (or add a new handler) to extract offset from click target
-    + walk up from `event.target` to find the nearest ancestor with `data-offset-start`
+  + [X] update `createNoteClickHandler` to extract offset from click target via `findOffsetAncestor`
+    + walks up from `event.target` to find the nearest ancestor with `data-offset-start` (including `currentTarget` itself)
     + if found, use that offset as `from` in the `revealRange` message
-    + if not found (e.g. click on headline or gap between items), fall back to current behaviour
-  + [ ] update `bodyClickPosition` to accept an optional `offset` override
-    + when the click handler finds a `data-offset-start`, pass it through as `from`
-  + [ ] add tests: clicking a body item with `data-offset-start=150` sends `revealRange` with `from: 150`
+    + if not found (e.g. click on gap between items), fall back to current behaviour
+  + [X] offset extraction applies to both headline and body clicks (not just body)
+  + [X] add tests: 20 tests in `noteui.test.ts` covering offset extraction, character counting, refinement, and click handler integration
 + phase 2: fine-grained position within body items
-  + [ ] for text-heavy elements (paragraphs, list items), use `window.getSelection()` to approximate character offset within the element
-    + get the selection range from the click
-    + count characters from the element start to the selection point
-    + add that to `data-offset-start` for a more precise offset
-  + [ ] handle inline elements (bold, italic, links) that nest within a paragraph
-    + the `data-offset-start` is on the paragraph wrapper, not the inline span
-    + character counting needs to walk the text nodes within the element
-  + [ ] add tests: clicking in the middle of a paragraph sends an offset that corresponds to that character position
+  + [X] use `Range.getBoundingClientRect()` per-character to find the clicked character position
+    + walks text nodes in the wrapper, checks per-character bounding rects against click coordinates
+    + handles multiline text correctly (checks both X and Y per character)
+    + binary search skips text nodes past click X for inline element chains
+  + [X] handle inline elements (bold, italic, links) that nest within a paragraph
+    + `findCharAtPoint` walks all text nodes across inline element boundaries
+    + skips past text nodes whose right edge is before click X, continuing to next inline sibling
+  + [X] add tests: multiline text, inline elements, character-level precision
 + phase 3: double-click selection sync
   + [ ] when double-clicking a word in the NoteThink view, send a `selectRange` message (not `revealRange`)
     + use `data-offset-start` + character offset to compute `from` and `to` for the word

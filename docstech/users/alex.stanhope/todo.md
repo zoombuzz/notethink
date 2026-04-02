@@ -1,137 +1,6 @@
 # Todo [](?ng_view=kanban&ng_child_status=backlog)
 
 
-### Fix boundary flicker: typing at end of note causes view to flash blank [](?status=doing)
-
-+ problem
-  + typing at the end of the last line of a note (just before the invisible newline) causes the NoteThink view to flicker wildly — goes blank, then re-renders
-  + root cause: race between two independently debounced messages from the extension to the webview
-    + `selectionChanged` fires after 120ms with the caret position from the *post-edit* text
-    + `update` (full MDAST re-parse) fires after 250ms with the new document
-    + during the 130ms gap, the webview has a stale MDAST but a fresh caret position
-    + e.g. note `end_body.offset` = 500, user types char, caret = 501, but MDAST still says 500
-    + `findDeepestNote(501)` fails because `withinNoteHeadlineOrBody(501, note)` checks `501 <= 500` → false
-    + no note matches → `focused_seqs` changes → full re-render with wrong focus (blank/unfocused)
-    + 130ms later: new MDAST arrives → correct focus restored → second full re-render
-    + user sees two full re-renders in quick succession = flicker
-  + contributing factors making re-renders expensive
-    + `MarkdownNote` is not wrapped in `React.memo` — every parent re-render cascades to all children
-    + `convertMdastToNoteHierarchy` creates entirely new NoteProps objects each time, so shallow equality always fails
-    + `DocumentView` uses `key={index}` instead of stable note identity
-+ phase 1: fix the timing mismatch (eliminates the flicker)
-  + [X] in `notethinkEditor.ts`, suppress `selectionChanged` while `change_timer` is pending; send selection after doc update via `sendCurrentSelection()`
-  + [X] in `GenericView`, guard `findDeepestNote`: clamp caret position to root note's `end.offset`
-  + [X] add test: caret exceeding root end still finds a focused note (GenericView.test.tsx)
-  + [X] add tests: boundary-inclusive and one-past-boundary behaviour for `findDeepestNote` (noteops.test.ts)
-+ phase 2: reduce re-render cost (eliminates visual jank even when re-renders happen)
-  + [X] wrap `MarkdownNote` in `React.memo` with `areMarkdownNotePropsEqual` custom comparator
-  + [X] in `DocumentView`, use `key={note.seq}` instead of `key={index}` for stable component identity
-  + [X] in `renderBodyItems`, use `key={`body-${offset}`}` instead of `key={`nn-${i}`}` for stable MDAST body item keys
-+ phase 3: structural improvements
-  + [X] coalesced: change handler sends selection immediately after doc update (no separate stale-selection window)
-  + [X] `useMemo` around `convertMdastToNoteHierarchy` in `NoteView` keyed on `doc.hash_sha256`
-  + [ ] consider incremental MDAST updates instead of full re-parse (deferred — requires major architectural change)
-+ verification
-  + place caret at the end of the last line of a note, type rapidly — view should update smoothly without blanking
-  + place caret at the end of a mid-document note, type — same smooth behaviour
-  + move caret between notes — focus highlighting should still work correctly
-  + abridged notes should still expand/collapse correctly
-  + all existing tests still pass (404 tests)
-
-
-### Cursor positioning: editor caret position to NoteThink view [](?status=doing)
-
-+ goal
-  + good synchronisation between editor and NoteThink view
-+ shared foundation: position-aware body items
-  + [X] add `data-offset-start` and `data-offset-end` attributes to rendered body items
-  + [X] add `findBodyItemElement()` utility in `noteops.ts` (6 unit tests)
-  + [X] extract shared `renderBodyItems` from MarkdownNote into `renderops.tsx`; used by both MarkdownNote and GenericNoteWrapper
-+ phase 1: sub-note scroll in DocumentView and KanbanView
-  + [X] `useScrollToCaret` hook in `viewhooks.ts` — shared by DocumentView and KanbanView
-  + [X] removed broken `noteIsVisible` guard (view element is not a scroll container)
-  + [X] fixed `GenericNoteWrapper` not setting DOM `id` or propagating `display_options` to child notes
-  + [X] headline caret falls back to note-level scroll
-+ phase 2: smooth scroll and abridged notes
-  + [X] abridged notes auto-expand on focus
-  + [ ] consider debouncing sub-note scroll separately from note-level scroll if rapid cursor movement causes jitter
-+ phase 3: virtual caret indicator
-  + [X] `.caretTarget` CSS class with `::after` overlay and `@keyframes caretPulse` animation (fade pulse using `--mantine-primary-color-2`)
-  + [X] `useCaretIndicator` hook in `viewhooks.ts` — shared by DocumentView and KanbanView
-    + prefers body item, falls back to headline element (`[role="rowheader"]`), then note element
-    + if target is already visible, flashes immediately
-    + if scroll is needed, waits for `scrollend` + 150ms settle; 1000ms fallback
-  + [X] 4 unit tests (body item flash, caret move, headline fallback, cleanup)
-  + [X] added `data-offset-start`/`data-offset-end` to headline div in MarkdownNote — `findBodyItemElement` now finds headlines directly instead of relying on querySelector fallback
-+ other improvements
-  + [X] `Debug.enable('nodejs:*')` in dev mode (webview iframe has separate localStorage)
-  + [X] fixed `noteIsVisible` partial-visibility check (was always returning "visible")
-+ verification
-  + open a long note in VS Code
-  + move caret to the bottom of the note — NoteThink view should scroll to show that section
-  + move caret to headline — view should show the top of the note
-  + abridged note should expand then scroll when caret enters a lower section
-  + caret pulse visible on body items and headlines when moving through a note
-  + all existing tests still pass (401 tests)
-
-
-### Cursor positioning: Notethink view to editor caret position
-
-+ goal
-  + clicking in the NoteThink view should jump the editor caret to the precise position within the note, not just the note start
-  + currently `bodyClickPosition` returns `note.position.end.offset` (headline end) as `from`, so clicking anywhere in the body sends the caret to the same position
-  + need to map the click target back to the corresponding MDAST offset
-+ architecture
-  + `createNoteClickHandler` in `noteui.ts` builds an onClick that calls `note.handlers.click(event, note, position)`
-  + `GenericView.handlers.click` sends a `revealRange` message with `{from, to}` offsets to the extension
-  + extension calls `editor.revealRange` to move the caret
-  + the click event's `target` is a DOM element rendered by `renderNodeUnified` (e.g. `<p>`, `<li>`, `<code>`)
-  + these elements currently have no offset data — need the `data-offset-start`/`data-offset-end` attributes from the shared foundation
-+ depends on
-  + shared foundation from "editor caret → NoteThink view" story (position-aware body items)
-+ phase 1: offset-aware click handler
-  + [X] update `createNoteClickHandler` to extract offset from click target via `findOffsetAncestor`
-    + walks up from `event.target` to find the nearest ancestor with `data-offset-start` (including `currentTarget` itself)
-    + if found, use that offset as `from` in the `revealRange` message
-    + if not found (e.g. click on gap between items), fall back to current behaviour
-  + [X] offset extraction applies to both headline and body clicks (not just body)
-  + [X] add tests: 20 tests in `noteui.test.ts` covering offset extraction, character counting, refinement, and click handler integration
-+ phase 2: fine-grained position within body items
-  + [X] use `Range.getBoundingClientRect()` per-character to find the clicked character position
-    + walks text nodes in the wrapper, checks per-character bounding rects against click coordinates
-    + handles multiline text correctly (checks both X and Y per character)
-    + binary search skips text nodes past click X for inline element chains
-  + [X] handle inline elements (bold, italic, links) that nest within a paragraph
-    + `findCharAtPoint` walks all text nodes across inline element boundaries
-    + skips past text nodes whose right edge is before click X, continuing to next inline sibling
-  + [X] add tests: multiline text, inline elements, character-level precision
-+ phase 3: double-click selection sync
-  + [ ] when double-clicking a word in the NoteThink view, send a `selectRange` message (not `revealRange`)
-    + use `data-offset-start` + character offset to compute `from` and `to` for the word
-    + this selects the corresponding text in the editor
-  + [ ] add test: double-click on a word sends `selectRange` with correct `from`/`to` offsets
-+ verification
-  + click on a specific paragraph in a multi-paragraph note — editor caret should jump to that paragraph
-  + click on a list item deep in a note — caret should land at that list item
-  + click on headline — caret should go to note start (existing behaviour preserved)
-  + double-click a word — editor should select that word
-  + all existing tests still pass
-
-
-### Display what's next for each story
-
-+ when displaying tasks in a story
-  + we ideally want to show what's next
-    + with some hint of what's just happened (and a Show more) button to see it
-  + what's next is defined by the next task
-+ if a story has no tasks
-  + show it from the top
-+ if a story only has incomplete tasks
-  + show it from the first incomplete task
-+ if a story has many completed tasks and some incomplete ones
-  + show it from the first incomplete task
-
-
 ### Insert modal
 
 + goal
@@ -149,23 +18,6 @@
   + menu bar button and/or keyboard shortcut (Ctrl+I or similar)
 
 
-### Auto-expand note setting
-
-+ [X] add `auto_expand_focused_note?: boolean` to `NoteDisplayOptions.settings`, default `false` in `GenericView`
-+ [X] add to `areMarkdownNotePropsEqual` comparator
-+ [X] implement in `MarkdownNote`: auto-expand ON → expand on focus (old behaviour); OFF → respect `manually_expanded` state
-+ [X] "Show more" onClick sets `manually_expanded = true`, reset on `body_raw` change
-+ [X] add checkbox to `SettingsKanbanModal`
-+ [X] create `SettingsDocumentModal` with common settings (scroll, linetags, auto-expand)
-+ [X] wire DocumentView to open `SettingsDocumentModal` via `settingsClickRef`
-+ [X] 7 new tests for `SettingsDocumentModal` (open/close, checkbox state, save, cancel, no column controls)
-+ verification
-  + with setting ON: move cursor into a long note — it auto-expands; move cursor out — it clips back
-  + with setting OFF: move cursor into a long note — it stays clipped; click "Show more" — it expands and stays expanded
-  + edit the note content — manually-expanded state resets
-  + all existing tests pass (363 jest, 34 playwright)
-
-
 ### Settings modals
 
 + goal
@@ -179,23 +31,6 @@
 + [ ] implement global settings modal
   + port from notegit's GlobalSettingsModal (~80 lines)
   + theme preference, default view type, line numbers
-
-
-### Migrate TypeScript 5.9 to 6.x
-
-+ problem: TypeScript 6.0 no longer auto-discovers `@types/*` — requires explicit `types` in tsconfig
-+ breaks: `acquireVsCodeApi` global (needs `.d.ts`), `jest`/`describe`/`it` globals, CSS module imports, `require()` calls
-+ requires restructuring tsconfigs to separate production/jest/mocha compilation targets
-+ `@types/jest` and `@types/mocha` conflict when both in scope — need per-entry-point tsconfigs
-+ [X] exclude test files from lint tsconfigs (extension, webview, notethink-views)
-+ [X] add `tsconfig.jest.json` files for webview and notethink-views (re-includes tests, adds `ignoreDeprecations: "6.0"`)
-+ [X] add `vscode-webview.d.ts` with `declare function acquireVsCodeApi`
-+ [X] add CSS/SCSS module declarations in `react-app-env.d.ts`
-+ [X] add `declare const require` for webpack lazy import in renderops.tsx
-+ [X] set `transpileOnly: true` in webpack ts-loader (skips type-checking, lint handles it)
-+ [X] fix extension jest.config: `moduleResolution: 'node10'` + `ignoreDeprecations: '6.0'`
-+ [X] bump typescript to ^6.0 in root and notethink-views
-+ [X] verify build, lint (356 jest, 34 playwright) all pass
 
 
 ### Publish NoteThink 0.1.x to marketplace (requires manual work)

@@ -1,4 +1,4 @@
-import type { NoteProps, TextSelection, ClickPositionInfo, LineTag } from "../types/NoteProps";
+import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } from "../types/NoteProps";
 
 /**
  * Check if a position is within a note headline or body.
@@ -144,6 +144,25 @@ export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check
         }
     }
     return [];
+}
+
+/**
+ * Find the seq of the first incomplete task (listItem with checked === false)
+ * in a note's children_body tree. Returns undefined if no incomplete task found.
+ */
+export function findFirstIncompleteTaskSeq(items: Array<NoteProps | MdastNode>): number | undefined {
+    for (const item of items) {
+        if (!('seq' in item && item.seq !== undefined)) { continue; }
+        const note = item as NoteProps;
+        if (note.type === 'listItem' && note.checked === false) {
+            return note.seq;
+        }
+        if (note.children_body?.length) {
+            const found = findFirstIncompleteTaskSeq(note.children_body);
+            if (found !== undefined) { return found; }
+        }
+    }
+    return undefined;
 }
 
 /**

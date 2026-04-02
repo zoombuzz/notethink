@@ -300,6 +300,8 @@ body.disableAddressBarHidingOnScroll {
   }
 
   .body {
+    padding-left: 0.4em;
+
     table, p {
       margin-top: 0.3em;
       margin-bottom: 0.5em;
@@ -330,17 +332,38 @@ body.disableAddressBarHidingOnScroll {
     100% { background: transparent; }
   }
 
+  .readMoreRow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    pointer-events: auto;
+  }
+
   .readMoreToggle {
-    display: block;
     font-size: 85%;
     color: var(--mantine-primary-color-filled, var(--mantine-primary-color-2));
     cursor: pointer;
-    padding: 0.2em 0;
     user-select: none;
 
     &:hover {
       text-decoration: underline;
     }
+  }
+
+  .readMoreArrow {
+    display: inline-block;
+    font-size: 0.9em;
+    line-height: 1;
+    color: var(--mantine-primary-color-filled, var(--mantine-primary-color-2));
+    user-select: none;
+  }
+
+  .readMoreArrowDown {
+    transform: rotate(90deg);
+  }
+
+  .readMoreArrowUp {
+    transform: rotate(-90deg);
   }
 
   .abridgeFade {
@@ -359,6 +382,29 @@ body.disableAddressBarHidingOnScroll {
     justify-content: center;
     padding-bottom: 0.5em;
     pointer-events: none;
+
+    > * {
+      pointer-events: auto;
+    }
+  }
+
+  .abridgeFadeTop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4em;
+    background: linear-gradient(
+      var(--vscode-editor-background, var(--mantine-color-default)) 0%,
+      color-mix(in srgb, var(--vscode-editor-background, var(--mantine-color-default)), transparent 50%) 60%,
+      transparent 100%
+    );
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 0.3em;
+    pointer-events: none;
+    z-index: 1;
 
     > * {
       pointer-events: auto;

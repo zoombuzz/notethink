@@ -1,4 +1,4 @@
-import {Fragment, memo, useCallback, useEffect, useRef, useMemo, useState} from "react";
+import {Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useMemo, useState} from "react";
 import {MdastNode, NoteProps} from "../../types/NoteProps";
 import {
     getStandardNoteDataProps,
@@ -7,16 +7,21 @@ import {
 } from "../../lib/renderops";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import { buildNoteStyles, headlineClickPosition, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
+import { findFirstIncompleteTaskSeq } from "../../lib/noteops";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 import Debug from 'debug';
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
 // abridge when rendered height exceeds this multiple of width (top-level notes only)
 const HEIGHT_RATIO = 1;
+// pixels of completed-task context to show above the first incomplete task when scrolled
+const SCROLL_CONTEXT_PX = 40;
 
 export default memo(function MarkdownNote(props: NoteProps) {
     const [overflow_state, setOverflowState] = useState<{ overflows: boolean; max_height: number }>({ overflows: false, max_height: 0 });
+    const [scrolled_top, setScrolledTop] = useState(0);
     const note_ref = useRef<HTMLDivElement>(null);
+    const body_ref = useRef<HTMLDivElement>(null);
 
     // top-level = direct child of the parent context note
     const parent_seq = props.parent_notes?.length ? props.parent_notes[props.parent_notes.length - 1].seq : undefined;
@@ -38,13 +43,13 @@ export default memo(function MarkdownNote(props: NoteProps) {
         && props.display_options?.provided?.draggableProps?.style !== null
         && (props.display_options.provided.draggableProps.style as Record<string, unknown>).position === 'fixed';
 
-    // measure rendered dimensions and detect overflow (runs regardless of focus so we always know)
+    // measure body dimensions and detect overflow (runs regardless of focus so we always know)
     useEffect(() => {
-        if (!is_top_level || !note_ref.current) {
+        if (!is_top_level || !body_ref.current) {
             setOverflowState({ overflows: false, max_height: 0 });
             return;
         }
-        const el = note_ref.current;
+        const el = body_ref.current;
         const check = () => {
             // skip measurement during drag — element is position:fixed with wrong dimensions
             if (getComputedStyle(el).position === 'fixed') { return; }
@@ -82,6 +87,34 @@ export default memo(function MarkdownNote(props: NoteProps) {
     if (!is_dragging) { clip_lock_ref.current = should_clip_base; }
     const should_clip = is_dragging ? clip_lock_ref.current : should_clip_base;
 
+    // scroll body to first incomplete task when clipped
+    const first_incomplete_seq = useMemo(
+        () => findFirstIncompleteTaskSeq(props.children_body),
+        [props.body_raw],
+    );
+    useLayoutEffect(() => {
+        if (!body_ref.current) { return; }
+        if (!should_clip) {
+            body_ref.current.scrollTop = 0;
+            setScrolledTop(0);
+            return;
+        }
+        if (first_incomplete_seq === undefined) {
+            body_ref.current.scrollTop = 0;
+            setScrolledTop(0);
+            return;
+        }
+        const task_el = body_ref.current.querySelector(`[data-seq="${first_incomplete_seq}"]`) as HTMLElement | null;
+        if (!task_el) {
+            body_ref.current.scrollTop = 0;
+            setScrolledTop(0);
+            return;
+        }
+        const scroll_to = Math.max(0, task_el.offsetTop - SCROLL_CONTEXT_PX);
+        body_ref.current.scrollTop = scroll_to;
+        setScrolledTop(scroll_to);
+    }, [should_clip, first_incomplete_seq, props.body_raw]);
+
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(props, {
@@ -100,6 +133,7 @@ export default memo(function MarkdownNote(props: NoteProps) {
     };
 
     // render note
+    const has_body = !!(note.children_body?.length);
     return (
         <div className={buildNoteStyles(note, note.display_options?.additional_classes).join(' ')}
              id={note.display_options?.id}
@@ -119,10 +153,7 @@ export default memo(function MarkdownNote(props: NoteProps) {
              {...props.display_options?.provided?.dragHandleProps}
              ref={set_refs}
              role={'row'} aria-current={note.focused} aria-selected={note.selected}
-             style={{
-                 ...(props.display_options?.provided?.draggableProps?.style as React.CSSProperties | undefined),
-                 ...(should_clip ? { maxHeight: `${overflow_state.max_height}px`, overflow: 'hidden', position: 'relative' } : undefined),
-             }}
+             style={props.display_options?.provided?.draggableProps?.style as React.CSSProperties | undefined}
         >
             <div className={view_specific_styles.headline}
                  role={'rowheader'}
@@ -136,19 +167,39 @@ export default memo(function MarkdownNote(props: NoteProps) {
             { note.linetags && <GenericNoteAttributes
                 {...note}
             /> }
-            { note.children_body?.length ?
-            <div className={view_specific_styles.body}
-                 onClick={createNoteClickHandler(note, bodyClickPosition(note))}
-            >
-                {renderBodyItems(note, note.children_body)}
-            </div> : ''}
-            {should_clip && (
-                <div className={view_specific_styles.abridgeFade}>
-                    <span
-                        className={view_specific_styles.readMoreToggle}
-                        onClick={(e) => { e.stopPropagation(); setManuallyExpanded(true); }}
-                        role="button"
-                    >Show more</span>
+            { has_body && (
+                <div style={{ position: 'relative' }}>
+                    <div className={view_specific_styles.body}
+                         ref={body_ref}
+                         onClick={createNoteClickHandler(note, bodyClickPosition(note))}
+                         style={should_clip ? { maxHeight: `${overflow_state.max_height}px`, overflow: 'hidden' } : undefined}
+                    >
+                        {renderBodyItems(note, note.children_body)}
+                    </div>
+                    {should_clip && scrolled_top > 0 && (
+                        <div className={view_specific_styles.abridgeFadeTop}>
+                            <span className={view_specific_styles.readMoreRow}>
+                                <span
+                                    className={view_specific_styles.readMoreToggle}
+                                    onClick={(e) => { e.stopPropagation(); setManuallyExpanded(true); }}
+                                    role="button"
+                                >Show more</span>
+                                <span className={view_specific_styles.readMoreArrow + ' ' + view_specific_styles.readMoreArrowDown}>{'\u00BB'}</span>
+                            </span>
+                        </div>
+                    )}
+                    {should_clip && (
+                        <div className={view_specific_styles.abridgeFade}>
+                            <span className={view_specific_styles.readMoreRow}>
+                                <span
+                                    className={view_specific_styles.readMoreToggle}
+                                    onClick={(e) => { e.stopPropagation(); setManuallyExpanded(true); }}
+                                    role="button"
+                                >Show more</span>
+                                <span className={view_specific_styles.readMoreArrow + ' ' + view_specific_styles.readMoreArrowUp}>{'\u00BB'}</span>
+                            </span>
+                        </div>
+                    )}
                 </div>
             )}
             {!should_clip && is_top_level && overflow_state.overflows && (

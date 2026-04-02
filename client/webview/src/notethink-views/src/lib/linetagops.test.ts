@@ -31,6 +31,18 @@ describe('findLineTags', () => {
         const result = findLineTags(input);
         expect(result).toBe('[](?kanban_ordering_weight=3)');
     });
+
+    it('does not match markdown links as linetags', () => {
+        expect(findLineTags('+ [swiper](https://swiperjs.com/)')).toBe('');
+        expect(findLineTags('see [docs](https://example.com) for details')).toBe('');
+        expect(findLineTags('+ [text](/relative/path)')).toBe('');
+    });
+
+    it('matches linetag after markdown link on same line', () => {
+        const input = '## [link](https://example.com) [](?status=doing)';
+        const result = findLineTags(input);
+        expect(result).toContain('status=doing');
+    });
 });
 
 describe('parseLineTags', () => {

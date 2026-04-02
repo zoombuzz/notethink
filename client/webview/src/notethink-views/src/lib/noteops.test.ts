@@ -11,6 +11,7 @@ import {
     calculateTextChangesForCheckbox,
     standardNoteOrder,
     kanbanNoteOrder,
+    findFirstIncompleteTaskSeq,
 } from './noteops';
 import type { NoteProps, TextSelection } from '../types/NoteProps';
 
@@ -388,5 +389,75 @@ describe('findBodyItemElement', () => {
     it('returns undefined for an empty container', () => {
         const container = document.createElement('div');
         expect(findBodyItemElement(container, 10)).toBeUndefined();
+    });
+});
+
+describe('findFirstIncompleteTaskSeq', () => {
+    function makeListItem(seq: number, checked: boolean | undefined): NoteProps {
+        return makeNote({ seq, type: 'listItem', checked, children_body: [] });
+    }
+
+    function makeList(seq: number, items: NoteProps[]): NoteProps {
+        return makeNote({ seq, type: 'list', children_body: items });
+    }
+
+    it('returns undefined for empty children_body', () => {
+        expect(findFirstIncompleteTaskSeq([])).toBeUndefined();
+    });
+
+    it('returns undefined when no tasks exist', () => {
+        const items = [makeNote({ seq: 1, type: 'paragraph', children_body: [] })];
+        expect(findFirstIncompleteTaskSeq(items)).toBeUndefined();
+    });
+
+    it('returns undefined when all tasks are complete', () => {
+        const list = makeList(1, [
+            makeListItem(2, true),
+            makeListItem(3, true),
+        ]);
+        expect(findFirstIncompleteTaskSeq([list])).toBeUndefined();
+    });
+
+    it('returns seq of first incomplete task', () => {
+        const list = makeList(1, [
+            makeListItem(2, true),
+            makeListItem(3, false),
+            makeListItem(4, false),
+        ]);
+        expect(findFirstIncompleteTaskSeq([list])).toBe(3);
+    });
+
+    it('returns seq of first incomplete when all are incomplete', () => {
+        const list = makeList(1, [
+            makeListItem(2, false),
+            makeListItem(3, false),
+        ]);
+        expect(findFirstIncompleteTaskSeq([list])).toBe(2);
+    });
+
+    it('finds incomplete task in nested lists', () => {
+        const inner_list = makeList(3, [
+            makeListItem(4, true),
+            makeListItem(5, false),
+        ]);
+        const outer_list = makeList(1, [
+            makeListItem(2, true),
+            makeNote({ seq: 6, type: 'listItem', checked: true, children_body: [inner_list] }),
+        ]);
+        expect(findFirstIncompleteTaskSeq([outer_list])).toBe(5);
+    });
+
+    it('skips MdastNode items without seq', () => {
+        const mdast_node = { type: 'paragraph', position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } }, children: [] };
+        const list = makeList(1, [makeListItem(2, false)]);
+        expect(findFirstIncompleteTaskSeq([mdast_node as never, list])).toBe(2);
+    });
+
+    it('skips listItems without checked property', () => {
+        const list = makeList(1, [
+            makeListItem(2, undefined),
+            makeListItem(3, false),
+        ]);
+        expect(findFirstIncompleteTaskSeq([list])).toBe(3);
     });
 });

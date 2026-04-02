@@ -495,3 +495,141 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + if issues found, raise `engines.vscode` to the minimum version that works for both hosts
 
 
+### Cursor positioning: Notethink view to editor caret position
+
++ goal
+  + clicking in the NoteThink view should jump the editor caret to the precise position within the note, not just the note start
++ phase 1: offset-aware click handler
+  + [X] update `createNoteClickHandler` to extract offset from click target via `findOffsetAncestor`
+  + [X] offset extraction applies to both headline and body clicks (not just body)
+  + [X] add tests: 20 tests in `noteui.test.ts` covering offset extraction, character counting, refinement, and click handler integration
++ phase 2: fine-grained position within body items
+  + [X] use `Range.getBoundingClientRect()` per-character to find the clicked character position
+  + [X] handle inline elements (bold, italic, links) that nest within a paragraph
+  + [X] add tests: multiline text, inline elements, character-level precision
+
+
+### Display what's next for each story
+
++ goal
+  + when a clipped story has task lists, show the first incomplete task rather than the top
+  + headline and linetags always stay visible — only the body scrolls
+  + 1-2 completed tasks visible above as context (if they fit)
+  + "Show more" (top or bottom) expands the full note
++ phase 1: task-aware body scroll
+  + [X] add `findFirstIncompleteTaskSeq(children_body)` utility in `noteops.ts`
+  + [X] add unit tests for `findFirstIncompleteTaskSeq`
++ phase 2: scroll-to-next in MarkdownNote
+  + [X] move clipping from the outer note div to the `.body` div (headline/linetags always visible)
+  + [X] `useLayoutEffect` sets `scrollTop` on body container to first incomplete task
+  + [X] add `.abridgeFadeTop` CSS class + top/bottom "Show more" buttons with `»` arrows
+  + [X] add unit tests (8 tests in MarkdownNote.test.tsx)
++ phase 3: edge cases
+  + [X] "Show less" resets scroll position to task-aware default
+  + [X] drag-and-drop clip lock still works with body-level clipping
+  + [X] ResizeObserver detects overflow correctly on the body element
+
+
+### Fix link URLs showing as child notes
+
++ problem
+  + markdown links like `[swiper](https://swiperjs.com/)` had the URL appearing as a visible linetag attribute
+  + root cause: linetag parser's `findLineTags` regex matched `[text](url)` as linetags
++ fix
+  + [X] require `?` at start of href in `findLineTags` regexes to distinguish linetags from markdown links
+  + [X] add guard in `parseLineTags`: skip matches where href doesn't start with `?`
+  + [X] add tests in linetagops.test.ts and convertMdastToNoteHierarchy.test.ts
+  + [X] external links open via `vscode.env.openExternal` (desktop + VS Code Web)
+
+
+### Auto-expand note setting
+
++ [X] add `auto_expand_focused_note?: boolean` to `NoteDisplayOptions.settings`
++ [X] implement in `MarkdownNote`: auto-expand ON → expand on focus; OFF → respect `manually_expanded` state
++ [X] add checkbox to `SettingsKanbanModal` and new `SettingsDocumentModal`
++ [X] 7 new tests for `SettingsDocumentModal`
+
+
+### Migrate TypeScript 5.9 to 6.x
+
++ [X] exclude test files from lint tsconfigs, add `tsconfig.jest.json` files
++ [X] add `vscode-webview.d.ts`, CSS/SCSS module declarations, `declare const require`
++ [X] set `transpileOnly: true` in webpack ts-loader
++ [X] fix extension jest.config, bump typescript to ^6.0
++ [X] verify build, lint, all tests pass
+
+
+### Fix boundary flicker: typing at end of note causes view to flash blank
+
++ problem
+  + typing at the end of the last line of a note (just before the invisible newline) causes the NoteThink view to flicker wildly — goes blank, then re-renders
+  + root cause: race between two independently debounced messages from the extension to the webview
+    + `selectionChanged` fires after 120ms with the caret position from the *post-edit* text
+    + `update` (full MDAST re-parse) fires after 250ms with the new document
+    + during the 130ms gap, the webview has a stale MDAST but a fresh caret position
+    + e.g. note `end_body.offset` = 500, user types char, caret = 501, but MDAST still says 500
+    + `findDeepestNote(501)` fails because `withinNoteHeadlineOrBody(501, note)` checks `501 <= 500` → false
+    + no note matches → `focused_seqs` changes → full re-render with wrong focus (blank/unfocused)
+    + 130ms later: new MDAST arrives → correct focus restored → second full re-render
+    + user sees two full re-renders in quick succession = flicker
+  + contributing factors making re-renders expensive
+    + `MarkdownNote` is not wrapped in `React.memo` — every parent re-render cascades to all children
+    + `convertMdastToNoteHierarchy` creates entirely new NoteProps objects each time, so shallow equality always fails
+    + `DocumentView` uses `key={index}` instead of stable note identity
++ phase 1: fix the timing mismatch (eliminates the flicker)
+  + [X] in `notethinkEditor.ts`, suppress `selectionChanged` while `change_timer` is pending; send selection after doc update via `sendCurrentSelection()`
+  + [X] in `GenericView`, guard `findDeepestNote`: clamp caret position to root note's `end.offset`
+  + [X] add test: caret exceeding root end still finds a focused note (GenericView.test.tsx)
+  + [X] add tests: boundary-inclusive and one-past-boundary behaviour for `findDeepestNote` (noteops.test.ts)
++ phase 2: reduce re-render cost (eliminates visual jank even when re-renders happen)
+  + [X] wrap `MarkdownNote` in `React.memo` with `areMarkdownNotePropsEqual` custom comparator
+  + [X] in `DocumentView`, use `key={note.seq}` instead of `key={index}` for stable component identity
+  + [X] in `renderBodyItems`, use `key={`body-${offset}`}` instead of `key={`nn-${i}`}` for stable MDAST body item keys
++ phase 3: structural improvements
+  + [X] coalesced: change handler sends selection immediately after doc update (no separate stale-selection window)
+  + [X] `useMemo` around `convertMdastToNoteHierarchy` in `NoteView` keyed on `doc.hash_sha256`
+  + [ ] consider incremental MDAST updates instead of full re-parse (deferred — requires major architectural change)
++ verification
+  + place caret at the end of the last line of a note, type rapidly — view should update smoothly without blanking
+  + place caret at the end of a mid-document note, type — same smooth behaviour
+  + move caret between notes — focus highlighting should still work correctly
+  + abridged notes should still expand/collapse correctly
+  + all existing tests still pass (404 tests)
+
+
+### Cursor positioning: editor caret position to NoteThink view
+
++ goal
+  + good synchronisation between editor and NoteThink view
++ shared foundation: position-aware body items
+  + [X] add `data-offset-start` and `data-offset-end` attributes to rendered body items
+  + [X] add `findBodyItemElement()` utility in `noteops.ts` (6 unit tests)
+  + [X] extract shared `renderBodyItems` from MarkdownNote into `renderops.tsx`; used by both MarkdownNote and GenericNoteWrapper
++ phase 1: sub-note scroll in DocumentView and KanbanView
+  + [X] `useScrollToCaret` hook in `viewhooks.ts` — shared by DocumentView and KanbanView
+  + [X] removed broken `noteIsVisible` guard (view element is not a scroll container)
+  + [X] fixed `GenericNoteWrapper` not setting DOM `id` or propagating `display_options` to child notes
+  + [X] headline caret falls back to note-level scroll
++ phase 2: smooth scroll and abridged notes
+  + [X] abridged notes auto-expand on focus
+  + [ ] consider debouncing sub-note scroll separately from note-level scroll if rapid cursor movement causes jitter
++ phase 3: virtual caret indicator
+  + [X] `.caretTarget` CSS class with `::after` overlay and `@keyframes caretPulse` animation (fade pulse using `--mantine-primary-color-2`)
+  + [X] `useCaretIndicator` hook in `viewhooks.ts` — shared by DocumentView and KanbanView
+    + prefers body item, falls back to headline element (`[role="rowheader"]`), then note element
+    + if target is already visible, flashes immediately
+    + if scroll is needed, waits for `scrollend` + 150ms settle; 1000ms fallback
+  + [X] 4 unit tests (body item flash, caret move, headline fallback, cleanup)
+  + [X] added `data-offset-start`/`data-offset-end` to headline div in MarkdownNote — `findBodyItemElement` now finds headlines directly instead of relying on querySelector fallback
++ other improvements
+  + [X] `Debug.enable('nodejs:*')` in dev mode (webview iframe has separate localStorage)
+  + [X] fixed `noteIsVisible` partial-visibility check (was always returning "visible")
++ verification
+  + open a long note in VS Code
+  + move caret to the bottom of the note — NoteThink view should scroll to show that section
+  + move caret to headline — view should show the top of the note
+  + abridged note should expand then scroll when caret enters a lower section
+  + caret pulse visible on body items and headlines when moving through a note
+  + all existing tests still pass (401 tests)
+
+

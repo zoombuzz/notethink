@@ -416,6 +416,13 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					}
 					return;
 				}
+				case 'openExternal': {
+					const url = e.url as string;
+					if (url) {
+						vscode.env.openExternal(vscode.Uri.parse(url));
+					}
+					return;
+				}
 				case 'renderError': {
 					writeToErrorLog('webview render error', e.message as string, e.stack as string);
 					return;

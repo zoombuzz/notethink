@@ -50,6 +50,24 @@ export default function ExtensionReceiver() {
     const [connected, setConnected] = useState(!!saved_state?.docs && Object.keys(saved_state.docs).length > 0);
     const [timed_out, setTimedOut] = useState(false);
 
+    // intercept link clicks and open via the extension host (works in desktop and web VS Code)
+    useEffect(() => {
+        const handleLinkClick = (event: MouseEvent) => {
+            const anchor = (event.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
+            if (!anchor) { return; }
+            const url = anchor.getAttribute('href');
+            if (!url) { return; }
+            // only intercept external URLs (http/https/mailto)
+            if (/^https?:\/\/|^mailto:/i.test(url)) {
+                event.preventDefault();
+                event.stopPropagation();
+                vscode.postMessage({ type: 'openExternal', url });
+            }
+        };
+        document.addEventListener('click', handleLinkClick, true);
+        return () => document.removeEventListener('click', handleLinkClick, true);
+    }, []);
+
     const updateAllViewStates = useCallback((updater: (view_state: ViewState) => ViewState) => {
         setViewStates(prev => {
             const next = { ...prev };

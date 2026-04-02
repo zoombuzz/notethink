@@ -688,3 +688,68 @@ function flattenNotes(root: any): any[] {
     if (root.children_body) { walk(root.children_body); }
     return result;
 }
+
+describe('link rendering in list items', () => {
+    it('markdown link in list item is not parsed as a linetag', () => {
+        const text = '+ [swiper](https://swiperjs.com/)\n';
+        const mdast = mdastNode('root', 0, text.length, {
+            children: [
+                mdastNode('list', 0, 33, {
+                    children: [
+                        mdastNode('listItem', 0, 33, {
+                            checked: null as unknown as boolean,
+                            children: [
+                                mdastNode('paragraph', 2, 33, {
+                                    children: [
+                                        mdastNode('link', 2, 33, {
+                                            children: [
+                                                mdastNode('text', 3, 9, { value: 'swiper' } as Partial<MdastNode>),
+                                            ],
+                                        } as Partial<MdastNode>),
+                                    ],
+                                }),
+                            ],
+                        }),
+                    ],
+                }),
+            ],
+        });
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const all = flattenNotes(root);
+        // list → listItem → paragraph: 3 notes total
+        expect(all.length).toBe(3);
+        // no note should have linetags — the markdown link should NOT be parsed as a linetag
+        for (const note of all) {
+            expect(note.linetags).toBeUndefined();
+        }
+        // paragraph's MDAST children should contain the link node for inline rendering
+        const paragraph_note = all.find(n => n.type === 'paragraph');
+        expect(paragraph_note).toBeDefined();
+        expect(paragraph_note!.children).toHaveLength(1);
+        expect(paragraph_note!.children[0].type).toBe('link');
+        expect(paragraph_note!.children_body).toHaveLength(0);
+    });
+
+    it('actual linetag is still parsed correctly alongside markdown links', () => {
+        const text = '### Story title [](?status=doing)\n';
+        const mdast = mdastNode('root', 0, text.length, {
+            children: [
+                mdastNode('heading', 0, 33, {
+                    depth: 3,
+                    children: [
+                        mdastNode('text', 4, 16, { value: 'Story title ' } as Partial<MdastNode>),
+                        mdastNode('link', 16, 32, {
+                            children: [],
+                        } as Partial<MdastNode>),
+                    ],
+                }),
+            ],
+        });
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const all = flattenNotes(root);
+        expect(all.length).toBe(1);
+        expect(all[0].linetags).toBeDefined();
+        expect(all[0].linetags!['status']).toBeDefined();
+        expect(all[0].linetags!['status'].value).toBe('doing');
+    });
+});

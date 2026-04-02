@@ -9,12 +9,12 @@ type HashMapOf<S> = { [key: string]: S };
  */
 export function findLineTags(input: string): string {
     // use String.match() with regex to pull out all linetags together (https://regexr.com/) if bracketed ([]()) or ('[]()')
-    const bracketed_matches = input.match(new RegExp('(\\([^\\]]*\\[.*\\)[^\\]]*\\))[\\n]*$'));
+    const bracketed_matches = input.match(new RegExp('(\\([^\\]]*\\[.*\\]\\(\\?[^\\)]*\\)[^\\]]*\\))[\\n]*$'));
     if (bracketed_matches && bracketed_matches?.length >= 2) {
         return bracketed_matches[1];
     }
-    // use String.match() with regex to pull out all linetags together if unbracketed []() (no hoover)
-    const brackless_matches = input.match(new RegExp('(\\[.*\\)[^\\]]*)[\\n]*$'));
+    // use String.match() with regex to pull out all linetags together if unbracketed [](?...) — requires '?' to distinguish from markdown links
+    const brackless_matches = input.match(new RegExp('(\\[.*\\]\\(\\?[^\\)]*\\)[^\\]]*)[\\n]*$'));
     if (brackless_matches && brackless_matches?.length >= 2) {
         return brackless_matches[1];
     }
@@ -33,6 +33,8 @@ export function parseLineTags(input: string, note_seq: number): HashMapOf<LineTa
     let matches: RegExpExecArray | null;
     while ((matches = regex.exec(input) as RegExpExecArray | null) !== null) {
         if (matches.groups && matches.groups.href) {
+            // skip markdown links — linetags always start with '?' (e.g. [](?key=value))
+            if (!matches.groups.href.startsWith('?')) { continue; }
             const link_text = matches.groups?.text;
             const link_queryparams = new URLSearchParams(matches.groups?.href);
             const link_querykeys = link_queryparams.keys();

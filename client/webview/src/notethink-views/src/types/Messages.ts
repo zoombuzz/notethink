@@ -36,10 +36,16 @@ export interface EditTextMessage {
     changes: EditTextChange[];
 }
 
+export interface OpenExternalMessage {
+    type: 'openExternal';
+    url: string;
+}
+
 export type WebviewToExtensionMessage =
     | RevealRangeMessage
     | SelectRangeMessage
-    | EditTextMessage;
+    | EditTextMessage
+    | OpenExternalMessage;
 
 // Extension -> Webview messages
 

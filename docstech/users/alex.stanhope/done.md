@@ -654,3 +654,16 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + `if (!items?.length) { return undefined; }` — handles undefined/null/empty input
 
 
+### Scroll caret into view within clipped notes
+
++ problem
+  + when the editor caret is inside a clipped (abridged) note, the NoteThink view does nothing — the caret target is invisible
+  + `useScrollToCaret` detected the body item was clipped by `overflow: hidden` and bailed out entirely
+  + `useCaretIndicator` similarly skipped flashing for clipped targets
++ [X] scroll clipped body to reveal caret target (viewhooks.ts)
+  + added `findOverflowAncestor` to locate the `overflow: hidden` body container
+  + added `scrollClippedBodyToTarget` that adjusts body `scrollTop` to centre the target between the top fade (4em/64px) and bottom fade (6em/96px)
+  + `useScrollToCaret`: when body item is clipped, scrolls note into view then adjusts body scroll
+  + `useCaretIndicator`: when target is clipped, scrolls body to reveal it then flashes
+
+

@@ -122,10 +122,19 @@ export default memo(function MarkdownNote(props: NoteProps) {
         applyBodyScroll(Math.max(0, task_el.offsetTop - SCROLL_CONTEXT_PX));
     }, [should_clip, first_incomplete_seq, props.body_raw]);
 
-    // scroll body to caret position when focused and clipped — overrides task-aware scroll
+    // scroll body to caret position when focused and clipped — overrides task-aware scroll;
+    // when focus leaves, restore task-aware scroll to first incomplete task
     const caret_offset = props.display_options?.caret_offset as number | undefined;
     useLayoutEffect(() => {
-        if (!body_ref.current || !should_clip || !props.focused) { return; }
+        if (!body_ref.current || !should_clip) { return; }
+        if (!props.focused) {
+            // focus left — restore task-aware scroll position
+            const task_el = first_incomplete_seq !== undefined
+                ? body_ref.current.querySelector(`[data-seq="${first_incomplete_seq}"]`) as HTMLElement | null
+                : null;
+            applyBodyScroll(task_el ? Math.max(0, task_el.offsetTop - SCROLL_CONTEXT_PX) : 0);
+            return;
+        }
         if (caret_offset === undefined) { return; }
         // find the body item containing the caret
         const candidates = body_ref.current.querySelectorAll<HTMLElement>('[data-offset-start]');

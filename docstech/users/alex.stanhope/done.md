@@ -21,7 +21,7 @@
   + `accent-color: var(--mantine-primary-color-2)` on checkbox input
 
 
-## Breadcrumb accessibility
+### Breadcrumb accessibility
 
 BreadcrumbTrail uses clickable `<div>` elements with onClick handlers. These are not
 keyboard-accessible and have no ARIA roles. Convert to `<button>` elements so screen
@@ -34,7 +34,7 @@ readers and keyboard users can navigate the breadcrumb trail.
 - [X] Add unit test: breadcrumb buttons are keyboard-focusable and have correct ARIA
 
 
-## Validate incoming messages in ExtensionReceiver
+### Validate incoming messages in ExtensionReceiver
 
 ExtensionReceiver blindly destructures incoming messages from the extension. A malformed
 message (missing `type`, missing `partial.docs`, wrong shape) could silently corrupt
@@ -48,14 +48,14 @@ state or throw. Add runtime validation at the message boundary.
 - [X] Add unit tests: malformed messages are discarded without crashing
 
 
-## CHANGELOG for 0.1.1
+### CHANGELOG for 0.1.1
 
 Document user-facing changes from this session.
 
 - [X] Add 0.1.1 entry to CHANGELOG.md covering: second-click blank view fix, kanban drag no longer spawns new editor, dragging to Untagged removes status tag instead of writing literal "untagged", sass deprecation warning fixed
 
 
-## Progressive document loading on startup
+### Progressive document loading on startup
 
 Currently the extension finds all `**/*.md` files on startup, parses every one, then sends
 them all to the webview. This blocks startup on large repos. Change to: load docs from
@@ -71,7 +71,7 @@ files in the background.
 - [X] Test: webview renders immediately with open-editor doc, background docs appear progressively
 
 
-## E2E test for kanban drag-and-drop
+### E2E test for kanban drag-and-drop
 
 The kanban drag-and-drop flow (drag card between columns, reorder within column) has
 unit tests but no playwright E2E coverage for the full interaction.
@@ -83,7 +83,7 @@ unit tests but no playwright E2E coverage for the full interaction.
 - [X] Assert: card no longer appears in the source column
 
 
-## Error boundary for view crash recovery
+### Error boundary for view crash recovery
 
 When a malformed markdown file or unexpected data causes a React component to throw,
 the entire NoteThink webview goes blank with no feedback. Add a React error boundary
@@ -97,7 +97,7 @@ expandable error details (standard VS Code extension pattern).
 - [X] Add playwright E2E test: inject malformed MDAST, verify fallback appears (view doesn't blank)
 
 
-## Extension-side unit tests (mocked vscode)
+### Extension-side unit tests (mocked vscode)
 
 `notethinkEditor.ts` (330 lines), `parseops.ts`, and `errorops.ts` have zero test coverage.
 These are critical code paths (message handling, text edits, file watching). Start with
@@ -113,7 +113,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 - [X] Follow-up: add `@vscode/test-web` integration tests for real VS Code API paths
 
 
-## Fix critical rendering gaps
+### Fix critical rendering gaps
 
 + [X] strip linetag text from rendered headlines
   + renderops.tsx: added `strip_linetags` render option that filters MDAST children by position offset using `linetags_from`
@@ -124,7 +124,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + notegit has the same line commented out; this is not a bug
 
 
-## Dynamic kanban columns
+### Dynamic kanban columns
 
 + [X] derive column definitions from notes' status linetag values
   + KanbanView columns replaced from useState with useMemo deriving from notes_within_parent_context
@@ -132,7 +132,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + columns sorted alphabetically; dynamic — appear/disappear as notes change
 
 
-## View menu and toolbar
+### View menu and toolbar
 
 + [X] implement view type selector using native VS Code controls
   + registered notethink.setViewAuto/Document/Kanban commands with icons in editor/title menu navigation group
@@ -146,7 +146,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + native VS Code editor/title bar replaces the custom menubar pattern
 
 
-## Theme integration (partial)
+### Theme integration (partial)
 
 + [X] detect VS Code theme kind and apply to webview
   + inline script in notethinkEditor.ts reads body.vscode-dark/vscode-high-contrast
@@ -158,7 +158,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + index.css uses --vscode-font-family, --vscode-editor-foreground, --vscode-editor-background
 
 
-## Keyboard shortcuts for view navigation
+### Keyboard shortcuts for view navigation
 
 + [X] implement keyboard handler in GenericView
   + navigation callback registered via onNavigationCommand ref on ViewApi
@@ -172,7 +172,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + extension.ts registers all 10 commands relaying to active webview panel
 
 
-## Bootstrap compiled typescript client
+### Bootstrap compiled typescript client
 
 + [X] fix restart bug
 + [X] re-base extension on webpack
@@ -184,25 +184,25 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] get extension running
 
 
-## Continue dev setup
+### Continue dev setup
 
 + [X] chase down log entries
 + [X] mark index.tsx HTML as only being used for testing
 
 
-## Get document data flowing
+### Get document data flowing
 
 + [X] replicate using extension samples
 
 
-## Wire notethink-views into rendering pipeline
+### Wire notethink-views into rendering pipeline
 
 + [X] build MDAST-to-NoteProps transformer
 + [X] replace NoteRenderer internals
 + [X] notethink-views consumed directly by webpack
 
 
-## Get a first basic release of NoteThink extension out
+### Get a first basic release of NoteThink extension out
 
 + [X] fix client/extension/package.json metadata
 + [X] add marketplace metadata to root package.json
@@ -212,7 +212,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] verify the production build pipeline
 
 
-## Bring notethink up to active-dev standard
+### Bring notethink up to active-dev standard
 
 + [X] migrate from npm to pnpm
 + [X] replace `console.warn` with `debug` library
@@ -224,20 +224,20 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] commit untracked files on bootstrap branch
 
 
-## Work on DX
+### Work on DX
 
 + [X] test with reference sample to see if it's broadly doable
 + [X] fix access: can't inspect HTML
 + [X] fix missing sourcemap
 
 
-## Compute delta on `partial` in ExtensionReceiver
+### Compute delta on `partial` in ExtensionReceiver
 
 + [X] use hash_sha256 on doc content for change detection
 + [X] add React.memo to DocumentView and GenericNote
 
 
-## Port notegit features into NoteThink (phases 1-5)
+### Port notegit features into NoteThink (phases 1-5)
 
 + [X] phase 1: linetag parsing and display
 + [X] phase 2: extension-webview message protocol
@@ -248,7 +248,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] comprehensive test suite
 
 
-## CSS variable bridge and click/selection fix
+### CSS variable bridge and click/selection fix
 
 + [X] CSS variable bridge (vscode-mantine-bridge.css)
 + [X] fix click/selection flow

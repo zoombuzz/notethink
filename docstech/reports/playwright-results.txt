@@ -1,43 +1,7 @@
 # Playwright Test Results
-# Version: 0.1.38
-# Date: 2026-04-02T17:48:00Z
+# Version: 0.1.40
+# Date: 2026-04-02T18:45:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-playwright
 # ---
 Running 34 tests using 10 workers
-
-  ✓  breadcrumb.spec.ts - shows full path when no workspace_root is provided
-  ✓  breadcrumb.spec.ts - strips workspace_root prefix from breadcrumb
-  ✓  breadcrumb.spec.ts - uses relative_path for breadcrumb (symlink-safe)
-  ✓  breadcrumb.spec.ts - relative_path data-path attributes use full absolute paths
-  ✓  breadcrumb.spec.ts - breadcrumb with countingsheet path shows countingsheet as first segment
-  ✓  click-interaction.spec.ts - clicking a note headline sends revealRange message
-  ✓  click-interaction.spec.ts - captured messages include docId and docPath
-  ✓  click-interaction.spec.ts - clicking a note sets aria-current (focused) attribute
-  ✓  click-interaction.spec.ts - second click on focused note selects it without blanking the view
-  ✓  document-view.spec.ts - renders document container after injecting basic.md
-  ✓  document-view.spec.ts - renders note headlines with correct text
-  ✓  document-view.spec.ts - renders notes with data-seq attributes
-  ✓  document-view.spec.ts - renders body paragraphs
-  ✓  error-boundary.spec.ts - shows fallback when malformed MDAST causes render error
-  ✓  error-boundary.spec.ts - fallback displays friendly message and error details
-  ✓  error-boundary.spec.ts - fallback includes a Try Again button
-  ✓  error-boundary.spec.ts - NoteRenderer container remains in the DOM despite error
-  ✓  kanban-drag.spec.ts - dragging a card between columns sends editText with status change
-  ✓  kanban-drag.spec.ts - dragging a card to untagged column sends editText that removes status tag
-  ✓  kanban-drag.spec.ts - view does not blank after drag completes
-  ✓  kanban-drag.spec.ts - card appears in destination column after extension sends updated doc
-  ✓  kanban-view.spec.ts - renders kanban columns via auto view detecting ng_view linetag
-  ✓  kanban-view.spec.ts - places tasks in correct columns
-  ✓  kanban-view.spec.ts - places untagged tasks in untagged column
-  ✓  keyboard-navigation.spec.ts - clicking different notes produces revealRange messages
-  ✓  keyboard-navigation.spec.ts - selection feedback updates focused note styling
-  ✓  keyboard-navigation.spec.ts - drillIn on nested doc changes parent context
-  ✓  keyboard-navigation.spec.ts - drillOut returns to parent context
-  ✓  settings-toggle.spec.ts - toggling lineNumbers shows and hides line number elements
-  ✓  settings-toggle.spec.ts - toggling contextBars shows and hides context bar elements
-  ✓  settings-toggle.spec.ts - settings survive view type switch
-  ✓  view-switching.spec.ts - defaults to auto view which resolves to document for plain markdown
-  ✓  view-switching.spec.ts - switches to kanban view and back to document
-  ✓  view-switching.spec.ts - switches to auto view
-
-  34 passed (7.7s)
+  34 passed (7.5s)

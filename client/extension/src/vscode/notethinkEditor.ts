@@ -288,6 +288,14 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			try { switch (e.type) {
 				case 'requestInitialState':
 					try {
+						// check if a different .md file is now active in the editor
+						// (e.g. after window reload, VS Code may restore editors in unpredictable order)
+						const current_editor = vscode.window.activeTextEditor;
+						if (current_editor?.document.uri.path.endsWith('.md')
+							&& current_editor.document.uri.path !== active_path) {
+							active_doc = await buildDoc(current_editor.document);
+							active_path = current_editor.document.uri.path;
+						}
 						if (active_doc) {
 							sendDoc(active_doc);
 							sendCurrentSelection();

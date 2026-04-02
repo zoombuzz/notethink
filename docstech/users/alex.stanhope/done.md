@@ -1,7 +1,7 @@
 # Done [](?ng_view=kanban&ng_child_status=done)
 
 
-### child attribute inheritance
+### Child attribute inheritance
 
 + [X] add `inherited?: true` flag to LineTag interface in `notethink-views/src/types/NoteProps.ts`
 + [X] add `applyChildAttributeInheritance(allNotes)` in `convertMdastToNoteHierarchy.ts`
@@ -13,7 +13,7 @@
 + [X] unit tests: 8 new tests in `convertMdastToNoteHierarchy.test.ts`
 
 
-### theme tweaks
+### Theme tweaks
 
 + [X] make border clearer in dark themes
   + dark-mode override in `ViewRenderer.module.scss` using `--vscode-editorWidget-border`
@@ -113,7 +113,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 - [X] Follow-up: add `@vscode/test-web` integration tests for real VS Code API paths
 
 
-## fix critical rendering gaps
+## Fix critical rendering gaps
 
 + [X] strip linetag text from rendered headlines
   + renderops.tsx: added `strip_linetags` render option that filters MDAST children by position offset using `linetags_from`
@@ -124,7 +124,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + notegit has the same line commented out; this is not a bug
 
 
-## dynamic kanban columns
+## Dynamic kanban columns
 
 + [X] derive column definitions from notes' status linetag values
   + KanbanView columns replaced from useState with useMemo deriving from notes_within_parent_context
@@ -132,7 +132,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + columns sorted alphabetically; dynamic — appear/disappear as notes change
 
 
-## view menu and toolbar
+## View menu and toolbar
 
 + [X] implement view type selector using native VS Code controls
   + registered notethink.setViewAuto/Document/Kanban commands with icons in editor/title menu navigation group
@@ -146,7 +146,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + native VS Code editor/title bar replaces the custom menubar pattern
 
 
-## theme integration (partial)
+## Theme integration (partial)
 
 + [X] detect VS Code theme kind and apply to webview
   + inline script in notethinkEditor.ts reads body.vscode-dark/vscode-high-contrast
@@ -158,7 +158,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + index.css uses --vscode-font-family, --vscode-editor-foreground, --vscode-editor-background
 
 
-## keyboard shortcuts for view navigation
+## Keyboard shortcuts for view navigation
 
 + [X] implement keyboard handler in GenericView
   + navigation callback registered via onNavigationCommand ref on ViewApi
@@ -172,7 +172,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + extension.ts registers all 10 commands relaying to active webview panel
 
 
-## bootstrap compiled typescript client
+## Bootstrap compiled typescript client
 
 + [X] fix restart bug
 + [X] re-base extension on webpack
@@ -184,25 +184,25 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] get extension running
 
 
-## continue dev setup
+## Continue dev setup
 
 + [X] chase down log entries
 + [X] mark index.tsx HTML as only being used for testing
 
 
-## get document data flowing
+## Get document data flowing
 
 + [X] replicate using extension samples
 
 
-## wire notethink-views into rendering pipeline
+## Wire notethink-views into rendering pipeline
 
 + [X] build MDAST-to-NoteProps transformer
 + [X] replace NoteRenderer internals
 + [X] notethink-views consumed directly by webpack
 
 
-## get a first basic release of NoteThink extension out
+## Get a first basic release of NoteThink extension out
 
 + [X] fix client/extension/package.json metadata
 + [X] add marketplace metadata to root package.json
@@ -212,7 +212,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] verify the production build pipeline
 
 
-## bring notethink up to active-dev standard
+## Bring notethink up to active-dev standard
 
 + [X] migrate from npm to pnpm
 + [X] replace `console.warn` with `debug` library
@@ -224,20 +224,20 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] commit untracked files on bootstrap branch
 
 
-## work on DX
+## Work on DX
 
 + [X] test with reference sample to see if it's broadly doable
 + [X] fix access: can't inspect HTML
 + [X] fix missing sourcemap
 
 
-## compute delta on `partial` in ExtensionReceiver
+## Compute delta on `partial` in ExtensionReceiver
 
 + [X] use hash_sha256 on doc content for change detection
 + [X] add React.memo to DocumentView and GenericNote
 
 
-## port notegit features into NoteThink (phases 1-5)
+## Port notegit features into NoteThink (phases 1-5)
 
 + [X] phase 1: linetag parsing and display
 + [X] phase 2: extension-webview message protocol
@@ -254,7 +254,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] fix click/selection flow
 
 
-### install notethink-dev to get using it all the time
+### Install notethink-dev to get using it all the time
 
 + symlink
   + `ln -s /mnt/secure/home/alex/git/github.com/active_development/notethink ~/.vscode/extensions/notethink-dev`
@@ -265,7 +265,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + no point launching a product that I do not value myself
 
 
-### dynamic kanban columns
+### Dynamic kanban columns
 
 + goal
   + kanban columns are hardcoded to untagged/backlog/doing/done
@@ -287,7 +287,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + [X] add tests for SettingsKanbanModal and column ordering
 
 
-### view state persistence
+### View state persistence
 
 + goal
   + when the webview reloads (e.g. tab switch), view state is lost
@@ -298,7 +298,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] persist kanban column scroll positions
 
 
-### view selector
+### View selector
 
 + [X] add view type selector to context bars
   + created `ViewTypeSelector.tsx` shared component with `<select>` driven by `SELECTABLE_VIEWTYPES`
@@ -327,7 +327,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + openview-experiment: 10 approaches tested, 6 passed, 4 failed
 
 
-### theme integration
+### Theme integration
 
 + goal
   + webview should match VS Code's active colour theme (light/dark/high contrast)
@@ -345,7 +345,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + ensure focus/selection outlines have sufficient contrast
 
 
-### kanban visual polish
+### Kanban visual polish
 
 + goal
   + bring the Kanban view closer to the look of established tools (Jira, Trello, Linear, GitHub Projects)
@@ -383,7 +383,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + 196 tests passing
 
 
-### view toolbar, breadcrumbs, and integration selector
+### View toolbar, breadcrumbs, and integration selector
 
 + goal
   + improve the top-of-view toolbar: breadcrumb context, smarter view selector, and a new ViewIntegrationSelector
@@ -407,7 +407,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + GenericView integration test verifies breadcrumb click triggers setIntegration + setViewManagedState
 
 
-### performance: large file rendering
+### Performance: large file rendering
 
 + problem
   + NoteThink UI sluggish for big files (shopify-uncomplicated todo.md: 2761 lines, 274 headings)
@@ -426,7 +426,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + lazy-import mermaid deferred (blocked by maxChunks: 1 requirement for web extensions)
 
 
-### height-based abridging
+### Height-based abridging
 
 + problem
   + count-based abridging (ABRIDGE_THRESHOLD, descendant budget) didn't adapt to visual size
@@ -612,7 +612,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + [X] headline caret falls back to note-level scroll
 + phase 2: smooth scroll and abridged notes
   + [X] abridged notes auto-expand on focus
-  + [ ] consider debouncing sub-note scroll separately from note-level scroll if rapid cursor movement causes jitter
+  + consider debouncing sub-note scroll separately from note-level scroll if rapid cursor movement causes jitter
 + phase 3: virtual caret indicator
   + [X] `.caretTarget` CSS class with `::after` overlay and `@keyframes caretPulse` animation (fade pulse using `--mantine-primary-color-2`)
   + [X] `useCaretIndicator` hook in `viewhooks.ts` — shared by DocumentView and KanbanView
@@ -676,5 +676,26 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + removed `isClippedByAncestor`, `findOverflowAncestor`, `scrollClippedBodyToTarget`
   + `useScrollToCaret` now calls `scrollIntoView` unconditionally — body scroll handled by MarkdownNote
   + `useCaretIndicator` no longer skips clipped targets
+
+
+### Fix repeated extension host crashes
+
++ problem
+  + 8 extension host restarts in ~1 hour, no errors in NoteThink.log or renderer.log
+  + renderer.log showed "VERY LONG TASK" warnings (129ms, 284ms)
++ root cause: `caret_offset` on shared `display_options` defeated React.memo for ALL notes
+  + every cursor move changed `caret_offset`, causing 30+ MarkdownNote re-renders per keystroke
+  + each re-render ran DOM queries in `useLayoutEffect` (caret scroll logic)
+  + cumulative cost exceeded webview render budget, triggering extension host restarts
++ [X] fix memo comparator to only re-render focused notes on caret move (MarkdownNote.tsx)
+  + `if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset)` — unfocused notes skip caret_offset comparison
+  + re-renders per caret move: 30+ → 1-2 (focused note + parent)
++ [X] add try/catch to `requestInitialState` handler (notethinkEditor.ts)
+  + `sendDoc` and `sendCurrentSelection` were unprotected — could crash extension host
++ [X] wrap entire `onDidReceiveMessage` switch in top-level try/catch (notethinkEditor.ts)
+  + safety net: any unhandled error in message handler is caught and logged
++ [X] make webview global error handlers unconditional (notethinkEditor.ts)
+  + `window.onerror` and `window.onunhandledrejection` now always register
+  + added `console.error` fallback if vscode API not available
 
 

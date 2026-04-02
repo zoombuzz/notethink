@@ -285,11 +285,15 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		// receive message back from the webview.
 		webviewPanel.webview.onDidReceiveMessage(async (e) => {
 			debug('onDidReceiveMessage', e.type);
-			switch (e.type) {
+			try { switch (e.type) {
 				case 'requestInitialState':
-					if (active_doc) {
-						sendDoc(active_doc);
-						sendCurrentSelection();
+					try {
+						if (active_doc) {
+							sendDoc(active_doc);
+							sendCurrentSelection();
+						}
+					} catch (err) {
+						writeToErrorLog('requestInitialState failed', '', err);
 					}
 					return;
 				case 'revealRange':
@@ -431,6 +435,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					writeToErrorLog('webview render error', e.message as string, e.stack as string);
 					return;
 				}
+			} } catch (err) {
+				writeToErrorLog('onDidReceiveMessage failed', e?.type, err);
 			}
 		});
 
@@ -519,15 +525,19 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							// already acquired — reuse existing instance
 						}
 						// capture uncaught errors that escape React ErrorBoundary
-						if (window.__notethinkVscodeApi) {
-							window.onerror = function(msg, source, line, col, error) {
+						window.onerror = function(msg, source, line, col, error) {
+							if (window.__notethinkVscodeApi) {
 								window.__notethinkVscodeApi.postMessage({ type: 'renderError', message: String(msg), stack: error ? error.stack : source + ':' + line });
-							};
-							window.onunhandledrejection = function(event) {
-								var reason = event.reason;
+							}
+							console.error('[NoteThink] uncaught error:', msg, source, line);
+						};
+						window.onunhandledrejection = function(event) {
+							var reason = event.reason;
+							if (window.__notethinkVscodeApi) {
 								window.__notethinkVscodeApi.postMessage({ type: 'renderError', message: String(reason), stack: reason && reason.stack ? reason.stack : '' });
-							};
-						}
+							}
+							console.error('[NoteThink] unhandled rejection:', reason);
+						};
 					})();
 					var exports = {};
 				</script>

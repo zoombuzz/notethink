@@ -272,8 +272,8 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
     if (prev.display_options?.settings?.show_linetags_in_headlines !== next.display_options?.settings?.show_linetags_in_headlines) { return false; }
     if (prev.display_options?.settings?.show_line_numbers !== next.display_options?.settings?.show_line_numbers) { return false; }
     if (prev.display_options?.settings?.auto_expand_focused_note !== next.display_options?.settings?.auto_expand_focused_note) { return false; }
-    // caret offset drives body scroll in clipped notes
-    if (prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
+    // caret offset drives body scroll in clipped notes — only re-render focused notes
+    if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
     // DnD: provided changes during drag (draggableProps.style contains transform)
     if (prev.display_options?.provided?.draggableProps !== next.display_options?.provided?.draggableProps) { return false; }
     if (prev.display_options?.provided?.dragHandleProps !== next.display_options?.provided?.dragHandleProps) { return false; }

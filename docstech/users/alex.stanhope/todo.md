@@ -1,4 +1,4 @@
-# Todo [](?ng_view=kanban&ng_child_status=backlog)
+# Todo [](?ng_view=kanban)
 
 
 ### Insert modal

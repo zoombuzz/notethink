@@ -419,7 +419,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				case 'openExternal': {
 					const url = e.url as string;
 					if (url) {
-						vscode.env.openExternal(vscode.Uri.parse(url));
+						try {
+							await vscode.env.openExternal(vscode.Uri.parse(url));
+						} catch (err) {
+							writeToErrorLog('openExternal failed', url, err);
+						}
 					}
 					return;
 				}

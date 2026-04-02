@@ -53,15 +53,21 @@ export default function ExtensionReceiver() {
     // intercept link clicks and open via the extension host (works in desktop and web VS Code)
     useEffect(() => {
         const handleLinkClick = (event: MouseEvent) => {
-            const anchor = (event.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
-            if (!anchor) { return; }
-            const url = anchor.getAttribute('href');
-            if (!url) { return; }
-            // only intercept external URLs (http/https/mailto)
-            if (/^https?:\/\/|^mailto:/i.test(url)) {
-                event.preventDefault();
-                event.stopPropagation();
-                vscode.postMessage({ type: 'openExternal', url });
+            try {
+                const target = event.target as HTMLElement | null;
+                if (!target?.closest) { return; }
+                const anchor = target.closest('a[href]') as HTMLAnchorElement | null;
+                if (!anchor) { return; }
+                const url = anchor.getAttribute('href');
+                if (!url) { return; }
+                // only intercept external URLs (http/https/mailto)
+                if (/^https?:\/\/|^mailto:/i.test(url)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    vscode.postMessage({ type: 'openExternal', url });
+                }
+            } catch (err) {
+                console.error('handleLinkClick failed:', err);
             }
         };
         document.addEventListener('click', handleLinkClick, true);

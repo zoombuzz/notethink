@@ -151,6 +151,7 @@ export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check
  * in a note's children_body tree. Returns undefined if no incomplete task found.
  */
 export function findFirstIncompleteTaskSeq(items: Array<NoteProps | MdastNode>): number | undefined {
+    if (!items?.length) { return undefined; }
     for (const item of items) {
         if (!('seq' in item && item.seq !== undefined)) { continue; }
         const note = item as NoteProps;

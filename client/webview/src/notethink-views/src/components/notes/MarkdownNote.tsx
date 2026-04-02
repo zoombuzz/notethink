@@ -54,6 +54,9 @@ export default memo(function MarkdownNote(props: NoteProps) {
             // skip measurement during drag — element is position:fixed with wrong dimensions
             if (getComputedStyle(el).position === 'fixed') { return; }
             const width = el.offsetWidth;
+            // skip measurement when element has no width (e.g. during initial layout or hidden tab)
+            // — otherwise max_height becomes 0, hiding all body content
+            if (width === 0) { return; }
             const max_h = width * HEIGHT_RATIO;
             const naturally_overflows = el.scrollHeight > max_h;
             setOverflowState(prev => {

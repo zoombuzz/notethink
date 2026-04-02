@@ -1,4 +1,4 @@
-# Done [](?ng_view=kanban)
+# Done [](?ng_view=kanban&ng_child_status=done)
 
 
 ### child attribute inheritance
@@ -631,5 +631,26 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + abridged note should expand then scroll when caret enters a lower section
   + caret pulse visible on body items and headlines when moving through a note
   + all existing tests still pass (401 tests)
+
+
+### Fix view crash: defensive guards on new features
+
++ problem
+  + NoteThink view crashed in VS Code — no error in NoteThink.log or renderer.log
+  + crash introduced by last commit (body-level clipping, openExternal link handling, findFirstIncompleteTaskSeq)
+  + ErrorBoundary did not catch the error, indicating an event handler or layout-triggered crash
++ root causes identified
+  + ResizeObserver zero-width race: body-level overflow measurement could produce `maxHeight: 0px` when body element has zero width during layout transitions (tab switch, webview restore), hiding all body content
+  + unhandled `openExternal` errors: extension's `openExternal` message handler lacked try/catch — unhandled promise rejection could crash the web worker extension host
+  + unguarded link click handler: capture-phase click interceptor in ExtensionReceiver could throw if event.target lacks `.closest` method (e.g. non-Element targets)
+  + missing null guard on `findFirstIncompleteTaskSeq`: called during render via useMemo without defensive check on input array
++ [X] add zero-width guard in ResizeObserver `check()` (MarkdownNote.tsx)
+  + `if (width === 0) { return; }` — skips measurement when body has no width yet
++ [X] add try/catch + await to `openExternal` handler (notethinkEditor.ts)
+  + matches error handling pattern of other message handlers (editText, setIntegration)
++ [X] add try/catch and `.closest` guard to `handleLinkClick` (ExtensionReceiver.tsx)
+  + prevents uncaught exceptions from crashing the webview
++ [X] add null guard to `findFirstIncompleteTaskSeq` (noteops.ts)
+  + `if (!items?.length) { return undefined; }` — handles undefined/null/empty input
 
 

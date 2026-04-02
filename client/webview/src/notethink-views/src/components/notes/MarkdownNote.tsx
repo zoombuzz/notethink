@@ -20,6 +20,7 @@ const SCROLL_CONTEXT_PX = 40;
 export default memo(function MarkdownNote(props: NoteProps) {
     const [overflow_state, setOverflowState] = useState<{ overflows: boolean; max_height: number }>({ overflows: false, max_height: 0 });
     const [scrolled_top, setScrolledTop] = useState(0);
+    const [at_bottom, setAtBottom] = useState(false);
     const note_ref = useRef<HTMLDivElement>(null);
     const body_ref = useRef<HTMLDivElement>(null);
 
@@ -90,6 +91,14 @@ export default memo(function MarkdownNote(props: NoteProps) {
     if (!is_dragging) { clip_lock_ref.current = should_clip_base; }
     const should_clip = is_dragging ? clip_lock_ref.current : should_clip_base;
 
+    // helper: set body scrollTop and update scrolled_top / at_bottom state
+    const applyBodyScroll = useCallback((scroll_to: number) => {
+        if (!body_ref.current) { return; }
+        body_ref.current.scrollTop = scroll_to;
+        setScrolledTop(scroll_to);
+        setAtBottom(body_ref.current.scrollTop + body_ref.current.clientHeight >= body_ref.current.scrollHeight - 2);
+    }, []);
+
     // scroll body to first incomplete task when clipped
     const first_incomplete_seq = useMemo(
         () => findFirstIncompleteTaskSeq(props.children_body),
@@ -98,25 +107,51 @@ export default memo(function MarkdownNote(props: NoteProps) {
     useLayoutEffect(() => {
         if (!body_ref.current) { return; }
         if (!should_clip) {
-            body_ref.current.scrollTop = 0;
-            setScrolledTop(0);
+            applyBodyScroll(0);
             return;
         }
         if (first_incomplete_seq === undefined) {
-            body_ref.current.scrollTop = 0;
-            setScrolledTop(0);
+            applyBodyScroll(0);
             return;
         }
         const task_el = body_ref.current.querySelector(`[data-seq="${first_incomplete_seq}"]`) as HTMLElement | null;
         if (!task_el) {
-            body_ref.current.scrollTop = 0;
-            setScrolledTop(0);
+            applyBodyScroll(0);
             return;
         }
-        const scroll_to = Math.max(0, task_el.offsetTop - SCROLL_CONTEXT_PX);
-        body_ref.current.scrollTop = scroll_to;
-        setScrolledTop(scroll_to);
+        applyBodyScroll(Math.max(0, task_el.offsetTop - SCROLL_CONTEXT_PX));
     }, [should_clip, first_incomplete_seq, props.body_raw]);
+
+    // scroll body to caret position when focused and clipped — overrides task-aware scroll
+    const caret_offset = props.display_options?.caret_offset as number | undefined;
+    useLayoutEffect(() => {
+        if (!body_ref.current || !should_clip || !props.focused) { return; }
+        if (caret_offset === undefined) { return; }
+        // find the body item containing the caret
+        const candidates = body_ref.current.querySelectorAll<HTMLElement>('[data-offset-start]');
+        let target_el: HTMLElement | undefined;
+        for (let i = candidates.length - 1; i >= 0; --i) {
+            const el = candidates[i];
+            const start = Number(el.dataset.offsetStart);
+            const end = Number(el.dataset.offsetEnd);
+            if (!isNaN(start) && !isNaN(end) && caret_offset >= start && caret_offset <= end) {
+                target_el = el;
+                break;
+            }
+        }
+        if (!target_el) { return; }
+        // check if the target is already visible within the clipped body
+        const body_rect = body_ref.current.getBoundingClientRect();
+        const target_rect = target_el.getBoundingClientRect();
+        const fade_top = 64;   // 4em — matches .abridgeFadeTop height
+        const fade_bottom = 96; // 6em — matches .abridgeFade height
+        const visible_top = body_rect.top + fade_top;
+        const visible_bottom = body_rect.bottom - fade_bottom;
+        if (target_rect.top >= visible_top && target_rect.bottom <= visible_bottom) { return; }
+        // scroll body to show target, centred between fades
+        const target_offset_in_body = target_rect.top - body_rect.top + body_ref.current.scrollTop;
+        applyBodyScroll(Math.max(0, target_offset_in_body - fade_top));
+    }, [should_clip, props.focused, caret_offset]);
 
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
     const memoized_headline = useMemo(() => {
@@ -175,7 +210,7 @@ export default memo(function MarkdownNote(props: NoteProps) {
                     <div className={view_specific_styles.body}
                          ref={body_ref}
                          onClick={createNoteClickHandler(note, bodyClickPosition(note))}
-                         style={should_clip ? { maxHeight: `${overflow_state.max_height}px`, overflow: 'hidden' } : undefined}
+                         style={should_clip ? { maxHeight: `${overflow_state.max_height}px`, overflow: 'hidden', scrollPaddingTop: '4em', scrollPaddingBottom: '6em' } : undefined}
                     >
                         {renderBodyItems(note, note.children_body)}
                     </div>
@@ -191,7 +226,7 @@ export default memo(function MarkdownNote(props: NoteProps) {
                             </span>
                         </div>
                     )}
-                    {should_clip && (
+                    {should_clip && !at_bottom && (
                         <div className={view_specific_styles.abridgeFade}>
                             <span className={view_specific_styles.readMoreRow}>
                                 <span
@@ -237,6 +272,8 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
     if (prev.display_options?.settings?.show_linetags_in_headlines !== next.display_options?.settings?.show_linetags_in_headlines) { return false; }
     if (prev.display_options?.settings?.show_line_numbers !== next.display_options?.settings?.show_line_numbers) { return false; }
     if (prev.display_options?.settings?.auto_expand_focused_note !== next.display_options?.settings?.auto_expand_focused_note) { return false; }
+    // caret offset drives body scroll in clipped notes
+    if (prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
     // DnD: provided changes during drag (draggableProps.style contains transform)
     if (prev.display_options?.provided?.draggableProps !== next.display_options?.provided?.draggableProps) { return false; }
     if (prev.display_options?.provided?.dragHandleProps !== next.display_options?.provided?.dragHandleProps) { return false; }

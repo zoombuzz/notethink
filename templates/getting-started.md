@@ -10,14 +10,14 @@ Start typing to edit this document. Your changes are saved in your browser until
 
 ## Example Notes
 
-### Planning [](?status=todo)
+### Planning []()
 
 + break down tasks into smaller notes
   + each nested bullet becomes a card in Kanban view
 + use `?status=` tags to organise columns
   + todo, in_progress, done
 
-### Ideas [](?status=in_progress)
+### Ideas [](?status=doing)
 
 + NoteThink renders your markdown in real time
   + headings create the note hierarchy

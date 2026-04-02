@@ -240,10 +240,23 @@ import type { NoteProps } from '@/types/NoteProps';
 import { NoteComponent, type NoteProps } from '@/components';
 ```
 
+### Loop Safety
+- **Avoid potentially infinite loops** (do-while, while without bounds)
+- Use bounded for-loops with a maximum iteration count instead
+
 ### Constants Placement
 - **File-level constants** (e.g. `const MAX_ITERATIONS = 1000`) should be declared **near the head of the file**, below imports and type definitions
 - This makes them easy to find, reuse, review, and change
 - Do not declare the same constant inline within multiple functions — hoist it to module level
+
+### Debug Logger Pattern
+**Always include the debug import and constant in production files**, even if not currently used. This serves as a placeholder for adding debug statements during development. This applies to production source files (`.ts`, `.tsx`), not test files (`.test.ts`, `.test.tsx`).
+
+**Rules:**
+- `import Debug from "debug"` must be the **first import** in every file
+- `const debug = Debug("nodejs:...")` should appear after imports, before the component/function
+- **Never remove** the debug constant, even if ESLint reports it as unused
+- The debug namespace should follow the pattern: `nodejs:{path}:{filename}`
 
 ## React Patterns
 
@@ -355,6 +368,18 @@ src/
 - Tests: `*.test.tsx` or `*.test.ts` next to source file
 - Styles: `Component.module.scss` (CSS modules)
 
+## Code Quality
+
+### Avoid Duplication
+- Extract repeated code into shared utility functions
+- Use shared constants instead of hardcoding values
+- Create shared components for repeated UI patterns
+
+### Remove Unused Code
+- Remove unused imports
+- Remove unused variables (check compiler warnings)
+- Remove commented-out code that's no longer needed
+
 ## Error Handling
 
 ### Use Error Utilities
@@ -393,6 +418,11 @@ function parseConfig(json: string): Config | null {
 ```
 
 ## Testing Standards
+
+### Test Failures Must Always Be Fixed
+- **All test failures must be investigated and fixed**, regardless of whether they are related to the current change, pre-existing, or caused by external factors.
+- Never dismiss a failure as "not related to this change" or "pre-existing" — if a test is red, it needs fixing before the work is complete.
+- This applies to Jest, Playwright, and any other test suite.
 
 ### Test File Location
 
@@ -476,6 +506,15 @@ Always rebuild the extension after each code change so the developer can preview
 | Everything | `pnpm run check` |
 
 ---
+
+## Releaseable State After Each Phase
+
+After completing each phase of development, the codebase must be left in a releaseable state. This means:
+
+1. **All new code has tests** — every new module, model, library function must have corresponding tests before the phase is considered complete
+2. **All existing tests still pass** — run `pnpm run jest-test` and verify zero failures
+3. **Lint is clean** — run `pnpm run lint` with zero errors
+4. **No broken imports or dead references** — new modules must be properly wired and importable
 
 ## Story Tracking: todo.md and done.md
 

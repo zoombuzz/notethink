@@ -1,6 +1,12 @@
 # Todo [](?ng_view=kanban)
 
 
+### Multi-document navigation [](?status=doing)
+
++ the header bar should always be visible
+  + currently when I scroll down, it goes off the top
+
+
 ### Insert modal
 
 + goal

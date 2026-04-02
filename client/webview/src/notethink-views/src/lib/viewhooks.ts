@@ -20,68 +20,10 @@ function resolveCaretTarget(
 }
 
 /**
- * Check whether an element is clipped by an ancestor with overflow:hidden.
- * Returns true if the element's bottom extends beyond the ancestor's visible area.
- */
-function isClippedByAncestor(el: HTMLElement): boolean {
-    let ancestor = el.parentElement;
-    while (ancestor) {
-        const style = getComputedStyle(ancestor);
-        if (style.overflow === 'hidden' || style.overflowY === 'hidden') {
-            const ancestor_rect = ancestor.getBoundingClientRect();
-            const el_rect = el.getBoundingClientRect();
-            if (el_rect.bottom > ancestor_rect.bottom || el_rect.top < ancestor_rect.top) {
-                return true;
-            }
-        }
-        ancestor = ancestor.parentElement;
-    }
-    return false;
-}
-
-/**
- * Find the nearest ancestor with overflow:hidden (the body container in a clipped note).
- */
-function findOverflowAncestor(el: HTMLElement): HTMLElement | undefined {
-    let ancestor = el.parentElement;
-    while (ancestor) {
-        const style = getComputedStyle(ancestor);
-        if (style.overflow === 'hidden' || style.overflowY === 'hidden') {
-            return ancestor;
-        }
-        ancestor = ancestor.parentElement;
-    }
-    return undefined;
-}
-
-// fade overlay heights from ViewRenderer.module.scss — used as scroll padding
-const FADE_TOP_PX = 64;   // 4em
-const FADE_BOTTOM_PX = 96; // 6em
-
-/**
- * Scroll a clipped body container so the target element is visible between the fade overlays.
- */
-function scrollClippedBodyToTarget(target: HTMLElement): void {
-    const body_container = findOverflowAncestor(target);
-    if (!body_container) { return; }
-    const body_rect = body_container.getBoundingClientRect();
-    const target_rect = target.getBoundingClientRect();
-    // target's position within the body's scrollable area
-    const target_top_in_body = target_rect.top - body_rect.top + body_container.scrollTop;
-    const target_bottom_in_body = target_rect.bottom - body_rect.top + body_container.scrollTop;
-    const visible_top = body_container.scrollTop + FADE_TOP_PX;
-    const visible_bottom = body_container.scrollTop + body_container.clientHeight - FADE_BOTTOM_PX;
-    if (target_top_in_body < visible_top) {
-        // target is above the visible area — scroll up
-        body_container.scrollTop = Math.max(0, target_top_in_body - FADE_TOP_PX);
-    } else if (target_bottom_in_body > visible_bottom) {
-        // target is below the visible area — scroll down
-        body_container.scrollTop = target_bottom_in_body - body_container.clientHeight + FADE_BOTTOM_PX;
-    }
-}
-
-/**
  * Scroll the focused note (and body item) into view when the caret moves.
+ * When the target is inside a clipped (abridged) note body, scrollIntoView
+ * natively scrolls the overflow:hidden container too — scroll-padding on the
+ * body element accounts for fade overlays.
  */
 export function useScrollToCaret(
     display_options: NoteDisplayOptions,
@@ -97,13 +39,6 @@ export function useScrollToCaret(
             const resolved = resolveCaretTarget(display_options.focused_seqs, view_id, caret_offset);
             if (!resolved) { return; }
             const scroll_target = resolved.body_item || resolved.note_element;
-            // if the body item is clipped (inside an abridged note), scroll the note into
-            // view and adjust the body's internal scroll to reveal the caret target
-            if (resolved.body_item && isClippedByAncestor(resolved.body_item)) {
-                resolved.note_element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
-                scrollClippedBodyToTarget(resolved.body_item);
-                return;
-            }
             scroll_target.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
         });
         return () => cancelAnimationFrame(scroll_raf_ref.current);
@@ -138,11 +73,6 @@ export function useCaretIndicator(
         // rendered content so nothing should flash
         const target = resolved.body_item;
         if (!target) { return; }
-
-        // if the target is clipped, scroll the body to reveal it, then flash
-        if (isClippedByAncestor(target)) {
-            scrollClippedBodyToTarget(target);
-        }
 
         // skip re-flash if the caret moved within the same element
         if (target === prev_target_ref.current) { return; }

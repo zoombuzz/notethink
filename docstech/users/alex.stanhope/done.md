@@ -660,10 +660,21 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + when the editor caret is inside a clipped (abridged) note, the NoteThink view does nothing — the caret target is invisible
   + `useScrollToCaret` detected the body item was clipped by `overflow: hidden` and bailed out entirely
   + `useCaretIndicator` similarly skipped flashing for clipped targets
-+ [X] scroll clipped body to reveal caret target (viewhooks.ts)
-  + added `findOverflowAncestor` to locate the `overflow: hidden` body container
-  + added `scrollClippedBodyToTarget` that adjusts body `scrollTop` to centre the target between the top fade (4em/64px) and bottom fade (6em/96px)
-  + `useScrollToCaret`: when body item is clipped, scrolls note into view then adjusts body scroll
-  + `useCaretIndicator`: when target is clipped, scrolls body to reveal it then flashes
+  + bottom fade + "Show more" button covered content when body scrolled to bottom
++ [X] pass `caret_offset` through display_options (GenericView.tsx)
+  + set from `selection.main.head` so individual notes know the caret position
+  + added to `areMarkdownNotePropsEqual` so memo re-renders when caret moves
++ [X] caret-aware body scroll in MarkdownNote (MarkdownNote.tsx)
+  + `useLayoutEffect` finds `[data-offset-start]` element containing the caret
+  + checks visibility between fade overlays (64px top, 96px bottom)
+  + sets body `scrollTop` directly via `applyBodyScroll` helper — overrides task-aware scroll when focused
+  + added `scrollPaddingTop: '4em'`, `scrollPaddingBottom: '6em'` to clipped body style
++ [X] hide bottom fade when scrolled to bottom (MarkdownNote.tsx)
+  + added `at_bottom` state, updated by `applyBodyScroll` helper
+  + bottom fade condition: `should_clip && !at_bottom` (mirrors top fade: `should_clip && scrolled_top > 0`)
++ [X] simplified viewhooks.ts
+  + removed `isClippedByAncestor`, `findOverflowAncestor`, `scrollClippedBodyToTarget`
+  + `useScrollToCaret` now calls `scrollIntoView` unconditionally — body scroll handled by MarkdownNote
+  + `useCaretIndicator` no longer skips clipped targets
 
 

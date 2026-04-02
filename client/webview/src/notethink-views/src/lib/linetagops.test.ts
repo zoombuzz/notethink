@@ -234,7 +234,7 @@ describe('calculateTextChangesForNewLinetagValue', () => {
 
     it('removes sole linetag including leading space', () => {
         // Ensure the space before [](...) is also removed
-        const headline = '## Task [](?status=todo)';
+        const headline = '## Task [](?status=doing)';
         const note = makeNoteFromHeadline(headline);
         const changes = calculateTextChangesForNewLinetagValue(note, 'status', 'untagged', 'untagged');
         const result = applyChanges(headline, changes);

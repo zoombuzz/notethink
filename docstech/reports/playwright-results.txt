@@ -1,6 +1,6 @@
 # Playwright Test Results
-# Version: 0.1.36
-# Date: 2026-04-02T15:50:00Z
+# Version: 0.1.38
+# Date: 2026-04-02T17:48:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-playwright
 # ---
 Running 34 tests using 10 workers
@@ -40,4 +40,4 @@ Running 34 tests using 10 workers
   ✓  view-switching.spec.ts - switches to kanban view and back to document
   ✓  view-switching.spec.ts - switches to auto view
 
-  34 passed (7.6s)
+  34 passed (7.7s)

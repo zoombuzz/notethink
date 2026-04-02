@@ -107,6 +107,8 @@ export default function GenericView(props: ViewProps) {
         display_options.focused_notes = (deepest.note.parent_notes || []).concat([deepest.note]);
         display_options.focused_seqs = display_options.focused_notes.map((note: NoteProps) => note.seq);
     }
+    // pass caret offset so clipped notes can scroll their body to the caret position
+    display_options.caret_offset = props.selection?.main.head;
 
     // find the set of notes within this view that are currently selected (use full notes list so subnotes are included)
     display_options.selected_notes = useMemo(() => {

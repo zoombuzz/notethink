@@ -699,3 +699,39 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + added `console.error` fallback if vscode API not available
 
 
+### Multi-document navigation
+
++ the header bar should always be visible
+  + currently when I scroll down, it goes off the top
+  + root cause: `.viewToolbar` is `position: static` inside the body scroll container (`body.disableAddressBarHidingOnScroll` has `overflow-y: auto`)
+  + toolbar already has opaque `background` — just needs sticky positioning
+- [X] make `.viewToolbar` sticky in `ViewRenderer.module.scss`
+  + add `position: sticky; top: 0; z-index: 10` to `.viewToolbar`
+  + verify toolbar background is opaque (already set via `--vscode-breadcrumb-background`)
+- [X] verify in DocumentView and KanbanView
+  + scroll long document — toolbar stays pinned
+  + scroll kanban with many cards — toolbar stays pinned
+  + breadcrumb, view selector, settings gear all still functional
+- [X] add test: toolbar remains visible after scroll (Playwright E2E)
+  + N/A — NoteThink is a VS Code extension, Playwright not applicable
+
+
+### Insert modal
+
++ goal
+  + notegit has a searchable insert modal (~367 lines) with 40+ templates
+  + quick way to insert headings, linetags, mermaid diagrams, tables, code blocks
+  + this replaces typing boilerplate markdown manually
++ [X] implement InsertModal component in notethink-views
+  + searchable list of insert templates grouped by category
+  + native `<dialog>` with search, scope, and position selectors
+  + fires postMessage({type: 'editText', changes}) to insert at cursor position
++ [X] port insert template definitions from notegit
+  + 21 templates across 12 files in `inserts/en/`
+  + categories: headings, elements, lists, charts and diagrams, project management, architecture
++ [X] wire insert modal trigger
+  + toolbar + button (to left of settings gear)
+  + 4 position modes: at cursor (default), start of line, end of line, end of document
+  + 16 Jest tests for InsertModal component
+
+

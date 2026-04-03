@@ -1,39 +1,6 @@
 # Todo [](?ng_view=kanban)
 
 
-### Multi-document navigation [](?status=doing)
-
-+ the header bar should always be visible
-  + currently when I scroll down, it goes off the top
-  + root cause: `.viewToolbar` is `position: static` inside the body scroll container (`body.disableAddressBarHidingOnScroll` has `overflow-y: auto`)
-  + toolbar already has opaque `background` — just needs sticky positioning
-- [X] make `.viewToolbar` sticky in `ViewRenderer.module.scss`
-  + add `position: sticky; top: 0; z-index: 10` to `.viewToolbar`
-  + verify toolbar background is opaque (already set via `--vscode-breadcrumb-background`)
-- [X] verify in DocumentView and KanbanView
-  + scroll long document — toolbar stays pinned
-  + scroll kanban with many cards — toolbar stays pinned
-  + breadcrumb, view selector, settings gear all still functional
-- [ ] add test: toolbar remains visible after scroll (Playwright E2E)
-
-
-### Insert modal [](?status=doing)
-
-+ goal
-  + notegit has a searchable insert modal (~367 lines) with 40+ templates
-  + quick way to insert headings, linetags, mermaid diagrams, tables, code blocks
-  + this replaces typing boilerplate markdown manually
-+ [ ] implement InsertModal component in notethink-views
-  + searchable list of insert templates
-  + preview of what will be inserted
-  + fires postMessage({type: 'editText', changes}) to insert at cursor position
-+ [ ] port insert template definitions from notegit
-  + start with English templates; i18n can come later
-  + categories: basic (heading, paragraph, list, link, image), metadata (linetag), diagram (mermaid), structure (table, code block)
-+ [ ] wire insert modal trigger
-  + menu bar button and/or keyboard shortcut (Ctrl+I or similar)
-
-
 ### Settings modals
 
 + goal

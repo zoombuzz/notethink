@@ -5,6 +5,36 @@
 // produce off_grey colour, darker than default in light-mode, lighter than default in dark-mode
 $off_grey: color-mix(in srgb, var(--mantine-color-default), var(--mantine-color-default-color) 5%);
 
+@mixin themed-checkbox {
+  appearance: none;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.4em;
+  vertical-align: middle;
+  border: 1px solid var(--vscode-foreground, var(--mantine-color-default-color));
+  border-radius: 3px;
+  background: var(--vscode-checkbox-background, var(--mantine-color-default));
+  cursor: pointer;
+  position: relative;
+
+  &:checked {
+    background: var(--vscode-checkbox-background, var(--mantine-color-default));
+    border-color: var(--vscode-checkbox-border, var(--mantine-color-default-border));
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 3px;
+      top: 0px;
+      width: 4px;
+      height: 8px;
+      border: solid color-mix(in srgb, var(--vscode-foreground, var(--mantine-color-default-color)) 40%, var(--vscode-checkbox-border, var(--mantine-color-default-border)));
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+  }
+}
+
 
 //
 // Layout
@@ -104,6 +134,26 @@ body.disableAddressBarHidingOnScroll {
 //
 
 .modal {
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+  border-radius: 4px;
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  padding: 16px;
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: 13px;
+
+  // reset native dialog backdrop
+  &::backdrop {
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  h3 {
+    margin: 0 0 0.8em;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
   p {
     margin-top: 1.0em;
     margin-bottom: 1.0em;
@@ -115,6 +165,63 @@ body.disableAddressBarHidingOnScroll {
     &:last-of-type {
       margin-bottom: 0;
     }
+  }
+
+  // buttons — default to secondary style
+  button {
+    background: var(--vscode-button-secondaryBackground, #3a3d41);
+    color: var(--vscode-button-secondaryForeground, #fff);
+    border: none;
+    border-radius: 2px;
+    padding: 4px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+
+    &:hover {
+      background: var(--vscode-button-secondaryHoverBackground, #45494e);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
+
+  // checkboxes — shared style with view checkboxes
+  input[type="checkbox"] {
+    @include themed-checkbox;
+  }
+
+  // select dropdowns
+  select {
+    background: var(--vscode-dropdown-background, var(--vscode-input-background));
+    color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+    border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, #ccc));
+    border-radius: 2px;
+    padding: 2px 4px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  // text inputs
+  input[type="text"] {
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground, var(--vscode-foreground));
+    border: 1px solid var(--vscode-input-border, #ccc);
+    border-radius: 2px;
+    font-family: inherit;
+
+    &:focus {
+      border-color: var(--vscode-focusBorder, #007acc);
+      outline: none;
+    }
+  }
+
+  // labels
+  label {
+    cursor: pointer;
+    user-select: none;
   }
 
   .radiogroup {
@@ -129,6 +236,16 @@ body.disableAddressBarHidingOnScroll {
 
   .buttongroup {
     margin-top: 1.0em;
+
+    // first button in the action group is primary (Save, Insert)
+    button:first-child {
+      background: var(--vscode-button-background, #0e639c);
+      color: var(--vscode-button-foreground, #fff);
+
+      &:hover {
+        background: var(--vscode-button-hoverBackground, #1177bb);
+      }
+    }
   }
 }
 
@@ -141,17 +258,7 @@ body.disableAddressBarHidingOnScroll {
   width: 100%;
   padding: 4px 8px;
   margin-bottom: 0.5em;
-  font-size: 13px;
-  border: 1px solid var(--vscode-input-border, #ccc);
-  background: var(--vscode-input-background, var(--mantine-color-body, #fff));
-  color: var(--vscode-input-foreground, var(--vscode-foreground, inherit));
-  border-radius: 2px;
-  outline: none;
   box-sizing: border-box;
-
-  &:focus {
-    border-color: var(--vscode-focusBorder, #007acc);
-  }
 }
 
 .insertList {
@@ -200,15 +307,6 @@ body.disableAddressBarHidingOnScroll {
 .insertOptions {
   p {
     margin: 0.3em 0;
-  }
-
-  select {
-    font-size: 13px;
-    background: var(--vscode-input-background, var(--mantine-color-body, #fff));
-    color: var(--vscode-input-foreground, var(--vscode-foreground, inherit));
-    border: 1px solid var(--vscode-input-border, #ccc);
-    border-radius: 2px;
-    padding: 2px 4px;
   }
 }
 
@@ -344,9 +442,11 @@ body.disableAddressBarHidingOnScroll {
   }
 
   a {
+    color: var(--vscode-textLink-foreground, inherit);
     text-decoration: none;
 
     &:hover {
+      color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground, inherit));
       text-decoration: underline;
     }
   }
@@ -382,6 +482,18 @@ body.disableAddressBarHidingOnScroll {
     }
   }
 
+  .headline, .body {
+    // inline code spans (not inside pre/code blocks)
+    code {
+      color: var(--vscode-textPreformat-foreground, inherit);
+      background: var(--vscode-textPreformat-background, $off_grey);
+      padding: 0.1em 0.3em;
+      border-radius: 3px;
+      font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace);
+      font-size: 0.9em;
+    }
+  }
+
   .body {
     padding-left: 0.4em;
 
@@ -394,6 +506,13 @@ body.disableAddressBarHidingOnScroll {
       background: $off_grey;
       margin: 0 -1.0em 0 -1.0em;
       padding: 0.5em 0 0.5em 1.5em;
+
+      // reset inline code styles inside code blocks
+      code {
+        background: none;
+        padding: 0;
+        border-radius: 0;
+      }
     }
   }
 
@@ -533,36 +652,7 @@ body.disableAddressBarHidingOnScroll {
       }
 
       input[type=checkbox] {
-        appearance: none;
-        width: 1em;
-        height: 1em;
-        margin-right: 0.4em;
-        vertical-align: middle;
-        // unchecked: prominent border — outstanding task, needs attention
-        border: 1px solid var(--vscode-foreground, var(--mantine-color-default-color));
-        border-radius: 3px;
-        background: var(--vscode-checkbox-background, var(--mantine-color-default));
-        cursor: pointer;
-        position: relative;
-
-        &:checked {
-          // checked: subdued — task is done, no longer needs attention
-          background: var(--vscode-checkbox-background, var(--mantine-color-default));
-          border-color: var(--vscode-checkbox-border, var(--mantine-color-default-border));
-
-          &::after {
-            content: '';
-            position: absolute;
-            left: 3px;
-            top: 0px;
-            width: 4px;
-            height: 8px;
-            // tick slightly brighter than the border so it reads as "done" without drawing focus
-            border: solid color-mix(in srgb, var(--vscode-foreground, var(--mantine-color-default-color)) 40%, var(--vscode-checkbox-border, var(--mantine-color-default-border)));
-            border-width: 0 2px 2px 0;
-            transform: rotate(45deg);
-          }
-        }
+        @include themed-checkbox;
       }
 
       > ul, > div > ul, > div > div > ul {

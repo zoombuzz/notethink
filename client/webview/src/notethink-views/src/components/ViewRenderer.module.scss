@@ -132,12 +132,95 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
+.insertModal {
+  min-width: 320px;
+  max-width: 480px;
+}
+
+.insertSearch {
+  width: 100%;
+  padding: 4px 8px;
+  margin-bottom: 0.5em;
+  font-size: 13px;
+  border: 1px solid var(--vscode-input-border, #ccc);
+  background: var(--vscode-input-background, var(--mantine-color-body, #fff));
+  color: var(--vscode-input-foreground, var(--vscode-foreground, inherit));
+  border-radius: 2px;
+  outline: none;
+  box-sizing: border-box;
+
+  &:focus {
+    border-color: var(--vscode-focusBorder, #007acc);
+  }
+}
+
+.insertList {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--vscode-input-border, #ccc);
+  border-radius: 2px;
+  margin-bottom: 0.5em;
+}
+
+.insertGroup {
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  opacity: 0.6;
+  letter-spacing: 0.05em;
+}
+
+.insertItem {
+  padding: 4px 8px 4px 16px;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
+  }
+}
+
+.insertItemSelected {
+  background: var(--vscode-list-activeSelectionBackground, #094771);
+  color: var(--vscode-list-activeSelectionForeground, #fff);
+
+  &:hover {
+    background: var(--vscode-list-activeSelectionBackground, #094771);
+  }
+}
+
+.insertEmpty {
+  padding: 12px 8px;
+  font-size: 13px;
+  opacity: 0.5;
+  text-align: center;
+}
+
+.insertOptions {
+  p {
+    margin: 0.3em 0;
+  }
+
+  select {
+    font-size: 13px;
+    background: var(--vscode-input-background, var(--mantine-color-body, #fff));
+    color: var(--vscode-input-foreground, var(--vscode-foreground, inherit));
+    border: 1px solid var(--vscode-input-border, #ccc);
+    border-radius: 2px;
+    padding: 2px 4px;
+  }
+}
+
 
 //
 // Context bars
 //
 
 .viewToolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   height: 22px;

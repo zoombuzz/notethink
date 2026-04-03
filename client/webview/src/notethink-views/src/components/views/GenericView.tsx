@@ -1,4 +1,4 @@
-import React, { lazy, MouseEvent, useCallback, useEffect, useMemo, useRef } from "react";
+import React, { lazy, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Debug from "debug";
 import type { ViewProps, ViewApi } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions, NoteHandlers, ClickPositionInfo } from "../../types/NoteProps";
@@ -13,6 +13,7 @@ import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import BreadcrumbTrail from "./BreadcrumbTrail";
 import ViewTypeSelector from "./ViewTypeSelector";
 import ViewIntegrationSelector, { type IntegrationMode } from "./ViewIntegrationSelector";
+import InsertModal from "../InsertModal";
 import master_view_styles from "../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:GenericView");
@@ -358,6 +359,34 @@ export default function GenericView(props: ViewProps) {
     // settings callback ref — child views (e.g. KanbanView) register their handler
     const settingsClickRef = useRef<(() => void) | undefined>(undefined);
 
+    // insert modal state
+    const [insert_modal_open, setInsertModalOpen] = useState(false);
+
+    const handleInsert = useCallback((text: string, insert_point: string) => {
+        const doc_text = props.doc_text || '';
+        const head = props.selection?.main?.head ?? doc_text.length;
+        let from: number;
+        switch (insert_point) {
+            case 'startOfLine': {
+                const before = doc_text.lastIndexOf('\n', head - 1);
+                from = before === -1 ? 0 : before + 1;
+                break;
+            }
+            case 'endOfLine': {
+                const after = doc_text.indexOf('\n', head);
+                from = after === -1 ? doc_text.length : after;
+                break;
+            }
+            case 'endOfNote':
+                from = doc_text.length;
+                break;
+            default: // currentCaret
+                from = head;
+                break;
+        }
+        handlers.postMessage?.({ type: 'editText', changes: [{ from, insert: text }] });
+    }, [props.doc_text, props.selection, handlers]);
+
     // render toolbar at the leaf level only — when type is 'auto', AutoView will delegate
     // to a concrete type which renders GenericView again with the toolbar
     const show_toolbar = props.type !== 'auto';
@@ -377,6 +406,24 @@ export default function GenericView(props: ViewProps) {
                 handlers={handlers}
                 id={props.id}
             />
+            <button
+                data-testid="view-insert-button"
+                onClick={(e) => { e.stopPropagation(); setInsertModalOpen(true); }}
+                style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '1.1em',
+                    padding: '0 0.3em',
+                    color: 'var(--vscode-foreground, inherit)',
+                    opacity: 0.6,
+                    marginLeft: '0.3em',
+                }}
+                title="Insert"
+                aria-label="Insert"
+            >
+                &#43;
+            </button>
             <button
                 data-testid="view-settings-button"
                 onClick={(e) => { e.stopPropagation(); settingsClickRef.current?.(); }}
@@ -424,6 +471,11 @@ export default function GenericView(props: ViewProps) {
             {props.type === 'auto' && <AutoView {...enriched_props} />}
             {props.type === 'document' && <DocumentView {...enriched_props} />}
             {props.type === 'kanban' && <KanbanView {...enriched_props} />}
+            <InsertModal
+                opened={insert_modal_open}
+                onClose={() => setInsertModalOpen(false)}
+                onInsert={handleInsert}
+            />
         </>
     );
 }

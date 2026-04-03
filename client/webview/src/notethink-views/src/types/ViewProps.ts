@@ -7,6 +7,7 @@ export interface ViewProps {
     role?: string;
     doc_path?: string;
     doc_relative_path?: string;
+    doc_text?: string;
     workspace_root?: string;
     display_options?: NoteDisplayOptions;
     nested?: {

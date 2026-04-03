@@ -7,17 +7,17 @@
   + currently when I scroll down, it goes off the top
   + root cause: `.viewToolbar` is `position: static` inside the body scroll container (`body.disableAddressBarHidingOnScroll` has `overflow-y: auto`)
   + toolbar already has opaque `background` — just needs sticky positioning
-- [ ] make `.viewToolbar` sticky in `ViewRenderer.module.scss`
+- [X] make `.viewToolbar` sticky in `ViewRenderer.module.scss`
   + add `position: sticky; top: 0; z-index: 10` to `.viewToolbar`
   + verify toolbar background is opaque (already set via `--vscode-breadcrumb-background`)
-- [ ] verify in DocumentView and KanbanView
+- [X] verify in DocumentView and KanbanView
   + scroll long document — toolbar stays pinned
   + scroll kanban with many cards — toolbar stays pinned
   + breadcrumb, view selector, settings gear all still functional
 - [ ] add test: toolbar remains visible after scroll (Playwright E2E)
 
 
-### Insert modal
+### Insert modal [](?status=doing)
 
 + goal
   + notegit has a searchable insert modal (~367 lines) with 40+ templates

@@ -58,6 +58,7 @@ function NoteView({ note_id, note, props }: { note_id: string; note: Doc; props:
         type: view_type,
         doc_path: note.path,
         doc_relative_path: note.relative_path,
+        doc_text: note.text,
         workspace_root: props.workspace_root,
         display_options: view_display_options,
         nested: {

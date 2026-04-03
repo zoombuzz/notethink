@@ -1,6 +1,26 @@
 # Done [](?ng_view=kanban&ng_child_status=done)
 
 
+### Upgrade webpack-cli 6 → 7 and copy-webpack-plugin 13 → 14
+
++ [X] update `webpack-cli` from `^6.0.1` to `^7.0.0` in root package.json
++ [X] update `copy-webpack-plugin` from `13.0.1` to `14.0.0` in root package.json
++ [X] no `--node-env` flag usage found (removed in webpack-cli 7, replaced by `--config-node-env`)
++ [X] pnpm install succeeds (webpack-cli 7.0.2, copy-webpack-plugin 14.0.0)
++ [X] lint passes (eslint + tsc --noEmit for all 3 sub-projects)
++ [X] all 421 tests pass across extension (74), webview (30), notethink-views (317)
++ [X] webpack build succeeds (both extension and webview bundles)
+
+
+### Upgrade TypeScript 5.9 → 6.0
+
++ [X] upgrade `typescript` to `^6.0.2` in root package.json
++ [X] confirm `ignoreDeprecations: "6.0"` in all tsconfig.jest.json files (client/webview, client/webview/src/notethink-views)
++ [X] confirm inline `ignoreDeprecations: '6.0'` in client/extension/jest.config.cjs
++ [X] lint passes (eslint + tsc --noEmit for all 3 sub-projects)
++ [X] all 421 tests pass across extension (74), webview (30), notethink-views (317)
+
+
 ### Child attribute inheritance
 
 + [X] add `inherited?: true` flag to LineTag interface in `notethink-views/src/types/NoteProps.ts`
@@ -733,5 +753,13 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + toolbar + button (to left of settings gear)
   + 4 position modes: at cursor (default), start of line, end of line, end of document
   + 16 Jest tests for InsertModal component
+
+
+### Upgrade NPM packages (minor/patch, wave 1) [](?time_taken=0)
+
++ [X] run npm-check-updates --target minor
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
 
 

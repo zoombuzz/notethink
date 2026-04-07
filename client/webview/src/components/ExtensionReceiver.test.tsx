@@ -7,13 +7,14 @@ const mockNoteRendererProps = jest.fn();
 jest.mock('./NoteRenderer', () => {
     return {
         __esModule: true,
-        default: (props: { notes: Record<string, unknown>; selections?: Record<string, unknown>; postMessage?: unknown; viewStates?: Record<string, unknown>; setViewManagedState?: unknown; onNavigationCommand?: unknown }) => {
+        default: (props: { notes: Record<string, unknown>; selections?: Record<string, unknown>; postMessage?: unknown; viewStates?: Record<string, unknown>; setViewManagedState?: unknown; onNavigationCommand?: unknown; globalSettings?: Record<string, unknown> }) => {
             mockNoteRendererProps(props);
             return <div
                 data-testid="NoteRenderer"
                 data-note-count={Object.keys(props.notes).length}
                 data-has-selections={props.selections ? 'true' : 'false'}
                 data-view-states={JSON.stringify(props.viewStates || {})}
+                data-global-settings={JSON.stringify(props.globalSettings || {})}
             />;
         },
     };
@@ -219,26 +220,19 @@ describe('ExtensionReceiver', () => {
         expect(view_states['view-1']?.type).toBe('kanban');
     });
 
-    it('toggleSetting command toggles show_line_numbers', () => {
+    it('globalSettings message updates globalSettings state', () => {
         render(<ExtensionReceiver />);
-        // create a view state first
-        const last_call = mockNoteRendererProps.mock.calls[mockNoteRendererProps.mock.calls.length - 1][0];
-        act(() => {
-            last_call.setViewManagedState([{ id: 'view-1', type: 'document' }]);
-        });
-        // toggle line numbers
         act(() => {
             window.dispatchEvent(new MessageEvent('message', {
                 data: {
-                    type: 'command',
-                    command: 'toggleSetting',
-                    setting: 'lineNumbers',
+                    type: 'globalSettings',
+                    settings: { show_line_numbers: true },
                 },
             }));
         });
         const renderer = screen.getByTestId('NoteRenderer');
-        const view_states = JSON.parse(renderer.getAttribute('data-view-states') || '{}');
-        expect(view_states['view-1']?.display_options?.settings?.show_line_numbers).toBe(true);
+        const global_settings = JSON.parse(renderer.getAttribute('data-global-settings') || '{}');
+        expect(global_settings.show_line_numbers).toBe(true);
     });
 
     it('navigate command invokes callback ref', () => {

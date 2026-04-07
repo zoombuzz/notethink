@@ -763,3 +763,19 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] verify jest tests pass
 
 
+### Settings modals
+
++ goal
+  + notegit has per-view settings modals for display preferences
+  + NoteThink needs at least kanban settings and global display settings
++ [X] implement kanban settings modal
+  + port from notegit's SettingsKanbanModal (~61 lines)
+  + column definitions (add/remove/reorder columns)
+  + scroll-note-into-view toggle
+  + show-linetags-in-headlines toggle
++ [X] implement global settings modal
+  + show line numbers persisted via VS Code workspace config (notethink.showLineNumbers)
+  + accessible via per-view settings modals, command palette, and VS Code settings UI
+  + theme preference and default view type dropped (handled by VS Code natively)
+
+

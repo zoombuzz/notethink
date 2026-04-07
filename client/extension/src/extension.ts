@@ -56,13 +56,17 @@ export function activate(context: vscode.ExtensionContext) {
 		}));
 	}
 
-	// settings toggle commands
-	for (const setting of ['lineNumbers', 'contextBars'] as const) {
-		const commandName = `notethink.toggle${setting.charAt(0).toUpperCase() + setting.slice(1)}`;
-		context.subscriptions.push(vscode.commands.registerCommand(commandName, () => {
-			provider.sendCommandToActiveWebview('toggleSetting', { setting });
-		}));
-	}
+	// line numbers: persisted to workspace config
+	context.subscriptions.push(vscode.commands.registerCommand('notethink.toggleLineNumbers', async () => {
+		const config = vscode.workspace.getConfiguration('notethink');
+		const current = config.get<boolean>('showLineNumbers', false);
+		await config.update('showLineNumbers', !current, vscode.ConfigurationTarget.Workspace);
+	}));
+
+	// context bars: ephemeral toggle via webview state
+	context.subscriptions.push(vscode.commands.registerCommand('notethink.toggleContextBars', () => {
+		provider.sendCommandToActiveWebview('toggleSetting', { setting: 'contextBars' });
+	}));
 
 	// navigation commands
 	for (const direction of ['up', 'down', 'drillIn', 'drillOut', 'clearFocus'] as const) {

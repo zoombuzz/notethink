@@ -121,11 +121,27 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		const workspace_root = workspace_folder?.uri.path || '';
 		const extension_version = this.context.extension.packageJSON.version as string || '';
 
+		// global settings helpers
+		function readGlobalSettings() {
+			const config = vscode.workspace.getConfiguration('notethink');
+			return {
+				show_line_numbers: config.get<boolean>('showLineNumbers', false),
+			};
+		}
+
+		function sendGlobalSettings() {
+			webviewPanel.webview.postMessage({
+				type: 'globalSettings',
+				settings: readGlobalSettings(),
+			});
+		}
+
 		// load initial document and send selection for styled first render
 		active_doc = await buildDoc(initialDocument);
 		active_path = initialDocument.uri.path;
 		sendDoc(active_doc);
 		sendCurrentSelection();
+		sendGlobalSettings();
 
 		const filter_criterion = '**/*.md';
 		const docs: HashMapOf<Doc> = {};
@@ -282,6 +298,13 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			}
 		});
 
+		// re-send global settings when workspace configuration changes
+		const configSubscription = vscode.workspace.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('notethink.showLineNumbers')) {
+				sendGlobalSettings();
+			}
+		});
+
 		// receive message back from the webview.
 		webviewPanel.webview.onDidReceiveMessage(async (e) => {
 			debug('onDidReceiveMessage', e.type);
@@ -300,10 +323,28 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							sendDoc(active_doc);
 							sendCurrentSelection();
 						}
+						sendGlobalSettings();
 					} catch (err) {
 						writeToErrorLog('requestInitialState failed', '', err);
 					}
 					return;
+				case 'updateGlobalSetting': {
+					const setting = e.setting as string;
+					const value = e.value as unknown;
+					try {
+						const config = vscode.workspace.getConfiguration('notethink');
+						const setting_map: Record<string, string> = {
+							show_line_numbers: 'showLineNumbers',
+						};
+						const config_key = setting_map[setting];
+						if (config_key) {
+							await config.update(config_key, value, vscode.ConfigurationTarget.Workspace);
+						}
+					} catch (err) {
+						writeToErrorLog('updateGlobalSetting failed', setting, err);
+					}
+					return;
+				}
 				case 'revealRange':
 				case 'selectRange': {
 					const doc_path = e.docPath as string;
@@ -474,6 +515,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			changeDocumentSubscription.dispose();
 			activeEditorSubscription.dispose();
 			selectionSubscription.dispose();
+			configSubscription.dispose();
 		});
 	}
 

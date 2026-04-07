@@ -14,6 +14,8 @@ interface SettingsDocumentModalProps {
     onClose: () => void;
     settings: DocumentSettings;
     onSave: (settings: DocumentSettings) => void;
+    showLineNumbers?: boolean;
+    postMessage?: (message: unknown) => void;
 }
 
 export default function SettingsDocumentModal(props: SettingsDocumentModalProps) {
@@ -23,6 +25,7 @@ export default function SettingsDocumentModal(props: SettingsDocumentModalProps)
     const [show_linetags, setShowLinetags] = useState<boolean>(false);
     const [scroll_into_view, setScrollIntoView] = useState<boolean>(false);
     const [auto_expand, setAutoExpand] = useState<boolean>(false);
+    const [line_numbers, setLineNumbers] = useState<boolean>(false);
 
     // sync local state when modal opens
     useEffect(() => {
@@ -30,8 +33,9 @@ export default function SettingsDocumentModal(props: SettingsDocumentModalProps)
             setShowLinetags(props.settings.show_linetags_in_headlines ?? false);
             setScrollIntoView(props.settings.scroll_note_into_view ?? false);
             setAutoExpand(props.settings.auto_expand_focused_note ?? false);
+            setLineNumbers(props.showLineNumbers ?? false);
         }
-    }, [props.opened, props.settings]);
+    }, [props.opened, props.settings, props.showLineNumbers]);
 
     // open/close the native dialog element
     useEffect(() => {
@@ -50,7 +54,10 @@ export default function SettingsDocumentModal(props: SettingsDocumentModalProps)
             scroll_note_into_view: scroll_into_view,
             auto_expand_focused_note: auto_expand,
         });
-    }, [show_linetags, scroll_into_view, auto_expand, props.onSave]);
+        if (line_numbers !== (props.showLineNumbers ?? false)) {
+            props.postMessage?.({ type: 'updateGlobalSetting', setting: 'show_line_numbers', value: line_numbers });
+        }
+    }, [show_linetags, scroll_into_view, auto_expand, line_numbers, props.onSave, props.postMessage, props.showLineNumbers]);
 
     const handleCancel = useCallback(() => {
         props.onClose();
@@ -96,6 +103,17 @@ export default function SettingsDocumentModal(props: SettingsDocumentModalProps)
                         onChange={(e) => setAutoExpand(e.target.checked)}
                     />
                     {' '}Auto-expand focused note
+                </label>
+            </p>
+
+            <p>
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={line_numbers}
+                        onChange={(e) => setLineNumbers(e.target.checked)}
+                    />
+                    {' '}Show line numbers
                 </label>
             </p>
 

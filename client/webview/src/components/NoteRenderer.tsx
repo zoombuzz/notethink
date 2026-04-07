@@ -8,6 +8,7 @@ import { convertMdastToNoteHierarchy } from "../notethink-views/src/lib/convertM
 import { GenericView, ErrorBoundary } from "../notethink-views/src/components";
 import type { ViewProps } from "../notethink-views/src/types/ViewProps";
 import type { NoteProps, NoteDisplayOptions, TextSelection } from "../notethink-views/src/types/NoteProps";
+import type { GlobalSettingsPayload } from "../notethink-views/src/types/Messages";
 import type { ViewState } from './ExtensionReceiver';
 
 export type MdastNodes = import("mdast").Nodes;
@@ -31,6 +32,7 @@ interface NoteRendererProps {
     setViewManagedState?: (updates: Array<Record<string, unknown>>) => void;
     onNavigationCommand?: React.MutableRefObject<((direction: string) => void) | undefined>;
     workspace_root?: string;
+    globalSettings?: GlobalSettingsPayload;
 }
 
 /**
@@ -51,6 +53,10 @@ function NoteView({ note_id, note, props }: { note_id: string; note: Doc; props:
     const view_type = view_state?.type || 'auto';
     const view_display_options: NoteDisplayOptions = {
         ...view_state?.display_options,
+        settings: {
+            show_line_numbers: props.globalSettings?.show_line_numbers ?? false,
+            ...view_state?.display_options?.settings,
+        },
     };
 
     const view_props: ViewProps = {

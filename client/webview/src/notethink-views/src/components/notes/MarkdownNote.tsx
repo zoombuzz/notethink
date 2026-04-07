@@ -2,6 +2,7 @@ import {Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useMemo
 import {MdastNode, NoteProps} from "../../types/NoteProps";
 import {
     getStandardNoteDataProps,
+    isInternalAttribute,
     renderMarkdownNoteHeadline,
     renderBodyItems,
 } from "../../lib/renderops";
@@ -163,14 +164,16 @@ export default memo(function MarkdownNote(props: NoteProps) {
     }, [should_clip, props.focused, caret_offset]);
 
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
+    // always strip linetag link nodes from MDAST — they render as invisible empty <a> elements;
+    // visible linetag badges are appended separately when show_linetags_in_headlines is enabled
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(props, {
-            render: props.display_options?.settings?.show_linetags_in_headlines ? 'all_children' : 'strip_linetags',
+            render: 'strip_linetags',
             linetags_from: props.linetags_from,
         });
     }, [
         props.headline_raw,
-        props.checked, props.display_options?.settings?.show_linetags_in_headlines,
+        props.checked,
         props.linetags_from,
     ]);
     // get latest updates: always take the `props` version of `note` attributes, because memoized `parseNote` is only augmenting
@@ -208,8 +211,14 @@ export default memo(function MarkdownNote(props: NoteProps) {
                  data-offset-end={note.position.end.offset}
                  onClick={createNoteClickHandler(note, headlineClickPosition(note))}
             >
-                {note.display_options?.settings?.show_line_numbers && (<span className={view_specific_styles.lineno}><span>{note.position.start.line}</span></span>)}
+                {note.display_options?.settings?.show_line_numbers && note.level === note.display_options?.deepest?.selectable_level && (<span className={view_specific_styles.lineno}><span>{note.position.start.line}</span></span>)}
                 {note.headline}
+                {note.display_options?.settings?.show_linetags_in_headlines && note.linetags && Object.entries(note.linetags)
+                    .filter(([key]) => !isInternalAttribute(key))
+                    .map(([key, tag]) => (
+                        <span key={key} className={view_specific_styles.linetagInline}>{key}={tag.value}</span>
+                    ))
+                }
             </div>
             { note.linetags && <GenericNoteAttributes
                 {...note}

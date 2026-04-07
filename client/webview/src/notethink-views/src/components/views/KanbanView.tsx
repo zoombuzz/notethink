@@ -66,7 +66,7 @@ export default function KanbanView(props: ViewProps) {
         ...props.display_options,
         settings: {
             scroll_note_into_view: true,
-            show_linetags_in_headlines: true,
+            show_linetags_in_headlines: false,
             ...props.display_options?.settings,
         },
     };
@@ -139,11 +139,13 @@ export default function KanbanView(props: ViewProps) {
         column_order?: string[];
     }) => {
         setSettingsOpen(false);
+        // exclude show_line_numbers — it's a global setting persisted via workspace config
+        const { show_line_numbers: _sln, ...per_view_settings } = display_options.settings || {};
         props.handlers?.setViewManagedState?.([{
             id: props.id,
             display_options: {
                 settings: {
-                    ...display_options.settings,
+                    ...per_view_settings,
                     ...updated_settings,
                 },
             },
@@ -284,6 +286,8 @@ export default function KanbanView(props: ViewProps) {
                     column_order: display_options.settings?.column_order,
                 }}
                 onSave={handleSettingsSave}
+                showLineNumbers={display_options.settings?.show_line_numbers}
+                postMessage={props.handlers?.postMessage}
             />
         </>
     );

@@ -1,44 +1,6 @@
 # Playwright Test Results
-# Version: 0.1.43
-# Date: 2026-04-03T00:00:00Z
-# Command: npx playwright test
+# Version: 0.1.44
+# Date: 2026-04-07T00:00:00Z
+# Command: npx playwright test --project chromium
 # ---
-
-Running 34 tests using 10 workers
-
-  ✓  [chromium] breadcrumb.spec.ts:26:9 › strips workspace_root prefix from breadcrumb (1.0s)
-  ✓  [chromium] breadcrumb.spec.ts:11:9 › shows full path when no workspace_root is provided (1.0s)
-  ✓  [chromium] breadcrumb.spec.ts:82:9 › breadcrumb with countingsheet path shows countingsheet as first segment (1.0s)
-  ✓  [chromium] document-view.spec.ts:12:9 › renders document container after injecting basic.md (1.0s)
-  ✓  [chromium] breadcrumb.spec.ts:40:9 › uses relative_path for breadcrumb (symlink-safe) (1.0s)
-  ✓  [chromium] breadcrumb.spec.ts:66:9 › relative_path data-path attributes use full absolute paths for directory loading (1.0s)
-  ✓  [chromium] click-interaction.spec.ts:96:9 › captured messages include docId and docPath (1.2s)
-  ✓  [chromium] error-boundary.spec.ts:48:9 › shows fallback when malformed MDAST causes render error (418ms)
-  ✓  [chromium] error-boundary.spec.ts:56:9 › fallback displays friendly message and error details (433ms)
-  ✓  [chromium] error-boundary.spec.ts:80:9 › fallback includes a Try Again button (418ms)
-  ✓  [chromium] click-interaction.spec.ts:29:9 › clicking a note sets aria-current (focused) attribute (1.5s)
-  ✓  [chromium] error-boundary.spec.ts:90:9 › NoteRenderer container remains in the DOM despite error (415ms)
-  ✓  [chromium] click-interaction.spec.ts:13:9 › clicking a note headline sends revealRange message (1.7s)
-  ✓  [chromium] click-interaction.spec.ts:53:9 › second click on focused note selects it without blanking the view (2.0s)
-  ✓  [chromium] document-view.spec.ts:32:9 › renders notes with data-seq attributes (1.2s)
-  ✓  [chromium] document-view.spec.ts:41:9 › renders body paragraphs (1.2s)
-  ✓  [chromium] document-view.spec.ts:19:9 › renders note headlines with correct text (1.2s)
-  ✓  [chromium] kanban-view.spec.ts:29:9 › renders kanban columns via auto view detecting ng_view linetag (1.7s)
-  ✓  [chromium] kanban-view.spec.ts:45:9 › places tasks in correct columns (1.7s)
-  ✓  [chromium] kanban-view.spec.ts:62:9 › places untagged tasks in untagged column (1.7s)
-  ✓  [chromium] kanban-drag.spec.ts:81:9 › dragging a card to untagged column sends editText that removes status tag (2.5s)
-  ✓  [chromium] kanban-drag.spec.ts:47:9 › dragging a card between columns sends editText with status change (2.5s)
-  ✓  [chromium] kanban-drag.spec.ts:135:9 › card appears in destination column after extension sends updated doc (2.5s)
-  ✓  [chromium] kanban-drag.spec.ts:108:9 › view does not blank after drag completes (2.8s)
-  ✓  [chromium] keyboard-navigation.spec.ts:14:9 › clicking different notes produces revealRange messages (2.1s)
-  ✓  [chromium] keyboard-navigation.spec.ts:38:9 › selection feedback updates focused note styling (2.4s)
-  ✓  [chromium] view-switching.spec.ts:12:9 › defaults to auto view which resolves to document for plain markdown (765ms)
-  ✓  [chromium] keyboard-navigation.spec.ts:60:9 › drillIn on nested doc changes parent context (3.0s)
-  ✓  [chromium] settings-toggle.spec.ts:12:9 › toggling lineNumbers shows and hides line number elements (1.8s)
-  ✓  [chromium] settings-toggle.spec.ts:40:9 › toggling contextBars shows and hides context bar elements (1.8s)
-  ✓  [chromium] view-switching.spec.ts:22:9 › switches to kanban view and back to document (1.6s)
-  ✓  [chromium] settings-toggle.spec.ts:59:9 › settings survive view type switch (2.0s)
-  ✓  [chromium] view-switching.spec.ts:39:9 › switches to auto view (2.0s)
-  ✓  [chromium] keyboard-navigation.spec.ts:88:9 › drillOut returns to parent context (3.6s)
-
-  34 passed (7.7s)
+34 passed (7.2s)

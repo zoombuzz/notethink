@@ -212,7 +212,9 @@ export const workspace = {
 	}),
 	getConfiguration: jest.fn(() => ({
 		get: jest.fn(() => undefined),
+		update: jest.fn(async () => {}),
 	})),
+	onDidChangeConfiguration: jest.fn(() => ({ dispose: jest.fn() })),
 	registerFileSystemProvider: jest.fn(() => ({ dispose: jest.fn() })),
 	fs: {
 		readFile: jest.fn(async () => new Uint8Array()),

@@ -4,7 +4,7 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.43",
+  "version": "0.1.44",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
@@ -168,6 +168,12 @@
             ],
             "default": "verbose",
             "description": "Traces the communication between VS Code and the extension."
+          },
+          "notethink.showLineNumbers": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": false,
+            "description": "Show line numbers in NoteThink views."
           }
         }
       }

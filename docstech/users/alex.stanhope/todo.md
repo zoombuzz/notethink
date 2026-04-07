@@ -1,19 +1,15 @@
 # Todo [](?ng_view=kanban)
 
 
-### Settings modals
+### Remove Mantine CSS variable indirection
 
 + goal
-  + notegit has per-view settings modals for display preferences
-  + NoteThink needs at least kanban settings and global display settings
-+ [ ] implement kanban settings modal
-  + port from notegit's SettingsKanbanModal (~61 lines)
-  + column definitions (add/remove/reorder columns)
-  + scroll-note-into-view toggle
-  + show-linetags-in-headlines toggle
-+ [ ] implement global settings modal
-  + port from notegit's GlobalSettingsModal (~80 lines)
-  + theme preference, default view type, line numbers
+  + Mantine components are no longer used — all UI is native HTML/CSS
+  + 48 `--mantine-*` CSS variable references remain in ViewRenderer.module.scss via a bridge file
+  + replace with `--vscode-*` equivalents and remove the vestigial layer
++ [ ] replace all `--mantine-*` references in ViewRenderer.module.scss with `--vscode-*` equivalents
++ [ ] delete `client/webview/src/vscode-mantine-bridge.css` and its import in index.tsx
++ [ ] remove `@mantine/core`, `@mantine/hooks`, `@mantine/modals`, `@mantine/notifications`, `postcss-preset-mantine` from client/webview/package.json
 
 
 ### Publish NoteThink 0.1.x to marketplace (requires manual work)

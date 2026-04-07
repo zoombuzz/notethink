@@ -16,6 +16,8 @@ const default_props = {
     onClose: jest.fn(),
     settings: {},
     onSave: jest.fn(),
+    showLineNumbers: false,
+    postMessage: jest.fn(),
 };
 
 function renderModal(overrides: Partial<typeof default_props> = {}) {
@@ -96,5 +98,35 @@ describe('SettingsDocumentModal', () => {
         renderModal({ opened: true });
         expect(screen.queryByText('Column order')).not.toBeInTheDocument();
         expect(screen.queryByText('Reset order')).not.toBeInTheDocument();
+    });
+
+    it('shows line numbers checkbox reflecting showLineNumbers prop', () => {
+        renderModal({ opened: true, showLineNumbers: true });
+        const line_cb = screen.getAllByRole('checkbox').find(
+            cb => cb.closest('label')?.textContent?.includes('line numbers')
+        );
+        expect(line_cb).toBeChecked();
+    });
+
+    it('sends updateGlobalSetting when line numbers changed on save', () => {
+        const post_message = jest.fn();
+        renderModal({ opened: true, showLineNumbers: false, postMessage: post_message });
+        const line_cb = screen.getAllByRole('checkbox').find(
+            cb => cb.closest('label')?.textContent?.includes('line numbers')
+        )!;
+        fireEvent.click(line_cb);
+        fireEvent.click(screen.getByText('Save'));
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'updateGlobalSetting',
+            setting: 'show_line_numbers',
+            value: true,
+        });
+    });
+
+    it('does not send updateGlobalSetting when line numbers unchanged on save', () => {
+        const post_message = jest.fn();
+        renderModal({ opened: true, showLineNumbers: false, postMessage: post_message });
+        fireEvent.click(screen.getByText('Save'));
+        expect(post_message).not.toHaveBeenCalled();
     });
 });

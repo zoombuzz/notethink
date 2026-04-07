@@ -3,6 +3,7 @@ import Debug from 'debug';
 import type { HashMapOf, Doc } from '../types/general';
 import NoteRenderer from './NoteRenderer';
 import type { TextSelection, NoteDisplayOptions } from '../notethink-views/src/types/NoteProps';
+import type { GlobalSettingsPayload } from '../notethink-views/src/types/Messages';
 
 const debug = Debug("nodejs:notethink:ExtensionReceiver");
 
@@ -47,6 +48,7 @@ export default function ExtensionReceiver() {
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
     const [viewStates, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
     const navigationCallbackRef = useRef<((direction: string) => void) | undefined>(undefined);
+    const [globalSettings, setGlobalSettings] = useState<GlobalSettingsPayload>({ show_line_numbers: false });
     const [connected, setConnected] = useState(!!saved_state?.docs && Object.keys(saved_state.docs).length > 0);
     const [timed_out, setTimedOut] = useState(false);
 
@@ -147,6 +149,15 @@ export default function ExtensionReceiver() {
                 return;
             }
         }
+        if (message.type === 'globalSettings') {
+            if (
+                message.settings === null || message.settings === undefined ||
+                typeof message.settings !== 'object'
+            ) {
+                console.warn('ExtensionReceiver: discarding globalSettings message with invalid settings', message);
+                return;
+            }
+        }
 
         debug('onMessage %s', message.type);
         switch (message.type) {
@@ -192,6 +203,10 @@ export default function ExtensionReceiver() {
                     },
                 }));
                 return;
+            case 'globalSettings':
+                debug('received globalSettings %O', message.settings);
+                setGlobalSettings(message.settings as GlobalSettingsPayload);
+                return;
             case 'command':
                 debug('received command %s', message.command);
                 switch (message.command) {
@@ -200,7 +215,6 @@ export default function ExtensionReceiver() {
                         return;
                     case 'toggleSetting': {
                         const setting_map: Record<string, string> = {
-                            lineNumbers: 'show_line_numbers',
                             contextBars: 'show_context_bars',
                         };
                         const setting_key = setting_map[message.setting as string];
@@ -278,5 +292,6 @@ export default function ExtensionReceiver() {
         setViewManagedState={handleSetViewManagedState}
         onNavigationCommand={navigationCallbackRef}
         workspace_root={workspace_root}
+        globalSettings={globalSettings}
     />;
 }

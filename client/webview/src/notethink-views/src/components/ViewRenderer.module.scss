@@ -464,9 +464,9 @@ body.disableAddressBarHidingOnScroll {
     display: inline-block;
     line-height: 0;
     border-radius: 50%;
-    border: 1px solid var(--mantine-color-default-border);
-    color: color-mix(in srgb, var(--mantine-color-default-border), var(--mantine-color-default-color) 30%);
-    background: var(--mantine-color-default);
+    border: 1px solid color-mix(in srgb, var(--vscode-foreground) 50%, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+    color: color-mix(in srgb, var(--vscode-foreground) 50%, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+    background: var(--vscode-editor-background);
 
     // set min width so that single-digit numbers are the same size as double-digit+ numbers
     min-width: 2.0em;
@@ -761,6 +761,20 @@ body.disableAddressBarHidingOnScroll {
 
 
 // Note components
+
+.linetagInline {
+  display: inline-block;
+  font-size: 0.75em;
+  color: var(--vscode-textPreformat-foreground, inherit);
+  background: var(--vscode-textPreformat-background, rgba(128, 128, 128, 0.15));
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  white-space: nowrap;
+  vertical-align: middle;
+  opacity: 0.8;
+}
 
 .linetags {
   list-style: none;

@@ -48,11 +48,13 @@ export default React.memo(function DocumentView(props: ViewProps) {
 
     const handleSettingsSave = useCallback((updated_settings: DocumentSettings) => {
         setSettingsOpen(false);
+        // exclude show_line_numbers — it's a global setting persisted via workspace config
+        const { show_line_numbers: _sln, ...per_view_settings } = display_options.settings || {};
         props.handlers?.setViewManagedState?.([{
             id: props.id,
             display_options: {
                 settings: {
-                    ...display_options.settings,
+                    ...per_view_settings,
                     ...updated_settings,
                 },
             },
@@ -101,6 +103,8 @@ export default React.memo(function DocumentView(props: ViewProps) {
                     auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
                 }}
                 onSave={handleSettingsSave}
+                showLineNumbers={display_options.settings?.show_line_numbers}
+                postMessage={props.handlers?.postMessage}
             />
         </>
     );

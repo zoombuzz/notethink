@@ -41,11 +41,18 @@ export interface OpenExternalMessage {
     url: string;
 }
 
+export interface UpdateGlobalSettingMessage {
+    type: 'updateGlobalSetting';
+    setting: string;
+    value: unknown;
+}
+
 export type WebviewToExtensionMessage =
     | RevealRangeMessage
     | SelectRangeMessage
     | EditTextMessage
-    | OpenExternalMessage;
+    | OpenExternalMessage
+    | UpdateGlobalSettingMessage;
 
 // Extension -> Webview messages
 
@@ -73,7 +80,17 @@ export interface CommandMessage {
     direction?: 'up' | 'down' | 'drillIn' | 'drillOut' | 'clearFocus';
 }
 
+export interface GlobalSettingsPayload {
+    show_line_numbers: boolean;
+}
+
+export interface GlobalSettingsMessage {
+    type: 'globalSettings';
+    settings: GlobalSettingsPayload;
+}
+
 export type ExtensionToWebviewMessage =
     | UpdateMessage
     | SelectionChangedMessage
-    | CommandMessage;
+    | CommandMessage
+    | GlobalSettingsMessage;

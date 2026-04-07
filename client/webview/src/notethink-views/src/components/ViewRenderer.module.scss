@@ -464,7 +464,7 @@ body.disableAddressBarHidingOnScroll {
     display: inline-block;
     line-height: 0;
     border-radius: 50%;
-    border: 1px solid color-mix(in srgb, var(--vscode-foreground) 50%, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+    border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
     color: color-mix(in srgb, var(--vscode-foreground) 50%, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
     background: var(--vscode-editor-background);
 
@@ -938,7 +938,7 @@ body.disableAddressBarHidingOnScroll {
           border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
 
           > .lineno {
-            margin-left: -2.6em;
+            margin-left: -2.2em;
           }
         }
 

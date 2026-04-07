@@ -779,3 +779,14 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + theme preference and default view type dropped (handled by VS Code natively)
 
 
+### Remove Mantine CSS variable indirection
+
++ goal
+  + Mantine components are no longer used — all UI is native HTML/CSS
+  + 48 `--mantine-*` CSS variable references remain in ViewRenderer.module.scss via a bridge file
+  + replace with `--vscode-*` equivalents and remove the vestigial layer
++ [X] replace all `--mantine-*` references in ViewRenderer.module.scss with `--vscode-*` equivalents
++ [X] delete `client/webview/src/vscode-mantine-bridge.css` and its import in index.tsx
++ [X] remove `@mantine/core`, `@mantine/hooks`, `@mantine/modals`, `@mantine/notifications`, `postcss-preset-mantine` from client/webview/package.json
+
+

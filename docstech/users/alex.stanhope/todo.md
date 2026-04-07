@@ -1,17 +1,6 @@
 # Todo [](?ng_view=kanban)
 
 
-### Remove Mantine CSS variable indirection
-
-+ goal
-  + Mantine components are no longer used — all UI is native HTML/CSS
-  + 48 `--mantine-*` CSS variable references remain in ViewRenderer.module.scss via a bridge file
-  + replace with `--vscode-*` equivalents and remove the vestigial layer
-+ [ ] replace all `--mantine-*` references in ViewRenderer.module.scss with `--vscode-*` equivalents
-+ [ ] delete `client/webview/src/vscode-mantine-bridge.css` and its import in index.tsx
-+ [ ] remove `@mantine/core`, `@mantine/hooks`, `@mantine/modals`, `@mantine/notifications`, `postcss-preset-mantine` from client/webview/package.json
-
-
 ### Publish NoteThink 0.1.x to marketplace (requires manual work)
 
 + [ ] create extension icon

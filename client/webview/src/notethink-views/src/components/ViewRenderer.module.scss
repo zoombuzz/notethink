@@ -3,7 +3,7 @@
 //
 
 // produce off_grey colour, darker than default in light-mode, lighter than default in dark-mode
-$off_grey: color-mix(in srgb, var(--mantine-color-default), var(--mantine-color-default-color) 5%);
+$off_grey: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 5%);
 
 @mixin themed-checkbox {
   appearance: none;
@@ -11,15 +11,15 @@ $off_grey: color-mix(in srgb, var(--mantine-color-default), var(--mantine-color-
   height: 1em;
   margin-right: 0.4em;
   vertical-align: middle;
-  border: 1px solid var(--vscode-foreground, var(--mantine-color-default-color));
+  border: 1px solid var(--vscode-foreground, var(--vscode-editor-foreground));
   border-radius: 3px;
-  background: var(--vscode-checkbox-background, var(--mantine-color-default));
+  background: var(--vscode-checkbox-background, var(--vscode-editor-background));
   cursor: pointer;
   position: relative;
 
   &:checked {
-    background: var(--vscode-checkbox-background, var(--mantine-color-default));
-    border-color: var(--vscode-checkbox-border, var(--mantine-color-default-border));
+    background: var(--vscode-checkbox-background, var(--vscode-editor-background));
+    border-color: var(--vscode-checkbox-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
 
     &::after {
       content: '';
@@ -28,7 +28,7 @@ $off_grey: color-mix(in srgb, var(--mantine-color-default), var(--mantine-color-
       top: 0px;
       width: 4px;
       height: 8px;
-      border: solid color-mix(in srgb, var(--vscode-foreground, var(--mantine-color-default-color)) 40%, var(--vscode-checkbox-border, var(--mantine-color-default-border)));
+      border: solid color-mix(in srgb, var(--vscode-foreground, var(--vscode-editor-foreground)) 40%, var(--vscode-checkbox-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35))));
       border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
@@ -84,14 +84,14 @@ body.disableAddressBarHidingOnScroll {
   }
   .label {
     // make menu items more indented that the labels that group them
-    padding-left: calc(var(--mantine-spacing-xs)/2);
+    padding-left: calc(0.625rem/2);
   }
 }
 
 // menubars can appear outside views, e.g. Header
 .menubar {
   height: 2.3rem;
-  border-bottom: 1px solid var(--mantine-color-default-border);
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
 
   button.menu_target {
     border-radius: 0;
@@ -327,7 +327,7 @@ body.disableAddressBarHidingOnScroll {
   overflow: hidden;
   white-space: nowrap;
   border-bottom: 1px solid var(--vscode-breadcrumb-background, transparent);
-  background: var(--vscode-breadcrumb-background, var(--vscode-editor-background, var(--mantine-color-default)));
+  background: var(--vscode-breadcrumb-background, var(--vscode-editor-background));
   color: var(--vscode-breadcrumb-foregroundColor, var(--vscode-foreground, inherit));
 }
 
@@ -346,10 +346,10 @@ body.disableAddressBarHidingOnScroll {
 
 .contextBar {
   height: 2.3rem;
-  //background: darken(var(--mantine-color-default), 2%);
-  background: color-mix(in srgb, var(--mantine-color-default), var(--mantine-color-default-color) 2%);
+  //background: darken(var(--vscode-editor-background), 2%);
+  background: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 2%);
   //background: linear-gradient(0deg, darken($note_default_colour, 5%) 0%, $note_default_colour 40%);
-  background: linear-gradient(0deg, $off_grey 0%, var(--mantine-color-default) 70%);
+  background: linear-gradient(0deg, $off_grey 0%, var(--vscode-editor-background) 70%);
 
   > * {
     text-align: left;
@@ -370,8 +370,8 @@ body.disableAddressBarHidingOnScroll {
   margin: 0;
 
   .content {
-    border-left: 1px solid var(--mantine-color-default-border);
-    border-bottom: 1px solid var(--mantine-color-default-border);
+    border-left: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+    border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
     overflow: auto;
     // height of content is full-height minus height of menubar
     height: calc(100% - 2.3rem);
@@ -414,7 +414,7 @@ body.disableAddressBarHidingOnScroll {
   border-radius: 6px;
 
   &.focused {
-    outline: dashed 2px var(--mantine-primary-color-2);
+    outline: dashed 2px var(--vscode-focusBorder);
 
     .note.focused {
       outline-offset: 8px;
@@ -422,7 +422,7 @@ body.disableAddressBarHidingOnScroll {
   }
 
   &.selected {
-    outline: solid 2px var(--mantine-primary-color-2);
+    outline: solid 2px var(--vscode-focusBorder);
 
     .note.selected {
       outline-offset: 8px;
@@ -431,13 +431,13 @@ body.disableAddressBarHidingOnScroll {
 
   &.unclickable {
     // source selection colour from theme
-    outline: solid 5px var(--mantine-primary-color-2);
+    outline: solid 5px var(--vscode-focusBorder);
     outline-offset: 0;
     cursor: default;
   }
 
   &.locked {
-    outline-color: var(--mantine-color-red-outline);
+    outline-color: var(--vscode-errorForeground);
     opacity: 0.5;
   }
 
@@ -530,7 +530,7 @@ body.disableAddressBarHidingOnScroll {
   }
 
   @keyframes caretPulse {
-    0% { background: color-mix(in srgb, var(--mantine-primary-color-2), transparent 60%); }
+    0% { background: color-mix(in srgb, var(--vscode-focusBorder), transparent 60%); }
     100% { background: transparent; }
   }
 
@@ -543,7 +543,7 @@ body.disableAddressBarHidingOnScroll {
 
   .readMoreToggle {
     font-size: 85%;
-    color: var(--mantine-primary-color-filled, var(--mantine-primary-color-2));
+    color: var(--vscode-focusBorder);
     cursor: pointer;
     user-select: none;
 
@@ -556,7 +556,7 @@ body.disableAddressBarHidingOnScroll {
     display: inline-block;
     font-size: 0.9em;
     line-height: 1;
-    color: var(--mantine-primary-color-filled, var(--mantine-primary-color-2));
+    color: var(--vscode-focusBorder);
     user-select: none;
   }
 
@@ -576,8 +576,8 @@ body.disableAddressBarHidingOnScroll {
     height: 6em;
     background: linear-gradient(
       transparent 0%,
-      color-mix(in srgb, var(--vscode-editor-background, var(--mantine-color-default)), transparent 50%) 40%,
-      var(--vscode-editor-background, var(--mantine-color-default)) 75%
+      color-mix(in srgb, var(--vscode-editor-background), transparent 50%) 40%,
+      var(--vscode-editor-background) 75%
     );
     display: flex;
     align-items: flex-end;
@@ -597,8 +597,8 @@ body.disableAddressBarHidingOnScroll {
     right: 0;
     height: 4em;
     background: linear-gradient(
-      var(--vscode-editor-background, var(--mantine-color-default)) 0%,
-      color-mix(in srgb, var(--vscode-editor-background, var(--mantine-color-default)), transparent 50%) 60%,
+      var(--vscode-editor-background) 0%,
+      color-mix(in srgb, var(--vscode-editor-background), transparent 50%) 60%,
       transparent 100%
     );
     display: flex;
@@ -674,7 +674,7 @@ body.disableAddressBarHidingOnScroll {
     td, th {
       padding-left: 0.3em;
       padding-right: 0.3em;
-      border: 1px solid var(--mantine-color-default-border);
+      border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
     }
 
     tr {
@@ -686,21 +686,23 @@ body.disableAddressBarHidingOnScroll {
 
 }
 
-[data-mantine-color-scheme='dark'] .view {
+:global(body.vscode-dark) .view,
+:global(body.vscode-high-contrast) .view {
   .note, .leafNote {
     &.unclickable, &.focused, &.selected {
-      outline-color: var(--mantine-primary-color-8);
+      outline-color: var(--vscode-focusBorder);
     }
   }
 }
 
 // dark-mode: use a stronger border token so kanban cards/columns stand out from the background
-[data-mantine-color-scheme='dark'] .viewKanban .board {
+:global(body.vscode-dark) .viewKanban .board,
+:global(body.vscode-high-contrast) .viewKanban .board {
   .column {
-    border-color: var(--vscode-editorWidget-border, var(--mantine-color-default-border));
+    border-color: var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
   }
   .column > div > .note {
-    border-color: var(--vscode-editorWidget-border, var(--mantine-color-default-border));
+    border-color: var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 
     &:hover {
@@ -712,7 +714,7 @@ body.disableAddressBarHidingOnScroll {
     }
 
     > .headline {
-      border-bottom-color: var(--vscode-editorWidget-border, var(--mantine-color-default-border));
+      border-bottom-color: var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
     }
   }
 }
@@ -725,7 +727,7 @@ body.disableAddressBarHidingOnScroll {
   margin: 0.5em 0;
   border-radius: 6px;
   background: var(--vscode-textCodeBlock-background, $off_grey);
-  border: 1px solid var(--mantine-color-default-border);
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
   overflow: hidden;
 
   pre {
@@ -753,8 +755,8 @@ body.disableAddressBarHidingOnScroll {
   padding: 4px 12px;
   font-size: 11px;
   font-family: var(--vscode-font-family, sans-serif);
-  color: color-mix(in srgb, var(--vscode-editor-foreground, var(--mantine-color-default-color)), transparent 40%);
-  border-bottom: 1px solid var(--mantine-color-default-border);
+  color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 40%);
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
   user-select: none;
   text-transform: lowercase;
 }
@@ -809,7 +811,7 @@ body.disableAddressBarHidingOnScroll {
 
 .viewDocument {
   padding: 0 0.8em 1.2em 0.8em;
-  color: var(--mantine-color-default-color);
+  color: var(--vscode-editor-foreground);
 
   // support indenting on wide screens
   text-align: center;
@@ -846,12 +848,12 @@ body.disableAddressBarHidingOnScroll {
     h1 {
       font-size: 2.0em;
       font-weight: 600;
-      border-bottom: 1px solid var(--mantine-color-default-border);
+      border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
     }
 
     h2 {
       font-weight: 600;
-      border-bottom: 1px solid var(--mantine-color-default-border);
+      border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
     }
 
     .leafNote {
@@ -859,7 +861,7 @@ body.disableAddressBarHidingOnScroll {
 
       &.selected {
         // while notes in all views show their selection, leafNotes only show it in DocumentView
-        outline: solid 2px var(--mantine-primary-color-2);
+        outline: solid 2px var(--vscode-focusBorder);
       }
     }
   }
@@ -867,7 +869,7 @@ body.disableAddressBarHidingOnScroll {
 
 .viewKanban {
   padding: 0 0.8em 0 0.8em;
-  color: var(--mantine-color-default-color);
+  color: var(--vscode-editor-foreground);
 
   .contextBar {
     padding: 0 0.8em 0 1.2em;
@@ -890,12 +892,12 @@ body.disableAddressBarHidingOnScroll {
 
     .column {
       flex: 1;
-      background: color-mix(in srgb, var(--vscode-editor-background, var(--mantine-color-default)), var(--vscode-editor-foreground, var(--mantine-color-default-color)) 4%);
+      background: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 4%);
       min-width: 17.0em;
 
       padding: 0 12px 12px 12px;
 
-      border: 1px solid var(--mantine-color-default-border);
+      border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
       border-radius: 12px;
 
       &.pseudo {
@@ -911,8 +913,8 @@ body.disableAddressBarHidingOnScroll {
       }
 
       > div > .note {
-        background: var(--mantine-color-default);
-        border: 1px solid var(--mantine-color-default-border);
+        background: var(--vscode-editor-background);
+        border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
         border-radius: 8px;
         user-select: none;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -933,7 +935,7 @@ body.disableAddressBarHidingOnScroll {
         // only the first level
         > .headline {
           padding: 8px 16px;
-          border-bottom: 1px solid var(--mantine-color-default-border);
+          border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
 
           > .lineno {
             margin-left: -2.6em;
@@ -986,8 +988,8 @@ body.disableAddressBarHidingOnScroll {
           font-size: 12px;
           font-weight: 500;
           border-radius: 10px;
-          background: color-mix(in srgb, var(--vscode-editor-background, var(--mantine-color-default)), var(--vscode-editor-foreground, var(--mantine-color-default-color)) 10%);
-          color: color-mix(in srgb, var(--vscode-editor-foreground, var(--mantine-color-default-color)), transparent 30%);
+          background: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 10%);
+          color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 30%);
         }
       }
     }

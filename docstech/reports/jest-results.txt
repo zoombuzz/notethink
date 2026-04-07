@@ -1,9 +1,50 @@
 # Jest Test Results
-# Version: 0.1.44
+# Version: 0.1.45
 # Date: 2026-04-07T00:00:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
-extension:        4 files,  74 passed, 0 failed, 2.021s
-webview:          3 files,  30 passed, 0 failed, 0.609s
-notethink-views: 22 files, 323 passed, 0 failed, 2.879s
-TOTAL:           29 files, 427 passed, 0 failed
+Suite: extension (4 files)
+  PASS src/lib/utils.test.ts
+  PASS src/lib/errorops.test.ts
+  PASS src/lib/parseops.test.ts
+  PASS src/vscode/notethinkEditor.test.ts
+  Test Suites: 4 passed, 4 total
+  Tests: 74 passed, 74 total
+  Time: 1.999 s
+
+Suite: webview (3 files)
+  PASS src/components/ExtensionReceiver.test.tsx
+  PASS src/components/NoteRenderer.test.tsx
+  PASS src/components/base/App.test.tsx
+  Test Suites: 3 passed, 3 total
+  Tests: 30 passed, 30 total
+  Time: 0.623 s
+
+Suite: notethink-views (22 files)
+  PASS src/lib/convertMdastToNoteHierarchy.test.ts
+  PASS src/lib/noteops.test.ts
+  PASS src/lib/renderops.test.tsx
+  PASS src/lib/noteui.test.ts
+  PASS src/lib/linetagops.test.ts
+  PASS src/components/views/KanbanContextBar.test.tsx
+  PASS src/components/views/KanbanColumn.test.tsx
+  PASS src/components/views/ViewIntegrationSelector.test.tsx
+  PASS src/components/notes/CodeNote.test.tsx
+  PASS src/components/views/SettingsDocumentModal.test.tsx
+  PASS src/components/notes/MermaidDiagram.test.tsx
+  PASS src/components/views/AutoView.test.tsx
+  PASS src/components/views/KanbanView.test.tsx
+  PASS src/components/InsertModal.test.tsx
+  PASS src/components/notes/MarkdownNote.test.tsx
+  PASS src/components/notes/MermaidNote.test.tsx
+  PASS src/components/views/BreadcrumbTrail.test.tsx
+  PASS src/components/views/SettingsKanbanModal.test.tsx
+  PASS src/components/views/DocumentView.test.tsx
+  PASS src/components/ErrorBoundary.test.tsx
+  PASS src/components/notes/GenericNote.test.tsx
+  PASS src/components/views/GenericView.test.tsx
+  Test Suites: 22 passed, 22 total
+  Tests: 323 passed, 323 total
+  Time: 2.974 s
+
+TOTAL: 29 suites, 427 passed, 0 failed

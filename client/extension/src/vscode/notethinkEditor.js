@@ -296,18 +296,6 @@ export class NotethinkEditorProvider {
 			<body>
 				<div id="root"></div>
 				<script nonce="${nonce}">
-					(function() {
-						function syncColorScheme() {
-							var isDark = document.body.classList.contains('vscode-dark')
-								|| document.body.classList.contains('vscode-high-contrast');
-							document.documentElement.setAttribute(
-								'data-mantine-color-scheme',
-								isDark ? 'dark' : 'light'
-							);
-						}
-						syncColorScheme();
-						new MutationObserver(syncColorScheme).observe(document.body, { attributes: true, attributeFilter: ['class'] });
-					})();
 					var exports = {};
 				</script>
 				<script nonce="${nonce}" src="${scriptUri}"></script>

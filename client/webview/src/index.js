@@ -1,7 +1,6 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './vscode-mantine-bridge.css';
 import './index.css';
 import App from './components/base/App';
 import reportWebVitals from './reportWebVitals';

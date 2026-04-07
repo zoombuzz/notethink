@@ -9,13 +9,9 @@
   + once created, add `"icon": "media/icon.png"` to root package.json
 + [ ] create ZoomBuzz publisher account
   + register at marketplace.visualstudio.com
-+ [ ] test against edge cases before release
++ [ ] test against edge cases before release (manual)
   + install the .vsix locally (`code --install-extension notethink-0.1.0.vsix`)
-  + empty markdown file
-  + very large markdown file (1000+ lines)
-  + markdown with frontmatter (already parsed via mdast-util-frontmatter)
-  + markdown with GFM tables, strikethrough, footnotes
-  + file with unicode characters and special paths
+  + file with special paths (spaces, unicode filenames)
   + workspace with 100+ markdown files (performance check)
   + verify no console errors in developer tools
 + [ ] publish to marketplace

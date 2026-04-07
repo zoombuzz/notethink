@@ -689,6 +689,221 @@ function flattenNotes(root: any): any[] {
     return result;
 }
 
+describe('edge cases: frontmatter nodes', () => {
+
+    it('frontmatter (yaml) node passes through as raw MdastNode, not a NoteProps', () => {
+        const text = '---\ntitle: Test\n---\n# Content\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 5 } },
+            children: [
+                mdastNode('yaml', 0, 18, { value: 'title: Test' }),
+                mdastNode('heading', 19, 28, { depth: 1 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+
+        // yaml node should appear as raw MdastNode (no seq)
+        const yaml_node = root.children_body.find((c: any) => c.type === 'yaml');
+        expect(yaml_node).toBeDefined();
+        expect('seq' in yaml_node!).toBe(false);
+
+        // heading should be a NoteProps with seq
+        const allNotes = flattenNotes(root);
+        expect(allNotes).toHaveLength(1);
+        expect(allNotes[0].type).toBe('heading');
+    });
+
+    it('toml frontmatter passes through as raw MdastNode', () => {
+        const text = '+++\ntitle = "Test"\n+++\n# Content\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 5 } },
+            children: [
+                mdastNode('toml', 0, 21, { value: 'title = "Test"' }),
+                mdastNode('heading', 22, 31, { depth: 1 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+
+        const toml_node = root.children_body.find((c: any) => c.type === 'toml');
+        expect(toml_node).toBeDefined();
+        expect('seq' in toml_node!).toBe(false);
+    });
+});
+
+describe('edge cases: unicode in headline extraction', () => {
+
+    it('extracts headline_raw correctly for emoji headings', () => {
+        const text = '# 🚀 Launch\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 2 } },
+            children: [
+                mdastNode('heading', 0, text.length - 1, { depth: 1 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        expect(allNotes[0].headline_raw).toBe('# 🚀 Launch');
+    });
+
+    it('extracts headline_raw correctly for CJK headings', () => {
+        const text = '## 日本語の見出し\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 2 } },
+            children: [
+                mdastNode('heading', 0, text.length - 1, { depth: 2 }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        expect(allNotes[0].headline_raw).toBe('## 日本語の見出し');
+    });
+
+    it('body_raw extraction preserves unicode content', () => {
+        const text = '# Title\nParagraph with émojis 🎉 and café\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
+            children: [
+                mdastNode('heading', 0, 7, { depth: 1 }),
+                mdastNode('paragraph', 8, text.length - 1),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        expect(allNotes[0].body_raw).toContain('émojis 🎉');
+        expect(allNotes[0].body_raw).toContain('café');
+    });
+});
+
+describe('edge cases: GFM table nodes in hierarchy', () => {
+
+    it('table node passes through as raw MdastNode under heading body', () => {
+        const text = '# Data\n| A | B |\n|---|---|\n| 1 | 2 |\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 5 } },
+            children: [
+                mdastNode('heading', 0, 6, { depth: 1 }),
+                mdastNode('table', 7, text.length - 1),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const allNotes = flattenNotes(root);
+        expect(allNotes).toHaveLength(1);
+        expect(allNotes[0].type).toBe('heading');
+
+        // table should be in heading's children_body as raw MdastNode
+        const table_node = allNotes[0].children_body.find((c: any) => c.type === 'table');
+        expect(table_node).toBeDefined();
+        expect('seq' in table_node!).toBe(false);
+    });
+
+    it('top-level table passes through as raw MdastNode under root', () => {
+        const text = '| A | B |\n|---|---|\n| 1 | 2 |\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('table', 0, text.length - 1),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        expect(root.children_body).toHaveLength(1);
+        expect(root.children_body[0].type).toBe('table');
+        expect('seq' in root.children_body[0]).toBe(false);
+    });
+});
+
+describe('edge cases: footnoteDefinition nodes in hierarchy', () => {
+
+    it('footnoteDefinition passes through as raw MdastNode', () => {
+        const text = 'Text[^1].\n\n[^1]: Footnote content.\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
+            children: [
+                mdastNode('paragraph', 0, 9),
+                mdastNode('footnoteDefinition', 11, text.length - 1, { identifier: '1' }),
+            ],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        // Both should be raw MdastNodes, not NoteProps
+        expect(root.children_body).toHaveLength(2);
+        for (const child of root.children_body) {
+            expect('seq' in child).toBe(false);
+        }
+    });
+});
+
+describe('benchmark: 1000+ heading large file', () => {
+
+    function generateLargeMdast(headingCount: number): { text: string; mdast: MdastNode } {
+        const lines: string[] = [];
+        const children: MdastNode[] = [];
+        let offset = 0;
+
+        for (let i = 0; i < headingCount; i++) {
+            const depth = (i % 5 === 0) ? 2 : 3;
+            const prefix = '#'.repeat(depth) + ' ';
+            const heading_text = `${prefix}heading ${i}`;
+            const heading_start = offset;
+            const heading_end = offset + heading_text.length;
+            lines.push(heading_text);
+            offset = heading_end + 1;
+
+            children.push({
+                type: 'heading',
+                depth,
+                position: {
+                    start: { offset: heading_start, line: lines.length },
+                    end: { offset: heading_end, line: lines.length },
+                },
+                children: [],
+            });
+
+            const body_line_count = 5 + (i % 6);
+            for (let j = 0; j < body_line_count; j++) {
+                const body_line = `+ item ${i}-${j} with some content to simulate real text`;
+                lines.push(body_line);
+                offset += body_line.length + 1;
+            }
+            lines.push('');
+            offset += 1;
+        }
+
+        const text = lines.join('\n');
+        const mdast: MdastNode = {
+            type: 'root',
+            position: {
+                start: { offset: 0, line: 1 },
+                end: { offset: text.length, line: lines.length },
+            },
+            children,
+        };
+        return { text, mdast };
+    }
+
+    it('parses 1000 headings in under 200ms', () => {
+        const { text, mdast } = generateLargeMdast(1000);
+        expect(text.split('\n').length).toBeGreaterThan(1000);
+
+        // warm-up
+        convertMdastToNoteHierarchy(mdast, text);
+
+        const start = performance.now();
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const elapsed = performance.now() - start;
+
+        expect(elapsed).toBeLessThan(200);
+        const all_notes = flattenNotes(root);
+        expect(all_notes.length).toBe(1000);
+    });
+});
+
 describe('link rendering in list items', () => {
     it('markdown link in list item is not parsed as a linetag', () => {
         const text = '+ [swiper](https://swiperjs.com/)\n';

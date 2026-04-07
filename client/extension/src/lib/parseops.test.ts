@@ -140,4 +140,178 @@ describe('parseops', () => {
 			expect(img.alt).toBe('alt text');
 		});
 	});
+
+	// Unicode edge cases
+	describe('unicode characters', () => {
+		it('parses headings with emoji', () => {
+			const result = parse('# 🚀 Launch Plan\n## 📋 Tasks');
+			const headings = result.children.filter((c: any) => c.type === 'heading');
+			expect(headings).toHaveLength(2);
+			expect((headings[0] as any).depth).toBe(1);
+			expect((headings[1] as any).depth).toBe(2);
+		});
+
+		it('parses CJK characters in content', () => {
+			const result = parse('# 日本語の見出し\n\n中文段落内容。\n\n한국어 텍스트');
+			expect(result.children.length).toBeGreaterThan(0);
+			const heading = result.children[0] as any;
+			expect(heading.type).toBe('heading');
+			const paras = result.children.filter((c: any) => c.type === 'paragraph');
+			expect(paras).toHaveLength(2);
+		});
+
+		it('parses accented and diacritical characters', () => {
+			const result = parse('# Ñoño résumé naïve über café');
+			const heading = result.children[0] as any;
+			expect(heading.type).toBe('heading');
+			expect(heading.children[0].value).toBe('Ñoño résumé naïve über café');
+		});
+
+		it('parses combining characters and zero-width joiners', () => {
+			const result = parse('# e\u0301 a\u0300 n\u0303\n\nText with ZWJ: 👨\u200D👩\u200D👧\u200D👦');
+			expect(result.children.length).toBeGreaterThan(0);
+			expect(result.children[0].type).toBe('heading');
+		});
+
+		it('parses RTL text (Arabic/Hebrew)', () => {
+			const result = parse('# مرحبا بالعالم\n\nשלום עולם');
+			const heading = result.children[0] as any;
+			expect(heading.type).toBe('heading');
+			const para = result.children[1] as any;
+			expect(para.type).toBe('paragraph');
+		});
+
+		it('parses code blocks with unicode content', () => {
+			const markdown = '```python\nprint("こんにちは世界 🌍")\n```';
+			const result = parse(markdown);
+			const code = result.children.find((c: any) => c.type === 'code') as any;
+			expect(code).toBeDefined();
+			expect(code.value).toBe('print("こんにちは世界 🌍")');
+			expect(code.lang).toBe('python');
+		});
+
+		it('parses GFM tables with unicode cell content', () => {
+			const markdown = '| Emoji | 日本語 |\n|---|---|\n| 🎉 | テスト |';
+			const result = parse(markdown);
+			const table = result.children.find((c: any) => c.type === 'table');
+			expect(table).toBeDefined();
+		});
+
+		it('handles mathematical symbols and special unicode', () => {
+			const result = parse('# ∑∏∫ Mathematics\n\n∀x ∈ ℝ: x² ≥ 0');
+			expect(result.children[0].type).toBe('heading');
+			expect(result.children[1].type).toBe('paragraph');
+		});
+	});
+
+	// GFM footnotes
+	describe('GFM footnotes', () => {
+		it('parses footnote references and definitions', () => {
+			const markdown = 'Text with a footnote[^1].\n\n[^1]: This is the footnote content.';
+			const result = parse(markdown);
+			const footnote_ref = result.children.find((c: any) => c.type === 'paragraph');
+			expect(footnote_ref).toBeDefined();
+			const footnote_def = result.children.find((c: any) => c.type === 'footnoteDefinition');
+			expect(footnote_def).toBeDefined();
+			expect((footnote_def as any).identifier).toBe('1');
+		});
+
+		it('parses multiple footnotes', () => {
+			const markdown = 'First[^a] and second[^b].\n\n[^a]: Note A.\n\n[^b]: Note B.';
+			const result = parse(markdown);
+			const defs = result.children.filter((c: any) => c.type === 'footnoteDefinition');
+			expect(defs).toHaveLength(2);
+		});
+
+		it('parses footnote with multi-line content', () => {
+			const markdown = 'Text[^long].\n\n[^long]: First line.\n    Continuation line.';
+			const result = parse(markdown);
+			const def = result.children.find((c: any) => c.type === 'footnoteDefinition') as any;
+			expect(def).toBeDefined();
+			expect(def.identifier).toBe('long');
+		});
+	});
+
+	// Large file performance
+	describe('large file (1000+ lines)', () => {
+		it('parses a 1500-line markdown file correctly', () => {
+			const lines: string[] = [];
+			for (let i = 0; i < 150; i++) {
+				lines.push(`## Section ${i}`);
+				for (let j = 0; j < 8; j++) {
+					lines.push(`Paragraph line ${j} in section ${i} with some body text.`);
+				}
+				lines.push('');
+			}
+			const markdown = lines.join('\n');
+			expect(markdown.split('\n').length).toBeGreaterThan(1000);
+
+			const result = parse(markdown);
+			expect(result.type).toBe('root');
+			const headings = result.children.filter((c: any) => c.type === 'heading');
+			expect(headings).toHaveLength(150);
+		});
+
+		it('parses a 1500-line file in under 200ms', () => {
+			const lines: string[] = [];
+			for (let i = 0; i < 150; i++) {
+				lines.push(`## Section ${i}`);
+				for (let j = 0; j < 8; j++) {
+					lines.push(`- task ${j}: some descriptive text here`);
+				}
+				lines.push('');
+			}
+			const markdown = lines.join('\n');
+
+			// warm-up
+			parse(markdown);
+
+			const start = performance.now();
+			parse(markdown);
+			const elapsed = performance.now() - start;
+			expect(elapsed).toBeLessThan(200);
+		});
+	});
+
+	// Mixed content (all features in one document)
+	describe('mixed content document', () => {
+		it('parses frontmatter + GFM features + unicode in one document', () => {
+			const markdown = [
+				'---',
+				'title: 🚀 テスト Document',
+				'tags: [test, unicode]',
+				'---',
+				'',
+				'# Main Title',
+				'',
+				'A paragraph with **bold**, *italic*, and ~~strikethrough~~.',
+				'',
+				'| Column A | Column B |',
+				'|----------|----------|',
+				'| cell 1   | cell 2   |',
+				'',
+				'- [ ] unchecked task',
+				'- [x] checked task',
+				'',
+				'```ts',
+				'const greeting = "こんにちは";',
+				'```',
+				'',
+				'Footnote reference[^note].',
+				'',
+				'[^note]: Footnote with émojis 🎉.',
+			].join('\n');
+
+			const result = parse(markdown);
+			expect(result.type).toBe('root');
+
+			const types = result.children.map((c: any) => c.type);
+			expect(types).toContain('yaml');
+			expect(types).toContain('heading');
+			expect(types).toContain('table');
+			expect(types).toContain('list');
+			expect(types).toContain('code');
+			expect(types).toContain('footnoteDefinition');
+		});
+	});
 });

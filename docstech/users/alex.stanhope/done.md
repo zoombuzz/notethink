@@ -1,6 +1,18 @@
 # Done [](?ng_view=kanban&ng_child_status=done)
 
 
+### Edge-case tests for pre-release validation
+
++ [X] empty markdown file — already covered (parseops + hierarchy tests)
++ [X] very large markdown file (1000+ lines) — parse benchmark (150 sections × ~10 lines, under 200ms) and hierarchy benchmark (1000 headings, under 200ms)
++ [X] markdown with frontmatter — already covered (YAML + TOML in parseops); added hierarchy passthrough tests
++ [X] markdown with GFM tables, strikethrough — already covered in parseops; added hierarchy table passthrough tests
++ [X] markdown with GFM footnotes — 3 new tests (single, multiple, multi-line content) in parseops; hierarchy footnoteDefinition passthrough test
++ [X] file with unicode characters — 8 new tests in parseops (emoji, CJK, accented, combining chars, RTL, code blocks, tables, math symbols); 3 new hierarchy tests (emoji/CJK headline_raw, unicode body_raw)
++ [X] mixed content document — full-feature test (frontmatter + GFM + unicode + code + footnotes in one document)
++ tests 450 (was 427), 34 playwright
+
+
 ### Upgrade webpack-cli 6 → 7 and copy-webpack-plugin 13 → 14
 
 + [X] update `webpack-cli` from `^6.0.1` to `^7.0.0` in root package.json

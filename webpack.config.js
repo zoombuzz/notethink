@@ -85,6 +85,10 @@ const clientExtensionConfig = {
 	externals: {
 		'vscode': 'commonjs vscode', // ignored because it doesn't exist
 	},
+	ignoreWarnings: [
+		// mocha uses dynamic require() internally which webpack cannot statically analyse
+		{ module: /node_modules[\\/]mocha/ },
+	],
 	performance: {
 		hints: false
 	},

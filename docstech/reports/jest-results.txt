@@ -1,6 +1,6 @@
 # Jest Test Results
-# Version: 0.1.48
-# Date: 2026-04-08T10:30:00Z
+# Version: 0.1.49
+# Date: 2026-04-08T00:00:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
@@ -8,13 +8,14 @@
 > jest --config jest.config.cjs --forceExit
 
  PASS  src/lib/utils.test.ts
+ PASS  src/l10n/l10n-bundles.test.ts
  PASS  src/lib/errorops.test.ts
  PASS  src/lib/parseops.test.ts
  PASS  src/vscode/notethinkEditor.test.ts
 
-Test Suites: 4 passed, 4 total
-Tests:       88 passed, 88 total
-Time:        2.01 s
+Test Suites: 5 passed, 5 total
+Tests:       109 passed, 109 total
+Time:        2.028 s
 
 > notethink-client-display@0.1.0 test
 > jest --config jest.config.cjs --forceExit
@@ -25,44 +26,45 @@ Time:        2.01 s
 
 Test Suites: 3 passed, 3 total
 Tests:       30 passed, 30 total
-Time:        0.61 s
+Time:        0.592 s
 
 > @zoombuzz/notethink-views@0.1.0 test
 > jest --config jest.config.cjs --forceExit
 
- PASS  src/components/views/KanbanContextBar.test.tsx
- PASS  src/components/views/ViewIntegrationSelector.test.tsx
- PASS  src/lib/convertMdastToNoteHierarchy.test.ts
  PASS  src/lib/renderops.test.tsx
+ PASS  src/components/views/KanbanContextBar.test.tsx
+ PASS  src/components/views/AutoView.test.tsx
+ PASS  src/components/notes/CodeNote.test.tsx
+ PASS  src/components/notes/MermaidDiagram.test.tsx
+ PASS  src/lib/convertMdastToNoteHierarchy.test.ts
+ PASS  src/components/views/KanbanColumn.test.tsx
  PASS  src/lib/noteops.test.ts
+ PASS  src/components/views/KanbanView.test.tsx
+ PASS  src/components/views/BreadcrumbTrail.test.tsx
  PASS  src/components/views/SettingsDocumentModal.test.tsx
  PASS  src/lib/noteui.test.ts
  PASS  src/lib/linetagops.test.ts
- PASS  src/components/notes/CodeNote.test.tsx
- PASS  src/components/views/KanbanColumn.test.tsx
- PASS  src/components/views/BreadcrumbTrail.test.tsx
- PASS  src/components/notes/MermaidDiagram.test.tsx
- PASS  src/components/notes/MarkdownNote.test.tsx
- PASS  src/components/views/AutoView.test.tsx
- PASS  src/components/views/KanbanView.test.tsx
- PASS  src/components/views/DocumentView.test.tsx
- PASS  src/components/notes/MermaidNote.test.tsx
- PASS  src/components/InsertModal.test.tsx
  PASS  src/components/views/SettingsKanbanModal.test.tsx
+ PASS  src/components/l10n-rendering.test.tsx
+ PASS  src/components/notes/MermaidNote.test.tsx
+ PASS  src/components/notes/MarkdownNote.test.tsx
+ PASS  src/components/views/ViewIntegrationSelector.test.tsx
+ PASS  src/components/views/DocumentView.test.tsx
+ PASS  src/components/InsertModal.test.tsx
  PASS  src/components/ErrorBoundary.test.tsx
  PASS  src/components/notes/GenericNote.test.tsx
  PASS  src/components/views/GenericView.test.tsx
 
-Test Suites: 22 passed, 22 total
-Tests:       332 passed, 332 total
-Time:        2.815 s
+Test Suites: 23 passed, 23 total
+Tests:       339 passed, 339 total
+Time:        2.904 s
 
 ┌──────────────────┬───────┬────────┬────────┬─────────┐
 │ Suite            │ Files │ Passed │ Failed │ Time    │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     4 │     88 │      0 │  2.01 s │
-│ webview          │     3 │     30 │      0 │  0.61 s │
-│ notethink-views  │    22 │    332 │      0 │ 2.815 s │
+│ extension        │     5 │    109 │      0 │ 2.028 s │
+│ webview          │     3 │     30 │      0 │ 0.592 s │
+│ notethink-views  │    23 │    339 │      0 │ 2.904 s │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    29 │    450 │      0 │         │
+│ TOTAL            │    31 │    478 │      0 │         │
 └──────────────────┴───────┴────────┴────────┴─────────┘

@@ -1,0 +1,19 @@
+{
+  "displayName": "NoteThink",
+  "description": "Notizen in Markdown, als alles visualisiert",
+  "editor.displayName": "NoteThink",
+  "command.openview": "NoteThink: Ansicht öffnen",
+  "command.setViewAuto": "NoteThink: Automatische Ansicht",
+  "command.setViewDocument": "NoteThink: Dokumentansicht",
+  "command.setViewKanban": "NoteThink: Kanban-Ansicht",
+  "command.toggleLineNumbers": "NoteThink: Zeilennummern umschalten",
+  "command.toggleContextBars": "NoteThink: Kontextleisten umschalten",
+  "command.navigateUp": "NoteThink: Nach oben navigieren",
+  "command.navigateDown": "NoteThink: Nach unten navigieren",
+  "command.drillIn": "NoteThink: In Notiz eintauchen",
+  "command.drillOut": "NoteThink: Eine Ebene nach oben",
+  "command.clearFocus": "NoteThink: Fokus aufheben",
+  "config.title": "NoteThink",
+  "config.trace.description": "Verfolgt die Kommunikation zwischen VS Code und der Erweiterung.",
+  "config.showLineNumbers.description": "Zeilennummern in NoteThink-Ansichten anzeigen."
+}

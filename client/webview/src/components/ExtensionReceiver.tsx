@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Debug from 'debug';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import * as l10n from '@vscode/l10n';
 import type { HashMapOf, Doc } from '../types/general';
 import NoteRenderer from './NoteRenderer';
 import type { TextSelection, NoteDisplayOptions } from '../notethink-views/src/types/NoteProps';
@@ -280,9 +281,9 @@ export default function ExtensionReceiver() {
     const has_docs = state.docs && Object.keys(state.docs).length > 0;
     if (!has_docs && !connected && timed_out) {
         return <div style={{ padding: '24px', color: 'var(--vscode-foreground)', fontFamily: 'var(--vscode-font-family)' }}>
-            <p>Waiting for extension host...</p>
+            <p>{l10n.t('Waiting for extension host...')}</p>
             <p style={{ fontSize: '12px', opacity: 0.7 }}>
-                If this persists, reload the window: Ctrl+Shift+P → &quot;Developer: Reload Window&quot;
+                {l10n.t('If this persists, reload the window: Ctrl+Shift+P → "Developer: Reload Window"')}
             </p>
         </div>;
     }

@@ -41,7 +41,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const disposable = vscode.commands.registerCommand('notethink.openview', async () => {
 		const active_editor = vscode.window.activeTextEditor;
 		if (!active_editor || !active_editor.document.uri.path.endsWith('.md')) {
-			vscode.window.showWarningMessage('NoteThink: open a .md file first');
+			vscode.window.showWarningMessage(vscode.l10n.t('NoteThink: open a .md file first'));
 			return;
 		}
 		// createWebviewPanel avoids the VS Code breadcrumb bar that custom editors show;

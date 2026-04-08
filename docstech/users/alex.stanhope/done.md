@@ -802,3 +802,36 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] remove `@mantine/core`, `@mantine/hooks`, `@mantine/modals`, `@mantine/notifications`, `postcss-preset-mantine` from client/webview/package.json
 
 
+### Add i18n using VS Code l10n mechanism
+
++ goal
+  + internationalise all user-facing strings using the official `@vscode/l10n` API
+  + `package.nls.json` for manifest strings, `vscode.l10n.t()` for extension host, `@vscode/l10n` npm package for webview
+  + sets up the extraction/translation workflow so contributors can add languages later
++ scope (~57 strings)
+  + package.json manifest: 11 command titles, 3 config descriptions, 1 editor displayName
+  + extension host (extension.ts, notethinkEditor.ts): 4 strings (warnings, HTML error handlers)
+  + webview modals (InsertModal, SettingsDocumentModal, SettingsKanbanModal): ~27 strings
+  + webview components (ErrorBoundary, GenericView, ViewTypeSelector, ViewIntegrationSelector, BreadcrumbTrail, ExtensionReceiver): ~25 strings
++ [X] add `package.nls.json` to project root
+  + extract all `%`-interpolated keys for command titles, config descriptions, editor displayName
+  + update package.json to use `%key%` placeholders in contributes.commands and contributes.configuration
++ [X] wire up `vscode.l10n.t()` in extension host code
+  + replace hardcoded strings in extension.ts and notethinkEditor.ts
+  + add `l10n` bundle path to package.json manifest
++ [X] add `@vscode/l10n` as a dependency for the webview bundle
+  + initialise l10n in webview entry point with bundle URI from extension host
+  + pass bundle URI via postMessage or webview HTML data attribute
++ [X] refactor webview components to use `l10n.t()` calls
+  + InsertModal, SettingsDocumentModal, SettingsKanbanModal
+  + ErrorBoundary, GenericView, ViewTypeSelector, ViewIntegrationSelector
+  + BreadcrumbTrail, ExtensionReceiver
+  + strings with interpolation use `l10n.t('text {0}', variable)` syntax
++ [X] add `@vscode/l10n-dev` as a devDependency
+  + add `pnpm run l10n-export` script to extract strings into `bundle.l10n.json`
+  + document workflow for adding a new language (`bundle.l10n.<locale>.json`)
++ [X] update tests to cover l10n initialisation
+  + verify extension host strings resolve correctly
+  + verify webview renders with default (English) bundle
+
+

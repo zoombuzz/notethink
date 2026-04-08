@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as l10n from "@vscode/l10n";
 import styles from "../ViewRenderer.module.scss";
 
 interface SettingsKanbanModalProps {
@@ -110,9 +111,9 @@ export default function SettingsKanbanModal(props: SettingsKanbanModalProps) {
 
     return (
         <dialog ref={dialog_ref} className={styles.modal} onCancel={handleDialogCancel}>
-            <h3>Kanban Settings</h3>
+            <h3>{l10n.t('Kanban Settings')}</h3>
 
-            <p><strong>Column order</strong></p>
+            <p><strong>{l10n.t('Column order')}</strong></p>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {ordered_columns.map((column_name, index) => (
                     <li key={column_name} style={{ display: 'flex', alignItems: 'center', marginBottom: '0.3em' }}>
@@ -120,20 +121,20 @@ export default function SettingsKanbanModal(props: SettingsKanbanModalProps) {
                             type="button"
                             disabled={index === 0}
                             onClick={() => handleMoveUp(index)}
-                            aria-label={`Move ${column_name} up`}
+                            aria-label={l10n.t('Move {0} up', column_name)}
                         >&#9650;</button>
                         <button
                             type="button"
                             disabled={index === ordered_columns.length - 1}
                             onClick={() => handleMoveDown(index)}
-                            aria-label={`Move ${column_name} down`}
+                            aria-label={l10n.t('Move {0} down', column_name)}
                             style={{ marginRight: '0.5em' }}
                         >&#9660;</button>
                         <span>{column_name}</span>
                     </li>
                 ))}
             </ul>
-            <button type="button" onClick={handleResetOrder}>Reset order</button>
+            <button type="button" onClick={handleResetOrder}>{l10n.t('Reset order')}</button>
 
             <p>
                 <label>
@@ -142,7 +143,7 @@ export default function SettingsKanbanModal(props: SettingsKanbanModalProps) {
                         checked={show_linetags}
                         onChange={(e) => setShowLinetags(e.target.checked)}
                     />
-                    {' '}Show linetags in headlines
+                    {' '}{l10n.t('Show linetags in headlines')}
                 </label>
             </p>
 
@@ -153,7 +154,7 @@ export default function SettingsKanbanModal(props: SettingsKanbanModalProps) {
                         checked={scroll_into_view}
                         onChange={(e) => setScrollIntoView(e.target.checked)}
                     />
-                    {' '}Scroll note into view
+                    {' '}{l10n.t('Scroll note into view')}
                 </label>
             </p>
 
@@ -164,7 +165,7 @@ export default function SettingsKanbanModal(props: SettingsKanbanModalProps) {
                         checked={auto_expand}
                         onChange={(e) => setAutoExpand(e.target.checked)}
                     />
-                    {' '}Auto-expand focused note
+                    {' '}{l10n.t('Auto-expand focused note')}
                 </label>
             </p>
 
@@ -175,13 +176,13 @@ export default function SettingsKanbanModal(props: SettingsKanbanModalProps) {
                         checked={line_numbers}
                         onChange={(e) => setLineNumbers(e.target.checked)}
                     />
-                    {' '}Show line numbers
+                    {' '}{l10n.t('Show line numbers')}
                 </label>
             </p>
 
             <div className={styles.buttongroup}>
-                <button type="button" onClick={handleSave}>Save</button>
-                <button type="button" onClick={handleCancel} style={{ marginLeft: '0.5em' }}>Cancel</button>
+                <button type="button" onClick={handleSave}>{l10n.t('Save')}</button>
+                <button type="button" onClick={handleCancel} style={{ marginLeft: '0.5em' }}>{l10n.t('Cancel')}</button>
             </div>
 
             <p style={{ marginTop: '1.5em', opacity: 0.5, fontSize: '0.85em' }} data-testid="version-label">

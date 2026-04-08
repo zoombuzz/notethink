@@ -1,4 +1,5 @@
 import { MouseEvent, useMemo, Fragment } from "react";
+import * as l10n from "@vscode/l10n";
 import type { NoteProps } from "../../types/NoteProps";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import styles from "./BreadcrumbTrail.module.scss";
@@ -82,7 +83,7 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps) {
     const has_notes = memoized_notes.length > 0;
 
     return (
-        <nav className={styles.breadcrumbTrail} role="navigation" aria-label="Breadcrumb">
+        <nav className={styles.breadcrumbTrail} role="navigation" aria-label={l10n.t('Breadcrumb')}>
             {path_segments.map((segment, index) => {
                 return <Fragment key={`path-${index}`}>
                     {index > 0 && <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>}

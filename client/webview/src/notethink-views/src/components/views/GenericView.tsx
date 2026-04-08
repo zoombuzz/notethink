@@ -1,5 +1,6 @@
-import React, { lazy, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Debug from "debug";
+import React, { lazy, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as l10n from "@vscode/l10n";
 import type { ViewProps, ViewApi } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions, NoteHandlers, ClickPositionInfo } from "../../types/NoteProps";
 import {
@@ -419,8 +420,8 @@ export default function GenericView(props: ViewProps) {
                     opacity: 0.6,
                     marginLeft: '0.3em',
                 }}
-                title="Insert"
-                aria-label="Insert"
+                title={l10n.t('Insert')}
+                aria-label={l10n.t('Insert')}
             >
                 &#43;
             </button>
@@ -437,8 +438,8 @@ export default function GenericView(props: ViewProps) {
                     opacity: 0.6,
                     marginLeft: '0.3em',
                 }}
-                title="Settings"
-                aria-label="Settings"
+                title={l10n.t('Settings')}
+                aria-label={l10n.t('Settings')}
             >
                 &#9881;
             </button>

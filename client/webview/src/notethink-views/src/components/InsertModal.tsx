@@ -1,5 +1,6 @@
 import Debug from "debug";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as l10n from "@vscode/l10n";
 import inserts from "../inserts/en";
 import type { Insert } from "../inserts/types";
 import styles from "./ViewRenderer.module.scss";
@@ -17,12 +18,14 @@ interface InsertModalProps {
 const INSERT_LIST = Object.values(inserts);
 const GROUPS = Array.from(new Set(INSERT_LIST.map(i => i.group || 'Elements')));
 
-const POSITION_LABELS: Record<InsertPoint, string> = {
-    currentCaret: 'At cursor',
-    startOfLine: 'Start of line',
-    endOfLine: 'End of line',
-    endOfNote: 'End of document',
-};
+function getPositionLabels(): Record<InsertPoint, string> {
+    return {
+        currentCaret: l10n.t('At cursor'),
+        startOfLine: l10n.t('Start of line'),
+        endOfLine: l10n.t('End of line'),
+        endOfNote: l10n.t('End of document'),
+    };
+}
 
 export default function InsertModal(props: InsertModalProps) {
     const dialog_ref = useRef<HTMLDialogElement>(null);
@@ -147,12 +150,12 @@ export default function InsertModal(props: InsertModalProps) {
 
     return (
         <dialog ref={dialog_ref} className={`${styles.modal} ${styles.insertModal}`} onCancel={handleDialogCancel}>
-            <h3>Insert</h3>
+            <h3>{l10n.t('Insert')}</h3>
 
             <input
                 ref={search_ref}
                 type="text"
-                placeholder="Search templates..."
+                placeholder={l10n.t('Search templates...')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -178,7 +181,7 @@ export default function InsertModal(props: InsertModalProps) {
                     </div>
                 ))}
                 {filtered.length === 0 && (
-                    <div className={styles.insertEmpty}>No templates match your search</div>
+                    <div className={styles.insertEmpty}>{l10n.t('No templates match your search')}</div>
                 )}
             </div>
 
@@ -192,19 +195,19 @@ export default function InsertModal(props: InsertModalProps) {
                                     checked={scope === 'withExample'}
                                     onChange={(e) => setScope(e.target.checked ? 'withExample' : 'simple')}
                                 />
-                                {' '}Include example content
+                                {' '}{l10n.t('Include example content')}
                             </label>
                         </p>
                     )}
                     <p>
                         <label>
-                            Position:{' '}
+                            {l10n.t('Position:')}{' '}
                             <select
                                 value={effective_position}
                                 onChange={(e) => setPosition(e.target.value as InsertPoint)}
                             >
-                                {(Object.keys(POSITION_LABELS) as InsertPoint[]).map(key => (
-                                    <option key={key} value={key}>{POSITION_LABELS[key]}</option>
+                                {(Object.keys(getPositionLabels()) as InsertPoint[]).map(key => (
+                                    <option key={key} value={key}>{getPositionLabels()[key]}</option>
                                 ))}
                             </select>
                         </label>
@@ -213,8 +216,8 @@ export default function InsertModal(props: InsertModalProps) {
             )}
 
             <div className={styles.buttongroup}>
-                <button type="button" onClick={handleConfirm} disabled={!selected_insert}>Insert</button>
-                <button type="button" onClick={handleCancel} style={{ marginLeft: '0.5em' }}>Cancel</button>
+                <button type="button" onClick={handleConfirm} disabled={!selected_insert}>{l10n.t('Insert')}</button>
+                <button type="button" onClick={handleCancel} style={{ marginLeft: '0.5em' }}>{l10n.t('Cancel')}</button>
             </div>
         </dialog>
     );

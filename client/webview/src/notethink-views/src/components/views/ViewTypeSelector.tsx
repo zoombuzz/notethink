@@ -1,4 +1,5 @@
 import type { ChangeEvent } from "react";
+import * as l10n from "@vscode/l10n";
 import type { ViewProps } from "../../types/ViewProps";
 import { SELECTABLE_VIEWTYPES } from "./GenericView";
 
@@ -27,7 +28,7 @@ export default function ViewTypeSelector(props: ViewTypeSelectorProps) {
             data-testid="view-type-selector"
             value={props.currentType}
             onChange={handleChange}
-            aria-label="View type"
+            aria-label={l10n.t('View type')}
             style={{
                 background: 'var(--vscode-dropdown-background)',
                 border: '1px solid var(--vscode-dropdown-border)',
@@ -41,7 +42,7 @@ export default function ViewTypeSelector(props: ViewTypeSelectorProps) {
             {SELECTABLE_VIEWTYPES.map((vt) => (
                 <option key={vt} value={vt}>
                     {vt === 'auto' && props.autoResolvedType
-                        ? `Auto (${capitalize(props.autoResolvedType)})`
+                        ? l10n.t('Auto ({0})', capitalize(props.autoResolvedType))
                         : capitalize(vt)}
                 </option>
             ))}

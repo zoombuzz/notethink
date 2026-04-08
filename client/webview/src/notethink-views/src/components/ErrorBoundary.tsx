@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
+import * as l10n from "@vscode/l10n";
 
 interface ErrorBoundaryProps {
     children: ReactNode;
@@ -47,7 +48,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
                     }}
                 >
                     <p style={{ margin: "0 0 8px 0", fontWeight: 600 }}>
-                        Something went wrong rendering this view
+                        {l10n.t('Something went wrong rendering this view')}
                     </p>
                     <p
                         style={{
@@ -63,7 +64,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
                             color: "var(--vscode-descriptionForeground, #aaa)",
                         }}
                     >
-                        <summary style={{ cursor: "pointer" }}>Stack trace</summary>
+                        <summary style={{ cursor: "pointer" }}>{l10n.t('Stack trace')}</summary>
                         <pre
                             style={{
                                 whiteSpace: "pre-wrap",
@@ -93,7 +94,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
                             fontSize: "var(--vscode-font-size, 13px)",
                         }}
                     >
-                        Try Again
+                        {l10n.t('Try Again')}
                     </button>
                 </div>
             );

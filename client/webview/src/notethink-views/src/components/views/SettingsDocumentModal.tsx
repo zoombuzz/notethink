@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as l10n from "@vscode/l10n";
 import styles from "../ViewRenderer.module.scss";
 
 declare const NOTETHINK_VERSION: string | undefined;
@@ -71,7 +72,7 @@ export default function SettingsDocumentModal(props: SettingsDocumentModalProps)
 
     return (
         <dialog ref={dialog_ref} className={styles.modal} onCancel={handleDialogCancel}>
-            <h3>Document Settings</h3>
+            <h3>{l10n.t('Document Settings')}</h3>
 
             <p>
                 <label>
@@ -80,7 +81,7 @@ export default function SettingsDocumentModal(props: SettingsDocumentModalProps)
                         checked={show_linetags}
                         onChange={(e) => setShowLinetags(e.target.checked)}
                     />
-                    {' '}Show linetags in headlines
+                    {' '}{l10n.t('Show linetags in headlines')}
                 </label>
             </p>
 
@@ -91,7 +92,7 @@ export default function SettingsDocumentModal(props: SettingsDocumentModalProps)
                         checked={scroll_into_view}
                         onChange={(e) => setScrollIntoView(e.target.checked)}
                     />
-                    {' '}Scroll note into view
+                    {' '}{l10n.t('Scroll note into view')}
                 </label>
             </p>
 
@@ -102,7 +103,7 @@ export default function SettingsDocumentModal(props: SettingsDocumentModalProps)
                         checked={auto_expand}
                         onChange={(e) => setAutoExpand(e.target.checked)}
                     />
-                    {' '}Auto-expand focused note
+                    {' '}{l10n.t('Auto-expand focused note')}
                 </label>
             </p>
 
@@ -113,13 +114,13 @@ export default function SettingsDocumentModal(props: SettingsDocumentModalProps)
                         checked={line_numbers}
                         onChange={(e) => setLineNumbers(e.target.checked)}
                     />
-                    {' '}Show line numbers
+                    {' '}{l10n.t('Show line numbers')}
                 </label>
             </p>
 
             <div className={styles.buttongroup}>
-                <button type="button" onClick={handleSave}>Save</button>
-                <button type="button" onClick={handleCancel} style={{ marginLeft: '0.5em' }}>Cancel</button>
+                <button type="button" onClick={handleSave}>{l10n.t('Save')}</button>
+                <button type="button" onClick={handleCancel} style={{ marginLeft: '0.5em' }}>{l10n.t('Cancel')}</button>
             </div>
 
             <p style={{ marginTop: '1.5em', opacity: 0.5, fontSize: '0.85em' }} data-testid="version-label">

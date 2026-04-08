@@ -1,10 +1,10 @@
 {
   "name": "notethink",
-  "displayName": "NoteThink",
+  "displayName": "%displayName%",
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
-  "description": "Notes in markdown, visualised as anything",
-  "version": "0.1.48",
+  "description": "%description%",
+  "version": "0.1.49",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
@@ -33,12 +33,13 @@
     "onWebviewPanel:notethink",
     "onStartupFinished"
   ],
+  "l10n": "./l10n",
   "browser": "./client/extension/dist/extension",
   "contributes": {
     "customEditors": [
       {
         "viewType": "zoombuzz.notethink",
-        "displayName": "NoteThink",
+        "displayName": "%editor.displayName%",
         "selector": [
           {
             "filenamePattern": "*.md"
@@ -50,50 +51,50 @@
     "commands": [
       {
         "command": "notethink.openview",
-        "title": "NoteThink: Open View"
+        "title": "%command.openview%"
       },
       {
         "command": "notethink.setViewAuto",
-        "title": "NoteThink: Auto View",
+        "title": "%command.setViewAuto%",
         "icon": "$(eye)"
       },
       {
         "command": "notethink.setViewDocument",
-        "title": "NoteThink: Document View",
+        "title": "%command.setViewDocument%",
         "icon": "$(file-text)"
       },
       {
         "command": "notethink.setViewKanban",
-        "title": "NoteThink: Kanban View",
+        "title": "%command.setViewKanban%",
         "icon": "$(project)"
       },
       {
         "command": "notethink.toggleLineNumbers",
-        "title": "NoteThink: Toggle Line Numbers"
+        "title": "%command.toggleLineNumbers%"
       },
       {
         "command": "notethink.toggleContextBars",
-        "title": "NoteThink: Toggle Context Bars"
+        "title": "%command.toggleContextBars%"
       },
       {
         "command": "notethink.navigateUp",
-        "title": "NoteThink: Navigate Up"
+        "title": "%command.navigateUp%"
       },
       {
         "command": "notethink.navigateDown",
-        "title": "NoteThink: Navigate Down"
+        "title": "%command.navigateDown%"
       },
       {
         "command": "notethink.drillIn",
-        "title": "NoteThink: Drill Into Note"
+        "title": "%command.drillIn%"
       },
       {
         "command": "notethink.drillOut",
-        "title": "NoteThink: Navigate Back Up"
+        "title": "%command.drillOut%"
       },
       {
         "command": "notethink.clearFocus",
-        "title": "NoteThink: Clear Focus"
+        "title": "%command.clearFocus%"
       }
     ],
     "menus": {
@@ -156,7 +157,7 @@
       {
         "order": 22,
         "id": "notethink-extension",
-        "title": "notethink-extension",
+        "title": "%config.title%",
         "properties": {
           "notethink-extension.trace.server": {
             "type": "string",
@@ -167,13 +168,13 @@
               "verbose"
             ],
             "default": "verbose",
-            "description": "Traces the communication between VS Code and the extension."
+            "description": "%config.trace.description%"
           },
           "notethink.showLineNumbers": {
             "type": "boolean",
             "scope": "resource",
             "default": false,
-            "description": "Show line numbers in NoteThink views."
+            "description": "%config.showLineNumbers.description%"
           }
         }
       }
@@ -186,6 +187,7 @@
     "test-playwright": "pnpm run build && npx playwright test",
     "lint": "eslint . && tsc --noEmit -p client/extension && tsc --noEmit -p client/webview && tsc --noEmit -p client/webview/src/notethink-views",
     "build-and-rollup": "pnpm run build && cd client/webview/src/notethink-views && pnpm run rollup",
+    "l10n-export": "npx @vscode/l10n-dev export --outDir ./l10n ./client/extension/src ./client/webview/src",
     "check-updates": "npx npm-check-updates -u",
     "vscode:prepublish": "pnpm run package",
     "build": "webpack",
@@ -217,6 +219,7 @@
     "@types/mocha": "^10.0.10",
     "@types/vscode": "^1.110.0",
     "@types/webpack-env": "^1.18.8",
+    "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-web": "^0.0.80",
     "@vscode/vsce": "^3.7.1",
     "assert": "^2.1.0",

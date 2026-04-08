@@ -15,6 +15,7 @@
   "license": "Apache-2.0",
   "description": "Note view framework and React component library",
   "dependencies": {
+    "@vscode/l10n": "^0.0.18",
     "debug": "^4.4.3",
     "hast-util-sanitize": "^5.0.2",
     "hast-util-to-jsx-runtime": "^2.3.6",

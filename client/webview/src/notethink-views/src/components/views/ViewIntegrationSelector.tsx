@@ -1,12 +1,15 @@
 import type { ChangeEvent } from "react";
+import * as l10n from "@vscode/l10n";
 
 export const INTEGRATION_MODES = ['current_file', 'directory'] as const;
 export type IntegrationMode = typeof INTEGRATION_MODES[number];
 
-const MODE_LABELS: Record<IntegrationMode, string> = {
-    current_file: 'Current file',
-    directory: 'Directory',
-};
+function getModeLabels(): Record<IntegrationMode, string> {
+    return {
+        current_file: l10n.t('Current file'),
+        directory: l10n.t('Directory'),
+    };
+}
 
 interface ViewIntegrationSelectorProps {
     currentMode: IntegrationMode;
@@ -23,7 +26,7 @@ export default function ViewIntegrationSelector(props: ViewIntegrationSelectorPr
             data-testid="view-integration-selector"
             value={props.currentMode}
             onChange={handleChange}
-            aria-label="View integration"
+            aria-label={l10n.t('View integration')}
             style={{
                 background: 'var(--vscode-dropdown-background)',
                 border: '1px solid var(--vscode-dropdown-border)',
@@ -37,7 +40,7 @@ export default function ViewIntegrationSelector(props: ViewIntegrationSelectorPr
         >
             {INTEGRATION_MODES.map((mode) => (
                 <option key={mode} value={mode}>
-                    {MODE_LABELS[mode]}
+                    {getModeLabels()[mode]}
                 </option>
             ))}
         </select>

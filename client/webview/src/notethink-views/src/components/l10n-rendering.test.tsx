@@ -93,6 +93,29 @@ describe('l10n rendering with German bundle', () => {
     });
 });
 
+describe('l10n rendering with Spanish bundle', () => {
+    beforeEach(() => {
+        l10n.config({ contents: readBundle('es') });
+    });
+
+    it('renders Spanish heading in SettingsDocumentModal', () => {
+        render(<SettingsDocumentModal {...DOC_MODAL_PROPS} />);
+        expect(screen.getByText('Configuración del documento')).toBeInTheDocument();
+    });
+
+    it('renders Spanish button labels', () => {
+        render(<SettingsDocumentModal {...DOC_MODAL_PROPS} />);
+        expect(screen.getByText('Guardar')).toBeInTheDocument();
+        expect(screen.getByText('Cancelar')).toBeInTheDocument();
+    });
+
+    it('renders interpolated Spanish aria-labels for column reorder buttons', () => {
+        render(<SettingsKanbanModal {...KANBAN_MODAL_PROPS} />);
+        expect(screen.getByLabelText('Mover backlog hacia arriba')).toBeInTheDocument();
+        expect(screen.getByLabelText('Mover doing hacia abajo')).toBeInTheDocument();
+    });
+});
+
 describe('l10n reset to English', () => {
     it('renders English after resetting from French', () => {
         l10n.config({ contents: readBundle('fr') });

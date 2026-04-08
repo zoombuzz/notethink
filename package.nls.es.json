@@ -1,0 +1,19 @@
+{
+  "displayName": "NoteThink",
+  "description": "Notas en markdown, visualizadas de cualquier forma",
+  "editor.displayName": "NoteThink",
+  "command.openview": "NoteThink: Abrir vista",
+  "command.setViewAuto": "NoteThink: Vista automática",
+  "command.setViewDocument": "NoteThink: Vista de documento",
+  "command.setViewKanban": "NoteThink: Vista Kanban",
+  "command.toggleLineNumbers": "NoteThink: Alternar números de línea",
+  "command.toggleContextBars": "NoteThink: Alternar barras de contexto",
+  "command.navigateUp": "NoteThink: Navegar hacia arriba",
+  "command.navigateDown": "NoteThink: Navegar hacia abajo",
+  "command.drillIn": "NoteThink: Entrar en la nota",
+  "command.drillOut": "NoteThink: Subir un nivel",
+  "command.clearFocus": "NoteThink: Borrar selección",
+  "config.title": "NoteThink",
+  "config.trace.description": "Rastrea la comunicación entre VS Code y la extensión.",
+  "config.showLineNumbers.description": "Mostrar números de línea en las vistas de NoteThink."
+}

@@ -3,7 +3,7 @@ import path from 'path';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const BUNDLE_DIR = path.join(PROJECT_ROOT, 'l10n');
-const LOCALES = ['fr', 'it', 'de'];
+const LOCALES = ['fr', 'it', 'de', 'es'];
 
 function readJson(file_path: string): Record<string, string> {
     return JSON.parse(fs.readFileSync(file_path, 'utf-8'));

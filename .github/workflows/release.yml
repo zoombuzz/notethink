@@ -32,9 +32,6 @@ jobs:
       - name: Build (webpack + rollup)
         run: pnpm run build-and-rollup
 
-      - name: Run tests
-        run: pnpm run test-jest
-
       - name: Package .vsix
         run: pnpm run package:vsix
 

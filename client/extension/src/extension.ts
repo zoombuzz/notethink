@@ -16,8 +16,16 @@ export function activate(context: vscode.ExtensionContext) {
 			// extract document path from persisted webview state
 			const saved = state as { docs?: Record<string, { path?: string }> } | undefined;
 			const first_doc = saved?.docs ? Object.values(saved.docs)[0] : undefined;
-			const doc_path = first_doc?.path;
-			if (!doc_path) { return; }
+			let doc_path = first_doc?.path;
+			// fall back to current active .md editor if saved state has no doc
+			// (happens when VS Code restarts before the first doc was sent to the webview)
+			if (!doc_path) {
+				const active = vscode.window.activeTextEditor;
+				if (active?.document.uri.path.endsWith('.md')) {
+					doc_path = active.document.uri.path;
+				}
+			}
+			if (!doc_path) { panel.dispose(); return; }
 			try {
 				const uri = vscode.Uri.file(doc_path);
 				const document = await vscode.workspace.openTextDocument(uri);

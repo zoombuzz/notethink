@@ -244,8 +244,11 @@ export default function ExtensionReceiver() {
         }
     }, []);
 
-    // persist state so the webview can restore instantly if VS Code recreates it
+    // persist state so the webview can restore instantly if VS Code recreates it;
+    // skip empty docs to prevent blank-panel-on-restore when VS Code restarts
+    // before the extension sends the first document
     useEffect(() => {
+        if (!state.docs || Object.keys(state.docs).length === 0) { return; }
         vscode.setState({ docs: state.docs, viewStates });
     }, [state.docs, viewStates]);
 

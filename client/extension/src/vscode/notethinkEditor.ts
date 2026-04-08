@@ -137,10 +137,14 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		}
 
 		// load initial document and send selection for styled first render
-		active_doc = await buildDoc(initialDocument);
 		active_path = initialDocument.uri.path;
-		sendDoc(active_doc);
-		sendCurrentSelection();
+		try {
+			active_doc = await buildDoc(initialDocument);
+			sendDoc(active_doc);
+			sendCurrentSelection();
+		} catch (err) {
+			writeToErrorLog('failed to build initial document', initialDocument.uri.path, err);
+		}
 		sendGlobalSettings();
 
 		const filter_criterion = '**/*.md';

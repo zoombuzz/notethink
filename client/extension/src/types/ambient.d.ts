@@ -26,7 +26,7 @@ declare module 'assert' {
     export = assert;
 }
 
-// injected by webpack DefinePlugin — true for dev builds, false for production
+// injected by webpack DefinePlugin - true for dev builds, false for production
 declare const NOTETHINK_DEV: boolean;
 
 // `global` object available at runtime via webpack's node polyfills

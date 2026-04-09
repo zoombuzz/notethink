@@ -2,7 +2,7 @@
 
 A VS Code extension that renders markdown files as interactive visualizations.
 
-> **Status:** Preview / Beta — this is an early release. Expect rough edges.
+> **Status:** Preview / Beta - this is an early release. Expect rough edges.
 
 ## Features
 
@@ -58,7 +58,7 @@ pnpm install
    - Runs `pnpm run watch` (webpack in watch mode) as a pre-launch task
    - Opens a new Extension Development Host window
 3. In the dev host, open any `.md` file and right-click → "Open With..." → "NoteThink"
-4. Edit the markdown in the standard editor — the NoteThink view updates live (250ms debounce)
+4. Edit the markdown in the standard editor - the NoteThink view updates live (250ms debounce)
 5. Code changes in `client/extension/src/` or `client/webview/src/` are recompiled automatically by webpack watch. Reload the dev host window (`Ctrl+R`) to pick them up.
 
 ### Inspecting the webview
@@ -168,13 +168,13 @@ notethink/
 **Data flow:**
 1. Extension finds all `*.md` files, parses each to MDAST, computes SHA-256 hash
 2. Docs sent to webview via `postMessage`
-3. `ExtensionReceiver` compares hashes — unchanged docs are skipped
+3. `ExtensionReceiver` compares hashes - unchanged docs are skipped
 4. `NoteRenderer` converts MDAST to NoteProps hierarchy via `convertMdastToNoteHierarchy`
 5. `DocumentView` and `GenericNote` (both `React.memo`'d) render the note tree
 
 ## Known Limitations
 
-- **Read-only**: No editing support yet — NoteThink is a viewer, not an editor
+- **Read-only**: No editing support yet - NoteThink is a viewer, not an editor
 - **Single file view**: No multi-document navigation
 - **No icon**: Extension icon is a placeholder until a proper design is provided
 

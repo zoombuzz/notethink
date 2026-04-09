@@ -129,7 +129,7 @@ suite('Web Extension Test Suite', () => {
 			for (const cmd of notethinkCommands) {
 				assert.ok(
 					expectedCommands.includes(cmd),
-					`Unexpected command "${cmd}" found — update the test if this is intentional`
+					`Unexpected command "${cmd}" found - update the test if this is intentional`
 				);
 			}
 		});

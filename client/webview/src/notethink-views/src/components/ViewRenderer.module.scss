@@ -167,7 +167,7 @@ body.disableAddressBarHidingOnScroll {
     }
   }
 
-  // buttons — default to secondary style
+  // buttons - default to secondary style
   button {
     background: var(--vscode-button-secondaryBackground, #3a3d41);
     color: var(--vscode-button-secondaryForeground, #fff);
@@ -188,7 +188,7 @@ body.disableAddressBarHidingOnScroll {
     }
   }
 
-  // checkboxes — shared style with view checkboxes
+  // checkboxes - shared style with view checkboxes
   input[type="checkbox"] {
     @include themed-checkbox;
   }
@@ -390,7 +390,7 @@ body.disableAddressBarHidingOnScroll {
 
 }
 
-// standalone fullheight class — used on views and their wrappers (e.g. AutoView);
+// standalone fullheight class - used on views and their wrappers (e.g. AutoView);
 // extracted from .view nesting to ensure css-loader exports the class name correctly
 .fullheight {
   height: 100%;
@@ -642,7 +642,7 @@ body.disableAddressBarHidingOnScroll {
     > li {
       // explicitly set text-indent (to default) so that it doesn't inherit checkbox style for non-checkbox li tags
       text-indent: 0;
-      // restore bullet explicitly — framework CSS resets may remove it
+      // restore bullet explicitly - framework CSS resets may remove it
       list-style-type: disc;
 
       // hide discs on todo items (that contain checkboxes), either in note or nested note

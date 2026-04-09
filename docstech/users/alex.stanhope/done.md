@@ -3,13 +3,13 @@
 
 ### Edge-case tests for pre-release validation
 
-+ [X] empty markdown file — already covered (parseops + hierarchy tests)
-+ [X] very large markdown file (1000+ lines) — parse benchmark (150 sections × ~10 lines, under 200ms) and hierarchy benchmark (1000 headings, under 200ms)
-+ [X] markdown with frontmatter — already covered (YAML + TOML in parseops); added hierarchy passthrough tests
-+ [X] markdown with GFM tables, strikethrough — already covered in parseops; added hierarchy table passthrough tests
-+ [X] markdown with GFM footnotes — 3 new tests (single, multiple, multi-line content) in parseops; hierarchy footnoteDefinition passthrough test
-+ [X] file with unicode characters — 8 new tests in parseops (emoji, CJK, accented, combining chars, RTL, code blocks, tables, math symbols); 3 new hierarchy tests (emoji/CJK headline_raw, unicode body_raw)
-+ [X] mixed content document — full-feature test (frontmatter + GFM + unicode + code + footnotes in one document)
++ [X] empty markdown file - already covered (parseops + hierarchy tests)
++ [X] very large markdown file (1000+ lines) - parse benchmark (150 sections × ~10 lines, under 200ms) and hierarchy benchmark (1000 headings, under 200ms)
++ [X] markdown with frontmatter - already covered (YAML + TOML in parseops); added hierarchy passthrough tests
++ [X] markdown with GFM tables, strikethrough - already covered in parseops; added hierarchy table passthrough tests
++ [X] markdown with GFM footnotes - 3 new tests (single, multiple, multi-line content) in parseops; hierarchy footnoteDefinition passthrough test
++ [X] file with unicode characters - 8 new tests in parseops (emoji, CJK, accented, combining chars, RTL, code blocks, tables, math symbols); 3 new hierarchy tests (emoji/CJK headline_raw, unicode body_raw)
++ [X] mixed content document - full-feature test (frontmatter + GFM + unicode + code + footnotes in one document)
 + tests 450 (was 427), 34 playwright
 
 
@@ -152,7 +152,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + MarkdownNote.tsx: switched from `first_child_only` to `strip_linetags`, preserving inline formatting (bold, links) before the linetag
   + the linetag text is hidden from the headline; GenericNoteAttributes renders it as badges
 + [X] uncomment and wire notes_within_parent_context rendering in DocumentView
-  + not needed — child notes already render correctly via recursive `MarkdownNote.children_body` → `GenericNote` rendering
+  + not needed - child notes already render correctly via recursive `MarkdownNote.children_body` → `GenericNote` rendering
   + notegit has the same line commented out; this is not a bug
 
 
@@ -161,7 +161,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] derive column definitions from notes' status linetag values
   + KanbanView columns replaced from useState with useMemo deriving from notes_within_parent_context
   + scans notes for unique status linetag values, always includes 'untagged' as first pseudo-column
-  + columns sorted alphabetically; dynamic — appear/disappear as notes change
+  + columns sorted alphabetically; dynamic - appear/disappear as notes change
 
 
 ### View menu and toolbar
@@ -194,10 +194,10 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 
 + [X] implement keyboard handler in GenericView
   + navigation callback registered via onNavigationCommand ref on ViewApi
-  + Escape: clearFocus — calls getClearHandler to move caret past focused note
+  + Escape: clearFocus - calls getClearHandler to move caret past focused note
   + Up/Down: navigate between sibling notes via setCaretPosition
-  + Enter: drillIn — calls setParentContextSeq on focused note with children
-  + Backspace: drillOut — navigates to grandparent or root
+  + Enter: drillIn - calls setParentContextSeq on focused note with children
+  + Backspace: drillOut - navigates to grandparent or root
 + [X] register VS Code keybindings for NoteThink-specific commands
   + keybindings declared in package.json with `when: "activeCustomEditorId == 'zoombuzz.notethink'"`
   + escape, up, down, enter, backspace bound to navigation commands
@@ -306,7 +306,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] derive column definitions from notes' status linetag values
   + KanbanView columns replaced from useState with useMemo deriving from notes_within_parent_context
   + scans notes for unique status linetag values, always includes 'untagged' as first pseudo-column
-  + columns sorted alphabetically; dynamic — appear/disappear as notes change
+  + columns sorted alphabetically; dynamic - appear/disappear as notes change
 + [X] allow column customisation via kanban settings modal
   + [X] create SettingsKanbanModal component (notethink-views/src/components/views/)
     + native dialog with column reorder list, scroll_note_into_view toggle, show_linetags_in_headlines toggle
@@ -508,8 +508,8 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 ### Test engines.vscode lower bound against vscode-web and VS Code desktop
 
 + `engines.vscode` was lowered from `^1.109.0` to `^1.91.1` for dulcet compatibility
-  + `vscode-web` npm package tops out at 1.91.1 — NoteThink must be compatible with it
-  + VS Code desktop is currently ~1.96+ — the `^1.91.1` range covers both
+  + `vscode-web` npm package tops out at 1.91.1 - NoteThink must be compatible with it
+  + VS Code desktop is currently ~1.96+ - the `^1.91.1` range covers both
 + risk: NoteThink may use VS Code APIs introduced after 1.91
   + quick audit found only standard APIs (commands, window, workspace, Uri)
   + `window.tabGroups` (introduced 1.77) used only in test code
@@ -523,7 +523,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + verify: all existing functionality works (views, editing, drag-drop, theme sync)
 + [X] audit VS Code API usage against 1.91 API surface
   + all APIs available since 1.40 or earlier, except `createOutputChannel({ log: true })` (1.74)
-  + no APIs introduced after 1.91 — fully compatible
+  + no APIs introduced after 1.91 - fully compatible
 + if issues found, raise `engines.vscode` to the minimum version that works for both hosts
 
 
@@ -545,7 +545,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 
 + goal
   + when a clipped story has task lists, show the first incomplete task rather than the top
-  + headline and linetags always stay visible — only the body scrolls
+  + headline and linetags always stay visible - only the body scrolls
   + 1-2 completed tasks visible above as context (if they fit)
   + "Show more" (top or bottom) expands the full note
 + phase 1: task-aware body scroll
@@ -594,7 +594,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 ### Fix boundary flicker: typing at end of note causes view to flash blank
 
 + problem
-  + typing at the end of the last line of a note (just before the invisible newline) causes the NoteThink view to flicker wildly — goes blank, then re-renders
+  + typing at the end of the last line of a note (just before the invisible newline) causes the NoteThink view to flicker wildly - goes blank, then re-renders
   + root cause: race between two independently debounced messages from the extension to the webview
     + `selectionChanged` fires after 120ms with the caret position from the *post-edit* text
     + `update` (full MDAST re-parse) fires after 250ms with the new document
@@ -605,7 +605,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
     + 130ms later: new MDAST arrives → correct focus restored → second full re-render
     + user sees two full re-renders in quick succession = flicker
   + contributing factors making re-renders expensive
-    + `MarkdownNote` is not wrapped in `React.memo` — every parent re-render cascades to all children
+    + `MarkdownNote` is not wrapped in `React.memo` - every parent re-render cascades to all children
     + `convertMdastToNoteHierarchy` creates entirely new NoteProps objects each time, so shallow equality always fails
     + `DocumentView` uses `key={index}` instead of stable note identity
 + phase 1: fix the timing mismatch (eliminates the flicker)
@@ -620,11 +620,11 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + phase 3: structural improvements
   + [X] coalesced: change handler sends selection immediately after doc update (no separate stale-selection window)
   + [X] `useMemo` around `convertMdastToNoteHierarchy` in `NoteView` keyed on `doc.hash_sha256`
-  + [ ] consider incremental MDAST updates instead of full re-parse (deferred — requires major architectural change)
+  + [ ] consider incremental MDAST updates instead of full re-parse (deferred - requires major architectural change)
 + verification
-  + place caret at the end of the last line of a note, type rapidly — view should update smoothly without blanking
-  + place caret at the end of a mid-document note, type — same smooth behaviour
-  + move caret between notes — focus highlighting should still work correctly
+  + place caret at the end of the last line of a note, type rapidly - view should update smoothly without blanking
+  + place caret at the end of a mid-document note, type - same smooth behaviour
+  + move caret between notes - focus highlighting should still work correctly
   + abridged notes should still expand/collapse correctly
   + all existing tests still pass (404 tests)
 
@@ -638,7 +638,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + [X] add `findBodyItemElement()` utility in `noteops.ts` (6 unit tests)
   + [X] extract shared `renderBodyItems` from MarkdownNote into `renderops.tsx`; used by both MarkdownNote and GenericNoteWrapper
 + phase 1: sub-note scroll in DocumentView and KanbanView
-  + [X] `useScrollToCaret` hook in `viewhooks.ts` — shared by DocumentView and KanbanView
+  + [X] `useScrollToCaret` hook in `viewhooks.ts` - shared by DocumentView and KanbanView
   + [X] removed broken `noteIsVisible` guard (view element is not a scroll container)
   + [X] fixed `GenericNoteWrapper` not setting DOM `id` or propagating `display_options` to child notes
   + [X] headline caret falls back to note-level scroll
@@ -647,19 +647,19 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + consider debouncing sub-note scroll separately from note-level scroll if rapid cursor movement causes jitter
 + phase 3: virtual caret indicator
   + [X] `.caretTarget` CSS class with `::after` overlay and `@keyframes caretPulse` animation (fade pulse using `--mantine-primary-color-2`)
-  + [X] `useCaretIndicator` hook in `viewhooks.ts` — shared by DocumentView and KanbanView
+  + [X] `useCaretIndicator` hook in `viewhooks.ts` - shared by DocumentView and KanbanView
     + prefers body item, falls back to headline element (`[role="rowheader"]`), then note element
     + if target is already visible, flashes immediately
     + if scroll is needed, waits for `scrollend` + 150ms settle; 1000ms fallback
   + [X] 4 unit tests (body item flash, caret move, headline fallback, cleanup)
-  + [X] added `data-offset-start`/`data-offset-end` to headline div in MarkdownNote — `findBodyItemElement` now finds headlines directly instead of relying on querySelector fallback
+  + [X] added `data-offset-start`/`data-offset-end` to headline div in MarkdownNote - `findBodyItemElement` now finds headlines directly instead of relying on querySelector fallback
 + other improvements
   + [X] `Debug.enable('nodejs:*')` in dev mode (webview iframe has separate localStorage)
   + [X] fixed `noteIsVisible` partial-visibility check (was always returning "visible")
 + verification
   + open a long note in VS Code
-  + move caret to the bottom of the note — NoteThink view should scroll to show that section
-  + move caret to headline — view should show the top of the note
+  + move caret to the bottom of the note - NoteThink view should scroll to show that section
+  + move caret to headline - view should show the top of the note
   + abridged note should expand then scroll when caret enters a lower section
   + caret pulse visible on body items and headlines when moving through a note
   + all existing tests still pass (401 tests)
@@ -668,28 +668,28 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 ### Fix view crash: defensive guards on new features
 
 + problem
-  + NoteThink view crashed in VS Code — no error in NoteThink.log or renderer.log
+  + NoteThink view crashed in VS Code - no error in NoteThink.log or renderer.log
   + crash introduced by last commit (body-level clipping, openExternal link handling, findFirstIncompleteTaskSeq)
   + ErrorBoundary did not catch the error, indicating an event handler or layout-triggered crash
 + root causes identified
   + ResizeObserver zero-width race: body-level overflow measurement could produce `maxHeight: 0px` when body element has zero width during layout transitions (tab switch, webview restore), hiding all body content
-  + unhandled `openExternal` errors: extension's `openExternal` message handler lacked try/catch — unhandled promise rejection could crash the web worker extension host
+  + unhandled `openExternal` errors: extension's `openExternal` message handler lacked try/catch - unhandled promise rejection could crash the web worker extension host
   + unguarded link click handler: capture-phase click interceptor in ExtensionReceiver could throw if event.target lacks `.closest` method (e.g. non-Element targets)
   + missing null guard on `findFirstIncompleteTaskSeq`: called during render via useMemo without defensive check on input array
 + [X] add zero-width guard in ResizeObserver `check()` (MarkdownNote.tsx)
-  + `if (width === 0) { return; }` — skips measurement when body has no width yet
+  + `if (width === 0) { return; }` - skips measurement when body has no width yet
 + [X] add try/catch + await to `openExternal` handler (notethinkEditor.ts)
   + matches error handling pattern of other message handlers (editText, setIntegration)
 + [X] add try/catch and `.closest` guard to `handleLinkClick` (ExtensionReceiver.tsx)
   + prevents uncaught exceptions from crashing the webview
 + [X] add null guard to `findFirstIncompleteTaskSeq` (noteops.ts)
-  + `if (!items?.length) { return undefined; }` — handles undefined/null/empty input
+  + `if (!items?.length) { return undefined; }` - handles undefined/null/empty input
 
 
 ### Scroll caret into view within clipped notes
 
 + problem
-  + when the editor caret is inside a clipped (abridged) note, the NoteThink view does nothing — the caret target is invisible
+  + when the editor caret is inside a clipped (abridged) note, the NoteThink view does nothing - the caret target is invisible
   + `useScrollToCaret` detected the body item was clipped by `overflow: hidden` and bailed out entirely
   + `useCaretIndicator` similarly skipped flashing for clipped targets
   + bottom fade + "Show more" button covered content when body scrolled to bottom
@@ -699,14 +699,14 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] caret-aware body scroll in MarkdownNote (MarkdownNote.tsx)
   + `useLayoutEffect` finds `[data-offset-start]` element containing the caret
   + checks visibility between fade overlays (64px top, 96px bottom)
-  + sets body `scrollTop` directly via `applyBodyScroll` helper — overrides task-aware scroll when focused
+  + sets body `scrollTop` directly via `applyBodyScroll` helper - overrides task-aware scroll when focused
   + added `scrollPaddingTop: '4em'`, `scrollPaddingBottom: '6em'` to clipped body style
 + [X] hide bottom fade when scrolled to bottom (MarkdownNote.tsx)
   + added `at_bottom` state, updated by `applyBodyScroll` helper
   + bottom fade condition: `should_clip && !at_bottom` (mirrors top fade: `should_clip && scrolled_top > 0`)
 + [X] simplified viewhooks.ts
   + removed `isClippedByAncestor`, `findOverflowAncestor`, `scrollClippedBodyToTarget`
-  + `useScrollToCaret` now calls `scrollIntoView` unconditionally — body scroll handled by MarkdownNote
+  + `useScrollToCaret` now calls `scrollIntoView` unconditionally - body scroll handled by MarkdownNote
   + `useCaretIndicator` no longer skips clipped targets
 
 
@@ -720,10 +720,10 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + each re-render ran DOM queries in `useLayoutEffect` (caret scroll logic)
   + cumulative cost exceeded webview render budget, triggering extension host restarts
 + [X] fix memo comparator to only re-render focused notes on caret move (MarkdownNote.tsx)
-  + `if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset)` — unfocused notes skip caret_offset comparison
+  + `if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset)` - unfocused notes skip caret_offset comparison
   + re-renders per caret move: 30+ → 1-2 (focused note + parent)
 + [X] add try/catch to `requestInitialState` handler (notethinkEditor.ts)
-  + `sendDoc` and `sendCurrentSelection` were unprotected — could crash extension host
+  + `sendDoc` and `sendCurrentSelection` were unprotected - could crash extension host
 + [X] wrap entire `onDidReceiveMessage` switch in top-level try/catch (notethinkEditor.ts)
   + safety net: any unhandled error in message handler is caught and logged
 + [X] make webview global error handlers unconditional (notethinkEditor.ts)
@@ -736,16 +736,16 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + the header bar should always be visible
   + currently when I scroll down, it goes off the top
   + root cause: `.viewToolbar` is `position: static` inside the body scroll container (`body.disableAddressBarHidingOnScroll` has `overflow-y: auto`)
-  + toolbar already has opaque `background` — just needs sticky positioning
+  + toolbar already has opaque `background` - just needs sticky positioning
 - [X] make `.viewToolbar` sticky in `ViewRenderer.module.scss`
   + add `position: sticky; top: 0; z-index: 10` to `.viewToolbar`
   + verify toolbar background is opaque (already set via `--vscode-breadcrumb-background`)
 - [X] verify in DocumentView and KanbanView
-  + scroll long document — toolbar stays pinned
-  + scroll kanban with many cards — toolbar stays pinned
+  + scroll long document - toolbar stays pinned
+  + scroll kanban with many cards - toolbar stays pinned
   + breadcrumb, view selector, settings gear all still functional
 - [X] add test: toolbar remains visible after scroll (Playwright E2E)
-  + N/A — NoteThink is a VS Code extension, Playwright not applicable
+  + N/A - NoteThink is a VS Code extension, Playwright not applicable
 
 
 ### Insert modal
@@ -794,7 +794,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 ### Remove Mantine CSS variable indirection
 
 + goal
-  + Mantine components are no longer used — all UI is native HTML/CSS
+  + Mantine components are no longer used - all UI is native HTML/CSS
   + 48 `--mantine-*` CSS variable references remain in ViewRenderer.module.scss via a bridge file
   + replace with `--vscode-*` equivalents and remove the vestigial layer
 + [X] replace all `--mantine-*` references in ViewRenderer.module.scss with `--vscode-*` equivalents

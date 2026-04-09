@@ -31,7 +31,7 @@ function splitPathSegments(doc_path: string, workspace_root?: string, doc_relati
     let prefix: string;
 
     if (doc_relative_path) {
-        // Extension already computed the relative path — use it directly
+        // Extension already computed the relative path - use it directly
         relative_path = doc_relative_path;
         // Derive the prefix by removing the relative path from the full doc_path
         const suffix_index = doc_path.lastIndexOf(doc_relative_path);

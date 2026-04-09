@@ -73,7 +73,7 @@ export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderO
     return headline;
 }
 
-// Cache rendered JSX by node reference — nodes from unchanged MDAST trees keep the same identity
+// Cache rendered JSX by node reference - nodes from unchanged MDAST trees keep the same identity
 const renderCache = new WeakMap<MdastNode, ReactElement>();
 
 export function renderNodeUnified(node: MdastNode, options_arg: RenderOptions = {}): ReactElement {

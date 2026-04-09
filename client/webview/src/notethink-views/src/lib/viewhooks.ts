@@ -22,7 +22,7 @@ function resolveCaretTarget(
 /**
  * Scroll the focused note (and body item) into view when the caret moves.
  * When the target is inside a clipped (abridged) note body, scrollIntoView
- * natively scrolls the overflow:hidden container too — scroll-padding on the
+ * natively scrolls the overflow:hidden container too - scroll-padding on the
  * body element accounts for fade overlays.
  */
 export function useScrollToCaret(
@@ -52,7 +52,7 @@ export function useScrollToCaret(
 
 /**
  * Virtual caret indicator: pulse-highlight the body item containing the editor caret.
- * Only flashes a specific body item (paragraph, list item, code block) — never the
+ * Only flashes a specific body item (paragraph, list item, code block) - never the
  * entire note element, to avoid distracting full-tree flashes when cursoring through
  * headings or whitespace.
  */
@@ -83,12 +83,12 @@ export function useCaretIndicator(
         const is_visible = rect.top < window.innerHeight && rect.bottom > 0;
 
         if (is_visible) {
-            // already on screen — flash immediately
+            // already on screen - flash immediately
             target.classList.add(caret_class);
             return () => { target.classList.remove(caret_class); };
         }
 
-        // off screen — a scroll is about to start; wait for it to finish + 150ms settle
+        // off screen - a scroll is about to start; wait for it to finish + 150ms settle
         let timer: ReturnType<typeof setTimeout> | undefined;
         const apply = () => { target.classList.add(caret_class); };
         const on_scrollend = () => { clearTimeout(timer); timer = setTimeout(apply, 150); };

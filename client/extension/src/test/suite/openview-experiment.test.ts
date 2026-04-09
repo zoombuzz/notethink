@@ -235,7 +235,7 @@ suite('Open View Experiment', () => {
 	});
 
 	// ---------------------------------------------------------------
-	// Approach 10: like BetterFountain — createWebviewPanel in Two directly
+	// Approach 10: like BetterFountain - createWebviewPanel in Two directly
 	// (same as approach 2 but with retainContextWhenHidden)
 	// ---------------------------------------------------------------
 	test('Approach 10: createWebviewPanel Two + retainContextWhenHidden (BetterFountain style)', async () => {

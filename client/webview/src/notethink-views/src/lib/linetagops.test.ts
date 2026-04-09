@@ -267,7 +267,7 @@ describe('calculateTextChangesForOrdering', () => {
     });
 
     it('assigns weight when inserted note breaks sequence order', () => {
-        // seq 3 inserted between seq 1 and seq 2 — seq ordering won't work since 3 > 2
+        // seq 3 inserted between seq 1 and seq 2 - seq ordering won't work since 3 > 2
         const children = [makeNote(1), makeNote(3), makeNote(2)];
         const changes = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
         expect(changes.length).toBeGreaterThan(0);
@@ -302,7 +302,7 @@ describe('calculateTextChangesForOrdering', () => {
                 },
             },
         });
-        // successor has weight 5 too — there's no room between 5 and 5 (especially since seq order 3>2 means -1)
+        // successor has weight 5 too - there's no room between 5 and 5 (especially since seq order 3>2 means -1)
         const new_child = makeNote(3); // seq 3 going before seq 2
         const successor = makeNote(2, {
             linetags_from: 60,

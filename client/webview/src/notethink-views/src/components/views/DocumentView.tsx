@@ -48,7 +48,7 @@ export default React.memo(function DocumentView(props: ViewProps) {
 
     const handleSettingsSave = useCallback((updated_settings: DocumentSettings) => {
         setSettingsOpen(false);
-        // exclude show_line_numbers — it's a global setting persisted via workspace config
+        // exclude show_line_numbers - it's a global setting persisted via workspace config
         const { show_line_numbers: _sln, ...per_view_settings } = display_options.settings || {};
         props.handlers?.setViewManagedState?.([{
             id: props.id,

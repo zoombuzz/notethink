@@ -188,7 +188,7 @@ export default function ExtensionReceiver() {
                         debug('skipping setState, no doc hashes changed');
                         return state;
                     }
-                    // replace docs entirely — single-file view shows one doc at a time
+                    // replace docs entirely - single-file view shows one doc at a time
                     return { ...state, docs: incoming_docs };
                 });
                 return;

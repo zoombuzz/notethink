@@ -933,7 +933,7 @@ describe('link rendering in list items', () => {
         const all = flattenNotes(root);
         // list → listItem → paragraph: 3 notes total
         expect(all.length).toBe(3);
-        // no note should have linetags — the markdown link should NOT be parsed as a linetag
+        // no note should have linetags - the markdown link should NOT be parsed as a linetag
         for (const note of all) {
             expect(note.linetags).toBeUndefined();
         }

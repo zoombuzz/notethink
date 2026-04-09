@@ -60,7 +60,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		async function buildDoc(document: vscode.TextDocument): Promise<Doc> {
 			const text = document.getText();
 			const mdast = parse(text);
-			// asRelativePath handles symlinks — returns path relative to workspace root
+			// asRelativePath handles symlinks - returns path relative to workspace root
 			const relative = vscode.workspace.asRelativePath(document.uri, false);
 			return {
 				path: document.uri.path,
@@ -113,7 +113,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		}
 
 		// resolve workspace root for breadcrumb display
-		// Use asRelativePath to handle symlinks correctly — it returns a path relative
+		// Use asRelativePath to handle symlinks correctly - it returns a path relative
 		// to the workspace folder regardless of how the folder was opened (symlink or real path).
 		// getWorkspaceFolder may also return undefined in web extension hosts.
 		const workspace_folder = vscode.workspace.getWorkspaceFolder(initialDocument.uri)
@@ -268,7 +268,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			webviewPanel.webview.postMessage(message);
 		}
 
-		// debounce change handler — only re-parse the active document
+		// debounce change handler - only re-parse the active document
 		let change_timer: ReturnType<typeof setTimeout> | undefined;
 		const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
 			if (e.document.uri.path !== active_path) { return; }
@@ -355,7 +355,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const from = e.from as number;
 					const to = (e.to ?? e.from) as number;
 					try {
-						// Only act if a text editor for this document is already visible —
+						// Only act if a text editor for this document is already visible -
 						// don't open a new editor just because the user clicked in the NoteThink view
 						const existing = vscode.window.visibleTextEditors.find(
 							ed => ed.document.uri.path === doc_path
@@ -448,7 +448,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 								}
 							});
 						} else {
-							// No visible editor — apply edits via WorkspaceEdit (never opens a new editor)
+							// No visible editor - apply edits via WorkspaceEdit (never opens a new editor)
 							const wsEdit = new vscode.WorkspaceEdit();
 							for (const change of sorted_changes) {
 								const from = document.positionAt(change.from);
@@ -463,7 +463,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 						}
 						// bypass debounce: immediately re-parse and send the updated doc
 						// (the edit above already fired onDidChangeTextDocument which set a
-						// debounce timer — clear it to avoid a redundant delayed update)
+						// debounce timer - clear it to avoid a redundant delayed update)
 						if (change_timer) { clearTimeout(change_timer); change_timer = undefined; }
 						active_doc = await buildDoc(existing?.document ?? document);
 						sendDoc(active_doc);
@@ -493,11 +493,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			}
 		});
 
-		// track text editor selection changes — debounced to avoid flooding the webview
+		// track text editor selection changes - debounced to avoid flooding the webview
 		let selection_timer: ReturnType<typeof setTimeout> | undefined;
 		const selectionSubscription = vscode.window.onDidChangeTextEditorSelection(e => {
 			if (e.textEditor.document.uri.path !== active_path) { return; }
-			// suppress selection while a document change is pending — the change
+			// suppress selection while a document change is pending - the change
 			// handler sends selection after re-parse to keep MDAST and caret in sync
 			if (change_timer) { return; }
 			if (selection_timer) { clearTimeout(selection_timer); }
@@ -566,7 +566,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 								window.__notethinkVscodeApi = acquireVsCodeApi();
 							}
 						} catch(e) {
-							// already acquired — reuse existing instance
+							// already acquired - reuse existing instance
 						}
 						// capture uncaught errors that escape React ErrorBoundary
 						window.onerror = function(msg, source, line, col, error) {

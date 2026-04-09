@@ -231,7 +231,7 @@ describe('findCharAtPoint', () => {
         document.body.removeChild(wrapper);
     });
 
-    it('handles multiline text — clicks on correct line', () => {
+    it('handles multiline text - clicks on correct line', () => {
         const wrapper = document.createElement('div');
         // "Hello " (6 chars, line 1) + "world" (5 chars, line 2) = 11 chars
         const text = document.createTextNode('Hello world');
@@ -269,13 +269,13 @@ describe('refineOffsetWithSelection', () => {
         wrapper.dataset.offsetStart = '100';
         wrapper.appendChild(document.createTextNode('hello'));
         container.appendChild(wrapper);
-        // jsdom returns zero-rects — findCharAtPoint returns undefined
+        // jsdom returns zero-rects - findCharAtPoint returns undefined
         const event = makeMouseEvent(wrapper, container, 50, 10);
         expect(refineOffsetWithSelection(event, 100)).toBe(100);
     });
 });
 
-describe('createNoteClickHandler — offset-aware clicks', () => {
+describe('createNoteClickHandler - offset-aware clicks', () => {
     it('overrides from with data-offset-start for body clicks', () => {
         const note = makeNote();
         let captured_position: ClickPositionInfo | undefined;

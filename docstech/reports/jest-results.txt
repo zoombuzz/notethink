@@ -1,10 +1,10 @@
 # Jest Test Results
-# Version: 0.1.50
-# Date: 2026-04-10T11:30:00Z
+# Version: 0.1.51
+# Date: 2026-04-10T14:35:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
-> notethink@0.1.50 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> notethink@0.1.51 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
 PASS src/test/suite/parseops.test.ts
@@ -16,7 +16,7 @@ PASS src/test/suite/openview-experiment.test.ts
 Test Suites: 5 passed, 5 total
 Tests:       116 passed, 116 total
 Snapshots:   0 total
-Time:        2.018 s
+Time:        2.117 s
 
 > notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
 > jest --config jest.config.cjs --forceExit
@@ -28,7 +28,7 @@ PASS src/components/NoteRenderer.test.tsx
 Test Suites: 3 passed, 3 total
 Tests:       30 passed, 30 total
 Snapshots:   0 total
-Time:        0.581 s, estimated 1 s
+Time:        0.685 s
 
 > @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
 > jest --config jest.config.cjs --forceExit
@@ -60,14 +60,14 @@ PASS src/components/views/GenericView.test.tsx
 Test Suites: 23 passed, 23 total
 Tests:       342 passed, 342 total
 Snapshots:   0 total
-Time:        2.925 s, estimated 4 s
+Time:        2.838 s
 
 ┌──────────────────┬───────┬────────┬────────┬─────────┐
 │ Suite            │ Files │ Passed │ Failed │ Time    │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     5 │    116 │      0 │ 2.018 s │
-│ webview          │     3 │     30 │      0 │ 0.581 s │
-│ notethink-views  │    23 │    342 │      0 │ 2.925 s │
+│ extension        │     5 │    116 │      0 │ 2.117 s │
+│ webview          │     3 │     30 │      0 │ 0.685 s │
+│ notethink-views  │    23 │    342 │      0 │ 2.838 s │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
 │ TOTAL            │    31 │    488 │      0 │         │
 └──────────────────┴───────┴────────┴────────┴─────────┘

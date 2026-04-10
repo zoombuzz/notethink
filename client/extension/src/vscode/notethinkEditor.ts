@@ -559,33 +559,26 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				<div id="root"></div>
 				<script nonce="${nonce}">
 					(function() {
-						// React 19 dev mode emits performance.measure() for every component render
-						// to populate the Chrome DevTools "Components" track. With large documents
-						// (e.g. a 5000+ list-item kanban → 50000+ fibers per commit) the browser's
-						// performance entry buffer fills, and the next measure() call throws
-						// DataCloneError ("Data cannot be cloned, out of memory") inside React's
-						// commit phase, crashing the renderer process. Wrap measure() so the buffer
-						// is drained on overflow and a second-chance call is attempted; if that also
-						// fails, swallow silently — perf-track entries are dev-only convenience data.
+						// Disable React 19's component Performance Track by removing performance.measure
+						// BEFORE the webview bundle loads. React's supportsUserTiming flag is evaluated
+						// once at module-load time via "typeof performance.measure === 'function'"; when
+						// that is false, React skips the entire per-fiber instrumentation path - no
+						// addObjectDiffToProperties props-diff build, no reusable-options allocation, no
+						// measure() call. Without this, a large document (e.g. a 5000+ list-item kanban
+						// → 50000+ fibers per commit) fills the browser's performance entry buffer within
+						// a single commit, and either throws DataCloneError mid-commit or drives the
+						// renderer into OOM. A previous attempt wrapped measure() with catch+retry, but
+						// React's diff-build ran anyway and the renderer still crashed with the same
+						// heap-saturated content from oma's done.md. The only effective fix is to turn
+						// the feature off at source. reportWebVitals() in this webview is a no-op (no
+						// callback is passed from index.tsx) and no other bundle code depends on
+						// performance.measure for correctness.
 						try {
-							if (typeof performance !== 'undefined' && typeof performance.measure === 'function') {
-								var originalMeasure = performance.measure.bind(performance);
-								performance.measure = function patchedMeasure(name, startOrOptions, endMark) {
-									try {
-										return originalMeasure(name, startOrOptions, endMark);
-									} catch (err) {
-										try {
-											performance.clearMeasures();
-											performance.clearMarks();
-											return originalMeasure(name, startOrOptions, endMark);
-										} catch (err2) {
-											return undefined;
-										}
-									}
-								};
+							if (typeof performance !== 'undefined') {
+								performance.measure = undefined;
 							}
 						} catch (e) {
-							// performance API unavailable or non-writable — leave it alone
+							// performance.measure non-writable - leave it alone
 						}
 						// early-acquire API and expose on window so ExtensionReceiver.tsx can reuse it;
 						// guard with try/catch in case the webview is restored from cache (acquireVsCodeApi throws on second call)

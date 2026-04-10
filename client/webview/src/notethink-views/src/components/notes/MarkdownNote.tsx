@@ -53,11 +53,11 @@ export default memo(function MarkdownNote(props: NoteProps) {
         }
         const el = body_ref.current;
         const check = () => {
-            // skip measurement during drag — element is position:fixed with wrong dimensions
+            // skip measurement during drag - element is position:fixed with wrong dimensions
             if (getComputedStyle(el).position === 'fixed') { return; }
             const width = el.offsetWidth;
             // skip measurement when element has no width (e.g. during initial layout or hidden tab)
-            // — otherwise max_height becomes 0, hiding all body content
+            // - otherwise max_height becomes 0, hiding all body content
             if (width === 0) { return; }
             const max_h = width * HEIGHT_RATIO;
             const naturally_overflows = el.scrollHeight > max_h;
@@ -123,13 +123,13 @@ export default memo(function MarkdownNote(props: NoteProps) {
         applyBodyScroll(Math.max(0, task_el.offsetTop - SCROLL_CONTEXT_PX));
     }, [should_clip, first_incomplete_seq, props.body_raw]);
 
-    // scroll body to caret position when focused and clipped — overrides task-aware scroll;
+    // scroll body to caret position when focused and clipped - overrides task-aware scroll;
     // when focus leaves, restore task-aware scroll to first incomplete task
     const caret_offset = props.display_options?.caret_offset as number | undefined;
     useLayoutEffect(() => {
         if (!body_ref.current || !should_clip) { return; }
         if (!props.focused) {
-            // focus left — restore task-aware scroll position
+            // focus left - restore task-aware scroll position
             const task_el = first_incomplete_seq !== undefined
                 ? body_ref.current.querySelector(`[data-seq="${first_incomplete_seq}"]`) as HTMLElement | null
                 : null;
@@ -153,8 +153,8 @@ export default memo(function MarkdownNote(props: NoteProps) {
         // check if the target is already visible within the clipped body
         const body_rect = body_ref.current.getBoundingClientRect();
         const target_rect = target_el.getBoundingClientRect();
-        const fade_top = 64;   // 4em — matches .abridgeFadeTop height
-        const fade_bottom = 96; // 6em — matches .abridgeFade height
+        const fade_top = 64;   // 4em - matches .abridgeFadeTop height
+        const fade_bottom = 96; // 6em - matches .abridgeFade height
         const visible_top = body_rect.top + fade_top;
         const visible_bottom = body_rect.bottom - fade_bottom;
         if (target_rect.top >= visible_top && target_rect.bottom <= visible_bottom) { return; }
@@ -164,7 +164,7 @@ export default memo(function MarkdownNote(props: NoteProps) {
     }, [should_clip, props.focused, caret_offset]);
 
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
-    // always strip linetag link nodes from MDAST — they render as invisible empty <a> elements;
+    // always strip linetag link nodes from MDAST - they render as invisible empty <a> elements;
     // visible linetag badges are appended separately when show_linetags_in_headlines is enabled
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(props, {
@@ -290,7 +290,7 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
     if (prev.display_options?.settings?.show_linetags_in_headlines !== next.display_options?.settings?.show_linetags_in_headlines) { return false; }
     if (prev.display_options?.settings?.show_line_numbers !== next.display_options?.settings?.show_line_numbers) { return false; }
     if (prev.display_options?.settings?.auto_expand_focused_note !== next.display_options?.settings?.auto_expand_focused_note) { return false; }
-    // caret offset drives body scroll in clipped notes — only re-render focused notes
+    // caret offset drives body scroll in clipped notes - only re-render focused notes
     if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
     // DnD: provided changes during drag (draggableProps.style contains transform)
     if (prev.display_options?.provided?.draggableProps !== next.display_options?.provided?.draggableProps) { return false; }

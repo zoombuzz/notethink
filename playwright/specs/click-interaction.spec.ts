@@ -84,7 +84,7 @@ test.describe('Click Interaction', () => {
         await simulateRangeSelectionChanged(page, reveal_msg!.docPath!, select_msg!.from!, select_msg!.to!);
         await page.waitForTimeout(300);
 
-        // Step 5: Assert view did NOT blank — notes are still visible
+        // Step 5: Assert view did NOT blank - notes are still visible
         const visible_notes = page.locator('[data-seq]');
         await expect(visible_notes.first()).toBeVisible({ timeout: 3000 });
 

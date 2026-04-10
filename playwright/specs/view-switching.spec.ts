@@ -44,7 +44,7 @@ test.describe('View Switching', () => {
         await sendCommand(page, 'setViewType', { viewType: 'kanban' });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 
-        // Switch to auto — should resolve back to document for plain markdown
+        // Switch to auto - should resolve back to document for plain markdown
         await sendCommand(page, 'setViewType', { viewType: 'auto' });
         const auto_wrapper = page.locator('[data-auto-selected-viewtype="document"]');
         await expect(auto_wrapper).toBeVisible({ timeout: 5000 });

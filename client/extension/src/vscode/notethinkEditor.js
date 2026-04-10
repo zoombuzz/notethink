@@ -177,7 +177,7 @@ export class NotethinkEditorProvider {
                     const from = e.from;
                     const to = (e.to ?? e.from);
                     try {
-                        // Only act if a text editor for this document is already visible —
+                        // Only act if a text editor for this document is already visible -
                         // don't open a new editor just because the user clicked in the NoteThink view
                         const existing = vscode.window.visibleTextEditors.find(ed => ed.document.uri.path === doc_path);
                         if (!existing) {
@@ -224,7 +224,7 @@ export class NotethinkEditorProvider {
                             });
                         }
                         else {
-                            // No visible editor — apply edits via WorkspaceEdit (never opens a new editor)
+                            // No visible editor - apply edits via WorkspaceEdit (never opens a new editor)
                             const wsEdit = new vscode.WorkspaceEdit();
                             for (const change of sorted_changes) {
                                 const from = document.positionAt(change.from);

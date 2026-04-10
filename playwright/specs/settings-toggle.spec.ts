@@ -15,7 +15,7 @@ test.describe('Settings Toggle', () => {
         await sendCommand(page, 'setViewType', { viewType: 'document' });
         await page.waitForSelector('[data-testid]', { timeout: 5000 });
 
-        // By default, show_line_numbers is false — line number spans should not be present
+        // By default, show_line_numbers is false - line number spans should not be present
         let lineno_count = await page.locator('[role="rowheader"] span span').count();
         // Line numbers add a <span class="lineno"><span>{n}</span></span> inside the headline
         // Initially they should not be present
@@ -33,7 +33,7 @@ test.describe('Settings Toggle', () => {
         await sendCommand(page, 'toggleSetting', { setting: 'lineNumbers' });
         await page.waitForTimeout(300);
 
-        // The view should update — line numbers should be gone
+        // The view should update - line numbers should be gone
         // (This tests that the toggle is reversible)
     });
 

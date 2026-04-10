@@ -41,7 +41,7 @@ interface NoteRendererProps {
  * thrown by convertMdastToNoteHierarchy are caught by the parent ErrorBoundary.
  */
 function NoteView({ note_id, note, props }: { note_id: string; note: Doc; props: NoteRendererProps }) {
-    // memoize conversion keyed on content hash — avoids redundant work when only selection changes
+    // memoize conversion keyed on content hash - avoids redundant work when only selection changes
     const root_note = useMemo(
         () => convertMdastToNoteHierarchy(note.content!, note.text!),
         [note.hash_sha256]

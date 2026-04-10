@@ -4,7 +4,7 @@ import GenericView from './GenericView';
 import type { ViewProps, ViewApi } from '../../types/ViewProps';
 import type { NoteProps, ClickPositionInfo } from '../../types/NoteProps';
 
-// mock lazy-loaded view components — capture props for click handler testing
+// mock lazy-loaded view components - capture props for click handler testing
 const mockDocViewRender = jest.fn();
 const mockKanbanViewRender = jest.fn();
 const mockAutoViewRender = jest.fn();
@@ -33,7 +33,7 @@ jest.mock('./KanbanView', () => ({
     },
 }));
 
-// mock BreadcrumbTrail — capture onDirectoryClick for integration testing
+// mock BreadcrumbTrail - capture onDirectoryClick for integration testing
 let capturedOnDirectoryClick: ((dir_path: string) => void) | undefined;
 jest.mock('./BreadcrumbTrail', () => ({
     __esModule: true,
@@ -232,7 +232,7 @@ describe('GenericView', () => {
             child_notes: [child_note],
             position: { start: { offset: 0, line: 1 }, end: { offset: 50, line: 5 }, end_body: { offset: 50, line: 5 } },
         });
-        // caret at 60 exceeds root end (50) — simulates selection arriving before MDAST re-parse
+        // caret at 60 exceeds root end (50) - simulates selection arriving before MDAST re-parse
         const props = makeViewProps({
             type: 'document',
             notes: [root_note, child_note],

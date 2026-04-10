@@ -80,7 +80,7 @@ describe('l10n rendering with German bundle', () => {
 
     it('renders interpolated German aria-labels for column reorder buttons', () => {
         render(<SettingsKanbanModal {...KANBAN_MODAL_PROPS} />);
-        // German: "{0} nach oben verschieben" — placeholder moves to start
+        // German: "{0} nach oben verschieben" - placeholder moves to start
         expect(screen.getByLabelText('backlog nach oben verschieben')).toBeInTheDocument();
         expect(screen.getByLabelText('doing nach unten verschieben')).toBeInTheDocument();
     });

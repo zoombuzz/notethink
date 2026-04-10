@@ -33,7 +33,7 @@ interface ViewDisplayDeepestProps {
 
 export default function GenericView(props: ViewProps) {
 
-    // ref for current selection — the click handler reads this to avoid stale closures
+    // ref for current selection - the click handler reads this to avoid stale closures
     // when MarkdownNote's memo prevents re-render after a selection-only change
     const selection_ref = useRef(props.selection);
     selection_ref.current = props.selection;
@@ -91,7 +91,7 @@ export default function GenericView(props: ViewProps) {
     deepest.note = useMemo(() => {
         if (props.selection !== undefined) {
             let caret_pos = props.selection?.main.head;
-            // clamp caret to document bounds — selection may arrive before MDAST re-parse
+            // clamp caret to document bounds - selection may arrive before MDAST re-parse
             const root_end = props.notes?.[0]?.position?.end?.offset;
             if (caret_pos !== undefined && root_end !== undefined && caret_pos > root_end) {
                 caret_pos = root_end;
@@ -229,7 +229,7 @@ export default function GenericView(props: ViewProps) {
 
     }, props.handlers);
 
-    // handle breadcrumb directory click — switch to directory integration mode
+    // handle breadcrumb directory click - switch to directory integration mode
     const handleDirectoryClick = useCallback((dir_path: string) => {
         handlers.setViewManagedState([{
             id: props.id,
@@ -257,7 +257,7 @@ export default function GenericView(props: ViewProps) {
         parent_notes={parent_context ? parent_context.parent_notes?.concat([parent_context]) : []}
     />;
 
-    // navigation callback — registered on the ref so ExtensionReceiver can invoke it
+    // navigation callback - registered on the ref so ExtensionReceiver can invoke it
     const handleNavigation = useCallback((direction: string) => {
         const focused_seqs = display_options.focused_seqs || [];
         const focused_notes_list = display_options.focused_notes || [];
@@ -357,7 +357,7 @@ export default function GenericView(props: ViewProps) {
         }
     }, [handlers, props.id, props.doc_path]);
 
-    // settings callback ref — child views (e.g. KanbanView) register their handler
+    // settings callback ref - child views (e.g. KanbanView) register their handler
     const settingsClickRef = useRef<(() => void) | undefined>(undefined);
 
     // insert modal state
@@ -388,7 +388,7 @@ export default function GenericView(props: ViewProps) {
         handlers.postMessage?.({ type: 'editText', changes: [{ from, insert: text }] });
     }, [props.doc_text, props.selection, handlers]);
 
-    // render toolbar at the leaf level only — when type is 'auto', AutoView will delegate
+    // render toolbar at the leaf level only - when type is 'auto', AutoView will delegate
     // to a concrete type which renders GenericView again with the toolbar
     const show_toolbar = props.type !== 'auto';
 

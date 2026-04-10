@@ -1,70 +1,73 @@
 # Jest Test Results
-# Version: 0.1.49
-# Date: 2026-04-08T00:00:00Z
+# Version: 0.1.50
+# Date: 2026-04-10T11:30:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
-> notethink-client-extension@0.1.0 test
-> jest --config jest.config.cjs --forceExit
+> notethink@0.1.50 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> bash scripts/test-jest.sh
 
- PASS  src/lib/utils.test.ts
- PASS  src/l10n/l10n-bundles.test.ts
- PASS  src/lib/errorops.test.ts
- PASS  src/lib/parseops.test.ts
- PASS  src/vscode/notethinkEditor.test.ts
+PASS src/test/suite/parseops.test.ts
+PASS src/test/suite/utils.test.ts
+PASS src/test/suite/errorops.test.ts
+PASS src/test/suite/extension.test.ts
+PASS src/test/suite/openview-experiment.test.ts
 
 Test Suites: 5 passed, 5 total
-Tests:       109 passed, 109 total
-Time:        2.028 s
+Tests:       116 passed, 116 total
+Snapshots:   0 total
+Time:        2.018 s
 
-> notethink-client-display@0.1.0 test
+> notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
 > jest --config jest.config.cjs --forceExit
 
- PASS  src/components/ExtensionReceiver.test.tsx
- PASS  src/components/NoteRenderer.test.tsx
- PASS  src/components/base/App.test.tsx
+PASS src/components/ExtensionReceiver.test.tsx
+PASS src/components/base/App.test.tsx
+PASS src/components/NoteRenderer.test.tsx
 
 Test Suites: 3 passed, 3 total
 Tests:       30 passed, 30 total
-Time:        0.592 s
+Snapshots:   0 total
+Time:        0.581 s, estimated 1 s
 
-> @zoombuzz/notethink-views@0.1.0 test
+> @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
 > jest --config jest.config.cjs --forceExit
 
- PASS  src/lib/renderops.test.tsx
- PASS  src/components/views/KanbanContextBar.test.tsx
- PASS  src/components/views/AutoView.test.tsx
- PASS  src/components/notes/CodeNote.test.tsx
- PASS  src/components/notes/MermaidDiagram.test.tsx
- PASS  src/lib/convertMdastToNoteHierarchy.test.ts
- PASS  src/components/views/KanbanColumn.test.tsx
- PASS  src/lib/noteops.test.ts
- PASS  src/components/views/KanbanView.test.tsx
- PASS  src/components/views/BreadcrumbTrail.test.tsx
- PASS  src/components/views/SettingsDocumentModal.test.tsx
- PASS  src/lib/noteui.test.ts
- PASS  src/lib/linetagops.test.ts
- PASS  src/components/views/SettingsKanbanModal.test.tsx
- PASS  src/components/l10n-rendering.test.tsx
- PASS  src/components/notes/MermaidNote.test.tsx
- PASS  src/components/notes/MarkdownNote.test.tsx
- PASS  src/components/views/ViewIntegrationSelector.test.tsx
- PASS  src/components/views/DocumentView.test.tsx
- PASS  src/components/InsertModal.test.tsx
- PASS  src/components/ErrorBoundary.test.tsx
- PASS  src/components/notes/GenericNote.test.tsx
- PASS  src/components/views/GenericView.test.tsx
+PASS src/lib/renderops.test.tsx
+PASS src/components/notes/CodeNote.test.tsx
+PASS src/components/views/AutoView.test.tsx
+PASS src/lib/linetagops.test.ts
+PASS src/components/views/ViewIntegrationSelector.test.tsx
+PASS src/lib/convertMdastToNoteHierarchy.test.ts
+PASS src/components/l10n-rendering.test.tsx
+PASS src/lib/noteops.test.ts
+PASS src/lib/noteui.test.ts
+PASS src/components/views/SettingsKanbanModal.test.tsx
+PASS src/components/views/BreadcrumbTrail.test.tsx
+PASS src/components/notes/MermaidDiagram.test.tsx
+PASS src/components/views/SettingsDocumentModal.test.tsx
+PASS src/components/views/KanbanView.test.tsx
+PASS src/components/views/KanbanContextBar.test.tsx
+PASS src/components/views/KanbanColumn.test.tsx
+PASS src/components/InsertModal.test.tsx
+PASS src/components/ErrorBoundary.test.tsx
+PASS src/components/notes/MermaidNote.test.tsx
+PASS src/components/views/DocumentView.test.tsx
+PASS src/components/notes/MarkdownNote.test.tsx
+PASS src/components/notes/GenericNote.test.tsx
+PASS src/components/views/GenericView.test.tsx
 
 Test Suites: 23 passed, 23 total
-Tests:       339 passed, 339 total
-Time:        2.904 s
+Tests:       342 passed, 342 total
+Snapshots:   0 total
+Time:        2.925 s, estimated 4 s
 
 ┌──────────────────┬───────┬────────┬────────┬─────────┐
 │ Suite            │ Files │ Passed │ Failed │ Time    │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     5 │    109 │      0 │ 2.028 s │
-│ webview          │     3 │     30 │      0 │ 0.592 s │
-│ notethink-views  │    23 │    339 │      0 │ 2.904 s │
+│ extension        │     5 │    116 │      0 │ 2.018 s │
+│ webview          │     3 │     30 │      0 │ 0.581 s │
+│ notethink-views  │    23 │    342 │      0 │ 2.925 s │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    31 │    478 │      0 │         │
+│ TOTAL            │    31 │    488 │      0 │         │
 └──────────────────┴───────┴────────┴────────┴─────────┘

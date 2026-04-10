@@ -202,8 +202,8 @@ When committing, messages must be consistent with the existing commit history. R
 
 **Rules:**
 - **Never add "Co-authored-by:" lines** to commit messages. No attribution footers of any kind.
-- The message should purely inform the reader what was done — concise, lowercase, descriptive.
-- **Commit messages must be a single line** — no newlines, no multi-line bodies.
+- The message should purely inform the reader what was done - concise, lowercase, descriptive.
+- **Commit messages must be a single line** - no newlines, no multi-line bodies.
 - After the description, append a test summary: `; tests <jest>, <playwright>`
 - Run `pnpm jest-test` for Jest counts and the Playwright suite for E2E counts.
 
@@ -232,7 +232,7 @@ Before marking a task complete, verify:
 Developer stories and tasks are tracked in `docstech/users/<username>/todo.md` and `done.md`.
 
 - **Mark completed tasks** with `[X]` in `todo.md` (e.g. `- [X] Task description`).
-- **Move completed stories** — when all tasks in a story are done, remove the story from `todo.md` and append it to `done.md` (with exactly two blank lines before and after each story).
+- **Move completed stories** - when all tasks in a story are done, remove the story from `todo.md` and append it to `done.md` (with exactly two blank lines before and after each story).
 
 ## Dev Server Management
 
@@ -240,7 +240,7 @@ Multiple projects in this workspace use Next.js and share similar process names.
 
 **Rules:**
 - When starting a dev server (`pnpm dev`, `pnpm dev:worker`, etc.) via `run_in_background`, capture the new process's **PID** immediately afterwards (e.g. `lsof -ti :PORT`) and **store it in memory**.
-- When stopping a dev server, **kill only the specific PID** — never use `pkill node`, `pkill next`, `killall node`, or any pattern-based kill that could match other running servers.
+- When stopping a dev server, **kill only the specific PID** - never use `pkill node`, `pkill next`, `killall node`, or any pattern-based kill that could match other running servers.
 - If you don't have the PID, use `lsof -ti :PORT` for the specific port to find the correct process before killing it.
 
 ## Screenshots

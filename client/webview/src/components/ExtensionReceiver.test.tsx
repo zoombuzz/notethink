@@ -93,7 +93,7 @@ describe('ExtensionReceiver', () => {
             }));
         });
         const renderer = screen.getByTestId('NoteRenderer');
-        // second update replaces the first — only one doc at a time
+        // second update replaces the first - only one doc at a time
         expect(renderer).toHaveAttribute('data-note-count', '1');
     });
 
@@ -125,7 +125,7 @@ describe('ExtensionReceiver', () => {
         });
         expect(screen.getByTestId('NoteRenderer')).toHaveAttribute('data-note-count', '1');
 
-        // send same doc with same hash — should not cause re-render issues
+        // send same doc with same hash - should not cause re-render issues
         act(() => {
             window.dispatchEvent(new MessageEvent('message', {
                 data: {
@@ -158,7 +158,7 @@ describe('ExtensionReceiver', () => {
         });
         expect(screen.getByTestId('NoteRenderer')).toHaveAttribute('data-note-count', '1');
 
-        // send same doc with different hash — should update
+        // send same doc with different hash - should update
         act(() => {
             window.dispatchEvent(new MessageEvent('message', {
                 data: {

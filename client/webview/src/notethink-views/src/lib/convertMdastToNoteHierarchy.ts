@@ -223,7 +223,7 @@ function findChildNotes(
  * Uses an ancestor stack for O(n) instead of O(n²) backward scan.
  */
 function nestChildNotes(allNotes: NoteProps[], rootLevel: number): void {
-    // Stack of open ancestors — each note's range must contain the current note
+    // Stack of open ancestors - each note's range must contain the current note
     const stack: NoteProps[] = [];
     for (const note of allNotes) {
         const noteStart = note.position.start.offset;

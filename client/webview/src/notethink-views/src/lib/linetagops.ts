@@ -13,7 +13,7 @@ export function findLineTags(input: string): string {
     if (bracketed_matches && bracketed_matches?.length >= 2) {
         return bracketed_matches[1];
     }
-    // use String.match() with regex to pull out all linetags together if unbracketed [](?...) — requires '?' to distinguish from markdown links
+    // use String.match() with regex to pull out all linetags together if unbracketed [](?...) - requires '?' to distinguish from markdown links
     const brackless_matches = input.match(new RegExp('(\\[.*\\]\\(\\?[^\\)]*\\)[^\\]]*)[\\n]*$'));
     if (brackless_matches && brackless_matches?.length >= 2) {
         return brackless_matches[1];
@@ -33,7 +33,7 @@ export function parseLineTags(input: string, note_seq: number): HashMapOf<LineTa
     let matches: RegExpExecArray | null;
     while ((matches = regex.exec(input) as RegExpExecArray | null) !== null) {
         if (matches.groups && matches.groups.href) {
-            // skip markdown links — linetags always start with '?' (e.g. [](?key=value))
+            // skip markdown links - linetags always start with '?' (e.g. [](?key=value))
             if (!matches.groups.href.startsWith('?')) { continue; }
             const link_text = matches.groups?.text;
             const link_queryparams = new URLSearchParams(matches.groups?.href);
@@ -135,7 +135,7 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
     const setting_as_default = (new_value === default_value);
 
     // If the existing linetag is inherited (from a parent's ng_child_* attribute),
-    // treat it as if the note has no linetag for this key — either generate a new one
+    // treat it as if the note has no linetag for this key - either generate a new one
     // or skip if setting back to default (inherited value handles it)
     const existingTag = note.linetags?.[key_name];
     if (existingTag?.inherited) {
@@ -153,7 +153,7 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
             });
             return changes;
         }
-        // No real linetags at all — generate a new linetag block
+        // No real linetags at all - generate a new linetag block
         changes.push({
             from: note.position.start.offset + note.headline_raw.length,
             insert: ` [](?${key_name}=${new_value})`,
@@ -184,7 +184,7 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
         const linetags_base = note.linetags_from || 0;
         const linetag_keys = Object.keys(note.linetags);
         if (linetag_keys.length === 1 && linetag_keys[0] === key_name) {
-            // sole key — remove the entire linetag including the leading space
+            // sole key - remove the entire linetag including the leading space
             // headline_raw ends at start.offset + headline_raw.length; the linetag
             // string starts at linetags_from
             const linetag_start = linetags_base;
@@ -198,7 +198,7 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
                 insert: '',
             });
         } else {
-            // multiple keys — remove just this key=value (and the & separator)
+            // multiple keys - remove just this key=value (and the & separator)
             const removing = note.linetags[key_name];
             const key_abs = linetags_base + removing.key_offset;
             const value_end_abs = linetags_base + removing.value_offset + removing.value.length;
@@ -210,7 +210,7 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
                 // remove key=value& (key is before the separator)
                 changes.push({ from: key_abs, to: value_end_abs + 1, insert: '' });
             } else {
-                // last key — remove &key=value (separator is before the key)
+                // last key - remove &key=value (separator is before the key)
                 changes.push({ from: key_abs - 1, to: value_end_abs, insert: '' });
             }
             // also remove linktext if it duplicated the value

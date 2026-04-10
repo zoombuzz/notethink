@@ -247,7 +247,7 @@ import { NoteComponent, type NoteProps } from '@/components';
 ### Constants Placement
 - **File-level constants** (e.g. `const MAX_ITERATIONS = 1000`) should be declared **near the head of the file**, below imports and type definitions
 - This makes them easy to find, reuse, review, and change
-- Do not declare the same constant inline within multiple functions — hoist it to module level
+- Do not declare the same constant inline within multiple functions - hoist it to module level
 
 ### Debug Logger Pattern
 **Always include the debug import and constant in production files**, even if not currently used. This serves as a placeholder for adding debug statements during development. This applies to production source files (`.ts`, `.tsx`), not test files (`.test.ts`, `.test.tsx`).
@@ -421,7 +421,7 @@ function parseConfig(json: string): Config | null {
 
 ### Test Failures Must Always Be Fixed
 - **All test failures must be investigated and fixed**, regardless of whether they are related to the current change, pre-existing, or caused by external factors.
-- Never dismiss a failure as "not related to this change" or "pre-existing" — if a test is red, it needs fixing before the work is complete.
+- Never dismiss a failure as "not related to this change" or "pre-existing" - if a test is red, it needs fixing before the work is complete.
 - This applies to Jest, Playwright, and any other test suite.
 
 ### Test File Location
@@ -483,10 +483,10 @@ pnpm run check
 ```
 
 This runs, in order:
-1. **Lint** — eslint + `tsc --noEmit` across all three tsconfigs
-2. **Build** — webpack (extension + webview bundles)
-3. **Rollup** — notethink-views component library build
-4. **Jest** — all unit/component tests across extension, webview, and notethink-views
+1. **Lint** - eslint + `tsc --noEmit` across all three tsconfigs
+2. **Build** - webpack (extension + webview bundles)
+3. **Rollup** - notethink-views component library build
+4. **Jest** - all unit/component tests across extension, webview, and notethink-views
 
 CI only runs lint and build (no tests). Tests are the developer's responsibility before push.
 
@@ -511,10 +511,10 @@ Always rebuild the extension after each code change so the developer can preview
 
 After completing each phase of development, the codebase must be left in a releaseable state. This means:
 
-1. **All new code has tests** — every new module, model, library function must have corresponding tests before the phase is considered complete
-2. **All existing tests still pass** — run `pnpm run jest-test` and verify zero failures
-3. **Lint is clean** — run `pnpm run lint` with zero errors
-4. **No broken imports or dead references** — new modules must be properly wired and importable
+1. **All new code has tests** - every new module, model, library function must have corresponding tests before the phase is considered complete
+2. **All existing tests still pass** - run `pnpm run jest-test` and verify zero failures
+3. **Lint is clean** - run `pnpm run lint` with zero errors
+4. **No broken imports or dead references** - new modules must be properly wired and importable
 
 ## Story Tracking: todo.md and done.md
 
@@ -527,7 +527,7 @@ Each developer has `todo.md` and `done.md` files under `docstech/users/<username
 
 ### todo.md
 
-- Stories are read **top-to-bottom** — the next story to work on is always the one at the top.
+- Stories are read **top-to-bottom** - the next story to work on is always the one at the top.
 - Each story may contain tasks as a checklist (`- [ ]`). When completing a task, mark it `[X]` (e.g. `- [X] Task description`).
 - When a story is being actively implemented, attach a status linetag to its heading: `### Story title [](?status=doing)`.
 - Linetags use the format `[](?key=value&key2=value2)` appended to the story heading line.
@@ -537,7 +537,7 @@ Each developer has `todo.md` and `done.md` files under `docstech/users/<username
 
 - Completed stories are **appended to the end** of the file.
 - Maintain exactly two blank lines before and after each story entry.
-- When moving a story to done.md, remove any `status` attribute from its linetag — all stories in done.md are implicitly `status=done`.
+- When moving a story to done.md, remove any `status` attribute from its linetag - all stories in done.md are implicitly `status=done`.
 
 ### Example todo.md
 

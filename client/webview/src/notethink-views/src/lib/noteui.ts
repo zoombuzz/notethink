@@ -97,7 +97,7 @@ export function countTextCharsUpTo(root: Node, target_node: Node, target_offset:
  * Returns the index within this text node, or -1 if the click is not on any line.
  */
 function findCharInTextNode(range: Range, text_node: Text, node_len: number, clientX: number, clientY: number): number {
-    // binary search on Y — character Y positions are monotonically non-decreasing in normal text flow
+    // binary search on Y - character Y positions are monotonically non-decreasing in normal text flow
     let lo = 0, hi = node_len - 1;
     let line_char = -1;
     while (lo <= hi) {
@@ -180,7 +180,7 @@ export function findCharAtPoint(wrapper: HTMLElement, clientX: number, clientY: 
             continue;
         }
 
-        // click is past this text node's right edge — skip to next inline element
+        // click is past this text node's right edge - skip to next inline element
         if (clientX > node_rect.right) {
             char_count += node_len;
             continue;
@@ -200,7 +200,7 @@ export function findCharAtPoint(wrapper: HTMLElement, clientX: number, clientY: 
  * Walks text nodes within the body item wrapper and uses Range.getBoundingClientRect()
  * to find which character was clicked. Falls back to base_offset when unavailable.
  *
- * Note: this is approximate — markdown formatting characters (**, *, etc.) are not in the
+ * Note: this is approximate - markdown formatting characters (**, *, etc.) are not in the
  * DOM text, so the offset may be slightly past the true source position in formatted text.
  */
 export function refineOffsetWithSelection(event: MouseEvent<HTMLElement>, base_offset: number): number {

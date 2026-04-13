@@ -835,3 +835,11 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + verify webview renders with default (English) bundle
 
 
+### Upgrade NPM packages (Wave 1: minor/patch) [](?time_taken=0)
+
++ [X] run npm-check-updates
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
+
+

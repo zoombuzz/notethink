@@ -645,8 +645,10 @@ body.disableAddressBarHidingOnScroll {
       // restore bullet explicitly - framework CSS resets may remove it
       list-style-type: disc;
 
-      // hide discs on todo items (that contain checkboxes), either in note or nested note
-      &:has(> input[type=checkbox]), &:has(div > input[type=checkbox]) {
+      // hide discs on todo items whose OWN headline has a checkbox. Scope to the
+      // direct-descendant chain li > div.note > div.headline > input so non-checkbox
+      // listItems that contain a nested sub-list of checkbox items don't match.
+      &:has(> input[type=checkbox]), &:has(> div > div > input[type=checkbox]) {
         list-style-type: none;
         text-indent: -1.6em;
       }

@@ -1,9 +1,9 @@
 # Jest Test Results
-# Version: 0.1.52
-# Date: 2026-04-13T08:00:51Z
+# Version: 0.1.53
+# Date: 2026-04-13T15:45:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
-> notethink@0.1.52 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> notethink@0.1.53 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
 ## extension

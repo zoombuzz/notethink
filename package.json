@@ -4,14 +4,14 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "%description%",
-  "version": "0.1.54",
+  "version": "0.1.55",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
     "url": "https://github.com/ZoomBuzz/NoteThink/issues"
   },
   "engines": {
-    "vscode": "^1.115.0"
+    "vscode": "^1.116.0"
   },
   "categories": [
     "Visualization",

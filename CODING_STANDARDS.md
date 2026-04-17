@@ -617,5 +617,6 @@ Description of another completed story.
 
 - Develop and test on the `staging` branch.
 - Run `/prod-ready` before committing. Only commit + push to `staging` once `/prod-ready` reports green.
+- Before every release commit, verify that `engines.vscode` in `package.json` is `>=` the major/minor of `@types/vscode` (and any other vscode-dependent packages). `vsce package` fails CI when `@types/vscode` is greater than `engines.vscode`. If `@types/vscode` has been bumped, bump `engines.vscode` to match.
 - Merging `staging` → `main` is a **production deployment**. Always use `sh/git/merge-main.sh` — never merge manually.
 - The merge to `main` is decoupled from the staging push; it often runs later, not in the same session.

@@ -1,6 +1,6 @@
 # Jest Test Results
 # Version: 0.1.53
-# Date: 2026-04-13T15:45:00Z
+# Date: 2026-04-17T00:00:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 > notethink@0.1.53 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
@@ -9,14 +9,17 @@
 ## extension
 Test Suites: 5 passed, 5 total
 Tests:       116 passed, 116 total
+Time:        2.009 s
 
 ## webview
 Test Suites: 3 passed, 3 total
 Tests:       30 passed, 30 total
+Time:        0.568 s
 
 ## notethink-views
 Test Suites: 23 passed, 23 total
 Tests:       342 passed, 342 total
+Time:        2.802 s
 
 ## TOTAL
 Files: 31, Passed: 488, Failed: 0

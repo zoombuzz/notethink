@@ -612,3 +612,10 @@ Description of another completed story.
 
 - Commit messages must be a **single line** — no newlines or multi-line bodies.
 - **Never** include a `Co-Authored-By` tag.
+
+## Git Workflow
+
+- Develop and test on the `staging` branch.
+- Run `/prod-ready` before committing. Only commit + push to `staging` once `/prod-ready` reports green.
+- Merging `staging` → `main` is a **production deployment**. Always use `sh/git/merge-main.sh` — never merge manually.
+- The merge to `main` is decoupled from the staging push; it often runs later, not in the same session.

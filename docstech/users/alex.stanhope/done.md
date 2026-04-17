@@ -843,3 +843,14 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] verify jest tests pass
 
 
+### Upgrade NPM packages (root + workspace jest 30 + storybook 10) [](?time_taken=0)
+
++ [X] run npm-check-updates
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
++ Phase 1 (minor/patch across all 4 package.json paths): 488 tests pass
++ Phase 2 (jest 29 → 30 majors in client/webview + notethink-views): 488 tests pass, no Jest 30.3 timer issues encountered
++ Phase 3 (Storybook 8 → 10, rollup plugins): 488 tests pass, lint clean. Peer-dep warnings remain for @storybook/addon-essentials, @storybook/addon-interactions, @storybook/blocks, @storybook/test still at 8.6.18 — these addons were outside Phase 3 scope and some are deprecated/renamed in SB10; follow-up story needed to clean up the storybook configuration and addon set
+
+

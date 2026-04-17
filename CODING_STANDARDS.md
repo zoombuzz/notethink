@@ -153,9 +153,11 @@ function complexProcess(data: Data) {
 
 ### Comments
 
-- start with lowercase
+- **Always start comments with a lowercase letter** (unless the first word is a proper noun, type, or component name). This applies to the first sentence only — a multi-sentence comment starts lowercase, but every subsequent sentence follows normal capitalisation rules (first word capitalised unless there's a reason not to).
 - no period at end (unless multiple sentences)
 - place above the code, not inline
+- **Keep each comment to a single line.** Do not wrap a single comment across multiple `//` lines just to stay under 80 characters — let the line run long. If you genuinely have two separate thoughts, write two single-line comments stacked together, one thought per line. Long lines are fine; fragmented thoughts are not.
+- **Keep inline comments short.** When an inline comment is unavoidable, aim for 100 characters unless there's a good reason to make it more verbose (e.g. a tricky invariant that needs precise wording, or a non-obvious cross-reference). If an explanation genuinely needs more than ~100 chars, lift it into the function header comment (the block comment immediately above the function) rather than cramming it inline — long comments interleaved with statements break up the function body and make it hard to read.
 
 ```typescript
 // correct
@@ -490,6 +492,9 @@ This runs, in order:
 
 CI only runs lint and build (no tests). Tests are the developer's responsibility before push.
 
+### Dev Server Lifecycle During Testing
+**Leave the dev server running after Playwright tests finish.** The user often uses the running server for manual QA immediately after a verification run, and restarting costs 10+ seconds per check. Only stop the dev server if the user explicitly asks.
+
 ### After every code change
 
 Always rebuild the extension after each code change so the developer can preview it in the VS Code dev host. Run `pnpm run build` (or `pnpm run check` which includes the build) before considering a change complete.
@@ -532,6 +537,23 @@ Each developer has `todo.md` and `done.md` files under `docstech/users/<username
 - When a story is being actively implemented, attach a status linetag to its heading: `### Story title [](?status=doing)`.
 - Linetags use the format `[](?key=value&key2=value2)` appended to the story heading line.
 - When a story is completed (all tasks done), remove it from `todo.md` and append it to `done.md`.
+
+### Time Tags
+
+Two distinct tags — do not confuse them. Units: minutes.
+
+- **`time_estimated`** — forward-looking forecast of how long a story is expected to take. Can appear on a story in `todo.md` at creation time, or on a completed story in `done.md` (kept alongside `time_taken` for retrospective accuracy). Optional: if no sensible estimate is available at creation time, omit the tag entirely rather than guess.
+- **`time_taken`** — **actual** time spent on the story so far. Non-zero by definition. On an unfinished story in `todo.md` it represents work already done to date; on a completed story in `done.md` it represents total time from inception through completion.
+
+**CRITICAL**: `time_taken` must only ever contain time that has actually been worked. Never put an estimate into `time_taken` — even "a small placeholder" — because these values feed client billing, and recording estimated time as taken time means billing for work that may not have happened. If no time has been worked yet, omit the tag; use `time_estimated` for the forecast instead.
+
+```
+### New story [](?time_estimated=180)                        # ok in todo.md — forecast only, no work done yet
+### New story                                                 # also ok in todo.md — no estimate available
+### In-progress story [](?time_estimated=180&time_taken=45)  # ok in todo.md — 45 min worked so far, 180 min forecast total
+### Completed story [](?time_taken=225)                      # ok in done.md — 225 min actually worked
+### Completed story [](?time_estimated=180&time_taken=225)   # ok in done.md — keeps the forecast alongside the actual for retrospective accuracy
+```
 
 ### done.md
 
@@ -585,3 +607,8 @@ Description of another completed story.
 - **Always bump the version** in the governing `package.json` when implementing code changes.
 - **Only increment the patch version** (e.g. 2.11.2 → 2.11.3). Major and minor version changes are the user's decision.
 - After completing work, show the updated version number in your output.
+
+## Commit Messages
+
+- Commit messages must be a **single line** — no newlines or multi-line bodies.
+- **Never** include a `Co-Authored-By` tag.

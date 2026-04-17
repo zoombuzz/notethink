@@ -9,7 +9,7 @@ const outputChannel = vscode.window.createOutputChannel('NoteThink', {
     log: true,
 });
 
-// --- Dev file log: buffer lines and flush to docstech/reports/notethink-extension.log ---
+// --- Dev file log: buffer lines and flush to <notethink>/notethink-extension.log ---
 const LOG_BUFFER_MAX = 500;
 const LOG_FLUSH_MS = 1000;
 const logBuffer: string[] = [];
@@ -18,9 +18,11 @@ let logFlushTimer: ReturnType<typeof setTimeout> | undefined;
 function flushLogBuffer() {
     logFlushTimer = undefined;
     if (logBuffer.length === 0) { return; }
-    const folder = vscode.workspace.workspaceFolders?.[0];
-    if (!folder) { return; }
-    const logUri = vscode.Uri.joinPath(folder.uri, 'docstech', 'reports', 'notethink-extension.log');
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) { return; }
+    // prefer a workspace folder whose path ends in /notethink, fall back to first folder
+    const folder = folders.find(f => /[\/\\]notethink$/.test(f.uri.path)) ?? folders[0];
+    const logUri = vscode.Uri.joinPath(folder.uri, 'notethink-extension.log');
     const content = logBuffer.join('\n') + '\n';
     // fire-and-forget; never block logging on I/O
     vscode.workspace.fs.writeFile(logUri, new TextEncoder().encode(content)).then(
@@ -30,7 +32,7 @@ function flushLogBuffer() {
 }
 
 function appendToFileLog(line: string) {
-    if (typeof NOTETHINK_DEV !== 'undefined' && !NOTETHINK_DEV) { return; }
+    if (typeof NOTETHINK_DEV === 'undefined' || !NOTETHINK_DEV) { return; }
     logBuffer.push(line);
     if (logBuffer.length > LOG_BUFFER_MAX) {
         logBuffer.splice(0, logBuffer.length - LOG_BUFFER_MAX);

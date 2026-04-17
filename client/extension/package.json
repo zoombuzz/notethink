@@ -15,23 +15,23 @@
 		"test": "jest --config jest.config.cjs --forceExit"
 	},
 	"dependencies": {
-		"mdast-util-from-markdown": "^2.0.2",
+		"mdast-util-from-markdown": "^2.0.3",
 		"mdast-util-frontmatter": "^2.0.1",
 		"mdast-util-gfm": "^3.1.0",
 		"micromark-extension-frontmatter": "^2.0.0",
 		"micromark-extension-gfm": "^3.0.0",
 		"vscode-languageclient": "9.0.1",
-		"winston": "^3.17.0",
+		"winston": "^3.19.0",
 		"winston-transport-vscode": "^0.1.0"
 	},
 	"devDependencies": {
 		"@babel/core": "^7.29.0",
-		"@babel/preset-env": "^7.29.0",
+		"@babel/preset-env": "^7.29.2",
 		"@types/jest": "^30.0.0",
 		"@types/mdast": "^4.0.4",
-		"babel-jest": "^30.2.0",
-		"jest": "^30.2.0",
+		"babel-jest": "^30.3.0",
+		"jest": "^30.3.0",
 		"logform": "^2.7.0",
-		"ts-jest": "^29.4.6"
+		"ts-jest": "^29.4.9"
 	}
 }

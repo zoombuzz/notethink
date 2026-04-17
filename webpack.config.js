@@ -146,11 +146,11 @@ const clientWebviewConfig = {
 			},
 			{
 				test: /\.css$/,
-				use: ["style-loader", "css-loader"],
+				use: ["style-loader", { loader: "css-loader", options: { modules: { namedExport: false, exportLocalsConvention: "as-is" } } }],
 			},
 			{
 				test: /\.scss$/,
-				use: ["style-loader", "css-loader", { loader: "sass-loader", options: { api: "modern-compiler" } }],
+				use: ["style-loader", { loader: "css-loader", options: { modules: { namedExport: false, exportLocalsConvention: "as-is" } } }, { loader: "sass-loader", options: { api: "modern-compiler" } }],
 			},
 		]
 	},

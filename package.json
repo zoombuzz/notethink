@@ -4,14 +4,14 @@
   "author": "Zoom Buzz Ltd.",
   "publisher": "ZoomBuzz",
   "description": "%description%",
-  "version": "0.1.55",
+  "version": "0.1.56",
   "license": "Apache-2.0",
   "homepage": "https://github.com/ZoomBuzz/NoteThink",
   "bugs": {
     "url": "https://github.com/ZoomBuzz/NoteThink/issues"
   },
   "engines": {
-    "vscode": "^1.116.0"
+    "vscode": "^1.118.0"
   },
   "categories": [
     "Visualization",
@@ -217,11 +217,11 @@
     "@playwright/test": "^1.59.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/mocha": "^10.0.10",
-    "@types/vscode": "^1.116.0",
+    "@types/vscode": "^1.118.0",
     "@types/webpack-env": "^1.18.8",
     "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-web": "^0.0.80",
-    "@vscode/vsce": "^3.9.0",
+    "@vscode/vsce": "^3.9.1",
     "assert": "^2.1.0",
     "copy-webpack-plugin": "14.0.0",
     "css-loader": "^7.1.4",
@@ -240,7 +240,7 @@
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.7",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.58.2",
+    "typescript-eslint": "^8.59.1",
     "webpack": "^5.106.2",
     "webpack-cli": "^7.0.2"
   }

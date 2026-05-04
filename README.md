@@ -33,6 +33,10 @@ code --install-extension notethink-0.1.0.vsix
 2. Use the command palette (`Ctrl+Shift+P`) and run "NoteThink: Open View"
 3. Or right-click on a markdown file and select "Open With..." → "NoteThink"
 
+For the conventions your markdown should follow — heading levels, story
+structure, linetag syntax, epics, Directory mode — see
+[AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md).
+
 ## Development
 
 ### Prerequisites

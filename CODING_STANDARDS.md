@@ -492,8 +492,8 @@ This runs, in order:
 
 CI only runs lint and build (no tests). Tests are the developer's responsibility before push.
 
-### Dev Server Lifecycle During Testing
-**Leave the dev server running after Playwright tests finish.** The user often uses the running server for manual QA immediately after a verification run, and restarting costs 10+ seconds per check. Only stop the dev server if the user explicitly asks.
+### No web dev server
+notethink is a VS Code extension — there is no `pnpm run dev` and no HTTP server to start. The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host. Per the `/open-dev` skill's special cases, this project is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`).
 
 ### After every code change
 

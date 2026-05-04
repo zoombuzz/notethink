@@ -854,3 +854,15 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + Phase 3 (Storybook 8 → 10, rollup plugins): 488 tests pass, lint clean. Peer-dep warnings remain for @storybook/addon-essentials, @storybook/addon-interactions, @storybook/blocks, @storybook/test still at 8.6.18 — these addons were outside Phase 3 scope and some are deprecated/renamed in SB10; follow-up story needed to clean up the storybook configuration and addon set
 
 
+### Upgrade NPM packages (Wave 1 minor/patch refresh)
+
++ [X] run npm-check-updates
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
++ updates: @types/vscode ^1.116.0 → ^1.118.0, @vscode/vsce ^3.9.0 → ^3.9.1, typescript-eslint ^8.58.2 → ^8.59.1
++ also bumped engines.vscode ^1.116.0 → ^1.118.0 to keep it >= @types/vscode major/minor (per CODING_STANDARDS pre-release rule)
++ rejects honoured: eslint and @eslint/js stay pinned at 9.39.4 (per .ncurc.json)
++ lint clean; 488 jest tests pass (extension 116, webview 30, notethink-views 342)
+
+

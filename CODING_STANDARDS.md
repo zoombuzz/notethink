@@ -492,8 +492,8 @@ This runs, in order:
 
 CI only runs lint and build (no tests). Tests are the developer's responsibility before push.
 
-### Dev Server Lifecycle During Testing
-**Leave the dev server running after Playwright tests finish.** The user often uses the running server for manual QA immediately after a verification run, and restarting costs 10+ seconds per check. Only stop the dev server if the user explicitly asks.
+### No web dev server
+notethink is a VS Code extension — there is no `pnpm run dev` and no HTTP server to start. The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host. Per the `/open-dev` skill's special cases, this project is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`).
 
 ### After every code change
 
@@ -617,5 +617,6 @@ Description of another completed story.
 
 - Develop and test on the `staging` branch.
 - Run `/prod-ready` before committing. Only commit + push to `staging` once `/prod-ready` reports green.
+- Before every release commit, verify that `engines.vscode` in `package.json` is `>=` the major/minor of `@types/vscode` (and any other vscode-dependent packages). `vsce package` fails CI when `@types/vscode` is greater than `engines.vscode`. If `@types/vscode` has been bumped, bump `engines.vscode` to match.
 - Merging `staging` → `main` is a **production deployment**. Always use `sh/git/merge-main.sh` — never merge manually.
 - The merge to `main` is decoupled from the staging push; it often runs later, not in the same session.

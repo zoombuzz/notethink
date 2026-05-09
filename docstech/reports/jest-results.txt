@@ -1,25 +1,41 @@
 # Jest Test Results
-# Version: 0.1.53
-# Date: 2026-04-17T00:00:00Z
+# Version: 0.1.57
+# Date: 2026-05-09T00:00:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
-> notethink@0.1.53 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> notethink@0.1.57 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
-## extension
+> notethink-client-extension@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/extension
+> jest --config jest.config.cjs --forceExit
+
 Test Suites: 5 passed, 5 total
 Tests:       116 passed, 116 total
-Time:        2.009 s
+Snapshots:   0 total
+Time:        2.234 s
 
-## webview
+> notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
+> jest --config jest.config.cjs --forceExit
+
 Test Suites: 3 passed, 3 total
 Tests:       30 passed, 30 total
-Time:        0.568 s
+Snapshots:   0 total
+Time:        0.711 s
 
-## notethink-views
+> @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
+> jest --config jest.config.cjs --forceExit
+
 Test Suites: 23 passed, 23 total
 Tests:       342 passed, 342 total
-Time:        2.802 s
+Snapshots:   0 total
+Time:        3.459 s
 
-## TOTAL
-Files: 31, Passed: 488, Failed: 0
+┌──────────────────┬───────┬────────┬────────┬─────────┐
+│ Suite            │ Files │ Passed │ Failed │ Time    │
+├──────────────────┼───────┼────────┼────────┼─────────┤
+│ extension        │     5 │    116 │      0 │ 2.234 s │
+│ webview          │     3 │     30 │      0 │ 0.711 s │
+│ notethink-views  │    23 │    342 │      0 │ 3.459 s │
+├──────────────────┼───────┼────────┼────────┼─────────┤
+│ TOTAL            │    31 │    488 │      0 │         │
+└──────────────────┴───────┴────────┴────────┴─────────┘

@@ -1,5 +1,5 @@
 import React, { Suspense, createRef } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import GenericView from './GenericView';
 import type { ViewProps, ViewApi } from '../../types/ViewProps';
 import type { NoteProps, ClickPositionInfo } from '../../types/NoteProps';
@@ -922,6 +922,154 @@ describe('GenericView navigation callback', () => {
         expect(post_message).toHaveBeenCalledWith({
             type: 'revealRange',
             from: 51,
+        });
+    });
+
+    describe('settings drawer', () => {
+
+        function renderWithToolbar(view_overrides: Partial<ViewProps> = {}) {
+            // a non-'auto' type renders the toolbar (which holds the gear button) + the drawer
+            return render(
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({ type: 'document', ...view_overrides })} />
+                </Suspense>
+            );
+        }
+
+        it('renders the gear button with aria-expanded=false initially', async () => {
+            renderWithToolbar();
+            const gear = await screen.findByTestId('view-settings-button');
+            expect(gear).toHaveAttribute('aria-expanded', 'false');
+        });
+
+        it('toggles aria-expanded on the gear button when clicked', async () => {
+            renderWithToolbar();
+            const gear = await screen.findByTestId('view-settings-button');
+            fireEvent.click(gear);
+            expect(gear).toHaveAttribute('aria-expanded', 'true');
+            fireEvent.click(gear);
+            expect(gear).toHaveAttribute('aria-expanded', 'false');
+        });
+
+        it('flips data-open on the drawer grid when the gear is clicked', async () => {
+            renderWithToolbar();
+            const grid = await screen.findByTestId('settings-drawer-grid');
+            expect(grid).toHaveAttribute('data-open', 'false');
+            fireEvent.click(await screen.findByTestId('view-settings-button'));
+            expect(grid).toHaveAttribute('data-open', 'true');
+        });
+
+        it('renders SettingsDocumentDrawer when view type is document', async () => {
+            renderWithToolbar({ type: 'document' });
+            expect(await screen.findByTestId('settings-drawer-document')).toBeInTheDocument();
+            expect(screen.queryByTestId('settings-drawer-kanban')).not.toBeInTheDocument();
+        });
+
+        it('renders SettingsKanbanDrawer when view type is kanban', async () => {
+            renderWithToolbar({ type: 'kanban' });
+            expect(await screen.findByTestId('settings-drawer-kanban')).toBeInTheDocument();
+            expect(screen.queryByTestId('settings-drawer-document')).not.toBeInTheDocument();
+        });
+
+        it('does not render the drawer for type "auto" (toolbar suppressed)', async () => {
+            renderWithToolbar({ type: 'auto' });
+            await waitFor(() => expect(screen.queryByTestId('auto-view')).toBeInTheDocument());
+            expect(screen.queryByTestId('view-settings-button')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('settings-drawer-grid')).not.toBeInTheDocument();
+        });
+
+        it('toggling a per-view checkbox dispatches setViewManagedState immediately', async () => {
+            const set_state = jest.fn();
+            renderWithToolbar({
+                type: 'document',
+                handlers: {
+                    setViewManagedState: set_state,
+                    deleteViewFromManagedState: jest.fn(),
+                    revertAllViewsToDefaultState: jest.fn(),
+                    postMessage: jest.fn(),
+                },
+            });
+            fireEvent.click(await screen.findByTestId('view-settings-button'));
+            const linetags_cb = screen.getAllByRole('checkbox').find(
+                cb => cb.closest('label')?.textContent?.includes('linetag')
+            )!;
+            fireEvent.click(linetags_cb);
+            expect(set_state).toHaveBeenCalledTimes(1);
+            const update = set_state.mock.calls[0][0][0];
+            expect(update.id).toBe('test-view');
+            expect(update.display_options.settings.show_linetags_in_headlines).toBe(true);
+        });
+
+        it('toggling the line-numbers checkbox dispatches postMessage updateGlobalSetting', async () => {
+            const post_message = jest.fn();
+            renderWithToolbar({
+                type: 'document',
+                handlers: {
+                    setViewManagedState: jest.fn(),
+                    deleteViewFromManagedState: jest.fn(),
+                    revertAllViewsToDefaultState: jest.fn(),
+                    postMessage: post_message,
+                },
+            });
+            fireEvent.click(await screen.findByTestId('view-settings-button'));
+            const line_cb = screen.getAllByRole('checkbox').find(
+                cb => cb.closest('label')?.textContent?.includes('line numbers')
+            )!;
+            fireEvent.click(line_cb);
+            expect(post_message).toHaveBeenCalledWith({
+                type: 'updateGlobalSetting',
+                setting: 'show_line_numbers',
+                value: true,
+            });
+        });
+
+        it('Kanban column reorder dispatches setViewManagedState with column_order; reset persists undefined', async () => {
+            const set_state = jest.fn();
+            const status_note_a = makeNote({
+                seq: 1, level: 2,
+                position: { start: { offset: 10, line: 2 }, end: { offset: 20, line: 2 }, end_body: { offset: 30, line: 3 } },
+                linetags: { 'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 } },
+            });
+            const status_note_b = makeNote({
+                seq: 2, level: 2,
+                position: { start: { offset: 30, line: 4 }, end: { offset: 40, line: 4 }, end_body: { offset: 50, line: 5 } },
+                linetags: { 'status': { key: 'status', value: 'done', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 } },
+            });
+            const root = makeNote({ seq: 0, level: 1, child_notes: [status_note_a, status_note_b] });
+            renderWithToolbar({
+                type: 'kanban',
+                notes: [root, status_note_a, status_note_b],
+                handlers: {
+                    setViewManagedState: set_state,
+                    deleteViewFromManagedState: jest.fn(),
+                    revertAllViewsToDefaultState: jest.fn(),
+                    postMessage: jest.fn(),
+                },
+            });
+            fireEvent.click(await screen.findByTestId('view-settings-button'));
+            // natural order is ['doing', 'done', 'untagged']; clicking move-up on 'done' produces ['done', 'doing', 'untagged']
+            fireEvent.click(screen.getByLabelText('Move done up'));
+            expect(set_state).toHaveBeenCalledTimes(1);
+            const reorder_update = set_state.mock.calls[0][0][0];
+            expect(reorder_update.display_options.settings.column_order).toEqual(['done', 'doing', 'untagged']);
+            // resetting to natural order persists undefined
+            set_state.mockClear();
+            fireEvent.click(screen.getByText('Reset order'));
+            const reset_update = set_state.mock.calls[0][0][0];
+            expect(reset_update.display_options.settings.column_order).toBeUndefined();
+        });
+
+        it('Escape closes the drawer and returns focus to the gear button', async () => {
+            renderWithToolbar();
+            const gear = await screen.findByTestId('view-settings-button');
+            fireEvent.click(gear);
+            expect(gear).toHaveAttribute('aria-expanded', 'true');
+            act(() => {
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+            });
+            expect(gear).toHaveAttribute('aria-expanded', 'false');
+            // focus restoration runs in a requestAnimationFrame; jsdom supports rAF
+            await waitFor(() => expect(document.activeElement).toBe(gear));
         });
     });
 });

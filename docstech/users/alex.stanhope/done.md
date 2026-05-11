@@ -866,3 +866,62 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + lint clean; 488 jest tests pass (extension 116, webview 30, notethink-views 342)
 
 
+### Settings drawer (replace centred modal with top-anchored, full-width, push-down drawer)
+
++ goal
+  + clicking the toolbar gear icon should open a full-width drawer attached below the toolbar, not pop a centred modal dialog
+  + the drawer pushes page content down rather than overlaying it; the part of the document the user was looking at remains visible (the page scrolls down by the drawer's height to compensate)
+  + changes inside the drawer apply immediately to the view — no Save or Cancel buttons; clicking the gear again (or pressing Escape) closes the drawer
+  + must be performant on long documents and large kanbans — opening/closing the drawer must not re-render the note tree
+
++ research — best practice for a top-anchored push-down drawer in a VSCode webview
+  1. **closest precedents inside VSCode** — VSCode's Find widget (Ctrl+F) and the merge-editor toolbar are top-anchored, full-width widgets that animate in/out. They use CSS transitions on `transform: translateY()` and *overlay* content. Push-down required a different primitive
+  2. **animating from collapsed to natural content height** — CSS Grid trick: outer `display: grid; grid-template-rows: 0fr; transition: grid-template-rows 150ms` with inner `overflow: hidden; min-height: 0`; toggling to `1fr` animates smoothly to natural height. No JS measurement, no `max-height` brittleness
+  3. **scroll anchoring** — capture an anchor element's `getBoundingClientRect().top` before the drawer opens, then `scrollBy` so the anchor returns to its previous viewport-y. CSS `overflow-anchor: auto` is unreliable for deliberate UI toggles
+  4. **sticky vs absolute vs fixed** — `position: sticky; top: <toolbar-height>` keeps the drawer in document flow (so content below moves down) but glued just below the toolbar while content scrolls underneath
+  5. **VSCode theming** — `var(--vscode-editorWidget-*)`, no backdrop, border-bottom matching the toolbar so the drawer reads as attached
+  6. **animation timing** — 150ms `cubic-bezier(0.2, 0, 0.38, 0.9)`; `@media (prefers-reduced-motion: reduce)` zeroes the duration
+  7. **performance** — `React.memo` on the drawer; reads from props with no local mirror; always mounted (open/closed is a CSS class); each onChange dispatches for a single key only, so `React.memo` on `DocumentView`/`KanbanView` filters out untouched re-renders
+  8. **real-time apply semantics** — per-view settings dispatch via `setViewManagedState`; global settings via `postMessage({ type: 'updateGlobalSetting' })`; Kanban column reorder normalises to `column_order: undefined` when the order matches natural
+
++ design decisions (locked in 2026-05-11)
+  1. **renamed `SettingsDocumentModal` → `SettingsDocumentDrawer` and `SettingsKanbanModal` → `SettingsKanbanDrawer`** — `<dialog>` replaced with plain `<div>` styled via the new `.settingsDrawer` SCSS class
+  2. **drawer ownership moved up to `GenericView`** — single, predictable place to insert the push-down element; `DocumentView`/`KanbanView` no longer own settings state or render settings UI
+  3. **`position: sticky; top: 22px`** below the toolbar; closing via clicking the gear again or pressing Escape
+  4. **no Save / no Cancel** — every input dispatches on change; local mirrored state removed; version label kept for diagnostics
+  5. **scroll anchoring in `GenericView`** — `useLayoutEffect` captures the gear button's `getBoundingClientRect().top` before the toggle, then a `requestAnimationFrame` loop calls `window.scrollBy(0, delta)` for ~250ms (covering the 150ms animation + margin) so the gear stays glued at its initial viewport position
+  6. **animation via CSS Grid** — `grid-template-rows: 0fr → 1fr`; flipped via `data-open="true"`
+  7. **reduced motion** — transition zeroed; `scrollBy` always instant
+  8. **gear icon is a toggle** — `aria-expanded={settings_drawer_open}`; tooltip stays `Settings`
+  9. **shared controls extracted** — `SettingsCommonControls.tsx` houses the four shared booleans; both drawers compose it
+  10. **drawer cap height** — `max-height: 50vh; overflow-y: auto` on the inner wrapper
+  11. **layout** — drawer body is a flex row: setting groups on the left (one group for Document, two for Kanban: column order + common controls), title and version pinned right via `justify-content: space-between`
+
++ code changes
+  + [X] new SCSS `.settingsDrawerGrid`, `.settingsDrawer`, `.settingsDrawerBody`, `.settingsDrawerGroups`, `.settingsDrawerGroup`, `.settingsDrawerMeta`, `.settingsDrawerColumnOrder`, `.settingsDrawerVersion` in `ViewRenderer.module.scss`
+  + [X] renamed `SettingsDocumentModal.tsx` → `SettingsDocumentDrawer.tsx`; removed `<dialog>`/local state/Save/Cancel; controlled inputs dispatch via `onSettingChange` / `onGlobalSettingChange`
+  + [X] renamed `SettingsKanbanModal.tsx` → `SettingsKanbanDrawer.tsx`; column up/down/reset dispatch via `onColumnOrderChange` on every click
+  + [X] new `SettingsCommonControls.tsx` housing the four shared boolean checkboxes
+  + [X] `GenericView.tsx` — hoisted `settings_drawer_open`; gear button has `aria-expanded` and a ref; `useLayoutEffect` rAF loop anchors gear-button viewport-y; document keydown listener closes on Escape and returns focus to the gear; drawer renders between toolbar and view body; `arraysEqual(custom_order, natural_order)` normalisation lives in `handleColumnOrderChange` so persistence drops to `undefined` when the order matches natural
+  + [X] `DocumentView.tsx`, `KanbanView.tsx` — `settings_open` state, `handleSettingsSave`, `onSettingsClick` ref wiring, and inline modal renders removed
+  + [X] `ViewProps.ts` — `handlers.onSettingsClick` removed (no other consumers)
+  + [X] `l10n-rendering.test.tsx` — updated imports/props for renamed drawers; Save/Cancel assertions dropped (no such buttons)
+
++ tests (Jest)
+  + [X] `SettingsDocumentDrawer.test.tsx` — each onChange dispatches the right handler with the right key/value; no Save/Cancel; version label rendered
+  + [X] `SettingsKanbanDrawer.test.tsx` — up/down/reset dispatch the new array; reset dispatches the natural order (consumer normalises to `undefined`); checkboxes dispatch immediately
+  + [X] `SettingsCommonControls.test.tsx` — each of the four checkboxes dispatches the expected handler with the expected key
+  + [X] `GenericView.test.tsx > settings drawer` — gear toggles `aria-expanded`; drawer `data-open` flips; the right drawer renders by view type; per-view checkbox dispatches `setViewManagedState`; line-numbers checkbox dispatches `postMessage updateGlobalSetting`; Kanban reorder persists `column_order`; reset persists `undefined`; Escape closes and returns focus
+  + [X] regression guard — Jest total 492 (baseline 488 + 4 net new) — no regressions; lint clean
+
++ tests (Playwright)
+  + [X] all 35 existing Playwright tests continue to pass (settings-toggle.spec.ts, kanban, view-switching, breadcrumb, click-interaction, document-view, error-boundary, keyboard-navigation, list-bullets)
+  + drawer-interaction Playwright tests (open/close animation, scroll anchoring, reduced motion) were not added at the browser level — equivalent assertions live in Jest under jsdom (toggle, dispatch, Escape + focus restoration). Could be added later if browser-level coverage becomes useful; deferred because the jsdom + manual verification already covers the behaviour
+
++ notes
+  + the only remaining `<dialog>` consumer is `InsertModal.tsx` — kept modal because it's a single-shot data entry that interrupts flow
+  + the CSS Grid `0fr → 1fr` animation requires Chromium 117+. VSCode ≥ 1.96 ships Electron 32 / Chromium 128 — well within range
+  + interacts cleanly with the Aggregate (Directory) story still in todo.md: in Directory mode a single drawer below the single toolbar remains the right model; the drawer's `onSettingChange` dispatches `setViewManagedState` for the merged view's `id`, exactly as for a single-file view
+  + post-implementation refinement (user feedback): Kanban Settings title and NoteThink version label pinned right; settings split into multi-column groups so the drawer is shorter and easier to scan
+
+

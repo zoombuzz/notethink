@@ -1,4 +1,4 @@
-import React, { type ReactElement, MouseEvent, Profiler, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { type ReactElement, MouseEvent, Profiler, useMemo } from "react";
 import {
     DragDropContext,
     Draggable,
@@ -11,7 +11,6 @@ import Debug from 'debug';
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
 import {
-    standardNoteOrder,
     withinNoteHeadlineOrBodyUpTo,
     kanbanNoteOrder,
 } from "../../lib/noteops";
@@ -19,7 +18,6 @@ import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
 import { calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering } from "../../lib/linetagops";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import KanbanColumn from "./KanbanColumn";
-import SettingsKanbanModal from "./SettingsKanbanModal";
 import GenericNote from "../notes/GenericNote";
 import master_view_styles from "../ViewRenderer.module.scss";
 import view_specific_styles from "../ViewRenderer.module.scss";
@@ -71,20 +69,6 @@ export default function KanbanView(props: ViewProps) {
         },
     };
 
-    const [settings_open, setSettingsOpen] = useState(false);
-
-    // register settings handler on the ref so the toolbar gear button can invoke it
-    useEffect(() => {
-        if (props.handlers?.onSettingsClick) {
-            props.handlers.onSettingsClick.current = () => setSettingsOpen(true);
-        }
-        return () => {
-            if (props.handlers?.onSettingsClick) {
-                props.handlers.onSettingsClick.current = undefined;
-            }
-        };
-    }, [props.handlers?.onSettingsClick]);
-
     const columns = useMemo<Array<Column>>(() => {
         const status_values = new Set<string>();
         for (const note of (props.notes_within_parent_context || [])) {
@@ -120,37 +104,6 @@ export default function KanbanView(props: ViewProps) {
         result.push({ seq: result.length, value: "untagged", type: "pseudo" });
         return result;
     }, [props.notes_within_parent_context, display_options.settings?.column_order]);
-
-    // natural column order (alphabetical, for settings modal comparison)
-    const natural_column_order = useMemo<string[]>(() => {
-        const status_values = new Set<string>();
-        for (const note of (props.notes_within_parent_context || [])) {
-            if (note.linetags?.status?.value) {
-                status_values.add(note.linetags.status.value);
-            }
-        }
-        return [...Array.from(status_values).sort(), 'untagged'];
-    }, [props.notes_within_parent_context]);
-
-    const handleSettingsSave = useCallback((updated_settings: {
-        show_linetags_in_headlines?: boolean;
-        scroll_note_into_view?: boolean;
-        auto_expand_focused_note?: boolean;
-        column_order?: string[];
-    }) => {
-        setSettingsOpen(false);
-        // exclude show_line_numbers - it's a global setting persisted via workspace config
-        const { show_line_numbers: _sln, ...per_view_settings } = display_options.settings || {};
-        props.handlers?.setViewManagedState?.([{
-            id: props.id,
-            display_options: {
-                settings: {
-                    ...per_view_settings,
-                    ...updated_settings,
-                },
-            },
-        }]);
-    }, [props.handlers, props.id, display_options.settings]);
 
     const dragStartHandler = (start: DragStart, provided: ResponderProvided): void => {
         const dragged_note_seq = Number(start.draggableId);
@@ -268,28 +221,12 @@ export default function KanbanView(props: ViewProps) {
     const container_styles: Array<string> = [view_specific_styles.viewKanban, master_view_styles.content];
 
     const content = (
-        <>
-            <div className={container_styles.join(' ')} id={`v${props.id}-inner`}
-                 onClick={(display_options.focused_notes?.length ? props.handlers?.getClearHandler?.(display_options.focused_notes) : undefined)}
-                 data-level={display_options.level} data-parent-content-seq={display_options.parent_context_seq}>
-                {props.nested?.parent_context && renderTopLevelNoteWithoutChildren(props.nested?.parent_context, props, display_options)}
-                {rendered_board}
-            </div>
-            <SettingsKanbanModal
-                opened={settings_open}
-                onClose={() => setSettingsOpen(false)}
-                columnOrder={natural_column_order}
-                settings={{
-                    show_linetags_in_headlines: display_options.settings?.show_linetags_in_headlines,
-                    scroll_note_into_view: display_options.settings?.scroll_note_into_view,
-                    auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
-                    column_order: display_options.settings?.column_order,
-                }}
-                onSave={handleSettingsSave}
-                showLineNumbers={display_options.settings?.show_line_numbers}
-                postMessage={props.handlers?.postMessage}
-            />
-        </>
+        <div className={container_styles.join(' ')} id={`v${props.id}-inner`}
+             onClick={(display_options.focused_notes?.length ? props.handlers?.getClearHandler?.(display_options.focused_notes) : undefined)}
+             data-level={display_options.level} data-parent-content-seq={display_options.parent_context_seq}>
+            {props.nested?.parent_context && renderTopLevelNoteWithoutChildren(props.nested?.parent_context, props, display_options)}
+            {rendered_board}
+        </div>
     );
 
     if (onProfilerRender) {

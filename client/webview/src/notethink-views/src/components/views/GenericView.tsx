@@ -1,5 +1,5 @@
 import Debug from "debug";
-import React, { lazy, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as l10n from "@vscode/l10n";
 import type { ViewProps, ViewApi } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions, NoteHandlers, ClickPositionInfo } from "../../types/NoteProps";
@@ -15,6 +15,9 @@ import BreadcrumbTrail from "./BreadcrumbTrail";
 import ViewTypeSelector from "./ViewTypeSelector";
 import ViewIntegrationSelector, { type IntegrationMode } from "./ViewIntegrationSelector";
 import InsertModal from "../InsertModal";
+import SettingsDocumentDrawer from "./SettingsDocumentDrawer";
+import SettingsKanbanDrawer from "./SettingsKanbanDrawer";
+import type { CommonSettingKey } from "./SettingsCommonControls";
 import master_view_styles from "../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:GenericView");
@@ -357,8 +360,112 @@ export default function GenericView(props: ViewProps) {
         }
     }, [handlers, props.id, props.doc_path]);
 
-    // settings callback ref - child views (e.g. KanbanView) register their handler
-    const settingsClickRef = useRef<(() => void) | undefined>(undefined);
+    // settings drawer state (hoisted from per-view modals)
+    const [settings_drawer_open, setSettingsDrawerOpen] = useState(false);
+    const gear_button_ref = useRef<HTMLButtonElement>(null);
+    const initial_gear_top_ref = useRef<number | null>(null);
+
+    // natural column order for the Kanban drawer (alphabetical + 'untagged' last)
+    const natural_column_order = useMemo<string[]>(() => {
+        if (props.type !== 'kanban') { return []; }
+        const status_values = new Set<string>();
+        for (const note of (notes_within_parent_context || [])) {
+            if (note.linetags?.status?.value) {
+                status_values.add(note.linetags.status.value);
+            }
+        }
+        return [...Array.from(status_values).sort(), 'untagged'];
+    }, [props.type, notes_within_parent_context]);
+
+    const arraysEqual = (a: string[], b: string[]): boolean => {
+        if (a.length !== b.length) { return false; }
+        return a.every((value, index) => value === b[index]);
+    };
+
+    // real-time apply: per-view setting change dispatches setViewManagedState immediately
+    const handleSettingChange = useCallback((key: CommonSettingKey, value: boolean) => {
+        const { show_line_numbers: _sln, ...per_view_settings } = display_options.settings || {};
+        handlers.setViewManagedState([{
+            id: props.id,
+            display_options: {
+                settings: {
+                    ...per_view_settings,
+                    [key]: value,
+                },
+            },
+        }]);
+    }, [handlers, props.id, display_options.settings]);
+
+    // real-time apply: global setting (currently just show_line_numbers) goes via postMessage
+    const handleGlobalSettingChange = useCallback((key: 'show_line_numbers', value: boolean) => {
+        handlers.postMessage?.({ type: 'updateGlobalSetting', setting: key, value });
+    }, [handlers]);
+
+    // real-time apply: Kanban column order change. Normalise: if next_order matches the natural order, persist undefined
+    const handleColumnOrderChange = useCallback((next_order: string[]) => {
+        const { show_line_numbers: _sln, ...per_view_settings } = display_options.settings || {};
+        const persisted_order = arraysEqual(next_order, natural_column_order) ? undefined : next_order;
+        handlers.setViewManagedState([{
+            id: props.id,
+            display_options: {
+                settings: {
+                    ...per_view_settings,
+                    column_order: persisted_order,
+                },
+            },
+        }]);
+    }, [handlers, props.id, display_options.settings, natural_column_order]);
+
+    // toggle the drawer; capture the gear button's viewport position so the scroll-anchoring effect can keep it stable
+    const handleSettingsToggle = useCallback(() => {
+        const gear = gear_button_ref.current;
+        if (gear) {
+            initial_gear_top_ref.current = gear.getBoundingClientRect().top;
+        }
+        setSettingsDrawerOpen((v) => !v);
+    }, []);
+
+    // scroll-anchor the gear button across the open/close animation so the content the user was looking at stays visible
+    useLayoutEffect(() => {
+        if (initial_gear_top_ref.current === null) { return; }
+        const target_top = initial_gear_top_ref.current;
+        let raf_id: number;
+        const deadline = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + 250; // 150ms anim + margin
+        const tick = () => {
+            const gear = gear_button_ref.current;
+            if (gear) {
+                const current_top = gear.getBoundingClientRect().top;
+                const delta = current_top - target_top;
+                if (Math.abs(delta) > 0.5) {
+                    // legacy 2-arg form is always instant; avoids the 'instant' ScrollBehavior typing issue
+                    window.scrollBy(0, delta);
+                }
+            }
+            const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+            if (now < deadline) {
+                raf_id = requestAnimationFrame(tick);
+            }
+        };
+        raf_id = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf_id);
+    }, [settings_drawer_open]);
+
+    // Escape closes the drawer and returns focus to the gear button
+    useEffect(() => {
+        if (!settings_drawer_open) { return; }
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                const gear = gear_button_ref.current;
+                if (gear) {
+                    initial_gear_top_ref.current = gear.getBoundingClientRect().top;
+                }
+                setSettingsDrawerOpen(false);
+                requestAnimationFrame(() => gear_button_ref.current?.focus());
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [settings_drawer_open]);
 
     // insert modal state
     const [insert_modal_open, setInsertModalOpen] = useState(false);
@@ -388,63 +495,9 @@ export default function GenericView(props: ViewProps) {
         handlers.postMessage?.({ type: 'editText', changes: [{ from, insert: text }] });
     }, [props.doc_text, props.selection, handlers]);
 
-    // render toolbar at the leaf level only - when type is 'auto', AutoView will delegate
+    // render toolbar and settings drawer at the leaf level only - when type is 'auto', AutoView will delegate
     // to a concrete type which renders GenericView again with the toolbar
     const show_toolbar = props.type !== 'auto';
-
-    const toolbar = show_toolbar ? (
-        <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
-            <ViewIntegrationSelector
-                currentMode={integration_mode}
-                onChange={handleIntegrationChange}
-            />
-            <div className={master_view_styles.viewToolbarBreadcrumb}>
-                {breadcrumb_trail}
-            </div>
-            <ViewTypeSelector
-                currentType={(props.nested?.replaced_attributes?.type as string) || props.type}
-                autoResolvedType={auto_resolved_type}
-                handlers={handlers}
-                id={props.id}
-            />
-            <button
-                data-testid="view-insert-button"
-                onClick={(e) => { e.stopPropagation(); setInsertModalOpen(true); }}
-                style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '1.1em',
-                    padding: '0 0.3em',
-                    color: 'var(--vscode-foreground, inherit)',
-                    opacity: 0.6,
-                    marginLeft: '0.3em',
-                }}
-                title={l10n.t('Insert')}
-                aria-label={l10n.t('Insert')}
-            >
-                &#43;
-            </button>
-            <button
-                data-testid="view-settings-button"
-                onClick={(e) => { e.stopPropagation(); settingsClickRef.current?.(); }}
-                style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '1.1em',
-                    padding: '0 0.3em',
-                    color: 'var(--vscode-foreground, inherit)',
-                    opacity: 0.6,
-                    marginLeft: '0.3em',
-                }}
-                title={l10n.t('Settings')}
-                aria-label={l10n.t('Settings')}
-            >
-                &#9881;
-            </button>
-        </div>
-    ) : null;
 
     const enriched_props: ViewProps = {
         ...props,
@@ -460,15 +513,108 @@ export default function GenericView(props: ViewProps) {
             breadcrumb_trail,
             auto_resolved_type,
         },
-        handlers: {
-            ...handlers,
-            onSettingsClick: settingsClickRef,
-        },
+        handlers,
     };
 
     return (
         <>
-            {toolbar}
+            {show_toolbar && (
+                <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
+                    <ViewIntegrationSelector
+                        currentMode={integration_mode}
+                        onChange={handleIntegrationChange}
+                    />
+                    <div className={master_view_styles.viewToolbarBreadcrumb}>
+                        {breadcrumb_trail}
+                    </div>
+                    <ViewTypeSelector
+                        currentType={(props.nested?.replaced_attributes?.type as string) || props.type}
+                        autoResolvedType={auto_resolved_type}
+                        handlers={handlers}
+                        id={props.id}
+                    />
+                    <button
+                        data-testid="view-insert-button"
+                        onClick={(e) => { e.stopPropagation(); setInsertModalOpen(true); }}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '1.1em',
+                            padding: '0 0.3em',
+                            color: 'var(--vscode-foreground, inherit)',
+                            opacity: 0.6,
+                            marginLeft: '0.3em',
+                        }}
+                        title={l10n.t('Insert')}
+                        aria-label={l10n.t('Insert')}
+                    >
+                        &#43;
+                    </button>
+                    <button
+                        ref={gear_button_ref}
+                        data-testid="view-settings-button"
+                        onClick={(e) => { e.stopPropagation(); handleSettingsToggle(); }}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '1.1em',
+                            padding: '0 0.3em',
+                            color: 'var(--vscode-foreground, inherit)',
+                            opacity: 0.6,
+                            marginLeft: '0.3em',
+                        }}
+                        title={l10n.t('Settings')}
+                        aria-label={l10n.t('Settings')}
+                        aria-expanded={settings_drawer_open}
+                        aria-controls={`v${props.id}-settings-drawer`}
+                    >
+                        &#9881;
+                    </button>
+                </div>
+            )}
+            {show_toolbar && (
+                <div
+                    id={`v${props.id}-settings-drawer`}
+                    className={master_view_styles.settingsDrawerGrid}
+                    data-open={settings_drawer_open}
+                    data-testid="settings-drawer-grid"
+                    role="region"
+                    aria-label={l10n.t('Settings')}
+                    aria-hidden={!settings_drawer_open}
+                >
+                    <div className={master_view_styles.settingsDrawer}>
+                        {props.type === 'document' && (
+                            <SettingsDocumentDrawer
+                                settings={{
+                                    show_linetags_in_headlines: display_options.settings?.show_linetags_in_headlines,
+                                    scroll_note_into_view: display_options.settings?.scroll_note_into_view,
+                                    auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
+                                }}
+                                showLineNumbers={display_options.settings?.show_line_numbers}
+                                onSettingChange={handleSettingChange}
+                                onGlobalSettingChange={handleGlobalSettingChange}
+                            />
+                        )}
+                        {props.type === 'kanban' && (
+                            <SettingsKanbanDrawer
+                                settings={{
+                                    show_linetags_in_headlines: display_options.settings?.show_linetags_in_headlines,
+                                    scroll_note_into_view: display_options.settings?.scroll_note_into_view,
+                                    auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
+                                    column_order: display_options.settings?.column_order,
+                                }}
+                                naturalColumnOrder={natural_column_order}
+                                showLineNumbers={display_options.settings?.show_line_numbers}
+                                onSettingChange={handleSettingChange}
+                                onGlobalSettingChange={handleGlobalSettingChange}
+                                onColumnOrderChange={handleColumnOrderChange}
+                            />
+                        )}
+                    </div>
+                </div>
+            )}
             {props.type === 'auto' && <AutoView {...enriched_props} />}
             {props.type === 'document' && <DocumentView {...enriched_props} />}
             {props.type === 'kanban' && <KanbanView {...enriched_props} />}

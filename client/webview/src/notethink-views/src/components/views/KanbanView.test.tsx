@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import KanbanView from './KanbanView';
 import type { ViewProps } from '../../types/ViewProps';
 import type { NoteProps } from '../../types/NoteProps';
@@ -34,14 +34,6 @@ jest.mock('./KanbanColumn', () => ({
             {props.count !== undefined && <span data-testid={`column-${props.value}-count`}>{props.count}</span>}
             <div data-testid={`column-${props.value}-notes`}>{props.children}</div>
         </div>
-    ),
-}));
-
-// mock SettingsKanbanModal
-jest.mock('./SettingsKanbanModal', () => ({
-    __esModule: true,
-    default: (props: { opened: boolean }) => (
-        props.opened ? <div data-testid="settings-modal">SettingsModal</div> : null
     ),
 }));
 
@@ -338,26 +330,6 @@ describe('KanbanView', () => {
         render(<KanbanView {...props} />);
         expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
-    });
-
-    it('registers settings handler on onSettingsClick ref', () => {
-        const settings_ref = { current: undefined } as React.MutableRefObject<(() => void) | undefined>;
-        const props = makeViewProps({
-            handlers: {
-                setViewManagedState: jest.fn(),
-                deleteViewFromManagedState: jest.fn(),
-                revertAllViewsToDefaultState: jest.fn(),
-                onSettingsClick: settings_ref,
-            },
-        });
-        render(<KanbanView {...props} />);
-        expect(settings_ref.current).toBeInstanceOf(Function);
-        expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
-        // invoke the registered handler to open settings (wrapped in act for state update)
-        React.act(() => {
-            settings_ref.current!();
-        });
-        expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
     });
 
     it('passes correct count to each column', () => {

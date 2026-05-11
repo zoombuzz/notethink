@@ -42,6 +42,4 @@ export interface ViewApi {
     postMessage?: (message: unknown) => void;
     // navigation callback ref - GenericView registers handler, ExtensionReceiver invokes via ref
     onNavigationCommand?: import('react').MutableRefObject<((direction: string) => void) | undefined>;
-    // settings callback ref - views register their settings handler, toolbar gear button invokes it
-    onSettingsClick?: import('react').MutableRefObject<(() => void) | undefined>;
 }

@@ -925,3 +925,61 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + post-implementation refinement (user feedback): Kanban Settings title and NoteThink version label pinned right; settings split into multi-column groups so the drawer is shorter and easier to scan
 
 
+### Aggregate (Directory) view: merge files into a single view
+
++ goal
+  + in Directory mode, show one merged visualisation of all matching files rather than N stacked copies of the single-file view
+  + each merged story carries an origin tag so the user can see which file it came from
+  + foundation for a project-plan Kanban that aggregates stories from every `todo.md` under `active_development/*/` into one board
+
++ design (locked in 2026-05-14)
+  + synthetic root in the webview (not on the extension side): `mergeAggregateRoot(docs, integration_path)` parses every doc via `convertMdastToNoteHierarchy` then surfaces depth-3 headings under a single seq=0 root, renumbering globally
+  + `##` headings are treated as epics: their depth-3 children become stories with `origin.epic = { name, id? }`; the structural epic is overridden by a direct `epic=` linetag (or one propagated via `ng_child_epic=` inheritance — already wired by `applyChildAttributeInheritance`)
+  + per-file `ng_view` on the H1 is captured as `origin.file_view_type` so `AutoView` can majority-vote view type across files (one vote per file, ties fall back to `document`)
+  + breadcrumb in Directory mode segments the aggregation path itself, not any one file
+  + edits/clicks attach `docPath: note.origin?.doc_path` so the per-doc routing survives the merge; in single-file mode `note.origin` is undefined and behaviour is unchanged
+  + origin pill: single uppercase first letter of project name (`oma` → `O`, `notegit` → `N`), deterministic colour from djb2 hash of full project name, theme-adaptive lightness (dark 32%, light 72%, saturation 65%); optional second epic pill when `origin.epic` is set
+  + extension watcher: phase-1 `findFiles` bulk update then a `FileSystemWatcher` streams incremental upserts (`merge_strategy: 'merge'`) and `docDeleted` removals; tear-down on dispose / mode switch
+  + naming: the per-doc and per-directory components inside `NoteRenderer.tsx` are tree-composers (`NoteTreeComposer`, `AggregateTreeComposer`), one layer above leaf views (Document/Kanban/Auto)
+
++ code changes
+  + [X] `origin?: NoteOrigin` field on `NoteProps`; `NoteOrigin` carries `doc_id`, `doc_path`, `relative_path?`, `epic?`, `file_view_type?`
+  + [X] new `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` + helpers `anyViewInDirectoryMode`, `firstIntegrationPath`
+  + [X] new `stripHeadlineLinetags` helper in `noteops.ts`; replaces the inline `stripMarkdownHeadline` in `BreadcrumbTrail.tsx`
+  + [X] `NoteRenderer.tsx` branches on `anyViewInDirectoryMode(viewStates)`; `AggregateTreeComposer` renders one `<GenericView>` over the merged root with no docId/docPath stamping (handlers attach origin paths themselves); single-file path uses `NoteTreeComposer`
+  + [X] both tree-composers extracted from `NoteRenderer.tsx` into `client/webview/src/components/composers/`: `NoteTreeComposer.tsx` (+ the `flattenAllNotes` helper it owns) and `AggregateTreeComposer.tsx`; `NoteRenderer.tsx` is now a thin dispatcher (~92 lines) and exports `NoteRendererProps` for the composers to `import type`
+  + [X] `GenericView` click handlers (checkbox + select/reveal + clear focus + keyboard up/down) and `KanbanView` drag-end attach `docPath: note.origin?.doc_path`
+  + [X] `AutoView` detects a synthetic aggregate root and majority-votes `origin.file_view_type` across files; ties / no votes fall back to `document`
+  + [X] `BreadcrumbTrail` gains an `integration_path` prop; directory mode segments that path
+  + [X] `GenericView.handleIntegrationChange` and `handleDirectoryClick` persist `integration_path` on the view state
+  + [X] new `OriginPill.tsx` + `OriginPill.module.scss`; helper `originPillColour(project_name, theme)`; rendered next to the headline in `MarkdownNote.tsx` only at story level (`note.level === 1`); click → `revealRange` on origin doc
+  + [X] origin pill scales via `em` units so its outer height matches the surrounding heading's line-height; `float: left` keeps multi-line headlines wrapping around it (first-line indent pattern)
+  + [X] `DocumentView`/`KanbanView` now propagate `postMessage` into `note_handlers` so the origin pill can route clicks
+  + [X] extension `setIntegration` replaces the one-shot `findFiles` with a `FileSystemWatcher`; phase-1 bulk update keeps the existing replace strategy; phase-2 watcher emits `merge_strategy: 'merge'` upserts and `docDeleted` removals
+  + [X] `ExtensionReceiver` handles `merge_strategy: 'merge'` (upsert) and a new `docDeleted` message; on mount re-dispatches `setIntegration` when saved view-state shows directory mode (extension's in-memory `integration_path` is lost on reload)
+  + [X] `sendDoc` opts out for docs outside `integration_path` and uses `merge_strategy: 'merge'` when an integration is active (so single-file edits don't wipe the merged map)
+  + [X] `editText` handler in the extension routes the re-parsed doc through `sendDoc` regardless of whether the edited file is the active one (covers aggregate-mode edits in non-active tabs)
+  + [X] `revealRange`/`selectRange` in aggregate mode smart-opens the origin file: existing tab → switch to that group; otherwise pick a column other than the NoteThink panel's (existing group preferred, else `ViewColumn.Beside`)
+  + [X] `AggregateTreeComposer` uses the same view-state id for read+write so settings drawer / column reorder dispatches round-trip correctly
+
++ tests (Jest, +39 vs 488 baseline → 527 passing)
+  + [X] `mergeAggregateRoot.test.ts`: single/many/empty/no-H1 files, `##` epic recursion, epic resolution (id / name / unresolved literal / direct overrides structural / ambiguous names resolve per-file), origin stamped on descendants, contiguous global seqs, integration_path on root, file_view_type captured from H1
+  + [X] `AutoView.test.tsx`: majority vote (2/3 kanban → kanban), tie → document, no votes → document, one-vote-per-file when one file has many stories, single-file mode unaffected
+  + [X] `OriginPill.test.tsx`: `originPillColour` determinism + theme lightness band + distinct hues for shared-first-letter projects + spectrum spread; rendering (letter, tooltip, click, epic pill present/absent, `?` fallback for missing relative_path)
+  + [X] existing `GenericView.test.tsx` updated for `integration_path` in `setViewManagedState`
+
++ tests (Playwright, +5 vs 35 baseline → 40 passing)
+  + [X] aggregate mode flips `NoteRenderer` to `data-aggregate-mode="true"` with a single toolbar
+  + [X] origin pills render the correct project letter on each aggregated story
+  + [X] clicking an origin pill sends `revealRange` with the origin doc path
+  + [X] breadcrumb segment click in aggregate mode sends `setIntegration` with the segment path
+  + [X] switching the aggregated view to Kanban keeps origin pills and produces ≥2 columns
+
++ deferred / follow-up
+  + cross-project aggregation (`active_development/*/docstech/...`) — current `setIntegration` accepts a single directory only; multi-root integration is a later story
+  + `calfam/docstech/users/alex.stanhope/done.md` historical-context `##` dividers (lines 1367-1368 at the time of writing) interpret as epics; user cleaned these up after this story
+  + `linetagops` round-trip tests for `%26` / `+` encoding were not added — encoding works via existing `URLSearchParams` decoding; add when a real edge case appears
+
++ tests 527, playwright 40, lint clean
+
+

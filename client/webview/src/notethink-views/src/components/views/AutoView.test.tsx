@@ -158,4 +158,106 @@ describe('AutoView', () => {
         const wrapper = container.querySelector('[data-auto-selected-viewtype]');
         expect(wrapper).toHaveAttribute('data-auto-selected-viewtype', 'kanban');
     });
+
+    describe('aggregate (directory) mode', () => {
+
+        function makeAggregateRoot(): NoteProps {
+            return {
+                seq: 0,
+                level: 0,
+                type: 'root',
+                position: { start: { offset: 0, line: 1 }, end: { offset: 0, line: 1 } },
+                children: [],
+                children_body: [],
+                child_notes: [],
+                headline_raw: '',
+                body_raw: '',
+            };
+        }
+
+        function makeStory(seq: number, doc_id: string, file_view_type?: string): NoteProps {
+            return makeNote({
+                seq,
+                level: 1,
+                origin: { doc_id, doc_path: `/repo/${doc_id}.md`, file_view_type },
+            });
+        }
+
+        it('majority vote: 2/3 files vote kanban → kanban', () => {
+            const root = makeAggregateRoot();
+            const stories = [
+                makeStory(1, 'a', 'kanban'),
+                makeStory(2, 'b', 'kanban'),
+                makeStory(3, 'c', 'document'),
+            ];
+            root.child_notes = stories;
+            const props = makeViewProps({
+                notes: [root, ...stories],
+                nested: { parent_context: root },
+            });
+            render(<AutoView {...props} />);
+            expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'kanban');
+        });
+
+        it('majority vote: tie falls back to document', () => {
+            const root = makeAggregateRoot();
+            const stories = [
+                makeStory(1, 'a', 'kanban'),
+                makeStory(2, 'b', 'document'),
+            ];
+            root.child_notes = stories;
+            const props = makeViewProps({
+                notes: [root, ...stories],
+                nested: { parent_context: root },
+            });
+            render(<AutoView {...props} />);
+            expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'document');
+        });
+
+        it('no votes (no file_view_type anywhere): falls back to document', () => {
+            const root = makeAggregateRoot();
+            const stories = [
+                makeStory(1, 'a'),
+                makeStory(2, 'b'),
+            ];
+            root.child_notes = stories;
+            const props = makeViewProps({
+                notes: [root, ...stories],
+                nested: { parent_context: root },
+            });
+            render(<AutoView {...props} />);
+            expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'document');
+        });
+
+        it('multiple stories from same file vote only once', () => {
+            // file 'a' has 3 stories, all carrying file_view_type=kanban; file 'b' has 1 story with document
+            // single-vote per file → 1 kanban vs 1 document → tie → falls back to document
+            const root = makeAggregateRoot();
+            const stories = [
+                makeStory(1, 'a', 'kanban'),
+                makeStory(2, 'a', 'kanban'),
+                makeStory(3, 'a', 'kanban'),
+                makeStory(4, 'b', 'document'),
+            ];
+            root.child_notes = stories;
+            const props = makeViewProps({
+                notes: [root, ...stories],
+                nested: { parent_context: root },
+            });
+            render(<AutoView {...props} />);
+            expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'document');
+        });
+
+        it('single-file mode (no origin on children) is not affected by majority-vote path', () => {
+            // children with no origin → not aggregate root → falls back to existing logic (document)
+            const root = makeAggregateRoot();
+            root.child_notes = [makeNote({ seq: 1 })];
+            const props = makeViewProps({
+                notes: [root, makeNote({ seq: 1 })],
+                nested: { parent_context: root },
+            });
+            render(<AutoView {...props} />);
+            expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'document');
+        });
+    });
 });

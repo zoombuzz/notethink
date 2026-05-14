@@ -1,0 +1,57 @@
+/*
+ * All sizes are em-relative so the pill scales with whatever heading depth (h1..h6)
+ * rendered the surrounding headline. Each pill's outer height resolves to ~1.2em of
+ * the heading font, which closely matches typical heading line-heights — so the
+ * floated pill occupies exactly one line and the wrapped title text sits neatly
+ * beneath without a vertical gap.
+ */
+
+.originPillGroup {
+    /* float so multi-line headlines wrap around the pill (first-line indent pattern) */
+    float: left;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    margin: 0 0.5em 0 0;
+    vertical-align: baseline;
+}
+
+.projectPill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* 1.4em on the pill * 0.75em pill font = 1.05em of heading; +0.1em padding top/bottom ≈ 1.2em line-height */
+    min-width: 1.4em;
+    min-height: 1.4em;
+    padding: 0.1em 0.3em;
+    border-radius: 0.75em;
+    font-size: 0.75em;
+    font-weight: 600;
+    line-height: 1;
+    color: #fff;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Light theme: dark text on bright pill */
+:global(html[data-mantine-color-scheme="light"]) .projectPill {
+    color: var(--vscode-editor-foreground, #1f1f1f);
+}
+
+.epicPill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.4em;
+    padding: 0.1em 0.5em;
+    border-radius: 0.3em;
+    background-color: var(--vscode-badge-background, rgba(127, 127, 127, 0.2));
+    color: var(--vscode-badge-foreground, inherit);
+    font-size: 0.75em;
+    font-weight: 400;
+    line-height: 1;
+    user-select: none;
+    white-space: nowrap;
+    max-width: 18em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

@@ -173,7 +173,26 @@ export default function ExtensionReceiver() {
                 setState(state => {
                     const incoming_docs = message.partial.docs || {};
                     const current_docs = state.docs || {};
-                    // single-file view: check if the incoming doc is unchanged
+                    // merge_strategy: 'merge' upserts incoming docs into the current map (used by aggregate mode watcher for incremental updates)
+                    // anything else replaces the map entirely (single-file view, or aggregate mode's initial findFiles bulk update)
+                    const merge_strategy = (message as { merge_strategy?: string }).merge_strategy;
+                    if (merge_strategy === 'merge') {
+                        // upsert: keep existing docs not in incoming
+                        let has_changes = false;
+                        for (const [id, doc] of Object.entries(incoming_docs) as [string, Doc][]) {
+                            const existing = current_docs[id];
+                            if (!existing || !doc.hash_sha256 || existing.hash_sha256 !== doc.hash_sha256) {
+                                has_changes = true;
+                                break;
+                            }
+                        }
+                        if (!has_changes) {
+                            debug('skipping setState (merge), no doc hashes changed');
+                            return state;
+                        }
+                        return { ...state, docs: { ...current_docs, ...incoming_docs } };
+                    }
+                    // default: replace entirely
                     let has_changes = Object.keys(incoming_docs).length !== Object.keys(current_docs).length;
                     if (!has_changes) {
                         for (const [id, doc] of Object.entries(incoming_docs) as [string, Doc][]) {
@@ -188,8 +207,21 @@ export default function ExtensionReceiver() {
                         debug('skipping setState, no doc hashes changed');
                         return state;
                     }
-                    // replace docs entirely - single-file view shows one doc at a time
                     return { ...state, docs: incoming_docs };
+                });
+                return;
+            case 'docDeleted':
+                // aggregate mode: drop a single doc by id when the watcher sees a delete
+                debug('received docDeleted for %s', message.docId);
+                if (typeof message.docId !== 'string') {
+                    console.warn('ExtensionReceiver: docDeleted with invalid docId', message);
+                    return;
+                }
+                setState(state => {
+                    if (!state.docs || !state.docs[message.docId]) { return state; }
+                    const next = { ...state.docs };
+                    delete next[message.docId];
+                    return { ...state, docs: next };
                 });
                 return;
             case 'selectionChanged':
@@ -262,6 +294,22 @@ export default function ExtensionReceiver() {
         vscode.postMessage({
 			type: 'requestInitialState',
 		});
+        // if saved state shows we were in aggregate (directory) mode, re-establish the integration with the extension
+        // the extension's in-memory integration_path is lost on reload, so without this its requestInitialState reply would send only the active doc and the replace-strategy update would wipe the merged docs map down to one entry
+        if (saved_state?.viewStates) {
+            for (const id of Object.keys(saved_state.viewStates)) {
+                const vs = saved_state.viewStates[id];
+                if (vs?.display_options?.integration_mode === 'directory' && vs?.display_options?.integration_path) {
+                    debug('restoring directory integration on reload: %s', vs.display_options.integration_path);
+                    vscode.postMessage({
+                        type: 'setIntegration',
+                        mode: 'directory',
+                        path: vs.display_options.integration_path,
+                    });
+                    break;
+                }
+            }
+        }
         return () => {
             debug('removed message event listener');
             window.removeEventListener('message', onMessage);

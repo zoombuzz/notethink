@@ -879,6 +879,7 @@ describe('GenericView navigation callback', () => {
             id: 'test-view',
             display_options: {
                 integration_mode: 'directory',
+                integration_path: '/workspace/project/docs',
             },
         }]);
         expect(post_message).toHaveBeenCalledWith({

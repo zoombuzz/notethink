@@ -37,6 +37,7 @@ export interface NoteDisplayOptions {
     cropped_focused_seqs?: number[];
     cropped_selected_seqs?: number[];
     integration_mode?: string;
+    integration_path?: string;
     additional_classes?: string[];
     total_columns?: number;
     provided?: {
@@ -87,6 +88,8 @@ export interface NoteProps {
     hash_sha256?: string;
     updated?: number;
     updated_by_view?: string;
+    // aggregate (directory) mode: which file this note originated in (undefined in single-file mode; set on stories and their descendants by mergeAggregateRoot)
+    origin?: NoteOrigin;
     // rendered at Note parse time
     headline?: ReactElement;
     body?: ReactElement;
@@ -97,6 +100,22 @@ export interface NoteProps {
     display_options?: NoteDisplayOptions;
     handlers?: NoteHandlers;
     selection?: TextSelection;
+}
+
+export interface NoteOrigin {
+    doc_id: string;
+    doc_path: string;
+    relative_path?: string;
+    epic?: {
+        name: string;
+        id?: string;
+    };
+    /**
+     * The ng_view value declared on the originating file's H1, if any.
+     * Used by AutoView to majority-vote view type across the merged tree
+     * (one vote per file).
+     */
+    file_view_type?: string;
 }
 
 export type MdastNodes = import("mdast").Nodes;

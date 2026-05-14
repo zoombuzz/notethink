@@ -166,6 +166,8 @@ export default function GenericView(props: ViewProps) {
                         props.handlers.postMessage({
                             type: 'editText',
                             changes: changes,
+                            // aggregate mode: route to the origin file; undefined in single-file mode
+                            docPath: note.origin?.doc_path,
                         });
                     }
                 } catch (err) {
@@ -176,18 +178,21 @@ export default function GenericView(props: ViewProps) {
                 // read selection from ref to avoid stale closure when memo prevents re-render
                 const caret_pos = resolveCaretPosition(click_profile, note);
                 const current_head = selection_ref.current?.main.head;
+                const origin_doc_path = note.origin?.doc_path;
                 if (event.detail === 2) {
                     // double-click selects the note immediately
                     props.handlers?.postMessage?.({
                         type: 'selectRange',
                         from: click_profile.selection_from ?? click_profile.from,
                         to: click_profile.selection_to ?? click_profile.to,
+                        docPath: origin_doc_path,
                     });
                 } else if (note.selected) {
                     // click deselects and returns to focused
                     props.handlers?.postMessage?.({
                         type: 'revealRange',
                         from: caret_pos,
+                        docPath: origin_doc_path,
                     });
                 } else if (current_head === caret_pos) {
                     // click focused note to make selected
@@ -195,12 +200,14 @@ export default function GenericView(props: ViewProps) {
                         type: 'selectRange',
                         from: click_profile.selection_from ?? click_profile.from,
                         to: click_profile.selection_to ?? click_profile.to,
+                        docPath: origin_doc_path,
                     });
                 } else {
                     // click note to make focused
                     props.handlers?.postMessage?.({
                         type: 'revealRange',
                         from: caret_pos,
+                        docPath: origin_doc_path,
                     });
                 }
             }
@@ -217,6 +224,7 @@ export default function GenericView(props: ViewProps) {
                 props.handlers?.postMessage?.({
                     type: 'revealRange',
                     from: deepest_note_end + 1,
+                    docPath: deepest_note.origin?.doc_path,
                 });
             });
         },
@@ -232,12 +240,13 @@ export default function GenericView(props: ViewProps) {
 
     }, props.handlers);
 
-    // handle breadcrumb directory click - switch to directory integration mode
+    // handle breadcrumb directory click - switch to (or narrow within) directory integration mode
     const handleDirectoryClick = useCallback((dir_path: string) => {
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
                 integration_mode: 'directory',
+                integration_path: dir_path,
             },
         }]);
         handlers.postMessage?.({
@@ -253,6 +262,7 @@ export default function GenericView(props: ViewProps) {
         doc_path={props.doc_path}
         doc_relative_path={props.doc_relative_path}
         workspace_root={props.workspace_root}
+        integration_path={props.display_options?.integration_mode === 'directory' ? props.display_options?.integration_path : undefined}
         onDirectoryClick={handleDirectoryClick}
         handlers={{
             setParentContextSeq: handlers?.setParentContextSeq
@@ -280,7 +290,12 @@ export default function GenericView(props: ViewProps) {
                 const prev_index = current_index > 0 ? current_index - 1 : 0;
                 const target_note = notes_within_parent_context[prev_index];
                 if (target_note) {
-                    handlers.setCaretPosition?.(target_note.position.start.offset);
+                    // postMessage directly so we can attach the origin doc path in aggregate mode
+                    handlers.postMessage?.({
+                        type: 'revealRange',
+                        from: target_note.position.start.offset,
+                        docPath: target_note.origin?.doc_path,
+                    });
                 }
                 break;
             }
@@ -291,7 +306,11 @@ export default function GenericView(props: ViewProps) {
                 const next_index = current_index < notes_within_parent_context.length - 1 ? current_index + 1 : current_index;
                 const target_note = notes_within_parent_context[next_index];
                 if (target_note) {
-                    handlers.setCaretPosition?.(target_note.position.start.offset);
+                    handlers.postMessage?.({
+                        type: 'revealRange',
+                        from: target_note.position.start.offset,
+                        docPath: target_note.origin?.doc_path,
+                    });
                 }
                 break;
             }
@@ -344,14 +363,17 @@ export default function GenericView(props: ViewProps) {
     const integration_mode: IntegrationMode = (props.display_options?.integration_mode as IntegrationMode) || 'current_file';
 
     const handleIntegrationChange = useCallback((mode: IntegrationMode) => {
+        const dir_path = mode === 'directory' && props.doc_path
+            ? props.doc_path.replace(/\/[^/]+$/, '')
+            : undefined;
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
                 integration_mode: mode,
+                integration_path: dir_path,
             },
         }]);
-        if (mode === 'directory' && props.doc_path) {
-            const dir_path = props.doc_path.replace(/\/[^/]+$/, '');
+        if (mode === 'directory' && dir_path) {
             handlers.postMessage?.({
                 type: 'setIntegration',
                 mode: 'directory',

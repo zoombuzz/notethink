@@ -167,6 +167,21 @@ export function findFirstIncompleteTaskSeq(items: Array<NoteProps | MdastNode>):
 }
 
 /**
+ * Strip the heading prefix (`#+\s*`) and any trailing linetag blocks
+ * (`\s*\[[^\]]*\]\(\?[^)]*\)\s*$`, repeated) from a raw headline string.
+ * Used to derive epic names from `##` headings and breadcrumb labels.
+ */
+export function stripHeadlineLinetags(headline_raw: string): string {
+    let stripped = headline_raw.replace(/^#+\s*/, '');
+    // strip repeated trailing linetag blocks
+    const trailing = /\s*\[[^\]]*\]\(\?[^)]*\)\s*$/;
+    while (trailing.test(stripped)) {
+        stripped = stripped.replace(trailing, '');
+    }
+    return stripped.trim();
+}
+
+/**
  * Standard note ordering by document offset.
  */
 export function standardNoteOrder(a: NoteProps, b: NoteProps): number {

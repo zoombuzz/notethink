@@ -2,20 +2,19 @@ import { MouseEvent, useMemo, Fragment } from "react";
 import * as l10n from "@vscode/l10n";
 import type { NoteProps } from "../../types/NoteProps";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
+import { stripHeadlineLinetags } from "../../lib/noteops";
 import styles from "./BreadcrumbTrail.module.scss";
-
-/**
- * Strip markdown heading prefixes and leading/trailing whitespace
- * from a raw headline string to produce plain text for aria-labels.
- */
-function stripMarkdownHeadline(headline_raw: string): string {
-    return headline_raw.replace(/^#+\s*/, '').trim();
-}
 
 export interface BreadcrumbTrailProps extends NoteProps {
     doc_path?: string;
     doc_relative_path?: string;
     workspace_root?: string;
+    /**
+     * When set, breadcrumb path segments reflect this directory (aggregate mode)
+     * instead of the current file's path. Clicking a segment narrows the
+     * aggregation to that subdirectory.
+     */
+    integration_path?: string;
     onDirectoryClick?: (dir_path: string) => void;
 }
 
@@ -59,8 +58,25 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps) {
     const parent_context_headlines_raw = (parent_context.parent_notes || []).map((item: NoteProps) => item.headline_raw).join(' > ');
 
     const path_segments = useMemo(() => {
+        // directory (aggregate) mode: segment the integration directory itself
+        // we synthesise the same {label, path} shape: each path holds the absolute directory so onDirectoryClick can re-narrow the aggregation
+        if (props.integration_path) {
+            const stripped = props.workspace_root && props.integration_path.startsWith(props.workspace_root)
+                ? props.integration_path.slice(props.workspace_root.length)
+                : props.integration_path;
+            const parts = stripped.split('/').filter(Boolean);
+            const segments: Array<{ label: string; path: string }> = [];
+            let accumulated = props.workspace_root && props.integration_path.startsWith(props.workspace_root)
+                ? props.workspace_root
+                : '';
+            for (const part of parts) {
+                accumulated += '/' + part;
+                segments.push({ label: part, path: accumulated });
+            }
+            return segments;
+        }
         return props.doc_path ? splitPathSegments(props.doc_path, props.workspace_root, props.doc_relative_path) : [];
-    }, [props.doc_path, props.workspace_root, props.doc_relative_path]);
+    }, [props.doc_path, props.workspace_root, props.doc_relative_path, props.integration_path]);
 
     const memoized_notes: Array<NoteProps> = useMemo(() => {
         return (parent_context.parent_notes || []).map((item: NoteProps, index: number, items: Array<NoteProps>) => {
@@ -104,7 +120,7 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps) {
                 return <Fragment key={`breadcrumb-${item.seq}-${index}`}>
                     {index > 0 && <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>}
                     <button className={item.display_options?.additional_classes?.join(' ')}
-                            aria-label={stripMarkdownHeadline(item.headline_raw)}
+                            aria-label={stripHeadlineLinetags(item.headline_raw)}
                             onClick={(event: MouseEvent<HTMLElement>) => {
                                 parent_context.handlers?.setParentContextSeq?.(item.seq);
                             }}

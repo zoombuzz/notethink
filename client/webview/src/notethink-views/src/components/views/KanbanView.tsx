@@ -54,6 +54,7 @@ const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, dis
         handlers={{
             click: view.handlers?.click,
             setCaretPosition: view.handlers?.setCaretPosition,
+            postMessage: view.handlers?.postMessage,
         }}
     />;
 };
@@ -142,6 +143,8 @@ export default function KanbanView(props: ViewProps) {
             props.handlers.postMessage({
                 type: 'editText',
                 changes: changes,
+                // aggregate mode: route to the origin file; undefined in single-file mode
+                docPath: dragged_note.origin?.doc_path,
             });
         }
     };
@@ -204,6 +207,7 @@ export default function KanbanView(props: ViewProps) {
                                                 handlers={{
                                                     click: props.handlers?.click,
                                                     setCaretPosition: props.handlers?.setCaretPosition,
+                                                    postMessage: props.handlers?.postMessage,
                                                 }}
                                             />
                                         )}

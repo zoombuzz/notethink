@@ -7,6 +7,7 @@ import {
     renderBodyItems,
 } from "../../lib/renderops";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
+import OriginPill from "../../components/notes/OriginPill";
 import { buildNoteStyles, headlineClickPosition, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
 import { findFirstIncompleteTaskSeq } from "../../lib/noteops";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
@@ -212,6 +213,19 @@ export default memo(function MarkdownNote(props: NoteProps) {
                  onClick={createNoteClickHandler(note, headlineClickPosition(note))}
             >
                 {note.display_options?.settings?.show_line_numbers && note.level === note.display_options?.deepest?.selectable_level && (<span className={view_specific_styles.lineno}><span>{note.position.start.line}</span></span>)}
+                {note.origin && note.level === 1 && (
+                    <OriginPill
+                        origin={note.origin}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            note.handlers?.postMessage?.({
+                                type: 'revealRange',
+                                from: note.position.start.offset,
+                                docPath: note.origin!.doc_path,
+                            });
+                        }}
+                    />
+                )}
                 {note.headline}
                 {note.display_options?.settings?.show_linetags_in_headlines && note.linetags && Object.entries(note.linetags)
                     .filter(([key]) => !isInternalAttribute(key))

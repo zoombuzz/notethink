@@ -77,9 +77,22 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		function sendDoc(doc: Doc) {
 			const timestamped = { ...doc, updateSentAt: new Date().toISOString() };
 			debug('sendDoc %s', doc.path);
+			// in aggregate (directory) mode only docs inside integration_path go into the merged view; docs outside should not pollute the aggregated map
+			// selection updates for out-of-integration docs still flow through sendSelection separately
+			if (integration_path && !doc.path.startsWith(integration_path)) {
+				debug('sendDoc: skipping out-of-integration doc %s', doc.path);
+				return;
+			}
+			// in-memory edits to integration docs must merge into the existing map; otherwise the replace-strategy default would wipe every other file
+			const merge_strategy = integration_path ? 'merge' : undefined;
+			if (integration_path) {
+				// keep our local cache in sync so the watcher's later events build on the same content
+				integration_docs[doc.id] = timestamped;
+			}
 			webviewPanel.webview.postMessage({
 				type: 'update',
 				partial: { docs: { [doc.id]: timestamped } },
+				merge_strategy,
 				workspace_root,
 				extension_version,
 			});
@@ -97,6 +110,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 		let active_doc: Doc | undefined;
 		let active_path: string | undefined;
+
+		// --- aggregate (directory) integration state ---
+		let integration_watcher: vscode.FileSystemWatcher | undefined;
+		let integration_path: string | undefined;
+		const integration_docs: HashMapOf<Doc> = {};
 
 		function sendCurrentSelection() {
 			if (!active_path) { return; }
@@ -355,24 +373,69 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const from = e.from as number;
 					const to = (e.to ?? e.from) as number;
 					try {
-						// Only act if a text editor for this document is already visible -
-						// don't open a new editor just because the user clicked in the NoteThink view
+						if (!doc_path) { return; }
+
+						// first: if the doc already lives in a visible editor we just reveal/select in place without opening anything
 						const existing = vscode.window.visibleTextEditors.find(
 							ed => ed.document.uri.path === doc_path
 						);
-						if (!existing) { return; }
-						const document = existing.document;
+						if (existing) {
+							const document = existing.document;
+							const start_pos = document.positionAt(from);
+							const end_pos = document.positionAt(to);
+							// Selection(anchor, active): keep active at `from` so the head reported back via selectionChanged stays at the note's start offset rather than overshooting past end_body
+							existing.selection = (from === to)
+								? new vscode.Selection(start_pos, end_pos)
+								: new vscode.Selection(end_pos, start_pos);
+							existing.revealRange(new vscode.Range(start_pos, end_pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+							// focus the text editor so the user can immediately type
+							vscode.window.showTextDocument(existing.document, existing.viewColumn, false);
+							return;
+						}
+
+						// in aggregate (directory) mode the NoteThink view is a set of signposts — clicking a story should jump to the file even when no editor is currently showing it
+						// in single-file mode we deliberately stay silent to avoid spawning editors on stray clicks
+						if (!integration_path) { return; }
+
+						// find a tab anywhere in the workbench that already has the file open and switch to that group rather than opening a fresh editor
+						let target_column: vscode.ViewColumn | undefined;
+						try {
+							for (const group of vscode.window.tabGroups.all) {
+								for (const tab of group.tabs) {
+									const input = tab.input as { uri?: vscode.Uri } | undefined;
+									if (input?.uri?.path === doc_path) {
+										target_column = group.viewColumn;
+										break;
+									}
+								}
+								if (target_column !== undefined) { break; }
+							}
+						} catch {
+							// tabGroups API may be unavailable on older hosts — fall through
+						}
+
+						// not open anywhere — pick a column that isn't this NoteThink panel's, preferring an existing group, otherwise open beside (creates a new group)
+						if (target_column === undefined) {
+							const notethink_column = webviewPanel.viewColumn;
+							const other_group = vscode.window.tabGroups?.all?.find(
+								g => g.viewColumn !== notethink_column
+							);
+							target_column = other_group?.viewColumn ?? vscode.ViewColumn.Beside;
+						}
+
+						const uri = vscode.Uri.file(doc_path);
+						const document = await vscode.workspace.openTextDocument(uri);
 						const start_pos = document.positionAt(from);
 						const end_pos = document.positionAt(to);
-						// Selection(anchor, active): keep active at `from` so that
-						// the head reported back via selectionChanged stays at the
-						// note's start offset rather than overshooting past end_body
-						existing.selection = (from === to)
+						const editor = await vscode.window.showTextDocument(document, {
+							viewColumn: target_column,
+							preserveFocus: false,
+							preview: false,
+						});
+						editor.selection = (from === to)
 							? new vscode.Selection(start_pos, end_pos)
 							: new vscode.Selection(end_pos, start_pos);
-						existing.revealRange(new vscode.Range(start_pos, end_pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-						// focus the text editor so the user can immediately type
-						vscode.window.showTextDocument(existing.document, existing.viewColumn, false);
+						editor.revealRange(new vscode.Range(start_pos, end_pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 					} catch (err) {
 						writeToErrorLog(`${e.type} failed`, doc_path, err);
 					}
@@ -383,24 +446,82 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const dir_path = e.path as string;
 					if (mode === 'directory' && dir_path) {
 						try {
+							// tear down any previous watcher and reset the doc cache
+							if (integration_watcher) {
+								integration_watcher.dispose();
+								integration_watcher = undefined;
+							}
+							for (const key of Object.keys(integration_docs)) { delete integration_docs[key]; }
+							integration_path = dir_path;
+
+							// phase 1: discover existing files synchronously and send all in one update
 							const pattern = new vscode.RelativePattern(vscode.Uri.file(dir_path), '**/*.md');
 							const uris = await vscode.workspace.findFiles(pattern);
-							const dir_docs: HashMapOf<Doc> = {};
 							for (const uri of uris) {
-								const document = await vscode.workspace.openTextDocument(uri);
-								const doc = await buildDoc(document);
-								dir_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
+								try {
+									const document = await vscode.workspace.openTextDocument(uri);
+									const doc = await buildDoc(document);
+									integration_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
+								} catch (err) {
+									writeToErrorLog('setIntegration: failed to load doc', uri.path, err);
+								}
 							}
-							debug('setIntegration directory: %d docs from %s', Object.keys(dir_docs).length, dir_path);
+							debug('setIntegration directory: %d docs from %s', Object.keys(integration_docs).length, dir_path);
 							webviewPanel.webview.postMessage({
 								type: 'update',
-								partial: { docs: dir_docs },
+								partial: { docs: integration_docs },
 								workspace_root,
 								extension_version,
+							});
+
+							// phase 2: watch the directory for incremental adds/edits/deletes
+							integration_watcher = vscode.workspace.createFileSystemWatcher(pattern);
+							const upsert = async (uri: vscode.Uri) => {
+								try {
+									const document = await vscode.workspace.openTextDocument(uri);
+									const doc = await buildDoc(document);
+									integration_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
+									webviewPanel.webview.postMessage({
+										type: 'update',
+										partial: { docs: { [doc.id]: integration_docs[doc.id] } },
+										merge_strategy: 'merge',
+										workspace_root,
+										extension_version,
+									});
+								} catch (err) {
+									writeToErrorLog('setIntegration watcher: upsert failed', uri.path, err);
+								}
+							};
+							integration_watcher.onDidCreate(upsert);
+							integration_watcher.onDidChange(upsert);
+							integration_watcher.onDidDelete(async (uri) => {
+								try {
+									// find the doc id for this path and drop it
+									const id = await generateIdentifier(uri.path);
+									if (integration_docs[id]) {
+										delete integration_docs[id];
+										// signal the webview to drop this doc — convention: send tombstone with empty content
+										webviewPanel.webview.postMessage({
+											type: 'docDeleted',
+											docId: id,
+											docPath: uri.path,
+										});
+									}
+								} catch (err) {
+									writeToErrorLog('setIntegration watcher: delete failed', uri.path, err);
+								}
 							});
 						} catch (err) {
 							writeToErrorLog('setIntegration directory failed', dir_path, err);
 						}
+					} else if (mode === 'current_file') {
+						// switching back to single-file mode — tear down any active watcher
+						if (integration_watcher) {
+							integration_watcher.dispose();
+							integration_watcher = undefined;
+						}
+						integration_path = undefined;
+						for (const key of Object.keys(integration_docs)) { delete integration_docs[key]; }
 					}
 					return;
 				}
@@ -465,9 +586,16 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 						// (the edit above already fired onDidChangeTextDocument which set a
 						// debounce timer - clear it to avoid a redundant delayed update)
 						if (change_timer) { clearTimeout(change_timer); change_timer = undefined; }
-						active_doc = await buildDoc(existing?.document ?? document);
-						sendDoc(active_doc);
-						sendCurrentSelection();
+						const edited_document = existing?.document ?? document;
+						const edited_doc = await buildDoc(edited_document);
+						if (edited_document.uri.path === active_path) {
+							active_doc = edited_doc;
+							sendDoc(active_doc);
+							sendCurrentSelection();
+						} else {
+							// aggregate mode (or background) edit: route the updated doc through sendDoc so the merge strategy is applied correctly
+							sendDoc(edited_doc);
+						}
 					} catch (err) {
 						writeToErrorLog('editText failed', doc_path, err);
 					}
@@ -516,6 +644,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			}
 			if (change_timer) { clearTimeout(change_timer); }
 			if (selection_timer) { clearTimeout(selection_timer); }
+			if (integration_watcher) { integration_watcher.dispose(); integration_watcher = undefined; }
 			changeDocumentSubscription.dispose();
 			activeEditorSubscription.dispose();
 			selectionSubscription.dispose();

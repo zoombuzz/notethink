@@ -51,6 +51,9 @@ importers:
       '@stylistic/eslint-plugin':
         specifier: ^5.10.0
         version: 5.10.0(eslint@9.39.4)
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       '@types/mocha':
         specifier: ^10.0.10
         version: 10.0.10

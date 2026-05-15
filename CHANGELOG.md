@@ -4,6 +4,20 @@ All notable changes to the "notethink" extension will be documented in this file
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.2.1] - 2026-05-15
+
+### Security
+
+- Hardened the webview→extension-host trust boundary: webview-supplied file paths are now validated against the workspace (containment + `.md` check) before any open/edit, `setIntegration` rejects out-of-workspace directories, `openExternal` is restricted to `http`/`https`/`mailto`, and Mermaid `securityLevel` is pinned to `strict`
+
+### Fixed
+
+- Build: added the missing `@types/debug` dev dependency so the extension type-checks in a clean install (CI lint no longer fails on `TS7016`)
+
+### Changed
+
+- `merge-main.sh` now auto-publishes to the VS Code Marketplace on merge to `main` (version-guarded)
+
 ## [0.1.60] - 2026-05-15
 
 ### Changed

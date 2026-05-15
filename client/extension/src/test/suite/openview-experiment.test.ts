@@ -10,8 +10,8 @@ import * as vscode from 'vscode';
  * After each test we close all editors to reset state.
  */
 
-const EXTENSION_ID = 'ZoomBuzz.notethink';
-const VIEW_TYPE = 'zoombuzz.notethink';
+const EXTENSION_ID = 'NoteThink.notethink';
+const VIEW_TYPE = 'notethink.notethink';
 
 async function closeAllEditors(): Promise<void> {
 	await vscode.commands.executeCommand('workbench.action.closeAllEditors');

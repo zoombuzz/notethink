@@ -620,6 +620,8 @@ body.disableAddressBarHidingOnScroll {
       border-radius: 3px;
       font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace);
       font-size: 0.9em;
+      // allow long unbreakable tokens (URLs, flag=value identifiers) to wrap inside the card instead of punching past the right edge
+      overflow-wrap: anywhere;
     }
   }
 

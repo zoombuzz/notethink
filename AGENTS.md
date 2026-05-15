@@ -2,6 +2,8 @@
 
 This document provides essential information for AI agents working on the NoteThink codebase.
 
+**Workspace-wide rules** live in [`../AGENTS.md`](../AGENTS.md) — story state machine, story tracking format, version bumps, commit policy, git workflow, releaseable-state gate, test-failure discipline, edit verification, dev-server lifecycle, browser-snapshot cleanup. Read both: the workspace `AGENTS.md` defines the cross-project rules; this file documents NoteThink-specific architecture and overrides. Per-project coding standards are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md).
+
 ## Project Overview
 
 NoteThink is a VS Code extension that renders markdown files as interactive visualizations. It uses a React webview for the UI and includes a reusable component library (`notethink-views`).

@@ -2,6 +2,8 @@
 
 This document defines the coding standards for the NoteThink project.
 
+**Workspace-wide rules** (story state machine, story tracking format, version bumps, commit policy, git workflow, releaseable-state gate, test-failure discipline, edit verification, dev-server lifecycle, browser-snapshot cleanup) live in [`../AGENTS.md`](../AGENTS.md). This file documents only NoteThink-specific overrides and coding standards.
+
 ## Naming Conventions
 
 ### Variable Naming
@@ -388,12 +390,6 @@ src/
 - Remove unused variables (check compiler warnings)
 - Remove commented-out code that's no longer needed
 
-### Verify Edits After Making Them
-
-- **MUST**: After any non-trivial edit, re-read the changed section to confirm the result matches intent. Don't assume edits land correctly.
-- When the user references numbered items from a previous message or list, confirm which list they mean before acting.
-- **Why:** Past incidents — moving the wrong story, inserting at the wrong position — were all caused by skipping post-edit verification. A 2-second re-read prevents a 10-minute recovery.
-
 ## Error Handling
 
 ### Use Error Utilities
@@ -432,11 +428,6 @@ function parseConfig(json: string): Config | null {
 ```
 
 ## Testing Standards
-
-### Test Failures Must Always Be Fixed
-- **All test failures must be investigated and fixed**, regardless of whether they are related to the current change, pre-existing, or caused by external factors.
-- Never dismiss a failure as "not related to this change" or "pre-existing" - if a test is red, it needs fixing before the work is complete.
-- This applies to Jest, Playwright, and any other test suite.
 
 ### Test File Location
 
@@ -535,158 +526,3 @@ Always rebuild the extension after each code change so the developer can preview
 | Playwright E2E | `pnpm run test-playwright` |
 | Everything | `pnpm run check` |
 
----
-
-## Releaseable State After Each Phase
-
-After completing each phase of development, the codebase must be left in a releaseable state. This means:
-
-1. **All new code has tests** - every new module, model, library function must have corresponding tests before the phase is considered complete
-2. **All existing tests still pass** - run `pnpm run jest-test` and verify zero failures
-3. **Lint is clean** - run `pnpm run lint` with zero errors
-4. **No broken imports or dead references** - new modules must be properly wired and importable
-
-## Story Tracking: todo.md and done.md
-
-Each developer has `todo.md` and `done.md` files under `docstech/users/<username>/`.
-
-### Format Rules
-
-- **No blank lines** at the top of the file above the file's label (e.g. `# Todo` or `# Done`).
-- **Exactly two blank lines** before and after each story entry.
-
-### Story IDs and cross-references
-
-Stories that other stories reference need a stable ID. Without one, a cross-reference rots the moment the title changes.
-
-- Add `[](?id=slug)` to the `###` heading to make the story addressable. The slug is kebab-case, scoped to the file (not the workspace).
-  ```
-  ### Detect provider-side token revocation [](?id=detect-provider-token-revocation)
-  ```
-- In prose, reference another story with double-square-bracket wiki syntax: `[[detect-provider-token-revocation]]`. NoteThink resolves these against `[](?id=...)` linetags in the same file.
-- **Never invent a `[[slug]]` reference without also adding `[](?id=slug)` to the target heading** — the reference won't resolve and the cross-link silently breaks.
-- `id` is reserved by NoteThink's authoring guide for `##` epic headings, but the linetag mechanism is generic and `id=` works on `###` story headings identically. We use it on stories because the slug stays stable across title edits.
-- The full NoteThink authoring guide (epic ids, view configuration, inherited attributes, encoding rules) lives at `AUTHORING_GUIDE.md`. Read it before introducing a new linetag key.
-
-### todo.md
-
-- Stories are read **top-to-bottom** - the next story to work on is always the one at the top.
-- Each story may contain tasks as a checklist (`- [ ]`). When completing a task, mark it `[X]` (e.g. `- [X] Task description`).
-- When a story is being actively implemented, attach a status linetag to its heading: `### Story title [](?status=doing)`.
-- Linetags use the format `[](?key=value&key2=value2)` appended to a story heading **or to any bullet line**.
-- When a story is completed (all tasks done), remove it from `todo.md` and append it to `done.md`.
-- **Story plans go in todo.md, not separate files.** When planning a non-trivial story (including plan-mode output), write the implementation plan as expanded sub-bullets under the story's heading. Do **not** create a separate markdown file (e.g. under `~/.claude/plans/`). The todo.md / done.md files are the durable, checked-in record of scope, plan, and progress; `[X]` on each sub-bullet is how progress is shown. External plan files duplicate this, rot quickly, and aren't visible to anyone reviewing repo history.
-
-### Story content shape
-
-These rules cover the *content shape* of a story — its title, bullets, and structure. The format rules above cover *mechanics* (heading level, checklist syntax, linetags). All targets here are guidance, not hard caps.
-
-- **Titles are short.** Aim ≤ 60 chars (visible, excluding linetags). Em-dash qualifiers and sub-theme lists belong in the body, not the heading. No `HUMAN:` / `CLAUDE:` prefix on titles.
-- **Top-level bullets fit on one wrapped line.** ~120 chars is the working target. If a bullet runs longer, the surplus moves to child bullets, not the same line.
-- **One thought per bullet.** Don't chain ideas with "and", ";", "OR", "—" to glue them together. Split into siblings or parent+children.
-- **Task bullets lead with the verb.** Checklist items (`[ ]` / `[X]`) start with an imperative ("add", "rename", "ship", "verify"). Non-task bullets (observations, hypotheses, background notes) can be any shape.
-- **No role prefixes on tasks.** Don't write `CLAUDE:` / `HUMAN:` in front of a task. Default assumption: any task can be done by either, often collaboratively via Playwright MCP. Use the `work=manual` linetag (below) for the rare cases that are genuinely manual.
-- **Detail lives in children, not parentheticals.** Rationale, file paths, sub-steps, caveats, lettered enumerations — go under the parent as nested bullets, not inside `(…)` glued onto the parent. A short parenthetical is fine; anything longer than a few words moves to a child.
-- **Structured sections are bulleted, not prose.** `goal`, `scope`, `out of scope`, `background`, `acceptance criteria`, `dependencies`, `test plan`, `commit message draft` — each item is its own bullet (or child), not a paragraph. A short one-line narrative is fine where it reads naturally.
-- **Commit-message draft is bulleted.** One bullet per chunk (version bump, summary, tests count, etc.) as siblings — not a single backticked run-on sentence.
-- **Code/file refs are short.** `path/to/file.ts:42` is enough; don't quote whole snippets inside a bullet — fence them as a child code block only if truly needed.
-
-### Manual-work linetag
-
-Tasks default to "either Claude or human can do this, often collaboratively (Playwright MCP, etc.)". Tag a task only when it is **genuinely manual** — when no Claude collaboration can carry it out. Examples: responding to an email under your name, kicking off a Claude Design session, physical-machine actions, captcha-gated flows where automation is disallowed.
-
-- Use `[](?work=manual)` on the task's line.
-- "Requires login via SSO" is **not** manual — Playwright MCP plus a one-click SSO prompt is collaborative, not manual-only.
-- If several sibling tasks are all manual, group them under a single parent bullet and tag the parent — don't sprinkle the linetag across every leaf.
-
-Example:
-
-```
-+ outreach [](?work=manual)
-  + [ ] reply to Shopify reviewer email
-  + [ ] identify 3-5 SEO publications to pitch
-```
-
-### Time Tags
-
-Two distinct tags — do not confuse them. Units: minutes.
-
-- **`time_estimated`** — forward-looking forecast of how long a story is expected to take. Can appear on a story in `todo.md` at creation time, or on a completed story in `done.md` (kept alongside `time_taken` for retrospective accuracy). Optional: if no sensible estimate is available at creation time, omit the tag entirely rather than guess.
-- **`time_taken`** — **actual** time spent on the story so far. Non-zero by definition. On an unfinished story in `todo.md` it represents work already done to date; on a completed story in `done.md` it represents total time from inception through completion.
-
-**CRITICAL**: `time_taken` must only ever contain time that has actually been worked. Never put an estimate into `time_taken` — even "a small placeholder" — because these values feed client billing, and recording estimated time as taken time means billing for work that may not have happened. If no time has been worked yet, omit the tag; use `time_estimated` for the forecast instead.
-
-```
-### New story [](?time_estimated=180)                        # ok in todo.md — forecast only, no work done yet
-### New story                                                 # also ok in todo.md — no estimate available
-### In-progress story [](?time_estimated=180&time_taken=45)  # ok in todo.md — 45 min worked so far, 180 min forecast total
-### Completed story [](?time_taken=225)                      # ok in done.md — 225 min actually worked
-### Completed story [](?time_estimated=180&time_taken=225)   # ok in done.md — keeps the forecast alongside the actual for retrospective accuracy
-```
-
-### done.md
-
-- Completed stories are **appended to the end** of the file.
-- Maintain exactly two blank lines before and after each story entry.
-- When moving a story to done.md, remove any `status` attribute from its linetag - all stories in done.md are implicitly `status=done`.
-
-### Example todo.md
-
-```
-# Todo
-
-
-## Current story [](?status=doing)
-
-Story description here.
-
-- [X] First task already done
-- [ ] Second task still to do
-
-
-## Another story
-
-Another description here.
-
-- [ ] Some task
-- [ ] Another task
-```
-
-### Example done.md
-
-```
-# Done
-
-
-## Completed story
-
-Description of completed work.
-
-- [X] Task one
-- [X] Task two
-
-
-## Another completed story
-
-Description of another completed story.
-```
-
-## Version Bumps
-
-- **Always bump the version** in the governing `package.json` when implementing code changes.
-- **Only increment the patch version** (e.g. 2.11.2 → 2.11.3). Major and minor version changes are the user's decision.
-- After completing work, show the updated version number in your output.
-
-## Commit Messages
-
-- Commit messages must be a **single line** — no newlines or multi-line bodies.
-- **Never** include a `Co-Authored-By` tag.
-
-## Git Workflow
-
-- Develop and test on the `staging` branch.
-- Run `/prod-ready` before committing. Only commit + push to `staging` once `/prod-ready` reports green.
-- Before every release commit, verify that `engines.vscode` in `package.json` is `>=` the major/minor of `@types/vscode` (and any other vscode-dependent packages). `vsce package` fails CI when `@types/vscode` is greater than `engines.vscode`. If `@types/vscode` has been bumped, bump `engines.vscode` to match.
-- Merging `staging` → `main` is a **production deployment**. Always use `sh/git/merge-main.sh` — never merge manually.
-- The merge to `main` is decoupled from the staging push; it often runs later, not in the same session.
-- **Post-deploy healthcheck: one shot, not a loop.** After any deployment, hit the healthcheck endpoint **once** to confirm the new version is live, then move on. Do not poll in a sleep loop waiting for something to happen — the user will say if something is wrong.

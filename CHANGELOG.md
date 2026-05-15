@@ -4,6 +4,19 @@ All notable changes to the "notethink" extension will be documented in this file
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.1.60] - 2026-05-15
+
+### Changed
+
+- Marketplace publisher rebranded from `ZoomBuzz` to `NoteThink`; the extension ID is now `NoteThink.notethink`
+- Custom editor viewType renamed `zoombuzz.notethink` → `notethink.notethink`
+- Homepage now points to https://notethink.com
+
+### Added
+
+- Extension icon (`media/icon.png`) for the marketplace listing
+- `publish:marketplace` npm script — non-interactive `vsce publish` via a puppet-provisioned PAT env var (no `vsce login`)
+
 ## [0.1.1] - 2026-02-24
 
 ### Fixed

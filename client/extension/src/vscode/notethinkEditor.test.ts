@@ -84,6 +84,9 @@ describe('NotethinkEditorProvider', () => {
 
 		// call myWebviewPanel with the initial document
 		await (provider as any).myWebviewPanel(panelHelper.panel, initialDoc);
+
+		// the constructor no longer pushes the initial doc - requestInitialState (sent by the webview on mount) triggers it
+		await panelHelper.simulateMessage({ type: 'requestInitialState' });
 	});
 
 	afterEach(() => {
@@ -138,6 +141,7 @@ describe('NotethinkEditorProvider', () => {
 			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
 			const newPanel = createMockWebviewPanel();
 			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+			await newPanel.simulateMessage({ type: 'requestInitialState' });
 
 			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
 			expect(updates.length).toBeGreaterThanOrEqual(1);
@@ -165,6 +169,7 @@ describe('NotethinkEditorProvider', () => {
 			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
 			const newPanel = createMockWebviewPanel();
 			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+			await newPanel.simulateMessage({ type: 'requestInitialState' });
 
 			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
 			expect(updates.length).toBeGreaterThanOrEqual(1);
@@ -191,6 +196,7 @@ describe('NotethinkEditorProvider', () => {
 			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
 			const newPanel = createMockWebviewPanel();
 			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+			await newPanel.simulateMessage({ type: 'requestInitialState' });
 
 			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
 			const doc_entries = Object.values(updates[0].partial.docs) as any[];

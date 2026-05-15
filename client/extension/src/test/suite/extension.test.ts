@@ -10,8 +10,8 @@ import * as vscode from 'vscode';
  * Uses mocha tdd interface (suite/test/suiteSetup) as configured in index.ts.
  */
 
-const EXTENSION_ID = 'ZoomBuzz.notethink';
-const VIEW_TYPE = 'zoombuzz.notethink';
+const EXTENSION_ID = 'NoteThink.notethink';
+const VIEW_TYPE = 'notethink.notethink';
 
 suite('Web Extension Test Suite', () => {
 

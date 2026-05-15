@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NoteThink marketplace icon — PLACEHOLDER. See brief.md for the real design task. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B5BF0"/>
+      <stop offset="1" stop-color="#8B3DEF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- tile -->
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="url(#bg)"/>
+
+  <!-- "N" monogram: two bars + a diagonal edge linking two thought-nodes -->
+  <g fill="#FFFFFF">
+    <rect x="66" y="58" width="26" height="140" rx="13"/>
+    <rect x="164" y="58" width="26" height="140" rx="13"/>
+  </g>
+  <line x1="79" y1="72" x2="177" y2="184" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+
+  <!-- accent nodes: "think" = connected ideas -->
+  <circle cx="79" cy="72" r="20" fill="#34E0C8"/>
+  <circle cx="177" cy="184" r="20" fill="#34E0C8"/>
+</svg>

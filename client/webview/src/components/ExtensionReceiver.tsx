@@ -289,13 +289,8 @@ export default function ExtensionReceiver() {
     useEffect(() => {
         window.addEventListener('message', onMessage);
         debug('added message event listener');
-        // after adding the event listener, we can send a message to the extension to get the current state
-        // this is a workaround for the fact that the webview is not fully loaded when the extension sends the initial message
-        vscode.postMessage({
-			type: 'requestInitialState',
-		});
-        // if saved state shows we were in aggregate (directory) mode, re-establish the integration with the extension
-        // the extension's in-memory integration_path is lost on reload, so without this its requestInitialState reply would send only the active doc and the replace-strategy update would wipe the merged docs map down to one entry
+        // if saved state shows we were in aggregate (directory) mode, re-establish the integration first
+        // sending setIntegration before requestInitialState lets the extension synchronously set integration_path before the async findFiles - so when the requestInitialState handler runs sendDoc it uses merge_strategy='merge' and upserts into the saved aggregate map instead of replacing it
         if (saved_state?.viewStates) {
             for (const id of Object.keys(saved_state.viewStates)) {
                 const vs = saved_state.viewStates[id];
@@ -310,6 +305,11 @@ export default function ExtensionReceiver() {
                 }
             }
         }
+        // request initial state - this is what triggers the extension to send the active doc (and selection + global settings)
+        // sent after setIntegration so the extension has integration_path set by the time it runs sendDoc here
+        vscode.postMessage({
+			type: 'requestInitialState',
+		});
         return () => {
             debug('removed message event listener');
             window.removeEventListener('message', onMessage);

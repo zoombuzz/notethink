@@ -44,9 +44,10 @@
       <circle cx="200" cy="206" r="22"/>
     </g>
 
-    <!-- shadow cast by the lifted corner: SE edge sits on the crease and reaches
-         the right/bottom icon edges; feathers NW onto the note. No NW gap. -->
-    <path d="M260 168 L150 150 L168 260 Z" fill="#000000" fill-opacity="0.45" filter="url(#foldShadow)"/>
+    <!-- shadow cast by the lifted corner: a uniform-width L-band with a square
+         inner corner, both arms running squarely out to the east/south edges,
+         feathering NW onto the note. No triangular point. -->
+    <path d="M262 150 L150 150 L150 262 L262 262 Z" fill="#000000" fill-opacity="0.45" filter="url(#foldShadow)"/>
   </g>
 
   <!-- folded-up corner, drawn last so it occludes the N beneath it -->

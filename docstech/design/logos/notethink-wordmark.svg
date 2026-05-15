@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NoteThink horizontal wordmark / lockup — for README & docs (NOT the marketplace
+     icon; that is notethink-icon.svg / media/icon.png).
+     The icon block below is a copy of notethink-icon.svg embedded as a nested <svg>;
+     if the icon changes, re-sync this block. Text is live; for a font-independent
+     distributable, outline it:
+       inkscape notethink-wordmark.svg --export-text-to-path --export-plain-svg \
+         -o notethink-wordmark-outlined.svg -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 128" width="470" height="128"
+     role="img" aria-label="NoteThink">
+
+  <!-- ---- icon (mirror of notethink-icon.svg) ---- -->
+  <svg x="10" y="12" width="104" height="104" viewBox="0 0 256 256">
+    <defs>
+      <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="256" y2="256">
+        <stop offset="0" stop-color="#5B5BF0"/>
+        <stop offset="1" stop-color="#8B3DEF"/>
+      </linearGradient>
+      <linearGradient id="fold" gradientUnits="userSpaceOnUse" x1="212" y1="212" x2="168" y2="168">
+        <stop offset="0"    stop-color="#5454F4"/>
+        <stop offset="0.25" stop-color="#7146F2"/>
+        <stop offset="1"    stop-color="#7146F2"/>
+      </linearGradient>
+      <clipPath id="tile">
+        <path d="M56 0 H200 A56 56 0 0 1 256 56 V168 L168 256 H56
+                 A56 56 0 0 1 0 200 V56 A56 56 0 0 1 56 0 Z"/>
+      </clipPath>
+      <filter id="foldShadow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="4.5"/>
+      </filter>
+    </defs>
+
+    <path d="M56 0 H200 A56 56 0 0 1 256 56 V168 L168 256 H56
+             A56 56 0 0 1 0 200 V56 A56 56 0 0 1 56 0 Z" fill="url(#bg)"/>
+
+    <g clip-path="url(#tile)">
+      <g stroke="#FFFFFF" stroke-width="16" stroke-linecap="round">
+        <line x1="60"  y1="52" x2="60"  y2="206"/>
+        <line x1="60"  y1="52" x2="200" y2="206"/>
+        <line x1="200" y1="52" x2="200" y2="206"/>
+      </g>
+      <g fill="#FFFFFF">
+        <circle cx="60"  cy="52"  r="22"/>
+        <circle cx="60"  cy="206" r="22"/>
+        <circle cx="200" cy="52"  r="22"/>
+        <circle cx="128" cy="128" r="24"/>
+        <circle cx="200" cy="206" r="22"/>
+      </g>
+      <path d="M262 150 L150 150 L150 262 L262 262 Z" fill="#000000" fill-opacity="0.45" filter="url(#foldShadow)"/>
+    </g>
+
+    <path d="M256 168 L168 168 L168 256 Z" fill="url(#fold)"/>
+  </svg>
+
+  <!-- ---- wordmark ---- -->
+  <defs>
+    <linearGradient id="wm" gradientUnits="userSpaceOnUse" x1="132" y1="0" x2="452" y2="0">
+      <stop offset="0" stop-color="#5B5BF0"/>
+      <stop offset="1" stop-color="#8B3DEF"/>
+    </linearGradient>
+  </defs>
+  <text x="132" y="64" dominant-baseline="central"
+        font-family="Inter, 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif"
+        font-size="58" font-weight="700" letter-spacing="-1.5" fill="url(#wm)">NoteThink</text>
+</svg>

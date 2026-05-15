@@ -54,3 +54,4 @@ stylised note/page, a thought bubble, a node cluster). Deliver:
 - [x] `media/icon.png` re-rendered (256×256) from the approved SVG.
 - [x] `package.json` `"icon"` still points at `media/icon.png` (verified).
 - [x] Exploration drafts archived in `variants/`; review renders regenerated in `render/`.
+- [x] Optional horizontal lockup delivered (`notethink-wordmark.svg`, for README/docs).

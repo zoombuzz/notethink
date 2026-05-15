@@ -4,6 +4,13 @@
 # `vsce publish`. the publish is version-guarded: if this version is already on the
 # marketplace (e.g. a no-op re-merge) it is skipped rather than hard-failing the
 # merge; any other publish failure aborts loudly and returns to the source branch.
+#
+# main MUST stay a fast-forward of staging — the merge below is --ff-only so it can
+# never create a merge commit or prompt for a merge message. if it aborts with
+# "Not possible to fast-forward", main has diverged (it carries a commit staging
+# lacks, e.g. an old merge commit or a direct push); realign once with:
+#   git checkout main && git reset --hard origin/staging && git push --force-with-lease origin main && git checkout staging
+# then re-run. never "fix" a non-ff by dropping --ff-only.
 set -euo pipefail
 
 SOURCE_ENV="staging"
@@ -14,7 +21,7 @@ EXTENSION_ID="NoteThink.notethink"
 
 git -C "$REPO_DIR" fetch --all
 git -C "$REPO_DIR" checkout "$TARGET_ENV"
-git -C "$REPO_DIR" merge "$SOURCE_ENV"
+git -C "$REPO_DIR" merge --ff-only "$SOURCE_ENV"
 git -C "$REPO_DIR" push
 
 # release the merged main state to the VS Code Marketplace

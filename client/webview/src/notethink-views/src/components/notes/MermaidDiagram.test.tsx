@@ -60,7 +60,7 @@ describe('MermaidDiagram', () => {
             render(<MermaidDiagram>graph TD; A--&gt;B</MermaidDiagram>);
         });
         expect(mock_mermaid.initialize).toHaveBeenCalledWith(
-            expect.objectContaining({ startOnLoad: true })
+            expect.objectContaining({ startOnLoad: true, securityLevel: 'strict' })
         );
     });
 

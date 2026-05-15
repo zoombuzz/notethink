@@ -48,6 +48,9 @@ app/debug.log
 **/newrelic_agent.log
 **/notethink-extension.log
 
+# design logo renders (regenerate from docstech/design/logos/*.svg)
+docstech/design/logos/render/
+
 # misc
 .DS_Store
 *.pem

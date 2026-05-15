@@ -4,14 +4,22 @@ import type { HashMapOf, Doc } from '../types/general';
 import { abbrevDoc, getNonce } from '../lib/utils';
 import { debug, writeToLog, writeToErrorLog } from "../lib/errorops";
 import { parse } from '../lib/parseops';
+import { isPathWithin } from '../lib/pathsafe';
 
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
 const BACKGROUND_BATCH_SIZE = 20;
+const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
+
+// bridge isPathWithin to the live workspace: roots come from vscode.workspace.workspaceFolders so the pure helper stays vscode-free and unit-testable
+function isWithinWorkspace(target_path: string, options?: { requireExtension?: string }): boolean {
+	const root_paths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+	return isPathWithin(target_path, root_paths, options);
+}
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
-	public static readonly viewType = 'zoombuzz.notethink';
+	public static readonly viewType = 'notethink.notethink';
 	private activePanel: vscode.WebviewPanel | undefined;
 
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
@@ -154,16 +162,13 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			});
 		}
 
-		// load initial document and send selection for styled first render
+		// build the initial active doc but defer pushing it to the webview until requestInitialState arrives - the webview sends setIntegration first on reload so by the time we sendDoc here integration_path is set and the merge_strategy='merge' path runs instead of wiping the saved aggregate map
 		active_path = initialDocument.uri.path;
 		try {
 			active_doc = await buildDoc(initialDocument);
-			sendDoc(active_doc);
-			sendCurrentSelection();
 		} catch (err) {
 			writeToErrorLog('failed to build initial document', initialDocument.uri.path, err);
 		}
-		sendGlobalSettings();
 
 		const filter_criterion = '**/*.md';
 		const docs: HashMapOf<Doc> = {};
@@ -374,6 +379,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const to = (e.to ?? e.from) as number;
 					try {
 						if (!doc_path) { return; }
+						// gate both the visible-editor fast path and the openTextDocument path: webview-supplied paths are untrusted
+						if (!isWithinWorkspace(doc_path, { requireExtension: '.md' })) {
+							writeToErrorLog(`${e.type}: path outside workspace, refusing`, doc_path);
+							return;
+						}
 
 						// first: if the doc already lives in a visible editor we just reveal/select in place without opening anything
 						const existing = vscode.window.visibleTextEditors.find(
@@ -445,6 +455,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const mode = e.mode as string;
 					const dir_path = e.path as string;
 					if (mode === 'directory' && dir_path) {
+						// validate before any teardown so a poisoned path can't dismantle a legitimate integration (directory, so no extension requirement)
+						if (!isWithinWorkspace(dir_path)) {
+							writeToErrorLog('setIntegration: directory outside workspace, refusing', dir_path);
+							return;
+						}
 						try {
 							// tear down any previous watcher and reset the doc cache
 							if (integration_watcher) {
@@ -454,29 +469,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							for (const key of Object.keys(integration_docs)) { delete integration_docs[key]; }
 							integration_path = dir_path;
 
-							// phase 1: discover existing files synchronously and send all in one update
 							const pattern = new vscode.RelativePattern(vscode.Uri.file(dir_path), '**/*.md');
-							const uris = await vscode.workspace.findFiles(pattern);
-							for (const uri of uris) {
-								try {
-									const document = await vscode.workspace.openTextDocument(uri);
-									const doc = await buildDoc(document);
-									integration_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
-								} catch (err) {
-									writeToErrorLog('setIntegration: failed to load doc', uri.path, err);
-								}
-							}
-							debug('setIntegration directory: %d docs from %s', Object.keys(integration_docs).length, dir_path);
-							webviewPanel.webview.postMessage({
-								type: 'update',
-								partial: { docs: integration_docs },
-								workspace_root,
-								extension_version,
-							});
 
-							// phase 2: watch the directory for incremental adds/edits/deletes
-							integration_watcher = vscode.workspace.createFileSystemWatcher(pattern);
-							const upsert = async (uri: vscode.Uri) => {
+							// shared per-file loader: parse the doc and post a merge update so the view fills in progressively
+							// used by both the initial discovery and the file watcher
+							const loadOne = async (uri: vscode.Uri) => {
 								try {
 									const document = await vscode.workspace.openTextDocument(uri);
 									const doc = await buildDoc(document);
@@ -489,11 +486,32 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 										extension_version,
 									});
 								} catch (err) {
-									writeToErrorLog('setIntegration watcher: upsert failed', uri.path, err);
+									writeToErrorLog('setIntegration: failed to load doc', uri.path, err);
 								}
 							};
-							integration_watcher.onDidCreate(upsert);
-							integration_watcher.onDidChange(upsert);
+
+							// phase 1: discover and load in parallel; each file streams its own merge update as it completes so a slow file never blocks the others - the view fills in over a few seconds rather than waiting on the whole batch
+							// pass an explicit exclude pattern so the user's files.exclude/search.exclude can't hide notes inside the integration directory but still skip standard derived/dependency directories whose .md files (readmes, changelogs) would otherwise flood the aggregate view
+							const exclude_pattern = '**/{node_modules,.git,.svn,.hg,dist,build,out,.next,.cache,coverage}/**';
+							const uris = await vscode.workspace.findFiles(pattern, exclude_pattern);
+							debug('setIntegration directory: %d files discovered in %s', uris.length, dir_path);
+							const load_promises = uris.map(loadOne);
+							// once every load has settled, send a replace update with the canonical map
+							// this prunes stale docs left over from a previous session's saved state that no longer exist in the directory
+							Promise.allSettled(load_promises).then(() => {
+								debug('setIntegration directory: load complete, %d docs', Object.keys(integration_docs).length);
+								webviewPanel.webview.postMessage({
+									type: 'update',
+									partial: { docs: integration_docs },
+									workspace_root,
+									extension_version,
+								});
+							});
+
+							// phase 2: watch the directory for incremental adds/edits/deletes
+							integration_watcher = vscode.workspace.createFileSystemWatcher(pattern);
+							integration_watcher.onDidCreate(loadOne);
+							integration_watcher.onDidChange(loadOne);
 							integration_watcher.onDidDelete(async (uri) => {
 								try {
 									// find the doc id for this path and drop it
@@ -529,6 +547,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const doc_path = e.docPath as string;
 					const changes = e.changes as Array<{from: number; to?: number; insert: string}>;
 					try {
+						// webview-supplied paths are untrusted: only allow edits to .md files inside the workspace
+						if (!doc_path || !isWithinWorkspace(doc_path, { requireExtension: '.md' })) {
+							writeToErrorLog('editText: path outside workspace, refusing', doc_path);
+							return;
+						}
 						const uri = vscode.Uri.file(doc_path);
 						const document = await vscode.workspace.openTextDocument(uri);
 						const doc_length = document.getText().length;
@@ -605,7 +628,13 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const url = e.url as string;
 					if (url) {
 						try {
-							await vscode.env.openExternal(vscode.Uri.parse(url));
+							// host-side scheme allow-list: only open http/https/mailto, refuse everything else (file:, vscode:, etc.)
+							const parsed = vscode.Uri.parse(url);
+							if (!(ALLOWED_EXTERNAL_SCHEMES as readonly string[]).includes(parsed.scheme.toLowerCase())) {
+								writeToErrorLog('openExternal: refused scheme', url);
+								return;
+							}
+							await vscode.env.openExternal(parsed);
 						} catch (err) {
 							writeToErrorLog('openExternal failed', url, err);
 						}

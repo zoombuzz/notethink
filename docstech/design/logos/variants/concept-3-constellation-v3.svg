@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NoteThink concept 3 v3 — bigger Constellation N on a sticky-note tile; fold occludes the N. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B5BF0"/>
+      <stop offset="1" stop-color="#8B3DEF"/>
+    </linearGradient>
+    <clipPath id="tile">
+      <path d="M56 0 H200 A56 56 0 0 1 256 56 V168 L168 256 H56
+               A56 56 0 0 1 0 200 V56 A56 56 0 0 1 56 0 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- tile with the bottom-right corner cut for a folded sticky note -->
+  <path d="M56 0 H200 A56 56 0 0 1 256 56 V168 L168 256 H56
+           A56 56 0 0 1 0 200 V56 A56 56 0 0 1 56 0 Z" fill="url(#bg)"/>
+
+  <!-- the N sits ON the note: clipped to the tile so it can't spill past the fold -->
+  <g clip-path="url(#tile)">
+    <g stroke="#FFFFFF" stroke-width="16" stroke-linecap="round">
+      <line x1="60"  y1="52" x2="60"  y2="206"/>
+      <line x1="60"  y1="52" x2="200" y2="206"/>
+      <line x1="200" y1="52" x2="200" y2="206"/>
+    </g>
+    <g fill="#FFFFFF">
+      <circle cx="60"  cy="52"  r="22"/>
+      <circle cx="60"  cy="206" r="22"/>
+    </g>
+    <g fill="#34E0C8">
+      <circle cx="200" cy="52"  r="22"/>
+      <circle cx="128" cy="128" r="24"/>
+      <circle cx="200" cy="206" r="22"/>
+    </g>
+  </g>
+
+  <!-- folded-up corner, drawn last so it occludes the N beneath it -->
+  <path d="M256 168 L168 168 L168 256 Z" fill="#CDBDF8"/>
+  <path d="M256 168 L168 168 L168 256" fill="none" stroke="#5B3FB8" stroke-opacity="0.35" stroke-width="3"/>
+</svg>

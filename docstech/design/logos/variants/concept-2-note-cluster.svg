@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NoteThink concept 2 — Note + node cluster. Exploration draft, see brief.md. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B5BF0"/>
+      <stop offset="1" stop-color="#8B3DEF"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="url(#bg)"/>
+
+  <!-- note / page card -->
+  <rect x="46" y="52" width="116" height="152" rx="18" fill="#FFFFFF"/>
+  <g fill="#5B5BF0">
+    <rect x="64" y="78"  width="80" height="14" rx="7"/>
+    <rect x="64" y="108" width="80" height="14" rx="7"/>
+    <rect x="64" y="138" width="54" height="14" rx="7"/>
+  </g>
+
+  <!-- linked idea-nodes spilling off the page -->
+  <g stroke="#FFFFFF" stroke-width="11" stroke-linecap="round">
+    <line x1="156" y1="96"  x2="196" y2="76"/>
+    <line x1="196" y1="76"  x2="186" y2="150"/>
+    <line x1="156" y1="96"  x2="186" y2="150"/>
+  </g>
+  <g fill="#34E0C8">
+    <circle cx="156" cy="96"  r="20"/>
+    <circle cx="200" cy="72"  r="20"/>
+    <circle cx="188" cy="156" r="20"/>
+  </g>
+</svg>

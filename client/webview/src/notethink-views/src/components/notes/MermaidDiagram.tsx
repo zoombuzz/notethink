@@ -21,9 +21,11 @@ const MermaidDiagram = (props: MermaidDiagramProps) => {
     const diagram_text = props.children;
 
     useEffect(() => {
+        // securityLevel is pinned strict so mermaid keeps DOMPurify-sanitising the rendered SVG; lowering it to 'loose'/'antiscript' would turn the innerHTML assignment below into an untrusted-markdown XSS sink
         mermaid.initialize({
             startOnLoad: true,
-            logLevel: 5
+            logLevel: 5,
+            securityLevel: 'strict'
         });
     }, []);
 
@@ -35,6 +37,7 @@ const MermaidDiagram = (props: MermaidDiagramProps) => {
     useEffect(() => {
         if (!element) { return; }
         if (!render_result?.svg) { return; }
+        // safe only because mermaid securityLevel is pinned strict in initialize above, so this SVG is DOMPurify-sanitised before assignment
         element.innerHTML = render_result.svg;
         render_result.bindFunctions?.(element);
     }, [

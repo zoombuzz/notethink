@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NoteThink concept 3 v4 — Constellation N, sticky-note tile: gradient flap + cast shadow, all-white nodes. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
+  <defs>
+    <!-- tile: NW indigo -> SE violet -->
+    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="256" y2="256">
+      <stop offset="0" stop-color="#5B5BF0"/>
+      <stop offset="1" stop-color="#8B3DEF"/>
+    </linearGradient>
+    <!-- folded corner: the reverse — SE mauve -> NW purple -->
+    <linearGradient id="fold" gradientUnits="userSpaceOnUse" x1="256" y1="256" x2="0" y2="0">
+      <stop offset="0" stop-color="#5B5BF0"/>
+      <stop offset="1" stop-color="#8B3DEF"/>
+    </linearGradient>
+    <clipPath id="tile">
+      <path d="M56 0 H200 A56 56 0 0 1 256 56 V168 L168 256 H56
+               A56 56 0 0 1 0 200 V56 A56 56 0 0 1 56 0 Z"/>
+    </clipPath>
+    <filter id="foldShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+  </defs>
+
+  <!-- tile with the bottom-right corner cut for a folded sticky note -->
+  <path d="M56 0 H200 A56 56 0 0 1 256 56 V168 L168 256 H56
+           A56 56 0 0 1 0 200 V56 A56 56 0 0 1 56 0 Z" fill="url(#bg)"/>
+
+  <!-- the N sits ON the note: clipped to the tile so it can't spill past the fold -->
+  <g clip-path="url(#tile)">
+    <g stroke="#FFFFFF" stroke-width="16" stroke-linecap="round">
+      <line x1="60"  y1="52" x2="60"  y2="206"/>
+      <line x1="60"  y1="52" x2="200" y2="206"/>
+      <line x1="200" y1="52" x2="200" y2="206"/>
+    </g>
+    <g fill="#FFFFFF">
+      <circle cx="60"  cy="52"  r="22"/>
+      <circle cx="60"  cy="206" r="22"/>
+      <circle cx="200" cy="52"  r="22"/>
+      <circle cx="128" cy="128" r="24"/>
+      <circle cx="200" cy="206" r="22"/>
+    </g>
+
+    <!-- shadow the lifted corner casts onto the note (clipped to the note) -->
+    <path d="M249 161 L161 161 L161 249 Z" fill="#000000" fill-opacity="0.33" filter="url(#foldShadow)"/>
+  </g>
+
+  <!-- folded-up corner, drawn last so it occludes the N beneath it -->
+  <path d="M256 168 L168 168 L168 256 Z" fill="url(#fold)"/>
+</svg>

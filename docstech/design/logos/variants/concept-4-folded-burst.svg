@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NoteThink concept 4 — Folded note + thought burst. Exploration draft, see brief.md. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B5BF0"/>
+      <stop offset="1" stop-color="#8B3DEF"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="url(#bg)"/>
+
+  <!-- note with a folded top-right corner -->
+  <path d="M62 70
+           a16 16 0 0 1 16 -16
+           h66
+           l40 40
+           v84
+           a16 16 0 0 1 -16 16
+           h-90
+           a16 16 0 0 1 -16 -16
+           z" fill="#FFFFFF"/>
+  <path d="M144 54 l40 40 h-30 a10 10 0 0 1 -10 -10 z" fill="#B9C0F2"/>
+  <g fill="#5B5BF0">
+    <rect x="78" y="120" width="74" height="13" rx="6.5"/>
+    <rect x="78" y="148" width="74" height="13" rx="6.5"/>
+  </g>
+
+  <!-- thought burst escaping the fold -->
+  <g stroke="#FFFFFF" stroke-width="10" stroke-linecap="round">
+    <line x1="170" y1="84"  x2="206" y2="60"/>
+    <line x1="170" y1="84"  x2="210" y2="116"/>
+  </g>
+  <g fill="#34E0C8">
+    <circle cx="170" cy="84"  r="17"/>
+    <circle cx="210" cy="54"  r="17"/>
+    <circle cx="214" cy="122" r="17"/>
+  </g>
+</svg>

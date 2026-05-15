@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NoteThink concept 3 v2 — Constellation N on a sticky-note tile. Exploration draft, see brief.md. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B5BF0"/>
+      <stop offset="1" stop-color="#8B3DEF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- tile with the bottom-right corner cut for a folded sticky note -->
+  <path d="M56 0
+           H200
+           A56 56 0 0 1 256 56
+           V180
+           L180 256
+           H56
+           A56 56 0 0 1 0 200
+           V56
+           A56 56 0 0 1 56 0 Z" fill="url(#bg)"/>
+
+  <!-- folded-up corner (back of the page) -->
+  <path d="M256 180 L180 180 L180 256 Z" fill="#CDBDF8"/>
+  <path d="M256 180 L180 180 L180 256" fill="none" stroke="#5B3FB8" stroke-opacity="0.35" stroke-width="3"/>
+
+  <!-- edges that trace an N: left bar, diagonal, right bar (over the top) -->
+  <g stroke="#FFFFFF" stroke-width="16" stroke-linecap="round">
+    <line x1="74" y1="66" x2="74"  y2="190"/>
+    <line x1="74" y1="66" x2="182" y2="190"/>
+    <line x1="182" y1="66" x2="182" y2="190"/>
+  </g>
+
+  <!-- nodes; circle sizes unchanged from concept 3, top-right now teal -->
+  <g fill="#FFFFFF">
+    <circle cx="74"  cy="66"  r="22"/>
+    <circle cx="74"  cy="190" r="22"/>
+  </g>
+  <g fill="#34E0C8">
+    <circle cx="182" cy="66"  r="22"/>
+    <circle cx="128" cy="128" r="24"/>
+    <circle cx="182" cy="190" r="22"/>
+  </g>
+</svg>

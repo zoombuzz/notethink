@@ -1,12 +1,12 @@
 {
 	"name": "notethink-client-extension",
 	"description": "VS Code extension client for NoteThink markdown visualisation",
-	"author": "Zoom Buzz Ltd.",
+	"author": "NoteThink",
 	"version": "0.1.0",
-	"publisher": "ZoomBuzz",
+	"publisher": "NoteThink",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/ZoomBuzz/NoteThink.git"
+		"url": "https://github.com/zoombuzz/notethink.git"
 	},
 	"engines": {
 		"vscode": "^1.99.0"

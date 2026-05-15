@@ -983,3 +983,52 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + tests 527, playwright 40, lint clean
 
 
+### Harden webview→host trust boundary before public release [](?id=webview-path-hardening&time_estimated=90)
+
+Pre-publish security review found the only mitigation between a future webview-script regression and arbitrary file read/write is the markdown sanitizer + CSP. Added host-side validation so the trust boundary is defended in depth before the first public release.
+
++ background
+  + webview-supplied paths reach privileged host fs/editor APIs with no workspace-containment check
+  + not exploitable today (sanitizer + nonce CSP block webview script) — this is belt-and-suspenders
+  + relates to the "Publish NoteThink 0.1.x to marketplace" story — landed before `vsce publish`
++ goal
+  + every webview-supplied path is validated host-side before it reaches an fs/editor/external sink
++ scope
+  + shared path-containment helper with a pure, Jest-testable core plus a `vscode`-aware wrapper
+  + guard the three path-bearing message handlers and the external-URL handler
+  + pin Mermaid `securityLevel` and document the lone `innerHTML` sink
++ [X] add `isPathWithin` pure helper + `isWithinWorkspace` wrapper
+  + pure core takes target + root list, rejects `..` traversal and sibling-prefix (`/ws-evil` vs `/ws`)
+  + `pathsafe.ts` is vscode-free + Jest-tested; bridge in `notethinkEditor.ts` feeds `workspaceFolders` fsPaths
++ [X] guard `editText` path before `openTextDocument`/`applyEdit`
+  + `notethinkEditor.ts:550` — rejects non-workspace or non-`.md`, logs via `writeToErrorLog`, returns
++ [X] guard `revealRange`/`selectRange` path before `openTextDocument`/`showTextDocument`
+  + `notethinkEditor.ts:382` — validated after the `!doc_path` early-return; gates the existing-editor fast-path too
++ [X] guard `setIntegration` directory before `RelativePattern`/`findFiles`/watcher
+  + `notethinkEditor.ts:458` — rejects at the top of the directory branch, before any teardown
++ [X] add http/https/mailto scheme allow-list to `openExternal`
+  + `notethinkEditor.ts:631` — host-side `ALLOWED_EXTERNAL_SCHEMES` check, parsed once
++ [X] pin Mermaid `securityLevel: 'strict'` and comment the `innerHTML` sink
+  + `MermaidDiagram.tsx:24` initialize + `:38` `innerHTML` commented; test assertion strengthened to guard the pin
++ [X] confirm reload-replay of persisted `integration_path` is covered by the `setIntegration` guard
+  + `ExtensionReceiver.tsx:299` cross-ref comment added; host re-validates, no behaviour change
++ [X] add Jest tests for the path helper
+  + `pathsafe.test.ts` 13 cases + 7 handler regression tests in `notethinkEditor.test.ts` (refusal of out-of-workspace/non-md/bad-scheme)
++ [X] bump patch version in the governing package.json
+  + root `package.json` 0.1.60 → 0.1.61 (extension sub-package stays 0.1.0 by convention)
++ acceptance criteria
+  + out-of-workspace `docPath`/`path` is rejected + logged, no fs/editor call made
+  + `openExternal` only opens http/https/mailto
+  + Mermaid `securityLevel` is explicitly strict with a warning comment
+  + `pnpm run check` green; new helper has Jest coverage
++ test plan
+  + Jest: path-helper unit tests covering every case above
+  + `pnpm run check` (lint + build + rollup + jest) green
++ manual: open a note whose origin path is forced outside the workspace — confirm refused, not opened
++ manual: click an http link and a mailto link — confirm both still open externally
++ manual: confirm Mermaid diagrams still render after pinning securityLevel
++ commit message draft
+  + notethink 0.1.61: harden webview→host trust boundary — workspace-containment guard on editText/revealRange/setIntegration paths, http/https/mailto allow-list for openExternal, pin mermaid securityLevel=strict
+  + ; tests 547 jest, 40 playwright
+
+

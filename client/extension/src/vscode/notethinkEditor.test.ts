@@ -60,6 +60,13 @@ function mockTextEditor(doc: ReturnType<typeof mockTextDocument>) {
 	return editor;
 }
 
+// point the mocked workspace at the given roots so the host-side path-containment guard treats paths under them as in-workspace
+function setWorkspaceRoots(roots: string[] | undefined) {
+	(vscode.workspace as any).workspaceFolders = roots
+		? roots.map((root, index) => ({ uri: Uri.file(root), name: root, index }))
+		: undefined;
+}
+
 // ---- setup ------------------------------------------------------------------
 
 const defaultDocPath = '/workspace/initial.md';
@@ -84,6 +91,9 @@ describe('NotethinkEditorProvider', () => {
 
 		// call myWebviewPanel with the initial document
 		await (provider as any).myWebviewPanel(panelHelper.panel, initialDoc);
+
+		// the constructor no longer pushes the initial doc - requestInitialState (sent by the webview on mount) triggers it
+		await panelHelper.simulateMessage({ type: 'requestInitialState' });
 	});
 
 	afterEach(() => {
@@ -138,6 +148,7 @@ describe('NotethinkEditorProvider', () => {
 			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
 			const newPanel = createMockWebviewPanel();
 			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+			await newPanel.simulateMessage({ type: 'requestInitialState' });
 
 			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
 			expect(updates.length).toBeGreaterThanOrEqual(1);
@@ -165,6 +176,7 @@ describe('NotethinkEditorProvider', () => {
 			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
 			const newPanel = createMockWebviewPanel();
 			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+			await newPanel.simulateMessage({ type: 'requestInitialState' });
 
 			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
 			expect(updates.length).toBeGreaterThanOrEqual(1);
@@ -191,6 +203,7 @@ describe('NotethinkEditorProvider', () => {
 			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
 			const newPanel = createMockWebviewPanel();
 			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+			await newPanel.simulateMessage({ type: 'requestInitialState' });
 
 			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
 			const doc_entries = Object.values(updates[0].partial.docs) as any[];
@@ -209,6 +222,9 @@ describe('NotethinkEditorProvider', () => {
 	describe('editText message', () => {
 		const docPath = '/workspace/test.md';
 		const docText = 'Hello World';
+
+		beforeEach(() => setWorkspaceRoots(['/workspace']));
+		afterEach(() => setWorkspaceRoots(undefined));
 
 		it('uses editor.edit() when a visible editor exists', async () => {
 			const doc = mockTextDocument(docText, docPath);
@@ -293,7 +309,7 @@ describe('NotethinkEditorProvider', () => {
 			// Should not throw
 			await panelHelper.simulateMessage({
 				type: 'editText',
-				docPath: '/nonexistent.md',
+				docPath: '/workspace/nonexistent.md',
 				changes: [{ from: 0, insert: 'x' }],
 			});
 		});
@@ -303,6 +319,9 @@ describe('NotethinkEditorProvider', () => {
 
 	describe('revealRange message', () => {
 		const docPath = '/workspace/test.md';
+
+		beforeEach(() => setWorkspaceRoots(['/workspace']));
+		afterEach(() => setWorkspaceRoots(undefined));
 
 		it('sets selection and calls revealRange on an existing editor', async () => {
 			const doc = mockTextDocument('Hello World', docPath);
@@ -356,6 +375,9 @@ describe('NotethinkEditorProvider', () => {
 	describe('selectRange message', () => {
 		const docPath = '/workspace/test.md';
 
+		beforeEach(() => setWorkspaceRoots(['/workspace']));
+		afterEach(() => setWorkspaceRoots(undefined));
+
 		it('sets selection with head !== anchor (reversed)', async () => {
 			const doc = mockTextDocument('Hello World', docPath);
 			const editor = mockTextEditor(doc);
@@ -384,6 +406,91 @@ describe('NotethinkEditorProvider', () => {
 				from: 0,
 				to: 5,
 			});
+		});
+	});
+
+	// ---- security: webview path containment ---------------------------------
+
+	describe('webview path containment (security hardening)', () => {
+		beforeEach(() => setWorkspaceRoots(['/workspace']));
+		afterEach(() => setWorkspaceRoots(undefined));
+
+		it('editText refuses an out-of-workspace path', async () => {
+			(vscode.window as any).visibleTextEditors = [];
+
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				docPath: '/etc/shadow',
+				changes: [{ from: 0, insert: 'pwned' }],
+			});
+
+			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+			expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
+		});
+
+		it('editText refuses an in-workspace non-markdown path', async () => {
+			(vscode.window as any).visibleTextEditors = [];
+
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				docPath: '/workspace/secrets.txt',
+				changes: [{ from: 0, insert: 'pwned' }],
+			});
+
+			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+			expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
+		});
+
+		it('revealRange refuses an out-of-workspace path', async () => {
+			(vscode.window as any).visibleTextEditors = [];
+
+			await panelHelper.simulateMessage({
+				type: 'revealRange',
+				docPath: '/home/victim/.ssh/id_rsa',
+				from: 0,
+				to: 5,
+			});
+
+			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
+		});
+
+		it('setIntegration refuses an out-of-workspace directory', async () => {
+			await panelHelper.simulateMessage({
+				type: 'setIntegration',
+				mode: 'directory',
+				path: '/etc',
+			});
+
+			expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
+			expect(vscode.workspace.createFileSystemWatcher).not.toHaveBeenCalled();
+		});
+
+		it('openExternal opens an allowed https URL', async () => {
+			await panelHelper.simulateMessage({
+				type: 'openExternal',
+				url: 'https://example.com/page',
+			});
+
+			expect(vscode.env.openExternal).toHaveBeenCalledTimes(1);
+		});
+
+		it('openExternal refuses a file: URL', async () => {
+			await panelHelper.simulateMessage({
+				type: 'openExternal',
+				url: 'file:///etc/passwd',
+			});
+
+			expect(vscode.env.openExternal).not.toHaveBeenCalled();
+		});
+
+		it('openExternal refuses a vscode: URL', async () => {
+			await panelHelper.simulateMessage({
+				type: 'openExternal',
+				url: 'vscode://evil/path',
+			});
+
+			expect(vscode.env.openExternal).not.toHaveBeenCalled();
 		});
 	});
 

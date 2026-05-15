@@ -32,3 +32,11 @@ client/webview/src/**
 client/webview/public/**
 client/webview/postcss.config.js
 client/extension/src/**
+
+# repo tooling not needed at runtime (AUTHORING_GUIDE.md is intentionally kept)
+playwright/**
+scripts/**
+sh/**
+templates/**
+test-results/**
+.ncurc.json

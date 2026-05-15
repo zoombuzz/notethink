@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NoteThink concept 1 — Evolved N-graph. Exploration draft, see brief.md. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B5BF0"/>
+      <stop offset="1" stop-color="#8B3DEF"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="url(#bg)"/>
+
+  <!-- N: two heavy bars + diagonal connecting edge -->
+  <g fill="#FFFFFF">
+    <rect x="62" y="54" width="32" height="148" rx="16"/>
+    <rect x="162" y="54" width="32" height="148" rx="16"/>
+  </g>
+  <line x1="78" y1="70" x2="178" y2="186" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+
+  <!-- mint thought-nodes at the diagonal termini -->
+  <circle cx="78" cy="70" r="23" fill="#34E0C8"/>
+  <circle cx="178" cy="186" r="23" fill="#34E0C8"/>
+</svg>

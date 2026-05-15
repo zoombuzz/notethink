@@ -1,14 +1,15 @@
 {
   "name": "notethink",
   "displayName": "%displayName%",
-  "author": "Zoom Buzz Ltd.",
-  "publisher": "ZoomBuzz",
+  "author": "NoteThink",
+  "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.1.59",
+  "version": "0.2.0",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/ZoomBuzz/NoteThink",
+  "icon": "media/icon.png",
+  "homepage": "https://notethink.com",
   "bugs": {
-    "url": "https://github.com/ZoomBuzz/NoteThink/issues"
+    "url": "https://github.com/zoombuzz/notethink/issues"
   },
   "engines": {
     "vscode": "^1.118.0"
@@ -19,7 +20,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/zoombuzz/NoteThink.git"
+    "url": "https://github.com/zoombuzz/notethink.git"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
@@ -29,7 +30,7 @@
   ],
   "activationEvents": [
     "onLanguage:markdown",
-    "onCustomEditor:zoombuzz.notethink",
+    "onCustomEditor:notethink.notethink",
     "onWebviewPanel:notethink",
     "onStartupFinished"
   ],
@@ -38,7 +39,7 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "zoombuzz.notethink",
+        "viewType": "notethink.notethink",
         "displayName": "%editor.displayName%",
         "selector": [
           {
@@ -101,27 +102,27 @@
       "editor/title": [
         {
           "command": "notethink.setViewAuto",
-          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "when": "activeCustomEditorId == 'notethink.notethink'",
           "group": "navigation@1"
         },
         {
           "command": "notethink.setViewDocument",
-          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "when": "activeCustomEditorId == 'notethink.notethink'",
           "group": "navigation@2"
         },
         {
           "command": "notethink.setViewKanban",
-          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "when": "activeCustomEditorId == 'notethink.notethink'",
           "group": "navigation@3"
         },
         {
           "command": "notethink.toggleLineNumbers",
-          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "when": "activeCustomEditorId == 'notethink.notethink'",
           "group": "1_settings"
         },
         {
           "command": "notethink.toggleContextBars",
-          "when": "activeCustomEditorId == 'zoombuzz.notethink'",
+          "when": "activeCustomEditorId == 'notethink.notethink'",
           "group": "1_settings"
         }
       ]
@@ -130,27 +131,27 @@
       {
         "command": "notethink.clearFocus",
         "key": "escape",
-        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+        "when": "activeCustomEditorId == 'notethink.notethink'"
       },
       {
         "command": "notethink.navigateUp",
         "key": "up",
-        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+        "when": "activeCustomEditorId == 'notethink.notethink'"
       },
       {
         "command": "notethink.navigateDown",
         "key": "down",
-        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+        "when": "activeCustomEditorId == 'notethink.notethink'"
       },
       {
         "command": "notethink.drillIn",
         "key": "enter",
-        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+        "when": "activeCustomEditorId == 'notethink.notethink'"
       },
       {
         "command": "notethink.drillOut",
         "key": "backspace",
-        "when": "activeCustomEditorId == 'zoombuzz.notethink'"
+        "when": "activeCustomEditorId == 'notethink.notethink'"
       }
     ],
     "configuration": [
@@ -195,6 +196,7 @@
     "package": "webpack --mode production --devtool hidden-source-map",
     "postinstall": "cd client/extension && pnpm install && cd ../../ && cd client/webview && pnpm install && cd ../.. && cd client/webview/src/notethink-views && pnpm install && cd ../../../..",
     "package:vsix": "vsce package --no-dependencies",
+    "publish:marketplace": ": \"${TF_VAR_notethink_vsce_alex_publishonly_pat:?missing - provisioned via puppet-managed ~/.bash_envvars}\" && VSCE_PAT=\"$TF_VAR_notethink_vsce_alex_publishonly_pat\" vsce publish --no-dependencies",
     "test-playwright-with-ui": "pnpm run build && playwright test --ui",
     "chrome": "pnpm run build && vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ./docstech"
   },

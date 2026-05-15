@@ -1,28 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- NoteThink marketplace icon — FINAL. Source of truth (see brief.md).
-     Sticky-note tile, white "N" constellation, lit folded corner.
-     Re-render media/icon.png (256) and render/ from this file. -->
+<!-- NoteThink concept 3 v3 — bigger Constellation N on a sticky-note tile; fold occludes the N. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
   <defs>
-    <!-- tile: NW indigo -> SE violet -->
-    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="256" y2="256">
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#5B5BF0"/>
       <stop offset="1" stop-color="#8B3DEF"/>
-    </linearGradient>
-    <!-- folded corner: lit fold. Mauve highlight hugs the SE crease, then a quick
-         blend into a flat mid-tone (between mauve and purple) across the rest. -->
-    <linearGradient id="fold" gradientUnits="userSpaceOnUse" x1="212" y1="212" x2="168" y2="168">
-      <stop offset="0"    stop-color="#5454F4"/>
-      <stop offset="0.25" stop-color="#7146F2"/>
-      <stop offset="1"    stop-color="#7146F2"/>
     </linearGradient>
     <clipPath id="tile">
       <path d="M56 0 H200 A56 56 0 0 1 256 56 V168 L168 256 H56
                A56 56 0 0 1 0 200 V56 A56 56 0 0 1 56 0 Z"/>
     </clipPath>
-    <filter id="foldShadow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="4.5"/>
-    </filter>
   </defs>
 
   <!-- tile with the bottom-right corner cut for a folded sticky note -->
@@ -39,16 +26,15 @@
     <g fill="#FFFFFF">
       <circle cx="60"  cy="52"  r="22"/>
       <circle cx="60"  cy="206" r="22"/>
+    </g>
+    <g fill="#34E0C8">
       <circle cx="200" cy="52"  r="22"/>
       <circle cx="128" cy="128" r="24"/>
       <circle cx="200" cy="206" r="22"/>
     </g>
-
-    <!-- shadow cast by the lifted corner: SE edge sits on the crease and reaches
-         the right/bottom icon edges; feathers NW onto the note. No NW gap. -->
-    <path d="M260 168 L150 150 L168 260 Z" fill="#000000" fill-opacity="0.45" filter="url(#foldShadow)"/>
   </g>
 
   <!-- folded-up corner, drawn last so it occludes the N beneath it -->
-  <path d="M256 168 L168 168 L168 256 Z" fill="url(#fold)"/>
+  <path d="M256 168 L168 168 L168 256 Z" fill="#CDBDF8"/>
+  <path d="M256 168 L168 168 L168 256" fill="none" stroke="#5B3FB8" stroke-opacity="0.35" stroke-width="3"/>
 </svg>

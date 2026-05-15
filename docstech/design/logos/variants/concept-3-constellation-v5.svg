@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- NoteThink marketplace icon — FINAL. Source of truth (see brief.md).
-     Sticky-note tile, white "N" constellation, lit folded corner.
-     Re-render media/icon.png (256) and render/ from this file. -->
+<!-- NoteThink concept 3 v5 — accentuated flap fade + shadow extended to icon edges. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
   <defs>
     <!-- tile: NW indigo -> SE violet -->
@@ -9,12 +7,11 @@
       <stop offset="0" stop-color="#5B5BF0"/>
       <stop offset="1" stop-color="#8B3DEF"/>
     </linearGradient>
-    <!-- folded corner: lit fold. Mauve highlight hugs the SE crease, then a quick
-         blend into a flat mid-tone (between mauve and purple) across the rest. -->
-    <linearGradient id="fold" gradientUnits="userSpaceOnUse" x1="212" y1="212" x2="168" y2="168">
-      <stop offset="0"    stop-color="#5454F4"/>
-      <stop offset="0.25" stop-color="#7146F2"/>
-      <stop offset="1"    stop-color="#7146F2"/>
+    <!-- folded corner: the reverse, compressed to the flap so the fade is visible.
+         SE mauve -> NW purple, contrast widened a touch -->
+    <linearGradient id="fold" gradientUnits="userSpaceOnUse" x1="256" y1="256" x2="168" y2="168">
+      <stop offset="0" stop-color="#5454F4"/>
+      <stop offset="1" stop-color="#9438F2"/>
     </linearGradient>
     <clipPath id="tile">
       <path d="M56 0 H200 A56 56 0 0 1 256 56 V168 L168 256 H56
@@ -44,9 +41,9 @@
       <circle cx="200" cy="206" r="22"/>
     </g>
 
-    <!-- shadow cast by the lifted corner: SE edge sits on the crease and reaches
-         the right/bottom icon edges; feathers NW onto the note. No NW gap. -->
-    <path d="M260 168 L150 150 L168 260 Z" fill="#000000" fill-opacity="0.45" filter="url(#foldShadow)"/>
+    <!-- shadow the lifted corner casts onto the note; pushed past the icon
+         edges so (after this same clip) it sits flush to them, no gap -->
+    <path d="M266 150 L150 150 L150 266 Z" fill="#000000" fill-opacity="0.42" filter="url(#foldShadow)"/>
   </g>
 
   <!-- folded-up corner, drawn last so it occludes the N beneath it -->

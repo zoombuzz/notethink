@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- NoteThink marketplace icon — FINAL. Source of truth (see brief.md).
-     Sticky-note tile, white "N" constellation, lit folded corner.
-     Re-render media/icon.png (256) and render/ from this file. -->
+<!-- NoteThink concept 3 v6 — shadow re-anchored to the fold; smooth lit-fold gradient. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NoteThink">
   <defs>
     <!-- tile: NW indigo -> SE violet -->

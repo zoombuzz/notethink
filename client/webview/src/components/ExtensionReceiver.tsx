@@ -296,6 +296,7 @@ export default function ExtensionReceiver() {
                 const vs = saved_state.viewStates[id];
                 if (vs?.display_options?.integration_mode === 'directory' && vs?.display_options?.integration_path) {
                     debug('restoring directory integration on reload: %s', vs.display_options.integration_path);
+                    // host re-validates this path against the workspace before acting — persisted webview state is untrusted (defense-in-depth)
                     vscode.postMessage({
                         type: 'setIntegration',
                         mode: 'directory',

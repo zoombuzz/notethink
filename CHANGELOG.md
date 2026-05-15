@@ -14,7 +14,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 
-- Extension icon (`media/icon.png`) for the marketplace listing
+- Extension icon for the marketplace listing — final NoteThink logo (`media/icon.png`, 256×256; SVG source `docstech/design/logos/notethink-icon.svg`, drafts in `docstech/design/logos/variants/`)
 - `publish:marketplace` npm script — non-interactive `vsce publish` via a puppet-provisioned PAT env var (no `vsce login`)
 
 ## [0.1.1] - 2026-02-24

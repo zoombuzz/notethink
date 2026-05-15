@@ -1,8 +1,8 @@
 # NoteThink logo — design brief
 
-> Status: **placeholder shipped**. `notethink-icon.svg` is a functional stand-in so the
-> 0.1.x marketplace listing isn't blank. This brief is for Claude Design (or a human
-> designer) to produce the real mark.
+> Status: **final shipped** (2026-05-15). `notethink-icon.svg` is the approved mark —
+> sticky-note tile, white "N" constellation, lit folded corner. `media/icon.png` was
+> re-rendered from it; exploration drafts are archived in `variants/`.
 
 ## Workflow / conventions
 
@@ -48,8 +48,9 @@ stylised note/page, a thought bubble, a node cluster). Deliver:
 3. Renders in `render/` at 32/48/64/128/256/512 for review.
 4. Confirm the 32px render is still identifiable before sign-off.
 
-## Done when
+## Done — 2026-05-15
 
-- Final SVG approved and committed here.
-- `media/icon.png` re-rendered (256×256) from the approved SVG and committed.
-- `package.json` `"icon"` still points at `media/icon.png` (already wired).
+- [x] Final SVG approved and committed here (`notethink-icon.svg`).
+- [x] `media/icon.png` re-rendered (256×256) from the approved SVG.
+- [x] `package.json` `"icon"` still points at `media/icon.png` (verified).
+- [x] Exploration drafts archived in `variants/`; review renders regenerated in `render/`.

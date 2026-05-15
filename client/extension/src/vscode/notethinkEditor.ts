@@ -4,10 +4,18 @@ import type { HashMapOf, Doc } from '../types/general';
 import { abbrevDoc, getNonce } from '../lib/utils';
 import { debug, writeToLog, writeToErrorLog } from "../lib/errorops";
 import { parse } from '../lib/parseops';
+import { isPathWithin } from '../lib/pathsafe';
 
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
 const BACKGROUND_BATCH_SIZE = 20;
+const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
+
+// bridge isPathWithin to the live workspace: roots come from vscode.workspace.workspaceFolders so the pure helper stays vscode-free and unit-testable
+function isWithinWorkspace(target_path: string, options?: { requireExtension?: string }): boolean {
+	const root_paths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+	return isPathWithin(target_path, root_paths, options);
+}
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
@@ -371,6 +379,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const to = (e.to ?? e.from) as number;
 					try {
 						if (!doc_path) { return; }
+						// gate both the visible-editor fast path and the openTextDocument path: webview-supplied paths are untrusted
+						if (!isWithinWorkspace(doc_path, { requireExtension: '.md' })) {
+							writeToErrorLog(`${e.type}: path outside workspace, refusing`, doc_path);
+							return;
+						}
 
 						// first: if the doc already lives in a visible editor we just reveal/select in place without opening anything
 						const existing = vscode.window.visibleTextEditors.find(
@@ -442,6 +455,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const mode = e.mode as string;
 					const dir_path = e.path as string;
 					if (mode === 'directory' && dir_path) {
+						// validate before any teardown so a poisoned path can't dismantle a legitimate integration (directory, so no extension requirement)
+						if (!isWithinWorkspace(dir_path)) {
+							writeToErrorLog('setIntegration: directory outside workspace, refusing', dir_path);
+							return;
+						}
 						try {
 							// tear down any previous watcher and reset the doc cache
 							if (integration_watcher) {
@@ -529,6 +547,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const doc_path = e.docPath as string;
 					const changes = e.changes as Array<{from: number; to?: number; insert: string}>;
 					try {
+						// webview-supplied paths are untrusted: only allow edits to .md files inside the workspace
+						if (!doc_path || !isWithinWorkspace(doc_path, { requireExtension: '.md' })) {
+							writeToErrorLog('editText: path outside workspace, refusing', doc_path);
+							return;
+						}
 						const uri = vscode.Uri.file(doc_path);
 						const document = await vscode.workspace.openTextDocument(uri);
 						const doc_length = document.getText().length;
@@ -605,7 +628,13 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const url = e.url as string;
 					if (url) {
 						try {
-							await vscode.env.openExternal(vscode.Uri.parse(url));
+							// host-side scheme allow-list: only open http/https/mailto, refuse everything else (file:, vscode:, etc.)
+							const parsed = vscode.Uri.parse(url);
+							if (!(ALLOWED_EXTERNAL_SCHEMES as readonly string[]).includes(parsed.scheme.toLowerCase())) {
+								writeToErrorLog('openExternal: refused scheme', url);
+								return;
+							}
+							await vscode.env.openExternal(parsed);
 						} catch (err) {
 							writeToErrorLog('openExternal failed', url, err);
 						}

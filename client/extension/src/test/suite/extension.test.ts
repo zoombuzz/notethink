@@ -11,7 +11,7 @@ import * as vscode from 'vscode';
  */
 
 const EXTENSION_ID = 'NoteThink.notethink';
-const VIEW_TYPE = 'notethink.notethink';
+const VIEW_TYPE = 'notethink.viewer';
 
 suite('Web Extension Test Suite', () => {
 
@@ -67,7 +67,7 @@ suite('Web Extension Test Suite', () => {
 
 		const expectedCommands = [
 			// Core command
-			'notethink.openview',
+			'notethink.openViewer',
 			// View type switching
 			'notethink.setViewAuto',
 			'notethink.setViewDocument',

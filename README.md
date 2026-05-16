@@ -18,19 +18,26 @@ A VS Code extension that renders markdown files as interactive visualizations.
 
 ### From Marketplace
 
-Not yet published. See [Development](#development) below.
+Install **NoteThink** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=NoteThink.notethink):
+
+- In VS Code, open the Extensions view (`Ctrl+Shift+X`), search for **NoteThink**, and click **Install**, or
+- From the command line:
+
+  ```bash
+  code --install-extension NoteThink.notethink
+  ```
 
 ### From .vsix
 
 ```bash
 pnpm run package:vsix
-code --install-extension notethink-0.1.0.vsix
+code --install-extension notethink-<version>.vsix
 ```
 
 ## Usage
 
 1. Open any markdown file (`.md`)
-2. Use the command palette (`Ctrl+Shift+P`) and run "NoteThink: Open View"
+2. Use the command palette (`Ctrl+Shift+P`) and run "NoteThink: Open Viewer"
 3. Or right-click on a markdown file and select "Open With..." → "NoteThink"
 
 For the conventions your markdown should follow — heading levels, story
@@ -98,7 +105,7 @@ cd client/webview/src/notethink-views && pnpm test  # component library tests (2
 **Manual extension testing**: Press `F5`, then in the dev host:
 
 - Open a `.md` file → right-click → "Open With..." → NoteThink
-- Run "NoteThink: Open View" from the command palette
+- Run "NoteThink: Open Viewer" from the command palette
 - Check that headings, code blocks, lists, and task lists render
 - Edit the file and verify the view updates
 - Open Toggle Developer Tools and check for console errors
@@ -111,10 +118,10 @@ cd client/webview/src/notethink-views && pnpm test  # component library tests (2
 pnpm run package:vsix
 ```
 
-This runs the production build (`vscode:prepublish`) then packages into `notethink-0.1.0.vsix`. Install locally with:
+This runs the production build (`vscode:prepublish`) then packages into `notethink-<version>.vsix`. Install locally with:
 
 ```bash
-code --install-extension notethink-0.1.0.vsix
+code --install-extension notethink-<version>.vsix
 ```
 
 ## Project Structure
@@ -179,8 +186,6 @@ notethink/
 ## Known Limitations
 
 - **Read-only**: No editing support yet - NoteThink is a viewer, not an editor
-- **Single file view**: No multi-document navigation
-- **No icon**: Extension icon is a placeholder until a proper design is provided
 
 ## Contributing
 

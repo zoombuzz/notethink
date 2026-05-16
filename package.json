@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://notethink.com",
@@ -30,7 +30,7 @@
   ],
   "activationEvents": [
     "onLanguage:markdown",
-    "onCustomEditor:notethink.notethink",
+    "onCustomEditor:notethink.viewer",
     "onWebviewPanel:notethink",
     "onStartupFinished"
   ],
@@ -39,7 +39,7 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "notethink.notethink",
+        "viewType": "notethink.viewer",
         "displayName": "%editor.displayName%",
         "selector": [
           {
@@ -51,8 +51,8 @@
     ],
     "commands": [
       {
-        "command": "notethink.openview",
-        "title": "%command.openview%"
+        "command": "notethink.openViewer",
+        "title": "%command.openViewer%"
       },
       {
         "command": "notethink.setViewAuto",
@@ -102,27 +102,27 @@
       "editor/title": [
         {
           "command": "notethink.setViewAuto",
-          "when": "activeCustomEditorId == 'notethink.notethink'",
+          "when": "activeCustomEditorId == 'notethink.viewer'",
           "group": "navigation@1"
         },
         {
           "command": "notethink.setViewDocument",
-          "when": "activeCustomEditorId == 'notethink.notethink'",
+          "when": "activeCustomEditorId == 'notethink.viewer'",
           "group": "navigation@2"
         },
         {
           "command": "notethink.setViewKanban",
-          "when": "activeCustomEditorId == 'notethink.notethink'",
+          "when": "activeCustomEditorId == 'notethink.viewer'",
           "group": "navigation@3"
         },
         {
           "command": "notethink.toggleLineNumbers",
-          "when": "activeCustomEditorId == 'notethink.notethink'",
+          "when": "activeCustomEditorId == 'notethink.viewer'",
           "group": "1_settings"
         },
         {
           "command": "notethink.toggleContextBars",
-          "when": "activeCustomEditorId == 'notethink.notethink'",
+          "when": "activeCustomEditorId == 'notethink.viewer'",
           "group": "1_settings"
         }
       ]
@@ -131,27 +131,27 @@
       {
         "command": "notethink.clearFocus",
         "key": "escape",
-        "when": "activeCustomEditorId == 'notethink.notethink'"
+        "when": "activeCustomEditorId == 'notethink.viewer'"
       },
       {
         "command": "notethink.navigateUp",
         "key": "up",
-        "when": "activeCustomEditorId == 'notethink.notethink'"
+        "when": "activeCustomEditorId == 'notethink.viewer'"
       },
       {
         "command": "notethink.navigateDown",
         "key": "down",
-        "when": "activeCustomEditorId == 'notethink.notethink'"
+        "when": "activeCustomEditorId == 'notethink.viewer'"
       },
       {
         "command": "notethink.drillIn",
         "key": "enter",
-        "when": "activeCustomEditorId == 'notethink.notethink'"
+        "when": "activeCustomEditorId == 'notethink.viewer'"
       },
       {
         "command": "notethink.drillOut",
         "key": "backspace",
-        "when": "activeCustomEditorId == 'notethink.notethink'"
+        "when": "activeCustomEditorId == 'notethink.viewer'"
       }
     ],
     "configuration": [

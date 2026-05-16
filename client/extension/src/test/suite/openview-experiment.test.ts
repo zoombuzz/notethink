@@ -11,7 +11,7 @@ import * as vscode from 'vscode';
  */
 
 const EXTENSION_ID = 'NoteThink.notethink';
-const VIEW_TYPE = 'notethink.notethink';
+const VIEW_TYPE = 'notethink.viewer';
 
 async function closeAllEditors(): Promise<void> {
 	await vscode.commands.executeCommand('workbench.action.closeAllEditors');

@@ -38,7 +38,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	// register command defined in package.json
-	const disposable = vscode.commands.registerCommand('notethink.openview', async () => {
+	const disposable = vscode.commands.registerCommand('notethink.openViewer', async () => {
 		const active_editor = vscode.window.activeTextEditor;
 		if (!active_editor || !active_editor.document.uri.path.endsWith('.md')) {
 			vscode.window.showWarningMessage(vscode.l10n.t('NoteThink: open a .md file first'));

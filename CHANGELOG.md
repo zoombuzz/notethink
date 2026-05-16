@@ -4,6 +4,21 @@ All notable changes to the "notethink" extension will be documented in this file
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.2.2] - 2026-05-16
+
+### Changed
+
+- Renamed the custom-editor `viewType` (`notethink.notethink` → `notethink.viewer`) and the command id (`notethink.openview` → `notethink.openViewer`); the command's display label is now **NoteThink: Open Viewer** (all locales). Migration: a markdown file that was pinned open with the previous NoteThink custom editor reopens in the plain text editor once after updating — reopen it via "Open With… → NoteThink" or run **NoteThink: Open Viewer**. No user settings or files are affected.
+- Refreshed the extension icon and wordmark (`media/icon.png`, `docstech/design/logos/`).
+
+### Fixed
+
+- README install instructions corrected for the published Marketplace listing: real "From Marketplace" steps (search / `code --install-extension NoteThink.notethink`) replacing the stale "Not yet published" note, version-agnostic `.vsix` filenames, and removal of the obsolete "single file view" / "placeholder icon" known-limitations bullets.
+
+### Removed
+
+- Deleted 20 stale in-place `tsc` artefacts (`client/extension/src/**/*.js` + `.js.map`) that were committed, no longer regenerated, and unused (webpack bundles from `.ts`); added a `.gitignore` rule so they don't return.
+
 ## [0.2.1] - 2026-05-15
 
 ### Security

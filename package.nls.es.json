@@ -2,7 +2,7 @@
   "displayName": "NoteThink",
   "description": "Notas en markdown, visualizadas de cualquier forma",
   "editor.displayName": "NoteThink",
-  "command.openview": "NoteThink: Abrir vista",
+  "command.openViewer": "NoteThink: Abrir visor",
   "command.setViewAuto": "NoteThink: Vista automática",
   "command.setViewDocument": "NoteThink: Vista de documento",
   "command.setViewKanban": "NoteThink: Vista Kanban",

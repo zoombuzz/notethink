@@ -19,7 +19,7 @@ function isWithinWorkspace(target_path: string, options?: { requireExtension?: s
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
-	public static readonly viewType = 'notethink.notethink';
+	public static readonly viewType = 'notethink.viewer';
 	private activePanel: vscode.WebviewPanel | undefined;
 
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {

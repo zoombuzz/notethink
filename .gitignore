@@ -35,6 +35,10 @@ nohup.out
 # build outputs
 **/dist/
 
+# stale in-place tsc output (source of truth is the .ts; webpack bundles from .ts)
+client/extension/src/**/*.js
+client/extension/src/**/*.js.map
+
 # service workers
 **/public/sw.js
 **/public/sw.js.map

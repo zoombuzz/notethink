@@ -1,29 +1,6 @@
 # Todo [](?ng_view=kanban)
 
 
-### Publish NoteThink 0.1.x to marketplace [](?status=doing&id=publish-notethink-0-1-x)
-
-Publisher created (`NoteThink`, notethink.com verified). Extension rebranded off the old `ZoomBuzz` identity, final logo shipped. Only the credentialed `vsce publish` is left for the user.
-
-+ [X] rebrand publisher to NoteThink
-  + root package.json: publisher/author → NoteThink, homepage → https://notethink.com
-  + viewType `zoombuzz.notethink` → `notethink.notethink`; extension ID is now `NoteThink.notethink`
-  + updated notethinkEditor.ts, both mocha suites, client/extension sub-package
-  + repo/bugs URLs left at the real remote (github.com/zoombuzz/notethink) — GitHub org not renamed
-+ [X] create NoteThink marketplace publisher
-  + done by user; not the One Partner account used by other projects
-+ [X] add placeholder extension icon
-  + `media/icon.png` (256×256) wired via package.json `"icon"`
-  + SVG source in docstech/design/logos/, multi-res renders gitignored
-+ [X] commission the real logo
-  + final mark in docstech/design/logos/notethink-icon.svg; `media/icon.png` re-rendered; drafts archived in variants/
-+ [ ] publish to marketplace
-  + PAT provisioned as `$TF_VAR_notethink_vsce_alex_publishonly_pat` (puppet-managed ~/.bash_envvars; eyaml `general::notethink::vsce::alex_publishonly_pat`, Marketplace>Manage scope)
-  + run `pnpm run publish:marketplace` — non-interactive, bridges the env var to VSCE_PAT, no `vsce login` prompt
-+ manual: install the .vsix locally, exercise edge cases — special/unicode paths, 100+ markdown workspace perf, no devtools console errors
-+ manual: after publishing, verify the listing renders — icon, README, repo/homepage links
-
-
 ### Continue to refine directory experience
 
 + [ ] rename "Directory" option as "Folder"

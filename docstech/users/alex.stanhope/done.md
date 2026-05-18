@@ -1,38 +1,6 @@
 # Done [](?ng_view=kanban&ng_child_status=done)
 
 
-### Edge-case tests for pre-release validation
-
-+ [X] empty markdown file - already covered (parseops + hierarchy tests)
-+ [X] very large markdown file (1000+ lines) - parse benchmark (150 sections × ~10 lines, under 200ms) and hierarchy benchmark (1000 headings, under 200ms)
-+ [X] markdown with frontmatter - already covered (YAML + TOML in parseops); added hierarchy passthrough tests
-+ [X] markdown with GFM tables, strikethrough - already covered in parseops; added hierarchy table passthrough tests
-+ [X] markdown with GFM footnotes - 3 new tests (single, multiple, multi-line content) in parseops; hierarchy footnoteDefinition passthrough test
-+ [X] file with unicode characters - 8 new tests in parseops (emoji, CJK, accented, combining chars, RTL, code blocks, tables, math symbols); 3 new hierarchy tests (emoji/CJK headline_raw, unicode body_raw)
-+ [X] mixed content document - full-feature test (frontmatter + GFM + unicode + code + footnotes in one document)
-+ tests 450 (was 427), 34 playwright
-
-
-### Upgrade webpack-cli 6 → 7 and copy-webpack-plugin 13 → 14
-
-+ [X] update `webpack-cli` from `^6.0.1` to `^7.0.0` in root package.json
-+ [X] update `copy-webpack-plugin` from `13.0.1` to `14.0.0` in root package.json
-+ [X] no `--node-env` flag usage found (removed in webpack-cli 7, replaced by `--config-node-env`)
-+ [X] pnpm install succeeds (webpack-cli 7.0.2, copy-webpack-plugin 14.0.0)
-+ [X] lint passes (eslint + tsc --noEmit for all 3 sub-projects)
-+ [X] all 421 tests pass across extension (74), webview (30), notethink-views (317)
-+ [X] webpack build succeeds (both extension and webview bundles)
-
-
-### Upgrade TypeScript 5.9 → 6.0
-
-+ [X] upgrade `typescript` to `^6.0.2` in root package.json
-+ [X] confirm `ignoreDeprecations: "6.0"` in all tsconfig.jest.json files (client/webview, client/webview/src/notethink-views)
-+ [X] confirm inline `ignoreDeprecations: '6.0'` in client/extension/jest.config.cjs
-+ [X] lint passes (eslint + tsc --noEmit for all 3 sub-projects)
-+ [X] all 421 tests pass across extension (74), webview (30), notethink-views (317)
-
-
 ### Child attribute inheritance
 
 + [X] add `inherited?: true` flag to LineTag interface in `notethink-views/src/types/NoteProps.ts`
@@ -775,6 +743,26 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] verify jest tests pass
 
 
+### Upgrade webpack-cli 6 → 7 and copy-webpack-plugin 13 → 14
+
++ [X] update `webpack-cli` from `^6.0.1` to `^7.0.0` in root package.json
++ [X] update `copy-webpack-plugin` from `13.0.1` to `14.0.0` in root package.json
++ [X] no `--node-env` flag usage found (removed in webpack-cli 7, replaced by `--config-node-env`)
++ [X] pnpm install succeeds (webpack-cli 7.0.2, copy-webpack-plugin 14.0.0)
++ [X] lint passes (eslint + tsc --noEmit for all 3 sub-projects)
++ [X] all 421 tests pass across extension (74), webview (30), notethink-views (317)
++ [X] webpack build succeeds (both extension and webview bundles)
+
+
+### Upgrade TypeScript 5.9 → 6.0
+
++ [X] upgrade `typescript` to `^6.0.2` in root package.json
++ [X] confirm `ignoreDeprecations: "6.0"` in all tsconfig.jest.json files (client/webview, client/webview/src/notethink-views)
++ [X] confirm inline `ignoreDeprecations: '6.0'` in client/extension/jest.config.cjs
++ [X] lint passes (eslint + tsc --noEmit for all 3 sub-projects)
++ [X] all 421 tests pass across extension (74), webview (30), notethink-views (317)
+
+
 ### Settings modals
 
 + goal
@@ -800,6 +788,18 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + [X] replace all `--mantine-*` references in ViewRenderer.module.scss with `--vscode-*` equivalents
 + [X] delete `client/webview/src/vscode-mantine-bridge.css` and its import in index.tsx
 + [X] remove `@mantine/core`, `@mantine/hooks`, `@mantine/modals`, `@mantine/notifications`, `postcss-preset-mantine` from client/webview/package.json
+
+
+### Edge-case tests for pre-release validation
+
++ [X] empty markdown file - already covered (parseops + hierarchy tests)
++ [X] very large markdown file (1000+ lines) - parse benchmark (150 sections × ~10 lines, under 200ms) and hierarchy benchmark (1000 headings, under 200ms)
++ [X] markdown with frontmatter - already covered (YAML + TOML in parseops); added hierarchy passthrough tests
++ [X] markdown with GFM tables, strikethrough - already covered in parseops; added hierarchy table passthrough tests
++ [X] markdown with GFM footnotes - 3 new tests (single, multiple, multi-line content) in parseops; hierarchy footnoteDefinition passthrough test
++ [X] file with unicode characters - 8 new tests in parseops (emoji, CJK, accented, combining chars, RTL, code blocks, tables, math symbols); 3 new hierarchy tests (emoji/CJK headline_raw, unicode body_raw)
++ [X] mixed content document - full-feature test (frontmatter + GFM + unicode + code + footnotes in one document)
++ tests 450 (was 427), 34 playwright
 
 
 ### Add i18n using VS Code l10n mechanism
@@ -1030,5 +1030,28 @@ Pre-publish security review found the only mitigation between a future webview-s
 + commit message draft
   + notethink 0.1.61: harden webview→host trust boundary — workspace-containment guard on editText/revealRange/setIntegration paths, http/https/mailto allow-list for openExternal, pin mermaid securityLevel=strict
   + ; tests 547 jest, 40 playwright
+
+
+### Publish NoteThink 0.1.x to marketplace [](?id=publish-notethink-0-1-x)
+
+Publisher created (`NoteThink`, notethink.com verified). Extension rebranded off the old `ZoomBuzz` identity, final logo shipped. Only the credentialed `vsce publish` is left for the user.
+
++ [X] rebrand publisher to NoteThink
+  + root package.json: publisher/author → NoteThink, homepage → https://notethink.com
+  + viewType `zoombuzz.notethink` → `notethink.notethink`; extension ID is now `NoteThink.notethink`
+  + updated notethinkEditor.ts, both mocha suites, client/extension sub-package
+  + repo/bugs URLs left at the real remote (github.com/zoombuzz/notethink) — GitHub org not renamed
++ [X] create NoteThink marketplace publisher
+  + done by user; not the One Partner account used by other projects
++ [X] add placeholder extension icon
+  + `media/icon.png` (256×256) wired via package.json `"icon"`
+  + SVG source in docstech/design/logos/, multi-res renders gitignored
++ [X] commission the real logo
+  + final mark in docstech/design/logos/notethink-icon.svg; `media/icon.png` re-rendered; drafts archived in variants/
++ [X] publish to marketplace
+  + PAT provisioned, Marketplace > Manage scope
+  + run `pnpm run publish:marketplace` — non-interactive, bridges the env var to VSCE_PAT, no `vsce login` prompt
++ manual: install the .vsix locally, exercise edge cases — special/unicode paths, 100+ markdown workspace perf, no devtools console errors
++ manual: after publishing, verify the listing renders — icon, README, repo/homepage links
 
 

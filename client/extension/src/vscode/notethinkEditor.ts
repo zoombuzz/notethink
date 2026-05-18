@@ -9,6 +9,9 @@ import { isPathWithin } from '../lib/pathsafe';
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
 const BACKGROUND_BATCH_SIZE = 20;
+// hard cap on files loaded+parsed into a single directory aggregate
+// without it, selecting a large root (~600+ .md files) fans out one openTextDocument+parse+postMessage per file and re-runs mergeAggregateRoot on every message, saturating IPC and pinning the renderer ("window not responding")
+const MAX_AGGREGATE_FILES = 200;
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
 
 // bridge isPathWithin to the live workspace: roots come from vscode.workspace.workspaceFolders so the pure helper stays vscode-free and unit-testable
@@ -471,10 +474,19 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 							const pattern = new vscode.RelativePattern(vscode.Uri.file(dir_path), '**/*.md');
 
+							// aggregate-size metadata, surfaced to the webview so the breadcrumb can show "(loaded of discovered)" when the cap truncates
+							let aggregate_total_discovered = 0;
+							let aggregate_truncated = false;
+
 							// shared per-file loader: parse the doc and post a merge update so the view fills in progressively
 							// used by both the initial discovery and the file watcher
 							const loadOne = async (uri: vscode.Uri) => {
 								try {
+									// respect the cap for watcher-driven adds too: never grow a new path past MAX_AGGREGATE_FILES (re-parses of already-loaded paths still pass)
+									const already_loaded = Object.values(integration_docs).some(d => d.path === uri.path);
+									if (!already_loaded && Object.keys(integration_docs).length >= MAX_AGGREGATE_FILES) {
+										return;
+									}
 									const document = await vscode.workspace.openTextDocument(uri);
 									const doc = await buildDoc(document);
 									integration_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
@@ -484,6 +496,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 										merge_strategy: 'merge',
 										workspace_root,
 										extension_version,
+										aggregate_total_discovered,
+										aggregate_truncated,
 									});
 								} catch (err) {
 									writeToErrorLog('setIntegration: failed to load doc', uri.path, err);
@@ -492,9 +506,17 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 							// phase 1: discover and load in parallel; each file streams its own merge update as it completes so a slow file never blocks the others - the view fills in over a few seconds rather than waiting on the whole batch
 							// pass an explicit exclude pattern so the user's files.exclude/search.exclude can't hide notes inside the integration directory but still skip standard derived/dependency directories whose .md files (readmes, changelogs) would otherwise flood the aggregate view
-							const exclude_pattern = '**/{node_modules,.git,.svn,.hg,dist,build,out,.next,.cache,coverage}/**';
-							const uris = await vscode.workspace.findFiles(pattern, exclude_pattern);
-							debug('setIntegration directory: %d files discovered in %s', uris.length, dir_path);
+							const exclude_pattern = '**/{node_modules,.git,.svn,.hg,.terraform,dist,build,out,.next,.cache,coverage}/**';
+							const discovered = await vscode.workspace.findFiles(pattern, exclude_pattern);
+							// deterministic order so the capped subset (and what the user sees) is stable across reloads
+							const sorted_uris = [...discovered].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+							aggregate_total_discovered = sorted_uris.length;
+							aggregate_truncated = sorted_uris.length > MAX_AGGREGATE_FILES;
+							const uris = sorted_uris.slice(0, MAX_AGGREGATE_FILES);
+							debug('setIntegration directory: %d discovered, loading %d (cap %d, truncated=%s) in %s', aggregate_total_discovered, uris.length, MAX_AGGREGATE_FILES, aggregate_truncated, dir_path);
+							if (aggregate_truncated) {
+								writeToLog('setIntegration directory cap hit', `discovered ${aggregate_total_discovered}, loading first ${MAX_AGGREGATE_FILES} of ${dir_path}`);
+							}
 							const load_promises = uris.map(loadOne);
 							// once every load has settled, send a replace update with the canonical map
 							// this prunes stale docs left over from a previous session's saved state that no longer exist in the directory
@@ -505,6 +527,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 									partial: { docs: integration_docs },
 									workspace_root,
 									extension_version,
+									aggregate_total_discovered,
+									aggregate_truncated,
 								});
 							});
 

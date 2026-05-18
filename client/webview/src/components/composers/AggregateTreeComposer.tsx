@@ -63,11 +63,16 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
         },
     };
 
+    // number of source files actually loaded into the merged view (the breadcrumb shows this)
+    const file_count = Object.keys(docs).length;
+
     const view_props: ViewProps = {
         id: view_state_id,
         type: view_type,
         // doc_path/doc_relative_path/doc_text intentionally undefined for the merged view
         workspace_root: props.workspace_root,
+        file_count,
+        aggregate_total_discovered: props.aggregate_total_discovered,
         display_options: view_display_options,
         nested: {
             parent_context: merged_root,

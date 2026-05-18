@@ -1,23 +1,14 @@
 # Playwright Test Results
-# Version: 0.2.1
-# Date: 2026-05-16T06:30:21Z
+# Version: 0.2.2
+# Date: 2026-05-18T19:54:47+01:00
 # Command: npx playwright test
 # ---
-Running 40 tests using workers (chromium)
+Running 41 tests using 10 workers
 
-All specs passed:
-- aggregate-directory.spec.ts (origin pills, breadcrumb setIntegration, revealRange, Kanban grouping)
-- breadcrumb.spec.ts (workspace_root stripping, relative_path absolute paths, countingsheet path)
-- click-interaction.spec.ts (revealRange, aria-current, focus/select, docId/docPath)
-- document-view.spec.ts (container, headlines, data-seq, body paragraphs)
-- error-boundary.spec.ts (malformed MDAST fallback, message/details, Try Again, container retained)
-- kanban-view.spec.ts (auto-detect ng_view, column placement, untagged column)
-- kanban-drag.spec.ts (editText status change, remove status tag, no blank after drag, destination update)
-- keyboard-navigation.spec.ts (revealRange, focus styling, drillIn/drillOut parent context)
-- list-bullets.spec.ts (non-checkbox parent keeps bullet)
-- settings-toggle.spec.ts (lineNumbers, contextBars, survive view switch)
-- view-switching.spec.ts (auto→document, kanban round-trip, auto view)
+  41 passed (8.2s)
 
-  40 passed (7.8s)
-
-Result: 40/40 passed, 0 failed, 0 skipped
+All E2E specs green. Updated/added since last commit:
+- breadcrumb.spec.ts: workspace folder kept as first segment (4 specs rewritten
+  from the old "strip the root" expectations to the new behaviour)
+- aggregate-directory.spec.ts: breadcrumb file count "(N)" shown only in
+  directory mode (new spec)

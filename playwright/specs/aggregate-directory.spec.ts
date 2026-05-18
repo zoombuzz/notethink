@@ -106,6 +106,23 @@ test.describe('Aggregate (Directory) view', () => {
         expect(typeof last_set_integration!.path).toBe('string');
     });
 
+    test('breadcrumb shows the aggregated file count only in directory mode', async ({ page }) => {
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+        ], { workspace_root: WORKSPACE_ROOT });
+
+        // single-file (stacked) mode: the count is meaningless and must not appear
+        await expect(page.getByText('(2)', { exact: true })).toHaveCount(0);
+
+        await selectDirectoryMode(page);
+        await page.waitForSelector('[data-aggregate-mode="true"]');
+
+        // directory mode: the two aggregated source files surface as "(2)" after the path
+        const nav = page.locator('nav[aria-label="Breadcrumb"]');
+        await expect(nav.getByText('(2)', { exact: true })).toBeVisible({ timeout: 5000 });
+    });
+
     test('switching aggregate to Kanban shows stories grouped by status linetag with origin pills', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },

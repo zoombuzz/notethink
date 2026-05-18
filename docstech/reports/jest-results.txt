@@ -1,30 +1,22 @@
 # Jest Test Results
-# Version: 0.2.1
-# Date: 2026-05-16T06:30:21Z
+# Version: 0.2.2
+# Date: 2026-05-18T19:54:47+01:00
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
-> notethink-client-display@0.1.0 test client/webview
-> jest --config jest.config.cjs --forceExit
-
-Test Suites: 3 passed, 3 total
-Tests:       30 passed, 30 total
-Snapshots:   0 total
-
-> @zoombuzz/notethink-views@0.1.0 test client/webview/src/notethink-views
-> jest --config jest.config.cjs --forceExit
-
-Test Suites: 26 passed, 26 total
-Tests:       381 passed, 381 total
-Snapshots:   0 total
-
 ┌──────────────────┬───────┬────────┬────────┬─────────┐
 │ Suite            │ Files │ Passed │ Failed │ Time    │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     6 │    136 │      0 │ 2.023 s │
-│ webview          │     3 │     30 │      0 │  0.55 s │
-│ notethink-views  │    26 │    381 │      0 │ 2.865 s │
+│ extension        │     6 │    136 │      0 │ 2.105 s │
+│ webview          │     3 │     30 │      0 │ 0.607 s │
+│ notethink-views  │    26 │    392 │      0 │ 2.925 s │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    35 │    547 │      0 │         │
+│ TOTAL            │    35 │    558 │      0 │         │
 └──────────────────┴───────┴────────┴────────┴─────────┘
 
-Result: 547/547 passed, 35 suites, 0 failed
+Test Suites: 35 passed, 35 total
+Tests:       558 passed, 558 total
+Snapshots:   0 total
+
+All suites green. New since last commit:
+- BreadcrumbTrail.test.tsx: directory-mode segmenting (workspace folder as first
+  segment) + file-count display ("(N)", "(N of M)", single-file omission)

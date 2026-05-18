@@ -35,6 +35,8 @@ export interface NoteRendererProps {
     setViewManagedState?: (updates: Array<Record<string, unknown>>) => void;
     onNavigationCommand?: React.MutableRefObject<((direction: string) => void) | undefined>;
     workspace_root?: string;
+    // directory (aggregate) mode: total files discovered before the MAX_AGGREGATE_FILES cap
+    aggregate_total_discovered?: number;
     globalSettings?: GlobalSettingsPayload;
 }
 

@@ -263,6 +263,8 @@ export default function GenericView(props: ViewProps) {
         doc_relative_path={props.doc_relative_path}
         workspace_root={props.workspace_root}
         integration_path={props.display_options?.integration_mode === 'directory' ? props.display_options?.integration_path : undefined}
+        file_count={props.file_count}
+        aggregate_total_discovered={props.aggregate_total_discovered}
         onDirectoryClick={handleDirectoryClick}
         handlers={{
             setParentContextSeq: handlers?.setParentContextSeq

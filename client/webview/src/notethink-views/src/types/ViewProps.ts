@@ -9,6 +9,9 @@ export interface ViewProps {
     doc_relative_path?: string;
     doc_text?: string;
     workspace_root?: string;
+    // directory (aggregate) mode only: number of source files loaded into the merged view, and the total discovered before the MAX_AGGREGATE_FILES cap truncated it
+    file_count?: number;
+    aggregate_total_discovered?: number;
     display_options?: NoteDisplayOptions;
     nested?: {
         menus?: Record<string, unknown>;

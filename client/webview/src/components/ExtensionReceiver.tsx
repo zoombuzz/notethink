@@ -47,6 +47,8 @@ export default function ExtensionReceiver() {
 	const [state, setState] = useState<VSCodeState>(saved_state || { docs: {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
+    // directory (aggregate) mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
+    const [aggregate_total_discovered, setAggregateTotalDiscovered] = useState<number | undefined>(undefined);
     const [viewStates, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
     const navigationCallbackRef = useRef<((direction: string) => void) | undefined>(undefined);
     const [globalSettings, setGlobalSettings] = useState<GlobalSettingsPayload>({ show_line_numbers: false });
@@ -169,6 +171,9 @@ export default function ExtensionReceiver() {
                 }
                 if (message.extension_version) {
                     (window as unknown as Record<string, unknown>).__NOTETHINK_EXTENSION_VERSION__ = message.extension_version;
+                }
+                if (typeof message.aggregate_total_discovered === 'number') {
+                    setAggregateTotalDiscovered(message.aggregate_total_discovered);
                 }
                 setState(state => {
                     const incoming_docs = message.partial.docs || {};
@@ -345,6 +350,7 @@ export default function ExtensionReceiver() {
         setViewManagedState={handleSetViewManagedState}
         onNavigationCommand={navigationCallbackRef}
         workspace_root={workspace_root}
+        aggregate_total_discovered={aggregate_total_discovered}
         globalSettings={globalSettings}
     />;
 }

@@ -23,7 +23,7 @@ test.describe('Breadcrumb workspace root stripping', () => {
         await expect(nav.locator('button', { hasText: 'example.md' })).toBeVisible();
     });
 
-    test('strips workspace_root prefix from breadcrumb', async ({ page }) => {
+    test('keeps the opened workspace folder as the first breadcrumb segment', async ({ page }) => {
         const workspace_root = '/mnt/secure/home/alex/git/github.com/active_development';
         const doc_path = workspace_root + '/notethink/docstech/testdata/example.md';
         await injectDocsFromFixture(page, 'basic.md', doc_path, workspace_root);
@@ -31,13 +31,15 @@ test.describe('Breadcrumb workspace root stripping', () => {
         const nav = page.locator('nav[aria-label="Breadcrumb"]');
         await expect(nav).toBeVisible({ timeout: 5000 });
 
+        // absolute prefix above the opened folder stays hidden
         await expect(nav.locator('button', { hasText: 'mnt' })).not.toBeVisible();
-        await expect(nav.locator('button', { hasText: 'active_development' })).not.toBeVisible();
+        // the opened folder itself is now the first segment
+        await expect(nav.locator('button', { hasText: 'active_development' })).toBeVisible();
         await expect(nav.locator('button', { hasText: 'notethink' })).toBeVisible();
         await expect(nav.locator('button', { hasText: 'example.md' })).toBeVisible();
     });
 
-    test('uses relative_path for breadcrumb (symlink-safe)', async ({ page }) => {
+    test('uses relative_path for breadcrumb (symlink-safe), keeping the opened folder as root', async ({ page }) => {
         // Simulate symlink mismatch: workspace opened via /home/alex/github.com/active_development
         // but doc path resolves via /mnt/secure/home/alex/git/github.com/active_development
         // workspace_root won't match doc_path, but relative_path from asRelativePath handles it
@@ -50,15 +52,15 @@ test.describe('Breadcrumb workspace root stripping', () => {
         const nav = page.locator('nav[aria-label="Breadcrumb"]');
         await expect(nav).toBeVisible({ timeout: 5000 });
 
-        // Should NOT show any absolute path segments
+        // absolute prefix above the opened folder stays hidden
         await expect(nav.locator('button', { hasText: 'mnt' })).not.toBeVisible();
         await expect(nav.locator('button', { hasText: 'secure' })).not.toBeVisible();
         await expect(nav.locator('button', { hasText: 'home' })).not.toBeVisible();
-        await expect(nav.locator('button', { hasText: 'active_development' })).not.toBeVisible();
 
-        // First segment should be 'countingsheet'
+        // the opened folder is the first segment, derived from doc_path minus the relative suffix
         const first_button = nav.locator('button[data-path]').first();
-        await expect(first_button).toHaveText('countingsheet');
+        await expect(first_button).toHaveText('active_development');
+        await expect(nav.locator('button', { hasText: 'countingsheet' })).toBeVisible();
         await expect(nav.locator('button', { hasText: 'docs' })).toBeVisible();
         await expect(nav.locator('button', { hasText: 'todo.md' })).toBeVisible();
     });
@@ -73,13 +75,14 @@ test.describe('Breadcrumb workspace root stripping', () => {
         await expect(nav).toBeVisible({ timeout: 5000 });
 
         const first_segment = nav.locator('button[data-path]').first();
+        // first segment is the opened folder itself
         await expect(first_segment).toHaveAttribute(
             'data-path',
-            '/mnt/secure/home/alex/git/github.com/active_development/countingsheet'
+            '/mnt/secure/home/alex/git/github.com/active_development'
         );
     });
 
-    test('breadcrumb with countingsheet path shows countingsheet as first segment', async ({ page }) => {
+    test('breadcrumb with workspace root shows the opened folder as the first segment', async ({ page }) => {
         const workspace_root = '/mnt/secure/home/alex/git/github.com/active_development';
         const doc_path = workspace_root + '/countingsheet/nodejs/ledger/docs/todo.md';
         await injectDocsFromFixture(page, 'basic.md', doc_path, workspace_root);
@@ -88,7 +91,8 @@ test.describe('Breadcrumb workspace root stripping', () => {
         await expect(nav).toBeVisible({ timeout: 5000 });
 
         const first_button = nav.locator('button[data-path]').first();
-        await expect(first_button).toHaveText('countingsheet');
+        await expect(first_button).toHaveText('active_development');
+        await expect(nav.locator('button', { hasText: 'countingsheet' })).toBeVisible();
 
         await expect(nav.locator('button', { hasText: 'nodejs' })).toBeVisible();
         await expect(nav.locator('button', { hasText: 'ledger' })).toBeVisible();

@@ -199,46 +199,47 @@ describe('BreadcrumbTrail', () => {
         expect(on_directory_click).toHaveBeenCalledWith('/workspace/docs');
     });
 
-    it('strips workspace_root prefix from breadcrumb path segments', () => {
+    it('keeps the opened workspace folder as the first clickable segment', () => {
         const current = makeNote({ seq: 0 });
         render(<BreadcrumbTrail {...current} doc_path="/home/user/workspace/project/docs/todo.md" workspace_root="/home/user/workspace" />);
-        // Should not show 'home', 'user', or 'workspace'
+        // path above the opened workspace folder stays hidden
         expect(screen.queryByText('home')).not.toBeInTheDocument();
         expect(screen.queryByText('user')).not.toBeInTheDocument();
-        expect(screen.queryByText('workspace')).not.toBeInTheDocument();
-        // Should show segments below workspace root
+        // the opened workspace folder itself is now the first segment
+        expect(screen.getByText('workspace')).toBeInTheDocument();
         expect(screen.getByText('project')).toBeInTheDocument();
         expect(screen.getByText('docs')).toBeInTheDocument();
         expect(screen.getByText('todo.md')).toBeInTheDocument();
     });
 
-    it('strips realistic workspace root (active_development) so first segment is the project', () => {
+    it('keeps the realistic workspace root (active_development) as the first segment', () => {
         const current = makeNote({ seq: 0 });
         const workspace_root = '/mnt/secure/home/alex/git/github.com/active_development';
         const doc_path = workspace_root + '/countingsheet/nodejs/ledger/docs/todo.md';
         render(<BreadcrumbTrail {...current} doc_path={doc_path} workspace_root={workspace_root} />);
-        // Should NOT show any of the workspace root segments
+        // everything ABOVE the opened folder stays hidden
         expect(screen.queryByText('mnt')).not.toBeInTheDocument();
         expect(screen.queryByText('secure')).not.toBeInTheDocument();
         expect(screen.queryByText('home')).not.toBeInTheDocument();
         expect(screen.queryByText('alex')).not.toBeInTheDocument();
         expect(screen.queryByText('git')).not.toBeInTheDocument();
         expect(screen.queryByText('github.com')).not.toBeInTheDocument();
-        expect(screen.queryByText('active_development')).not.toBeInTheDocument();
-        // First visible segment should be 'countingsheet'
+        // the opened folder itself is the first segment, project sits below it
+        expect(screen.getByText('active_development')).toBeInTheDocument();
         expect(screen.getByText('countingsheet')).toBeInTheDocument();
         expect(screen.getByText('nodejs')).toBeInTheDocument();
         expect(screen.getByText('todo.md')).toBeInTheDocument();
     });
 
-    it('preserves full paths in data-path when workspace_root is set', () => {
+    it('first data-path segment is the workspace root itself', () => {
         const current = makeNote({ seq: 0 });
         const { container } = render(<BreadcrumbTrail {...current} doc_path="/home/user/workspace/project/docs/todo.md" workspace_root="/home/user/workspace" />);
         const path_items = container.querySelectorAll('[data-path]');
-        expect(path_items).toHaveLength(3);
-        expect(path_items[0]).toHaveAttribute('data-path', '/home/user/workspace/project');
-        expect(path_items[1]).toHaveAttribute('data-path', '/home/user/workspace/project/docs');
-        expect(path_items[2]).toHaveAttribute('data-path', '/home/user/workspace/project/docs/todo.md');
+        expect(path_items).toHaveLength(4);
+        expect(path_items[0]).toHaveAttribute('data-path', '/home/user/workspace');
+        expect(path_items[1]).toHaveAttribute('data-path', '/home/user/workspace/project');
+        expect(path_items[2]).toHaveAttribute('data-path', '/home/user/workspace/project/docs');
+        expect(path_items[3]).toHaveAttribute('data-path', '/home/user/workspace/project/docs/todo.md');
     });
 
     it('preserves full paths in data-path with realistic workspace root', () => {
@@ -247,12 +248,13 @@ describe('BreadcrumbTrail', () => {
         const doc_path = workspace_root + '/notethink/docstech/users/alex.stanhope/todo.md';
         const { container } = render(<BreadcrumbTrail {...current} doc_path={doc_path} workspace_root={workspace_root} />);
         const path_items = container.querySelectorAll('[data-path]');
-        expect(path_items).toHaveLength(5);
-        expect(path_items[0]).toHaveAttribute('data-path', workspace_root + '/notethink');
-        expect(path_items[1]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech');
-        expect(path_items[2]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech/users');
-        expect(path_items[3]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech/users/alex.stanhope');
-        expect(path_items[4]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech/users/alex.stanhope/todo.md');
+        expect(path_items).toHaveLength(6);
+        expect(path_items[0]).toHaveAttribute('data-path', workspace_root);
+        expect(path_items[1]).toHaveAttribute('data-path', workspace_root + '/notethink');
+        expect(path_items[2]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech');
+        expect(path_items[3]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech/users');
+        expect(path_items[4]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech/users/alex.stanhope');
+        expect(path_items[5]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech/users/alex.stanhope/todo.md');
     });
 
     it('calls onDirectoryClick with full path when workspace_root is set', () => {
@@ -272,11 +274,11 @@ describe('BreadcrumbTrail', () => {
             doc_path="/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs/todo.md"
             doc_relative_path="countingsheet/docs/todo.md"
         />);
-        // Should NOT show any absolute path segments
+        // absolute prefix above the opened folder stays hidden
         expect(screen.queryByText('mnt')).not.toBeInTheDocument();
         expect(screen.queryByText('secure')).not.toBeInTheDocument();
-        expect(screen.queryByText('active_development')).not.toBeInTheDocument();
-        // Should show only relative segments
+        // the opened folder is derived from doc_path minus the relative suffix
+        expect(screen.getByText('active_development')).toBeInTheDocument();
         expect(screen.getByText('countingsheet')).toBeInTheDocument();
         expect(screen.getByText('docs')).toBeInTheDocument();
         expect(screen.getByText('todo.md')).toBeInTheDocument();
@@ -289,11 +291,12 @@ describe('BreadcrumbTrail', () => {
             doc_relative_path="countingsheet/docs/todo.md"
         />);
         const path_items = container.querySelectorAll('[data-path]');
-        expect(path_items).toHaveLength(3);
-        // Full paths reconstructed from doc_path minus relative suffix
-        expect(path_items[0]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development/countingsheet');
-        expect(path_items[1]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs');
-        expect(path_items[2]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs/todo.md');
+        expect(path_items).toHaveLength(4);
+        // first segment is the opened folder, then full paths reconstructed from doc_path minus relative suffix
+        expect(path_items[0]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development');
+        expect(path_items[1]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development/countingsheet');
+        expect(path_items[2]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs');
+        expect(path_items[3]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs/todo.md');
     });
 
     it('doc_relative_path takes precedence over workspace_root', () => {
@@ -323,5 +326,146 @@ describe('BreadcrumbTrail', () => {
         render(<BreadcrumbTrail {...current} doc_path="/mnt/secure/home/file.md" workspace_root={undefined} />);
         expect(screen.getByText('mnt')).toBeInTheDocument();
         expect(screen.getByText('secure')).toBeInTheDocument();
+    });
+
+    describe('directory (aggregate) mode integration_path', () => {
+
+        it('keeps the opened workspace folder as the first segment', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+            />);
+            // one level up: active_development is now the root, calfam below it
+            expect(screen.getByText('active_development')).toBeInTheDocument();
+            expect(screen.getByText('calfam')).toBeInTheDocument();
+            // nothing above the workspace folder leaks in
+            expect(screen.queryByText('github.com')).not.toBeInTheDocument();
+            expect(screen.queryByText('home')).not.toBeInTheDocument();
+        });
+
+        it('data-path on the workspace-folder segment is the workspace root itself', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            const { container } = render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+            />);
+            const path_items = container.querySelectorAll('[data-path]');
+            expect(path_items).toHaveLength(2);
+            expect(path_items[0]).toHaveAttribute('data-path', workspace_root);
+            expect(path_items[1]).toHaveAttribute('data-path', workspace_root + '/calfam');
+        });
+
+        it('clicking the workspace-folder segment re-aggregates the whole opened folder', () => {
+            const on_directory_click = jest.fn();
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+                onDirectoryClick={on_directory_click}
+            />);
+            fireEvent.click(screen.getByText('active_development'));
+            expect(on_directory_click).toHaveBeenCalledWith(workspace_root);
+        });
+
+        it('segments deeper subdirectories below the workspace folder', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            const { container } = render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam/docstech'}
+            />);
+            const path_items = container.querySelectorAll('[data-path]');
+            expect(path_items).toHaveLength(3);
+            expect(path_items[0]).toHaveAttribute('data-path', workspace_root);
+            expect(path_items[1]).toHaveAttribute('data-path', workspace_root + '/calfam');
+            expect(path_items[2]).toHaveAttribute('data-path', workspace_root + '/calfam/docstech');
+        });
+
+        it('when integration_path is the workspace root, shows just the workspace folder', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            const { container } = render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root}
+            />);
+            const path_items = container.querySelectorAll('[data-path]');
+            expect(path_items).toHaveLength(1);
+            expect(path_items[0]).toHaveAttribute('data-path', workspace_root);
+            expect(screen.getByText('active_development')).toBeInTheDocument();
+        });
+
+        it('falls back to absolute segments when integration_path is outside workspace_root', () => {
+            const current = makeNote({ seq: 0 });
+            const { container } = render(<BreadcrumbTrail {...current}
+                workspace_root="/home/alex/github.com/active_development"
+                integration_path="/tmp/elsewhere/notes"
+            />);
+            const path_items = container.querySelectorAll('[data-path]');
+            expect(path_items).toHaveLength(3);
+            expect(path_items[0]).toHaveAttribute('data-path', '/tmp');
+            expect(path_items[2]).toHaveAttribute('data-path', '/tmp/elsewhere/notes');
+        });
+
+        it('shows the file count "(N)" after the path in directory mode', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+                file_count={17}
+            />);
+            expect(screen.getByText('(17)')).toBeInTheDocument();
+        });
+
+        it('shows "(N of M)" when the discovery cap truncated the set', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root}
+                file_count={200}
+                aggregate_total_discovered={615}
+            />);
+            expect(screen.getByText('(200 of 615)')).toBeInTheDocument();
+        });
+
+        it('shows plain "(N)" when discovered total is not greater than loaded', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+                file_count={17}
+                aggregate_total_discovered={17}
+            />);
+            expect(screen.getByText('(17)')).toBeInTheDocument();
+            expect(screen.queryByText('(17 of 17)')).not.toBeInTheDocument();
+        });
+
+        it('does not render a count when file_count is undefined', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            const { container } = render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+            />);
+            expect(container.textContent).not.toMatch(/\(\d/);
+        });
+    });
+
+    it('does not show a file count in single-file mode even when file_count is passed', () => {
+        const current = makeNote({ seq: 0 });
+        const { container } = render(<BreadcrumbTrail {...current}
+            doc_path="/home/user/workspace/project/docs/todo.md"
+            workspace_root="/home/user/workspace"
+            file_count={42}
+        />);
+        // single-file mode (no integration_path): the count is meaningless and omitted
+        expect(screen.queryByText('(42)')).not.toBeInTheDocument();
+        expect(container.textContent).not.toMatch(/\(\d/);
     });
 });

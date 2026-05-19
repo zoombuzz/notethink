@@ -1,4 +1,5 @@
 import { findLineTags, parseLineTags, calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering } from './linetagops';
+import { kanbanNoteOrder } from './noteops';
 import type { NoteProps } from '../types/NoteProps';
 
 describe('findLineTags', () => {
@@ -317,5 +318,60 @@ describe('calculateTextChangesForOrdering', () => {
         const changes = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
         // should cascade: both new_child and successor get weights
         expect(changes.length).toBeGreaterThanOrEqual(1);
+    });
+
+    /*
+     * round-trip: a column is displayed unweighted by ascending seq (the
+     * implicit ordering kanbanNoteOrder now uses). simulate a drop the way
+     * KanbanView.dragEndHandler does (filter the dragged note out, splice it
+     * into the new index), feed the result to calculateTextChangesForOrdering,
+     * apply the produced kanban_ordering_weight values back onto note copies,
+     * re-sort with kanbanNoteOrder, and assert the column holds the dropped
+     * order. this is the end-to-end correctness the drag code lacked.
+     */
+    function simulateDrop(initial: NoteProps[], from_index: number, to_index: number): number[] {
+        const dragged = initial[from_index];
+        const column = initial.filter(n => n.seq !== dragged.seq);
+        column.splice(to_index, 0, dragged);
+        const changes = calculateTextChangesForOrdering(column, to_index, 'kanban_ordering_weight');
+        // a brand-new linetag is inserted at note.position.start.offset + headline_raw.length, so map each change back to its note by that offset
+        // notes the algorithm assigned weight 0 (the default) get no change and stay unweighted — kanbanNoteOrder ranks them ahead of weighted cards, which is intended
+        const weight_by_offset = new Map<number, number>();
+        for (const c of changes) {
+            const m = /kanban_ordering_weight=(\d+)/.exec(c.insert);
+            if (m) { weight_by_offset.set(c.from, Number(m[1])); }
+        }
+        const applied = column.map(n => {
+            const insert_at = n.position.start.offset + n.headline_raw.length;
+            const w = weight_by_offset.get(insert_at);
+            if (w === undefined) { return n; }
+            return {
+                ...n,
+                linetags: {
+                    kanban_ordering_weight: {
+                        key: 'kanban_ordering_weight', value: String(w), value_numeric: w,
+                        note_seq: n.seq, key_offset: 0, value_offset: 0, linktext_offset: 0,
+                    },
+                },
+            };
+        });
+        return applied.slice().sort(kanbanNoteOrder).map(n => n.seq);
+    }
+
+    it('round-trip: dropping a card at the top holds it first', () => {
+        // displayed unweighted by seq: [10, 20, 30, 40]; drag the last to the top
+        const column = [makeNote(10), makeNote(20), makeNote(30), makeNote(40)];
+        expect(simulateDrop(column, 3, 0)).toEqual([40, 10, 20, 30]);
+    });
+
+    it('round-trip: dropping a card at the bottom holds it last', () => {
+        const column = [makeNote(10), makeNote(20), makeNote(30), makeNote(40)];
+        expect(simulateDrop(column, 0, 3)).toEqual([20, 30, 40, 10]);
+    });
+
+    it('round-trip: dropping a card into the middle holds its new position', () => {
+        const column = [makeNote(10), makeNote(20), makeNote(30), makeNote(40)];
+        // drag seq 30 (index 2) to sit just after seq 10 (index 1)
+        expect(simulateDrop(column, 2, 1)).toEqual([10, 30, 20, 40]);
     });
 });

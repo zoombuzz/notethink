@@ -182,14 +182,24 @@ export function stripHeadlineLinetags(headline_raw: string): string {
 }
 
 /**
- * Standard note ordering by document offset.
+ * Standard note ordering: by seq (the canonical reading order — document order
+ * for a single file, the round-robin cross-file interleave in folder mode), with
+ * the document offset as a tiebreak when seqs are equal. This is the single
+ * source of truth for implicit (non-drag) ordering across every view.
  */
 export function standardNoteOrder(a: NoteProps, b: NoteProps): number {
+    if (a.seq !== b.seq) { return a.seq - b.seq; }
     return a.position.start.offset - b.position.start.offset;
 }
 
 /**
- * Kanban-specific note ordering by ordering weight then seq.
+ * Kanban-specific note ordering: explicit `kanban_ordering_weight` linetag first
+ * (set on drag-to-reorder), otherwise the merged `seq`.
+ *
+ * With no explicit weights it delegates to standardNoteOrder (seq-primary), so
+ * an unweighted column matches every other view and stays consistent with what
+ * calculateTextChangesForOrdering assumes when deciding whether a dragged card
+ * even needs an explicit weight.
  */
 export function kanbanNoteOrder(a: NoteProps, b: NoteProps) {
     if (a?.linetags?.kanban_ordering_weight?.value_numeric) {
@@ -205,6 +215,7 @@ export function kanbanNoteOrder(a: NoteProps, b: NoteProps) {
         if (b?.linetags?.kanban_ordering_weight?.value_numeric) {
             return -1;
         } else {
+            // no explicit weights: defer to the canonical seq-primary order
             return standardNoteOrder(a, b);
         }
     }

@@ -12,6 +12,8 @@ const debug = Debug("nodejs:notethink:AggregateTreeComposer");
 // DEFAULT_AGGREGATE_INCLUDE/EXCLUDE); used until the extension echoes the effective globs
 export const DEFAULT_AGGREGATE_INCLUDE = '**/*.md';
 export const DEFAULT_AGGREGATE_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,dist,build,out,.next,.cache,coverage}/**';
+// webview-only cap on top-level stories taken per source file when merging the aggregate; not round-tripped to the extension
+export const DEFAULT_AGGREGATE_MAX_NOTES_PER_FILE = 10;
 
 /**
  * AggregateTreeComposer merges every loaded Doc into a single synthetic-root tree and
@@ -29,6 +31,22 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
             .join('|');
     }, [docs]);
 
+    // pick the first view state in folder mode as the source of display_options for the merged view
+    // use that view state's id for the GenericView too, so settings/column-reorder dispatches round-trip back to the same state the renderer reads
+    const { view_state_id, view_state } = (() => {
+        if (!props.viewStates) { return { view_state_id: '__aggregate__', view_state: undefined }; }
+        for (const id of Object.keys(props.viewStates)) {
+            if (props.viewStates[id]?.display_options?.integration_mode === 'folder') {
+                return { view_state_id: id, view_state: props.viewStates[id] };
+            }
+        }
+        return { view_state_id: '__aggregate__', view_state: props.viewStates['__default'] };
+    })();
+
+    // effective per-file story cap: the user's persisted per-view override wins, else the webview default; applied purely webview-side by mergeAggregateRoot (never round-trips to the extension)
+    const max_notes_per_file = view_state?.display_options?.aggregate_max_notes_per_file
+        ?? DEFAULT_AGGREGATE_MAX_NOTES_PER_FILE;
+
     const { merged_root, all_notes } = useMemo(() => {
         const input: { [key: string]: AggregatedDocInput | undefined } = {};
         for (const [id, d] of Object.entries(docs)) {
@@ -42,21 +60,9 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
                 };
             }
         }
-        const { root, all_notes } = mergeAggregateRoot(input, integration_path);
+        const { root, all_notes } = mergeAggregateRoot(input, integration_path, max_notes_per_file);
         return { merged_root: root, all_notes };
-    }, [merge_key, integration_path]);
-
-    // pick the first view state in folder mode as the source of display_options for the merged view
-    // use that view state's id for the GenericView too, so settings/column-reorder dispatches round-trip back to the same state the renderer reads
-    const { view_state_id, view_state } = (() => {
-        if (!props.viewStates) { return { view_state_id: '__aggregate__', view_state: undefined }; }
-        for (const id of Object.keys(props.viewStates)) {
-            if (props.viewStates[id]?.display_options?.integration_mode === 'folder') {
-                return { view_state_id: id, view_state: props.viewStates[id] };
-            }
-        }
-        return { view_state_id: '__aggregate__', view_state: props.viewStates['__default'] };
-    })();
+    }, [merge_key, integration_path, max_notes_per_file]);
     const view_type = view_state?.type || 'auto';
     const view_display_options: NoteDisplayOptions = {
         ...view_state?.display_options,

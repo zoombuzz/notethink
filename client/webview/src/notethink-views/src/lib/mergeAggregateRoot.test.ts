@@ -99,21 +99,46 @@ describe('mergeAggregateRoot', () => {
         expect(storyB.origin?.doc_id).toBe('id-a');
     });
 
-    it('multiple files: stories from each file appear under one synthetic root in stable relative_path order', () => {
+    it('multiple files: stories interleave round-robin by per-file rank (uneven lengths)', () => {
         const docA = simpleFile('id-a', 'a/todo.md', 'A', ['A1', 'A2']);
         const docB = simpleFile('id-b', 'b/todo.md', 'B', ['B1']);
-        // pass in reverse-insertion order — result should still be A-first due to relative_path sort
+        // pass in reverse-insertion order — file order is still a/ then b/ (relative_path sort)
         const { root, all_notes } = mergeAggregateRoot({ 'id-b': docB, 'id-a': docA }, '/repo/');
 
         expect(root.child_notes).toHaveLength(3);
         expect(all_notes).toHaveLength(4);
         expect(all_notes.map(n => n.seq)).toEqual([0, 1, 2, 3]);
+        // round 0: A1 (a), B1 (b); round 1: only A2 (b has no rank-1 story)
         const [s1, s2, s3] = root.child_notes!;
         expect(s1.headline_raw).toBe('### A1');
         expect(s1.origin?.doc_id).toBe('id-a');
-        expect(s2.headline_raw).toBe('### A2');
-        expect(s3.headline_raw).toBe('### B1');
-        expect(s3.origin?.doc_id).toBe('id-b');
+        expect(s2.headline_raw).toBe('### B1');
+        expect(s2.origin?.doc_id).toBe('id-b');
+        expect(s3.headline_raw).toBe('### A2');
+        expect(s3.origin?.doc_id).toBe('id-a');
+    });
+
+    it('equal-length files: clean round-robin across three projects in stable file order', () => {
+        const docA = simpleFile('id-a', 'a/todo.md', 'A', ['A1', 'A2']);
+        const docB = simpleFile('id-b', 'b/todo.md', 'B', ['B1', 'B2']);
+        const docC = simpleFile('id-c', 'c/todo.md', 'C', ['C1', 'C2']);
+        const { root } = mergeAggregateRoot({ 'id-c': docC, 'id-a': docA, 'id-b': docB }, '/repo/');
+        expect(root.child_notes!.map(n => n.headline_raw)).toEqual(
+            ['### A1', '### B1', '### C1', '### A2', '### B2', '### C2'],
+        );
+    });
+
+    it('newest-at-bottom interleaves each project\'s newest-first across projects', () => {
+        // two done.md-style files: newest is the last story; cap 2 keeps the last
+        // two reversed (newest first), then interleave so the column shows each
+        // project's most-recent completion first
+        const docA = orderedFile('id-a', 'a/done.md', 'A', 'newest-at-bottom', ['A1', 'A2', 'A3']);
+        const docB = orderedFile('id-b', 'b/done.md', 'B', 'newest-at-bottom', ['B1', 'B2', 'B3']);
+        const { root } = mergeAggregateRoot({ 'id-b': docB, 'id-a': docA }, '/repo/', 2);
+        // a kept [A3,A2] (newest first), b kept [B3,B2]; round-robin → A3,B3,A2,B2
+        expect(root.child_notes!.map(n => n.headline_raw)).toEqual(
+            ['### A3', '### B3', '### A2', '### B2'],
+        );
     });
 
     it('empty file (H1 but no stories) contributes zero entries', () => {
@@ -362,6 +387,174 @@ describe('mergeAggregateRoot', () => {
         const doc = simpleFile('id-a', 'a/todo.md', 'Todo', ['One']);
         const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/active_development');
         expect((root as { integration_path?: string }).integration_path).toBe('/repo/active_development');
+    });
+
+    /**
+     * Build a single-H1 file whose H1 carries an `order=<value>` linetag, with
+     * depth-3 stories directly under the H1.
+     */
+    function orderedFile(
+        id: string,
+        relative_path: string,
+        title: string,
+        order_value: string | undefined,
+        stories: string[],
+    ): AggregatedDocInput {
+        const h1_line = order_value === undefined
+            ? `# ${title}`
+            : `# ${title} [](?order=${order_value})`;
+        const lines: string[] = [h1_line];
+        for (const s of stories) { lines.push(`### ${s}`); }
+        const text = lines.join('\n') + '\n';
+
+        const children: MdastNode[] = [];
+        let offset = 0;
+        children.push(mdastNode('heading', offset, offset + h1_line.length, { depth: 1 }));
+        offset += h1_line.length + 1;
+        for (const s of stories) {
+            const line = `### ${s}`;
+            children.push(mdastNode('heading', offset, offset + line.length, { depth: 3 }));
+            offset += line.length + 1;
+        }
+        return makeDoc(id, relative_path, text, children);
+    }
+
+    describe('max_notes_per_file cap', () => {
+
+        it('undefined max: no cap (behaviour unchanged)', () => {
+            const doc = simpleFile('id-a', 'a/todo.md', 'T', ['S1', 'S2', 'S3', 'S4', 'S5']);
+            const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/');
+            expect(root.child_notes).toHaveLength(5);
+            expect(root.child_notes!.map(n => n.headline_raw)).toEqual(
+                ['### S1', '### S2', '### S3', '### S4', '### S5'],
+            );
+        });
+
+        it('default (no order linetag) keeps the FIRST N stories', () => {
+            const doc = orderedFile('id-a', 'a/todo.md', 'T', undefined, ['S1', 'S2', 'S3', 'S4', 'S5']);
+            const { root, all_notes } = mergeAggregateRoot({ 'id-a': doc }, '/repo/', 3);
+            expect(root.child_notes!.map(n => n.headline_raw)).toEqual(['### S1', '### S2', '### S3']);
+            // seqs renumber contiguously over the kept set only
+            expect(all_notes.map(n => n.seq)).toEqual([0, 1, 2, 3]);
+        });
+
+        it('explicit newest-at-top keeps the FIRST N stories', () => {
+            const doc = orderedFile('id-a', 'a/todo.md', 'T', 'newest-at-top', ['S1', 'S2', 'S3', 'S4']);
+            const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/', 2);
+            expect(root.child_notes!.map(n => n.headline_raw)).toEqual(['### S1', '### S2']);
+        });
+
+        it('newest-at-bottom keeps the LAST N stories, reversed to newest-first', () => {
+            const doc = orderedFile('id-a', 'a/todo.md', 'T', 'newest-at-bottom', ['S1', 'S2', 'S3', 'S4', 'S5']);
+            const { root, all_notes } = mergeAggregateRoot({ 'id-a': doc }, '/repo/', 2);
+            // last 2 in the file are S4,S5; S5 is newest so it sorts first (smallest seq)
+            expect(root.child_notes!.map(n => n.headline_raw)).toEqual(['### S5', '### S4']);
+            expect(all_notes.map(n => n.seq)).toEqual([0, 1, 2]);
+        });
+
+        it('newest-at-bottom reverses even when uncapped (implicit ordering weight)', () => {
+            const doc = orderedFile('id-a', 'a/todo.md', 'T', 'newest-at-bottom', ['S1', 'S2', 'S3']);
+            // no max passed: still reversed so the document-bottom story sorts to the top
+            const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/');
+            expect(root.child_notes!.map(n => n.headline_raw)).toEqual(['### S3', '### S2', '### S1']);
+        });
+
+        it('absent order behaves as newest-at-top (first N)', () => {
+            const doc = orderedFile('id-a', 'a/todo.md', 'T', undefined, ['S1', 'S2', 'S3']);
+            const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/', 1);
+            expect(root.child_notes!.map(n => n.headline_raw)).toEqual(['### S1']);
+        });
+
+        it('unrecognised order value behaves as default (first N)', () => {
+            const doc = orderedFile('id-a', 'a/todo.md', 'T', 'sideways', ['S1', 'S2', 'S3', 'S4']);
+            const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/', 2);
+            expect(root.child_notes!.map(n => n.headline_raw)).toEqual(['### S1', '### S2']);
+        });
+
+        it('max greater than story count keeps all (newest-at-bottom still reversed)', () => {
+            const doc = orderedFile('id-a', 'a/todo.md', 'T', 'newest-at-bottom', ['S1', 'S2']);
+            const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/', 10);
+            expect(root.child_notes!.map(n => n.headline_raw)).toEqual(['### S2', '### S1']);
+        });
+
+        it('max = 0 keeps none from that file', () => {
+            const doc = orderedFile('id-a', 'a/todo.md', 'T', undefined, ['S1', 'S2', 'S3']);
+            const { root, all_notes } = mergeAggregateRoot({ 'id-a': doc }, '/repo/', 0);
+            expect(root.child_notes).toHaveLength(0);
+            expect(all_notes).toHaveLength(1); // synthetic root only
+        });
+
+        it('mix of two files with different order linetags in one merge', () => {
+            // a/ keeps first 2 (default), b/ keeps last 2 (newest-at-bottom)
+            const docA = orderedFile('id-a', 'a/todo.md', 'A', 'newest-at-top', ['A1', 'A2', 'A3', 'A4']);
+            const docB = orderedFile('id-b', 'b/todo.md', 'B', 'newest-at-bottom', ['B1', 'B2', 'B3', 'B4']);
+            const { root, all_notes } = mergeAggregateRoot({ 'id-b': docB, 'id-a': docA }, '/repo/', 2);
+            // a kept [A1,A2] (first 2), b kept [B4,B3] (last 2 reversed newest-first);
+            // round-robin in stable file order a/ then b/ → A1,B4,A2,B3
+            expect(root.child_notes!.map(n => n.headline_raw)).toEqual(
+                ['### A1', '### B4', '### A2', '### B3'],
+            );
+            expect(all_notes.map(n => n.seq)).toEqual([0, 1, 2, 3, 4]);
+        });
+
+        it('epic-nested stories are counted in the per-file cap', () => {
+            // # Todo
+            // ### S1            (direct)
+            // ## Epic
+            // ### S2            (epic-nested)
+            // ### S3            (epic-nested)
+            // ### S4            (epic-nested)
+            const h1 = '# Todo';
+            const s1 = '### S1';
+            const epic = '## Epic';
+            const s2 = '### S2';
+            const s3 = '### S3';
+            const s4 = '### S4';
+            const text = `${h1}\n${s1}\n${epic}\n${s2}\n${s3}\n${s4}\n`;
+            let off = 0;
+            const h1_n = mdastNode('heading', off, off + h1.length, { depth: 1 }); off += h1.length + 1;
+            const s1_n = mdastNode('heading', off, off + s1.length, { depth: 3 }); off += s1.length + 1;
+            const epic_n = mdastNode('heading', off, off + epic.length, { depth: 2 }); off += epic.length + 1;
+            const s2_n = mdastNode('heading', off, off + s2.length, { depth: 3 }); off += s2.length + 1;
+            const s3_n = mdastNode('heading', off, off + s3.length, { depth: 3 }); off += s3.length + 1;
+            const s4_n = mdastNode('heading', off, off + s4.length, { depth: 3 }); off += s4.length + 1;
+            const doc = makeDoc('id-epic', 'x/todo.md', text, [h1_n, s1_n, epic_n, s2_n, s3_n, s4_n]);
+
+            // cap of 3: keeps S1 (direct) + S2, S3 (epic-nested), drops S4
+            const { root } = mergeAggregateRoot({ 'id-epic': doc }, '/repo/', 3);
+            const kept = root.child_notes!;
+            expect(kept.map(n => n.headline_raw)).toEqual(['### S1', '### S2', '### S3']);
+            // epic stamping of the kept epic-nested stories preserved
+            expect(kept[0].origin?.epic).toBeUndefined();
+            expect(kept[1].origin?.epic?.name).toBe('Epic');
+            expect(kept[2].origin?.epic?.name).toBe('Epic');
+        });
+
+        it('epic-nested newest-at-bottom keeps the last N across the file, reversed', () => {
+            // same shape as above but order=newest-at-bottom, cap 2 → keeps S3,S4 → reversed to S4,S3
+            const h1 = '# Todo [](?order=newest-at-bottom)';
+            const s1 = '### S1';
+            const epic = '## Epic';
+            const s2 = '### S2';
+            const s3 = '### S3';
+            const s4 = '### S4';
+            const text = `${h1}\n${s1}\n${epic}\n${s2}\n${s3}\n${s4}\n`;
+            let off = 0;
+            const h1_n = mdastNode('heading', off, off + h1.length, { depth: 1 }); off += h1.length + 1;
+            const s1_n = mdastNode('heading', off, off + s1.length, { depth: 3 }); off += s1.length + 1;
+            const epic_n = mdastNode('heading', off, off + epic.length, { depth: 2 }); off += epic.length + 1;
+            const s2_n = mdastNode('heading', off, off + s2.length, { depth: 3 }); off += s2.length + 1;
+            const s3_n = mdastNode('heading', off, off + s3.length, { depth: 3 }); off += s3.length + 1;
+            const s4_n = mdastNode('heading', off, off + s4.length, { depth: 3 }); off += s4.length + 1;
+            const doc = makeDoc('id-epic2', 'x/todo.md', text, [h1_n, s1_n, epic_n, s2_n, s3_n, s4_n]);
+
+            const { root } = mergeAggregateRoot({ 'id-epic2': doc }, '/repo/', 2);
+            const kept = root.child_notes!;
+            expect(kept.map(n => n.headline_raw)).toEqual(['### S4', '### S3']);
+            expect(kept[0].origin?.epic?.name).toBe('Epic');
+            expect(kept[1].origin?.epic?.name).toBe('Epic');
+        });
+
     });
 
     it('file_view_type from H1 ng_view linetag is captured on every story of that file', () => {

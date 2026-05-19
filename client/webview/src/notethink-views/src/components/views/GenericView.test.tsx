@@ -67,6 +67,23 @@ jest.mock('./ViewIntegrationSelector', () => ({
     },
 }));
 
+// mock FilesDrawer - capture the seeded props + onApplyFilters for aggregate-filter testing
+let capturedFilesDrawerProps: { include: string; exclude: string; maxNotesPerFile: number } | undefined;
+let capturedOnApplyFilters: ((include: string, exclude: string, maxNotesPerFile: number) => void) | undefined;
+jest.mock('./FilesDrawer', () => ({
+    __esModule: true,
+    default: (props: {
+        include: string;
+        exclude: string;
+        maxNotesPerFile: number;
+        onApplyFilters: (include: string, exclude: string, maxNotesPerFile: number) => void;
+    }) => {
+        capturedFilesDrawerProps = { include: props.include, exclude: props.exclude, maxNotesPerFile: props.maxNotesPerFile };
+        capturedOnApplyFilters = props.onApplyFilters;
+        return <div data-testid="files-drawer-mock" data-max-notes={props.maxNotesPerFile}>FilesDrawer</div>;
+    },
+}));
+
 // mock ViewRenderer styles
 jest.mock('../ViewRenderer.module.scss', () => ({
     viewToolbar: 'viewToolbar',
@@ -128,6 +145,8 @@ beforeEach(() => {
     mockAutoViewRender.mockClear();
     capturedOnFolderClick = undefined;
     capturedOnIntegrationChange = undefined;
+    capturedFilesDrawerProps = undefined;
+    capturedOnApplyFilters = undefined;
 });
 
 describe('GenericView', () => {
@@ -1116,5 +1135,83 @@ describe('GenericView navigation callback', () => {
             // focus restoration runs in a requestAnimationFrame; jsdom supports rAF
             await waitFor(() => expect(document.activeElement).toBe(gear));
         });
+    });
+});
+
+describe('GenericView aggregate files drawer', () => {
+
+    function renderFolderView(view_overrides: Partial<ViewProps> = {}) {
+        // folder integration mode + a non-'auto' type renders the FilesDrawer
+        return render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'document',
+                    display_options: { integration_mode: 'folder', integration_path: '/workspace/project/docs' },
+                    aggregate_include: '**/*.md',
+                    aggregate_exclude: '**/node_modules/**',
+                    ...view_overrides,
+                })} />
+            </Suspense>
+        );
+    }
+
+    it('renders FilesDrawer in folder mode seeded with maxNotesPerFile from display_options', async () => {
+        renderFolderView({
+            display_options: {
+                integration_mode: 'folder',
+                integration_path: '/workspace/project/docs',
+                aggregate_max_notes_per_file: 25,
+            },
+        });
+        await waitFor(() => expect(screen.getByTestId('files-drawer-mock')).toBeInTheDocument());
+        expect(capturedFilesDrawerProps?.maxNotesPerFile).toBe(25);
+        expect(screen.getByTestId('files-drawer-mock')).toHaveAttribute('data-max-notes', '25');
+    });
+
+    it('defaults maxNotesPerFile to 10 when display_options has no override', async () => {
+        renderFolderView();
+        await waitFor(() => expect(screen.getByTestId('files-drawer-mock')).toBeInTheDocument());
+        expect(capturedFilesDrawerProps?.maxNotesPerFile).toBe(10);
+    });
+
+    it('persists aggregate_max_notes_per_file via setViewManagedState and excludes it from the setIntegration postMessage', async () => {
+        const post_message = jest.fn();
+        const set_view_managed_state = jest.fn();
+        renderFolderView({
+            handlers: {
+                setViewManagedState: set_view_managed_state,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: post_message,
+            },
+        });
+        await waitFor(() => expect(capturedOnApplyFilters).toBeInstanceOf(Function));
+
+        capturedOnApplyFilters!('**/users/**', '**/dist/**', 7);
+
+        // the cap is persisted to per-view state alongside the globs
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: 'test-view',
+            display_options: {
+                aggregate_include: '**/users/**',
+                aggregate_exclude: '**/dist/**',
+                aggregate_max_notes_per_file: 7,
+            },
+        }]);
+
+        // but the cap is webview-only: only include/exclude round-trip to the extension
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'setIntegration',
+            mode: 'folder',
+            path: '/workspace/project/docs',
+            include: '**/users/**',
+            exclude: '**/dist/**',
+        });
+        const set_integration_call = post_message.mock.calls.find(
+            ([msg]) => msg?.type === 'setIntegration',
+        );
+        expect(set_integration_call).toBeDefined();
+        expect(set_integration_call![0]).not.toHaveProperty('max_notes_per_file');
+        expect(set_integration_call![0]).not.toHaveProperty('aggregate_max_notes_per_file');
     });
 });

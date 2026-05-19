@@ -36,6 +36,38 @@ interface EpicEntry {
     id: string | undefined;
 }
 
+// file H1 `order` linetag value: newest stories are appended at the bottom of the file (e.g. done.md)
+const ORDER_NEWEST_AT_BOTTOM = 'newest-at-bottom';
+
+/**
+ * Select a single file's contributed stories for the merged view: trim to at
+ * most `max` entries and orient them newest-first so they sort consistently
+ * with `newest-at-top` files.
+ *
+ * `order` is the file H1's `order` linetag value. `newest-at-bottom` means the
+ * newest stories sit at the END of the file: keep the LAST `max`, then reverse
+ * so the newest (document-bottom) story gets the smallest merged seq and sorts
+ * to the top of its column — the reversal applies even when uncapped. Anything
+ * else (`newest-at-top`, an unrecognised value, or absent) keeps the FIRST
+ * `max` in document order, which is already newest-first. `max` undefined → no
+ * cap; `<= 0` → keep none; `>=` length → keep all.
+ */
+function selectFileStories<T>(stories: T[], max: number | undefined, order: string | undefined): T[] {
+    const newest_at_bottom = order === ORDER_NEWEST_AT_BOTTOM;
+    let kept: T[];
+    if (max === undefined || max >= stories.length) {
+        kept = stories;
+    } else if (max <= 0) {
+        kept = [];
+    } else if (newest_at_bottom) {
+        kept = stories.slice(stories.length - max);
+    } else {
+        kept = stories.slice(0, max);
+    }
+    // newest-at-bottom files are stored oldest-first; reverse (on a copy — kept may alias the caller's array) so the newest story sorts to the top of its column
+    return newest_at_bottom ? [...kept].reverse() : kept;
+}
+
 /**
  * Resolve the absolute path of the folder the aggregation is scoped to.
  * For breadcrumb segmenting we pass this through unchanged; callers segment it.
@@ -79,10 +111,15 @@ function resolveEpicLinetag(
  * `ng_child_epic=` ancestors via applyChildAttributeInheritance) override structural.
  *
  * Renumbers seqs globally and rewrites parent_notes so the merged tree has a single root.
+ *
+ * `max_notes_per_file` (optional) caps how many top-level stories each source file
+ * contributes. Undefined → no cap (unchanged behaviour). Which end is kept depends on
+ * the file H1's `order` linetag (see trimFileStories).
  */
 export function mergeAggregateRoot(
     docs: { [key: string]: AggregatedDocInput | undefined },
     integration_path: string,
+    max_notes_per_file?: number,
 ): MergeAggregateRootResult {
     // 1. parse each doc once
     const parsed: PerFileParse[] = [];
@@ -107,7 +144,8 @@ export function mergeAggregateRoot(
         file_epic_by_id: Map<string, EpicEntry>;
         file_epic_by_name: Map<string, EpicEntry>;
     }
-    const collected: CollectedStory[] = [];
+    // each file's selected stories, kept in stable file order (parsed is sorted by relative_path)
+    const per_file_lists: CollectedStory[][] = [];
 
     for (const file of parsed) {
         const { doc, root, h1 } = file;
@@ -131,6 +169,9 @@ export function mergeAggregateRoot(
         // capture file-level ng_view from the H1 linetags (used by AutoView's majority vote)
         const file_view_type = h1?.linetags?.ng_view?.value;
 
+        // file H1 `order` linetag decides which end the per-file cap keeps
+        const file_order = h1?.linetags?.order?.value;
+
         const base_origin: Omit<NoteOrigin, 'epic'> = {
             doc_id: doc.id,
             doc_path: doc.path,
@@ -138,10 +179,12 @@ export function mergeAggregateRoot(
             file_view_type,
         };
 
+        // assemble this file's full ordered story contribution (direct + epic-nested) in document order; selectFileStories then trims + orients it, and the round-robin pass below interleaves it with the other files
+        const file_stories: CollectedStory[] = [];
         for (const c of walk_children) {
             if (c.depth === 3) {
                 // story directly under H1 (or doc root, in no-H1 case)
-                collected.push({
+                file_stories.push({
                     story: c,
                     origin: { ...base_origin },
                     file_epic_by_id,
@@ -155,7 +198,7 @@ export function mergeAggregateRoot(
                 };
                 for (const g of (c.child_notes || [])) {
                     if (g.depth === 3) {
-                        collected.push({
+                        file_stories.push({
                             story: g,
                             origin: { ...base_origin, epic: epic_entry },
                             file_epic_by_id,
@@ -165,6 +208,17 @@ export function mergeAggregateRoot(
                 }
             }
             // ignore other depths and non-heading types at file root
+        }
+
+        per_file_lists.push(selectFileStories(file_stories, max_notes_per_file, file_order));
+    }
+
+    // interleave round-robin by per-file rank so each column shows the latest picture across projects: rank-0 of every file (in stable file order), then rank-1, etc; a file with fewer stories simply drops out of later rounds while longer ones keep contributing
+    const collected: CollectedStory[] = [];
+    const max_file_stories = per_file_lists.reduce((max_len, list) => Math.max(max_len, list.length), 0);
+    for (let rank = 0; rank < max_file_stories; rank++) {
+        for (const list of per_file_lists) {
+            if (rank < list.length) { collected.push(list[rank]); }
         }
     }
 

@@ -1,4 +1,4 @@
-# Done [](?ng_view=kanban&ng_child_status=done)
+# Done [](?ng_view=kanban&ng_child_status=done&order=newest-at-bottom)
 
 
 ### Child attribute inheritance
@@ -1138,5 +1138,96 @@ Switching the integration selector from Folder back to Current file leaves the v
   + manual: clear the exclude box on a repo with node_modules and confirm
     behaviour (broader set, possible `of M` truncation hint)
   + manual: reload the window and confirm custom filters are restored
+
+
+### Per-file note cap (default 10) + order linetag
+
+Long files (e.g. `done.md` with hundreds of completed stories) swamp Folder mode. Cap top-level stories taken per source file (default 10, editable in the Files drawer), and add an `order` linetag on the file root so the cap keeps the newest end.
+
++ design decisions (locked, reversible)
+  + cap applied webview-side in `mergeAggregateRoot` (operates on parsed
+    notes; no extension round-trip — instant re-render on change)
+  + scope: Folder/aggregate mode only; Current-file mode shows the whole file
+  + `order` read from the file H1 linetag: `newest-at-top` (default / absent /
+    unrecognised) keeps the first N, `newest-at-bottom` keeps the last N;
+    document order preserved within the slice (no re-sort)
+  + cap counts depth-3 stories the file contributes (incl. epic-nested), in
+    document order
+  + default cap = 10, persisted per-view in
+    `display_options.aggregate_max_notes_per_file`
++ contract (both agents implement against this — no merging, shared copy)
+  + `mergeAggregateRoot(docs, integration_path, max_notes_per_file?: number)`
+    — new optional 3rd param; when undefined, no cap
+  + display-options key `aggregate_max_notes_per_file?: number` on
+    `NoteDisplayOptions` and `ViewProps`
+  + `DEFAULT_AGGREGATE_MAX_NOTES_PER_FILE = 10` exported from
+    AggregateTreeComposer.tsx alongside the existing DEFAULT_AGGREGATE_*
++ [X] docs/data: AUTHORING_GUIDE `order` key + Per-file-note-cap section;
+      `done.md` root → `&order=newest-at-bottom`
++ [X] agent A — core: `order` read + per-file first/last-N trim in
+      `mergeAggregateRoot.ts` (new `trimFileStories` helper, optional 3rd
+      param); display-options key on `NoteProps.ts` + `ViewProps.ts`; +11
+      `mergeAggregateRoot.test.ts` cases
++ [X] agent B — UI/wiring: "Max stories per file" numeric input in
+      `FilesDrawer.tsx` (default 10, debounced, clamp floor 1); threaded via
+      `GenericView.tsx` (persisted by setViewManagedState only — setIntegration
+      NOT extended); `AggregateTreeComposer.tsx` resolves + passes the cap and
+      exports `DEFAULT_AGGREGATE_MAX_NOTES_PER_FILE=10`; FilesDrawer +
+      GenericView jest added
++ [X] coordinated: version 0.2.4 → 0.2.5; integrated gate green centrally —
+      build, lint (eslint + 3× tsc), jest 604/604, playwright 42/42
++ [X] fix (review feedback): newest-at-bottom showed oldest-first in the
+      column; `selectFileStories` now reverses the kept slice so the
+      document-bottom (newest) story gets the smallest merged seq and sorts to
+      the top — applies even uncapped; AUTHORING_GUIDE note corrected; tests
+      updated + new uncapped-reversal case
++ [X] fix (review feedback): the merge-seq reversal had no effect because
+      `kanbanNoteOrder`'s no-weight fallback sorted by `position.start.offset`
+      (raw per-file document offset), not the merged seq. fallback now uses
+      `seq` (the implicit ordering weight — already file-`order`-aware via
+      mergeAggregateRoot; equal seqs tie-break on offset). single-file
+      unaffected (seq == doc order). `noteops.test.ts` updated for seq fallback
++ [X] review (review feedback): drag-to-reorder weight write
+      (`calculateTextChangesForOrdering` / KanbanView.dragEndHandler) — found
+      correct, but it assumed seq-order display while the renderer used offset
+      order (now reconciled by the seq fallback above); added end-to-end
+      round-trip jest (drop top/bottom/middle → weights → kanbanNoteOrder holds
+      the dropped order) which it previously lacked
++ [X] fix (review feedback): folder columns were blocky-by-file (all of
+      project A, then all of B). mergeAggregateRoot now interleaves
+      round-robin by per-file rank (flattened, epic-nested included) in stable
+      relative_path order — rank-0 of every file, then rank-1, … shorter files
+      drop out of later rounds. standardNoteOrder made seq-primary (offset
+      tiebreak) as the single source of truth so Kanban AND Document/Auto
+      aggregate views both interleave; kanbanNoteOrder no-weight branch now
+      delegates to it. Rewrote the two blocky merge tests; added equal-length,
+      uneven-length, newest-at-bottom-interleave, seq-primary standardNoteOrder
+      cases
++ manual: in folder mode, drag a Done card up/down and confirm it holds
+  position after the editText round-trips back
++ manual: open a multi-project folder, confirm columns interleave (top story
+  of each project, then second of each) in Kanban and in Document view
++ manual: open a folder with `done.md`, confirm only the last 10 stories show;
+  raise the cap in the Files drawer, confirm more appear without reload
++ manual: confirm `todo.md` (no `order`) still shows its first 10 stories
+
+
+### Version the Authoring Guide
+
+Formalise an Authoring Guide version so language can evolve across files without breaking existing sites.
+
++ decisions (from user)
+  + semantic versioning: patch = editorial only (no file renders differently);
+    minor = new backward-compatible features; major = potentially breaking
+  + default: every file is interpreted against the latest version; files do
+    not record a version yet (may revisit later)
+  + authors can pin with `ng_authoring_version` (`MAJOR` or `MAJOR.MINOR`) on
+    the file root — reserved/documented now, not enforced (only 1.0.0 exists)
++ [X] AUTHORING_GUIDE: version banner + `## Versioning` section (patch/minor/
+      major table, default-latest, locking) at `1.0.0`
++ [X] AUTHORING_GUIDE: `ng_authoring_version` added to the reserved
+      View-configuration linetag table
++ doc-only change — no parser/behaviour change (version-conditional parsing is
+  future work, to land with the first breaking major)
 
 

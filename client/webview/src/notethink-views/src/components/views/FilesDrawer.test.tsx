@@ -7,6 +7,7 @@ const DERIVED_DIR_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,dist,buil
 const default_props = {
     include: '**/*.md',
     exclude: DERIVED_DIR_EXCLUDE,
+    maxNotesPerFile: 10,
     fileCount: 3,
     noteCount: 42,
     files: ['docs/a.md', 'docs/users/alex/todo.md', 'node_modules/pkg/readme.md'],
@@ -28,11 +29,17 @@ describe('FilesDrawer', () => {
         jest.useRealTimers();
     });
 
-    it('seeds the include/exclude inputs from props and shows the count', () => {
+    it('seeds the include/exclude/max-notes inputs from props and shows the count', () => {
         renderDrawer();
         expect(screen.getByTestId('files-drawer-include')).toHaveValue('**/*.md');
         expect(screen.getByTestId('files-drawer-exclude')).toHaveValue(DERIVED_DIR_EXCLUDE);
+        expect(screen.getByTestId('files-drawer-max-notes')).toHaveValue(10);
         expect(screen.getByTestId('files-drawer-count')).toHaveTextContent('42 in 3 files');
+    });
+
+    it('seeds the max-notes input from the prop value', () => {
+        renderDrawer({ maxNotesPerFile: 25 });
+        expect(screen.getByTestId('files-drawer-max-notes')).toHaveValue(25);
     });
 
     it('lists only files selected by the current filters (derived dir excluded)', () => {
@@ -57,7 +64,7 @@ describe('FilesDrawer', () => {
         expect(list).not.toHaveTextContent('docs/a.md');
         expect(list).toHaveTextContent('docs/users/alex/todo.md');
         expect(props.onApplyFilters).toHaveBeenCalledTimes(1);
-        expect(props.onApplyFilters).toHaveBeenCalledWith('**/users/**', DERIVED_DIR_EXCLUDE);
+        expect(props.onApplyFilters).toHaveBeenCalledWith('**/users/**', DERIVED_DIR_EXCLUDE, 10);
     });
 
     it('clearing the exclude box surfaces the derived-dir files after the debounce', () => {
@@ -65,7 +72,7 @@ describe('FilesDrawer', () => {
         fireEvent.change(screen.getByTestId('files-drawer-exclude'), { target: { value: '' } });
         act(() => { jest.advanceTimersByTime(200); });
         expect(screen.getByTestId('files-drawer-list')).toHaveTextContent('node_modules/pkg/readme.md');
-        expect(props.onApplyFilters).toHaveBeenCalledWith('**/*.md', '');
+        expect(props.onApplyFilters).toHaveBeenCalledWith('**/*.md', '', 10);
     });
 
     it('coalesces rapid keystrokes into a single apply', () => {
@@ -76,14 +83,38 @@ describe('FilesDrawer', () => {
         fireEvent.change(input, { target: { value: '**/users/**' } });
         act(() => { jest.advanceTimersByTime(200); });
         expect(props.onApplyFilters).toHaveBeenCalledTimes(1);
-        expect(props.onApplyFilters).toHaveBeenCalledWith('**/users/**', DERIVED_DIR_EXCLUDE);
+        expect(props.onApplyFilters).toHaveBeenCalledWith('**/users/**', DERIVED_DIR_EXCLUDE, 10);
     });
 
-    it('resyncs the inputs when the effective globs change underneath it', () => {
+    it('resyncs the inputs when the effective globs/cap change underneath it', () => {
         const { rerender } = renderDrawer();
-        rerender(<FilesDrawer {...default_props} include="**/notes/**" exclude="" />);
+        rerender(<FilesDrawer {...default_props} include="**/notes/**" exclude="" maxNotesPerFile={5} />);
         expect(screen.getByTestId('files-drawer-include')).toHaveValue('**/notes/**');
         expect(screen.getByTestId('files-drawer-exclude')).toHaveValue('');
+        expect(screen.getByTestId('files-drawer-max-notes')).toHaveValue(5);
+    });
+
+    it('debounces a max-notes change and applies the clamped integer', () => {
+        const { props } = renderDrawer();
+        fireEvent.change(screen.getByTestId('files-drawer-max-notes'), { target: { value: '3' } });
+        expect(props.onApplyFilters).not.toHaveBeenCalled();
+        act(() => { jest.advanceTimersByTime(200); });
+        expect(props.onApplyFilters).toHaveBeenCalledTimes(1);
+        expect(props.onApplyFilters).toHaveBeenCalledWith('**/*.md', DERIVED_DIR_EXCLUDE, 3);
+    });
+
+    it('clamps a max-notes value below the floor to 1', () => {
+        const { props } = renderDrawer();
+        fireEvent.change(screen.getByTestId('files-drawer-max-notes'), { target: { value: '0' } });
+        act(() => { jest.advanceTimersByTime(200); });
+        expect(props.onApplyFilters).toHaveBeenCalledWith('**/*.md', DERIVED_DIR_EXCLUDE, 1);
+    });
+
+    it('an empty/NaN max-notes box falls back to the current value, not 0', () => {
+        const { props } = renderDrawer({ maxNotesPerFile: 8 });
+        fireEvent.change(screen.getByTestId('files-drawer-max-notes'), { target: { value: '' } });
+        act(() => { jest.advanceTimersByTime(200); });
+        expect(props.onApplyFilters).toHaveBeenCalledWith('**/*.md', DERIVED_DIR_EXCLUDE, 8);
     });
 
     it('shows the empty-state when no files match', () => {

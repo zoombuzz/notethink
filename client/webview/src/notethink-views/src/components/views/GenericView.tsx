@@ -282,13 +282,15 @@ export default function GenericView(props: ViewProps) {
         toggleDrawer('files', anchor);
     }, [toggleDrawer]);
 
-    // persist edited globs to per-view state (survives reload) and post a background setIntegration so the extension re-discovers the whole aggregate with the new filters
-    const handleApplyFilters = useCallback((next_include: string, next_exclude: string) => {
+    // persist edited globs + per-file story cap to per-view state (survives reload) and post a background setIntegration so the extension re-discovers the whole aggregate with the new filters
+    // the cap is webview-only: it is persisted in view state and applied by mergeAggregateRoot but is NOT included in the setIntegration round-trip
+    const handleApplyFilters = useCallback((next_include: string, next_exclude: string, next_max_notes_per_file: number) => {
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
                 aggregate_include: next_include,
                 aggregate_exclude: next_exclude,
+                aggregate_max_notes_per_file: next_max_notes_per_file,
             },
         }]);
         const integration_path = props.display_options?.integration_path;
@@ -686,6 +688,7 @@ export default function GenericView(props: ViewProps) {
                     <FilesDrawer
                         include={props.aggregate_include ?? ''}
                         exclude={props.aggregate_exclude ?? ''}
+                        maxNotesPerFile={props.display_options?.aggregate_max_notes_per_file ?? 10}
                         fileCount={props.file_count ?? 0}
                         noteCount={props.note_count ?? 0}
                         files={props.aggregate_files ?? []}

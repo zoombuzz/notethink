@@ -16,6 +16,8 @@ export interface ViewProps {
     note_count?: number;
     aggregate_include?: string;
     aggregate_exclude?: string;
+    // folder mode: cap top-level stories taken per source file (which end depends on the file's order linetag)
+    aggregate_max_notes_per_file?: number;
     aggregate_files?: Array<string>;
     display_options?: NoteDisplayOptions;
     nested?: {

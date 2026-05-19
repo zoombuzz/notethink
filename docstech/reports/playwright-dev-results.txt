@@ -1,14 +1,12 @@
 # Playwright Test Results
-# Version: 0.2.4
+# Version: 0.2.5
 # Date: 2026-05-19T00:00:00Z
 # Command: npx playwright test
 # ---
 Running 42 tests using 10 workers
 
-  42 passed (8.4s)
+  42 passed (7.9s)
 
-All E2E specs green. Covers the current task's fix plus the concurrent
-Directory->Folder rename + Files-drawer epic:
-- aggregate-folder.spec.ts (renamed from aggregate-directory.spec.ts): folder
-  mode + "(X in Y files)" breadcrumb, Files drawer open/filter
-- breadcrumb.spec.ts: workspace folder kept as first segment
+All E2E specs green after the per-file note cap + `order` linetag feature.
+No spec changes needed (the cap is webview-only, default 10; existing
+aggregate-folder.spec.ts fixtures stay under the cap).

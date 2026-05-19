@@ -163,9 +163,17 @@ describe('resolveCaretPosition', () => {
 });
 
 describe('standardNoteOrder', () => {
-    it('sorts by offset', () => {
-        const a = makeNote({ position: { start: { offset: 10, line: 1 }, end: { offset: 20, line: 2 } } });
-        const b = makeNote({ position: { start: { offset: 5, line: 1 }, end: { offset: 15, line: 2 } } });
+    it('sorts by seq primarily (the canonical reading / interleave order)', () => {
+        // a has the LARGER document offset but the SMALLER seq — seq must win
+        const a = makeNote({ seq: 1, position: { start: { offset: 900, line: 90 }, end: { offset: 910, line: 91 } } });
+        const b = makeNote({ seq: 2, position: { start: { offset: 5, line: 1 }, end: { offset: 15, line: 2 } } });
+        expect(standardNoteOrder(a, b)).toBeLessThan(0);
+        expect(standardNoteOrder(b, a)).toBeGreaterThan(0);
+    });
+
+    it('tie-breaks on document offset when seqs are equal', () => {
+        const a = makeNote({ seq: 4, position: { start: { offset: 10, line: 1 }, end: { offset: 20, line: 2 } } });
+        const b = makeNote({ seq: 4, position: { start: { offset: 5, line: 1 }, end: { offset: 15, line: 2 } } });
         expect(standardNoteOrder(a, b)).toBeGreaterThan(0);
     });
 });
@@ -187,9 +195,27 @@ describe('kanbanNoteOrder', () => {
         expect(kanbanNoteOrder(a, b)).toBeGreaterThan(0);
     });
 
-    it('falls back to standardNoteOrder when no weights', () => {
-        const a = makeNote({ seq: 1, position: { start: { offset: 10, line: 1 }, end: { offset: 20, line: 2 } } });
+    it('falls back to merged seq (not document offset) when no weights', () => {
+        // a has the LARGER document offset but the SMALLER merged seq — e.g. a
+        // newest-at-bottom done.md story that mergeAggregateRoot reversed to the
+        // top. seq must win so the newest story sorts first in its column.
+        const a = makeNote({ seq: 1, position: { start: { offset: 900, line: 90 }, end: { offset: 920, line: 91 } } });
         const b = makeNote({ seq: 2, position: { start: { offset: 5, line: 1 }, end: { offset: 15, line: 2 } } });
+        expect(kanbanNoteOrder(a, b)).toBeLessThan(0);
+        expect(kanbanNoteOrder(b, a)).toBeGreaterThan(0);
+    });
+
+    it('orders unweighted cards by ascending seq', () => {
+        const first = makeNote({ seq: 3 });
+        const second = makeNote({ seq: 7 });
+        expect(kanbanNoteOrder(first, second)).toBeLessThan(0);
+        const column = [makeNote({ seq: 7 }), makeNote({ seq: 2 }), makeNote({ seq: 5 })];
+        expect(column.slice().sort(kanbanNoteOrder).map(n => n.seq)).toEqual([2, 5, 7]);
+    });
+
+    it('tie-breaks on document offset when seqs are equal', () => {
+        const a = makeNote({ seq: 4, position: { start: { offset: 30, line: 3 }, end: { offset: 40, line: 4 } } });
+        const b = makeNote({ seq: 4, position: { start: { offset: 10, line: 1 }, end: { offset: 20, line: 2 } } });
         expect(kanbanNoteOrder(a, b)).toBeGreaterThan(0);
     });
 

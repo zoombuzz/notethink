@@ -9,6 +9,49 @@ For coding standards (TypeScript, React, file naming), see
 [CODING_STANDARDS.md](./CODING_STANDARDS.md). For agent-facing project
 guidance, see [AGENTS.md](./AGENTS.md).
 
+**This guide is versioned. Current version: `1.0.0`.** See
+[Versioning](#versioning) for what patch / minor / major changes mean and how a
+file can pin itself to an older version.
+
+---
+
+## Versioning
+
+The grammar this guide describes is versioned with [semantic
+versioning](https://semver.org/) — `MAJOR.MINOR.PATCH`. The current version is
+**`1.0.0`** (the first formally versioned baseline of the existing grammar).
+
+What each kind of change means for your files:
+
+| Bump | What changes | Effect on existing files |
+|---|---|---|
+| **patch** (`1.0.x`) | Editorial fixes, clarifications, examples — the grammar itself is unchanged | None. Every file renders exactly as before |
+| **minor** (`1.x.0`) | New, backward-compatible features (a new optional linetag, key, or behaviour) | None. Files that don't use the new feature render exactly as before |
+| **major** (`x.0.0`) | Changes that could alter or remove how an existing construct is interpreted | A file written for an older major version *may* render differently — see locking below |
+
+### The default: latest
+
+Every file is interpreted against the **latest** version of this guide. Files
+do **not** need to record which version they were written for, and most never
+will. (We may revisit this once a second major version exists.)
+
+### Locking to an older version
+
+When a future **major** version introduces a breaking change, an author can
+keep a file on the old behaviour by pinning it on the file root (`#`):
+
+```markdown
+# Todo [](?ng_view=kanban&ng_authoring_version=1)
+```
+
+`ng_authoring_version` accepts `MAJOR` or `MAJOR.MINOR` (e.g. `1` or `1.2`).
+It is **reserved and documented now for forward-compatibility** — only version
+`1.0.0` exists today, so the flag currently has no effect. It exists so that
+files authored today keep working unchanged the day a `2.0.0` ships.
+
+Mixed-version workspaces are supported: in Folder mode, different files may pin
+different versions and each is interpreted independently.
+
 ---
 
 ## TL;DR
@@ -220,6 +263,8 @@ renders.
 |---|---|
 | `ng_view` | View type for this subtree: `auto`, `document`, `kanban` |
 | `ng_level` | Render level (advanced; usually leave unset) |
+| `order` | Which end of the file holds the **newest** stories: `newest-at-top` (default) or `newest-at-bottom`. Read off the file root (`#`) only. Tells Folder mode which end to keep when the per-file note cap truncates the file — see [Per-file note cap](#per-file-note-cap-and-the-order-linetag) |
+| `ng_authoring_version` | Pin this file to an older Authoring Guide version (`MAJOR` or `MAJOR.MINOR`, e.g. `1` or `1.2`) instead of the latest. Set on the file root (`#`). Reserved for forward-compatibility — only `1.0.0` exists today, so it has no effect yet. See [Versioning](#versioning) |
 
 ### Story status
 
@@ -369,6 +414,39 @@ subfolder.
 The note-hierarchy segments after the path operate on the merged tree —
 clicking an epic name in the breadcrumb scopes the view to that epic's
 stories.
+
+### Per-file note cap and the `order` linetag
+
+Folder mode caps how many top-level stories it takes **from each source
+file** (default **10**, adjustable in the Files drawer — see below). Without
+this, a long `done.md` with hundreds of completed stories would swamp the
+merged view with mostly-irrelevant history.
+
+Which end of the file the kept stories come from depends on the file root's
+`order` linetag:
+
+| `order` value | Meaning | Cap keeps |
+|---|---|---|
+| `newest-at-top` *(default — also used when `order` is absent or unrecognised)* | The newest stories are written at the **top** of the file (e.g. `todo.md`: the next thing to do is first) | the **first** N stories |
+| `newest-at-bottom` | The newest stories are appended at the **bottom** of the file (e.g. `done.md`: the most recently completed work is last) | the **last** N stories |
+
+```markdown
+# Done [](?ng_view=kanban&ng_child_status=done&order=newest-at-bottom)
+```
+
+Notes:
+
+- The cap and `order` apply **only in Folder mode**. Current-file mode always
+  shows the whole file.
+- The kept stories are always presented **newest-first** so every file reads
+  consistently in the merged view (newest at the top of its column). For
+  `newest-at-top` files that is just document order; for `newest-at-bottom`
+  files the kept slice is reversed (the document-bottom story sorts first).
+- The cap counts the stories a file contributes (depth-3 `###` headings,
+  including those nested under `##` epics), in document order.
+- Adjust the cap (or set it to a large number to effectively disable it) per
+  view from the **Files drawer**; the value persists with the view like the
+  include/exclude globs.
 
 ### Best practices for files that will be aggregated
 

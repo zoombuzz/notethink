@@ -38,7 +38,20 @@ export function postMessageToExtension(message: unknown) {
     vscode.postMessage(message);
 }
 
-const saved_state = vscode.getState();
+// migrate persisted state written before the directory→folder rename: the integration
+// mode was stored as 'directory'; normalise it so all downstream reads only see 'folder'
+function migrateSavedState(s: VSCodeState | undefined): VSCodeState | undefined {
+    if (!s?.viewStates) { return s; }
+    for (const id of Object.keys(s.viewStates)) {
+        const dopts = s.viewStates[id]?.display_options;
+        if (dopts?.integration_mode === 'directory') {
+            dopts.integration_mode = 'folder';
+        }
+    }
+    return s;
+}
+
+const saved_state = migrateSavedState(vscode.getState());
 
 const CONNECTION_TIMEOUT_MS = 5000;
 
@@ -47,8 +60,11 @@ export default function ExtensionReceiver() {
 	const [state, setState] = useState<VSCodeState>(saved_state || { docs: {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
-    // directory (aggregate) mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
+    // folder (aggregate) mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
     const [aggregate_total_discovered, setAggregateTotalDiscovered] = useState<number | undefined>(undefined);
+    // folder (aggregate) mode: the effective include/exclude globs the extension is using, echoed back so the Files drawer can show them
+    const [aggregate_include, setAggregateInclude] = useState<string | undefined>(undefined);
+    const [aggregate_exclude, setAggregateExclude] = useState<string | undefined>(undefined);
     const [viewStates, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
     const navigationCallbackRef = useRef<((direction: string) => void) | undefined>(undefined);
     const [globalSettings, setGlobalSettings] = useState<GlobalSettingsPayload>({ show_line_numbers: false });
@@ -175,6 +191,12 @@ export default function ExtensionReceiver() {
                 if (typeof message.aggregate_total_discovered === 'number') {
                     setAggregateTotalDiscovered(message.aggregate_total_discovered);
                 }
+                if (typeof message.aggregate_include === 'string') {
+                    setAggregateInclude(message.aggregate_include);
+                }
+                if (typeof message.aggregate_exclude === 'string') {
+                    setAggregateExclude(message.aggregate_exclude);
+                }
                 setState(state => {
                     const incoming_docs = message.partial.docs || {};
                     const current_docs = state.docs || {};
@@ -294,18 +316,21 @@ export default function ExtensionReceiver() {
     useEffect(() => {
         window.addEventListener('message', onMessage);
         debug('added message event listener');
-        // if saved state shows we were in aggregate (directory) mode, re-establish the integration first
+        // if saved state shows we were in aggregate (folder) mode, re-establish the integration first
         // sending setIntegration before requestInitialState lets the extension synchronously set integration_path before the async findFiles - so when the requestInitialState handler runs sendDoc it uses merge_strategy='merge' and upserts into the saved aggregate map instead of replacing it
         if (saved_state?.viewStates) {
             for (const id of Object.keys(saved_state.viewStates)) {
                 const vs = saved_state.viewStates[id];
-                if (vs?.display_options?.integration_mode === 'directory' && vs?.display_options?.integration_path) {
-                    debug('restoring directory integration on reload: %s', vs.display_options.integration_path);
+                if (vs?.display_options?.integration_mode === 'folder' && vs?.display_options?.integration_path) {
+                    debug('restoring folder integration on reload: %s', vs.display_options.integration_path);
                     // host re-validates this path against the workspace before acting — persisted webview state is untrusted (defense-in-depth)
+                    // replay any persisted custom filters so a reload restores them rather than snapping back to the defaults
                     vscode.postMessage({
                         type: 'setIntegration',
-                        mode: 'directory',
+                        mode: 'folder',
                         path: vs.display_options.integration_path,
+                        include: vs.display_options.aggregate_include,
+                        exclude: vs.display_options.aggregate_exclude,
                     });
                     break;
                 }
@@ -351,6 +376,8 @@ export default function ExtensionReceiver() {
         onNavigationCommand={navigationCallbackRef}
         workspace_root={workspace_root}
         aggregate_total_discovered={aggregate_total_discovered}
+        aggregate_include={aggregate_include}
+        aggregate_exclude={aggregate_exclude}
         globalSettings={globalSettings}
     />;
 }

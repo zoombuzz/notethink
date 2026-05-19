@@ -1,17 +1,17 @@
 import { test, expect } from '@playwright/test';
-import { injectMultipleDocsFromFixtures, selectDirectoryMode } from '../helpers/inject-multi-docs';
+import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
 import { sendCommand } from '../helpers/send-command';
 
 const WORKSPACE_ROOT = '/mnt/workspace/active_development';
 
-test.describe('Aggregate (Directory) view', () => {
+test.describe('Aggregate (Folder) view', () => {
 
     test.beforeEach(async ({ page }) => {
         await page.goto('/playwright/harness/index.html');
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
     });
 
-    test('directory mode shows a single NoteRenderer with aggregate flag and single toolbar', async ({ page }) => {
+    test('folder mode shows a single NoteRenderer with aggregate flag and single toolbar', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
             { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
@@ -20,8 +20,8 @@ test.describe('Aggregate (Directory) view', () => {
         // initially: two stacked NoteTreeComposers (single-file mode renders one per doc)
         await page.waitForSelector('[data-testid="NoteRenderer"]');
 
-        // switch to directory mode
-        await selectDirectoryMode(page);
+        // switch to folder mode
+        await selectFolderMode(page);
 
         // NoteRenderer flips to aggregate variant
         const renderer = page.locator('[data-testid="NoteRenderer"]');
@@ -37,7 +37,7 @@ test.describe('Aggregate (Directory) view', () => {
             { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
-        await selectDirectoryMode(page);
+        await selectFolderMode(page);
         await page.waitForSelector('[data-aggregate-mode="true"]');
 
         const pills = page.locator('[data-testid="origin-project-pill"]');
@@ -56,7 +56,7 @@ test.describe('Aggregate (Directory) view', () => {
             { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
-        await selectDirectoryMode(page);
+        await selectFolderMode(page);
         await page.waitForSelector('[data-aggregate-mode="true"]');
 
         // clear any messages from the mode-switch handshake
@@ -84,8 +84,8 @@ test.describe('Aggregate (Directory) view', () => {
         ], { workspace_root: WORKSPACE_ROOT });
 
         // start aggregation at workspace root via a direct setViewManagedState route through GenericView
-        // we trigger directory mode and let the selector fire setIntegration on its default dir
-        await selectDirectoryMode(page);
+        // we trigger folder mode and let the selector fire setIntegration on its default dir
+        await selectFolderMode(page);
         await page.waitForSelector('[data-aggregate-mode="true"]');
 
         // clear messages
@@ -102,25 +102,56 @@ test.describe('Aggregate (Directory) view', () => {
             return msgs.filter((m) => m.type === 'setIntegration').pop();
         });
         expect(last_set_integration).toBeDefined();
-        expect(last_set_integration!.mode).toBe('directory');
+        expect(last_set_integration!.mode).toBe('folder');
         expect(typeof last_set_integration!.path).toBe('string');
     });
 
-    test('breadcrumb shows the aggregated file count only in directory mode', async ({ page }) => {
+    test('breadcrumb shows the aggregated "(X in Y files)" count only in folder mode', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
             { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         // single-file (stacked) mode: the count is meaningless and must not appear
-        await expect(page.getByText('(2)', { exact: true })).toHaveCount(0);
+        await expect(page.getByTestId('breadcrumb-file-count')).toHaveCount(0);
 
-        await selectDirectoryMode(page);
+        await selectFolderMode(page);
         await page.waitForSelector('[data-aggregate-mode="true"]');
 
-        // directory mode: the two aggregated source files surface as "(2)" after the path
-        const nav = page.locator('nav[aria-label="Breadcrumb"]');
-        await expect(nav.getByText('(2)', { exact: true })).toBeVisible({ timeout: 5000 });
+        // folder mode: "(X in 2 files)" — X is the merged top-level story count
+        const count = page.getByTestId('breadcrumb-file-count');
+        await expect(count).toBeVisible({ timeout: 5000 });
+        await expect(count).toHaveText(/^\(\d+ in 2 files\)$/);
+    });
+
+    test('clicking the breadcrumb count opens the Files drawer; editing the include glob re-filters the list', async ({ page }) => {
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+        ], { workspace_root: WORKSPACE_ROOT });
+
+        await selectFolderMode(page);
+        await page.waitForSelector('[data-aggregate-mode="true"]');
+
+        const drawer = page.locator('[data-testid="files-drawer-grid"]');
+        await expect(drawer).toHaveAttribute('data-open', 'false');
+
+        await page.getByTestId('breadcrumb-file-count').click();
+        await expect(drawer).toHaveAttribute('data-open', 'true');
+
+        // both source files are listed under the default filters
+        const list = page.getByTestId('files-drawer-list');
+        await expect(list).toContainText('oma/docstech/todo.md');
+        await expect(list).toContainText('notegit/docstech/todo.md');
+
+        // narrowing the include glob re-filters the list client-side after the debounce
+        await page.getByTestId('files-drawer-include').fill('**/oma/**');
+        await expect(list).toContainText('oma/docstech/todo.md');
+        await expect(list).not.toContainText('notegit/docstech/todo.md');
+
+        // Escape closes the drawer
+        await page.keyboard.press('Escape');
+        await expect(drawer).toHaveAttribute('data-open', 'false');
     });
 
     test('switching aggregate to Kanban shows stories grouped by status linetag with origin pills', async ({ page }) => {
@@ -129,7 +160,7 @@ test.describe('Aggregate (Directory) view', () => {
             { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
-        await selectDirectoryMode(page);
+        await selectFolderMode(page);
         await page.waitForSelector('[data-aggregate-mode="true"]');
 
         await sendCommand(page, 'setViewType', { viewType: 'kanban' });

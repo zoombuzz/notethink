@@ -1,14 +1,14 @@
 # Playwright Test Results
-# Version: 0.2.2
-# Date: 2026-05-18T19:54:47+01:00
+# Version: 0.2.4
+# Date: 2026-05-19T00:00:00Z
 # Command: npx playwright test
 # ---
-Running 41 tests using 10 workers
+Running 42 tests using 10 workers
 
-  41 passed (8.2s)
+  42 passed (8.4s)
 
-All E2E specs green. Updated/added since last commit:
-- breadcrumb.spec.ts: workspace folder kept as first segment (4 specs rewritten
-  from the old "strip the root" expectations to the new behaviour)
-- aggregate-directory.spec.ts: breadcrumb file count "(N)" shown only in
-  directory mode (new spec)
+All E2E specs green. Covers the current task's fix plus the concurrent
+Directory->Folder rename + Files-drawer epic:
+- aggregate-folder.spec.ts (renamed from aggregate-directory.spec.ts): folder
+  mode + "(X in Y files)" breadcrumb, Files drawer open/filter
+- breadcrumb.spec.ts: workspace folder kept as first segment

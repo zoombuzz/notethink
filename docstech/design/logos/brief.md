@@ -21,7 +21,7 @@
 ## What NoteThink is
 
 A VS Code extension that renders markdown notes as interactive visualisations —
-document, kanban, mermaid, aggregated directory views. Tagline in `package.nls.json`:
+document, kanban, mermaid, aggregated folder views. Tagline in `package.nls.json`:
 **"Notes in markdown, visualised as anything."**
 
 ## Design constraints

@@ -5,7 +5,7 @@ import {toHast} from "mdast-util-to-hast";
 import {toJsxRuntime} from "hast-util-to-jsx-runtime";
 import {Fragment, jsx, jsxs} from "react/jsx-runtime";
 import type { HashMapOf, Doc } from "../types/general";
-import { anyViewInDirectoryMode, firstIntegrationPath } from "../notethink-views/src/lib/mergeAggregateRoot";
+import { anyViewInFolderMode, firstIntegrationPath } from "../notethink-views/src/lib/mergeAggregateRoot";
 import { ErrorBoundary } from "../notethink-views/src/components";
 import type { TextSelection } from "../notethink-views/src/types/NoteProps";
 import type { GlobalSettingsPayload } from "../notethink-views/src/types/Messages";
@@ -35,8 +35,11 @@ export interface NoteRendererProps {
     setViewManagedState?: (updates: Array<Record<string, unknown>>) => void;
     onNavigationCommand?: React.MutableRefObject<((direction: string) => void) | undefined>;
     workspace_root?: string;
-    // directory (aggregate) mode: total files discovered before the MAX_AGGREGATE_FILES cap
+    // folder (aggregate) mode: total files discovered before the MAX_AGGREGATE_FILES cap
     aggregate_total_discovered?: number;
+    // folder (aggregate) mode: effective include/exclude globs echoed by the extension
+    aggregate_include?: string;
+    aggregate_exclude?: string;
     globalSettings?: GlobalSettingsPayload;
 }
 
@@ -44,7 +47,7 @@ export interface NoteRendererProps {
  * NoteRenderer dispatches the loaded Docs to a tree-composer.
  *
  * Single-file mode renders one NoteTreeComposer per Doc (legacy stacked-views shape, used
- * in practice with one Doc at a time). Aggregate (directory) mode renders a single
+ * in practice with one Doc at a time). Aggregate (folder) mode renders a single
  * AggregateTreeComposer that merges every Doc into one synthetic root.
  */
 export default function NoteRenderer(props: NoteRendererProps) {
@@ -58,8 +61,8 @@ export default function NoteRenderer(props: NoteRendererProps) {
         });
     }, [props.postMessage]);
 
-    // aggregate (directory) mode: when any view state has integration_mode === 'directory', pick AggregateTreeComposer to build a single merged tree across every loaded doc instead of stacking N per-doc composers
-    const aggregate_mode = anyViewInDirectoryMode(props.viewStates);
+    // aggregate (folder) mode: when any view state has integration_mode === 'folder', pick AggregateTreeComposer to build a single merged tree across every loaded doc instead of stacking N per-doc composers
+    const aggregate_mode = anyViewInFolderMode(props.viewStates);
     const integration_path = aggregate_mode ? firstIntegrationPath(props.viewStates) : undefined;
 
     if (aggregate_mode && integration_path) {

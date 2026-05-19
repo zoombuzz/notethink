@@ -16,7 +16,7 @@
   "View type": "View type",
   "Auto ({0})": "Auto ({0})",
   "Current file": "Current file",
-  "Directory": "Directory",
+  "Folder": "Folder",
   "View integration": "View integration",
   "Kanban Settings": "Kanban Settings",
   "Column order": "Column order",
@@ -32,5 +32,13 @@
   "Settings": "Settings",
   "Breadcrumb": "Breadcrumb",
   "Waiting for extension host...": "Waiting for extension host...",
-  "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"": "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\""
+  "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"": "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"",
+  "({0} in {1} files)": "({0} in {1} files)",
+  "({0} in {1} of {2} files)": "({0} in {1} of {2} files)",
+  "{0} notes in {1} files — open the Files panel": "{0} notes in {1} files — open the Files panel",
+  "{0} in {1} files": "{0} in {1} files",
+  "Files": "Files",
+  "Include filter": "Include filter",
+  "Exclude filter": "Exclude filter",
+  "No files match the current filters": "No files match the current filters"
 }

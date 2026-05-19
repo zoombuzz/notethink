@@ -39,6 +39,18 @@ export class Uri {
 	}
 }
 
+export class RelativePattern {
+	readonly baseUri: Uri;
+	readonly base: string;
+	readonly pattern: string;
+
+	constructor(base: Uri | string, pattern: string) {
+		this.baseUri = typeof base === 'string' ? Uri.file(base) : base;
+		this.base = this.baseUri.path;
+		this.pattern = pattern;
+	}
+}
+
 export class Disposable {
 	constructor(private callOnDispose: () => void) {}
 	dispose() { this.callOnDispose(); }

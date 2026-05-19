@@ -16,7 +16,7 @@
   "View type": "Type de vue",
   "Auto ({0})": "Auto ({0})",
   "Current file": "Fichier actuel",
-  "Directory": "Répertoire",
+  "Folder": "Dossier",
   "View integration": "Intégration de la vue",
   "Kanban Settings": "Paramètres Kanban",
   "Column order": "Ordre des colonnes",
@@ -32,5 +32,13 @@
   "Settings": "Paramètres",
   "Breadcrumb": "Fil d'Ariane",
   "Waiting for extension host...": "En attente de l'hôte d'extension...",
-  "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"": "Si le problème persiste, rechargez la fenêtre : Ctrl+Shift+P → « Developer: Reload Window »"
+  "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"": "Si le problème persiste, rechargez la fenêtre : Ctrl+Shift+P → « Developer: Reload Window »",
+  "({0} in {1} files)": "({0} dans {1} fichiers)",
+  "({0} in {1} of {2} files)": "({0} dans {1} sur {2} fichiers)",
+  "{0} notes in {1} files — open the Files panel": "{0} notes dans {1} fichiers — ouvrir le panneau Fichiers",
+  "{0} in {1} files": "{0} dans {1} fichiers",
+  "Files": "Fichiers",
+  "Include filter": "Filtre d'inclusion",
+  "Exclude filter": "Filtre d'exclusion",
+  "No files match the current filters": "Aucun fichier ne correspond aux filtres actuels"
 }

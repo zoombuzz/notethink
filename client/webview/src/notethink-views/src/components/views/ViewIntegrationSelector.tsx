@@ -1,13 +1,13 @@
 import type { ChangeEvent } from "react";
 import * as l10n from "@vscode/l10n";
 
-export const INTEGRATION_MODES = ['current_file', 'directory'] as const;
+export const INTEGRATION_MODES = ['current_file', 'folder'] as const;
 export type IntegrationMode = typeof INTEGRATION_MODES[number];
 
 function getModeLabels(): Record<IntegrationMode, string> {
     return {
         current_file: l10n.t('Current file'),
-        directory: l10n.t('Directory'),
+        folder: l10n.t('Folder'),
     };
 }
 

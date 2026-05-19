@@ -33,12 +33,12 @@ jest.mock('./KanbanView', () => ({
     },
 }));
 
-// mock BreadcrumbTrail - capture onDirectoryClick for integration testing
-let capturedOnDirectoryClick: ((dir_path: string) => void) | undefined;
+// mock BreadcrumbTrail - capture onFolderClick for integration testing
+let capturedOnFolderClick: ((folder_path: string) => void) | undefined;
 jest.mock('./BreadcrumbTrail', () => ({
     __esModule: true,
-    default: (props: NoteProps & { onDirectoryClick?: (dir_path: string) => void }) => {
-        capturedOnDirectoryClick = props.onDirectoryClick;
+    default: (props: NoteProps & { onFolderClick?: (folder_path: string) => void }) => {
+        capturedOnFolderClick = props.onFolderClick;
         return <div data-testid="breadcrumb-trail">BreadcrumbTrail</div>;
     },
 }));
@@ -53,14 +53,18 @@ jest.mock('./ViewTypeSelector', () => ({
     ),
 }));
 
-// mock ViewIntegrationSelector
+// mock ViewIntegrationSelector - capture onChange for integration-mode testing
+let capturedOnIntegrationChange: ((mode: string) => void) | undefined;
 jest.mock('./ViewIntegrationSelector', () => ({
     __esModule: true,
-    default: (props: { currentMode: string }) => (
-        <select data-testid="view-integration-selector" value={props.currentMode} onChange={() => {}}>
-            <option value={props.currentMode}>{props.currentMode}</option>
-        </select>
-    ),
+    default: (props: { currentMode: string; onChange?: (mode: string) => void }) => {
+        capturedOnIntegrationChange = props.onChange;
+        return (
+            <select data-testid="view-integration-selector" value={props.currentMode} onChange={() => {}}>
+                <option value={props.currentMode}>{props.currentMode}</option>
+            </select>
+        );
+    },
 }));
 
 // mock ViewRenderer styles
@@ -122,7 +126,8 @@ beforeEach(() => {
     mockDocViewRender.mockClear();
     mockKanbanViewRender.mockClear();
     mockAutoViewRender.mockClear();
-    capturedOnDirectoryClick = undefined;
+    capturedOnFolderClick = undefined;
+    capturedOnIntegrationChange = undefined;
 });
 
 describe('GenericView', () => {
@@ -849,7 +854,7 @@ describe('GenericView navigation callback', () => {
         });
     });
 
-    it('directory breadcrumb click sends setIntegration message and updates integration mode', async () => {
+    it('folder breadcrumb click sends setIntegration message and updates integration mode', async () => {
         const post_message = jest.fn();
         const set_view_managed_state = jest.fn();
         const root = makeNote({ seq: 0, level: 1 });
@@ -871,21 +876,60 @@ describe('GenericView navigation callback', () => {
         );
         await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
 
-        // BreadcrumbTrail mock captured onDirectoryClick
-        expect(capturedOnDirectoryClick).toBeInstanceOf(Function);
-        capturedOnDirectoryClick!('/workspace/project/docs');
+        // BreadcrumbTrail mock captured onFolderClick
+        expect(capturedOnFolderClick).toBeInstanceOf(Function);
+        capturedOnFolderClick!('/workspace/project/docs');
 
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: 'test-view',
             display_options: {
-                integration_mode: 'directory',
+                integration_mode: 'folder',
                 integration_path: '/workspace/project/docs',
             },
         }]);
         expect(post_message).toHaveBeenCalledWith({
             type: 'setIntegration',
-            mode: 'directory',
+            mode: 'folder',
             path: '/workspace/project/docs',
+        });
+    });
+
+    it('integration selector switch to current_file sends setIntegration and updates integration mode', async () => {
+        const post_message = jest.fn();
+        const set_view_managed_state = jest.fn();
+        const root = makeNote({ seq: 0, level: 1 });
+
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'document',
+                    notes: [root],
+                    doc_path: '/workspace/project/docs/todo.md',
+                    handlers: {
+                        setViewManagedState: set_view_managed_state,
+                        deleteViewFromManagedState: jest.fn(),
+                        revertAllViewsToDefaultState: jest.fn(),
+                        postMessage: post_message,
+                    },
+                })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
+
+        // ViewIntegrationSelector mock captured onChange
+        expect(capturedOnIntegrationChange).toBeInstanceOf(Function);
+        capturedOnIntegrationChange!('current_file');
+
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: 'test-view',
+            display_options: {
+                integration_mode: 'current_file',
+                integration_path: undefined,
+            },
+        }]);
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'setIntegration',
+            mode: 'current_file',
         });
     });
 

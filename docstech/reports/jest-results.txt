@@ -1,22 +1,23 @@
 # Jest Test Results
-# Version: 0.2.2
-# Date: 2026-05-18T19:54:47+01:00
+# Version: 0.2.4
+# Date: 2026-05-19T00:00:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 ┌──────────────────┬───────┬────────┬────────┬─────────┐
 │ Suite            │ Files │ Passed │ Failed │ Time    │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     6 │    136 │      0 │ 2.105 s │
-│ webview          │     3 │     30 │      0 │ 0.607 s │
-│ notethink-views  │    26 │    392 │      0 │ 2.925 s │
+│ extension        │     6 │    141 │      0 │ 2.029 s │
+│ webview          │     3 │     30 │      0 │ 0.565 s │
+│ notethink-views  │    28 │    415 │      0 │ 2.981 s │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    35 │    558 │      0 │         │
+│ TOTAL            │    37 │    586 │      0 │         │
 └──────────────────┴───────┴────────┴────────┴─────────┘
 
-Test Suites: 35 passed, 35 total
-Tests:       558 passed, 558 total
-Snapshots:   0 total
+Tests: 586 passed, 586 total
 
-All suites green. New since last commit:
-- BreadcrumbTrail.test.tsx: directory-mode segmenting (workspace folder as first
-  segment) + file-count display ("(N)", "(N of M)", single-file omission)
+All suites green. Covers the current task's fix (reset viewer to current file
+when leaving folder mode: GenericView current_file branch + notethinkEditor
+teardown re-send, with new GenericView + notethinkEditor tests) plus the
+concurrent Directory->Folder rename + Files-drawer editable-filters epic
+(globMatch, FilesDrawer, ToolbarDrawer, BreadcrumbTrail "(X in Y files)" label,
+notethinkEditor setIntegration folder-mode filter tests).

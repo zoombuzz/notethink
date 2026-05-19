@@ -8,9 +8,14 @@ import type { NoteDisplayOptions } from "../../notethink-views/src/types/NotePro
 import type { NoteRendererProps } from "../NoteRenderer";
 const debug = Debug("nodejs:notethink:AggregateTreeComposer");
 
+// webview-side mirror of the extension's aggregate-filter defaults (notethinkEditor.ts
+// DEFAULT_AGGREGATE_INCLUDE/EXCLUDE); used until the extension echoes the effective globs
+export const DEFAULT_AGGREGATE_INCLUDE = '**/*.md';
+export const DEFAULT_AGGREGATE_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,dist,build,out,.next,.cache,coverage}/**';
+
 /**
  * AggregateTreeComposer merges every loaded Doc into a single synthetic-root tree and
- * renders one GenericView for the whole directory.
+ * renders one GenericView for the whole folder.
  *
  * Tree-composers sit one layer above views (Document/Kanban/Auto): each composer produces
  * the note tree handed to a leaf view. Companion to NoteTreeComposer for single-file mode.
@@ -41,12 +46,12 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
         return { merged_root: root, all_notes };
     }, [merge_key, integration_path]);
 
-    // pick the first view state in directory mode as the source of display_options for the merged view
+    // pick the first view state in folder mode as the source of display_options for the merged view
     // use that view state's id for the GenericView too, so settings/column-reorder dispatches round-trip back to the same state the renderer reads
     const { view_state_id, view_state } = (() => {
         if (!props.viewStates) { return { view_state_id: '__aggregate__', view_state: undefined }; }
         for (const id of Object.keys(props.viewStates)) {
-            if (props.viewStates[id]?.display_options?.integration_mode === 'directory') {
+            if (props.viewStates[id]?.display_options?.integration_mode === 'folder') {
                 return { view_state_id: id, view_state: props.viewStates[id] };
             }
         }
@@ -55,7 +60,7 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
     const view_type = view_state?.type || 'auto';
     const view_display_options: NoteDisplayOptions = {
         ...view_state?.display_options,
-        integration_mode: 'directory',
+        integration_mode: 'folder',
         integration_path,
         settings: {
             show_line_numbers: props.globalSettings?.show_line_numbers ?? false,
@@ -65,6 +70,19 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
 
     // number of source files actually loaded into the merged view (the breadcrumb shows this)
     const file_count = Object.keys(docs).length;
+    // top-level stories merged into the synthetic root — the "X" in the breadcrumb "(X in Y files)"
+    const note_count = merged_root.child_notes?.length ?? 0;
+
+    // effective filters: the user's persisted per-view override wins, else the extension's echoed globs, else the defaults; '' is a valid user value (exclude cleared) so ?? is correct (only null/undefined fall through)
+    const aggregate_include = view_state?.display_options?.aggregate_include
+        ?? props.aggregate_include ?? DEFAULT_AGGREGATE_INCLUDE;
+    const aggregate_exclude = view_state?.display_options?.aggregate_exclude
+        ?? props.aggregate_exclude ?? DEFAULT_AGGREGATE_EXCLUDE;
+
+    // loaded source files (workspace-relative where known) for the Files drawer list, stable order
+    const aggregate_files = Object.values(docs)
+        .map(d => d.relative_path ?? d.path)
+        .sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
 
     const view_props: ViewProps = {
         id: view_state_id,
@@ -73,6 +91,10 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
         workspace_root: props.workspace_root,
         file_count,
         aggregate_total_discovered: props.aggregate_total_discovered,
+        note_count,
+        aggregate_include,
+        aggregate_exclude,
+        aggregate_files,
         display_options: view_display_options,
         nested: {
             parent_context: merged_root,

@@ -5,7 +5,7 @@ import styles from "./OriginPill.module.scss";
 const debug = Debug("nodejs:notethink-views:OriginPill");
 
 /**
- * Origin pill: shown next to a story's headline in aggregate (directory) mode.
+ * Origin pill: shown next to a story's headline in aggregate (folder) mode.
  *
  * Renders a project pill (single uppercase letter from origin.relative_path's first
  * path segment) followed by an optional epic pill (epic.name) when origin.epic is set.

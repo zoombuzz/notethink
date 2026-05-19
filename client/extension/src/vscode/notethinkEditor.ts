@@ -9,9 +9,13 @@ import { isPathWithin } from '../lib/pathsafe';
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
 const BACKGROUND_BATCH_SIZE = 20;
-// hard cap on files loaded+parsed into a single directory aggregate
+// hard cap on files loaded+parsed into a single folder aggregate
 // without it, selecting a large root (~600+ .md files) fans out one openTextDocument+parse+postMessage per file and re-runs mergeAggregateRoot on every message, saturating IPC and pinning the renderer ("window not responding")
 const MAX_AGGREGATE_FILES = 200;
+// default aggregate filters; overridable per-view from the Files drawer (setIntegration include/exclude)
+const DEFAULT_AGGREGATE_INCLUDE = '**/*.md';
+// skip standard derived/dependency directories whose .md files (readmes, changelogs) would otherwise flood the aggregate view; the user may override or clear this from the Files drawer
+const DEFAULT_AGGREGATE_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,dist,build,out,.next,.cache,coverage}/**';
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
 
 // bridge isPathWithin to the live workspace: roots come from vscode.workspace.workspaceFolders so the pure helper stays vscode-free and unit-testable
@@ -88,7 +92,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		function sendDoc(doc: Doc) {
 			const timestamped = { ...doc, updateSentAt: new Date().toISOString() };
 			debug('sendDoc %s', doc.path);
-			// in aggregate (directory) mode only docs inside integration_path go into the merged view; docs outside should not pollute the aggregated map
+			// in aggregate (folder) mode only docs inside integration_path go into the merged view; docs outside should not pollute the aggregated map
 			// selection updates for out-of-integration docs still flow through sendSelection separately
 			if (integration_path && !doc.path.startsWith(integration_path)) {
 				debug('sendDoc: skipping out-of-integration doc %s', doc.path);
@@ -122,9 +126,12 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		let active_doc: Doc | undefined;
 		let active_path: string | undefined;
 
-		// --- aggregate (directory) integration state ---
+		// --- aggregate (folder) integration state ---
 		let integration_watcher: vscode.FileSystemWatcher | undefined;
 		let integration_path: string | undefined;
+		// editable aggregate filters, persisted per-view by the webview and replayed on reload; survive a breadcrumb re-narrow (only overwritten when the setIntegration message explicitly carries them)
+		let integration_include = DEFAULT_AGGREGATE_INCLUDE;
+		let integration_exclude = DEFAULT_AGGREGATE_EXCLUDE;
 		const integration_docs: HashMapOf<Doc> = {};
 
 		function sendCurrentSelection() {
@@ -406,7 +413,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							return;
 						}
 
-						// in aggregate (directory) mode the NoteThink view is a set of signposts — clicking a story should jump to the file even when no editor is currently showing it
+						// in aggregate (folder) mode the NoteThink view is a set of signposts — clicking a story should jump to the file even when no editor is currently showing it
 						// in single-file mode we deliberately stay silent to avoid spawning editors on stray clicks
 						if (!integration_path) { return; }
 
@@ -456,11 +463,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				}
 				case 'setIntegration': {
 					const mode = e.mode as string;
-					const dir_path = e.path as string;
-					if (mode === 'directory' && dir_path) {
-						// validate before any teardown so a poisoned path can't dismantle a legitimate integration (directory, so no extension requirement)
-						if (!isWithinWorkspace(dir_path)) {
-							writeToErrorLog('setIntegration: directory outside workspace, refusing', dir_path);
+					const folder_path = e.path as string;
+					if (mode === 'folder' && folder_path) {
+						// validate before any teardown so a poisoned path can't dismantle a legitimate integration (folder, so no extension requirement)
+						if (!isWithinWorkspace(folder_path)) {
+							writeToErrorLog('setIntegration: folder outside workspace, refusing', folder_path);
 							return;
 						}
 						try {
@@ -470,9 +477,17 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 								integration_watcher = undefined;
 							}
 							for (const key of Object.keys(integration_docs)) { delete integration_docs[key]; }
-							integration_path = dir_path;
+							integration_path = folder_path;
 
-							const pattern = new vscode.RelativePattern(vscode.Uri.file(dir_path), '**/*.md');
+							// only adopt filters the message explicitly carries so a breadcrumb re-narrow keeps the user's current filters; an empty include is degenerate (matches nothing) so fall back to the default, an empty exclude legitimately means "exclude nothing"
+							if (typeof e.include === 'string') {
+								integration_include = e.include.trim() === '' ? DEFAULT_AGGREGATE_INCLUDE : e.include;
+							}
+							if (typeof e.exclude === 'string') {
+								integration_exclude = e.exclude;
+							}
+
+							const pattern = new vscode.RelativePattern(vscode.Uri.file(folder_path), integration_include);
 
 							// aggregate-size metadata, surfaced to the webview so the breadcrumb can show "(loaded of discovered)" when the cap truncates
 							let aggregate_total_discovered = 0;
@@ -498,6 +513,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 										extension_version,
 										aggregate_total_discovered,
 										aggregate_truncated,
+										aggregate_include: integration_include,
+										aggregate_exclude: integration_exclude,
 									});
 								} catch (err) {
 									writeToErrorLog('setIntegration: failed to load doc', uri.path, err);
@@ -505,23 +522,23 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							};
 
 							// phase 1: discover and load in parallel; each file streams its own merge update as it completes so a slow file never blocks the others - the view fills in over a few seconds rather than waiting on the whole batch
-							// pass an explicit exclude pattern so the user's files.exclude/search.exclude can't hide notes inside the integration directory but still skip standard derived/dependency directories whose .md files (readmes, changelogs) would otherwise flood the aggregate view
-							const exclude_pattern = '**/{node_modules,.git,.svn,.hg,.terraform,dist,build,out,.next,.cache,coverage}/**';
-							const discovered = await vscode.workspace.findFiles(pattern, exclude_pattern);
+							// pass an explicit exclude (default skips derived/dependency dirs and overrides the user's files.exclude/search.exclude); an empty exclude becomes null so findFiles applies no exclusions at all
+							const find_exclude = integration_exclude.trim() === '' ? null : integration_exclude;
+							const discovered = await vscode.workspace.findFiles(pattern, find_exclude);
 							// deterministic order so the capped subset (and what the user sees) is stable across reloads
 							const sorted_uris = [...discovered].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 							aggregate_total_discovered = sorted_uris.length;
 							aggregate_truncated = sorted_uris.length > MAX_AGGREGATE_FILES;
 							const uris = sorted_uris.slice(0, MAX_AGGREGATE_FILES);
-							debug('setIntegration directory: %d discovered, loading %d (cap %d, truncated=%s) in %s', aggregate_total_discovered, uris.length, MAX_AGGREGATE_FILES, aggregate_truncated, dir_path);
+							debug('setIntegration folder: %d discovered, loading %d (cap %d, truncated=%s) in %s', aggregate_total_discovered, uris.length, MAX_AGGREGATE_FILES, aggregate_truncated, folder_path);
 							if (aggregate_truncated) {
-								writeToLog('setIntegration directory cap hit', `discovered ${aggregate_total_discovered}, loading first ${MAX_AGGREGATE_FILES} of ${dir_path}`);
+								writeToLog('setIntegration folder cap hit', `discovered ${aggregate_total_discovered}, loading first ${MAX_AGGREGATE_FILES} of ${folder_path}`);
 							}
 							const load_promises = uris.map(loadOne);
 							// once every load has settled, send a replace update with the canonical map
-							// this prunes stale docs left over from a previous session's saved state that no longer exist in the directory
+							// this prunes stale docs left over from a previous session's saved state that no longer exist in the folder
 							Promise.allSettled(load_promises).then(() => {
-								debug('setIntegration directory: load complete, %d docs', Object.keys(integration_docs).length);
+								debug('setIntegration folder: load complete, %d docs', Object.keys(integration_docs).length);
 								webviewPanel.webview.postMessage({
 									type: 'update',
 									partial: { docs: integration_docs },
@@ -529,10 +546,12 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 									extension_version,
 									aggregate_total_discovered,
 									aggregate_truncated,
+									aggregate_include: integration_include,
+									aggregate_exclude: integration_exclude,
 								});
 							});
 
-							// phase 2: watch the directory for incremental adds/edits/deletes
+							// phase 2: watch the folder for incremental adds/edits/deletes
 							integration_watcher = vscode.workspace.createFileSystemWatcher(pattern);
 							integration_watcher.onDidCreate(loadOne);
 							integration_watcher.onDidChange(loadOne);
@@ -554,7 +573,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 								}
 							});
 						} catch (err) {
-							writeToErrorLog('setIntegration directory failed', dir_path, err);
+							writeToErrorLog('setIntegration folder failed', folder_path, err);
 						}
 					} else if (mode === 'current_file') {
 						// switching back to single-file mode — tear down any active watcher
@@ -563,7 +582,25 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							integration_watcher = undefined;
 						}
 						integration_path = undefined;
+						integration_include = DEFAULT_AGGREGATE_INCLUDE;
+						integration_exclude = DEFAULT_AGGREGATE_EXCLUDE;
 						for (const key of Object.keys(integration_docs)) { delete integration_docs[key]; }
+						// re-resolve the active editor (it may have changed while in folder mode) and re-send just that file
+						// integration_path is now unset so sendDoc posts merge_strategy=undefined (replace), pruning the stale aggregate docs
+						try {
+							const current_editor = vscode.window.activeTextEditor;
+							if (current_editor?.document.uri.path.endsWith('.md')
+								&& current_editor.document.uri.path !== active_path) {
+								active_doc = await buildDoc(current_editor.document);
+								active_path = current_editor.document.uri.path;
+							}
+							if (active_doc) {
+								sendDoc(active_doc);
+								sendCurrentSelection();
+							}
+						} catch (err) {
+							writeToErrorLog('setIntegration current_file failed', '', err);
+						}
 					}
 					return;
 				}

@@ -1,13 +1,6 @@
 # Todo [](?ng_view=kanban)
 
 
-### Continue to refine directory experience
-
-+ [ ] rename "Directory" option as "Folder"
-  + this is much more consistent with VSCode's native interface
-+ [ ] improve filters
-
-
 ### Multi-view management [post-v1]
 
 + goal

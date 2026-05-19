@@ -1,7 +1,7 @@
 # NoteThink Authoring Guide
 
 How to structure your markdown files so NoteThink renders them well — as
-documents, as Kanban boards, and (in Directory mode) as cross-file aggregate
+documents, as Kanban boards, and (in Folder mode) as cross-file aggregate
 views.
 
 This guide covers the conventions you need to follow as a **document author**.
@@ -323,7 +323,7 @@ Both work. You can mix them.
 
 ### Cross-project epic references
 
-In Directory mode (and the upcoming cross-project Kanban), an epic id is
+In Folder mode (and the upcoming cross-project Kanban), an epic id is
 resolved against all loaded epics. If two projects each have an epic with
 `[](?id=auth)`, a story in either project that says `epic=auth` will resolve
 to the epic from its own file (each project resolves independently). If you
@@ -332,7 +332,7 @@ namespaced id: `[](?id=zoombuzz/auth)` and `[](?epic=zoombuzz/auth)`.
 
 ---
 
-## Directory mode
+## Folder mode
 
 NoteThink has two integration modes, selected from the toolbar at the top of
 the view.
@@ -340,11 +340,11 @@ the view.
 | Mode | What it shows |
 |---|---|
 | **Current file** | The file open in the active editor |
-| **Directory** | Every `*.md` file under the active file's directory, merged into one view |
+| **Folder** | Every `*.md` file under the active file's folder, merged into one view |
 
-In Directory mode, NoteThink:
+In Folder mode, NoteThink:
 
-1. Loads every `*.md` file under the directory.
+1. Loads every `*.md` file under the folder.
 2. Walks each file's tree:
    - depth-3 (`###`) headings become stories on the merged board
    - depth-2 (`##`) headings become epics; their depth-3 children become stories
@@ -357,14 +357,14 @@ In Directory mode, NoteThink:
 Each story shows a small **origin pill** with the source file (and epic, if
 any). Clicking it opens the source file at the story's location.
 
-Editing a checkbox or status in Directory mode writes to the correct origin
+Editing a checkbox or status in Folder mode writes to the correct origin
 file — the merged view is just a presentation layer.
 
-### Breadcrumb in Directory mode
+### Breadcrumb in Folder mode
 
-The breadcrumb's path segments represent the **aggregated directory**, not
+The breadcrumb's path segments represent the **aggregated folder**, not
 any single file. Clicking a path segment narrows the aggregation to that
-sub-directory.
+subfolder.
 
 The note-hierarchy segments after the path operate on the merged tree —
 clicking an epic name in the breadcrumb scopes the view to that epic's
@@ -390,7 +390,7 @@ Before pushing changes to a `todo.md` / `done.md`:
 
 1. Open the file in NoteThink (Current file mode). Does the document view
    show what you expect? Does the Kanban view group stories correctly?
-2. Switch to Directory mode. Are there any stacked headers, frozen
+2. Switch to Folder mode. Are there any stacked headers, frozen
    breadcrumbs, or stories that show up in the wrong column? If yes, you
    likely have a heading-level mismatch (e.g. a `##` where you meant `###`).
 3. Open the file on github.com. The empty linetags should be invisible. If

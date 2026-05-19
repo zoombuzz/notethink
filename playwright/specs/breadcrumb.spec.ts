@@ -65,7 +65,7 @@ test.describe('Breadcrumb workspace root stripping', () => {
         await expect(nav.locator('button', { hasText: 'todo.md' })).toBeVisible();
     });
 
-    test('relative_path data-path attributes use full absolute paths for directory loading', async ({ page }) => {
+    test('relative_path data-path attributes use full absolute paths for folder loading', async ({ page }) => {
         const doc_path = '/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs/todo.md';
         await injectDocsFromFixture(page, 'basic.md', doc_path, {
             relative_path: 'countingsheet/docs/todo.md',

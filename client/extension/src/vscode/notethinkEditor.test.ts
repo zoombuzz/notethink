@@ -409,6 +409,91 @@ describe('NotethinkEditorProvider', () => {
 		});
 	});
 
+	// ---- setIntegration aggregate filters -----------------------------------
+
+	describe('setIntegration aggregate filters', () => {
+		const DEFAULT_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,dist,build,out,.next,.cache,coverage}/**';
+		const flush = () => new Promise(resolve => setImmediate(resolve));
+
+		beforeEach(() => setWorkspaceRoots(['/workspace']));
+		afterEach(() => setWorkspaceRoots(undefined));
+
+		it('uses the default include/exclude when the message carries none', async () => {
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			await flush();
+
+			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[0];
+			expect(find_call[0].pattern).toBe('**/*.md');
+			expect(find_call[1]).toBe(DEFAULT_EXCLUDE);
+
+			const update = panelHelper.postedMessages.filter((m: any) => m.type === 'update').pop();
+			expect(update.aggregate_include).toBe('**/*.md');
+			expect(update.aggregate_exclude).toBe(DEFAULT_EXCLUDE);
+		});
+
+		it('passes a custom include and treats an empty exclude as no exclusions (null)', async () => {
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({
+				type: 'setIntegration', mode: 'folder', path: '/workspace/notes',
+				include: '**/users/**', exclude: '',
+			});
+			await flush();
+
+			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[0];
+			expect(find_call[0].pattern).toBe('**/users/**');
+			expect(find_call[1]).toBeNull();
+
+			const update = panelHelper.postedMessages.filter((m: any) => m.type === 'update').pop();
+			expect(update.aggregate_include).toBe('**/users/**');
+			expect(update.aggregate_exclude).toBe('');
+		});
+
+		it('falls back to the default include when an empty include is sent', async () => {
+			await panelHelper.simulateMessage({
+				type: 'setIntegration', mode: 'folder', path: '/workspace/notes',
+				include: '', exclude: '**/skip/**',
+			});
+			await flush();
+
+			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[0];
+			expect(find_call[0].pattern).toBe('**/*.md');
+			expect(find_call[1]).toBe('**/skip/**');
+		});
+
+		it('retains the user filters across a breadcrumb re-narrow that omits them', async () => {
+			await panelHelper.simulateMessage({
+				type: 'setIntegration', mode: 'folder', path: '/workspace/notes',
+				include: '**/users/**', exclude: '',
+			});
+			await flush();
+			// a breadcrumb segment click re-narrows to a subdirectory without carrying filters
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes/users' });
+			await flush();
+
+			const second_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[1];
+			expect(second_call[0].pattern).toBe('**/users/**');
+			expect(second_call[1]).toBeNull();
+		});
+
+		it('switching to current_file tears down the aggregate and re-sends the active doc as a replace', async () => {
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			await flush();
+
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'current_file' });
+			await flush();
+
+			// the active doc is re-sent with no merge_strategy so the webview replaces (prunes) the stale aggregate docs
+			const update = panelHelper.postedMessages.find((m: any) => m.type === 'update');
+			expect(update).toBeDefined();
+			expect(update.merge_strategy).toBeUndefined();
+			const doc_entries = Object.values(update.partial.docs) as any[];
+			expect(doc_entries.length).toBe(1);
+			expect(doc_entries[0].path).toBe(defaultDocPath);
+		});
+	});
+
 	// ---- security: webview path containment ---------------------------------
 
 	describe('webview path containment (security hardening)', () => {
@@ -455,10 +540,10 @@ describe('NotethinkEditorProvider', () => {
 			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
 		});
 
-		it('setIntegration refuses an out-of-workspace directory', async () => {
+		it('setIntegration refuses an out-of-workspace folder', async () => {
 			await panelHelper.simulateMessage({
 				type: 'setIntegration',
-				mode: 'directory',
+				mode: 'folder',
 				path: '/etc',
 			});
 

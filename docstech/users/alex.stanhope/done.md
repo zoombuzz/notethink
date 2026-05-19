@@ -1055,3 +1055,88 @@ Publisher created (`NoteThink`, notethink.com verified). Extension rebranded off
 + manual: after publishing, verify the listing renders — icon, README, repo/homepage links
 
 
+### Reset viewer to current file when leaving folder mode
+
+Switching the integration selector from Folder back to Current file leaves the viewer showing the stale aggregate (stacked per-file headers/breadcrumbs) instead of the active editor file.
+
++ root cause
+  + `handleIntegrationChange` (GenericView.tsx) only posts `setIntegration` for
+    `mode === 'folder'`; there is no `current_file` branch, so the extension
+    never tears down aggregate state
+  + extension keeps `integration_path`/`integration_docs`/watcher, so `sendDoc`
+    skips out-of-dir files and tags in-dir updates `merge_strategy: 'merge'`;
+    the webview never prunes the old aggregate docs and `NoteRenderer` stacks
+    one view per stale doc
++ [X] add a `current_file` branch to `handleIntegrationChange` that posts
+      `{ type: 'setIntegration', mode: 'current_file' }`
++ [X] in the extension `setIntegration` `current_file` branch, after teardown
+      re-resolve the active editor and re-send it via `sendDoc` (replace) +
+      selection so the webview prunes stale aggregate docs
++ [X] add jest: GenericView selector→current_file posts setIntegration +
+      setViewManagedState
++ [X] add jest: notethinkEditor current_file tears down the aggregate and
+      re-sends the active doc as a replace (no merge_strategy)
++ [X] bump patch version (0.2.3 → 0.2.4)
++ manual: in folder mode, switch to a file outside the aggregate dir, toggle
+  back to Current file, confirm only that file renders
+
+
+### Continue to refine folder experience
+
++ [X] rename "Directory" option as "Folder"
+  + comprehensive refactor: IntegrationMode value, setIntegration message,
+    integration_mode comparisons, handleFolderClick/onFolderClick,
+    anyViewInFolderMode, folder_path, UI label + l10n (5 locales), comments,
+    tests, playwright (aggregate-folder.spec.ts), docs; legacy persisted
+    integration_mode:'directory' migrated to 'folder' in ExtensionReceiver
++ improve filters: editable include/exclude + Files drawer
+  + goal
+    + breadcrumb folder count becomes `(X in Y files)` where X = top-level
+      stories merged into the synthetic root, Y = source files loaded
+    + clicking the count opens a Files drawer (same scaffold as the Settings
+      drawer: top-anchored push-down grid, Escape, scroll-anchor)
+    + Files drawer shows: editable Include filter, editable Exclude filter,
+      the file count, and a live list of currently-selected files
+    + editing a box debounces 200ms then (a) re-filters the drawer's file list
+      client-side instantly, (b) persists the globs to view state and posts a
+      background `setIntegration` so the whole aggregate re-discovers
+  + decisions (confirmed with user)
+    + X counts top-level stories (synthetic_root.child_notes.length)
+    + edited filters persist in per-view state (survive reload, like
+      integration_path)
+    + exclude box is fully editable incl. the derived-dir guard list (user can
+      clear it; accept the MAX_AGGREGATE_FILES truncation risk)
+  + [X] extension: hoist include/exclude to closure state in notethinkEditor.ts
+        with DEFAULT_AGGREGATE_INCLUDE/EXCLUDE; accept optional include/exclude
+        on the `setIntegration` message; empty exclude -> pass null to findFiles
+        (no excludes); empty include -> fall back to default
+  + [X] extension: echo aggregate_include/aggregate_exclude on the aggregate
+        `update` messages (next to aggregate_total_discovered)
+  + [X] webview: thread aggregate_include/exclude + file list + note_count
+        through ExtensionReceiver -> NoteRenderer -> AggregateTreeComposer ->
+        ViewProps -> GenericView; replay persisted globs in the reload
+        setIntegration
+  + [X] lib: globMatch.ts — minimal VS Code glob -> RegExp (** , * , ? , {a,b})
+        for client-side instant filtering; no new dependency
+  + [X] BreadcrumbTrail: `(X in Y files)` label (and `(X in Y of M files)` when
+        the discovery cap truncated); make the count a button -> opens drawer
+  + [X] GenericView: ToolbarDrawer wrapper factored from the Settings drawer
+        scaffold (behaviour-preserving); files drawer mutually exclusive with
+        settings; one shared scroll-anchor/Escape effect over `active_drawer`
+  + [X] FilesDrawer.tsx: two debounced text inputs + count + filtered file list
+  + [X] wire persistence (setViewManagedState) + background reapply
+        (postMessage setIntegration with include/exclude)
+  + [X] l10n: add new UI strings to l10n/bundle.l10n*.json (5 locales)
+  + [X] tests: jest (globMatch, BreadcrumbTrail label+click, FilesDrawer
+        debounce, notethinkEditor setIntegration filters + RelativePattern
+        mock); playwright (count format, click opens drawer, editing a box
+        filters the list); settings-toggle.spec stayed green. Composer glue
+        (note_count / file list) covered indirectly via Breadcrumb + FilesDrawer
+        rather than a dedicated harness-less composer test
+  + manual: edit include to a narrower glob, confirm drawer list shrinks
+    within ~200ms and the merged notes re-discover shortly after
+  + manual: clear the exclude box on a repo with node_modules and confirm
+    behaviour (broader set, possible `of M` truncation hint)
+  + manual: reload the window and confirm custom filters are restored
+
+

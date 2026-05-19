@@ -38,6 +38,9 @@ export interface NoteDisplayOptions {
     cropped_selected_seqs?: number[];
     integration_mode?: string;
     integration_path?: string;
+    // editable aggregate filters (Files drawer); persisted here so they survive a reload like integration_path
+    aggregate_include?: string;
+    aggregate_exclude?: string;
     additional_classes?: string[];
     total_columns?: number;
     provided?: {
@@ -88,7 +91,7 @@ export interface NoteProps {
     hash_sha256?: string;
     updated?: number;
     updated_by_view?: string;
-    // aggregate (directory) mode: which file this note originated in (undefined in single-file mode; set on stories and their descendants by mergeAggregateRoot)
+    // aggregate (folder) mode: which file this note originated in (undefined in single-file mode; set on stories and their descendants by mergeAggregateRoot)
     origin?: NoteOrigin;
     // rendered at Note parse time
     headline?: ReactElement;

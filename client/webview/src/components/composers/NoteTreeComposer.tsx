@@ -13,7 +13,7 @@ const debug = Debug("nodejs:notethink:NoteTreeComposer");
  *
  * Tree-composers sit one layer above views (Document/Kanban/Auto): each composer produces
  * the note tree handed to a leaf view. NoteTreeComposer is the single-file composer;
- * AggregateTreeComposer is the directory-aggregate companion.
+ * AggregateTreeComposer is the folder-aggregate companion.
  *
  * By doing the MDAST conversion inside this component's render, any errors thrown by
  * convertMdastToNoteHierarchy are caught by the parent ErrorBoundary.

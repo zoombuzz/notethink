@@ -17,6 +17,8 @@ import ViewIntegrationSelector, { type IntegrationMode } from "./ViewIntegration
 import InsertModal from "../InsertModal";
 import SettingsDocumentDrawer from "./SettingsDocumentDrawer";
 import SettingsKanbanDrawer from "./SettingsKanbanDrawer";
+import ToolbarDrawer from "./ToolbarDrawer";
+import FilesDrawer from "./FilesDrawer";
 import type { CommonSettingKey } from "./SettingsCommonControls";
 import master_view_styles from "../ViewRenderer.module.scss";
 
@@ -240,21 +242,66 @@ export default function GenericView(props: ViewProps) {
 
     }, props.handlers);
 
-    // handle breadcrumb directory click - switch to (or narrow within) directory integration mode
-    const handleDirectoryClick = useCallback((dir_path: string) => {
+    // handle breadcrumb folder click - switch to (or narrow within) folder integration mode
+    const handleFolderClick = useCallback((folder_path: string) => {
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
-                integration_mode: 'directory',
-                integration_path: dir_path,
+                integration_mode: 'folder',
+                integration_path: folder_path,
             },
         }]);
         handlers.postMessage?.({
             type: 'setIntegration',
-            mode: 'directory',
-            path: dir_path,
+            mode: 'folder',
+            path: folder_path,
         });
     }, [handlers, props.id]);
+
+    // at most one toolbar drawer open at a time (settings | files); shares the scroll-anchor + Escape behaviour
+    const [active_drawer, setActiveDrawer] = useState<'none' | 'settings' | 'files'>('none');
+    const gear_button_ref = useRef<HTMLButtonElement>(null);
+    // the element whose viewport position is held stable across the open/close animation (and refocused on Escape) — the gear for settings, the breadcrumb count for files
+    const anchor_el_ref = useRef<HTMLElement | null>(null);
+    const anchor_top_ref = useRef<number | null>(null);
+
+    // toggle a drawer; capture the trigger element's viewport position so the scroll-anchor effect can keep it stable through the open/close animation
+    const toggleDrawer = useCallback((which: 'settings' | 'files', anchor: HTMLElement | null) => {
+        if (anchor) {
+            anchor_el_ref.current = anchor;
+            anchor_top_ref.current = anchor.getBoundingClientRect().top;
+        }
+        setActiveDrawer(prev => (prev === which ? 'none' : which));
+    }, []);
+
+    const handleSettingsToggle = useCallback(() => {
+        toggleDrawer('settings', gear_button_ref.current);
+    }, [toggleDrawer]);
+
+    const handleFileCountClick = useCallback((anchor: HTMLElement) => {
+        toggleDrawer('files', anchor);
+    }, [toggleDrawer]);
+
+    // persist edited globs to per-view state (survives reload) and post a background setIntegration so the extension re-discovers the whole aggregate with the new filters
+    const handleApplyFilters = useCallback((next_include: string, next_exclude: string) => {
+        handlers.setViewManagedState([{
+            id: props.id,
+            display_options: {
+                aggregate_include: next_include,
+                aggregate_exclude: next_exclude,
+            },
+        }]);
+        const integration_path = props.display_options?.integration_path;
+        if (integration_path) {
+            handlers.postMessage?.({
+                type: 'setIntegration',
+                mode: 'folder',
+                path: integration_path,
+                include: next_include,
+                exclude: next_exclude,
+            });
+        }
+    }, [handlers, props.id, props.display_options?.integration_path]);
 
     // create standard breadcrumb component for display in views
     const breadcrumb_trail = <BreadcrumbTrail
@@ -262,10 +309,12 @@ export default function GenericView(props: ViewProps) {
         doc_path={props.doc_path}
         doc_relative_path={props.doc_relative_path}
         workspace_root={props.workspace_root}
-        integration_path={props.display_options?.integration_mode === 'directory' ? props.display_options?.integration_path : undefined}
+        integration_path={props.display_options?.integration_mode === 'folder' ? props.display_options?.integration_path : undefined}
         file_count={props.file_count}
+        note_count={props.note_count}
         aggregate_total_discovered={props.aggregate_total_discovered}
-        onDirectoryClick={handleDirectoryClick}
+        onFolderClick={handleFolderClick}
+        onFileCountClick={handleFileCountClick}
         handlers={{
             setParentContextSeq: handlers?.setParentContextSeq
         }}
@@ -361,33 +410,35 @@ export default function GenericView(props: ViewProps) {
     // determine the auto-resolved type label for the view selector
     const auto_resolved_type = props.nested?.auto_resolved_type;
 
-    // integration mode (current_file vs directory)
+    // integration mode (current_file vs folder)
     const integration_mode: IntegrationMode = (props.display_options?.integration_mode as IntegrationMode) || 'current_file';
 
     const handleIntegrationChange = useCallback((mode: IntegrationMode) => {
-        const dir_path = mode === 'directory' && props.doc_path
+        const folder_path = mode === 'folder' && props.doc_path
             ? props.doc_path.replace(/\/[^/]+$/, '')
             : undefined;
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
                 integration_mode: mode,
-                integration_path: dir_path,
+                integration_path: folder_path,
             },
         }]);
-        if (mode === 'directory' && dir_path) {
+        if (mode === 'folder' && folder_path) {
             handlers.postMessage?.({
                 type: 'setIntegration',
-                mode: 'directory',
-                path: dir_path,
+                mode: 'folder',
+                path: folder_path,
+            });
+        } else if (mode === 'current_file') {
+            // notify the extension so it disposes the aggregate watcher and re-sends just the active doc
+            // without this the stale aggregate docs keep rendering as stacked single-file views
+            handlers.postMessage?.({
+                type: 'setIntegration',
+                mode: 'current_file',
             });
         }
     }, [handlers, props.id, props.doc_path]);
-
-    // settings drawer state (hoisted from per-view modals)
-    const [settings_drawer_open, setSettingsDrawerOpen] = useState(false);
-    const gear_button_ref = useRef<HTMLButtonElement>(null);
-    const initial_gear_top_ref = useRef<number | null>(null);
 
     // natural column order for the Kanban drawer (alphabetical + 'untagged' last)
     const natural_column_order = useMemo<string[]>(() => {
@@ -440,25 +491,16 @@ export default function GenericView(props: ViewProps) {
         }]);
     }, [handlers, props.id, display_options.settings, natural_column_order]);
 
-    // toggle the drawer; capture the gear button's viewport position so the scroll-anchoring effect can keep it stable
-    const handleSettingsToggle = useCallback(() => {
-        const gear = gear_button_ref.current;
-        if (gear) {
-            initial_gear_top_ref.current = gear.getBoundingClientRect().top;
-        }
-        setSettingsDrawerOpen((v) => !v);
-    }, []);
-
-    // scroll-anchor the gear button across the open/close animation so the content the user was looking at stays visible
+    // scroll-anchor the trigger element across the open/close animation so the content the user was looking at stays visible
     useLayoutEffect(() => {
-        if (initial_gear_top_ref.current === null) { return; }
-        const target_top = initial_gear_top_ref.current;
+        if (anchor_top_ref.current === null) { return; }
+        const target_top = anchor_top_ref.current;
         let raf_id: number;
         const deadline = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + 250; // 150ms anim + margin
         const tick = () => {
-            const gear = gear_button_ref.current;
-            if (gear) {
-                const current_top = gear.getBoundingClientRect().top;
+            const anchor = anchor_el_ref.current;
+            if (anchor) {
+                const current_top = anchor.getBoundingClientRect().top;
                 const delta = current_top - target_top;
                 if (Math.abs(delta) > 0.5) {
                     // legacy 2-arg form is always instant; avoids the 'instant' ScrollBehavior typing issue
@@ -472,24 +514,24 @@ export default function GenericView(props: ViewProps) {
         };
         raf_id = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf_id);
-    }, [settings_drawer_open]);
+    }, [active_drawer]);
 
-    // Escape closes the drawer and returns focus to the gear button
+    // Escape closes whichever drawer is open and returns focus to its trigger element
     useEffect(() => {
-        if (!settings_drawer_open) { return; }
+        if (active_drawer === 'none') { return; }
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
-                const gear = gear_button_ref.current;
-                if (gear) {
-                    initial_gear_top_ref.current = gear.getBoundingClientRect().top;
+                const anchor = anchor_el_ref.current;
+                if (anchor) {
+                    anchor_top_ref.current = anchor.getBoundingClientRect().top;
                 }
-                setSettingsDrawerOpen(false);
-                requestAnimationFrame(() => gear_button_ref.current?.focus());
+                setActiveDrawer('none');
+                requestAnimationFrame(() => anchor_el_ref.current?.focus());
             }
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [settings_drawer_open]);
+    }, [active_drawer]);
 
     // insert modal state
     const [insert_modal_open, setInsertModalOpen] = useState(false);
@@ -591,7 +633,7 @@ export default function GenericView(props: ViewProps) {
                         }}
                         title={l10n.t('Settings')}
                         aria-label={l10n.t('Settings')}
-                        aria-expanded={settings_drawer_open}
+                        aria-expanded={active_drawer === 'settings'}
                         aria-controls={`v${props.id}-settings-drawer`}
                     >
                         &#9881;
@@ -599,45 +641,57 @@ export default function GenericView(props: ViewProps) {
                 </div>
             )}
             {show_toolbar && (
-                <div
+                <ToolbarDrawer
+                    open={active_drawer === 'settings'}
                     id={`v${props.id}-settings-drawer`}
-                    className={master_view_styles.settingsDrawerGrid}
-                    data-open={settings_drawer_open}
-                    data-testid="settings-drawer-grid"
-                    role="region"
-                    aria-label={l10n.t('Settings')}
-                    aria-hidden={!settings_drawer_open}
+                    testId="settings-drawer-grid"
+                    ariaLabel={l10n.t('Settings')}
                 >
-                    <div className={master_view_styles.settingsDrawer}>
-                        {props.type === 'document' && (
-                            <SettingsDocumentDrawer
-                                settings={{
-                                    show_linetags_in_headlines: display_options.settings?.show_linetags_in_headlines,
-                                    scroll_note_into_view: display_options.settings?.scroll_note_into_view,
-                                    auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
-                                }}
-                                showLineNumbers={display_options.settings?.show_line_numbers}
-                                onSettingChange={handleSettingChange}
-                                onGlobalSettingChange={handleGlobalSettingChange}
-                            />
-                        )}
-                        {props.type === 'kanban' && (
-                            <SettingsKanbanDrawer
-                                settings={{
-                                    show_linetags_in_headlines: display_options.settings?.show_linetags_in_headlines,
-                                    scroll_note_into_view: display_options.settings?.scroll_note_into_view,
-                                    auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
-                                    column_order: display_options.settings?.column_order,
-                                }}
-                                naturalColumnOrder={natural_column_order}
-                                showLineNumbers={display_options.settings?.show_line_numbers}
-                                onSettingChange={handleSettingChange}
-                                onGlobalSettingChange={handleGlobalSettingChange}
-                                onColumnOrderChange={handleColumnOrderChange}
-                            />
-                        )}
-                    </div>
-                </div>
+                    {props.type === 'document' && (
+                        <SettingsDocumentDrawer
+                            settings={{
+                                show_linetags_in_headlines: display_options.settings?.show_linetags_in_headlines,
+                                scroll_note_into_view: display_options.settings?.scroll_note_into_view,
+                                auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
+                            }}
+                            showLineNumbers={display_options.settings?.show_line_numbers}
+                            onSettingChange={handleSettingChange}
+                            onGlobalSettingChange={handleGlobalSettingChange}
+                        />
+                    )}
+                    {props.type === 'kanban' && (
+                        <SettingsKanbanDrawer
+                            settings={{
+                                show_linetags_in_headlines: display_options.settings?.show_linetags_in_headlines,
+                                scroll_note_into_view: display_options.settings?.scroll_note_into_view,
+                                auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
+                                column_order: display_options.settings?.column_order,
+                            }}
+                            naturalColumnOrder={natural_column_order}
+                            showLineNumbers={display_options.settings?.show_line_numbers}
+                            onSettingChange={handleSettingChange}
+                            onGlobalSettingChange={handleGlobalSettingChange}
+                            onColumnOrderChange={handleColumnOrderChange}
+                        />
+                    )}
+                </ToolbarDrawer>
+            )}
+            {show_toolbar && integration_mode === 'folder' && (
+                <ToolbarDrawer
+                    open={active_drawer === 'files'}
+                    id={`v${props.id}-files-drawer`}
+                    testId="files-drawer-grid"
+                    ariaLabel={l10n.t('Files')}
+                >
+                    <FilesDrawer
+                        include={props.aggregate_include ?? ''}
+                        exclude={props.aggregate_exclude ?? ''}
+                        fileCount={props.file_count ?? 0}
+                        noteCount={props.note_count ?? 0}
+                        files={props.aggregate_files ?? []}
+                        onApplyFilters={handleApplyFilters}
+                    />
+                </ToolbarDrawer>
             )}
             {props.type === 'auto' && <AutoView {...enriched_props} />}
             {props.type === 'document' && <DocumentView {...enriched_props} />}

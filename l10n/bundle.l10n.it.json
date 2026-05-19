@@ -16,7 +16,7 @@
   "View type": "Tipo di vista",
   "Auto ({0})": "Auto ({0})",
   "Current file": "File corrente",
-  "Directory": "Cartella",
+  "Folder": "Cartella",
   "View integration": "Integrazione della vista",
   "Kanban Settings": "Impostazioni Kanban",
   "Column order": "Ordine delle colonne",
@@ -32,5 +32,13 @@
   "Settings": "Impostazioni",
   "Breadcrumb": "Percorso di navigazione",
   "Waiting for extension host...": "In attesa dell'host dell'estensione...",
-  "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"": "Se il problema persiste, ricarica la finestra: Ctrl+Shift+P → \"Developer: Reload Window\""
+  "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"": "Se il problema persiste, ricarica la finestra: Ctrl+Shift+P → \"Developer: Reload Window\"",
+  "({0} in {1} files)": "({0} in {1} file)",
+  "({0} in {1} of {2} files)": "({0} in {1} di {2} file)",
+  "{0} notes in {1} files — open the Files panel": "{0} note in {1} file — apri il pannello File",
+  "{0} in {1} files": "{0} in {1} file",
+  "Files": "File",
+  "Include filter": "Filtro di inclusione",
+  "Exclude filter": "Filtro di esclusione",
+  "No files match the current filters": "Nessun file corrisponde ai filtri attuali"
 }

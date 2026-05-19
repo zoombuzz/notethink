@@ -12,7 +12,7 @@ interface DocSpec {
 
 /**
  * Inject multiple docs in a single 'update' message — sufficient to bootstrap
- * the webview's aggregate (directory) renderer for tests.
+ * the webview's aggregate (folder) renderer for tests.
  */
 export async function injectMultipleDocsFromFixtures(
     page: Page,
@@ -60,9 +60,9 @@ export async function injectMultipleDocsFromFixtures(
 }
 
 /**
- * Toggle the integration selector dropdown to 'directory' mode via the existing UI.
+ * Toggle the integration selector dropdown to 'folder' mode via the existing UI.
  */
-export async function selectDirectoryMode(page: Page) {
+export async function selectFolderMode(page: Page) {
     const selector = page.locator('[data-testid="view-integration-selector"]').first();
-    await selector.selectOption('directory');
+    await selector.selectOption('folder');
 }

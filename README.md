@@ -41,7 +41,7 @@ code --install-extension notethink-<version>.vsix
 3. Or right-click on a markdown file and select "Open With..." → "NoteThink"
 
 For the conventions your markdown should follow — heading levels, story
-structure, linetag syntax, epics, Directory mode — see
+structure, linetag syntax, epics, Folder mode — see
 [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md).
 
 ## Development

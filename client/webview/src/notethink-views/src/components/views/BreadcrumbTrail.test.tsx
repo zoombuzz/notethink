@@ -191,12 +191,12 @@ describe('BreadcrumbTrail', () => {
         expect(path_buttons).toHaveLength(2);
     });
 
-    it('calls onDirectoryClick with segment path when a path segment is clicked', () => {
-        const on_directory_click = jest.fn();
+    it('calls onFolderClick with segment path when a path segment is clicked', () => {
+        const on_folder_click = jest.fn();
         const current = makeNote({ seq: 0 });
-        render(<BreadcrumbTrail {...current} doc_path="/workspace/docs/todo.md" onDirectoryClick={on_directory_click} />);
+        render(<BreadcrumbTrail {...current} doc_path="/workspace/docs/todo.md" onFolderClick={on_folder_click} />);
         fireEvent.click(screen.getByText('docs'));
-        expect(on_directory_click).toHaveBeenCalledWith('/workspace/docs');
+        expect(on_folder_click).toHaveBeenCalledWith('/workspace/docs');
     });
 
     it('keeps the opened workspace folder as the first clickable segment', () => {
@@ -257,12 +257,12 @@ describe('BreadcrumbTrail', () => {
         expect(path_items[5]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech/users/alex.stanhope/todo.md');
     });
 
-    it('calls onDirectoryClick with full path when workspace_root is set', () => {
-        const on_directory_click = jest.fn();
+    it('calls onFolderClick with full path when workspace_root is set', () => {
+        const on_folder_click = jest.fn();
         const current = makeNote({ seq: 0 });
-        render(<BreadcrumbTrail {...current} doc_path="/home/user/workspace/project/docs/todo.md" workspace_root="/home/user/workspace" onDirectoryClick={on_directory_click} />);
+        render(<BreadcrumbTrail {...current} doc_path="/home/user/workspace/project/docs/todo.md" workspace_root="/home/user/workspace" onFolderClick={on_folder_click} />);
         fireEvent.click(screen.getByText('docs'));
-        expect(on_directory_click).toHaveBeenCalledWith('/home/user/workspace/project/docs');
+        expect(on_folder_click).toHaveBeenCalledWith('/home/user/workspace/project/docs');
     });
 
     it('uses doc_relative_path when provided (handles symlinks)', () => {
@@ -328,7 +328,7 @@ describe('BreadcrumbTrail', () => {
         expect(screen.getByText('secure')).toBeInTheDocument();
     });
 
-    describe('directory (aggregate) mode integration_path', () => {
+    describe('folder (aggregate) mode integration_path', () => {
 
         it('keeps the opened workspace folder as the first segment', () => {
             const current = makeNote({ seq: 0 });
@@ -359,16 +359,16 @@ describe('BreadcrumbTrail', () => {
         });
 
         it('clicking the workspace-folder segment re-aggregates the whole opened folder', () => {
-            const on_directory_click = jest.fn();
+            const on_folder_click = jest.fn();
             const current = makeNote({ seq: 0 });
             const workspace_root = '/home/alex/github.com/active_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
                 integration_path={workspace_root + '/calfam'}
-                onDirectoryClick={on_directory_click}
+                onFolderClick={on_folder_click}
             />);
             fireEvent.click(screen.getByText('active_development'));
-            expect(on_directory_click).toHaveBeenCalledWith(workspace_root);
+            expect(on_folder_click).toHaveBeenCalledWith(workspace_root);
         });
 
         it('segments deeper subdirectories below the workspace folder', () => {
@@ -410,40 +410,71 @@ describe('BreadcrumbTrail', () => {
             expect(path_items[2]).toHaveAttribute('data-path', '/tmp/elsewhere/notes');
         });
 
-        it('shows the file count "(N)" after the path in directory mode', () => {
+        it('shows "(X in Y files)" after the path in folder mode', () => {
             const current = makeNote({ seq: 0 });
             const workspace_root = '/home/alex/github.com/active_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
                 integration_path={workspace_root + '/calfam'}
                 file_count={17}
+                note_count={214}
             />);
-            expect(screen.getByText('(17)')).toBeInTheDocument();
+            expect(screen.getByText('(214 in 17 files)')).toBeInTheDocument();
         });
 
-        it('shows "(N of M)" when the discovery cap truncated the set', () => {
+        it('shows "(X in Y of M files)" when the discovery cap truncated the set', () => {
             const current = makeNote({ seq: 0 });
             const workspace_root = '/home/alex/github.com/active_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
                 integration_path={workspace_root}
                 file_count={200}
+                note_count={1800}
                 aggregate_total_discovered={615}
             />);
-            expect(screen.getByText('(200 of 615)')).toBeInTheDocument();
+            expect(screen.getByText('(1800 in 200 of 615 files)')).toBeInTheDocument();
         });
 
-        it('shows plain "(N)" when discovered total is not greater than loaded', () => {
+        it('shows the plain form when discovered total is not greater than loaded', () => {
             const current = makeNote({ seq: 0 });
             const workspace_root = '/home/alex/github.com/active_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
                 integration_path={workspace_root + '/calfam'}
                 file_count={17}
+                note_count={214}
                 aggregate_total_discovered={17}
             />);
-            expect(screen.getByText('(17)')).toBeInTheDocument();
-            expect(screen.queryByText('(17 of 17)')).not.toBeInTheDocument();
+            expect(screen.getByText('(214 in 17 files)')).toBeInTheDocument();
+            expect(screen.queryByText(/of 17 files/)).not.toBeInTheDocument();
+        });
+
+        it('treats a missing note_count as 0', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+                file_count={17}
+            />);
+            expect(screen.getByText('(0 in 17 files)')).toBeInTheDocument();
+        });
+
+        it('calls onFileCountClick with the count element when the count is clicked', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            const onFileCountClick = jest.fn();
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+                file_count={17}
+                note_count={214}
+                onFileCountClick={onFileCountClick}
+            />);
+            const count = screen.getByTestId('breadcrumb-file-count');
+            count.click();
+            expect(onFileCountClick).toHaveBeenCalledTimes(1);
+            expect(onFileCountClick.mock.calls[0][0]).toBe(count);
         });
 
         it('does not render a count when file_count is undefined', () => {

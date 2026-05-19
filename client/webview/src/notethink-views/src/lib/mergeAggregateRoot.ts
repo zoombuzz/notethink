@@ -3,13 +3,13 @@ import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNo
 import { stripHeadlineLinetags } from "./noteops";
 
 /**
- * Aggregate (Directory) mode entry point.
+ * Aggregate (Folder) mode entry point.
  *
- * Takes a map of source documents and an integration directory path; returns a single
+ * Takes a map of source documents and an integration folder path; returns a single
  * synthetic root NoteProps whose children are the depth-3 "stories" gathered from every
  * doc, each stamped with origin metadata so callers can route edits back to the source file.
  *
- * See design in docstech/users/alex.stanhope/todo.md (story "Aggregate (Directory) view").
+ * See design in docstech/users/alex.stanhope/todo.md (story "Aggregate (Folder) view").
  */
 
 export interface AggregatedDocInput {
@@ -37,7 +37,7 @@ interface EpicEntry {
 }
 
 /**
- * Resolve the absolute path of the directory the aggregation is scoped to.
+ * Resolve the absolute path of the folder the aggregation is scoped to.
  * For breadcrumb segmenting we pass this through unchanged; callers segment it.
  */
 function safeStripHeadline(headline_raw: string | undefined): string {
@@ -238,20 +238,20 @@ export function mergeAggregateRoot(
 
 /**
  * Helper used by NoteRenderer to detect whether any of the supplied view states
- * has switched to directory aggregation. Exported so tests can exercise it.
+ * has switched to folder aggregation. Exported so tests can exercise it.
  */
-export function anyViewInDirectoryMode(
+export function anyViewInFolderMode(
     view_states: Record<string, { display_options?: { integration_mode?: string } }> | undefined,
 ): boolean {
     if (!view_states) { return false; }
     for (const id of Object.keys(view_states)) {
-        if (view_states[id]?.display_options?.integration_mode === 'directory') { return true; }
+        if (view_states[id]?.display_options?.integration_mode === 'folder') { return true; }
     }
     return false;
 }
 
 /**
- * Reads the integration_path from the first view state in directory mode, if any.
+ * Reads the integration_path from the first view state in folder mode, if any.
  */
 export function firstIntegrationPath(
     view_states: Record<string, { display_options?: { integration_mode?: string; integration_path?: string } }> | undefined,
@@ -259,7 +259,7 @@ export function firstIntegrationPath(
     if (!view_states) { return undefined; }
     for (const id of Object.keys(view_states)) {
         const v = view_states[id];
-        if (v?.display_options?.integration_mode === 'directory' && typeof v.display_options.integration_path === 'string') {
+        if (v?.display_options?.integration_mode === 'folder' && typeof v.display_options.integration_path === 'string') {
             return v.display_options.integration_path;
         }
     }

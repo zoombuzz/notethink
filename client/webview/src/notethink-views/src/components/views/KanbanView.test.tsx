@@ -332,6 +332,45 @@ describe('KanbanView', () => {
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });
 
+    it('hides an empty named column left over in a stale column_order', () => {
+        const doing_note = makeNote({
+            seq: 1,
+            headline_raw: '## Task A',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [doing_note],
+            display_options: {
+                settings: {
+                    // 'done' and 'review' are remembered in the order but no note uses them now
+                    column_order: ['review', 'done', 'doing', 'untagged'],
+                },
+            },
+        });
+        render(<KanbanView {...props} />);
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        expect(screen.queryByTestId('column-done')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('column-review')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
+    });
+
+    it('falls back to all columns when no column has stories (empty board not blank)', () => {
+        const props = makeViewProps({
+            notes_within_parent_context: [],
+            display_options: {
+                settings: {
+                    column_order: ['done', 'doing', 'untagged'],
+                },
+            },
+        });
+        render(<KanbanView {...props} />);
+        expect(screen.getByTestId('column-done')).toBeInTheDocument();
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+    });
+
     it('passes correct count to each column', () => {
         const note1 = makeNote({
             seq: 1,

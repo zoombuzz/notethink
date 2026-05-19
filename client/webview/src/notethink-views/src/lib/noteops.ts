@@ -1,5 +1,10 @@
 import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } from "../types/NoteProps";
 
+// context for the relevance-aware order: the doc path of the file currently focused in the editor (last selectionChanged), if any
+export interface NoteOrderContext {
+    active_doc_path?: string;
+}
+
 /**
  * Check if a position is within a note headline or body.
  */
@@ -201,22 +206,59 @@ export function standardNoteOrder(a: NoteProps, b: NoteProps): number {
  * calculateTextChangesForOrdering assumes when deciding whether a dragged card
  * even needs an explicit weight.
  */
-export function kanbanNoteOrder(a: NoteProps, b: NoteProps) {
-    if (a?.linetags?.kanban_ordering_weight?.value_numeric) {
-        if (b?.linetags?.kanban_ordering_weight?.value_numeric) {
-            if (a.linetags.kanban_ordering_weight.value_numeric === b.linetags.kanban_ordering_weight.value_numeric) {
-                return (a.seq > b.seq ? 1 : -1);
+/**
+ * Relevance-aware implicit order. Identical to standardNoteOrder, except that
+ * among stories of the SAME per-file rank (`origin.file_rank`) the active
+ * editor file's stories sort first. The rank-equality gate keeps this a pure
+ * tiebreak: it never lifts a story above one of a better (lower) rank, so the
+ * round-robin cross-file interleave is preserved. With no active file (or
+ * notes without an origin, i.e. single-file mode) it is exactly
+ * standardNoteOrder.
+ */
+export function makeNoteOrder(ctx?: NoteOrderContext) {
+    const active = ctx?.active_doc_path;
+    return (a: NoteProps, b: NoteProps): number => {
+        if (active) {
+            const rank_a = a.origin?.file_rank;
+            const rank_b = b.origin?.file_rank;
+            if (rank_a !== undefined && rank_a === rank_b) {
+                const a_active = a.origin?.doc_path === active;
+                const b_active = b.origin?.doc_path === active;
+                if (a_active !== b_active) { return a_active ? -1 : 1; }
             }
-            return (a.linetags.kanban_ordering_weight.value_numeric > b.linetags.kanban_ordering_weight.value_numeric ? 1 : -1);
-        } else {
-            return 1;
         }
-    } else {
-        if (b?.linetags?.kanban_ordering_weight?.value_numeric) {
-            return -1;
+        return standardNoteOrder(a, b);
+    };
+}
+
+/**
+ * Kanban ordering: explicit `kanban_ordering_weight` linetag first (set on
+ * drag-to-reorder), otherwise the relevance-aware implicit order. Drag
+ * precedence is unchanged; relevance only affects unweighted, same-rank cards.
+ */
+export function makeKanbanNoteOrder(ctx?: NoteOrderContext) {
+    const order = makeNoteOrder(ctx);
+    return (a: NoteProps, b: NoteProps): number => {
+        if (a?.linetags?.kanban_ordering_weight?.value_numeric) {
+            if (b?.linetags?.kanban_ordering_weight?.value_numeric) {
+                if (a.linetags.kanban_ordering_weight.value_numeric === b.linetags.kanban_ordering_weight.value_numeric) {
+                    return (a.seq > b.seq ? 1 : -1);
+                }
+                return (a.linetags.kanban_ordering_weight.value_numeric > b.linetags.kanban_ordering_weight.value_numeric ? 1 : -1);
+            } else {
+                return 1;
+            }
         } else {
-            // no explicit weights: defer to the canonical seq-primary order
-            return standardNoteOrder(a, b);
+            if (b?.linetags?.kanban_ordering_weight?.value_numeric) {
+                return -1;
+            } else {
+                return order(a, b);
+            }
         }
-    }
+    };
+}
+
+// context-free kanban order (no relevance) — retained for callers/tests that have no active-file context
+export function kanbanNoteOrder(a: NoteProps, b: NoteProps) {
+    return makeKanbanNoteOrder()(a, b);
 }

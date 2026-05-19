@@ -12,7 +12,7 @@ import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
 import {
     withinNoteHeadlineOrBodyUpTo,
-    kanbanNoteOrder,
+    makeKanbanNoteOrder,
 } from "../../lib/noteops";
 import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
 import { calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering } from "../../lib/linetagops";
@@ -156,19 +156,20 @@ export default function KanbanView(props: ViewProps) {
     useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
 
     // assign notes to columns
+    const kanban_order = makeKanbanNoteOrder({ active_doc_path: props.active_doc_path });
     columns.map((column: Column) => {
         column.child_notes = (props.notes_within_parent_context || [])
             .filter((note: NoteProps) => (
                 (note?.linetags?.status && note?.linetags?.status.value === column.value)
                 || (!note?.linetags?.status && column.value === 'untagged')
             ))
-            .sort(kanbanNoteOrder);
+            .sort(kanban_order);
     });
 
-    // hide empty Untagged column when other columns exist with notes
-    const visible_columns = columns.filter(col =>
-        col.value !== 'untagged' || (col.child_notes?.length ?? 0) > 0 || columns.length === 1
-    );
+    // only render columns that contain stories (a stale column_order can list statuses no note currently uses)
+    // fall back to all columns when nothing has stories so an empty board is never blank
+    const populated_columns = columns.filter(col => (col.child_notes?.length ?? 0) > 0);
+    const visible_columns = populated_columns.length > 0 ? populated_columns : columns;
 
     const rendered_board: ReactElement = <div className={view_specific_styles.board} data-total-columns={visible_columns.length}>
         <DragDropContext onDragEnd={dragEndHandler} onDragStart={dragStartHandler}>

@@ -23,8 +23,11 @@ interface SettingsKanbanDrawerProps {
 
 function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps) {
 
-    // resolved order shown in the list: prefer custom order, fall back to natural
-    const ordered_columns: string[] = props.settings.column_order ?? props.naturalColumnOrder;
+    // every column the board shows must be reorderable here: start from the saved order, then append any live column (a new status like testing, or untagged) not yet in it — otherwise a status absent from a stale saved order is unreachable in this list
+    const saved_order = props.settings.column_order;
+    const ordered_columns: string[] = (saved_order && saved_order.length > 0)
+        ? [...saved_order, ...props.naturalColumnOrder.filter(value => !saved_order.includes(value))]
+        : props.naturalColumnOrder;
 
     const handleMoveUp = useCallback((index: number) => {
         if (index <= 0) { return; }

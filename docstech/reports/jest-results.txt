@@ -1,5 +1,5 @@
 # Jest Test Results
-# Version: 0.2.5
+# Version: 0.2.6
 # Date: 2026-05-19T00:00:00Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
@@ -8,16 +8,16 @@
 ├──────────────────┼───────┼────────┼────────┼─────────┤
 │ extension        │     6 │    141 │      0 │ 2.071 s │
 │ webview          │     3 │     30 │      0 │ 0.647 s │
-│ notethink-views  │    28 │    442 │      0 │ 3.112 s │
+│ notethink-views  │    28 │    453 │      0 │ 3.016 s │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    37 │    613 │      0 │         │
+│ TOTAL            │    37 │    624 │      0 │         │
 └──────────────────┴───────┴────────┴────────┴─────────┘
 
-Tests: 613 passed, 613 total (+27 vs 0.2.4). Includes the newest-at-bottom
-reversal, the seq-primary ordering chain (standardNoteOrder seq-first, single
-source of truth; kanbanNoteOrder delegates), the round-robin cross-file
-interleave in mergeAggregateRoot (equal/uneven lengths, newest-at-bottom
-interleave), and the drag-reorder round-trip cases.
+Tests: 624 passed, 624 total (+11 vs the committed 0.2.5). Adds the Kanban
+column review fixes and relevance ordering: makeNoteOrder/makeKanbanNoteOrder
+rank-gated active-file tiebreak (within equal rank, never across; explicit
+weight still wins; no-context == standardNoteOrder) and mergeAggregateRoot
+origin.file_rank stamping (incl. newest-at-bottom).
 
 Integrated gate for the per-file note cap + `order` linetag feature
 (2-agent team, single shared working copy). New coverage:

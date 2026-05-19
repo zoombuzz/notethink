@@ -19,6 +19,8 @@ export interface ViewProps {
     // folder mode: cap top-level stories taken per source file (which end depends on the file's order linetag)
     aggregate_max_notes_per_file?: number;
     aggregate_files?: Array<string>;
+    // doc path of the file currently focused in the editor — relevance ordering bumps its stories within equal rank
+    active_doc_path?: string;
     display_options?: NoteDisplayOptions;
     nested?: {
         menus?: Record<string, unknown>;

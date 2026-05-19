@@ -218,7 +218,12 @@ export function mergeAggregateRoot(
     const max_file_stories = per_file_lists.reduce((max_len, list) => Math.max(max_len, list.length), 0);
     for (let rank = 0; rank < max_file_stories; rank++) {
         for (const list of per_file_lists) {
-            if (rank < list.length) { collected.push(list[rank]); }
+            if (rank < list.length) {
+                const cs = list[rank];
+                // stamp the per-file rank so relevance ordering can break ties among equal-rank stories
+                cs.origin.file_rank = rank;
+                collected.push(cs);
+            }
         }
     }
 

@@ -11,6 +11,8 @@ import {
     calculateTextChangesForCheckbox,
     standardNoteOrder,
     kanbanNoteOrder,
+    makeNoteOrder,
+    makeKanbanNoteOrder,
     findFirstIncompleteTaskSeq,
 } from './noteops';
 import type { NoteProps, TextSelection } from '../types/NoteProps';
@@ -255,6 +257,83 @@ describe('kanbanNoteOrder', () => {
             },
         });
         expect(kanbanNoteOrder(a, b)).toBeLessThan(0);
+    });
+});
+
+describe('makeNoteOrder (relevance)', () => {
+    function ranked(seq: number, doc_path: string, file_rank: number): NoteProps {
+        return makeNote({
+            seq,
+            // distinct offsets so a pure offset/seq order would keep doc-order
+            position: { start: { offset: seq * 100, line: seq }, end: { offset: seq * 100 + 10, line: seq } },
+            origin: { doc_id: doc_path, doc_path, relative_path: doc_path, file_rank },
+        });
+    }
+
+    it('with no context behaves exactly like standardNoteOrder', () => {
+        const a = ranked(2, 'b/todo.md', 0);
+        const b = ranked(1, 'a/todo.md', 0);
+        const order = makeNoteOrder();
+        expect(order(a, b)).toBe(standardNoteOrder(a, b));
+        expect(order(b, a)).toBe(standardNoteOrder(b, a));
+    });
+
+    it('within equal rank, the active editor file sorts first', () => {
+        // same rank 0, different files; stable order would put a/ before b/
+        const a = ranked(1, 'a/todo.md', 0);
+        const b = ranked(2, 'b/todo.md', 0);
+        const order = makeNoteOrder({ active_doc_path: 'b/todo.md' });
+        expect(order(a, b)).toBeGreaterThan(0); // b (active) first
+        expect(order(b, a)).toBeLessThan(0);
+    });
+
+    it('does not lift an active-file story above a better (lower) rank', () => {
+        const other_rank0 = ranked(1, 'a/todo.md', 0);
+        const active_rank1 = ranked(2, 'b/todo.md', 1);
+        const order = makeNoteOrder({ active_doc_path: 'b/todo.md' });
+        // rank decides first: rank-0 other beats rank-1 active
+        expect(order(other_rank0, active_rank1)).toBeLessThan(0);
+        expect(order(active_rank1, other_rank0)).toBeGreaterThan(0);
+    });
+
+    it('falls back to stable file order when no story is from the active file', () => {
+        const a = ranked(1, 'a/todo.md', 0);
+        const b = ranked(2, 'b/todo.md', 0);
+        const order = makeNoteOrder({ active_doc_path: 'z/none.md' });
+        expect(order(a, b)).toBe(standardNoteOrder(a, b));
+    });
+});
+
+describe('makeKanbanNoteOrder (relevance + weights)', () => {
+    function ranked(seq: number, doc_path: string, file_rank: number, weight?: number): NoteProps {
+        return makeNote({
+            seq,
+            position: { start: { offset: seq * 100, line: seq }, end: { offset: seq * 100 + 10, line: seq } },
+            origin: { doc_id: doc_path, doc_path, relative_path: doc_path, file_rank },
+            linetags: weight === undefined ? undefined : {
+                'kanban_ordering_weight': {
+                    key: 'kanban_ordering_weight', value: `${weight}`, value_numeric: weight,
+                    note_seq: seq, key_offset: 0, value_offset: 0, linktext_offset: 0,
+                },
+            },
+        });
+    }
+
+    it('explicit weight still wins over relevance', () => {
+        const weighted_other = ranked(1, 'a/todo.md', 0, 1);
+        const unweighted_active = ranked(2, 'b/todo.md', 0);
+        const order = makeKanbanNoteOrder({ active_doc_path: 'b/todo.md' });
+        // unweighted sorts before weighted regardless of relevance/rank
+        expect(order(unweighted_active, weighted_other)).toBeLessThan(0);
+        expect(order(weighted_other, unweighted_active)).toBeGreaterThan(0);
+    });
+
+    it('among unweighted same-rank cards the active file sorts first', () => {
+        const a = ranked(1, 'a/todo.md', 0);
+        const b = ranked(2, 'b/todo.md', 0);
+        const order = makeKanbanNoteOrder({ active_doc_path: 'b/todo.md' });
+        expect(order(a, b)).toBeGreaterThan(0);
+        expect([a, b].slice().sort(order).map(n => n.origin?.doc_path)).toEqual(['b/todo.md', 'a/todo.md']);
     });
 });
 

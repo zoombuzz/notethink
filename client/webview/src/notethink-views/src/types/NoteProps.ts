@@ -121,6 +121,13 @@ export interface NoteOrigin {
      * (one vote per file).
      */
     file_view_type?: string;
+    /**
+     * 0-based index of this story within its source file's selected story
+     * list (after the per-file cap + `order` reversal). The implicit ordering
+     * weight: equal across files means equal priority, which relevance ordering
+     * then breaks toward the active editor file.
+     */
+    file_rank?: number;
 }
 
 export type MdastNodes = import("mdast").Nodes;

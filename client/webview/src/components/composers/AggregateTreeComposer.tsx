@@ -101,6 +101,7 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
         aggregate_include,
         aggregate_exclude,
         aggregate_files,
+        active_doc_path: props.active_doc_path,
         display_options: view_display_options,
         nested: {
             parent_context: merged_root,

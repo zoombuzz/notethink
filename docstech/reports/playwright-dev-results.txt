@@ -1,5 +1,5 @@
 # Playwright Test Results
-# Version: 0.2.5
+# Version: 0.2.6
 # Date: 2026-05-19T00:00:00Z
 # Command: npx playwright test
 # ---

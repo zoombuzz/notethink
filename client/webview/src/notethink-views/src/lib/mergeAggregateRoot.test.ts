@@ -141,6 +141,27 @@ describe('mergeAggregateRoot', () => {
         );
     });
 
+    it('stamps origin.file_rank as the 0-based per-file index (relevance ordering key)', () => {
+        const docA = simpleFile('id-a', 'a/todo.md', 'A', ['A1', 'A2', 'A3']);
+        const docB = simpleFile('id-b', 'b/todo.md', 'B', ['B1', 'B2']);
+        const { root } = mergeAggregateRoot({ 'id-b': docB, 'id-a': docA }, '/repo/');
+        const by_headline = Object.fromEntries(
+            root.child_notes!.map(n => [n.headline_raw, n.origin?.file_rank]),
+        );
+        // each file's stories are ranked 0..n-1 independently, in that file's order
+        expect(by_headline).toEqual({
+            '### A1': 0, '### A2': 1, '### A3': 2,
+            '### B1': 0, '### B2': 1,
+        });
+    });
+
+    it('newest-at-bottom: file_rank 0 is the newest (document-bottom) story', () => {
+        const doc = orderedFile('id-a', 'a/done.md', 'A', 'newest-at-bottom', ['old', 'mid', 'new']);
+        const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/');
+        const rank0 = root.child_notes!.find(n => n.origin?.file_rank === 0);
+        expect(rank0?.headline_raw).toBe('### new');
+    });
+
     it('empty file (H1 but no stories) contributes zero entries', () => {
         const empty = simpleFile('id-empty', 'oma/todo.md', 'Todo', []);
         const nonempty = simpleFile('id-other', 'a/todo.md', 'Todo', ['Real']);

@@ -40,6 +40,8 @@ export interface NoteRendererProps {
     // folder (aggregate) mode: effective include/exclude globs echoed by the extension
     aggregate_include?: string;
     aggregate_exclude?: string;
+    // doc path of the file currently focused in the editor — bumps its stories within equal rank
+    active_doc_path?: string;
     globalSettings?: GlobalSettingsPayload;
 }
 

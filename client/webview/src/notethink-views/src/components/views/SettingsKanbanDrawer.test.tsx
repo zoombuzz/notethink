@@ -40,6 +40,18 @@ describe('SettingsKanbanDrawer', () => {
         expect(items.map(el => el.textContent)).toEqual(['doing', 'done', 'untagged']);
     });
 
+    it('appends live columns missing from a stale saved order so they stay reorderable', () => {
+        // a note has status=testing (so naturalColumnOrder includes it) but the
+        // saved column_order predates it — testing must still appear and be movable
+        renderDrawer({
+            settings: { column_order: ['done', 'doing', 'untagged'] },
+            naturalColumnOrder: ['doing', 'done', 'testing', 'untagged'],
+        });
+        const items = screen.getAllByText(/^(doing|done|testing|untagged)$/);
+        expect(items.map(el => el.textContent)).toEqual(['done', 'doing', 'untagged', 'testing']);
+        expect(screen.getByLabelText('Move testing up')).toBeInTheDocument();
+    });
+
     it('clicking move-up dispatches onColumnOrderChange with the swapped order', () => {
         const on_order = jest.fn();
         renderDrawer({ onColumnOrderChange: on_order });

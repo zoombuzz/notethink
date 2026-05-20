@@ -900,21 +900,61 @@ describe('NotethinkEditorProvider', () => {
 			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(0);
 		});
 
-		it('re-parses the active doc when the watcher fires onDidChange', async () => {
+		it('re-parses the active doc from disk (not the openTextDocument cache) when the watcher fires onDidChange', async () => {
 			const { panel } = await setupUnvisitedDoc();
 			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
 			const on_change_cb = watcher_instance.onDidChange.mock.calls[0][0];
 
-			const updated_doc = mockTextDocument('# Lonely updated', docPath);
-			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(updated_doc);
+			// fs.readFile returns the fresh on-disk bytes; openTextDocument is rigged to a stale value to prove we are NOT going through that path
+			const fresh_text = '# Lonely updated';
+			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode(fresh_text));
+			const stale_doc = mockTextDocument('# Lonely (stale cache)', docPath);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(stale_doc);
 
 			panel.postedMessages.length = 0;
 			await on_change_cb(Uri.file(docPath));
 
+			expect(vscode.workspace.fs.readFile).toHaveBeenCalled();
 			const updates = panel.postedMessages.filter((m: any) => m.type === 'update');
 			expect(updates.length).toBeGreaterThanOrEqual(1);
 			const doc_entries = Object.values(updates[0].partial.docs) as any[];
-			expect(doc_entries[0].text).toBe('# Lonely updated');
+			expect(doc_entries[0].text).toBe(fresh_text);
+			expect(doc_entries[0].createdBy).toBe('fsWatcher');
+		});
+
+		it('folder-mode watcher re-parses changed files from disk, bypassing the openTextDocument cache', async () => {
+			const file_path = '/workspace/notes/story.md';
+			// phase-1 discovery uses openTextDocument (initial load, cache is fresh from disk anyway)
+			const initial_doc = mockTextDocument('# story v1', file_path);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(initial_doc);
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_path)]);
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			// phase-1 loadOne uses crypto.subtle.digest in buildDoc which spans multiple event-loop cycles; wait until both phase-1 messages (per-file merge + Promise.allSettled.then canonical) have landed before clearing, otherwise a late-arriving v1 merge would race the watcher's v2 post and become updates[0]
+			while (panelHelper.postedMessages.filter((m: any) => m.type === 'update').length < 2) {
+				await new Promise(resolve => setImmediate(resolve));
+			}
+
+			// rig openTextDocument to a stale value to prove the watcher path does NOT use it
+			const stale_doc = mockTextDocument('# story (stale cache)', file_path);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(stale_doc);
+			// fresh disk content the watcher should pick up via fs.readFile
+			const fresh_text = '# story v2 (from disk)';
+			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode(fresh_text));
+
+			// grab the folder watcher instance and fire onDidChange
+			const folder_watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_change_cb = folder_watcher.onDidChange.mock.calls[0][0];
+
+			panelHelper.postedMessages.length = 0;
+			await on_change_cb(Uri.file(file_path));
+
+			expect(vscode.workspace.fs.readFile).toHaveBeenCalled();
+			const updates = panelHelper.postedMessages.filter((m: any) => m.type === 'update');
+			expect(updates.length).toBeGreaterThanOrEqual(1);
+			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			expect(doc_entries[0].text).toBe(fresh_text);
+			expect(doc_entries[0].createdBy).toBe('fsWatcher');
 		});
 
 		it('disposes the watcher when the setting flips off via configuration change', async () => {

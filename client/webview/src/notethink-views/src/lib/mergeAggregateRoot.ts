@@ -1,6 +1,7 @@
 import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NoteProps";
 import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNoteHierarchy";
 import { stripHeadlineLinetags } from "./noteops";
+import { hueForProjectIndex, projectNameFromRelativePath } from "../components/notes/OriginPill";
 
 /**
  * Aggregate (Folder) mode entry point.
@@ -137,6 +138,15 @@ export function mergeAggregateRoot(
         return ar < br ? -1 : ar > br ? 1 : 0;
     });
 
+    // assign each distinct project (first path segment of relative_path) a hue based on its position in the sorted enumeration, fed through the golden-angle spread. The old djb2(name)%360 fallback in OriginPill happens to collide for real-world pairs like calfam/shopify-uncomplicated and notegit/countingsheet; a sorted-index assignment is the only way to guarantee a minimum gap on the hue wheel for arbitrary project names
+    const project_hue_by_name = new Map<string, number>();
+    for (const file of parsed) {
+        const project_name = projectNameFromRelativePath(file.doc.relative_path);
+        if (project_name && !project_hue_by_name.has(project_name)) {
+            project_hue_by_name.set(project_name, hueForProjectIndex(project_hue_by_name.size));
+        }
+    }
+
     // 2. for each file, build epic registries and collect stories
     interface CollectedStory {
         story: NoteProps;
@@ -172,11 +182,13 @@ export function mergeAggregateRoot(
         // file H1 `order` linetag decides which end the per-file cap keeps
         const file_order = h1?.linetags?.order?.value;
 
+        const project_name = projectNameFromRelativePath(doc.relative_path);
         const base_origin: Omit<NoteOrigin, 'epic'> = {
             doc_id: doc.id,
             doc_path: doc.path,
             relative_path: doc.relative_path,
             file_view_type,
+            project_hue: project_name ? project_hue_by_name.get(project_name) : undefined,
         };
 
         // assemble this file's full ordered story contribution (direct + epic-nested) in document order; selectFileStories then trims + orients it, and the round-robin pass below interleaves it with the other files

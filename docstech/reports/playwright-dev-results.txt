@@ -1,14 +1,14 @@
 # Playwright Test Results
-# Version: 0.2.9
-# Date: 2026-05-20T13:42:45Z
+# Version: 0.2.10
+# Date: 2026-05-20T17:31:07Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-playwright
 # ---
 
-> notethink@0.2.9 test-playwright /mnt/secure/home/alex/git/github.com/active_development/notethink
+> notethink@0.2.10 test-playwright /mnt/secure/home/alex/git/github.com/active_development/notethink
 > pnpm run build && playwright test
 
 
-> notethink@0.2.9 build /mnt/secure/home/alex/git/github.com/active_development/notethink
+> notethink@0.2.10 build /mnt/secure/home/alex/git/github.com/active_development/notethink
 > webpack
 
     [webpack-cli] Compiler starting... 
@@ -17,11 +17,11 @@
     [webpack-cli] Compiler is using config: '/mnt/secure/home/alex/git/github.com/active_development/notethink/webpack.config.js'
     [webpack-cli] Compiler finished
     [webpack-cli] Compiler finished
-asset extension.js 2.14 MiB [emitted] [compared for emit] [big] (name: extension) 1 related asset
+asset extension.js 2.14 MiB [compared for emit] [big] (name: extension) 1 related asset
 asset test/suite/index.js 903 KiB [compared for emit] [big] (name: test/suite/index) 1 related asset
 orphan modules 63.5 KiB [orphan] 39 modules
 runtime modules 2.38 KiB 11 modules
-cacheable modules 2.72 MiB
+cacheable modules 2.73 MiB
   modules by path ./ 1.04 MiB 262 modules
   modules by path ../../node_modules/.pnpm/ 1.68 MiB 217 modules
   util (ignored) 15 bytes [built] [code generated]
@@ -31,12 +31,12 @@ cacheable modules 2.72 MiB
 ./src/test/suite/ sync \.test$ 234 bytes [built] [code generated]
 ../../node_modules/.pnpm/mocha@11.7.5/node_modules/mocha/ sync 160 bytes [optional] [built] [code generated]
 external "vscode" 42 bytes [built] [code generated]
-webpack 5.106.2 compiled successfully in 1960 ms
+webpack 5.106.2 compiled successfully in 2165 ms
 
 assets by path *.png 14.7 KiB
   asset logo512.png 9.44 KiB [compared for emit] [from: public/logo512.png] [copied]
   asset logo192.png 5.22 KiB [compared for emit] [from: public/logo192.png] [copied]
-asset index.js 11.1 MiB [emitted] [compared for emit] [big] (name: index) (id hint: vendors) 1 related asset
+asset index.js 11.1 MiB [compared for emit] [big] (name: index) (id hint: vendors) 1 related asset
 asset favicon.ico 3.78 KiB [compared for emit] [from: public/favicon.ico] [copied]
 asset index.html 1.68 KiB [compared for emit] [from: public/index.html] [copied]
 asset manifest.json 492 bytes [compared for emit] [from: public/manifest.json] [copied]
@@ -45,7 +45,7 @@ orphan modules 648 KiB [orphan] 606 modules
 runtime modules 1.29 KiB 7 modules
 modules by path ./src/notethink-views/node_modules/.pnpm/ 7.41 MiB 1334 modules
 modules by path ./node_modules/ 1.88 MiB 101 modules
-modules by path ./src/notethink-views/src/ 282 KiB 53 modules
+modules by path ./src/notethink-views/src/ 285 KiB 53 modules
 modules by path ./src/components/ 30.6 KiB
   modules by path ./src/components/*.tsx 20.4 KiB 2 modules
   modules by path ./src/components/composers/*.tsx 9.94 KiB 2 modules
@@ -56,40 +56,40 @@ modules by path ./src/*.css 3.47 KiB
 ./src/index.tsx 1000 bytes [built] [code generated]
 ./src/reportWebVitals.ts 395 bytes [built] [code generated]
 ../../node_modules/.pnpm/process@0.11.10/node_modules/process/browser.js 5.29 KiB [built] [code generated]
-webpack 5.106.2 compiled successfully in 2603 ms
+webpack 5.106.2 compiled successfully in 2892 ms
 
 Running 44 tests using 10 workers
 
-  ✓   4 [chromium] › playwright/specs/breadcrumb.spec.ts:26:9 › Breadcrumb workspace root stripping › keeps the opened workspace folder as the first breadcrumb segment (889ms)
-  ✓   6 [chromium] › playwright/specs/aggregate-folder.spec.ts:109:9 › Aggregate (Folder) view › breadcrumb shows the aggregated "(X in Y files)" count only in folder mode (912ms)
-  ✓   7 [chromium] › playwright/specs/aggregate-folder.spec.ts:14:9 › Aggregate (Folder) view › folder mode shows a single NoteRenderer with aggregate flag and single toolbar (919ms)
-  ✓   8 [chromium] › playwright/specs/breadcrumb.spec.ts:11:9 › Breadcrumb workspace root stripping › shows full path when no workspace_root is provided (1.3s)
-  ✓   5 [chromium] › playwright/specs/aggregate-folder.spec.ts:34:9 › Aggregate (Folder) view › origin pills appear on each aggregated story showing the project first letter (1.3s)
-  ✓   9 [chromium] › playwright/specs/aggregate-folder.spec.ts:53:9 › Aggregate (Folder) view › click on an origin pill sends revealRange with the origin doc path (1.4s)
-  ✓  10 [chromium] › playwright/specs/aggregate-folder.spec.ts:80:9 › Aggregate (Folder) view › breadcrumb segment click in aggregate mode sends setIntegration (1.4s)
-  ✓   2 [chromium] › playwright/specs/aggregate-folder.spec.ts:127:9 › Aggregate (Folder) view › clicking the breadcrumb count opens the Files drawer; editing the include glob re-filters the list (1.7s)
-  ✓   1 [chromium] › playwright/specs/aggregate-folder.spec.ts:157:9 › Aggregate (Folder) view › outside-click dismisses the toolbar drawer; clicks inside or on the trigger do not double-toggle (1.7s)
-  ✓  12 [chromium] › playwright/specs/breadcrumb.spec.ts:68:9 › Breadcrumb workspace root stripping › relative_path data-path attributes use full absolute paths for folder loading (1.2s)
+  ✓   9 [chromium] › playwright/specs/breadcrumb.spec.ts:26:9 › Breadcrumb workspace root stripping › keeps the opened workspace folder as the first breadcrumb segment (823ms)
+  ✓   7 [chromium] › playwright/specs/aggregate-folder.spec.ts:14:9 › Aggregate (Folder) view › folder mode shows a single NoteRenderer with aggregate flag and single toolbar (911ms)
+  ✓  10 [chromium] › playwright/specs/breadcrumb.spec.ts:11:9 › Breadcrumb workspace root stripping › shows full path when no workspace_root is provided (1.3s)
+  ✓   3 [chromium] › playwright/specs/aggregate-folder.spec.ts:109:9 › Aggregate (Folder) view › breadcrumb shows the aggregated "(X in Y files)" count only in folder mode (1.3s)
+  ✓   2 [chromium] › playwright/specs/aggregate-folder.spec.ts:34:9 › Aggregate (Folder) view › origin pills appear on each aggregated story showing the project first letter (1.3s)
+  ✓   5 [chromium] › playwright/specs/aggregate-folder.spec.ts:53:9 › Aggregate (Folder) view › click on an origin pill sends revealRange with the origin doc path (1.4s)
+  ✓   8 [chromium] › playwright/specs/aggregate-folder.spec.ts:80:9 › Aggregate (Folder) view › breadcrumb segment click in aggregate mode sends setIntegration (1.4s)
+  ✓   6 [chromium] › playwright/specs/aggregate-folder.spec.ts:127:9 › Aggregate (Folder) view › clicking the breadcrumb count opens the Files drawer; editing the include glob re-filters the list (1.7s)
+  ✓   1 [chromium] › playwright/specs/aggregate-folder.spec.ts:157:9 › Aggregate (Folder) view › outside-click dismisses the toolbar drawer; clicks inside or on the trigger do not double-toggle (1.8s)
   ✓  11 [chromium] › playwright/specs/breadcrumb.spec.ts:42:9 › Breadcrumb workspace root stripping › uses relative_path for breadcrumb (symlink-safe), keeping the opened folder as root (1.2s)
+  ✓  12 [chromium] › playwright/specs/breadcrumb.spec.ts:68:9 › Breadcrumb workspace root stripping › relative_path data-path attributes use full absolute paths for folder loading (1.2s)
+  ✓   4 [chromium] › playwright/specs/aggregate-folder.spec.ts:186:9 › Aggregate (Folder) view › switching aggregate to Kanban shows stories grouped by status linetag with origin pills (2.2s)
   ✓  13 [chromium] › playwright/specs/breadcrumb.spec.ts:85:9 › Breadcrumb workspace root stripping › breadcrumb with workspace root shows the opened folder as the first segment (1.2s)
-  ✓   3 [chromium] › playwright/specs/aggregate-folder.spec.ts:186:9 › Aggregate (Folder) view › switching aggregate to Kanban shows stories grouped by status linetag with origin pills (2.1s)
-  ✓  22 [chromium] › playwright/specs/error-boundary.spec.ts:48:9 › Error Boundary › shows fallback when malformed MDAST causes render error (414ms)
-  ✓  23 [chromium] › playwright/specs/error-boundary.spec.ts:56:9 › Error Boundary › fallback displays friendly message and error details (422ms)
+  ✓  22 [chromium] › playwright/specs/error-boundary.spec.ts:48:9 › Error Boundary › shows fallback when malformed MDAST causes render error (410ms)
   ✓  14 [chromium] › playwright/specs/click-interaction.spec.ts:13:9 › Click Interaction › clicking a note headline sends revealRange message (1.4s)
   ✓  17 [chromium] › playwright/specs/click-interaction.spec.ts:96:9 › Click Interaction › captured messages include docId and docPath (1.4s)
   ✓  18 [chromium] › playwright/specs/document-view.spec.ts:12:9 › Document View › renders document container after injecting basic.md (1.2s)
+  ✓  23 [chromium] › playwright/specs/error-boundary.spec.ts:56:9 › Error Boundary › fallback displays friendly message and error details (417ms)
   ✓  19 [chromium] › playwright/specs/document-view.spec.ts:19:9 › Document View › renders note headlines with correct text (1.2s)
-  ✓  24 [chromium] › playwright/specs/error-boundary.spec.ts:80:9 › Error Boundary › fallback includes a Try Again button (415ms)
-  ✓  25 [chromium] › playwright/specs/error-boundary.spec.ts:90:9 › Error Boundary › NoteRenderer container remains in the DOM despite error (424ms)
+  ✓  24 [chromium] › playwright/specs/error-boundary.spec.ts:80:9 › Error Boundary › fallback includes a Try Again button (414ms)
   ✓  15 [chromium] › playwright/specs/click-interaction.spec.ts:29:9 › Click Interaction › clicking a note sets aria-current (focused) attribute (1.7s)
+  ✓  25 [chromium] › playwright/specs/error-boundary.spec.ts:90:9 › Error Boundary › NoteRenderer container remains in the DOM despite error (436ms)
   ✓  20 [chromium] › playwright/specs/document-view.spec.ts:32:9 › Document View › renders notes with data-seq attributes (1.2s)
   ✓  21 [chromium] › playwright/specs/document-view.spec.ts:41:9 › Document View › renders body paragraphs (1.2s)
   ✓  16 [chromium] › playwright/specs/click-interaction.spec.ts:53:9 › Click Interaction › second click on focused note selects it without blanking the view (2.3s)
   ✓  30 [chromium] › playwright/specs/kanban-view.spec.ts:29:9 › Kanban View › renders kanban columns via auto view detecting ng_view linetag (1.7s)
   ✓  31 [chromium] › playwright/specs/kanban-view.spec.ts:45:9 › Kanban View › places tasks in correct columns (1.7s)
   ✓  32 [chromium] › playwright/specs/kanban-view.spec.ts:62:9 › Kanban View › places untagged tasks in untagged column (1.7s)
-  ✓  26 [chromium] › playwright/specs/kanban-drag.spec.ts:47:9 › Kanban Drag and Drop › dragging a card between columns sends editText with status change (2.5s)
   ✓  33 [chromium] › playwright/specs/kanban-view.spec.ts:71:9 › Kanban View › long unbreakable headline tokens wrap inside the card and do not punch past its right edge (2.0s)
+  ✓  26 [chromium] › playwright/specs/kanban-drag.spec.ts:47:9 › Kanban Drag and Drop › dragging a card between columns sends editText with status change (2.5s)
   ✓  27 [chromium] › playwright/specs/kanban-drag.spec.ts:81:9 › Kanban Drag and Drop › dragging a card to untagged column sends editText that removes status tag (2.5s)
   ✓  34 [chromium] › playwright/specs/keyboard-navigation.spec.ts:14:9 › Keyboard Navigation › clicking different notes produces revealRange messages (2.1s)
   ✓  29 [chromium] › playwright/specs/kanban-drag.spec.ts:135:9 › Kanban Drag and Drop › card appears in destination column after extension sends updated doc (2.5s)
@@ -99,10 +99,10 @@ Running 44 tests using 10 workers
   ✓  42 [chromium] › playwright/specs/view-switching.spec.ts:12:9 › View Switching › defaults to auto view which resolves to document for plain markdown (1.2s)
   ✓  39 [chromium] › playwright/specs/settings-toggle.spec.ts:12:9 › Settings Toggle › toggling lineNumbers shows and hides line number elements (1.8s)
   ✓  40 [chromium] › playwright/specs/settings-toggle.spec.ts:40:9 › Settings Toggle › toggling contextBars shows and hides context bar elements (1.8s)
-  ✓  41 [chromium] › playwright/specs/settings-toggle.spec.ts:59:9 › Settings Toggle › settings survive view type switch (2.0s)
+  ✓  41 [chromium] › playwright/specs/settings-toggle.spec.ts:59:9 › Settings Toggle › settings survive view type switch (2.1s)
   ✓  43 [chromium] › playwright/specs/view-switching.spec.ts:22:9 › View Switching › switches to kanban view and back to document (2.0s)
   ✓  36 [chromium] › playwright/specs/keyboard-navigation.spec.ts:60:9 › Keyboard Navigation › drillIn on nested doc changes parent context (3.0s)
   ✓  44 [chromium] › playwright/specs/view-switching.spec.ts:39:9 › View Switching › switches to auto view (2.0s)
   ✓  37 [chromium] › playwright/specs/keyboard-navigation.spec.ts:88:9 › Keyboard Navigation › drillOut returns to parent context (3.5s)
 
-  44 passed (8.9s)
+  44 passed (9.0s)

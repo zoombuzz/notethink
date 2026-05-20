@@ -73,21 +73,25 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 		// --- helpers ---
 
-		async function buildDoc(document: vscode.TextDocument): Promise<Doc> {
-			const text = document.getText();
+		// build a Doc from a URI + raw text. Use when responding to disk-change events: openTextDocument's TextDocument cache is not refreshed on external on-disk edits for files that aren't bound to a visible editor, so document.getText() returns stale content and the watcher's "freshly-changed" event silently posts the old text. Reading the bytes directly bypasses the cache and gives us what's actually on disk now.
+		async function buildDocFromUriAndText(uri: vscode.Uri, text: string, createdBy: string): Promise<Doc> {
 			const mdast = parse(text);
 			// asRelativePath handles symlinks - returns path relative to workspace root
-			const relative = vscode.workspace.asRelativePath(document.uri, false);
+			const relative = vscode.workspace.asRelativePath(uri, false);
 			return {
-				path: document.uri.path,
+				path: uri.path,
 				relative_path: !relative.startsWith('/') ? relative : undefined,
-				id: await generateIdentifier(document.uri.path),
+				id: await generateIdentifier(uri.path),
 				content: mdast,
 				text,
 				hash_sha256: await generateIdentifier(text),
 				updatedAt: new Date().toISOString(),
-				createdBy: "activeEditor",
+				createdBy,
 			};
+		}
+
+		async function buildDoc(document: vscode.TextDocument): Promise<Doc> {
+			return buildDocFromUriAndText(document.uri, document.getText(), "activeEditor");
 		}
 
 		function sendDoc(doc: Doc) {
@@ -177,8 +181,10 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				const onChange = async (changed_uri: vscode.Uri) => {
 					if (changed_uri.path !== active_path) { return; }
 					try {
-						const document = await vscode.workspace.openTextDocument(changed_uri);
-						active_doc = await buildDoc(document);
+						// fs.readFile bypasses the TextDocument cache (see buildDocFromUriAndText). openTextDocument would return stale content for files not bound to a visible editor, which is exactly the case this watcher exists to handle
+						const bytes = await vscode.workspace.fs.readFile(changed_uri);
+						const text = new TextDecoder().decode(bytes);
+						active_doc = await buildDocFromUriAndText(changed_uri, text, "fsWatcher");
 						sendDoc(active_doc);
 					} catch (err) {
 						writeToErrorLog('active-file watcher: re-parse failed', changed_uri.path, err);
@@ -553,16 +559,24 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							let aggregate_truncated = false;
 
 							// shared per-file loader: parse the doc and post a merge update so the view fills in progressively
-							// used by both the initial discovery and the file watcher
-							const loadOne = async (uri: vscode.Uri) => {
+							// used by both the initial discovery and the file watcher. The watcher path passes fromDisk=true so we re-read raw bytes — see buildDocFromUriAndText for why openTextDocument's cache can't be trusted to reflect external on-disk edits
+							const loadOne = async (uri: vscode.Uri, opts: { fromDisk?: boolean } = {}) => {
 								try {
 									// respect the cap for watcher-driven adds too: never grow a new path past MAX_AGGREGATE_FILES (re-parses of already-loaded paths still pass)
 									const already_loaded = Object.values(integration_docs).some(d => d.path === uri.path);
 									if (!already_loaded && Object.keys(integration_docs).length >= MAX_AGGREGATE_FILES) {
 										return;
 									}
-									const document = await vscode.workspace.openTextDocument(uri);
-									const doc = await buildDoc(document);
+									let doc: Doc;
+									if (opts.fromDisk) {
+										const bytes = await vscode.workspace.fs.readFile(uri);
+										const text = new TextDecoder().decode(bytes);
+										doc = await buildDocFromUriAndText(uri, text, "fsWatcher");
+									} else {
+										// initial-discovery and other live-doc paths: openTextDocument may return editor-buffer content with unsaved edits, which is the right thing to show on first load
+										const document = await vscode.workspace.openTextDocument(uri);
+										doc = await buildDoc(document);
+									}
 									integration_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
 									webviewPanel.webview.postMessage({
 										type: 'update',
@@ -593,7 +607,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							if (aggregate_truncated) {
 								writeToLog('setIntegration folder cap hit', `discovered ${aggregate_total_discovered}, loading first ${MAX_AGGREGATE_FILES} of ${folder_path}`);
 							}
-							const load_promises = uris.map(loadOne);
+							// arrow wrapper isolates loadOne from .map's (value, index, array) trio — without it, the index parameter collides with the new opts argument
+							const load_promises = uris.map(uri => loadOne(uri));
 							// once every load has settled, send a replace update with the canonical map
 							// this prunes stale docs left over from a previous session's saved state that no longer exist in the folder
 							Promise.allSettled(load_promises).then(() => {
@@ -612,8 +627,9 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 							// phase 2: watch the folder for incremental adds/edits/deletes
 							integration_watcher = vscode.workspace.createFileSystemWatcher(pattern);
-							integration_watcher.onDidCreate(loadOne);
-							integration_watcher.onDidChange(loadOne);
+							// fromDisk: true so the watcher path bypasses openTextDocument's stale cache (this is the entire reason the watcher exists)
+							integration_watcher.onDidCreate(uri => loadOne(uri, { fromDisk: true }));
+							integration_watcher.onDidChange(uri => loadOne(uri, { fromDisk: true }));
 							integration_watcher.onDidDelete(async (uri) => {
 								try {
 									// find the doc id for this path and drop it

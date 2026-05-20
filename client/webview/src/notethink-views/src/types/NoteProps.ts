@@ -129,6 +129,14 @@ export interface NoteOrigin {
      * then breaks toward the active editor file.
      */
     file_rank?: number;
+    /**
+     * Pre-computed hue (0-359) for the project pill colour. Stamped by
+     * mergeAggregateRoot based on the project's index in the sorted enumeration
+     * of all distinct project names visible in the aggregate, fed through
+     * hueForProjectIndex (golden-angle spread). Bypasses the djb2-hash fallback
+     * in OriginPill, which can collide for some real-world name pairs.
+     */
+    project_hue?: number;
 }
 
 export type MdastNodes = import("mdast").Nodes;

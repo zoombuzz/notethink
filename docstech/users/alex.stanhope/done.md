@@ -1321,3 +1321,28 @@ In single-file mode, change-handling is wired to `onDidChangeTextDocument` (`not
 + manual: open a `.md` in the viewer with no editor split, edit the file from a separate process (or Claude's Write), confirm the viewer re-renders within ~1s
 
 
+### Bypass openTextDocument cache on watcher-driven re-parses
+
+The 0.2.9 work added `active_file_watcher` for single-file mode and the existing folder-mode `integration_watcher` already covers aggregate views. Both call `vscode.workspace.openTextDocument(uri)` on change to re-parse the doc. **VS Code's TextDocument cache is not refreshed on external disk changes for files that aren't bound to a visible editor** — the watcher correctly fires `onDidChange`, but `openTextDocument` returns the stale cached doc and `document.getText()` yields stale text. The viewer posts the same content as before and the UI doesn't update. A window reload wipes the cache and the next read pulls fresh content — that's the symptom.
+
++ [X] factor out a `buildDocFromUriAndText(uri, text, createdBy)` helper from the existing `buildDoc(document)` so we can build a Doc from raw bytes without going through TextDocument
++ [X] in folder-mode `loadOne`, when called from the watcher's `onDidChange`/`onDidCreate`, read bytes via `vscode.workspace.fs.readFile(uri)` and feed them to `buildDocFromUriAndText` (initial discovery keeps `openTextDocument` so editor-buffer/unsaved content still wins on first load)
++ [X] in `active_file_watcher`'s `onChange`, do the same: `fs.readFile` → `buildDocFromUriAndText` instead of `openTextDocument` + `buildDoc`
++ [X] tests: the watcher tests should assert `fs.readFile` is called and the posted doc reflects the disk content (not whatever `openTextDocument` returns); add a folder-mode case for the same pattern in `loadOne`
++ manual: edit todo.md/done.md externally with notethink showing the kanban aggregate; the moved story should appear in its new column within ~1s without a window reload
+
+
+### Origin-pill color collisions across projects
+
+Aggregate view origin pills colour-code each story by its source file's first letter (project initial). Two pairs of projects observed to hash to the same colour: CalFam ("C") and Shopify Uncomplicated ("S") both render the same red; notegit ("N") and countingsheet ("C") both render the same green. The bucket is too small / the hash isn't spreading the input space — first-letter-only collapses many projects to ~26 inputs, and even those don't fan out evenly.
+
+Investigation: the pill colour used `djb2(project_name) % 360`. The input was already the full project name, not the first letter — but `djb2 % 360` happens to alias for our real-world names. Empirically: calfam→hue 7, shopify-uncomplicated→hue 4 (3° apart); notegit→hue 87, countingsheet→hue 83 (4° apart). Tried FNV-1a, SHA-256, and hash×irrational multipliers — every hash function produces *some* close pair for our 8-project set because 8 random points on a 360-bucket ring are statistically prone to clustering. Only a sorted-index assignment with a golden-angle multiplier guarantees a minimum gap.
+
++ [X] `hueForProjectIndex(i)` returns `(i * 137.508) % 360` (golden angle) — adjacent indices land far apart on the wheel; deterministic per index
++ [X] `mergeAggregateRoot` enumerates distinct project names from `parsed` (already sorted by `relative_path`), assigns each its sorted-position hue via `hueForProjectIndex`, stamps `origin.project_hue` on every story
++ [X] `OriginPill` prefers `origin.project_hue` when present; falls back to the djb2 hash for single-file mode and legacy callers
++ [X] `pillColourForHue(hue, theme)` factored out so both paths share the final HSL build
++ [X] tests: index spread ≥30° pairwise for the workspace 8-project set; precomputed-hue path takes precedence over the hash; existing djb2 coverage retained for the fallback path
++ manual: open the workspace folder in aggregate mode and verify calfam/shopify-uncomplicated pills are now visually distinct, and notegit/countingsheet pills are too
+
+

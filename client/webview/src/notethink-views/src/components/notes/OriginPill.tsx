@@ -13,7 +13,7 @@ const debug = Debug("nodejs:notethink-views:OriginPill");
  */
 
 /**
- * djb2-style hash of a string to a 32-bit integer (sign-collapsed).
+ * djb2-style hash of a string to a 32-bit integer (sign-collapsed). Used as a fallback only — see hueForProjectIndex for the primary assignment.
  */
 function djb2(str: string): number {
     let hash = 5381;
@@ -23,17 +23,31 @@ function djb2(str: string): number {
     return Math.abs(hash);
 }
 
+// golden angle (≈ 360 - 360/φ). Used to spread sorted-index inputs around the hue wheel so adjacent indices land ~137° apart, far from each other on the colour wheel
+const GOLDEN_ANGLE_DEG = 137.50776405003785;
+
 /**
- * Deterministic colour for a project pill.
- *
- * - hue: derived from a djb2 hash of the full project name (spread across the spectrum)
- * - saturation: 65% (visible spread, no neon)
- * - lightness: dark 32% (white text on dark theme); light 72% (dark text on light theme)
+ * Deterministic hue (0-359) for a project given its 0-based index in a stable sorted enumeration of all distinct project names visible in the aggregate. Using a golden-angle multiplier instead of a hash-mod ensures any number of projects get visually-distinct hues — hash%360 happens to collide for our real-world names (calfam/shopify-uncomplicated, notegit/countingsheet).
  */
-export function originPillColour(project_name: string, theme: 'dark' | 'light'): string {
-    const hue = djb2(project_name) % 360;
+export function hueForProjectIndex(index: number): number {
+    // floor + non-negative modulo so negative indices don't break the result
+    const v = (index * GOLDEN_ANGLE_DEG) % 360;
+    return Math.floor(v < 0 ? v + 360 : v);
+}
+
+/**
+ * Turn a hue value (0-359) into the final HSL string at the theme-appropriate lightness.
+ */
+export function pillColourForHue(hue: number, theme: 'dark' | 'light'): string {
     const lightness = theme === 'dark' ? 32 : 72;
     return `hsl(${hue} 65% ${lightness}%)`;
+}
+
+/**
+ * Deterministic colour for a project pill from the project name only — fallback when the merged origin doesn't carry a precomputed hue (single-file mode, legacy origins, tests). Uses djb2(name)%360 which can collide for some name pairs; aggregate-mode callers should use hueForProjectIndex via origin.project_hue instead.
+ */
+export function originPillColour(project_name: string, theme: 'dark' | 'light'): string {
+    return pillColourForHue(djb2(project_name) % 360, theme);
 }
 
 /**
@@ -75,7 +89,10 @@ export default function OriginPill({ origin, onClick }: OriginPillProps) {
 
     const project_name = projectNameFromRelativePath(origin.relative_path);
     const letter = project_name ? project_name.charAt(0).toUpperCase() : '?';
-    const colour = originPillColour(project_name || origin.doc_path, theme);
+    // aggregate mode stamps origin.project_hue from the sorted-index assignment in mergeAggregateRoot; fall back to the hash-based colour for legacy origins or single-file mode where no global enumeration exists
+    const colour = typeof origin.project_hue === 'number'
+        ? pillColourForHue(origin.project_hue, theme)
+        : originPillColour(project_name || origin.doc_path, theme);
 
     return (
         <span className={styles.originPillGroup} role="presentation">

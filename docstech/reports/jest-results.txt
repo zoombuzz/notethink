@@ -1,9 +1,10 @@
 # Jest Test Results
-# Version: 0.2.9
-# Date: 2026-05-20T13:42:45Z
+# Version: 0.2.10
+# Date: 2026-05-20T17:31:07Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
-> notethink@0.2.9 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+
+> notethink@0.2.10 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
 
@@ -12,11 +13,11 @@
 
 
 Test Suites: 6 passed, 6 total
-Tests:       150 passed, 150 total
+Tests:       151 passed, 151 total
 Snapshots:   0 total
-Time:        2.122 s
+Time:        2.051 s
 Ran all test suites.
-Force exiting Jest
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
 > notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
@@ -26,29 +27,30 @@ Force exiting Jest
 Test Suites: 3 passed, 3 total
 Tests:       30 passed, 30 total
 Snapshots:   0 total
-Time:        0.581 s, estimated 1 s
+Time:        0.576 s, estimated 1 s
 Ran all test suites.
-Force exiting Jest
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
 > @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
 > jest --config jest.config.cjs --forceExit
 
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
 
 Test Suites: 28 passed, 28 total
-Tests:       457 passed, 457 total
+Tests:       462 passed, 462 total
 Snapshots:   0 total
-Time:        3.311 s
+Time:        3.085 s
 Ran all test suites.
-Force exiting Jest
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
 ┌──────────────────┬───────┬────────┬────────┬─────────┐
 │ Suite            │ Files │ Passed │ Failed │ Time    │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     6 │    150 │      0 │ 2.122 s │
-│ webview          │     3 │     30 │      0 │ 0.581 s │
-│ notethink-views  │    28 │    457 │      0 │ 3.311 s │
+│ extension        │     6 │    151 │      0 │ 2.051 s │
+│ webview          │     3 │     30 │      0 │ 0.576 s │
+│ notethink-views  │    28 │    462 │      0 │ 3.085 s │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    37 │    637 │      0 │         │
+│ TOTAL            │    37 │    643 │      0 │         │
 └──────────────────┴───────┴────────┴────────┴─────────┘

@@ -410,6 +410,22 @@ describe('mergeAggregateRoot', () => {
         expect((root as { integration_path?: string }).integration_path).toBe('/repo/active_development');
     });
 
+    it('stamps origin.project_label using the aggregate divergence rule', () => {
+        const docNg = simpleFile('id-ng', 'notegit/todo.md', 'Notegit', ['Ng1']);
+        const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
+        const docCs = simpleFile('id-cs', 'countingsheet/todo.md', 'Countingsheet', ['Cs1']);
+        const { root } = mergeAggregateRoot(
+            { 'id-ng': docNg, 'id-nt': docNt, 'id-cs': docCs },
+            '/repo/',
+        );
+        const by_headline = Object.fromEntries(
+            root.child_notes!.map(n => [n.headline_raw, n.origin?.project_label]),
+        );
+        expect(by_headline['### Ng1']).toBe('NG');
+        expect(by_headline['### Nt1']).toBe('NT');
+        expect(by_headline['### Cs1']).toBe('CO');
+    });
+
     /**
      * Build a single-H1 file whose H1 carries an `order=<value>` linetag, with
      * depth-3 stories directly under the H1.

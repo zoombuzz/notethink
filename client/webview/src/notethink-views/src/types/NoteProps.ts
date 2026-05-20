@@ -137,6 +137,16 @@ export interface NoteOrigin {
      * in OriginPill, which can collide for some real-world name pairs.
      */
     project_hue?: number;
+    /**
+     * Pre-computed 2-character pill label for the project. Stamped by
+     * mergeAggregateRoot using buildProjectLabels — the first char is the
+     * project's initial; the second is the earliest character that
+     * differentiates this project from any other in the aggregate (so
+     * notegit→`NG`, notethink→`NT`, countingsheet→`CO`). OriginPill falls back
+     * to a single-project first+second-character abbreviation when this is
+     * absent (single-file mode, legacy origins).
+     */
+    project_label?: string;
 }
 
 export type MdastNodes = import("mdast").Nodes;

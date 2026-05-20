@@ -7,9 +7,12 @@ const debug = Debug("nodejs:notethink-views:OriginPill");
 /**
  * Origin pill: shown next to a story's headline in aggregate (folder) mode.
  *
- * Renders a project pill (single uppercase letter from origin.relative_path's first
- * path segment) followed by an optional epic pill (epic.name) when origin.epic is set.
- * Project pill colour is deterministic per project name; theme-adaptive for dark/light.
+ * Renders a project pill (two uppercase letters derived from origin.relative_path's
+ * first path segment) followed by an optional epic pill (epic.name) when origin.epic
+ * is set. The first letter is always the project name's initial; the second is the
+ * earliest character that disambiguates this project from every other one visible in
+ * the aggregate (e.g. notegit→`NG`, notethink→`NT`, countingsheet→`CO`). Project pill
+ * colour is deterministic per project name; theme-adaptive for dark/light.
  */
 
 /**
@@ -61,6 +64,55 @@ export function projectNameFromRelativePath(relative_path: string | undefined): 
 }
 
 /**
+ * Single-project abbreviation used as a fallback in single-file mode or when the
+ * merged origin doesn't carry a precomputed label. First char + second char of the
+ * project name, both uppercased; a single-letter name yields the single letter; an
+ * empty name yields '?'.
+ */
+export function projectAbbreviation(project_name: string | undefined): string {
+    if (!project_name) { return '?'; }
+    const first = project_name.charAt(0).toUpperCase();
+    if (project_name.length < 2) { return first; }
+    return first + project_name.charAt(1).toUpperCase();
+}
+
+/**
+ * Compute a 2-character label per project across the supplied list. The first
+ * character is always the project name's initial. The second character is taken
+ * from the smallest index i >= 1 at which no other name in the set shares the
+ * prefix `name.slice(0, i + 1)` — i.e. the earliest character that
+ * differentiates this project from any other (so notegit vs notethink emit
+ * `NG` and `NT` rather than two `N`s). If a name is a strict prefix of another
+ * (no divergence found), we fall back to the second character of the name
+ * itself. Names shorter than 2 chars produce single-letter labels.
+ */
+export function buildProjectLabels(names: string[]): Map<string, string> {
+    const labels = new Map<string, string>();
+    for (const name of names) {
+        if (!name || labels.has(name)) { continue; }
+        const first = name.charAt(0).toUpperCase();
+        if (name.length < 2) {
+            labels.set(name, first);
+            continue;
+        }
+        let chosen_i = -1;
+        for (let i = 1; i < name.length; i++) {
+            const prefix = name.slice(0, i + 1);
+            let collides = false;
+            for (const other of names) {
+                if (other === name) { continue; }
+                if (other.startsWith(prefix)) { collides = true; break; }
+            }
+            if (!collides) { chosen_i = i; break; }
+        }
+        // name is a strict prefix of another project — fall back to the second char of name itself
+        if (chosen_i === -1) { chosen_i = 1; }
+        labels.set(name, first + name.charAt(chosen_i).toUpperCase());
+    }
+    return labels;
+}
+
+/**
  * Read the current Mantine color scheme from <html data-mantine-color-scheme>.
  * Defaults to 'dark' if the attribute is missing.
  */
@@ -88,7 +140,8 @@ export default function OriginPill({ origin, onClick }: OriginPillProps) {
     }, []);
 
     const project_name = projectNameFromRelativePath(origin.relative_path);
-    const letter = project_name ? project_name.charAt(0).toUpperCase() : '?';
+    // aggregate mode stamps origin.project_label using the global divergence rule (see buildProjectLabels); single-file / legacy origins fall back to the project name's first+second characters
+    const label = origin.project_label ?? projectAbbreviation(project_name);
     // aggregate mode stamps origin.project_hue from the sorted-index assignment in mergeAggregateRoot; fall back to the hash-based colour for legacy origins or single-file mode where no global enumeration exists
     const colour = typeof origin.project_hue === 'number'
         ? pillColourForHue(origin.project_hue, theme)
@@ -104,7 +157,7 @@ export default function OriginPill({ origin, onClick }: OriginPillProps) {
                 data-project={project_name}
                 onClick={onClick}
             >
-                {letter}
+                {label}
             </span>
             {origin.epic && (
                 <span

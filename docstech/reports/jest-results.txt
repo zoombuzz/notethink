@@ -1,10 +1,10 @@
 # Jest Test Results
-# Version: 0.2.10
-# Date: 2026-05-20T17:31:07Z
+# Version: 0.2.11
+# Date: 2026-05-20T19:20:20+01:00
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
-> notethink@0.2.10 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> notethink@0.2.11 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
 
@@ -15,7 +15,7 @@
 Test Suites: 6 passed, 6 total
 Tests:       151 passed, 151 total
 Snapshots:   0 total
-Time:        2.051 s
+Time:        2.07 s
 Ran all test suites.
 Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -27,7 +27,7 @@ Force exiting Jest: Have you considered using `--detectOpenHandles` to detect as
 Test Suites: 3 passed, 3 total
 Tests:       30 passed, 30 total
 Snapshots:   0 total
-Time:        0.576 s, estimated 1 s
+Time:        0.574 s, estimated 1 s
 Ran all test suites.
 Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -38,9 +38,9 @@ Force exiting Jest: Have you considered using `--detectOpenHandles` to detect as
 A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
 
 Test Suites: 28 passed, 28 total
-Tests:       462 passed, 462 total
+Tests:       474 passed, 474 total
 Snapshots:   0 total
-Time:        3.085 s
+Time:        3.097 s
 Ran all test suites.
 Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -48,9 +48,9 @@ Force exiting Jest: Have you considered using `--detectOpenHandles` to detect as
 ┌──────────────────┬───────┬────────┬────────┬─────────┐
 │ Suite            │ Files │ Passed │ Failed │ Time    │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     6 │    151 │      0 │ 2.051 s │
-│ webview          │     3 │     30 │      0 │ 0.576 s │
-│ notethink-views  │    28 │    462 │      0 │ 3.085 s │
+│ extension        │     6 │    151 │      0 │ 2.07 s  │
+│ webview          │     3 │     30 │      0 │ 0.574 s │
+│ notethink-views  │    28 │    474 │      0 │ 3.097 s │
 ├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    37 │    643 │      0 │         │
+│ TOTAL            │    37 │    655 │      0 │         │
 └──────────────────┴───────┴────────┴────────┴─────────┘

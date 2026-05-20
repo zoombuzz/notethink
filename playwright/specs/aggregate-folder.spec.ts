@@ -43,7 +43,7 @@ test.describe('Aggregate (Folder) view', () => {
         const pills = page.locator('[data-testid="origin-project-pill"]');
         await expect(pills).toHaveCount(4, { timeout: 5000 }); // 2 stories per file × 2 files
 
-        // project letters: 'O' for oma, 'N' for notegit
+        // project labels: 'OM' for oma, 'NO' for notegit (no prefix collisions in this fixture set)
         const project_attrs = await pills.evaluateAll((nodes) =>
             nodes.map((n) => n.getAttribute('data-project'))
         );

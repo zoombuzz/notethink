@@ -1346,3 +1346,15 @@ Investigation: the pill colour used `djb2(project_name) % 360`. The input was al
 + manual: open the workspace folder in aggregate mode and verify calfam/shopify-uncomplicated pills are now visually distinct, and notegit/countingsheet pills are too
 
 
+### Two-character origin pills with prefix disambiguation
+
+The aggregate origin pill currently renders a single uppercase letter (the project's initial). A second letter would make pills more legible — `C` becomes `CO` for countingsheet — and let prefix-colliding projects differentiate visually: notegit→`NG`, notethink→`NT` (earliest divergent character chosen per project against the merged aggregate's project list).
+
++ [X] add `projectAbbreviation(name)` fallback (first + second char, uppercased) and `buildProjectLabels(names)` (divergence-rule labeller) in `client/webview/src/notethink-views/src/components/notes/OriginPill.tsx`
++ [X] stamp `origin.project_label` in `mergeAggregateRoot` alongside `project_hue`, fed from the same sorted distinct-project-names enumeration
++ [X] add `project_label?: string` to `NoteOrigin` and render it in `OriginPill`, falling back to the single-project abbreviation when absent (single-file/legacy origins)
++ [X] tests: OriginPill suites for `projectAbbreviation` and `buildProjectLabels` (spec examples + 3-way collision + strict-prefix edge case + workspace project list); mergeAggregateRoot test asserting `origin.project_label` matches the divergence rule
++ [X] update existing OriginPill test expectations (`O` → `OM`) and the Playwright spec's comment for clarity
++ manual: open the workspace folder in aggregate mode and verify notegit/notethink pills now read `NG`/`NT` and countingsheet reads `CO`
+
+

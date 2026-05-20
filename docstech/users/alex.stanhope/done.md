@@ -1231,3 +1231,76 @@ Formalise an Authoring Guide version so language can evolve across files without
   future work, to land with the first breaking major)
 
 
+### Stop note headlines escaping the card on the right
+
+Kanban card headlines containing a long unbreakable token (path, slug, identifier) punch past the card's right edge — wrap is currently scoped to inline `code` only. Apply the wrap to the whole headline/body, and add an `overflow: hidden` safety net on the kanban card so anything that still escapes is clipped by the rounded border.
+
++ [X] promote `overflow-wrap: anywhere` from `.headline, .body code` to the parent `.headline, .body` block in `ViewRenderer.module.scss` (covers raw text, linetagInline spans, OriginPill, every inline child); drop the now-redundant copy on `code`
++ [X] add `overflow: hidden` to the kanban card (`.column > div > .note`) so the 8px rounded border crops residual escapees; safe because focus/selection rings use `outline` (drawn outside the box) and box-shadow is painted by the element itself
++ [X] Playwright check in `kanban-view.spec.ts`: the headline's right edge does not exceed the card's right edge for a story with an inserted long-unbreakable token
++ manual: reload window on a kanban board with long-slug stories and confirm headlines wrap inside the card (no horizontal punch-through)
+
+
+### Upgrade NPM packages (minor/patch + sass-loader 16→17) [](?time_taken=60)
+
++ [X] run npm-check-updates
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
+
+
+### Relevance ordering: bump active-file stories within equal rank
+
+In Folder mode, same-rank stories (e.g. every file's rank-0) tied only on stable file path, so the open editor file's stories were buried. Add a rank-gated relevance tiebreak toward the active editor file. Builds on the round-robin foundation; weights/interleave unchanged.
+
++ decisions (confirmed): relevance = last `selectionChanged` doc path;
+  file-level; scope everywhere (Kanban + Document/Auto)
++ [X] `NoteOrigin.file_rank` (0-based per-file index, `order`/cap-aware);
+      stamped in mergeAggregateRoot's round-robin
++ [X] `makeNoteOrder(ctx)` / `makeKanbanNoteOrder(ctx)` — rank-gated relevance
+      tiebreak then delegate to the unchanged seq-primary
+      standardNoteOrder/weight logic (zero regression when no active file)
++ [X] plumb `active_doc_path` (last selectionChanged) ExtensionReceiver →
+      NoteRenderer → Aggregate/NoteTreeComposer → ViewProps →
+      GenericView (pre-sort) + KanbanView (column sort)
++ [X] tests: noteops (relevance within equal rank; not across ranks; explicit
+      weight still wins; no-ctx == standardNoteOrder), mergeAggregateRoot
+      (file_rank stamping incl. newest-at-bottom)
++ manual: open a project's todo.md in the editor, confirm its stories rise to
+  the top of each column within their rank band; other projects still listed
++ manual: confirm single-file view + drag-reorder unaffected
+
+
+### Kanban: reorderable new columns + hide empty columns
+
+Two Kanban folder-mode bugs from review of the aggregate board.
+
++ [X] settings drawer omitted a live status (`testing`) when a stale
+      `column_order` didn't list it, so it couldn't be reordered —
+      `SettingsKanbanDrawer` now shows the saved order then appends any live
+      column (new status / untagged) not in it, matching the board's columns
++ [X] empty columns left over in a stale `column_order` (`done`,
+      `code-review`) still rendered — `KanbanView` now shows only columns with
+      stories (generalised from the untagged-only rule), with an all-columns
+      fallback so an empty board isn't blank
++ [X] tests: KanbanView (stale empty named column hidden; empty-board
+      fallback), SettingsKanbanDrawer (live column appended to stale order)
++ tradeoff (noted): hiding empty columns means a card can't be dragged into a
+  status that has no column yet; status is still settable by editing the
+  `status=` linetag in the markdown
++ manual: confirm `testing` is reorderable in the drawer and empty
+  done/code-review columns no longer show
+
+
+### Outside-click closes the toolbar drawer
+
+Settings + Files drawers can already be dismissed with Escape, but a pointer-only user has to find the trigger again. Add a click-outside dismiss so any pointerdown on the view body, a note, or unrelated chrome closes whichever drawer is open. Trigger button and drawer interior stay un-dismissive so toggle + interaction still work.
+
++ [X] add a `pointerdown` listener in `GenericView.tsx` (mirroring the existing Escape effect's lifecycle), active only while a drawer is open
++ [X] ignore the event when the target is inside `anchor_el_ref.current` (current trigger) or inside the open drawer wrapper (looked up by id) — so the trigger's own onClick toggles cleanly and clicks inside the drawer don't dismiss
++ [X] no focus restore on outside-click (focus follows the pointer); Escape keeps the existing focus-restore behaviour
++ [X] Playwright coverage in `aggregate-folder.spec.ts` (folder mode exposes both drawers): outside-click closes Files drawer; clicking inside it does not; trigger click toggles cleanly
++ [X] Jest coverage in `GenericView.test.tsx`: outside `pointerdown` flips `data-open` to `false` for the Settings drawer; inside-drawer `pointerdown` leaves it open
++ manual: open Settings, click a note in the body — drawer closes; open Files, click a kanban card — drawer closes; open Settings, toggle a checkbox — drawer stays open
+
+

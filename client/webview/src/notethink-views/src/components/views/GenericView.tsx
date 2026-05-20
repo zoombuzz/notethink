@@ -535,6 +535,24 @@ export default function GenericView(props: ViewProps) {
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [active_drawer]);
 
+    // outside-click closes whichever drawer is open; the trigger and the drawer body are excluded so the trigger's own onClick toggles cleanly and clicks inside the drawer don't dismiss
+    // pointerdown (not click) fires before any onClick on the click target, so the drawer is gone by the time the clicked control runs its handler; no focus restore here — focus follows the pointer
+    useEffect(() => {
+        if (active_drawer === 'none') { return; }
+        const drawer_id = `v${props.id}-${active_drawer}-drawer`;
+        const onPointerDown = (e: PointerEvent) => {
+            const target = e.target as Node | null;
+            if (!target) { return; }
+            const anchor = anchor_el_ref.current;
+            if (anchor && anchor.contains(target)) { return; }
+            const drawer_el = document.getElementById(drawer_id);
+            if (drawer_el && drawer_el.contains(target)) { return; }
+            setActiveDrawer('none');
+        };
+        document.addEventListener('pointerdown', onPointerDown);
+        return () => document.removeEventListener('pointerdown', onPointerDown);
+    }, [active_drawer, props.id]);
+
     // insert modal state
     const [insert_modal_open, setInsertModalOpen] = useState(false);
 

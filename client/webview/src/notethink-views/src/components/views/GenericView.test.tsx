@@ -1135,6 +1135,44 @@ describe('GenericView navigation callback', () => {
             // focus restoration runs in a requestAnimationFrame; jsdom supports rAF
             await waitFor(() => expect(document.activeElement).toBe(gear));
         });
+
+        it('pointerdown outside the drawer and trigger closes the drawer', async () => {
+            renderWithToolbar();
+            const gear = await screen.findByTestId('view-settings-button');
+            fireEvent.click(gear);
+            const grid = await screen.findByTestId('settings-drawer-grid');
+            expect(grid).toHaveAttribute('data-open', 'true');
+            // dispatch on document.body — outside both the trigger and the drawer
+            act(() => {
+                document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+            });
+            expect(grid).toHaveAttribute('data-open', 'false');
+        });
+
+        it('pointerdown inside the drawer body keeps the drawer open', async () => {
+            renderWithToolbar();
+            fireEvent.click(await screen.findByTestId('view-settings-button'));
+            const grid = await screen.findByTestId('settings-drawer-grid');
+            const inside = await screen.findByTestId('settings-drawer-document');
+            act(() => {
+                inside.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+            });
+            expect(grid).toHaveAttribute('data-open', 'true');
+        });
+
+        it('pointerdown on the trigger does not double-toggle (close then re-open)', async () => {
+            renderWithToolbar();
+            const gear = await screen.findByTestId('view-settings-button');
+            fireEvent.click(gear);
+            const grid = await screen.findByTestId('settings-drawer-grid');
+            expect(grid).toHaveAttribute('data-open', 'true');
+            // simulate a real click: pointerdown then click both target the gear
+            act(() => {
+                gear.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+            });
+            fireEvent.click(gear);
+            expect(grid).toHaveAttribute('data-open', 'false');
+        });
     });
 });
 

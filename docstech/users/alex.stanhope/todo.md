@@ -1,47 +1,17 @@
 # Todo [](?ng_view=kanban)
 
 
-### Relevance ordering: bump active-file stories within equal rank [](?status=code-review)
+### Watch unopened files shown in the viewer
 
-In Folder mode, same-rank stories (e.g. every file's rank-0) tied only on stable file path, so the open editor file's stories were buried. Add a rank-gated relevance tiebreak toward the active editor file. Builds on the round-robin foundation; weights/interleave unchanged.
+In single-file mode, change-handling is wired to `onDidChangeTextDocument` (`notethinkEditor.ts:306`) — fires only for editor-open documents. A file shown in the viewer but with no open text editor (custom editor + on-disk edit by another tool, e.g. Claude's Write) never re-parses. Folder mode already has its own `createFileSystemWatcher` (`notethinkEditor.ts:555`); single-file mode does not.
 
-+ decisions (confirmed): relevance = last `selectionChanged` doc path;
-  file-level; scope everywhere (Kanban + Document/Auto)
-+ [X] `NoteOrigin.file_rank` (0-based per-file index, `order`/cap-aware);
-      stamped in mergeAggregateRoot's round-robin
-+ [X] `makeNoteOrder(ctx)` / `makeKanbanNoteOrder(ctx)` — rank-gated relevance
-      tiebreak then delegate to the unchanged seq-primary
-      standardNoteOrder/weight logic (zero regression when no active file)
-+ [X] plumb `active_doc_path` (last selectionChanged) ExtensionReceiver →
-      NoteRenderer → Aggregate/NoteTreeComposer → ViewProps →
-      GenericView (pre-sort) + KanbanView (column sort)
-+ [X] tests: noteops (relevance within equal rank; not across ranks; explicit
-      weight still wins; no-ctx == standardNoteOrder), mergeAggregateRoot
-      (file_rank stamping incl. newest-at-bottom)
-+ manual: open a project's todo.md in the editor, confirm its stories rise to
-  the top of each column within their rank band; other projects still listed
-+ manual: confirm single-file view + drag-reorder unaffected
-
-
-### Kanban: reorderable new columns + hide empty columns [](?status=code-review)
-
-Two Kanban folder-mode bugs from review of the aggregate board.
-
-+ [X] settings drawer omitted a live status (`testing`) when a stale
-      `column_order` didn't list it, so it couldn't be reordered —
-      `SettingsKanbanDrawer` now shows the saved order then appends any live
-      column (new status / untagged) not in it, matching the board's columns
-+ [X] empty columns left over in a stale `column_order` (`done`,
-      `code-review`) still rendered — `KanbanView` now shows only columns with
-      stories (generalised from the untagged-only rule), with an all-columns
-      fallback so an empty board isn't blank
-+ [X] tests: KanbanView (stale empty named column hidden; empty-board
-      fallback), SettingsKanbanDrawer (live column appended to stale order)
-+ tradeoff (noted): hiding empty columns means a card can't be dragged into a
-  status that has no column yet; status is still settable by editing the
-  `status=` linetag in the markdown
-+ manual: confirm `testing` is reorderable in the drawer and empty
-  done/code-review columns no longer show
++ [ ] add a `notethink.watchUnopenedFilesInViewer` boolean configuration to `package.json` `contributes.configuration` (default `true`); add the l10n string + 5 translations
++ [ ] expose it as a checkbox in the Settings drawer (Document + Kanban) alongside the existing `show_line_numbers` global toggle
++ [ ] when the setting is on, register a `vscode.workspace.createFileSystemWatcher` for the active viewed file whenever it isn't backed by an open `TextDocument`; on change/create, re-`buildDoc` and `sendDoc`
++ [ ] dispose the per-file watcher on viewer dispose, on doc swap, and on setting flip (avoid leaks across active-doc changes)
++ [ ] de-dupe with `onDidChangeTextDocument` — if the doc gets opened in an editor while the watcher is live, dispose the watcher to avoid double re-parse
++ [ ] tests: Jest in `notethinkEditor.test.ts` covering watcher attach/detach lifecycle + setting flip; Playwright is N/A (no real fs in harness)
++ manual: open a `.md` in the viewer with no editor split, edit the file from a separate process (or Claude's Write), confirm the viewer re-renders within ~1s
 
 
 ### Multi-view management [post-v1]

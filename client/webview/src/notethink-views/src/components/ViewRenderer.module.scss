@@ -658,6 +658,9 @@ body.disableAddressBarHidingOnScroll {
   }
 
   .headline, .body {
+    // allow long unbreakable tokens (URLs, paths, slug-with-dashes, flag=value identifiers) to wrap inside the card instead of punching past the right edge — applies to raw text, inline code, linetag pills, every inline child
+    overflow-wrap: anywhere;
+
     // inline code spans (not inside pre/code blocks)
     code {
       color: var(--vscode-textPreformat-foreground, inherit);
@@ -666,8 +669,6 @@ body.disableAddressBarHidingOnScroll {
       border-radius: 3px;
       font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace);
       font-size: 0.9em;
-      // allow long unbreakable tokens (URLs, flag=value identifiers) to wrap inside the card instead of punching past the right edge
-      overflow-wrap: anywhere;
     }
   }
 
@@ -1095,6 +1096,8 @@ body.disableAddressBarHidingOnScroll {
         background: var(--vscode-editor-background);
         border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
         border-radius: 8px;
+        // safety net for residual escapees (rare unbreakable inline element); selection/focus ring uses outline + outline-offset and box-shadow is painted by the element itself, so neither is clipped
+        overflow: hidden;
         user-select: none;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
         transition: box-shadow 200ms ease, transform 150ms ease;

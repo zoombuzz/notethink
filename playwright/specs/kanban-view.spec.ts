@@ -67,4 +67,29 @@ test.describe('Kanban View', () => {
         const untagged_column = page.locator('[role="region"][aria-label="untagged"]');
         await expect(untagged_column.getByText('Task D')).toBeVisible({ timeout: 5000 });
     });
+
+    test('long unbreakable headline tokens wrap inside the card and do not punch past its right edge', async ({ page }) => {
+        const { path: doc_path } = await injectDocsFromFixture(page, 'kanban-long-headline.md');
+        await page.waitForSelector('[data-seq]', { timeout: 5000 });
+        await simulateSelectionChanged(page, doc_path, 2);
+        await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
+
+        // the kanban card is the first `[role="row"]` inside the backlog column
+        const card = page.locator('[role="region"][aria-label="backlog"] [role="row"]').first();
+        const headline = card.locator('[role="rowheader"]').first();
+        await expect(card).toBeVisible();
+        await expect(headline).toBeVisible();
+
+        // bounding-box check: the headline's right edge must not cross the card's right edge — proves wrap is doing its job (and the crop would mask any residual)
+        const card_box = await card.boundingBox();
+        const headline_box = await headline.boundingBox();
+        expect(card_box).not.toBeNull();
+        expect(headline_box).not.toBeNull();
+        // allow 1px of sub-pixel rounding tolerance
+        expect(headline_box!.x + headline_box!.width).toBeLessThanOrEqual(card_box!.x + card_box!.width + 1);
+
+        // computed style check on the card: overflow:hidden is in place as the safety-net crop
+        const card_overflow = await card.evaluate(el => getComputedStyle(el).overflow);
+        expect(card_overflow).toBe('hidden');
+    });
 });

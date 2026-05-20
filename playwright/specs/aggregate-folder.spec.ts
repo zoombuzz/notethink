@@ -154,6 +154,35 @@ test.describe('Aggregate (Folder) view', () => {
         await expect(drawer).toHaveAttribute('data-open', 'false');
     });
 
+    test('outside-click dismisses the toolbar drawer; clicks inside or on the trigger do not double-toggle', async ({ page }) => {
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+        ], { workspace_root: WORKSPACE_ROOT });
+
+        await selectFolderMode(page);
+        await page.waitForSelector('[data-aggregate-mode="true"]');
+
+        const files_drawer = page.locator('[data-testid="files-drawer-grid"]');
+        const settings_drawer = page.locator('[data-testid="settings-drawer-grid"]');
+
+        // open Files, click inside the drawer body — stays open
+        await page.getByTestId('breadcrumb-file-count').click();
+        await expect(files_drawer).toHaveAttribute('data-open', 'true');
+        await page.getByTestId('files-drawer-include').click();
+        await expect(files_drawer).toHaveAttribute('data-open', 'true');
+
+        // click an aggregated note in the view body — drawer closes
+        await page.locator('[data-seq]').first().click();
+        await expect(files_drawer).toHaveAttribute('data-open', 'false');
+
+        // open Settings, click the gear again — drawer toggles closed (not re-opened by the outside-click handler racing the trigger)
+        await page.getByTestId('view-settings-button').click();
+        await expect(settings_drawer).toHaveAttribute('data-open', 'true');
+        await page.getByTestId('view-settings-button').click();
+        await expect(settings_drawer).toHaveAttribute('data-open', 'false');
+    });
+
     test('switching aggregate to Kanban shows stories grouped by status linetag with origin pills', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },

@@ -82,7 +82,10 @@ export interface CommandMessage {
 
 export interface GlobalSettingsPayload {
     show_line_numbers: boolean;
+    watch_unopened_files_in_viewer: boolean;
 }
+
+export type GlobalSettingKey = keyof GlobalSettingsPayload;
 
 export interface GlobalSettingsMessage {
     type: 'globalSettings';

@@ -70,6 +70,7 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
         integration_path,
         settings: {
             show_line_numbers: props.globalSettings?.show_line_numbers ?? false,
+            watch_unopened_files_in_viewer: props.globalSettings?.watch_unopened_files_in_viewer ?? true,
             ...view_state?.display_options?.settings,
         },
     };

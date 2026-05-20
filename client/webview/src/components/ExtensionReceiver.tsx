@@ -69,7 +69,7 @@ export default function ExtensionReceiver() {
     const [aggregate_exclude, setAggregateExclude] = useState<string | undefined>(undefined);
     const [viewStates, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
     const navigationCallbackRef = useRef<((direction: string) => void) | undefined>(undefined);
-    const [globalSettings, setGlobalSettings] = useState<GlobalSettingsPayload>({ show_line_numbers: false });
+    const [globalSettings, setGlobalSettings] = useState<GlobalSettingsPayload>({ show_line_numbers: false, watch_unopened_files_in_viewer: true });
     const [connected, setConnected] = useState(!!saved_state?.docs && Object.keys(saved_state.docs).length > 0);
     const [timed_out, setTimedOut] = useState(false);
 

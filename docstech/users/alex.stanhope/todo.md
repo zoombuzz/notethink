@@ -1,19 +1,6 @@
 # Todo [](?ng_view=kanban)
 
 
-### Watch unopened files shown in the viewer
-
-In single-file mode, change-handling is wired to `onDidChangeTextDocument` (`notethinkEditor.ts:306`) — fires only for editor-open documents. A file shown in the viewer but with no open text editor (custom editor + on-disk edit by another tool, e.g. Claude's Write) never re-parses. Folder mode already has its own `createFileSystemWatcher` (`notethinkEditor.ts:555`); single-file mode does not.
-
-+ [ ] add a `notethink.watchUnopenedFilesInViewer` boolean configuration to `package.json` `contributes.configuration` (default `true`); add the l10n string + 5 translations
-+ [ ] expose it as a checkbox in the Settings drawer (Document + Kanban) alongside the existing `show_line_numbers` global toggle
-+ [ ] when the setting is on, register a `vscode.workspace.createFileSystemWatcher` for the active viewed file whenever it isn't backed by an open `TextDocument`; on change/create, re-`buildDoc` and `sendDoc`
-+ [ ] dispose the per-file watcher on viewer dispose, on doc swap, and on setting flip (avoid leaks across active-doc changes)
-+ [ ] de-dupe with `onDidChangeTextDocument` — if the doc gets opened in an editor while the watcher is live, dispose the watcher to avoid double re-parse
-+ [ ] tests: Jest in `notethinkEditor.test.ts` covering watcher attach/detach lifecycle + setting flip; Playwright is N/A (no real fs in harness)
-+ manual: open a `.md` in the viewer with no editor split, edit the file from a separate process (or Claude's Write), confirm the viewer re-renders within ~1s
-
-
 ### Multi-view management [post-v1]
 
 + goal

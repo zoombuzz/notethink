@@ -3,6 +3,7 @@ import React, { useCallback } from "react";
 import * as l10n from "@vscode/l10n";
 import styles from "../ViewRenderer.module.scss";
 import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } from "./SettingsCommonControls";
+import type { GlobalSettingKey } from "../../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:SettingsKanbanDrawer");
 
@@ -16,8 +17,9 @@ interface SettingsKanbanDrawerProps {
     settings: KanbanSettings;
     naturalColumnOrder: string[];
     showLineNumbers?: boolean;
+    watchUnopenedFilesInViewer?: boolean;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
-    onGlobalSettingChange: (key: 'show_line_numbers', value: boolean) => void;
+    onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
     onColumnOrderChange: (next_order: string[]) => void;
 }
 
@@ -81,6 +83,7 @@ function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps) {
                     <SettingsCommonControls
                         settings={props.settings}
                         showLineNumbers={props.showLineNumbers}
+                        watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
                         onSettingChange={props.onSettingChange}
                         onGlobalSettingChange={props.onGlobalSettingChange}
                     />

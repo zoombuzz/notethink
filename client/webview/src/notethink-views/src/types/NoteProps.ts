@@ -19,6 +19,7 @@ export interface NoteDisplayOptions {
         show_context_bars?: boolean;
         show_linetags_in_headlines?: boolean;
         show_line_numbers?: boolean;
+        watch_unopened_files_in_viewer?: boolean;
         scroll_text_into_view?: boolean;
         scroll_note_into_view?: boolean;
         auto_expand_focused_note?: boolean;

@@ -5,6 +5,7 @@ import SettingsCommonControls from './SettingsCommonControls';
 const default_props = {
     settings: {},
     showLineNumbers: false,
+    watchUnopenedFilesInViewer: true,
     onSettingChange: jest.fn(),
     onGlobalSettingChange: jest.fn(),
 };
@@ -20,10 +21,10 @@ describe('SettingsCommonControls', () => {
         jest.clearAllMocks();
     });
 
-    it('renders the four common checkboxes', () => {
+    it('renders the five common checkboxes', () => {
         renderControls();
         const checkboxes = screen.getAllByRole('checkbox');
-        expect(checkboxes).toHaveLength(4);
+        expect(checkboxes).toHaveLength(5);
     });
 
     it.each([
@@ -52,5 +53,19 @@ describe('SettingsCommonControls', () => {
         expect(on_change).not.toHaveBeenCalled();
         expect(on_global).toHaveBeenCalledTimes(1);
         expect(on_global).toHaveBeenCalledWith('show_line_numbers', true);
+    });
+
+    it('toggles watch_unopened_files_in_viewer via onGlobalSettingChange (default-on shows checked)', () => {
+        const on_change = jest.fn();
+        const on_global = jest.fn();
+        renderControls({ onSettingChange: on_change, onGlobalSettingChange: on_global });
+        const cb = screen.getAllByRole('checkbox').find(
+            c => c.closest('label')?.textContent?.includes('unopened files')
+        )! as HTMLInputElement;
+        expect(cb.checked).toBe(true);
+        fireEvent.click(cb);
+        expect(on_change).not.toHaveBeenCalled();
+        expect(on_global).toHaveBeenCalledTimes(1);
+        expect(on_global).toHaveBeenCalledWith('watch_unopened_files_in_viewer', false);
     });
 });

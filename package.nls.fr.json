@@ -15,5 +15,6 @@
   "command.clearFocus": "NoteThink : Effacer la sélection",
   "config.title": "NoteThink",
   "config.trace.description": "Trace la communication entre VS Code et l'extension.",
-  "config.showLineNumbers.description": "Afficher les numéros de ligne dans les vues NoteThink."
+  "config.showLineNumbers.description": "Afficher les numéros de ligne dans les vues NoteThink.",
+  "config.watchUnopenedFilesInViewer.description": "Surveiller les modifications sur disque du fichier affiché lorsqu'il n'est pas ouvert dans un éditeur de texte (rafraîchit la visionneuse lorsqu'un autre outil le modifie)."
 }

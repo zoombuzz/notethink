@@ -3,6 +3,7 @@ import React from "react";
 import * as l10n from "@vscode/l10n";
 import styles from "../ViewRenderer.module.scss";
 import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } from "./SettingsCommonControls";
+import type { GlobalSettingKey } from "../../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:SettingsDocumentDrawer");
 
@@ -13,8 +14,9 @@ export type DocumentSettings = CommonSettings;
 interface SettingsDocumentDrawerProps {
     settings: DocumentSettings;
     showLineNumbers?: boolean;
+    watchUnopenedFilesInViewer?: boolean;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
-    onGlobalSettingChange: (key: 'show_line_numbers', value: boolean) => void;
+    onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
 }
 
 function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps) {
@@ -25,6 +27,7 @@ function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps) {
                     <SettingsCommonControls
                         settings={props.settings}
                         showLineNumbers={props.showLineNumbers}
+                        watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
                         onSettingChange={props.onSettingChange}
                         onGlobalSettingChange={props.onGlobalSettingChange}
                     />

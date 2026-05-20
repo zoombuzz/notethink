@@ -20,6 +20,7 @@ import SettingsKanbanDrawer from "./SettingsKanbanDrawer";
 import ToolbarDrawer from "./ToolbarDrawer";
 import FilesDrawer from "./FilesDrawer";
 import type { CommonSettingKey } from "./SettingsCommonControls";
+import type { GlobalSettingKey } from "../../types/Messages";
 import master_view_styles from "../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:GenericView");
@@ -49,6 +50,7 @@ export default function GenericView(props: ViewProps) {
         ...props.display_options,
         settings: {
             show_line_numbers: false,
+            watch_unopened_files_in_viewer: true,
             show_context_bars: true,
             scroll_text_into_view: true,
             scroll_note_into_view: true,
@@ -459,9 +461,9 @@ export default function GenericView(props: ViewProps) {
         return a.every((value, index) => value === b[index]);
     };
 
-    // real-time apply: per-view setting change dispatches setViewManagedState immediately
+    // real-time apply: per-view setting change dispatches setViewManagedState immediately. Global keys are stripped so they don't get baked into per-view state — the extension owns them via vscode workspace config
     const handleSettingChange = useCallback((key: CommonSettingKey, value: boolean) => {
-        const { show_line_numbers: _sln, ...per_view_settings } = display_options.settings || {};
+        const { show_line_numbers: _sln, watch_unopened_files_in_viewer: _wu, ...per_view_settings } = display_options.settings || {};
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
@@ -473,14 +475,14 @@ export default function GenericView(props: ViewProps) {
         }]);
     }, [handlers, props.id, display_options.settings]);
 
-    // real-time apply: global setting (currently just show_line_numbers) goes via postMessage
-    const handleGlobalSettingChange = useCallback((key: 'show_line_numbers', value: boolean) => {
+    // real-time apply: global setting goes via postMessage; the extension writes it to vscode workspace/user config and echoes back via globalSettings
+    const handleGlobalSettingChange = useCallback((key: GlobalSettingKey, value: boolean) => {
         handlers.postMessage?.({ type: 'updateGlobalSetting', setting: key, value });
     }, [handlers]);
 
     // real-time apply: Kanban column order change. Normalise: if next_order matches the natural order, persist undefined
     const handleColumnOrderChange = useCallback((next_order: string[]) => {
-        const { show_line_numbers: _sln, ...per_view_settings } = display_options.settings || {};
+        const { show_line_numbers: _sln, watch_unopened_files_in_viewer: _wu, ...per_view_settings } = display_options.settings || {};
         const persisted_order = arraysEqual(next_order, natural_column_order) ? undefined : next_order;
         handlers.setViewManagedState([{
             id: props.id,
@@ -675,6 +677,7 @@ export default function GenericView(props: ViewProps) {
                                 auto_expand_focused_note: display_options.settings?.auto_expand_focused_note,
                             }}
                             showLineNumbers={display_options.settings?.show_line_numbers}
+                            watchUnopenedFilesInViewer={display_options.settings?.watch_unopened_files_in_viewer}
                             onSettingChange={handleSettingChange}
                             onGlobalSettingChange={handleGlobalSettingChange}
                         />
@@ -689,6 +692,7 @@ export default function GenericView(props: ViewProps) {
                             }}
                             naturalColumnOrder={natural_column_order}
                             showLineNumbers={display_options.settings?.show_line_numbers}
+                            watchUnopenedFilesInViewer={display_options.settings?.watch_unopened_files_in_viewer}
                             onSettingChange={handleSettingChange}
                             onGlobalSettingChange={handleGlobalSettingChange}
                             onColumnOrderChange={handleColumnOrderChange}

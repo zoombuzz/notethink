@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { generateIdentifier } from '../lib/crypto';
 import type { HashMapOf, Doc } from '../types/general';
 import { abbrevDoc, getNonce } from '../lib/utils';
@@ -134,6 +135,10 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		let integration_exclude = DEFAULT_AGGREGATE_EXCLUDE;
 		const integration_docs: HashMapOf<Doc> = {};
 
+		// --- single-file external-change watcher ---
+		// in single-file mode, onDidChangeTextDocument only fires for editor-open docs; when the viewer shows a file that isn't open in any text editor (custom editor + external edit by another tool, e.g. Claude's Write), the viewer would never refresh. This watcher closes that gap. Folder mode already has integration_watcher covering its tree.
+		let active_file_watcher: vscode.FileSystemWatcher | undefined;
+
 		function sendCurrentSelection() {
 			if (!active_path) { return; }
 			const editor = vscode.window.visibleTextEditors.find(
@@ -145,6 +150,45 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				sendSelection(active_path, head, anchor);
 			} else {
 				sendSelection(active_path, 0, 0);
+			}
+		}
+
+		// idempotent: tear any existing watcher down, then re-arm if the active file currently needs one. Call this whenever the active path, integration mode, setting value, or visible-editor set changes.
+		function syncActiveFileWatcher() {
+			if (active_file_watcher) {
+				active_file_watcher.dispose();
+				active_file_watcher = undefined;
+			}
+			// folder mode has integration_watcher; double-armed watchers would re-parse the same file twice
+			if (integration_path) { return; }
+			if (!active_path) { return; }
+			const config = vscode.workspace.getConfiguration('notethink');
+			if (!config.get<boolean>('watchUnopenedFilesInViewer', true)) { return; }
+			// a visible text editor will already drive onDidChangeTextDocument for on-disk changes; we only fill the gap when there's no editor
+			const visible = vscode.window.visibleTextEditors.find(
+				ed => ed.document.uri.path === active_path
+			);
+			if (visible) { return; }
+			try {
+				const folder = path.dirname(active_path);
+				const filename = path.basename(active_path);
+				const pattern = new vscode.RelativePattern(vscode.Uri.file(folder), filename);
+				active_file_watcher = vscode.workspace.createFileSystemWatcher(pattern);
+				const onChange = async (changed_uri: vscode.Uri) => {
+					if (changed_uri.path !== active_path) { return; }
+					try {
+						const document = await vscode.workspace.openTextDocument(changed_uri);
+						active_doc = await buildDoc(document);
+						sendDoc(active_doc);
+					} catch (err) {
+						writeToErrorLog('active-file watcher: re-parse failed', changed_uri.path, err);
+					}
+				};
+				active_file_watcher.onDidChange(onChange);
+				active_file_watcher.onDidCreate(onChange);
+				debug('active-file watcher armed for %s', active_path);
+			} catch (err) {
+				writeToErrorLog('syncActiveFileWatcher: failed to create watcher', active_path, err);
 			}
 		}
 
@@ -162,6 +206,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			const config = vscode.workspace.getConfiguration('notethink');
 			return {
 				show_line_numbers: config.get<boolean>('showLineNumbers', false),
+				watch_unopened_files_in_viewer: config.get<boolean>('watchUnopenedFilesInViewer', true),
 			};
 		}
 
@@ -179,6 +224,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		} catch (err) {
 			writeToErrorLog('failed to build initial document', initialDocument.uri.path, err);
 		}
+		syncActiveFileWatcher();
 
 		const filter_criterion = '**/*.md';
 		const docs: HashMapOf<Doc> = {};
@@ -330,15 +376,25 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				const head = editor.document.offsetAt(editor.selection.active);
 				const anchor = editor.document.offsetAt(editor.selection.anchor);
 				sendSelection(active_path, head, anchor);
+				syncActiveFileWatcher();
 			} catch (err) {
 				writeToErrorLog('failed to switch active document', editor?.document.uri.path, err);
 			}
+		});
+
+		// re-evaluate the active-file watcher when the visible editor set changes (an editor split opening or closing for the active file flips whether we still need the watcher)
+		const visibleEditorsSubscription = vscode.window.onDidChangeVisibleTextEditors(() => {
+			syncActiveFileWatcher();
 		});
 
 		// re-send global settings when workspace configuration changes
 		const configSubscription = vscode.workspace.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration('notethink.showLineNumbers')) {
 				sendGlobalSettings();
+			}
+			if (e.affectsConfiguration('notethink.watchUnopenedFilesInViewer')) {
+				sendGlobalSettings();
+				syncActiveFileWatcher();
 			}
 		});
 
@@ -361,6 +417,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							sendCurrentSelection();
 						}
 						sendGlobalSettings();
+						syncActiveFileWatcher();
 					} catch (err) {
 						writeToErrorLog('requestInitialState failed', '', err);
 					}
@@ -370,12 +427,14 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					const value = e.value as unknown;
 					try {
 						const config = vscode.workspace.getConfiguration('notethink');
-						const setting_map: Record<string, string> = {
-							show_line_numbers: 'showLineNumbers',
+						// per-setting storage target: showLineNumbers persists per-workspace (existing behaviour); watchUnopenedFilesInViewer is a personal viewer-behaviour preference that should follow the user across every project
+						const setting_map: Record<string, { configKey: string; target: vscode.ConfigurationTarget }> = {
+							show_line_numbers: { configKey: 'showLineNumbers', target: vscode.ConfigurationTarget.Workspace },
+							watch_unopened_files_in_viewer: { configKey: 'watchUnopenedFilesInViewer', target: vscode.ConfigurationTarget.Global },
 						};
-						const config_key = setting_map[setting];
-						if (config_key) {
-							await config.update(config_key, value, vscode.ConfigurationTarget.Workspace);
+						const entry = setting_map[setting];
+						if (entry) {
+							await config.update(entry.configKey, value, entry.target);
 						}
 					} catch (err) {
 						writeToErrorLog('updateGlobalSetting failed', setting, err);
@@ -602,6 +661,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							writeToErrorLog('setIntegration current_file failed', '', err);
 						}
 					}
+					// folder mode: integration_path is now set so this disposes any active-file watcher; current_file mode: integration_path is now undefined so this arms one if the active file has no visible editor
+					syncActiveFileWatcher();
 					return;
 				}
 				case 'editText': {
@@ -735,8 +796,10 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			if (change_timer) { clearTimeout(change_timer); }
 			if (selection_timer) { clearTimeout(selection_timer); }
 			if (integration_watcher) { integration_watcher.dispose(); integration_watcher = undefined; }
+			if (active_file_watcher) { active_file_watcher.dispose(); active_file_watcher = undefined; }
 			changeDocumentSubscription.dispose();
 			activeEditorSubscription.dispose();
+			visibleEditorsSubscription.dispose();
 			selectionSubscription.dispose();
 			configSubscription.dispose();
 		});

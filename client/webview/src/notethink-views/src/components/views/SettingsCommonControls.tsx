@@ -1,5 +1,6 @@
 import Debug from "debug";
 import * as l10n from "@vscode/l10n";
+import type { GlobalSettingKey } from "../../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:SettingsCommonControls");
 
@@ -14,8 +15,9 @@ export type CommonSettingKey = keyof CommonSettings;
 interface SettingsCommonControlsProps {
     settings: CommonSettings;
     showLineNumbers?: boolean;
+    watchUnopenedFilesInViewer?: boolean;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
-    onGlobalSettingChange: (key: 'show_line_numbers', value: boolean) => void;
+    onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
 }
 
 export default function SettingsCommonControls(props: SettingsCommonControlsProps) {
@@ -23,6 +25,8 @@ export default function SettingsCommonControls(props: SettingsCommonControlsProp
     const scroll_into_view = props.settings.scroll_note_into_view ?? false;
     const auto_expand = props.settings.auto_expand_focused_note ?? false;
     const line_numbers = props.showLineNumbers ?? false;
+    // default true matches the extension-side default (notethink.watchUnopenedFilesInViewer)
+    const watch_unopened = props.watchUnopenedFilesInViewer ?? true;
 
     return (
         <>
@@ -67,6 +71,17 @@ export default function SettingsCommonControls(props: SettingsCommonControlsProp
                         onChange={(e) => props.onGlobalSettingChange('show_line_numbers', e.target.checked)}
                     />
                     {' '}{l10n.t('Show line numbers')}
+                </label>
+            </p>
+
+            <p>
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={watch_unopened}
+                        onChange={(e) => props.onGlobalSettingChange('watch_unopened_files_in_viewer', e.target.checked)}
+                    />
+                    {' '}{l10n.t('Watch unopened files in viewer')}
                 </label>
             </p>
         </>

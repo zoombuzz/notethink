@@ -33,6 +33,7 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
         ...view_state?.display_options,
         settings: {
             show_line_numbers: props.globalSettings?.show_line_numbers ?? false,
+            watch_unopened_files_in_viewer: props.globalSettings?.watch_unopened_files_in_viewer ?? true,
             ...view_state?.display_options?.settings,
         },
     };

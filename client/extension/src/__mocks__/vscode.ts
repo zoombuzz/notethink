@@ -180,6 +180,12 @@ export enum QuickPickItemKind {
 	Default = 0,
 }
 
+export enum ConfigurationTarget {
+	Global = 1,
+	Workspace = 2,
+	WorkspaceFolder = 3,
+}
+
 export const window = {
 	createOutputChannel: jest.fn(() => ({
 		appendLine: jest.fn(),
@@ -202,6 +208,7 @@ export const window = {
 	visibleTextEditors: [] as any[],
 	onDidChangeTextEditorSelection: jest.fn(() => ({ dispose: jest.fn() })),
 	onDidChangeActiveTextEditor: jest.fn(() => ({ dispose: jest.fn() })),
+	onDidChangeVisibleTextEditors: jest.fn(() => ({ dispose: jest.fn() })),
 };
 
 export const workspace = {

@@ -829,4 +829,156 @@ describe('NotethinkEditorProvider', () => {
 			expect(panelHelper.postedMessages.length).toBe(0);
 		});
 	});
+
+	// ---- active-file watcher lifecycle --------------------------------------
+
+	describe('active-file watcher', () => {
+		const docPath = '/workspace/lonely.md';
+		const docText = '# Lonely';
+
+		function makeWatcher() {
+			return {
+				onDidCreate: jest.fn(),
+				onDidChange: jest.fn(),
+				onDidDelete: jest.fn(),
+				dispose: jest.fn(),
+			};
+		}
+
+		// build a panel for a doc with no visible editor — the precondition that arms the watcher
+		async function setupUnvisitedDoc(opts: { settingOn?: boolean } = {}) {
+			const setting_on = opts.settingOn ?? true;
+			(vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+				get: jest.fn((_key: string, fallback: unknown) => {
+					if (_key === 'watchUnopenedFilesInViewer') { return setting_on; }
+					return fallback;
+				}),
+				update: jest.fn(async () => {}),
+			});
+			(vscode.window as any).visibleTextEditors = [];
+			const doc = mockTextDocument(docText, docPath);
+			const local_provider = new NotethinkEditorProvider(mockExtensionContext() as any);
+			const local_panel = createMockWebviewPanel();
+			await (local_provider as any).myWebviewPanel(local_panel.panel, doc);
+			await local_panel.simulateMessage({ type: 'requestInitialState' });
+			return { provider: local_provider, panel: local_panel, doc };
+		}
+
+		beforeEach(() => {
+			setWorkspaceRoots(['/workspace']);
+			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockImplementation(() => makeWatcher());
+		});
+		afterEach(() => {
+			setWorkspaceRoots(undefined);
+			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation(() => ({
+				get: jest.fn(() => undefined),
+				update: jest.fn(async () => {}),
+			}));
+		});
+
+		it('arms a file-system watcher for the active file when no visible editor exists', async () => {
+			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockClear();
+			await setupUnvisitedDoc();
+			const calls = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls;
+			expect(calls.length).toBeGreaterThanOrEqual(1);
+			const last = calls[calls.length - 1][0];
+			// RelativePattern over the parent folder, narrowed to the file name
+			expect(last?.base).toBe('/workspace');
+			expect(last?.pattern).toBe('lonely.md');
+		});
+
+		it('does NOT arm a watcher when the active file is already visible in a text editor', async () => {
+			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockClear();
+			// the outer beforeEach already configured visibleTextEditors = [initialEditor] for defaultDocPath
+			// since the default panelHelper's active path is visible, no watcher should be armed
+			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(0);
+		});
+
+		it('does NOT arm a watcher when the setting is off', async () => {
+			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockClear();
+			await setupUnvisitedDoc({ settingOn: false });
+			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(0);
+		});
+
+		it('re-parses the active doc when the watcher fires onDidChange', async () => {
+			const { panel } = await setupUnvisitedDoc();
+			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_change_cb = watcher_instance.onDidChange.mock.calls[0][0];
+
+			const updated_doc = mockTextDocument('# Lonely updated', docPath);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(updated_doc);
+
+			panel.postedMessages.length = 0;
+			await on_change_cb(Uri.file(docPath));
+
+			const updates = panel.postedMessages.filter((m: any) => m.type === 'update');
+			expect(updates.length).toBeGreaterThanOrEqual(1);
+			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			expect(doc_entries[0].text).toBe('# Lonely updated');
+		});
+
+		it('disposes the watcher when the setting flips off via configuration change', async () => {
+			await setupUnvisitedDoc();
+			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			expect(watcher_instance.dispose).not.toHaveBeenCalled();
+
+			// flip the underlying config to off, then trigger the config-change callback
+			(vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+				get: jest.fn(() => false),
+				update: jest.fn(async () => {}),
+			});
+			const on_config_cb = (vscode.workspace.onDidChangeConfiguration as jest.Mock).mock.calls.slice(-1)[0][0];
+			on_config_cb({ affectsConfiguration: (key: string) => key === 'notethink.watchUnopenedFilesInViewer' });
+
+			expect(watcher_instance.dispose).toHaveBeenCalledTimes(1);
+		});
+
+		it('arms a watcher when the setting flips on via configuration change', async () => {
+			const { provider: _provider } = await setupUnvisitedDoc({ settingOn: false });
+			const initial_calls = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length;
+			expect(initial_calls).toBe(0);
+
+			(vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+				get: jest.fn(() => true),
+				update: jest.fn(async () => {}),
+			});
+			const on_config_cb = (vscode.workspace.onDidChangeConfiguration as jest.Mock).mock.calls.slice(-1)[0][0];
+			on_config_cb({ affectsConfiguration: (key: string) => key === 'notethink.watchUnopenedFilesInViewer' });
+
+			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(1);
+		});
+
+		it('disposes the watcher when entering folder (aggregate) mode', async () => {
+			const { panel } = await setupUnvisitedDoc();
+			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace' });
+			await new Promise(resolve => setImmediate(resolve));
+
+			expect(watcher_instance.dispose).toHaveBeenCalledTimes(1);
+		});
+
+		it('disposes the watcher when the editor panel is disposed', async () => {
+			const { panel } = await setupUnvisitedDoc();
+			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			panel.simulateDispose();
+			expect(watcher_instance.dispose).toHaveBeenCalledTimes(1);
+		});
+
+		it('re-evaluates when the visible-editor set changes (visible→hidden re-arms; hidden→visible disposes)', async () => {
+			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockClear();
+			// start with no visible editor → watcher armed on first sync
+			await setupUnvisitedDoc();
+			const first_watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+
+			// now simulate an editor becoming visible for the same file
+			const editor = mockTextEditor(mockTextDocument(docText, docPath));
+			(vscode.window as any).visibleTextEditors = [editor];
+			const on_visible_cb = (vscode.window.onDidChangeVisibleTextEditors as jest.Mock).mock.calls.slice(-1)[0][0];
+			on_visible_cb([editor]);
+
+			expect(first_watcher.dispose).toHaveBeenCalledTimes(1);
+		});
+	});
 });

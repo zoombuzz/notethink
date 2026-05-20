@@ -1304,3 +1304,20 @@ Settings + Files drawers can already be dismissed with Escape, but a pointer-onl
 + manual: open Settings, click a note in the body — drawer closes; open Files, click a kanban card — drawer closes; open Settings, toggle a checkbox — drawer stays open
 
 
+### Watch unopened files shown in the viewer
+
+In single-file mode, change-handling is wired to `onDidChangeTextDocument` (`notethinkEditor.ts:306`) — fires only for editor-open documents. A file shown in the viewer but with no open text editor (custom editor + on-disk edit by another tool, e.g. Claude's Write) never re-parses. Folder mode already has its own `createFileSystemWatcher` (`notethinkEditor.ts:555`); single-file mode does not.
+
++ [X] add a `notethink.watchUnopenedFilesInViewer` boolean configuration to `package.json` `contributes.configuration` (default `true`); add the l10n string + 5 translations
++ [X] expose it as a checkbox in the Settings drawer (Document + Kanban) alongside the existing `show_line_numbers` global toggle
++ [X] when the setting is on, register a `vscode.workspace.createFileSystemWatcher` for the active viewed file whenever it isn't backed by an open `TextDocument`; on change/create, re-`buildDoc` and `sendDoc`
++ [X] dispose the per-file watcher on viewer dispose, on doc swap, and on setting flip (avoid leaks across active-doc changes)
++ [X] de-dupe with `onDidChangeTextDocument` — if the doc gets opened in an editor while the watcher is live, dispose the watcher to avoid double re-parse
++ [X] tests: Jest in `notethinkEditor.test.ts` covering watcher attach/detach lifecycle + setting flip; Playwright is N/A (no real fs in harness)
++ implementation notes
+  + gate is "no visible text editor" rather than "no open TextDocument" — strictly equivalent given that VS Code only fires `onDidChangeTextDocument` for editors that are visible (the empirical bug the story documents)
+  + the new setting is `scope: "window"` and written via `ConfigurationTarget.Global` — it's a per-user behavioural preference and follows the user across every workspace, unlike `showLineNumbers` (per-workspace)
+  + dedupe via `onDidChangeVisibleTextEditors` instead of `onDidOpenTextDocument`/`onDidCloseTextDocument` — the visible-editor signal already covers both transitions and matches the gate
++ manual: open a `.md` in the viewer with no editor split, edit the file from a separate process (or Claude's Write), confirm the viewer re-renders within ~1s
+
+

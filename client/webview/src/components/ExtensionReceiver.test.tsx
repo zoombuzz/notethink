@@ -7,7 +7,7 @@ const mockNoteRendererProps = jest.fn();
 jest.mock('./NoteRenderer', () => {
     return {
         __esModule: true,
-        default: (props: { notes: Record<string, unknown>; selections?: Record<string, unknown>; postMessage?: unknown; viewStates?: Record<string, unknown>; setViewManagedState?: unknown; onNavigationCommand?: unknown; globalSettings?: Record<string, unknown> }) => {
+        default: (props: { notes: Record<string, unknown>; selections?: Record<string, unknown>; postMessage?: unknown; viewStates?: Record<string, unknown>; setViewManagedState?: unknown; onNavigationCommand?: unknown; globalSettings?: Record<string, unknown>; folderViewSettings?: Record<string, unknown> }) => {
             mockNoteRendererProps(props);
             return <div
                 data-testid="NoteRenderer"
@@ -15,6 +15,7 @@ jest.mock('./NoteRenderer', () => {
                 data-has-selections={props.selections ? 'true' : 'false'}
                 data-view-states={JSON.stringify(props.viewStates || {})}
                 data-global-settings={JSON.stringify(props.globalSettings || {})}
+                data-folder-view-settings={JSON.stringify(props.folderViewSettings || {})}
             />;
         },
     };
@@ -428,6 +429,187 @@ describe('ExtensionReceiver', () => {
                 }));
             });
             expect(warn_spy).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('folder view cascade', () => {
+        const FOLDER_KEY = '__folder__';
+
+        it('threads folderViewSettings from the message into NoteRenderer props', () => {
+            render(<ExtensionReceiver />);
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: {
+                        type: 'folderViewSettings',
+                        settings: {
+                            view_type: 'kanban',
+                            column_order: ['done', 'doing'],
+                            include_filter: '**/notes/**',
+                            exclude_filter: '',
+                            max_notes_per_file: 5,
+                            show_context_bars: false,
+                            has_workspace_overrides: true,
+                        },
+                    },
+                }));
+            });
+            const renderer = screen.getByTestId('NoteRenderer');
+            const settings = JSON.parse(renderer.getAttribute('data-folder-view-settings') || '{}');
+            expect(settings.view_type).toBe('kanban');
+            expect(settings.column_order).toEqual(['done', 'doing']);
+            expect(settings.max_notes_per_file).toBe(5);
+            expect(settings.has_workspace_overrides).toBe(true);
+        });
+
+        it('setViewType command in folder mode round-trips to updateFolderViewSetting', () => {
+            render(<ExtensionReceiver />);
+            const last_call = mockNoteRendererProps.mock.calls[mockNoteRendererProps.mock.calls.length - 1][0];
+            // establish folder mode by writing the canonical viewState's integration_mode tag
+            act(() => {
+                last_call.setViewManagedState([{
+                    id: FOLDER_KEY,
+                    display_options: { integration_mode: 'folder', integration_path: '/repo' },
+                }]);
+            });
+            post_message_spy.mockClear();
+            // fire the setViewType command (mirrors the keybinding / command palette path)
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'command', command: 'setViewType', viewType: 'kanban' },
+                }));
+            });
+            // expect the cascade write (the only postMessage caused by this command in folder mode)
+            const cascade_call = post_message_spy.mock.calls.find(
+                c => c[0]?.type === 'updateFolderViewSetting' && c[0]?.setting === 'view_type'
+            );
+            expect(cascade_call).toBeDefined();
+            expect(cascade_call![0]).toEqual({
+                type: 'updateFolderViewSetting',
+                setting: 'view_type',
+                value: 'kanban',
+            });
+        });
+
+        it('setViewType command in single-file mode does NOT round-trip to updateFolderViewSetting', () => {
+            render(<ExtensionReceiver />);
+            // no folder-tagged viewState exists; firing setViewType should not cascade
+            post_message_spy.mockClear();
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'command', command: 'setViewType', viewType: 'document' },
+                }));
+            });
+            const cascade_call = post_message_spy.mock.calls.find(
+                c => c[0]?.type === 'updateFolderViewSetting'
+            );
+            expect(cascade_call).toBeUndefined();
+        });
+    });
+
+    // when the integration_mode tag is dispatched to the canonical folder key, the folder viewState's other settings (column_order, filters, ...) must survive a flip to current_file and back
+    describe('folder viewState survives integration_mode flip', () => {
+        const FOLDER_KEY = '__folder__';
+
+        it('flipping folder → current_file → folder preserves column_order and filters', () => {
+            render(<ExtensionReceiver />);
+            const last_call = mockNoteRendererProps.mock.calls[mockNoteRendererProps.mock.calls.length - 1][0];
+
+            // initial folder setup: user enters folder mode (dispatch matches GenericView.handleIntegrationChange)
+            act(() => {
+                last_call.setViewManagedState([{
+                    id: FOLDER_KEY,
+                    display_options: {
+                        integration_mode: 'folder',
+                        integration_path: '/repo/notes',
+                    },
+                }]);
+            });
+
+            // user customises folder view: column reorder + custom include/exclude
+            act(() => {
+                last_call.setViewManagedState([{
+                    id: FOLDER_KEY,
+                    type: 'kanban',
+                    display_options: {
+                        settings: { column_order: ['done', 'doing', 'todo'] },
+                        include_filter: '**/todo.md',
+                        exclude_filter: '',
+                        max_notes_per_file: 5,
+                    },
+                }]);
+            });
+
+            // flip to current_file (handleIntegrationChange dispatches with id = FOLDER_KEY)
+            act(() => {
+                last_call.setViewManagedState([{
+                    id: FOLDER_KEY,
+                    display_options: {
+                        integration_mode: 'current_file',
+                        integration_path: undefined,
+                    },
+                }]);
+            });
+
+            // flip back to folder
+            act(() => {
+                last_call.setViewManagedState([{
+                    id: FOLDER_KEY,
+                    display_options: {
+                        integration_mode: 'folder',
+                        integration_path: '/repo/notes',
+                    },
+                }]);
+            });
+
+            const renderer = screen.getByTestId('NoteRenderer');
+            const view_states = JSON.parse(renderer.getAttribute('data-view-states') || '{}');
+            const folder_state = view_states[FOLDER_KEY];
+            expect(folder_state).toBeDefined();
+            expect(folder_state.type).toBe('kanban');
+            expect(folder_state.display_options.integration_mode).toBe('folder');
+            expect(folder_state.display_options.integration_path).toBe('/repo/notes');
+            expect(folder_state.display_options.settings.column_order).toEqual(['done', 'doing', 'todo']);
+            expect(folder_state.display_options.include_filter).toBe('**/todo.md');
+            expect(folder_state.display_options.exclude_filter).toBe('');
+            expect(folder_state.display_options.max_notes_per_file).toBe(5);
+        });
+
+        it('current_file flip writes the mode tag to the canonical key without stranding a doc-path orphan', () => {
+            render(<ExtensionReceiver />);
+            const last_call = mockNoteRendererProps.mock.calls[mockNoteRendererProps.mock.calls.length - 1][0];
+
+            // start in folder mode with settings
+            act(() => {
+                last_call.setViewManagedState([{
+                    id: FOLDER_KEY,
+                    display_options: {
+                        integration_mode: 'folder',
+                        integration_path: '/repo',
+                        settings: { column_order: ['a', 'b'] },
+                    },
+                }]);
+            });
+
+            // flip to current_file — dispatch targets canonical key, not any doc path
+            act(() => {
+                last_call.setViewManagedState([{
+                    id: FOLDER_KEY,
+                    display_options: {
+                        integration_mode: 'current_file',
+                        integration_path: undefined,
+                    },
+                }]);
+            });
+
+            const renderer = screen.getByTestId('NoteRenderer');
+            const view_states = JSON.parse(renderer.getAttribute('data-view-states') || '{}');
+            // no doc-path entry should have been created by the mode flip
+            const keys = Object.keys(view_states);
+            expect(keys).toEqual([FOLDER_KEY]);
+            // settings preserved under the canonical key by the shallow merge in display_options
+            expect(view_states[FOLDER_KEY].display_options.settings.column_order).toEqual(['a', 'b']);
+            // tag flipped
+            expect(view_states[FOLDER_KEY].display_options.integration_mode).toBe('current_file');
         });
     });
 });

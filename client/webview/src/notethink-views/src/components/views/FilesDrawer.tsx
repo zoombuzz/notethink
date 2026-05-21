@@ -22,12 +22,12 @@ interface FilesDrawerProps {
 }
 
 /**
- * Files drawer: the aggregate-mode counterpart of the Settings drawer. Shows the editable
+ * Files drawer: the folder-mode counterpart of the Settings drawer. Shows the editable
  * include/exclude globs, the per-file story cap, the file/note count, and the live list of
  * currently-selected files. Typing in a box debounces FILES_FILTER_DEBOUNCE_MS, then
  * re-filters the list client-side (instant feedback) and calls onApplyFilters so the owning
  * view can persist the globs/cap and post a background setIntegration that re-discovers the
- * whole aggregate. The per-file cap is webview-only and never round-trips to the extension.
+ * whole folder view. The per-file cap is webview-only and never round-trips to the extension.
  */
 function FilesDrawer(props: FilesDrawerProps) {
     // controlled input state, seeded from the effective globs/cap
@@ -64,7 +64,7 @@ function FilesDrawer(props: FilesDrawerProps) {
             // (a) instant: re-filter the drawer list client-side
             setAppliedInclude(next_include);
             setAppliedExclude(next_exclude);
-            // (b) background: persist + re-discover the whole aggregate
+            // (b) background: persist + re-discover the whole folder view
             props.onApplyFilters(next_include, next_exclude, next_max);
         }, FILES_FILTER_DEBOUNCE_MS);
     }, [props.onApplyFilters, resolveMaxNotes]);

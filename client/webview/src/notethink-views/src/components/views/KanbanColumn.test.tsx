@@ -4,15 +4,24 @@ import KanbanColumn from './KanbanColumn';
 
 describe('KanbanColumn', () => {
 
-    it('renders column with heading', () => {
+    it('renders column with heading (formatted from the raw status slug)', () => {
         render(<KanbanColumn seq={0} value="backlog" />);
         expect(screen.getByRole('columnheader')).toBeInTheDocument();
-        expect(screen.getByText('backlog')).toBeInTheDocument();
+        // formatColumnLabel title-cases each word; aria-label stays as the raw slug
+        expect(screen.getByText('Backlog')).toBeInTheDocument();
     });
 
-    it('renders column with region role and aria-label', () => {
+    it('renders column with region role and aria-label using the raw slug', () => {
         render(<KanbanColumn seq={1} value="doing" />);
         expect(screen.getByRole('region', { name: 'doing' })).toBeInTheDocument();
+    });
+
+    it('formats dashed slugs in the heading with spaces and title-case', () => {
+        render(<KanbanColumn seq={0} value="code-review" />);
+        // header shows the user-facing label
+        expect(screen.getByText('Code Review')).toBeInTheDocument();
+        // aria-label keeps the canonical slug for assistive tech / scripting
+        expect(screen.getByRole('region', { name: 'code-review' })).toBeInTheDocument();
     });
 
     it('renders children within notes container', () => {

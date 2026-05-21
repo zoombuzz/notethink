@@ -39,11 +39,9 @@ export interface NoteDisplayOptions {
     cropped_selected_seqs?: number[];
     integration_mode?: string;
     integration_path?: string;
-    // editable aggregate filters (Files drawer); persisted here so they survive a reload like integration_path
-    aggregate_include?: string;
-    aggregate_exclude?: string;
-    // folder mode: cap top-level stories taken per source file (which end depends on the file's order linetag)
-    aggregate_max_notes_per_file?: number;
+    include_filter?: string;
+    exclude_filter?: string;
+    max_notes_per_file?: number;
     additional_classes?: string[];
     total_columns?: number;
     provided?: {
@@ -94,7 +92,7 @@ export interface NoteProps {
     hash_sha256?: string;
     updated?: number;
     updated_by_view?: string;
-    // aggregate (folder) mode: which file this note originated in (undefined in single-file mode; set on stories and their descendants by mergeAggregateRoot)
+    // folder mode: which file this note originated in (undefined in single-file mode; set on stories and their descendants by mergeAggregateRoot)
     origin?: NoteOrigin;
     // rendered at Note parse time
     headline?: ReactElement;
@@ -109,7 +107,7 @@ export interface NoteProps {
 }
 
 /**
- * NoteOrigin: aggregate (folder) mode metadata stamped on every story and its
+ * NoteOrigin: folder mode metadata stamped on every story and its
  * descendants by mergeAggregateRoot; lets callers route edits back to the
  * source file and drives implicit cross-file ordering.
  * - file_view_type: the ng_view value declared on the originating file's H1, if any; used by AutoView to majority-vote view type across the merged tree (one vote per file)

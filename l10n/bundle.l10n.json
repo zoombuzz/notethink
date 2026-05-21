@@ -41,5 +41,9 @@
   "Files": "Files",
   "Include filter": "Include filter",
   "Exclude filter": "Exclude filter",
-  "No files match the current filters": "No files match the current filters"
+  "No files match the current filters": "No files match the current filters",
+  "Make user default": "Make user default",
+  "Reset to user default": "Reset to user default",
+  "Save your current folder view settings as your user default across every VS Code window.": "Save your current folder view settings as your user default across every VS Code window.",
+  "Clear this workspace's folder view overrides and fall back to your user default.": "Clear this workspace's folder view overrides and fall back to your user default."
 }

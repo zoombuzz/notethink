@@ -1,6 +1,6 @@
 import { globToRegExp, globMatches } from './globMatch';
 
-// library-side test fixture: a realistic exclude glob to feed the matcher. intentionally not coupled to the app's DEFAULT_AGGREGATE_EXCLUDE (extension/webview own those) — these tests exercise the glob mechanism, not the app default
+// library-side test fixture: a realistic exclude glob to feed the matcher. intentionally not coupled to the app's DEFAULT_EXCLUDE_FILTER (extension/webview own those) — these tests exercise the glob mechanism, not the app default
 const DERIVED_DIR_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**';
 
 describe('globToRegExp', () => {

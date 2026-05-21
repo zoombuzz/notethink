@@ -41,5 +41,9 @@
   "Files": "Dateien",
   "Include filter": "Einschlussfilter",
   "Exclude filter": "Ausschlussfilter",
-  "No files match the current filters": "Keine Dateien entsprechen den aktuellen Filtern"
+  "No files match the current filters": "Keine Dateien entsprechen den aktuellen Filtern",
+  "Make user default": "Als Benutzerstandard festlegen",
+  "Reset to user default": "Auf Benutzerstandard zurücksetzen",
+  "Save your current folder view settings as your user default across every VS Code window.": "Speichern Sie Ihre aktuellen Ordneransichts­einstellungen als Benutzerstandard für jedes VS Code-Fenster.",
+  "Clear this workspace's folder view overrides and fall back to your user default.": "Überschreibungen der Ordneransicht in diesem Arbeitsbereich löschen und auf den Benutzerstandard zurückgreifen."
 }

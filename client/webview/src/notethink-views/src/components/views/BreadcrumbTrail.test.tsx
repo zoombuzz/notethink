@@ -328,7 +328,7 @@ describe('BreadcrumbTrail', () => {
         expect(screen.getByText('secure')).toBeInTheDocument();
     });
 
-    describe('folder (aggregate) mode integration_path', () => {
+    describe('folder mode integration_path', () => {
 
         it('keeps the opened workspace folder as the first segment', () => {
             const current = makeNote({ seq: 0 });
@@ -358,7 +358,7 @@ describe('BreadcrumbTrail', () => {
             expect(path_items[1]).toHaveAttribute('data-path', workspace_root + '/calfam');
         });
 
-        it('clicking the workspace-folder segment re-aggregates the whole opened folder', () => {
+        it('clicking the workspace-folder segment re-discovers the whole opened folder', () => {
             const on_folder_click = jest.fn();
             const current = makeNote({ seq: 0 });
             const workspace_root = '/home/alex/github.com/active_development';

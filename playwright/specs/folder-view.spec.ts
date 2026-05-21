@@ -11,10 +11,10 @@ test.describe('Aggregate (Folder) view', () => {
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
     });
 
-    test('folder mode shows a single NoteRenderer with aggregate flag and single toolbar', async ({ page }) => {
+    test('folder mode shows a single NoteRenderer with folder flag and single toolbar', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         // initially: two stacked NoteTreeComposers (single-file mode renders one per doc)
@@ -23,22 +23,22 @@ test.describe('Aggregate (Folder) view', () => {
         // switch to folder mode
         await selectFolderMode(page);
 
-        // NoteRenderer flips to aggregate variant
+        // NoteRenderer flips to folder variant
         const renderer = page.locator('[data-testid="NoteRenderer"]');
-        await expect(renderer).toHaveAttribute('data-aggregate-mode', 'true', { timeout: 5000 });
+        await expect(renderer).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
 
         // exactly one toolbar visible (single merged view, not stacked)
         await expect(page.locator('[data-testid="view-toolbar"]')).toHaveCount(1);
     });
 
-    test('origin pills appear on each aggregated story showing the project first letter', async ({ page }) => {
+    test('origin pills appear on each merged story showing the project first letter', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);
-        await page.waitForSelector('[data-aggregate-mode="true"]');
+        await page.waitForSelector('[data-folder-mode="true"]');
 
         const pills = page.locator('[data-testid="origin-project-pill"]');
         await expect(pills).toHaveCount(4, { timeout: 5000 }); // 2 stories per file × 2 files
@@ -52,12 +52,12 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('click on an origin pill sends revealRange with the origin doc path', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);
-        await page.waitForSelector('[data-aggregate-mode="true"]');
+        await page.waitForSelector('[data-folder-mode="true"]');
 
         // clear any messages from the mode-switch handshake
         await page.evaluate(() => { (window as unknown as { __captured_messages: unknown[] }).__captured_messages = []; });
@@ -77,16 +77,16 @@ test.describe('Aggregate (Folder) view', () => {
         ).toBe(`${WORKSPACE_ROOT}/oma/docstech/todo.md`);
     });
 
-    test('breadcrumb segment click in aggregate mode sends setIntegration', async ({ page }) => {
+    test('breadcrumb segment click in folder mode sends setIntegration', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         // start aggregation at workspace root via a direct setViewManagedState route through GenericView
         // we trigger folder mode and let the selector fire setIntegration on its default dir
         await selectFolderMode(page);
-        await page.waitForSelector('[data-aggregate-mode="true"]');
+        await page.waitForSelector('[data-folder-mode="true"]');
 
         // clear messages
         await page.evaluate(() => { (window as unknown as { __captured_messages: unknown[] }).__captured_messages = []; });
@@ -106,17 +106,17 @@ test.describe('Aggregate (Folder) view', () => {
         expect(typeof last_set_integration!.path).toBe('string');
     });
 
-    test('breadcrumb shows the aggregated "(X in Y files)" count only in folder mode', async ({ page }) => {
+    test('breadcrumb shows the merged "(X in Y files)" count only in folder mode', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         // single-file (stacked) mode: the count is meaningless and must not appear
         await expect(page.getByTestId('breadcrumb-file-count')).toHaveCount(0);
 
         await selectFolderMode(page);
-        await page.waitForSelector('[data-aggregate-mode="true"]');
+        await page.waitForSelector('[data-folder-mode="true"]');
 
         // folder mode: "(X in 2 files)" — X is the merged top-level story count
         const count = page.getByTestId('breadcrumb-file-count');
@@ -126,12 +126,12 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('clicking the breadcrumb count opens the Files drawer; editing the include glob re-filters the list', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);
-        await page.waitForSelector('[data-aggregate-mode="true"]');
+        await page.waitForSelector('[data-folder-mode="true"]');
 
         const drawer = page.locator('[data-testid="files-drawer-grid"]');
         await expect(drawer).toHaveAttribute('data-open', 'false');
@@ -156,12 +156,12 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('outside-click dismisses the toolbar drawer; clicks inside or on the trigger do not double-toggle', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);
-        await page.waitForSelector('[data-aggregate-mode="true"]');
+        await page.waitForSelector('[data-folder-mode="true"]');
 
         const files_drawer = page.locator('[data-testid="files-drawer-grid"]');
         const settings_drawer = page.locator('[data-testid="settings-drawer-grid"]');
@@ -172,7 +172,7 @@ test.describe('Aggregate (Folder) view', () => {
         await page.getByTestId('files-drawer-include').click();
         await expect(files_drawer).toHaveAttribute('data-open', 'true');
 
-        // click an aggregated note in the view body — drawer closes
+        // click a merged note in the view body — drawer closes
         await page.locator('[data-seq]').first().click();
         await expect(files_drawer).toHaveAttribute('data-open', 'false');
 
@@ -183,14 +183,14 @@ test.describe('Aggregate (Folder) view', () => {
         await expect(settings_drawer).toHaveAttribute('data-open', 'false');
     });
 
-    test('switching aggregate to Kanban shows stories grouped by status linetag with origin pills', async ({ page }) => {
+    test('switching folder mode to Kanban shows stories grouped by status linetag with origin pills', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'aggregate-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'aggregate-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);
-        await page.waitForSelector('[data-aggregate-mode="true"]');
+        await page.waitForSelector('[data-folder-mode="true"]');
 
         await sendCommand(page, 'setViewType', { viewType: 'kanban' });
 

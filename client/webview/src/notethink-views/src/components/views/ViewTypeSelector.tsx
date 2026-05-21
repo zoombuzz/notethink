@@ -7,11 +7,15 @@ function capitalize(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/**
+ * - onFolderCascadeWrite: when present, called after `setViewManagedState` so the parent can round-trip the change to VS Code config; the parent only passes it in folder mode
+ */
 interface ViewTypeSelectorProps {
     currentType: string;
     autoResolvedType?: string;
     handlers?: ViewProps['handlers'];
     id: string;
+    onFolderCascadeWrite?: (viewType: string) => void;
 }
 
 export default function ViewTypeSelector(props: ViewTypeSelectorProps) {
@@ -21,6 +25,7 @@ export default function ViewTypeSelector(props: ViewTypeSelectorProps) {
             id: props.id,
             type: viewType,
         }]);
+        props.onFolderCascadeWrite?.(viewType);
     };
 
     return (

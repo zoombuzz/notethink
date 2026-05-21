@@ -8,10 +8,11 @@ import type { HashMapOf, Doc } from "../types/general";
 import { anyViewInFolderMode, firstIntegrationPath } from "../notethink-views/src/lib/mergeAggregateRoot";
 import { ErrorBoundary } from "../notethink-views/src/components";
 import type { TextSelection } from "../notethink-views/src/types/NoteProps";
-import type { GlobalSettingsPayload } from "../notethink-views/src/types/Messages";
+import type { GlobalSettingsPayload, FolderViewSettingsPayload } from "../notethink-views/src/types/Messages";
 import type { ViewState } from './ExtensionReceiver';
 import NoteTreeComposer from './composers/NoteTreeComposer';
-import AggregateTreeComposer from './composers/AggregateTreeComposer';
+import FolderTreeComposer from './composers/FolderTreeComposer';
+
 const debug = Debug("nodejs:notethink:NoteRenderer");
 
 export type MdastNodes = import("mdast").Nodes;
@@ -35,12 +36,13 @@ export interface NoteRendererProps {
     setViewManagedState?: (updates: Array<Record<string, unknown>>) => void;
     onNavigationCommand?: React.MutableRefObject<((direction: string) => void) | undefined>;
     workspace_root?: string;
-    // folder (aggregate) mode: total files discovered before the MAX_AGGREGATE_FILES cap
+    // folder mode: total files discovered before the MAX_AGGREGATE_FILES cap
     aggregate_total_discovered?: number;
-    // folder (aggregate) mode: effective include/exclude globs echoed by the extension
-    aggregate_include?: string;
-    aggregate_exclude?: string;
+    // folder mode: effective include/exclude globs echoed by the extension
+    include_filter?: string;
+    exclude_filter?: string;
     globalSettings?: GlobalSettingsPayload;
+    folderViewSettings?: FolderViewSettingsPayload;
 }
 
 /**
@@ -48,7 +50,7 @@ export interface NoteRendererProps {
  *
  * Single-file mode renders one NoteTreeComposer per Doc (legacy stacked-views shape, used
  * in practice with one Doc at a time). Aggregate (folder) mode renders a single
- * AggregateTreeComposer that merges every Doc into one synthetic root.
+ * FolderTreeComposer that merges every Doc into one synthetic root.
  */
 export default function NoteRenderer(props: NoteRendererProps) {
     const ref = useRef<HTMLDivElement>(null);
@@ -61,15 +63,15 @@ export default function NoteRenderer(props: NoteRendererProps) {
         });
     }, [props.postMessage]);
 
-    // aggregate (folder) mode: when any view state has integration_mode === 'folder', pick AggregateTreeComposer to build a single merged tree across every loaded doc instead of stacking N per-doc composers
-    const aggregate_mode = anyViewInFolderMode(props.viewStates);
-    const integration_path = aggregate_mode ? firstIntegrationPath(props.viewStates) : undefined;
+    // folder mode: when any view state has integration_mode === 'folder', pick FolderTreeComposer to build a single merged tree across every loaded doc instead of stacking N per-doc composers
+    const folder_mode = anyViewInFolderMode(props.viewStates);
+    const integration_path = folder_mode ? firstIntegrationPath(props.viewStates) : undefined;
 
-    if (aggregate_mode && integration_path) {
-        return <div ref={ref} data-testid="NoteRenderer" data-aggregate-mode="true">
+    if (folder_mode && integration_path) {
+        return <div ref={ref} data-testid="NoteRenderer" data-folder-mode="true">
             <Suspense fallback={<div>Loading...</div>}>
                 <ErrorBoundary onError={handleRenderError}>
-                    <AggregateTreeComposer docs={props.notes} integration_path={integration_path} props={props} />
+                    <FolderTreeComposer docs={props.notes} integration_path={integration_path} props={props} />
                 </ErrorBoundary>
             </Suspense>
         </div>;

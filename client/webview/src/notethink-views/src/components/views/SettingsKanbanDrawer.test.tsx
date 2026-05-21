@@ -30,14 +30,15 @@ describe('SettingsKanbanDrawer', () => {
 
     it('shows column order list (custom order if set, else natural)', () => {
         renderDrawer({ settings: { column_order: ['done', 'doing', 'untagged'] } });
-        const items = screen.getAllByText(/^(doing|done|untagged)$/);
-        expect(items.map(el => el.textContent)).toEqual(['done', 'doing', 'untagged']);
+        // formatColumnLabel formats the raw status slug (dashes → spaces, title-case)
+        const items = screen.getAllByText(/^(Doing|Done|Untagged)$/);
+        expect(items.map(el => el.textContent)).toEqual(['Done', 'Doing', 'Untagged']);
     });
 
     it('falls back to naturalColumnOrder when no custom order is set', () => {
         renderDrawer({ settings: {} });
-        const items = screen.getAllByText(/^(doing|done|untagged)$/);
-        expect(items.map(el => el.textContent)).toEqual(['doing', 'done', 'untagged']);
+        const items = screen.getAllByText(/^(Doing|Done|Untagged)$/);
+        expect(items.map(el => el.textContent)).toEqual(['Doing', 'Done', 'Untagged']);
     });
 
     it('appends live columns missing from a stale saved order so they stay reorderable', () => {
@@ -47,9 +48,9 @@ describe('SettingsKanbanDrawer', () => {
             settings: { column_order: ['done', 'doing', 'untagged'] },
             naturalColumnOrder: ['doing', 'done', 'testing', 'untagged'],
         });
-        const items = screen.getAllByText(/^(doing|done|testing|untagged)$/);
-        expect(items.map(el => el.textContent)).toEqual(['done', 'doing', 'untagged', 'testing']);
-        expect(screen.getByLabelText('Move testing up')).toBeInTheDocument();
+        const items = screen.getAllByText(/^(Doing|Done|Testing|Untagged)$/);
+        expect(items.map(el => el.textContent)).toEqual(['Done', 'Doing', 'Untagged', 'Testing']);
+        expect(screen.getByLabelText('Move Testing up')).toBeInTheDocument();
     });
 
     it('clicking move-up dispatches onColumnOrderChange with the swapped order', () => {
@@ -57,16 +58,17 @@ describe('SettingsKanbanDrawer', () => {
         renderDrawer({ onColumnOrderChange: on_order });
         // move 'done' up (it's at index 1; first row's up button is disabled, so use the 2nd row's up button)
         const up_buttons = screen.getAllByRole('button').filter(b => b.getAttribute('aria-label')?.startsWith('Move'));
-        const move_done_up = up_buttons.find(b => b.getAttribute('aria-label') === 'Move done up')!;
+        const move_done_up = up_buttons.find(b => b.getAttribute('aria-label') === 'Move Done up')!;
         fireEvent.click(move_done_up);
         expect(on_order).toHaveBeenCalledTimes(1);
+        // dispatched payload is the raw slug (data), not the display label
         expect(on_order).toHaveBeenCalledWith(['done', 'doing', 'untagged']);
     });
 
     it('clicking move-down dispatches onColumnOrderChange with the swapped order', () => {
         const on_order = jest.fn();
         renderDrawer({ onColumnOrderChange: on_order });
-        const move_doing_down = screen.getByLabelText('Move doing down');
+        const move_doing_down = screen.getByLabelText('Move Doing down');
         fireEvent.click(move_doing_down);
         expect(on_order).toHaveBeenCalledTimes(1);
         expect(on_order).toHaveBeenCalledWith(['done', 'doing', 'untagged']);

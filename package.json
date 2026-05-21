@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.2.13",
+  "version": "0.2.21",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -182,6 +182,45 @@
             "scope": "window",
             "default": true,
             "description": "%config.watchUnopenedFilesInViewer.description%"
+          },
+          "notethink.folderView.viewType": {
+            "type": "string",
+            "scope": "resource",
+            "enum": ["auto", "document", "kanban"],
+            "default": "auto",
+            "description": "%config.folderView.viewType.description%"
+          },
+          "notethink.folderView.columnOrder": {
+            "type": "array",
+            "scope": "resource",
+            "items": { "type": "string" },
+            "default": ["untagged", "doing", "code-review", "testing", "done"],
+            "description": "%config.folderView.columnOrder.description%"
+          },
+          "notethink.folderView.includeFilter": {
+            "type": "string",
+            "scope": "resource",
+            "default": "**/*.md",
+            "description": "%config.folderView.includeFilter.description%"
+          },
+          "notethink.folderView.excludeFilter": {
+            "type": "string",
+            "scope": "resource",
+            "default": "**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**",
+            "description": "%config.folderView.excludeFilter.description%"
+          },
+          "notethink.folderView.maxNotesPerFile": {
+            "type": "integer",
+            "scope": "resource",
+            "minimum": 1,
+            "default": 10,
+            "description": "%config.folderView.maxNotesPerFile.description%"
+          },
+          "notethink.folderView.showContextBars": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": true,
+            "description": "%config.folderView.showContextBars.description%"
           }
         }
       }

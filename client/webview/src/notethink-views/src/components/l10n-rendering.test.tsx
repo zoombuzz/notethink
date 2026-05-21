@@ -63,8 +63,9 @@ describe('l10n rendering with German bundle', () => {
     it('renders interpolated German aria-labels for column reorder buttons', () => {
         render(<SettingsKanbanDrawer {...KANBAN_DRAWER_PROPS} />);
         // German: "{0} nach oben verschieben" - placeholder moves to start
-        expect(screen.getByLabelText('backlog nach oben verschieben')).toBeInTheDocument();
-        expect(screen.getByLabelText('doing nach unten verschieben')).toBeInTheDocument();
+        // the {0} substitution is the formatted column label (title-case), not the raw slug
+        expect(screen.getByLabelText('Backlog nach oben verschieben')).toBeInTheDocument();
+        expect(screen.getByLabelText('Doing nach unten verschieben')).toBeInTheDocument();
     });
 
     it('renders German Reset order button label', () => {
@@ -85,8 +86,9 @@ describe('l10n rendering with Spanish bundle', () => {
 
     it('renders interpolated Spanish aria-labels for column reorder buttons', () => {
         render(<SettingsKanbanDrawer {...KANBAN_DRAWER_PROPS} />);
-        expect(screen.getByLabelText('Mover backlog hacia arriba')).toBeInTheDocument();
-        expect(screen.getByLabelText('Mover doing hacia abajo')).toBeInTheDocument();
+        // the {0} substitution is the formatted column label (title-case), not the raw slug
+        expect(screen.getByLabelText('Mover Backlog hacia arriba')).toBeInTheDocument();
+        expect(screen.getByLabelText('Mover Doing hacia abajo')).toBeInTheDocument();
     });
 });
 

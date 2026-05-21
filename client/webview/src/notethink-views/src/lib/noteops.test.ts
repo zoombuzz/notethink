@@ -13,6 +13,7 @@ import {
     kanbanNoteOrder,
     noteOrder,
     findFirstIncompleteTaskSeq,
+    formatColumnLabel,
 } from './noteops';
 import type { NoteProps, TextSelection } from '../types/NoteProps';
 
@@ -564,5 +565,44 @@ describe('findFirstIncompleteTaskSeq', () => {
             makeListItem(3, false),
         ]);
         expect(findFirstIncompleteTaskSeq([list])).toBe(3);
+    });
+});
+
+describe('formatColumnLabel', () => {
+    it('replaces dashes with spaces and title-cases each word', () => {
+        expect(formatColumnLabel('code-review')).toBe('Code Review');
+    });
+
+    it('handles single-word slugs', () => {
+        expect(formatColumnLabel('todo')).toBe('Todo');
+        expect(formatColumnLabel('done')).toBe('Done');
+    });
+
+    it('handles multi-dash slugs', () => {
+        expect(formatColumnLabel('in-progress-review')).toBe('In Progress Review');
+    });
+
+    it('preserves existing spaces and title-cases each word', () => {
+        expect(formatColumnLabel('code review')).toBe('Code Review');
+    });
+
+    it('mixes dashes and spaces', () => {
+        expect(formatColumnLabel('blocked on-customer')).toBe('Blocked On Customer');
+    });
+
+    it('returns empty string for empty input', () => {
+        expect(formatColumnLabel('')).toBe('');
+    });
+
+    it('collapses repeated dashes into single-space-separated words', () => {
+        expect(formatColumnLabel('foo--bar')).toBe('Foo Bar');
+    });
+
+    it('leaves an already-title-cased string title-cased', () => {
+        expect(formatColumnLabel('Done')).toBe('Done');
+    });
+
+    it('preserves the canonical "untagged" bucket label as Untagged', () => {
+        expect(formatColumnLabel('untagged')).toBe('Untagged');
     });
 });

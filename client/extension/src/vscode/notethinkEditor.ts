@@ -6,7 +6,7 @@ import { abbrevDoc, getNonce } from '../lib/utils';
 import { debug, writeToLog, writeToErrorLog } from "../lib/errorops";
 import { parse } from '../lib/parseops';
 import { isPathWithin } from '../lib/pathsafe';
-import { MAX_AGGREGATE_FILES, DEFAULT_AGGREGATE_INCLUDE, DEFAULT_AGGREGATE_EXCLUDE } from '../constants';
+import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_FOLDER_VIEW_COLUMN_ORDER } from '../constants';
 
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
@@ -100,7 +100,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		function sendDoc(doc: Doc) {
 			const timestamped = { ...doc, updateSentAt: new Date().toISOString() };
 			debug('sendDoc %s', doc.path);
-			// in aggregate (folder) mode only docs inside integration_path go into the merged view; docs outside should not pollute the aggregated map
+			// in folder mode only docs inside integration_path go into the merged view; docs outside should not pollute the loaded docs map
 			// selection updates for out-of-integration docs still flow through sendSelection separately
 			if (integration_path && !doc.path.startsWith(integration_path)) {
 				debug('sendDoc: skipping out-of-integration doc %s', doc.path);
@@ -134,12 +134,12 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		let active_doc: Doc | undefined;
 		let active_path: string | undefined;
 
-		// --- aggregate (folder) integration state ---
+		// --- folder integration state ---
 		let integration_watcher: vscode.FileSystemWatcher | undefined;
 		let integration_path: string | undefined;
-		// editable aggregate filters, persisted per-view by the webview and replayed on reload; survive a breadcrumb re-narrow (only overwritten when the setIntegration message explicitly carries them)
-		let integration_include = DEFAULT_AGGREGATE_INCLUDE;
-		let integration_exclude = DEFAULT_AGGREGATE_EXCLUDE;
+		// editable folder filters, persisted per-view by the webview and replayed on reload; survive a breadcrumb re-narrow (only overwritten when the setIntegration message explicitly carries them)
+		let integration_include = DEFAULT_INCLUDE_FILTER;
+		let integration_exclude = DEFAULT_EXCLUDE_FILTER;
 		const integration_docs: HashMapOf<Doc> = {};
 
 		// --- single-file external-change watcher ---
@@ -226,7 +226,81 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			});
 		}
 
-		// build the initial active doc but defer pushing it to the webview until requestInitialState arrives - the webview sends setIntegration first on reload so by the time we sendDoc here integration_path is set and the merge_strategy='merge' path runs instead of wiping the saved aggregate map
+		// folder view settings — built-in default → User → Workspace cascade
+		// keys map between the webview payload (snake_case) and the VS Code config keys (camelCase under notethink.folderView.*)
+		const FOLDER_VIEW_KEYS = [
+			'view_type',
+			'column_order',
+			'include_filter',
+			'exclude_filter',
+			'max_notes_per_file',
+			'show_context_bars',
+		] as const;
+		type FolderViewKey = typeof FOLDER_VIEW_KEYS[number];
+
+		const FOLDER_VIEW_CONFIG_MAP: Record<FolderViewKey, string> = {
+			view_type: 'viewType',
+			column_order: 'columnOrder',
+			include_filter: 'includeFilter',
+			exclude_filter: 'excludeFilter',
+			max_notes_per_file: 'maxNotesPerFile',
+			show_context_bars: 'showContextBars',
+		};
+
+		// one-shot rename of legacy `notethink.folderView.aggregate*` keys (any scope) to their new names; runs before the first read so the cascade reflects the migrated values
+		const LEGACY_KEY_MIGRATIONS: Array<[string, string]> = [
+			['aggregateInclude', 'includeFilter'],
+			['aggregateExclude', 'excludeFilter'],
+			['aggregateMaxNotesPerFile', 'maxNotesPerFile'],
+		];
+		async function migrateLegacyFolderViewKeys() {
+			const config = vscode.workspace.getConfiguration('notethink.folderView');
+			for (const [old_key, new_key] of LEGACY_KEY_MIGRATIONS) {
+				const inspected = config.inspect(old_key);
+				if (!inspected) { continue; }
+				for (const target of [vscode.ConfigurationTarget.Global, vscode.ConfigurationTarget.Workspace] as const) {
+					const value = target === vscode.ConfigurationTarget.Global ? inspected.globalValue : inspected.workspaceValue;
+					if (value === undefined) { continue; }
+					try {
+						await config.update(new_key, value, target);
+						await config.update(old_key, undefined, target);
+					} catch (err) {
+						writeToErrorLog('migrateLegacyFolderViewKeys failed', `${old_key} → ${new_key}`, err);
+					}
+				}
+			}
+		}
+
+		function readFolderViewSettings() {
+			const config = vscode.workspace.getConfiguration('notethink.folderView');
+			// true iff any of the six folder-view keys has a Workspace-scope value; the webview uses it to enable the Reset button
+			let has_workspace_overrides = false;
+			for (const key of FOLDER_VIEW_KEYS) {
+				const inspected = config.inspect(FOLDER_VIEW_CONFIG_MAP[key]);
+				if (inspected?.workspaceValue !== undefined) {
+					has_workspace_overrides = true;
+					break;
+				}
+			}
+			return {
+				view_type: config.get<'auto' | 'document' | 'kanban'>('viewType', 'auto'),
+				column_order: config.get<string[]>('columnOrder', DEFAULT_FOLDER_VIEW_COLUMN_ORDER),
+				include_filter: config.get<string>('includeFilter', '**/*.md'),
+				exclude_filter: config.get<string>('excludeFilter', '**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**'),
+				max_notes_per_file: config.get<number>('maxNotesPerFile', 10),
+				show_context_bars: config.get<boolean>('showContextBars', true),
+				has_workspace_overrides,
+			};
+		}
+
+		function sendFolderViewSettings() {
+			webviewPanel.webview.postMessage({
+				type: 'folderViewSettings',
+				settings: readFolderViewSettings(),
+			});
+		}
+
+		// build the initial active doc but defer pushing it to the webview until requestInitialState arrives - the webview sends setIntegration first on reload so by the time we sendDoc here integration_path is set and the merge_strategy='merge' path runs instead of wiping the saved folder docs map
 		active_path = initialDocument.uri.path;
 		try {
 			active_doc = await buildDoc(initialDocument);
@@ -396,7 +470,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			syncActiveFileWatcher();
 		});
 
-		// re-send global settings when workspace configuration changes
+		// re-send global / folder-view settings when workspace configuration changes
 		const configSubscription = vscode.workspace.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration('notethink.showLineNumbers')) {
 				sendGlobalSettings();
@@ -404,6 +478,9 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			if (e.affectsConfiguration('notethink.watchUnopenedFilesInViewer')) {
 				sendGlobalSettings();
 				syncActiveFileWatcher();
+			}
+			if (e.affectsConfiguration('notethink.folderView')) {
+				sendFolderViewSettings();
 			}
 		});
 
@@ -426,6 +503,9 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							sendCurrentSelection();
 						}
 						sendGlobalSettings();
+						// rename legacy aggregate* keys before the first read so the cascade reflects migrated values
+						await migrateLegacyFolderViewKeys();
+						sendFolderViewSettings();
 						syncActiveFileWatcher();
 					} catch (err) {
 						writeToErrorLog('requestInitialState failed', '', err);
@@ -447,6 +527,64 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 						}
 					} catch (err) {
 						writeToErrorLog('updateGlobalSetting failed', setting, err);
+					}
+					return;
+				}
+				case 'updateFolderViewSetting': {
+					// scope defaults to workspace so user edits stay local; promote-to-default uses scope='global'
+					const setting = e.setting as FolderViewKey;
+					const value = e.value as unknown;
+					const scope = (e.scope as 'workspace' | 'global' | undefined) ?? 'workspace';
+					try {
+						if (!FOLDER_VIEW_KEYS.includes(setting)) {
+							writeToErrorLog('updateFolderViewSetting: unknown setting', setting);
+							return;
+						}
+						const config = vscode.workspace.getConfiguration('notethink.folderView');
+						const target = scope === 'global'
+							? vscode.ConfigurationTarget.Global
+							: vscode.ConfigurationTarget.Workspace;
+						await config.update(FOLDER_VIEW_CONFIG_MAP[setting], value, target);
+					} catch (err) {
+						writeToErrorLog('updateFolderViewSetting failed', setting, err);
+					}
+					return;
+				}
+				case 'promoteFolderViewSettingsToUser': {
+					// copy every currently-resolved value to User scope, then clear Workspace so the cascade reads from User next time
+					try {
+						const config = vscode.workspace.getConfiguration('notethink.folderView');
+						const resolved = readFolderViewSettings();
+						for (const key of FOLDER_VIEW_KEYS) {
+							const configKey = FOLDER_VIEW_CONFIG_MAP[key];
+							await config.update(configKey, resolved[key], vscode.ConfigurationTarget.Global);
+						}
+						// second pass clears Workspace overrides so they don't shadow the freshly-promoted User values
+						for (const key of FOLDER_VIEW_KEYS) {
+							const configKey = FOLDER_VIEW_CONFIG_MAP[key];
+							const inspected = config.inspect(configKey);
+							if (inspected?.workspaceValue !== undefined) {
+								await config.update(configKey, undefined, vscode.ConfigurationTarget.Workspace);
+							}
+						}
+					} catch (err) {
+						writeToErrorLog('promoteFolderViewSettingsToUser failed', '', err);
+					}
+					return;
+				}
+				case 'resetFolderViewSettingsToDefault': {
+					// clear every Workspace-scope override so the cascade falls back to User then built-in
+					try {
+						const config = vscode.workspace.getConfiguration('notethink.folderView');
+						for (const key of FOLDER_VIEW_KEYS) {
+							const configKey = FOLDER_VIEW_CONFIG_MAP[key];
+							const inspected = config.inspect(configKey);
+							if (inspected?.workspaceValue !== undefined) {
+								await config.update(configKey, undefined, vscode.ConfigurationTarget.Workspace);
+							}
+						}
+					} catch (err) {
+						writeToErrorLog('resetFolderViewSettingsToDefault failed', '', err);
 					}
 					return;
 				}
@@ -481,7 +619,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							return;
 						}
 
-						// in aggregate (folder) mode the NoteThink view is a set of signposts — clicking a story should jump to the file even when no editor is currently showing it
+						// in folder mode the NoteThink view is a set of signposts — clicking a story should jump to the file even when no editor is currently showing it
 						// in single-file mode we deliberately stay silent to avoid spawning editors on stray clicks
 						if (!integration_path) { return; }
 
@@ -549,7 +687,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 							// only adopt filters the message explicitly carries so a breadcrumb re-narrow keeps the user's current filters; an empty include is degenerate (matches nothing) so fall back to the default, an empty exclude legitimately means "exclude nothing"
 							if (typeof e.include === 'string') {
-								integration_include = e.include.trim() === '' ? DEFAULT_AGGREGATE_INCLUDE : e.include;
+								integration_include = e.include.trim() === '' ? DEFAULT_INCLUDE_FILTER : e.include;
 							}
 							if (typeof e.exclude === 'string') {
 								integration_exclude = e.exclude;
@@ -557,7 +695,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 							const pattern = new vscode.RelativePattern(vscode.Uri.file(folder_path), integration_include);
 
-							// aggregate-size metadata, surfaced to the webview so the breadcrumb can show "(loaded of discovered)" when the cap truncates
+							// folder-size metadata, surfaced to the webview so the breadcrumb can show "(loaded of discovered)" when the cap truncates
 							let aggregate_total_discovered = 0;
 							let aggregate_truncated = false;
 
@@ -589,8 +727,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 										extension_version,
 										aggregate_total_discovered,
 										aggregate_truncated,
-										aggregate_include: integration_include,
-										aggregate_exclude: integration_exclude,
+										include_filter: integration_include,
+										exclude_filter: integration_exclude,
 									});
 								} catch (err) {
 									writeToErrorLog('setIntegration: failed to load doc', uri.path, err);
@@ -623,8 +761,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 									extension_version,
 									aggregate_total_discovered,
 									aggregate_truncated,
-									aggregate_include: integration_include,
-									aggregate_exclude: integration_exclude,
+									include_filter: integration_include,
+									exclude_filter: integration_exclude,
 								});
 							});
 
@@ -660,11 +798,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							integration_watcher = undefined;
 						}
 						integration_path = undefined;
-						integration_include = DEFAULT_AGGREGATE_INCLUDE;
-						integration_exclude = DEFAULT_AGGREGATE_EXCLUDE;
+						integration_include = DEFAULT_INCLUDE_FILTER;
+						integration_exclude = DEFAULT_EXCLUDE_FILTER;
 						for (const key of Object.keys(integration_docs)) { delete integration_docs[key]; }
 						// re-resolve the active editor (it may have changed while in folder mode) and re-send just that file
-						// integration_path is now unset so sendDoc posts merge_strategy=undefined (replace), pruning the stale aggregate docs
+						// integration_path is now unset so sendDoc posts merge_strategy=undefined (replace), pruning the stale folder docs
 						try {
 							const current_editor = vscode.window.activeTextEditor;
 							if (current_editor?.document.uri.path.endsWith('.md')
@@ -757,7 +895,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 							sendDoc(active_doc);
 							sendCurrentSelection();
 						} else {
-							// aggregate mode (or background) edit: route the updated doc through sendDoc so the merge strategy is applied correctly
+							// folder mode (or background) edit: route the updated doc through sendDoc so the merge strategy is applied correctly
 							sendDoc(edited_doc);
 						}
 					} catch (err) {

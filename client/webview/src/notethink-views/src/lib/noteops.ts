@@ -182,6 +182,19 @@ export function stripHeadlineLinetags(headline_raw: string): string {
 }
 
 /**
+ * format a kanban column name for display: replace dashes with spaces and title-case each word. The raw status slug (`code-review`) is what lives in the data; this produces the user-facing label (`Code Review`). Empty input returns empty.
+ */
+export function formatColumnLabel(value: string): string {
+    if (!value) { return ''; }
+    return value
+        .replace(/-/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 0)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+/**
  * Standard note ordering: by seq (the canonical reading order — document order
  * for a single file, the round-robin cross-file interleave in folder mode), with
  * the document offset as a tiebreak when seqs are equal. This is the single

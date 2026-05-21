@@ -41,5 +41,9 @@
   "Files": "Fichiers",
   "Include filter": "Filtre d'inclusion",
   "Exclude filter": "Filtre d'exclusion",
-  "No files match the current filters": "Aucun fichier ne correspond aux filtres actuels"
+  "No files match the current filters": "Aucun fichier ne correspond aux filtres actuels",
+  "Make user default": "Définir comme défaut utilisateur",
+  "Reset to user default": "Rétablir le défaut utilisateur",
+  "Save your current folder view settings as your user default across every VS Code window.": "Enregistrez vos paramètres de vue de dossier actuels comme défaut utilisateur pour chaque fenêtre VS Code.",
+  "Clear this workspace's folder view overrides and fall back to your user default.": "Effacer les remplacements de la vue de dossier de cet espace de travail et revenir au défaut utilisateur."
 }

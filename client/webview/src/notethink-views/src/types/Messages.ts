@@ -47,12 +47,39 @@ export interface UpdateGlobalSettingMessage {
     value: unknown;
 }
 
+/**
+ * per-key write to a folder-view setting. Scope defaults to 'workspace' on the extension side when omitted; 'global' is the promote path.
+ */
+export interface UpdateFolderViewSettingMessage {
+    type: 'updateFolderViewSetting';
+    setting: keyof FolderViewSettingsPayload;
+    value: unknown;
+    scope?: 'workspace' | 'global';
+}
+
+/**
+ * promote every currently-resolved folder-view setting into User scope, then clear the Workspace overrides so the cascade reads from User next time.
+ */
+export interface PromoteFolderViewSettingsToUserMessage {
+    type: 'promoteFolderViewSettingsToUser';
+}
+
+/**
+ * clear every Workspace-scope folder-view override so the cascade falls back to User (or built-in default if no User override exists).
+ */
+export interface ResetFolderViewSettingsToDefaultMessage {
+    type: 'resetFolderViewSettingsToDefault';
+}
+
 export type WebviewToExtensionMessage =
     | RevealRangeMessage
     | SelectRangeMessage
     | EditTextMessage
     | OpenExternalMessage
-    | UpdateGlobalSettingMessage;
+    | UpdateGlobalSettingMessage
+    | UpdateFolderViewSettingMessage
+    | PromoteFolderViewSettingsToUserMessage
+    | ResetFolderViewSettingsToDefaultMessage;
 
 // Extension -> Webview messages
 
@@ -92,8 +119,30 @@ export interface GlobalSettingsMessage {
     settings: GlobalSettingsPayload;
 }
 
+/**
+ * resolved cascade values for the folder-view settings. The extension reads each key via vscode.workspace.getConfiguration() (built-in default → User → Workspace) and sends this payload on requestInitialState and whenever onDidChangeConfiguration fires for any of the underlying keys.
+ * - has_workspace_overrides: true iff at least one key has a value at ConfigurationTarget.Workspace; drives whether the Reset button is enabled in the UI
+ */
+export interface FolderViewSettingsPayload {
+    view_type: 'auto' | 'document' | 'kanban';
+    column_order: string[];
+    include_filter: string;
+    exclude_filter: string;
+    max_notes_per_file: number;
+    show_context_bars: boolean;
+    has_workspace_overrides: boolean;
+}
+
+export type FolderViewSettingKey = Exclude<keyof FolderViewSettingsPayload, 'has_workspace_overrides'>;
+
+export interface FolderViewSettingsMessage {
+    type: 'folderViewSettings';
+    settings: FolderViewSettingsPayload;
+}
+
 export type ExtensionToWebviewMessage =
     | UpdateMessage
     | SelectionChangedMessage
     | CommandMessage
-    | GlobalSettingsMessage;
+    | GlobalSettingsMessage
+    | FolderViewSettingsMessage;

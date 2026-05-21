@@ -11,7 +11,7 @@
 import * as vscode from 'vscode';
 import { createMockWebviewPanel, Position, Range, Selection, WorkspaceEdit, Uri } from '../__mocks__/vscode';
 import { NotethinkEditorProvider } from './notethinkEditor';
-import { DEFAULT_AGGREGATE_EXCLUDE } from '../constants';
+import { DEFAULT_EXCLUDE_FILTER } from '../constants';
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -410,9 +410,9 @@ describe('NotethinkEditorProvider', () => {
 		});
 	});
 
-	// ---- setIntegration aggregate filters -----------------------------------
+	// ---- setIntegration folder filters -----------------------------------
 
-	describe('setIntegration aggregate filters', () => {
+	describe('setIntegration folder filters', () => {
 		const flush = () => new Promise(resolve => setImmediate(resolve));
 
 		beforeEach(() => setWorkspaceRoots(['/workspace']));
@@ -425,11 +425,11 @@ describe('NotethinkEditorProvider', () => {
 
 			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[0];
 			expect(find_call[0].pattern).toBe('**/*.md');
-			expect(find_call[1]).toBe(DEFAULT_AGGREGATE_EXCLUDE);
+			expect(find_call[1]).toBe(DEFAULT_EXCLUDE_FILTER);
 
 			const update = panelHelper.postedMessages.filter((m: any) => m.type === 'update').pop();
-			expect(update.aggregate_include).toBe('**/*.md');
-			expect(update.aggregate_exclude).toBe(DEFAULT_AGGREGATE_EXCLUDE);
+			expect(update.include_filter).toBe('**/*.md');
+			expect(update.exclude_filter).toBe(DEFAULT_EXCLUDE_FILTER);
 		});
 
 		it('passes a custom include and treats an empty exclude as no exclusions (null)', async () => {
@@ -445,8 +445,8 @@ describe('NotethinkEditorProvider', () => {
 			expect(find_call[1]).toBeNull();
 
 			const update = panelHelper.postedMessages.filter((m: any) => m.type === 'update').pop();
-			expect(update.aggregate_include).toBe('**/users/**');
-			expect(update.aggregate_exclude).toBe('');
+			expect(update.include_filter).toBe('**/users/**');
+			expect(update.exclude_filter).toBe('');
 		});
 
 		it('falls back to the default include when an empty include is sent', async () => {
@@ -476,7 +476,7 @@ describe('NotethinkEditorProvider', () => {
 			expect(second_call[1]).toBeNull();
 		});
 
-		it('switching to current_file tears down the aggregate and re-sends the active doc as a replace', async () => {
+		it('switching to current_file tears down the folder integration and re-sends the active doc as a replace', async () => {
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
 			await flush();
 
@@ -484,7 +484,7 @@ describe('NotethinkEditorProvider', () => {
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'current_file' });
 			await flush();
 
-			// the active doc is re-sent with no merge_strategy so the webview replaces (prunes) the stale aggregate docs
+			// the active doc is re-sent with no merge_strategy so the webview replaces (prunes) the stale folder docs
 			const update = panelHelper.postedMessages.find((m: any) => m.type === 'update');
 			expect(update).toBeDefined();
 			expect(update.merge_strategy).toBeUndefined();
@@ -988,7 +988,7 @@ describe('NotethinkEditorProvider', () => {
 			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(1);
 		});
 
-		it('disposes the watcher when entering folder (aggregate) mode', async () => {
+		it('disposes the watcher when entering folder mode', async () => {
 			const { panel } = await setupUnvisitedDoc();
 			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
 

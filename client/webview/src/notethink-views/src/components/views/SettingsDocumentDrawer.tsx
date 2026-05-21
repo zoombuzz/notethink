@@ -17,6 +17,9 @@ interface SettingsDocumentDrawerProps {
     watchUnopenedFilesInViewer?: boolean;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
+    onMakeDefault?: () => void;
+    onResetToDefault?: () => void;
+    canResetToDefault?: boolean;
 }
 
 function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps) {
@@ -30,6 +33,9 @@ function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps) {
                         watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
                         onSettingChange={props.onSettingChange}
                         onGlobalSettingChange={props.onGlobalSettingChange}
+                        onMakeDefault={props.onMakeDefault}
+                        onResetToDefault={props.onResetToDefault}
+                        canResetToDefault={props.canResetToDefault}
                     />
                 </section>
             </div>

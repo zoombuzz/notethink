@@ -13,8 +13,10 @@ if (typeof globalThis.TextDecoder === 'undefined') {
 }
 
 // mock acquireVsCodeApi global (available in VS Code webview context)
-globalThis.acquireVsCodeApi = () => ({
+// singleton so tests spying on .postMessage observe the same instance the SUT uses
+const __vscode_api_singleton = {
     getState: () => ({ docs: {} }),
     setState: () => {},
     postMessage: () => {},
-});
+};
+globalThis.acquireVsCodeApi = () => __vscode_api_singleton;

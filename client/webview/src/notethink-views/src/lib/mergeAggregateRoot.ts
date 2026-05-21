@@ -46,6 +46,11 @@ interface EpicEntry {
 const ORDER_NEWEST_AT_BOTTOM = 'newest-at-bottom';
 
 /**
+ * canonical viewState key for folder mode. All folder-mode reads and writes use this key so settings (column_order, filters, view type, etc.) survive a flip to current_file mode and back.
+ */
+export const FOLDER_VIEW_STATE_ID = '__folder__';
+
+/**
  * Select a single file's contributed stories for the merged view: trim to at
  * most `max` entries and orient them newest-first so they sort consistently
  * with `newest-at-top` files.
@@ -319,27 +324,35 @@ export function mergeAggregateRoot(
 }
 
 /**
- * Helper used by NoteRenderer to detect whether any of the supplied view states
- * has switched to folder aggregation. Exported so tests can exercise it.
+ * helper used by NoteRenderer to detect whether any of the supplied view states has switched to folder aggregation. Exported so tests can exercise it. Checks the canonical FOLDER_VIEW_STATE_ID first, then falls back to a scan for any entry tagged integration_mode='folder' so a stranded doc-path-keyed viewState still resolves to folder mode.
  */
 export function anyViewInFolderMode(
     view_states: Record<string, { display_options?: { integration_mode?: string } }> | undefined,
 ): boolean {
     if (!view_states) { return false; }
+    if (view_states[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode === 'folder') { return true; }
     for (const id of Object.keys(view_states)) {
+        if (id === FOLDER_VIEW_STATE_ID) { continue; }
         if (view_states[id]?.display_options?.integration_mode === 'folder') { return true; }
     }
     return false;
 }
 
 /**
- * Reads the integration_path from the first view state in folder mode, if any.
+ * Reads the integration_path from the folder viewState. Checks the canonical key first,
+ * then falls back to the first legacy entry tagged integration_mode='folder' for state
+ * stranded under a doc-path key by the pre-fix dispatch bug.
  */
 export function firstIntegrationPath(
     view_states: Record<string, { display_options?: { integration_mode?: string; integration_path?: string } }> | undefined,
 ): string | undefined {
     if (!view_states) { return undefined; }
+    const canonical = view_states[FOLDER_VIEW_STATE_ID];
+    if (canonical?.display_options?.integration_mode === 'folder' && typeof canonical.display_options.integration_path === 'string') {
+        return canonical.display_options.integration_path;
+    }
     for (const id of Object.keys(view_states)) {
+        if (id === FOLDER_VIEW_STATE_ID) { continue; }
         const v = view_states[id];
         if (v?.display_options?.integration_mode === 'folder' && typeof v.display_options.integration_path === 'string') {
             return v.display_options.integration_path;

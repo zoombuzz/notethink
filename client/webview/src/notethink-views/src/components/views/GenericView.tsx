@@ -10,6 +10,7 @@ import {
     resolveCaretPosition,
     noteOrder,
 } from "../../lib/noteops";
+import { FOLDER_VIEW_STATE_ID } from "../../lib/mergeAggregateRoot";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import BreadcrumbTrail from "./BreadcrumbTrail";
 import ViewTypeSelector from "./ViewTypeSelector";
@@ -170,7 +171,7 @@ export default function GenericView(props: ViewProps) {
                         props.handlers.postMessage({
                             type: 'editText',
                             changes: changes,
-                            // aggregate mode: route to the origin file; undefined in single-file mode
+                            // folder mode: route to the origin file; undefined in single-file mode
                             docPath: note.origin?.doc_path,
                         });
                     }
@@ -245,9 +246,10 @@ export default function GenericView(props: ViewProps) {
     }, props.handlers);
 
     // handle breadcrumb folder click - switch to (or narrow within) folder integration mode
+    // dispatch targets FOLDER_VIEW_STATE_ID so the integration_mode tag never lands on a doc-path key in single-file mode
     const handleFolderClick = useCallback((folder_path: string) => {
         handlers.setViewManagedState([{
-            id: props.id,
+            id: FOLDER_VIEW_STATE_ID,
             display_options: {
                 integration_mode: 'folder',
                 integration_path: folder_path,
@@ -258,7 +260,7 @@ export default function GenericView(props: ViewProps) {
             mode: 'folder',
             path: folder_path,
         });
-    }, [handlers, props.id]);
+    }, [handlers]);
 
     // at most one toolbar drawer open at a time (settings | files); shares the scroll-anchor + Escape behaviour
     const [active_drawer, setActiveDrawer] = useState<'none' | 'settings' | 'files'>('none');
@@ -284,15 +286,15 @@ export default function GenericView(props: ViewProps) {
         toggleDrawer('files', anchor);
     }, [toggleDrawer]);
 
-    // persist edited globs + per-file story cap to per-view state (survives reload) and post a background setIntegration so the extension re-discovers the whole aggregate with the new filters
-    // the cap is webview-only: it is persisted in view state and applied by mergeAggregateRoot but is NOT included in the setIntegration round-trip
+    // persist edited globs + per-file story cap to per-view state (survives reload) and post a background setIntegration so the extension re-discovers the folder set with the new filters
+    // also round-trip each cascading setting to VS Code config via updateFolderViewSetting so it survives across windows when promoted to default
     const handleApplyFilters = useCallback((next_include: string, next_exclude: string, next_max_notes_per_file: number) => {
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
-                aggregate_include: next_include,
-                aggregate_exclude: next_exclude,
-                aggregate_max_notes_per_file: next_max_notes_per_file,
+                include_filter: next_include,
+                exclude_filter: next_exclude,
+                max_notes_per_file: next_max_notes_per_file,
             },
         }]);
         const integration_path = props.display_options?.integration_path;
@@ -305,7 +307,13 @@ export default function GenericView(props: ViewProps) {
                 exclude: next_exclude,
             });
         }
-    }, [handlers, props.id, props.display_options?.integration_path]);
+        // cascade round-trip: filters drawer is only reachable in folder mode, so we always write
+        if (props.display_options?.integration_mode === 'folder') {
+            handlers.postMessage?.({ type: 'updateFolderViewSetting', setting: 'include_filter', value: next_include });
+            handlers.postMessage?.({ type: 'updateFolderViewSetting', setting: 'exclude_filter', value: next_exclude });
+            handlers.postMessage?.({ type: 'updateFolderViewSetting', setting: 'max_notes_per_file', value: next_max_notes_per_file });
+        }
+    }, [handlers, props.id, props.display_options?.integration_path, props.display_options?.integration_mode]);
 
     // create standard breadcrumb component for display in views
     const breadcrumb_trail = <BreadcrumbTrail
@@ -345,7 +353,7 @@ export default function GenericView(props: ViewProps) {
                 const prev_index = current_index > 0 ? current_index - 1 : 0;
                 const target_note = notes_within_parent_context[prev_index];
                 if (target_note) {
-                    // postMessage directly so we can attach the origin doc path in aggregate mode
+                    // postMessage directly so we can attach the origin doc path in folder mode
                     handlers.postMessage?.({
                         type: 'revealRange',
                         from: target_note.position.start.offset,
@@ -421,8 +429,11 @@ export default function GenericView(props: ViewProps) {
         const folder_path = mode === 'folder' && props.doc_path
             ? props.doc_path.replace(/\/[^/]+$/, '')
             : undefined;
+        // dispatch the integration_mode tag to the canonical folder key (not props.id)
+        // so the folder viewState's other settings (column_order, filters, etc.) survive
+        // a flip to current_file and back
         handlers.setViewManagedState([{
-            id: props.id,
+            id: FOLDER_VIEW_STATE_ID,
             display_options: {
                 integration_mode: mode,
                 integration_path: folder_path,
@@ -435,8 +446,8 @@ export default function GenericView(props: ViewProps) {
                 path: folder_path,
             });
         } else if (mode === 'current_file') {
-            // notify the extension so it disposes the aggregate watcher and re-sends just the active doc
-            // without this the stale aggregate docs keep rendering as stacked single-file views
+            // notify the extension so it disposes the folder watcher and re-sends just the active doc
+            // without this the stale folder docs keep rendering as stacked single-file views
             handlers.postMessage?.({
                 type: 'setIntegration',
                 mode: 'current_file',
@@ -461,6 +472,24 @@ export default function GenericView(props: ViewProps) {
         return a.every((value, index) => value === b[index]);
     };
 
+    // cascade write to VS Code config (Workspace scope on the extension side); no-op outside folder mode so dispatchers can call it unconditionally
+    const cascadeWriteFolderViewSetting = useCallback((setting: string, value: unknown) => {
+        if (integration_mode !== 'folder') { return; }
+        handlers.postMessage?.({
+            type: 'updateFolderViewSetting',
+            setting,
+            value,
+        });
+    }, [handlers, integration_mode]);
+
+    const handleMakeDefault = useCallback(() => {
+        handlers.postMessage?.({ type: 'promoteFolderViewSettingsToUser' });
+    }, [handlers]);
+
+    const handleResetToDefault = useCallback(() => {
+        handlers.postMessage?.({ type: 'resetFolderViewSettingsToDefault' });
+    }, [handlers]);
+
     // real-time apply: per-view setting change dispatches setViewManagedState immediately. Global keys are stripped so they don't get baked into per-view state — the extension owns them via vscode workspace config
     const handleSettingChange = useCallback((key: CommonSettingKey, value: boolean) => {
         const { show_line_numbers: _sln, watch_unopened_files_in_viewer: _wu, ...per_view_settings } = display_options.settings || {};
@@ -480,10 +509,11 @@ export default function GenericView(props: ViewProps) {
         handlers.postMessage?.({ type: 'updateGlobalSetting', setting: key, value });
     }, [handlers]);
 
-    // real-time apply: Kanban column order change. Normalise: if next_order matches the natural order, persist undefined
+    // real-time apply: Kanban column order change. Normalise: if next_order matches the natural order, persist undefined locally; cascade always carries an explicit array (empty == natural)
     const handleColumnOrderChange = useCallback((next_order: string[]) => {
         const { show_line_numbers: _sln, watch_unopened_files_in_viewer: _wu, ...per_view_settings } = display_options.settings || {};
-        const persisted_order = arraysEqual(next_order, natural_column_order) ? undefined : next_order;
+        const matches_natural = arraysEqual(next_order, natural_column_order);
+        const persisted_order = matches_natural ? undefined : next_order;
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
@@ -493,7 +523,9 @@ export default function GenericView(props: ViewProps) {
                 },
             },
         }]);
-    }, [handlers, props.id, display_options.settings, natural_column_order]);
+        // cascade payload uses [] (not undefined) for "natural order" to match the package.json default's shape
+        cascadeWriteFolderViewSetting('column_order', matches_natural ? [] : next_order);
+    }, [handlers, props.id, display_options.settings, natural_column_order, cascadeWriteFolderViewSetting]);
 
     // scroll-anchor the trigger element across the open/close animation so the content the user was looking at stays visible
     useLayoutEffect(() => {
@@ -620,6 +652,9 @@ export default function GenericView(props: ViewProps) {
                         autoResolvedType={auto_resolved_type}
                         handlers={handlers}
                         id={props.id}
+                        onFolderCascadeWrite={integration_mode === 'folder'
+                            ? (view_type) => cascadeWriteFolderViewSetting('view_type', view_type)
+                            : undefined}
                     />
                     <button
                         data-testid="view-insert-button"
@@ -680,6 +715,9 @@ export default function GenericView(props: ViewProps) {
                             watchUnopenedFilesInViewer={display_options.settings?.watch_unopened_files_in_viewer}
                             onSettingChange={handleSettingChange}
                             onGlobalSettingChange={handleGlobalSettingChange}
+                            onMakeDefault={integration_mode === 'folder' ? handleMakeDefault : undefined}
+                            onResetToDefault={integration_mode === 'folder' ? handleResetToDefault : undefined}
+                            canResetToDefault={props.folder_view_cascade_has_workspace_overrides ?? false}
                         />
                     )}
                     {props.type === 'kanban' && (
@@ -696,6 +734,9 @@ export default function GenericView(props: ViewProps) {
                             onSettingChange={handleSettingChange}
                             onGlobalSettingChange={handleGlobalSettingChange}
                             onColumnOrderChange={handleColumnOrderChange}
+                            onMakeDefault={integration_mode === 'folder' ? handleMakeDefault : undefined}
+                            onResetToDefault={integration_mode === 'folder' ? handleResetToDefault : undefined}
+                            canResetToDefault={props.folder_view_cascade_has_workspace_overrides ?? false}
                         />
                     )}
                 </ToolbarDrawer>
@@ -708,12 +749,12 @@ export default function GenericView(props: ViewProps) {
                     ariaLabel={l10n.t('Files')}
                 >
                     <FilesDrawer
-                        include={props.aggregate_include ?? ''}
-                        exclude={props.aggregate_exclude ?? ''}
-                        maxNotesPerFile={props.display_options?.aggregate_max_notes_per_file ?? 10}
+                        include={props.include_filter ?? ''}
+                        exclude={props.exclude_filter ?? ''}
+                        maxNotesPerFile={props.display_options?.max_notes_per_file ?? 10}
                         fileCount={props.file_count ?? 0}
                         noteCount={props.note_count ?? 0}
-                        files={props.aggregate_files ?? []}
+                        files={props.aggregate_loaded_files ?? []}
                         onApplyFilters={handleApplyFilters}
                     />
                 </ToolbarDrawer>

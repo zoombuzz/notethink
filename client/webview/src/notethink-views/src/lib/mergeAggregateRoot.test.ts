@@ -1,4 +1,4 @@
-import { mergeAggregateRoot, type AggregatedDocInput } from './mergeAggregateRoot';
+import { mergeAggregateRoot, anyViewInFolderMode, firstIntegrationPath, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from './mergeAggregateRoot';
 import type { MdastNode } from '../types/NoteProps';
 
 /**
@@ -624,4 +624,71 @@ describe('mergeAggregateRoot', () => {
         expect(root.child_notes![0].origin?.file_view_type).toBe('kanban');
     });
 
+});
+
+describe('anyViewInFolderMode', () => {
+    it('returns false for undefined or empty view states', () => {
+        expect(anyViewInFolderMode(undefined)).toBe(false);
+        expect(anyViewInFolderMode({})).toBe(false);
+    });
+
+    it('returns true when the canonical key is tagged folder', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'folder' } },
+        };
+        expect(anyViewInFolderMode(view_states)).toBe(true);
+    });
+
+    it('returns true via legacy fallback when a doc-path key is tagged folder', () => {
+        const view_states = {
+            '/repo/a.md': { display_options: { integration_mode: 'folder' } },
+        };
+        expect(anyViewInFolderMode(view_states)).toBe(true);
+    });
+
+    it('returns false when canonical is tagged current_file and no legacy folder entry exists', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'current_file' } },
+            '/repo/a.md': { display_options: { integration_mode: 'current_file' } },
+        };
+        expect(anyViewInFolderMode(view_states)).toBe(false);
+    });
+
+    it('returns true when canonical is current_file but a legacy entry is still tagged folder', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'current_file' } },
+            '/repo/a.md': { display_options: { integration_mode: 'folder' } },
+        };
+        expect(anyViewInFolderMode(view_states)).toBe(true);
+    });
+});
+
+describe('firstIntegrationPath', () => {
+    it('returns undefined for undefined or empty view states', () => {
+        expect(firstIntegrationPath(undefined)).toBeUndefined();
+        expect(firstIntegrationPath({})).toBeUndefined();
+    });
+
+    it('prefers the canonical key over a legacy entry', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'folder', integration_path: '/canonical' } },
+            '/repo/a.md': { display_options: { integration_mode: 'folder', integration_path: '/legacy' } },
+        };
+        expect(firstIntegrationPath(view_states)).toBe('/canonical');
+    });
+
+    it('falls back to legacy entry when canonical has no folder tag', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'current_file' } },
+            '/repo/a.md': { display_options: { integration_mode: 'folder', integration_path: '/legacy' } },
+        };
+        expect(firstIntegrationPath(view_states)).toBe('/legacy');
+    });
+
+    it('returns undefined when no entry has both folder tag and a path', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'folder' } },
+        };
+        expect(firstIntegrationPath(view_states)).toBeUndefined();
+    });
 });

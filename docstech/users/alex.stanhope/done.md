@@ -1375,3 +1375,151 @@ Yesterday's tiebreak surfaces stories from the file currently focused in the edi
 + manual: confirm single-file view + drag-to-reorder are unaffected
 
 
+### Rename "aggregate" → "folder" / "filter" for user-facing identifiers
+
++ rationale
+  + UI says "folder view" everywhere; code says "aggregate" in many places. The mismatch costs a mental hop on every read with no offsetting benefit
+  + bare `folder_include` would be ambiguous (the folder already contains every file); the filter is over filenames matching a glob. Match the UI's "Include filter" / "Exclude filter" labels with `include_filter` / `exclude_filter`
+  + discipline going forward: **folder** = user-facing concept (mode, settings, UI), **aggregate** = the underlying merge operation (engine internals: input types, output stats, the merge function itself). Each new field/symbol falls cleanly into one of the two buckets
++ rename table
+  + user-facing fields and constants:
+    + `aggregate_include` → `include_filter`
+    + `aggregate_exclude` → `exclude_filter`
+    + `aggregate_max_notes_per_file` → `max_notes_per_file`
+    + `aggregate_files` → `aggregate_loaded_files` (keep prefix — engine output; the new noun says it's the loaded subset, paired with `aggregate_total_discovered`)
+    + `DEFAULT_AGGREGATE_INCLUDE` → `DEFAULT_INCLUDE_FILTER`
+    + `DEFAULT_AGGREGATE_EXCLUDE` → `DEFAULT_EXCLUDE_FILTER`
+    + `DEFAULT_AGGREGATE_MAX_NOTES_PER_FILE` → `DEFAULT_MAX_NOTES_PER_FILE`
+    + `AggregateTreeComposer` (file + class) → `FolderTreeComposer`
+  + VS Code config keys (user-visible in Settings UI):
+    + `notethink.folderView.aggregateInclude` → `notethink.folderView.includeFilter`
+    + `notethink.folderView.aggregateExclude` → `notethink.folderView.excludeFilter`
+    + `notethink.folderView.aggregateMaxNotesPerFile` → `notethink.folderView.maxNotesPerFile`
+  + unchanged (engine internals):
+    + `aggregate_total_discovered` — engine stat (pre-cap discovery count)
+    + `MAX_AGGREGATE_FILES` — engine cap
+    + `mergeAggregateRoot()` — the merge function itself
+    + `AggregatedDocInput` / `MergeAggregateRootResult` — function input/output types
+    + `FOLDER_VIEW_STATE_ID = '__folder__'` (was `'__aggregate__'`) — `migrateSavedState` renames the legacy key on first webview load
+    + extension-side `integration_*` locals (`integration_path`, `integration_include`, `integration_exclude`, `integration_watcher`, `integration_docs`) — internal grouping prefix, not user-visible
++ migration paths
+  + VS Code config: on extension activation, copy any value from each old `aggregate*` key to its new key (in the same scope: User and/or Workspace), then clear the old key. Idempotent — once migrated, the old keys are gone
+  + webview saved state: extend `migrateSavedState` in `ExtensionReceiver.tsx` to rename `display_options.aggregate_*` → new names on first load
+  + l10n: `package.nls.*.json` placeholder names rename to match (`config.folderView.aggregateInclude.description` → `config.folderView.includeFilter.description` etc.). Description bodies stay the same
++ [X] write story (this)
++ [X] rename source identifiers across `client/extension/src` and `client/webview/src` (snake_case fields, SCREAMING_SNAKE_CASE constants)
++ [X] move `AggregateTreeComposer.tsx` to `FolderTreeComposer.tsx`, rename the class, update importers
++ [X] rename VS Code config keys in `package.json` + l10n description placeholder keys in `package.nls.*.json`
++ [X] add `migrateLegacyFolderViewKeys()` in `notethinkEditor.ts`; called before the first `readFolderViewSettings()` (inside the `requestInitialState` handler)
++ [X] extend `migrateSavedState` in `ExtensionReceiver.tsx` for the persisted webview state (renames `display_options.aggregate_*` → new names on first load)
++ [X] update all tests that reference old identifiers (`ExtensionReceiver.test.tsx`, `GenericView.test.tsx`, `FilesDrawer.test.tsx`, `globMatch.test.ts`, `notethinkEditor.test.ts`)
++ [X] sweep comments and debug strings for "aggregate" where it refers to user-facing concepts; engine-internal usages (`mergeAggregateRoot`, `AggregatedDocInput`, `aggregateNoteLinetags`, `MAX_AGGREGATE_FILES`, `aggregate_total_discovered`, `aggregate_loaded_files`, the `__aggregate__` viewState key value) kept by design
++ [X] rename playwright spec `aggregate-folder.spec.ts` → `folder-view.spec.ts` and fixtures `aggregate-a.md`/`aggregate-b.md` → `folder-a.md`/`folder-b.md` (via `git mv` so history follows)
++ [X] pnpm run lint + build + rollup + test-jest green (682 jest)
++ [X] bump `package.json` patch version → 0.2.20
++ manual: open an existing workspace whose `.vscode/settings.json` has `notethink.folderView.aggregateInclude` set; reload; confirm the value now lives under `includeFilter` and the old key is gone
++ manual: open a workspace whose webview state has `display_options.aggregate_include`; reload; confirm settings still apply, viewState reflects the new field names
++ acceptance
+  + no `aggregate_*` identifiers in user-facing types/configs/symbols outside the engine-internal allowlist above
+  + existing User and Workspace settings under old config keys migrate transparently
+  + existing persisted viewState migrates transparently
+  + tests + lint + build + rollup green
+
+
+### Cascade folder view settings, with column-name formatting fix
+
++ user request
+  + "set settings once and have them apply to all my Versus code instances, but then I want the ability to override them in a specific instance"
+  + workspace overrides win over user defaults; explicit affordances to promote workspace → user (Make default) or wipe workspace overrides (Reset to default)
+  + a single pair of buttons in the settings drawer, not per-setting; one click promotes every customised value, one click clears every workspace override
+  + bundled cosmetic fix: kanban column names in **both** the column header and the settings drawer column-order list should render with dashes replaced by spaces, then capitalised. Today the data value `code-review` renders as `Code-review` via CSS `text-transform: capitalize` (which only capitalises the first char because the dash isn't a word boundary). After the fix it should render as `Code Review` in both places
++ design — lean on VS Code's existing config cascade
+  + add `notethink.folderView.*` keys to `package.json` `contributes.configuration`; VS Code's Settings UI handles the cascade (built-in default → User → Workspace) for free, and Settings Sync — when the user opts in — propagates User scope across machines
+  + the existing `globalSettings` pattern (`notethinkEditor.ts:214-225`, `:434-451`) is the template: extension reads config, pushes a typed payload to webview, listens for `onDidChangeConfiguration` to re-push, accepts an `updateXxx` message from the webview to write back. Mirror that pattern for folder view settings rather than inventing a parallel one
+  + writes default to `ConfigurationTarget.Workspace` — predictable, no surprises. Make default / Reset to default are the only paths that touch `ConfigurationTarget.Global`
++ cascading settings (initial set)
+  + `notethink.folderView.viewType` — string enum `auto | document | kanban`, default `auto`
+  + `notethink.folderView.columnOrder` — string array, default `['untagged', 'doing', 'code-review', 'testing', 'done']` (a rational left-to-right work progression; columns absent from the user's data are hidden by the board's empty-column culling, so this is just an ordering hint — unused buckets stay invisible until they have stories). Constant `DEFAULT_FOLDER_VIEW_COLUMN_ORDER` is the single source of truth, mirrored across `client/extension/src/constants.ts`, `client/webview/src/constants.ts`, and the `package.json` enum default
+  + `notethink.folderView.aggregateInclude` — string glob, default `**/*.md` (matches `DEFAULT_AGGREGATE_INCLUDE`)
+  + `notethink.folderView.aggregateExclude` — string glob, default matches `DEFAULT_AGGREGATE_EXCLUDE`
+  + `notethink.folderView.aggregateMaxNotesPerFile` — integer, default 10 (matches `DEFAULT_AGGREGATE_MAX_NOTES_PER_FILE`)
+  + `notethink.folderView.showContextBars` — boolean, default `true`
+  + out of scope for this story: `integration_mode` and `integration_path` (these are session state per workspace, not user preferences) and any single-file mode settings (`fileView.*` is a follow-up)
++ message contract additions
+  + ext → webview: `folderViewSettings` `{ settings: { viewType, columnOrder, aggregateInclude, aggregateExclude, aggregateMaxNotesPerFile, showContextBars } }` — resolved cascade values
+  + webview → ext: `updateFolderViewSetting` `{ key, value, scope?: 'workspace' | 'global' }` — default scope workspace
+  + webview → ext: `promoteFolderViewSettingsToUser` — copies every currently-resolved folder view setting into User scope, then clears Workspace overrides
+  + webview → ext: `resetFolderViewSettingsToDefault` — clears every Workspace-scope folder view override, falling back to User then built-in
++ webview wiring
+  + `ExtensionReceiver` holds `folderViewSettings` state next to `globalSettings`; passes through `NoteRenderer` props
+  + `AggregateTreeComposer` merges resolved settings into the rendered view (cascade values take precedence over webview-only defaults, but per-session `setViewManagedState` overrides win locally — optimistic update with extension confirmation)
+  + setting changes in folder mode dispatch `updateFolderViewSetting` to the extension instead of (or alongside) `setViewManagedState`. Working out which path wins for which keys is part of implementation: where the value lives in VS Code config, it round-trips through the extension; where it stays webview-only (e.g. the integration_mode tag), it keeps the existing path
++ make default / reset buttons
+  + two buttons in `SettingsKanbanDrawer` and `SettingsDocumentDrawer` (factor into the shared `SettingsCommonControls` if convenient) — single pair, not per-setting
+  + labels: `Make default` and `Reset to default`, with localisations in `bundle.l10n.json` for the existing locales
+  + tooltip on Make default: "Save your current folder view settings as the default for every VS Code window."
+  + tooltip on Reset to default: "Clear this window's folder view overrides and use the saved default."
+  + button visibility: always present; Reset disabled when no Workspace-scope overrides exist (VS Code config inspection via `getConfiguration().inspect(key)` exposes whether a workspaceValue is set)
++ column-name formatting fix
+  + new utility `formatColumnLabel(value: string): string` (in `client/webview/src/notethink-views/src/lib/noteops.ts` since it's a small string-transformation helper alongside `noteOrder` etc.) — replaces `-` with space and title-cases each word
+  + apply in `KanbanColumn.tsx` (`<h3>{props.value}</h3>` → `<h3>{formatColumnLabel(props.value)}</h3>`) and `SettingsKanbanDrawer.tsx` (`<span>{column_name}</span>` → `<span>{formatColumnLabel(column_name)}</span>`)
+  + drop the CSS `text-transform: capitalize` on `.heading` in `ViewRenderer.module.scss` — now the JS produces the actual display text, so accessibility tools / aria-labels see the user-facing words rather than the raw status slug
+  + keep raw status slug for `aria-label` on the column region (`role={'region'} aria-label={props.value}`) so assistive tech still gets the canonical value for selection/scripting flows. **Decision pending:** whether to use raw or formatted for the move-up/down aria-labels in the settings drawer — formatted is more readable, raw is more "scriptable". Default to formatted; revisit if a screen-reader user objects
++ [X] add `formatColumnLabel` utility in `noteops.ts` with jest tests
++ [X] apply `formatColumnLabel` in `KanbanColumn` heading and `SettingsKanbanDrawer` column list; drop redundant CSS capitalize
++ [X] declare `notethink.folderView.*` config keys in `package.json` `contributes.configuration`
++ [X] add `folderViewSettings` payload type + message types to `notethink-views/src/types/Messages.ts`
++ [X] extend `notethinkEditor.ts`: `readFolderViewSettings` / `sendFolderViewSettings`, handle `updateFolderViewSetting`, `promoteFolderViewSettingsToUser`, `resetFolderViewSettingsToDefault`, hook into `onDidChangeConfiguration` and `requestInitialState`
++ [X] extend `ExtensionReceiver.tsx`: new `folderViewSettings` state, message handlers, pass through to `NoteRenderer` props
++ [X] thread `folderViewSettings` through `NoteRenderer` and `AggregateTreeComposer` so cascade values are the rendering source; per-session viewState overrides remain available for optimistic updates
++ [X] route setting changes in folder mode through the new `updateFolderViewSetting` message (column reorder, filter changes, view type toggle, show_context_bars toggle); column reorder, filters and view type round-trip via `cascadeWriteFolderViewSetting`/handleApplyFilters/ViewTypeSelector.onFolderCascadeWrite; show_context_bars rounds-trip from `ExtensionReceiver`'s toggleSetting handler because it's command-driven
++ [X] add `Make default` and `Reset to default` buttons via `SettingsCommonControls` (shared by both drawers); wired to `promoteFolderViewSettingsToUser` / `resetFolderViewSettingsToDefault` messages; Reset disabled when `folder_view_cascade_has_workspace_overrides` is false
++ [X] l10n: button labels + tooltips added to `l10n/bundle.l10n.{json,fr,de,es,it}.json`; new `config.folderView.*.description` keys added to `package.nls*.json` for every supported locale
++ [X] jest: `formatColumnLabel` unit tests (9 cases covering dashes, multi-word, empty, edge cases) in `noteops.test.ts`
++ [X] jest: ExtensionReceiver round-trip — `folderViewSettings` message threads through to `NoteRenderer` props; `setViewType` command round-trips to `updateFolderViewSetting` in folder mode and not in single-file mode (3 new tests in `ExtensionReceiver.test.tsx`)
++ extension setting round-trip jest tests deferred — current mocha extension test surface doesn't yet mock `vscode.workspace.getConfiguration`; covered manually via the manual checks below
++ [X] pnpm run lint + build + rollup + test-jest green (682 tests)
++ [X] bump `package.json` patch version → 0.2.16
++ [X] follow-up: default `columnOrder` set to `['untagged', 'doing', 'code-review', 'testing', 'done']` via new `DEFAULT_FOLDER_VIEW_COLUMN_ORDER` constant (mirrored in webview + extension constants + package.json); empty columns continue to be hidden so the user only sees buckets with stories
++ manual: customise a kanban column order in workspace A, hit Make default, open workspace B, confirm the saved order applies; override in B, confirm A still shows the saved default
++ manual: hit Reset to default in workspace A, confirm overrides clear and the saved User default takes effect
++ manual: kanban column header shows `Code Review` (was `Code-review`); column-order list in settings drawer shows the same formatting
++ acceptance
+  + settings persist across VS Code instances when set as User defaults; workspace overrides win when present
+  + a single Make default / Reset to default pair drives the cascade, no per-setting toggles
+  + kanban column names render dashes as spaces with title-case in both the board and the settings drawer
+
+
+### Persist folder view settings across mode flips
+
++ symptom
+  + open a folder, customise view (kanban column order, per-file story cap, include/exclude globs, view type, show_context_bars etc.), switch to current-file view, switch back to folder view — all the folder customisations are gone, the view snaps back to defaults
+  + user expectation: folder view settings persist for the lifetime of the VS Code window (per workspace), surviving mode flips, panel disposals, and extension reloads
++ confirmed root cause
+  + `GenericView.handleIntegrationChange` (`client/webview/src/notethink-views/src/components/views/GenericView.tsx:420-444`) dispatches `setViewManagedState` with `id: props.id`, which is the **active composer's** view_state_id (`'__aggregate__'` in folder mode, the doc path in single-file mode)
+  + switching folder → current_file overwrites `viewStates['__aggregate__'].display_options.integration_mode` from `'folder'` to `'current_file'`. The other folder settings (column_order, filters, etc.) survive the shallow merge in `handleSetViewManagedState`, but the integration_mode tag no longer identifies that entry as "the folder viewState"
+  + switching current_file → folder dispatches with `id = '<doc_path>'`, writing `integration_mode: 'folder'` to `viewStates['<doc_path>']`. AggregateTreeComposer's lookup scan (`AggregateTreeComposer.tsx:30-37`) latches onto **this** orphan key — it has the tag but none of the user's settings. The original `'__aggregate__'` viewState (which still has the settings) is left dormant, tagged `current_file`, and is never read again
+  + secondary defect in `AggregateTreeComposer.tsx:37`: the fallback returns `view_state_id: '__aggregate__'` but reads `view_state: viewStates['__default']` — different keys
++ fix shape
+  + introduce stable canonical id for the folder-mode viewState (constant `FOLDER_VIEW_STATE_ID = '__aggregate__'`, keeping the existing key value to avoid migrating existing user state)
+  + `AggregateTreeComposer` reads and writes via this constant; integration_mode scan kept only as a one-shot legacy-read fallback for users whose folder viewState is currently parked under a doc-path key
+  + `GenericView.handleIntegrationChange` dispatches the integration_mode tag to the constant key (not `props.id`) so the mode toggle never strands settings under the wrong key
+  + `mergeAggregateRoot.anyViewInFolderMode` / `firstIntegrationPath` check the constant first, then fall back to the legacy scan
+  + `ExtensionReceiver`'s saved_state migration copies any legacy folder-tagged viewState into the canonical key on first load
++ webview-state-only fix
+  + `vscode.setState` already persists across mode flips within the workspace — the dropped workspaceState mirror was speculation before the cause was confirmed. If panel-disposal cases surface as a separate complaint, that's a follow-up story
++ [X] reproduce and confirm root cause
++ [X] add `FOLDER_VIEW_STATE_ID` constant in notethink-views (alongside `mergeAggregateRoot` helpers)
++ [X] fix `AggregateTreeComposer` to read/write the constant key, with legacy-tag scan as read-only fallback
++ [X] redirect `GenericView.handleIntegrationChange` and `handleFolderClick` to dispatch to the constant key (both paths exhibited the same bug)
++ [X] update `anyViewInFolderMode` / `firstIntegrationPath` to prefer the constant key
++ [X] migrate legacy folder-tagged viewState in `ExtensionReceiver.migrateSavedState`
++ [X] jest: round-trip through `handleSetViewManagedState` survives mode flip
++ [X] jest: helpers prefer the constant key, fall back to scan for legacy state
++ [X] pnpm run lint + build + rollup + test-jest green (669 tests)
++ manual: open folder, set kanban column order, flip to current-file and back, confirm column order intact
++ manual: confirm aggregate include/exclude and aggregate_max_notes_per_file survive a mode flip
++ acceptance
+  + every folder view setting listed in the symptom round-trips through current-file mode without loss
+
+

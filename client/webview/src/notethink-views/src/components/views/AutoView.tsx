@@ -62,7 +62,7 @@ export default function AutoView(props: ViewProps) {
         display_options: {},
     };
 
-    // aggregate (folder) mode: synthetic root has no single ng_view linetag on a top-level note, so apply a majority vote across originating files (one vote per file)
+    // folder mode: synthetic root has no single ng_view linetag on a top-level note, so apply a majority vote across originating files (one vote per file)
     if (isAggregateRoot(props.nested?.parent_context)) {
         const majority = majorityNgView(props.notes);
         if (majority) {

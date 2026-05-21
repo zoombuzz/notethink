@@ -34,12 +34,13 @@ test.describe('Kanban View', () => {
         await expect(auto_wrapper).toBeVisible({ timeout: 5000 });
 
         // Check that expected column headers appear (use h3 to avoid count badge text)
+        // formatColumnLabel title-cases the raw status slug for display; aria-labels keep the slug verbatim
         const column_headers = page.locator('[role="columnheader"] h3');
         const header_texts = await column_headers.allTextContents();
-        expect(header_texts).toContain('untagged');
-        expect(header_texts).toContain('backlog');
-        expect(header_texts).toContain('doing');
-        expect(header_texts).toContain('done');
+        expect(header_texts).toContain('Untagged');
+        expect(header_texts).toContain('Backlog');
+        expect(header_texts).toContain('Doing');
+        expect(header_texts).toContain('Done');
     });
 
     test('places tasks in correct columns', async ({ page }) => {

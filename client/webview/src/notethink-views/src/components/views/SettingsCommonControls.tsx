@@ -1,5 +1,6 @@
 import Debug from "debug";
 import * as l10n from "@vscode/l10n";
+import styles from "../ViewRenderer.module.scss";
 import type { GlobalSettingKey } from "../../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:SettingsCommonControls");
@@ -12,12 +13,19 @@ export interface CommonSettings {
 
 export type CommonSettingKey = keyof CommonSettings;
 
+/**
+ * - onMakeDefault / onResetToDefault: both passed only in folder mode; absence hides the cascade-controls row entirely
+ * - canResetToDefault: true iff any folder-view key has a Workspace-scope value that Reset would actually clear
+ */
 interface SettingsCommonControlsProps {
     settings: CommonSettings;
     showLineNumbers?: boolean;
     watchUnopenedFilesInViewer?: boolean;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
+    onMakeDefault?: () => void;
+    onResetToDefault?: () => void;
+    canResetToDefault?: boolean;
 }
 
 export default function SettingsCommonControls(props: SettingsCommonControlsProps) {
@@ -84,6 +92,26 @@ export default function SettingsCommonControls(props: SettingsCommonControlsProp
                     {' '}{l10n.t('Watch unopened files in viewer')}
                 </label>
             </p>
+
+            {props.onMakeDefault && props.onResetToDefault && (
+                <p data-testid="folder-view-cascade-controls" className={styles.cascadeControls}>
+                    <button
+                        type="button"
+                        onClick={props.onMakeDefault}
+                        title={l10n.t('Save your current folder view settings as your user default across every VS Code window.')}
+                    >
+                        {l10n.t('Make user default')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={props.onResetToDefault}
+                        disabled={!props.canResetToDefault}
+                        title={l10n.t("Clear this workspace's folder view overrides and fall back to your user default.")}
+                    >
+                        {l10n.t('Reset to user default')}
+                    </button>
+                </p>
+            )}
         </>
     );
 }

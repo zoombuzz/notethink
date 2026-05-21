@@ -143,7 +143,7 @@ export default function KanbanView(props: ViewProps) {
             props.handlers.postMessage({
                 type: 'editText',
                 changes: changes,
-                // aggregate mode: route to the origin file; undefined in single-file mode
+                // folder mode: route to the origin file; undefined in single-file mode
                 docPath: dragged_note.origin?.doc_path,
             });
         }

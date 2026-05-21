@@ -4,7 +4,28 @@ import * as l10n from '@vscode/l10n';
 import type { HashMapOf, Doc } from '../types/general';
 import NoteRenderer from './NoteRenderer';
 import type { TextSelection, NoteDisplayOptions } from '../notethink-views/src/types/NoteProps';
-import type { GlobalSettingsPayload } from '../notethink-views/src/types/Messages';
+import type { GlobalSettingsPayload, FolderViewSettingsPayload } from '../notethink-views/src/types/Messages';
+import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE, DEFAULT_FOLDER_VIEW_COLUMN_ORDER } from '../constants';
+import { FOLDER_VIEW_STATE_ID } from '../notethink-views/src/lib/mergeAggregateRoot';
+
+function anyViewStateTaggedFolder(view_states: Record<string, ViewState>): boolean {
+    if (view_states[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode === 'folder') { return true; }
+    for (const id of Object.keys(view_states)) {
+        if (id === FOLDER_VIEW_STATE_ID) { continue; }
+        if (view_states[id]?.display_options?.integration_mode === 'folder') { return true; }
+    }
+    return false;
+}
+
+const DEFAULT_FOLDER_VIEW_SETTINGS: FolderViewSettingsPayload = {
+    view_type: 'auto',
+    column_order: DEFAULT_FOLDER_VIEW_COLUMN_ORDER,
+    include_filter: DEFAULT_INCLUDE_FILTER,
+    exclude_filter: DEFAULT_EXCLUDE_FILTER,
+    max_notes_per_file: DEFAULT_MAX_NOTES_PER_FILE,
+    show_context_bars: true,
+    has_workspace_overrides: false,
+};
 
 const debug = Debug("nodejs:notethink:ExtensionReceiver");
 
@@ -38,14 +59,32 @@ export function postMessageToExtension(message: unknown) {
     vscode.postMessage(message);
 }
 
-// migrate persisted state written before the directory→folder rename: the integration
-// mode was stored as 'directory'; normalise it so all downstream reads only see 'folder'
+// normalise persisted viewState across past renames so downstream reads only see the current shape:
+// integration_mode 'directory' → 'folder', legacy aggregate_* display_options fields → include_filter / exclude_filter / max_notes_per_file, and the folder-mode viewState key '__aggregate__' → '__folder__'
 function migrateSavedState(s: VSCodeState | undefined): VSCodeState | undefined {
     if (!s?.viewStates) { return s; }
+    // rename the legacy folder-mode viewState key on the map
+    if ('__aggregate__' in s.viewStates && !('__folder__' in s.viewStates)) {
+        s.viewStates['__folder__'] = s.viewStates['__aggregate__'];
+        delete s.viewStates['__aggregate__'];
+    }
     for (const id of Object.keys(s.viewStates)) {
-        const dopts = s.viewStates[id]?.display_options;
-        if (dopts?.integration_mode === 'directory') {
+        const dopts = s.viewStates[id]?.display_options as (Record<string, unknown> | undefined);
+        if (!dopts) { continue; }
+        if (dopts.integration_mode === 'directory') {
             dopts.integration_mode = 'folder';
+        }
+        if ('aggregate_include' in dopts) {
+            dopts.include_filter = dopts.aggregate_include;
+            delete dopts.aggregate_include;
+        }
+        if ('aggregate_exclude' in dopts) {
+            dopts.exclude_filter = dopts.aggregate_exclude;
+            delete dopts.aggregate_exclude;
+        }
+        if ('aggregate_max_notes_per_file' in dopts) {
+            dopts.max_notes_per_file = dopts.aggregate_max_notes_per_file;
+            delete dopts.aggregate_max_notes_per_file;
         }
     }
     return s;
@@ -60,14 +99,18 @@ export default function ExtensionReceiver() {
 	const [state, setState] = useState<VSCodeState>(saved_state || { docs: {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
-    // folder (aggregate) mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
+    // folder mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
     const [aggregate_total_discovered, setAggregateTotalDiscovered] = useState<number | undefined>(undefined);
-    // folder (aggregate) mode: the effective include/exclude globs the extension is using, echoed back so the Files drawer can show them
-    const [aggregate_include, setAggregateInclude] = useState<string | undefined>(undefined);
-    const [aggregate_exclude, setAggregateExclude] = useState<string | undefined>(undefined);
+    // folder mode: the effective include/exclude globs the extension is using, echoed back so the Files drawer can show them
+    const [include_filter, setIncludeFilter] = useState<string | undefined>(undefined);
+    const [exclude_filter, setExcludeFilter] = useState<string | undefined>(undefined);
     const [viewStates, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
+    // ref mirror so the empty-deps onMessage callback can read the current viewStates without re-binding
+    const viewStatesRef = useRef<Record<string, ViewState>>(viewStates);
+    useEffect(() => { viewStatesRef.current = viewStates; }, [viewStates]);
     const navigationCallbackRef = useRef<((direction: string) => void) | undefined>(undefined);
     const [globalSettings, setGlobalSettings] = useState<GlobalSettingsPayload>({ show_line_numbers: false, watch_unopened_files_in_viewer: true });
+    const [folderViewSettings, setFolderViewSettings] = useState<FolderViewSettingsPayload>(DEFAULT_FOLDER_VIEW_SETTINGS);
     const [connected, setConnected] = useState(!!saved_state?.docs && Object.keys(saved_state.docs).length > 0);
     const [timed_out, setTimedOut] = useState(false);
 
@@ -177,6 +220,15 @@ export default function ExtensionReceiver() {
                 return;
             }
         }
+        if (message.type === 'folderViewSettings') {
+            if (
+                message.settings === null || message.settings === undefined ||
+                typeof message.settings !== 'object'
+            ) {
+                console.warn('ExtensionReceiver: discarding folderViewSettings message with invalid settings', message);
+                return;
+            }
+        }
 
         debug('onMessage %s', message.type);
         switch (message.type) {
@@ -191,17 +243,17 @@ export default function ExtensionReceiver() {
                 if (typeof message.aggregate_total_discovered === 'number') {
                     setAggregateTotalDiscovered(message.aggregate_total_discovered);
                 }
-                if (typeof message.aggregate_include === 'string') {
-                    setAggregateInclude(message.aggregate_include);
+                if (typeof message.include_filter === 'string') {
+                    setIncludeFilter(message.include_filter);
                 }
-                if (typeof message.aggregate_exclude === 'string') {
-                    setAggregateExclude(message.aggregate_exclude);
+                if (typeof message.exclude_filter === 'string') {
+                    setExcludeFilter(message.exclude_filter);
                 }
                 setState(state => {
                     const incoming_docs = message.partial.docs || {};
                     const current_docs = state.docs || {};
-                    // merge_strategy: 'merge' upserts incoming docs into the current map (used by aggregate mode watcher for incremental updates)
-                    // anything else replaces the map entirely (single-file view, or aggregate mode's initial findFiles bulk update)
+                    // merge_strategy: 'merge' upserts incoming docs into the current map (used by folder mode watcher for incremental updates)
+                    // anything else replaces the map entirely (single-file view, or folder mode's initial findFiles bulk update)
                     const merge_strategy = (message as { merge_strategy?: string }).merge_strategy;
                     if (merge_strategy === 'merge') {
                         // upsert: keep existing docs not in incoming
@@ -238,7 +290,7 @@ export default function ExtensionReceiver() {
                 });
                 return;
             case 'docDeleted':
-                // aggregate mode: drop a single doc by id when the watcher sees a delete
+                // folder mode: drop a single doc by id when the watcher sees a delete
                 debug('received docDeleted for %s', message.docId);
                 if (typeof message.docId !== 'string') {
                     console.warn('ExtensionReceiver: docDeleted with invalid docId', message);
@@ -267,11 +319,19 @@ export default function ExtensionReceiver() {
                 debug('received globalSettings %O', message.settings);
                 setGlobalSettings(message.settings as GlobalSettingsPayload);
                 return;
+            case 'folderViewSettings':
+                debug('received folderViewSettings %O', message.settings);
+                setFolderViewSettings(message.settings as FolderViewSettingsPayload);
+                return;
             case 'command':
                 debug('received command %s', message.command);
                 switch (message.command) {
                     case 'setViewType':
                         updateAllViewStates(view_state => ({ ...view_state, type: message.viewType }));
+                        // cascade: if folder mode is currently active, persist the new view type
+                        if (anyViewStateTaggedFolder(viewStatesRef.current)) {
+                            vscode.postMessage({ type: 'updateFolderViewSetting', setting: 'view_type', value: message.viewType });
+                        }
                         return;
                     case 'toggleSetting': {
                         const setting_map: Record<string, string> = {
@@ -279,19 +339,26 @@ export default function ExtensionReceiver() {
                         };
                         const setting_key = setting_map[message.setting as string];
                         if (!setting_key) {return;}
+                        let next_value: boolean | undefined;
                         updateAllViewStates(view_state => {
                             const current_settings = view_state?.display_options?.settings || {};
+                            const flipped = !current_settings[setting_key as keyof typeof current_settings];
+                            next_value = flipped;
                             return {
                                 ...view_state,
                                 display_options: {
                                     ...view_state?.display_options,
                                     settings: {
                                         ...current_settings,
-                                        [setting_key]: !current_settings[setting_key as keyof typeof current_settings],
+                                        [setting_key]: flipped,
                                     },
                                 },
                             };
                         });
+                        // cascade: only show_context_bars is in the folder-view cascade today
+                        if (setting_key === 'show_context_bars' && anyViewStateTaggedFolder(viewStatesRef.current) && next_value !== undefined) {
+                            vscode.postMessage({ type: 'updateFolderViewSetting', setting: 'show_context_bars', value: next_value });
+                        }
                         return;
                     }
                     case 'navigate':
@@ -316,8 +383,8 @@ export default function ExtensionReceiver() {
     useEffect(() => {
         window.addEventListener('message', onMessage);
         debug('added message event listener');
-        // if saved state shows we were in aggregate (folder) mode, re-establish the integration first
-        // sending setIntegration before requestInitialState lets the extension synchronously set integration_path before the async findFiles - so when the requestInitialState handler runs sendDoc it uses merge_strategy='merge' and upserts into the saved aggregate map instead of replacing it
+        // if saved state shows we were in folder mode, re-establish the integration first
+        // sending setIntegration before requestInitialState lets the extension synchronously set integration_path before the async findFiles - so when the requestInitialState handler runs sendDoc it uses merge_strategy='merge' and upserts into the saved folder docs map instead of replacing it
         if (saved_state?.viewStates) {
             for (const id of Object.keys(saved_state.viewStates)) {
                 const vs = saved_state.viewStates[id];
@@ -329,8 +396,8 @@ export default function ExtensionReceiver() {
                         type: 'setIntegration',
                         mode: 'folder',
                         path: vs.display_options.integration_path,
-                        include: vs.display_options.aggregate_include,
-                        exclude: vs.display_options.aggregate_exclude,
+                        include: vs.display_options.include_filter,
+                        exclude: vs.display_options.exclude_filter,
                     });
                     break;
                 }
@@ -376,8 +443,9 @@ export default function ExtensionReceiver() {
         onNavigationCommand={navigationCallbackRef}
         workspace_root={workspace_root}
         aggregate_total_discovered={aggregate_total_discovered}
-        aggregate_include={aggregate_include}
-        aggregate_exclude={aggregate_exclude}
+        include_filter={include_filter}
+        exclude_filter={exclude_filter}
         globalSettings={globalSettings}
+        folderViewSettings={folderViewSettings}
     />;
 }

@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { formatColumnLabel } from "../../lib/noteops";
 import type { NoteDisplayOptions } from "../../types/NoteProps";
 import view_specific_styles from "../ViewRenderer.module.scss";
 
@@ -26,7 +27,7 @@ export default function KanbanColumn(props: KanbanColumnProps) {
              ref={props.display_options?.provided?.innerRef}
         >
             <div className={view_specific_styles.heading} role={'columnheader'}>
-                <h3>{props.value}</h3>
+                <h3>{formatColumnLabel(props.value)}</h3>
                 {props.count !== undefined && (
                     <span className={view_specific_styles.countBadge} data-testid="count-badge">{props.count}</span>
                 )}

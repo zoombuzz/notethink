@@ -10,12 +10,12 @@ export interface BreadcrumbTrailProps extends NoteProps {
     doc_relative_path?: string;
     workspace_root?: string;
     /**
-     * When set, breadcrumb path segments reflect this folder (aggregate mode)
+     * When set, breadcrumb path segments reflect this folder (folder mode)
      * instead of the current file's path. Clicking a segment narrows the
      * aggregation to that subfolder.
      */
     integration_path?: string;
-    // folder (aggregate) mode only: rendered as "(X in Y files)" after the path (or "(X in Y of M files)" when the discovery cap truncated the set); not shown in single-file mode
+    // folder mode only: rendered as "(X in Y files)" after the path (or "(X in Y of M files)" when the discovery cap truncated the set); not shown in single-file mode
     // X = note_count (top-level stories), Y = file_count (source files loaded), M = aggregate_total_discovered (files found before the cap)
     file_count?: number;
     note_count?: number;
@@ -53,7 +53,7 @@ function splitPathSegments(doc_path: string, workspace_root?: string, doc_relati
     const parts = relative_path.split('/').filter(Boolean);
     const segments: Array<{ label: string; path: string }> = [];
     let accumulated = prefix;
-    // go one level up: keep the opened workspace folder itself (the last component of the stripped prefix, e.g. "active_development") as the first clickable breadcrumb segment so selecting it re-aggregates the whole opened folder rather than starting at the first subfolder
+    // go one level up: keep the opened workspace folder itself (the last component of the stripped prefix, e.g. "active_development") as the first clickable breadcrumb segment so selecting it re-discovers the whole opened folder rather than starting at the first subfolder
     if (prefix) {
         const root_label = prefix.split('/').filter(Boolean).pop();
         if (root_label) {
@@ -72,10 +72,10 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps) {
     const parent_context_headlines_raw = (parent_context.parent_notes || []).map((item: NoteProps) => item.headline_raw).join(' > ');
 
     const path_segments = useMemo(() => {
-        // folder (aggregate) mode: segment the integration folder itself
+        // folder mode: segment the integration folder itself
         // we synthesise the same {label, path} shape: each path holds the absolute folder so onFolderClick can re-narrow the aggregation
         if (props.integration_path) {
-            // go one level up: keep the opened workspace folder itself as the first breadcrumb segment (e.g. "active_development") so it is clickable and re-aggregates the whole opened folder, not just the current subfolder
+            // go one level up: keep the opened workspace folder itself as the first breadcrumb segment (e.g. "active_development") so it is clickable and re-discovers the whole opened folder, not just the current subfolder
             // we do this by stripping workspace_root's PARENT rather than workspace_root itself
             const within_workspace = !!props.workspace_root && props.integration_path.startsWith(props.workspace_root);
             const workspace_parent = within_workspace
@@ -113,7 +113,7 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps) {
         parent_context
     ]);
 
-    // folder (aggregate) mode only: "(X in Y files)" after the path, or "(X in Y of M files)" when the discovery cap truncated the set; never in single-file mode (always one file, so the count is meaningless there)
+    // folder mode only: "(X in Y files)" after the path, or "(X in Y of M files)" when the discovery cap truncated the set; never in single-file mode (always one file, so the count is meaningless there)
     const file_count_label = useMemo(() => {
         if (!props.integration_path || typeof props.file_count !== 'number') { return undefined; }
         const loaded = props.file_count;

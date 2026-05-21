@@ -13,7 +13,7 @@ const debug = Debug("nodejs:notethink:NoteTreeComposer");
  *
  * Tree-composers sit one layer above views (Document/Kanban/Auto): each composer produces
  * the note tree handed to a leaf view. NoteTreeComposer is the single-file composer;
- * AggregateTreeComposer is the folder-aggregate companion.
+ * FolderTreeComposer is the folder-mode companion.
  *
  * By doing the MDAST conversion inside this component's render, any errors thrown by
  * convertMdastToNoteHierarchy are caught by the parent ErrorBoundary.
@@ -59,7 +59,7 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
             postMessage: props.postMessage ? (message: unknown) => {
                 if (message && typeof message === 'object' && 'type' in message) {
                     const m = message as Record<string, unknown>;
-                    // respect docId/docPath already on the message — in aggregate mode the click handler attaches the origin doc's path from note.origin
+                    // respect docId/docPath already on the message — in folder mode the click handler attaches the origin doc's path from note.origin
                     // in single-file mode the per-note origin is undefined, so we stamp the view's own docId/docPath as before
                     props.postMessage!({
                         ...m,

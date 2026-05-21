@@ -5,13 +5,13 @@ import styles from "./OriginPill.module.scss";
 const debug = Debug("nodejs:notethink-views:OriginPill");
 
 /**
- * Origin pill: shown next to a story's headline in aggregate (folder) mode.
+ * Origin pill: shown next to a story's headline in folder mode.
  *
  * Renders a project pill (two uppercase letters derived from origin.relative_path's
  * first path segment) followed by an optional epic pill (epic.name) when origin.epic
  * is set. The first letter is always the project name's initial; the second is the
  * earliest character that disambiguates this project from every other one visible in
- * the aggregate (e.g. notegit→`NG`, notethink→`NT`, countingsheet→`CO`). Project pill
+ * the folder view (e.g. notegit→`NG`, notethink→`NT`, countingsheet→`CO`). Project pill
  * colour is deterministic per project name; theme-adaptive for dark/light.
  */
 
@@ -30,7 +30,7 @@ function djb2(str: string): number {
 const GOLDEN_ANGLE_DEG = 137.50776405003785;
 
 /**
- * Deterministic hue (0-359) for a project given its 0-based index in a stable sorted enumeration of all distinct project names visible in the aggregate. Using a golden-angle multiplier instead of a hash-mod ensures any number of projects get visually-distinct hues — hash%360 happens to collide for our real-world names (calfam/shopify-uncomplicated, notegit/countingsheet).
+ * Deterministic hue (0-359) for a project given its 0-based index in a stable sorted enumeration of all distinct project names visible in the folder view. Using a golden-angle multiplier instead of a hash-mod ensures any number of projects get visually-distinct hues — hash%360 happens to collide for our real-world names (calfam/shopify-uncomplicated, notegit/countingsheet).
  */
 export function hueForProjectIndex(index: number): number {
     // floor + non-negative modulo so negative indices don't break the result
@@ -47,7 +47,7 @@ export function pillColourForHue(hue: number, theme: 'dark' | 'light'): string {
 }
 
 /**
- * Deterministic colour for a project pill from the project name only — fallback when the merged origin doesn't carry a precomputed hue (single-file mode, legacy origins, tests). Uses djb2(name)%360 which can collide for some name pairs; aggregate-mode callers should use hueForProjectIndex via origin.project_hue instead.
+ * Deterministic colour for a project pill from the project name only — fallback when the merged origin doesn't carry a precomputed hue (single-file mode, legacy origins, tests). Uses djb2(name)%360 which can collide for some name pairs; folder-mode callers should use hueForProjectIndex via origin.project_hue instead.
  */
 export function originPillColour(project_name: string, theme: 'dark' | 'light'): string {
     return pillColourForHue(djb2(project_name) % 360, theme);
@@ -140,9 +140,9 @@ export default function OriginPill({ origin, onClick }: OriginPillProps) {
     }, []);
 
     const project_name = projectNameFromRelativePath(origin.relative_path);
-    // aggregate mode stamps origin.project_label using the global divergence rule (see buildProjectLabels); single-file / legacy origins fall back to the project name's first+second characters
+    // folder mode stamps origin.project_label using the global divergence rule (see buildProjectLabels); single-file / legacy origins fall back to the project name's first+second characters
     const label = origin.project_label ?? projectAbbreviation(project_name);
-    // aggregate mode stamps origin.project_hue from the sorted-index assignment in mergeAggregateRoot; fall back to the hash-based colour for legacy origins or single-file mode where no global enumeration exists
+    // folder mode stamps origin.project_hue from the sorted-index assignment in mergeAggregateRoot; fall back to the hash-based colour for legacy origins or single-file mode where no global enumeration exists
     const colour = typeof origin.project_hue === 'number'
         ? pillColourForHue(origin.project_hue, theme)
         : originPillColour(project_name || origin.doc_path, theme);

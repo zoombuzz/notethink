@@ -1,6 +1,7 @@
 import Debug from "debug";
 import React, { useCallback } from "react";
 import * as l10n from "@vscode/l10n";
+import { formatColumnLabel } from "../../lib/noteops";
 import styles from "../ViewRenderer.module.scss";
 import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } from "./SettingsCommonControls";
 import type { GlobalSettingKey } from "../../types/Messages";
@@ -21,6 +22,9 @@ interface SettingsKanbanDrawerProps {
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
     onColumnOrderChange: (next_order: string[]) => void;
+    onMakeDefault?: () => void;
+    onResetToDefault?: () => void;
+    canResetToDefault?: boolean;
 }
 
 function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps) {
@@ -55,24 +59,27 @@ function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps) {
                 <section className={styles.settingsDrawerGroup}>
                     <p><strong>{l10n.t('Column order')}</strong></p>
                     <ul className={styles.settingsDrawerColumnOrder}>
-                        {ordered_columns.map((column_name, index) => (
-                            <li key={column_name}>
-                                <button
-                                    type="button"
-                                    disabled={index === 0}
-                                    onClick={() => handleMoveUp(index)}
-                                    aria-label={l10n.t('Move {0} up', column_name)}
-                                >&#9650;</button>
-                                <button
-                                    type="button"
-                                    disabled={index === ordered_columns.length - 1}
-                                    onClick={() => handleMoveDown(index)}
-                                    aria-label={l10n.t('Move {0} down', column_name)}
-                                    style={{ marginLeft: '0.25em' }}
-                                >&#9660;</button>
-                                <span>{column_name}</span>
-                            </li>
-                        ))}
+                        {ordered_columns.map((column_name, index) => {
+                            const formatted_label = formatColumnLabel(column_name);
+                            return (
+                                <li key={column_name}>
+                                    <button
+                                        type="button"
+                                        disabled={index === 0}
+                                        onClick={() => handleMoveUp(index)}
+                                        aria-label={l10n.t('Move {0} up', formatted_label)}
+                                    >&#9650;</button>
+                                    <button
+                                        type="button"
+                                        disabled={index === ordered_columns.length - 1}
+                                        onClick={() => handleMoveDown(index)}
+                                        aria-label={l10n.t('Move {0} down', formatted_label)}
+                                        style={{ marginLeft: '0.25em' }}
+                                    >&#9660;</button>
+                                    <span>{formatted_label}</span>
+                                </li>
+                            );
+                        })}
                     </ul>
                     <p>
                         <button type="button" onClick={handleResetOrder}>{l10n.t('Reset order')}</button>
@@ -86,6 +93,9 @@ function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps) {
                         watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
                         onSettingChange={props.onSettingChange}
                         onGlobalSettingChange={props.onGlobalSettingChange}
+                        onMakeDefault={props.onMakeDefault}
+                        onResetToDefault={props.onResetToDefault}
+                        canResetToDefault={props.canResetToDefault}
                     />
                 </section>
             </div>

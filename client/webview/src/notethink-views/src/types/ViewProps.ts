@@ -9,16 +9,14 @@ export interface ViewProps {
     doc_relative_path?: string;
     doc_text?: string;
     workspace_root?: string;
-    // folder (aggregate) mode only: number of source files loaded into the merged view, and the total discovered before the MAX_AGGREGATE_FILES cap truncated it
     file_count?: number;
     aggregate_total_discovered?: number;
-    // folder (aggregate) mode only: top-level story count (synthetic-root children), the effective include/exclude globs, and the loaded file list — drives the breadcrumb count and the Files drawer
     note_count?: number;
-    aggregate_include?: string;
-    aggregate_exclude?: string;
-    // folder mode: cap top-level stories taken per source file (which end depends on the file's order linetag)
-    aggregate_max_notes_per_file?: number;
-    aggregate_files?: Array<string>;
+    include_filter?: string;
+    exclude_filter?: string;
+    max_notes_per_file?: number;
+    aggregate_loaded_files?: Array<string>;
+    folder_view_cascade_has_workspace_overrides?: boolean;
     display_options?: NoteDisplayOptions;
     nested?: {
         menus?: Record<string, unknown>;

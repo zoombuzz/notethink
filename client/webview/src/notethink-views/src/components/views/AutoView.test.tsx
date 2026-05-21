@@ -159,7 +159,7 @@ describe('AutoView', () => {
         expect(wrapper).toHaveAttribute('data-auto-selected-viewtype', 'kanban');
     });
 
-    describe('aggregate (folder) mode', () => {
+    describe('folder mode', () => {
 
         function makeAggregateRoot(): NoteProps {
             return {

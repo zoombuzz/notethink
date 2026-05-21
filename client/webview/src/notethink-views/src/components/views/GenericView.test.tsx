@@ -67,7 +67,7 @@ jest.mock('./ViewIntegrationSelector', () => ({
     },
 }));
 
-// mock FilesDrawer - capture the seeded props + onApplyFilters for aggregate-filter testing
+// mock FilesDrawer - capture the seeded props + onApplyFilters for folder-filter testing
 let capturedFilesDrawerProps: { include: string; exclude: string; maxNotesPerFile: number } | undefined;
 let capturedOnApplyFilters: ((include: string, exclude: string, maxNotesPerFile: number) => void) | undefined;
 jest.mock('./FilesDrawer', () => ({
@@ -899,8 +899,9 @@ describe('GenericView navigation callback', () => {
         expect(capturedOnFolderClick).toBeInstanceOf(Function);
         capturedOnFolderClick!('/workspace/project/docs');
 
+        // dispatch must land on the canonical folder key so a later flip back to folder mode doesn't lose settings stored under a doc-path key
         expect(set_view_managed_state).toHaveBeenCalledWith([{
-            id: 'test-view',
+            id: '__folder__',
             display_options: {
                 integration_mode: 'folder',
                 integration_path: '/workspace/project/docs',
@@ -939,8 +940,9 @@ describe('GenericView navigation callback', () => {
         expect(capturedOnIntegrationChange).toBeInstanceOf(Function);
         capturedOnIntegrationChange!('current_file');
 
+        // dispatch must land on the canonical folder key (not props.id) so the folder viewState's other settings survive the flip
         expect(set_view_managed_state).toHaveBeenCalledWith([{
-            id: 'test-view',
+            id: '__folder__',
             display_options: {
                 integration_mode: 'current_file',
                 integration_path: undefined,
@@ -1112,7 +1114,8 @@ describe('GenericView navigation callback', () => {
             });
             fireEvent.click(await screen.findByTestId('view-settings-button'));
             // natural order is ['doing', 'done', 'untagged']; clicking move-up on 'done' produces ['done', 'doing', 'untagged']
-            fireEvent.click(screen.getByLabelText('Move done up'));
+            // labels are formatted (title-cased) — the raw slug is still what's stored
+            fireEvent.click(screen.getByLabelText('Move Done up'));
             expect(set_state).toHaveBeenCalledTimes(1);
             const reorder_update = set_state.mock.calls[0][0][0];
             expect(reorder_update.display_options.settings.column_order).toEqual(['done', 'doing', 'untagged']);
@@ -1176,7 +1179,7 @@ describe('GenericView navigation callback', () => {
     });
 });
 
-describe('GenericView aggregate files drawer', () => {
+describe('GenericView folder files drawer', () => {
 
     function renderFolderView(view_overrides: Partial<ViewProps> = {}) {
         // folder integration mode + a non-'auto' type renders the FilesDrawer
@@ -1185,8 +1188,8 @@ describe('GenericView aggregate files drawer', () => {
                 <GenericView {...makeViewProps({
                     type: 'document',
                     display_options: { integration_mode: 'folder', integration_path: '/workspace/project/docs' },
-                    aggregate_include: '**/*.md',
-                    aggregate_exclude: '**/node_modules/**',
+                    include_filter: '**/*.md',
+                    exclude_filter: '**/node_modules/**',
                     ...view_overrides,
                 })} />
             </Suspense>
@@ -1198,7 +1201,7 @@ describe('GenericView aggregate files drawer', () => {
             display_options: {
                 integration_mode: 'folder',
                 integration_path: '/workspace/project/docs',
-                aggregate_max_notes_per_file: 25,
+                max_notes_per_file: 25,
             },
         });
         await waitFor(() => expect(screen.getByTestId('files-drawer-mock')).toBeInTheDocument());
@@ -1212,7 +1215,7 @@ describe('GenericView aggregate files drawer', () => {
         expect(capturedFilesDrawerProps?.maxNotesPerFile).toBe(10);
     });
 
-    it('persists aggregate_max_notes_per_file via setViewManagedState and excludes it from the setIntegration postMessage', async () => {
+    it('persists max_notes_per_file via setViewManagedState and excludes it from the setIntegration postMessage', async () => {
         const post_message = jest.fn();
         const set_view_managed_state = jest.fn();
         renderFolderView({
@@ -1231,9 +1234,9 @@ describe('GenericView aggregate files drawer', () => {
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: 'test-view',
             display_options: {
-                aggregate_include: '**/users/**',
-                aggregate_exclude: '**/dist/**',
-                aggregate_max_notes_per_file: 7,
+                include_filter: '**/users/**',
+                exclude_filter: '**/dist/**',
+                max_notes_per_file: 7,
             },
         }]);
 
@@ -1250,6 +1253,6 @@ describe('GenericView aggregate files drawer', () => {
         );
         expect(set_integration_call).toBeDefined();
         expect(set_integration_call![0]).not.toHaveProperty('max_notes_per_file');
-        expect(set_integration_call![0]).not.toHaveProperty('aggregate_max_notes_per_file');
+        expect(set_integration_call![0]).not.toHaveProperty('max_notes_per_file');
     });
 });

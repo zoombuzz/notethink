@@ -12,7 +12,7 @@ interface DocSpec {
 
 /**
  * Inject multiple docs in a single 'update' message — sufficient to bootstrap
- * the webview's aggregate (folder) renderer for tests.
+ * the webview's folder renderer for tests.
  */
 export async function injectMultipleDocsFromFixtures(
     page: Page,

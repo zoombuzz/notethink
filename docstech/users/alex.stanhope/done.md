@@ -1358,3 +1358,20 @@ The aggregate origin pill currently renders a single uppercase letter (the proje
 + manual: open the workspace folder in aggregate mode and verify notegit/notethink pills now read `NG`/`NT` and countingsheet reads `CO`
 
 
+### Relevance ordering: surface recently-edited files within equal rank
+
+Yesterday's tiebreak surfaces stories from the file currently focused in the editor — but the more informative signal is what an AI agent has been editing in the background, which the active-file gate can't show. Replace the active-file gate with an on-disk mtime gate so the more recently modified file's stories rise to the top of each rank band. Saving the file you currently have open bumps its mtime to now, so it still floats up — the open-file behaviour is preserved while background activity also surfaces.
+
++ decisions (confirmed): mtime as the sole within-band tiebreak (no
+  thresholds, no decay constants); rank gate unchanged; active-file
+  plumbing removed since saving = mtime bump = rise
++ [X] `Doc.mtime` captured in `buildDocFromUriAndText` via `vscode.workspace.fs.stat`
++ [X] `NoteOrigin.file_mtime` stamped in mergeAggregateRoot's round-robin
++ [X] `noteOrder` / `kanbanNoteOrder` — rank-gated mtime tiebreak then delegate to standardNoteOrder / weight logic (zero regression when mtimes are equal or absent)
++ [X] remove dead `active_doc_path` plumbing: ExtensionReceiver state, ViewProps, NoteRendererProps, both composers, both view sort calls
++ [X] tests: noteops (newer mtime wins within equal rank; rank still gates above mtime; equal/missing mtime == standardNoteOrder; explicit weights still beat relevance), mergeAggregateRoot (file_mtime stamping)
++ manual: in folder mode, edit a file via the terminal or another agent while a different file is open in the editor; confirm the edited file's stories rise to the top of each rank band
++ manual: save the file you have open; confirm its stories rise to the top of each rank band (same behaviour as before)
++ manual: confirm single-file view + drag-to-reorder are unaffected
+
+

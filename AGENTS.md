@@ -198,16 +198,7 @@ describe('DocumentView', () => {
 
 **Do not commit unless explicitly asked.** Write code, run lint and tests, and present your changes in the working copy for review. Only create a commit when the user explicitly requests it.
 
-**"What's next?"** means: read `docstech/users/alex.stanhope/todo.md`, take the top story, and prepare an implementation plan. Present the plan for approval. If there are ambiguities, choices, or approvals needed, ask those questions alongside the plan so the user can resolve everything in one go. When the user approves and asks you to implement, launch multiple agents simultaneously to work on independent parts of the plan in parallel.
-
 When committing, messages must be consistent with the existing commit history. Review `git log --oneline` to match the style.
-
-**Rules:**
-- **Never add "Co-authored-by:" lines** to commit messages. No attribution footers of any kind.
-- The message should purely inform the reader what was done - concise, lowercase, descriptive.
-- **Commit messages must be a single line** - no newlines, no multi-line bodies.
-- After the description, append a test summary: `; tests <jest>, <playwright>`
-- Run `pnpm jest-test` for Jest counts and the Playwright suite for E2E counts.
 
 **Examples from this repo's history:**
 ```
@@ -215,42 +206,6 @@ sorted out linting config for all modules; tests 157, 21
 added component views including context; added playwright e2e tests; tests 157, 21
 ```
 
-## Pre-Completion Checklist
+## Dev Server
 
-Before marking a task complete, verify:
-
-- [ ] Code compiles without errors (`npm run compile`)
-- [ ] Linting passes (`npm run lint`)
-- [ ] Naming conventions followed (snake_case variables, camelCase functions, PascalCase types)
-- [ ] Imports properly organized
-- [ ] No `console.log` statements (use `debug` instead)
-- [ ] Tests pass (if applicable)
-- [ ] Types are explicit, not inferred as `any`
-- [ ] Comments are lowercase and placed above code
-- [ ] No unused imports or variables
-
-## Story and Task Tracking
-
-Developer stories and tasks are tracked in `docstech/users/<username>/todo.md` and `done.md`.
-
-- **Mark completed tasks** with `[X]` in `todo.md` (e.g. `- [X] Task description`).
-- **Move completed stories** - when all tasks in a story are done, remove the story from `todo.md` and append it to `done.md` (with exactly two blank lines before and after each story).
-
-## Dev Server Management
-
-Multiple projects in this workspace use Next.js and share similar process names. A broad `pkill` or `killall` command intended for one dev server can inadvertently kill others.
-
-**Rules:**
-- When starting a dev server (`pnpm dev`, `pnpm dev:worker`, etc.) via `run_in_background`, capture the new process's **PID** immediately afterwards (e.g. `lsof -ti :PORT`) and **store it in memory**.
-- When stopping a dev server, **kill only the specific PID** - never use `pkill node`, `pkill next`, `killall node`, or any pattern-based kill that could match other running servers.
-- If you don't have the PID, use `lsof -ti :PORT` for the specific port to find the correct process before killing it.
-
-## Screenshots
-
-Ubuntu screenshots are saved to `~/Pictures/Screenshots/`. When the user refers to "the latest screenshot", "my screenshot", or similar, find the most recent file:
-
-```
-ls -t ~/Pictures/Screenshots/*.png | head -1
-```
-
-Then read it with the Read tool and include it in your analysis.
+notethink is a VS Code extension — it has no HTTP dev server and is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`). The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host.

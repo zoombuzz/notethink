@@ -13,12 +13,17 @@ import { buildProjectLabels, hueForProjectIndex, projectNameFromRelativePath } f
  * See design in docstech/users/alex.stanhope/todo.md (story "Aggregate (Folder) view").
  */
 
+/**
+ * AggregatedDocInput is one source file's contribution to mergeAggregateRoot.
+ * - mtime: on-disk modification time (epoch ms) — stamped onto every story's origin so within-band ordering can surface recently-edited files
+ */
 export interface AggregatedDocInput {
     id: string;
     path: string;
     relative_path?: string;
     content: MdastInput;
     text: string;
+    mtime?: number;
 }
 
 export interface MergeAggregateRootResult {
@@ -192,6 +197,7 @@ export function mergeAggregateRoot(
             doc_path: doc.path,
             relative_path: doc.relative_path,
             file_view_type,
+            file_mtime: doc.mtime,
             project_hue: project_name ? project_hue_by_name.get(project_name) : undefined,
             project_label: project_name ? project_label_by_name.get(project_name) : undefined,
         };

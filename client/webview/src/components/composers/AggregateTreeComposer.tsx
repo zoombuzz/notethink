@@ -6,14 +6,8 @@ import { GenericView } from "../../notethink-views/src/components";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
 import type { NoteDisplayOptions } from "../../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../NoteRenderer";
+import { DEFAULT_AGGREGATE_INCLUDE, DEFAULT_AGGREGATE_EXCLUDE, DEFAULT_AGGREGATE_MAX_NOTES_PER_FILE } from "../../constants";
 const debug = Debug("nodejs:notethink:AggregateTreeComposer");
-
-// webview-side mirror of the extension's aggregate-filter defaults (notethinkEditor.ts
-// DEFAULT_AGGREGATE_INCLUDE/EXCLUDE); used until the extension echoes the effective globs
-export const DEFAULT_AGGREGATE_INCLUDE = '**/*.md';
-export const DEFAULT_AGGREGATE_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,dist,build,out,.next,.cache,coverage}/**';
-// webview-only cap on top-level stories taken per source file when merging the aggregate; not round-tripped to the extension
-export const DEFAULT_AGGREGATE_MAX_NOTES_PER_FILE = 10;
 
 /**
  * AggregateTreeComposer merges every loaded Doc into a single synthetic-root tree and
@@ -57,6 +51,7 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
                     relative_path: d.relative_path,
                     content: d.content,
                     text: d.text,
+                    mtime: d.mtime,
                 };
             }
         }
@@ -102,7 +97,6 @@ export default function AggregateTreeComposer({ docs, integration_path, props }:
         aggregate_include,
         aggregate_exclude,
         aggregate_files,
-        active_doc_path: props.active_doc_path,
         display_options: view_display_options,
         nested: {
             parent_context: merged_root,

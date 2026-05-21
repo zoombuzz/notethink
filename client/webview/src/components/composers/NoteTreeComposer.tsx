@@ -45,7 +45,6 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
         doc_relative_path: note.relative_path,
         doc_text: note.text,
         workspace_root: props.workspace_root,
-        active_doc_path: props.active_doc_path,
         display_options: view_display_options,
         nested: {
             parent_context: root_note,

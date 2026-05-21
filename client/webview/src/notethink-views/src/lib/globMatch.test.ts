@@ -1,6 +1,7 @@
 import { globToRegExp, globMatches } from './globMatch';
 
-const DERIVED_DIR_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,dist,build,out,.next,.cache,coverage}/**';
+// library-side test fixture: a realistic exclude glob to feed the matcher. intentionally not coupled to the app's DEFAULT_AGGREGATE_EXCLUDE (extension/webview own those) — these tests exercise the glob mechanism, not the app default
+const DERIVED_DIR_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**';
 
 describe('globToRegExp', () => {
     it('matches a top-level file against **/*.md (zero leading dirs)', () => {
@@ -50,6 +51,11 @@ describe('globMatches', () => {
 
     it('rejects when exclude matches even though include matches', () => {
         expect(globMatches('node_modules/pkg/readme.md', '**/*.md', DERIVED_DIR_EXCLUDE)).toBe(false);
+    });
+
+    it('excludes .claude/worktrees mirror trees so agent-worktree copies do not duplicate stories', () => {
+        expect(globMatches('project/.claude/worktrees/agent-abc/docstech/users/me/todo.md', '**/*.md', DERIVED_DIR_EXCLUDE)).toBe(false);
+        expect(globMatches('project/.claude/settings.md', '**/*.md', DERIVED_DIR_EXCLUDE)).toBe(false);
     });
 
     it('rejects when include does not match', () => {

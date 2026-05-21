@@ -12,7 +12,7 @@ import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
 import {
     withinNoteHeadlineOrBodyUpTo,
-    makeKanbanNoteOrder,
+    kanbanNoteOrder,
 } from "../../lib/noteops";
 import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
 import { calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering } from "../../lib/linetagops";
@@ -156,7 +156,7 @@ export default function KanbanView(props: ViewProps) {
     useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
 
     // assign notes to columns
-    const kanban_order = makeKanbanNoteOrder({ active_doc_path: props.active_doc_path });
+    const kanban_order = kanbanNoteOrder;
     columns.map((column: Column) => {
         column.child_notes = (props.notes_within_parent_context || [])
             .filter((note: NoteProps) => (

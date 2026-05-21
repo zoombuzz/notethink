@@ -59,8 +59,6 @@ export default function ExtensionReceiver() {
     // state originates from `vscode.getState` when a webview is reloaded
 	const [state, setState] = useState<VSCodeState>(saved_state || { docs: {} });
     const [selections, setSelections] = useState<SelectionState>({});
-    // doc path of the file most recently focused in the editor (last selectionChanged) — drives relevance ordering in folder mode
-    const [active_doc_path, setActiveDocPath] = useState<string | undefined>(undefined);
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
     // folder (aggregate) mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
     const [aggregate_total_discovered, setAggregateTotalDiscovered] = useState<number | undefined>(undefined);
@@ -255,7 +253,6 @@ export default function ExtensionReceiver() {
                 return;
             case 'selectionChanged':
                 debug('received selectionChanged for %s', message.docPath);
-                setActiveDocPath(message.docPath);
                 setSelections(prev => ({
                     ...prev,
                     [message.docPath]: {
@@ -381,7 +378,6 @@ export default function ExtensionReceiver() {
         aggregate_total_discovered={aggregate_total_discovered}
         aggregate_include={aggregate_include}
         aggregate_exclude={aggregate_exclude}
-        active_doc_path={active_doc_path}
         globalSettings={globalSettings}
     />;
 }

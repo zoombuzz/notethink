@@ -160,6 +160,49 @@ function complexProcess(data: Data) {
 - place above the code, not inline
 - **Keep each comment to a single line.** Do not wrap a single comment across multiple `//` lines just to stay under 80 characters — let the line run long. If you genuinely have two separate thoughts, write two single-line comments stacked together, one thought per line. Long lines are fine; fragmented thoughts are not.
 - **Keep inline comments short.** When an inline comment is unavoidable, aim for 100 characters unless there's a good reason to make it more verbose (e.g. a tricky invariant that needs precise wording, or a non-obvious cross-reference). If an explanation genuinely needs more than ~100 chars, lift it into the function header comment (the block comment immediately above the function) rather than cramming it inline — long comments interleaved with statements break up the function body and make it hard to read.
+- **No back-reference comments.** Never write inline comments that point readers at context elsewhere in the same file or function — `// see function header for the rationale`, `// see above`, `// see the JSDoc`, `// (see comment on line 42)`. The reader is already there; pointers add clutter without information and rot when the layout changes. When lifting a long inline comment to a function-header JSDoc, either delete the inline outright (the JSDoc + well-named identifiers usually suffice) or replace it with a *short* self-contained factual one-liner that stands on its own — never leave a stub that says "see header for rationale". Same anti-pattern as the rule against referencing the current task / fix / callers (`// used by X`, `// added for the Y flow`, `// handles the case from issue #123`) — pointers belong in the PR description, not inline.
+- **No project-management version numbers in comments.** Never write inline comments like `// added in 2.11.0`, `// fixed in 2.12.3`, `// from v2.10 release`, etc. Project-management versions belong in `package.json` and any place that actively uses them — never in comments that don't get re-rendered when the version changes. Stale version-tagged comments accumulate every release and force a search-and-purge pass on the next minor bump. The only acceptable place a version literal appears in code is a block that actively *uses* it.
+- **No per-field comments inside data structures.** Don't interleave `//` comments or per-field JSDoc blocks alongside fields in an `interface`, `type`, `class`, Prisma model, GraphQL schema, JSON-schema, or any other data-shape declaration. Per-field comments fragment the field list, make the shape harder to scan, and decay into inconsistency as new fields are added without matching annotations. If a field needs explanation, lift it into the **structure's header comment** as a short `- field_name: …` line, so every field that warrants a note is documented in one block above the declaration rather than scattered alongside the fields. The only acceptable inline comments inside a data structure are **section dividers** that group related fields by purpose (e.g. `// --- identity ---`, `// --- timestamps ---`) — comments that describe a *group of fields*, not an individual one.
+
+```typescript
+// correct — field docs in the header, fields scan cleanly
+/**
+ * Doc represents a loaded markdown file.
+ * - mtime: on-disk modification time (epoch ms); drives within-band relevance ordering
+ * - hash_sha256: content hash, used by the webview to skip no-op re-renders
+ */
+interface Doc {
+    id: string;
+    path: string;
+    text: string;
+    hash_sha256?: string;
+    mtime?: number;
+}
+
+// incorrect — per-field comments interleaved with the fields
+interface Doc {
+    id: string;
+    path: string;
+    text: string;
+    // content hash, used by the webview to skip no-op re-renders
+    hash_sha256?: string;
+    // on-disk modification time (epoch ms); drives within-band relevance ordering
+    mtime?: number;
+}
+```
+
+```typescript
+// correct — section dividers grouping fields by purpose
+interface NoteOrigin {
+    // --- identity ---
+    doc_id: string;
+    doc_path: string;
+    relative_path?: string;
+    // --- presentation ---
+    project_hue?: number;
+    project_label?: string;
+}
+```
 
 ```typescript
 // correct
@@ -174,6 +217,10 @@ const result = processItems(items);
 const tax_amount = calculateTax(subtotal, region); // Calculate tax
 const result = processItems(items); // This handles edge cases
 ```
+
+### TODO Comments
+- **MUST**: Use format: `// TODO: description`
+- **SHOULD**: Include issue number: `// TODO(#123): description`
 
 ### Braces and Blocks
 
@@ -267,6 +314,10 @@ import { NoteComponent, type NoteProps } from '@/components';
 - `const debug = Debug("nodejs:...")` should appear after imports, before the component/function
 - **Never remove** the debug constant, even if ESLint reports it as unused
 - The debug namespace should follow the pattern: `nodejs:{path}:{filename}`
+
+### Extension Points
+- **Keep single-case switch statements** that currently dispatch on only one value. The switch structure signals "this is an extension point — add new variants here alongside the existing case". Do not collapse to `if (x !== 'only-value') return null` — it hides the intent and forces the next contributor to re-derive the pattern.
+- **Keep helper functions whose body has become trivial** after a refactor rather than deleting them, when the call site still represents a meaningful extension point. Leave the call site intact and replace the body with an empty return plus an inline comment explaining what must NOT be added and why, and (optionally) how to extend.
 
 ## React Patterns
 

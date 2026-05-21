@@ -8,7 +8,7 @@ import {
     findDeepestNote,
     findSelectedNotes,
     resolveCaretPosition,
-    makeNoteOrder,
+    noteOrder,
 } from "../../lib/noteops";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import BreadcrumbTrail from "./BreadcrumbTrail";
@@ -86,7 +86,7 @@ export default function GenericView(props: ViewProps) {
         parent_context.child_notes :
         (props.notes || [])
     ) as Array<NoteProps>;
-    notes_within_parent_context?.sort(makeNoteOrder({ active_doc_path: props.active_doc_path }));
+    notes_within_parent_context?.sort(noteOrder);
     display_options.level = (notes_within_parent_context && notes_within_parent_context.length > 0 ? notes_within_parent_context[0].level : 0);
 
     const deepest: ViewDisplayDeepestProps = {

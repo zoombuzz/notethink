@@ -6,17 +6,11 @@ import { abbrevDoc, getNonce } from '../lib/utils';
 import { debug, writeToLog, writeToErrorLog } from "../lib/errorops";
 import { parse } from '../lib/parseops';
 import { isPathWithin } from '../lib/pathsafe';
+import { MAX_AGGREGATE_FILES, DEFAULT_AGGREGATE_INCLUDE, DEFAULT_AGGREGATE_EXCLUDE } from '../constants';
 
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
 const BACKGROUND_BATCH_SIZE = 20;
-// hard cap on files loaded+parsed into a single folder aggregate
-// without it, selecting a large root (~600+ .md files) fans out one openTextDocument+parse+postMessage per file and re-runs mergeAggregateRoot on every message, saturating IPC and pinning the renderer ("window not responding")
-const MAX_AGGREGATE_FILES = 200;
-// default aggregate filters; overridable per-view from the Files drawer (setIntegration include/exclude)
-const DEFAULT_AGGREGATE_INCLUDE = '**/*.md';
-// skip standard derived/dependency directories whose .md files (readmes, changelogs) would otherwise flood the aggregate view; the user may override or clear this from the Files drawer
-const DEFAULT_AGGREGATE_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,dist,build,out,.next,.cache,coverage}/**';
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
 
 // bridge isPathWithin to the live workspace: roots come from vscode.workspace.workspaceFolders so the pure helper stays vscode-free and unit-testable
@@ -78,6 +72,14 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			const mdast = parse(text);
 			// asRelativePath handles symlinks - returns path relative to workspace root
 			const relative = vscode.workspace.asRelativePath(uri, false);
+			// on-disk mtime drives the in-band relevance order on the webview side; tolerate a missing stat (e.g. file deleted between read and stat) so we still ship a parsed Doc rather than dropping the update
+			let mtime: number | undefined;
+			try {
+				const st = await vscode.workspace.fs.stat(uri);
+				mtime = st.mtime;
+			} catch (err) {
+				debug('buildDocFromUriAndText: stat failed for %s: %O', uri.path, err);
+			}
 			return {
 				path: uri.path,
 				relative_path: !relative.startsWith('/') ? relative : undefined,
@@ -85,6 +87,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				content: mdast,
 				text,
 				hash_sha256: await generateIdentifier(text),
+				mtime,
 				updatedAt: new Date().toISOString(),
 				createdBy,
 			};

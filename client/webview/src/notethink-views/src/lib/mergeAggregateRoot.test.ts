@@ -155,6 +155,19 @@ describe('mergeAggregateRoot', () => {
         });
     });
 
+    it('stamps origin.file_mtime from the doc input on every collected story', () => {
+        const docA: AggregatedDocInput = { ...simpleFile('id-a', 'a/todo.md', 'A', ['A1', 'A2']), mtime: 1_000 };
+        const docB: AggregatedDocInput = { ...simpleFile('id-b', 'b/todo.md', 'B', ['B1']), mtime: 2_000 };
+        const { root } = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB }, '/repo/');
+        const by_headline = Object.fromEntries(
+            root.child_notes!.map(n => [n.headline_raw, n.origin?.file_mtime]),
+        );
+        expect(by_headline).toEqual({
+            '### A1': 1_000, '### A2': 1_000,
+            '### B1': 2_000,
+        });
+    });
+
     it('newest-at-bottom: file_rank 0 is the newest (document-bottom) story', () => {
         const doc = orderedFile('id-a', 'a/done.md', 'A', 'newest-at-bottom', ['old', 'mid', 'new']);
         const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/');

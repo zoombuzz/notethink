@@ -108,6 +108,16 @@ export interface NoteProps {
     selection?: TextSelection;
 }
 
+/**
+ * NoteOrigin: aggregate (folder) mode metadata stamped on every story and its
+ * descendants by mergeAggregateRoot; lets callers route edits back to the
+ * source file and drives implicit cross-file ordering.
+ * - file_view_type: the ng_view value declared on the originating file's H1, if any; used by AutoView to majority-vote view type across the merged tree (one vote per file)
+ * - file_rank: 0-based index of this story within its source file's selected story list (after the per-file cap + `order` reversal); the implicit ordering weight — equal across files means equal priority, which relevance ordering then breaks by file_mtime (newer first)
+ * - file_mtime: on-disk mtime (epoch ms) of the source file at parse time; within a file_rank band, stories from more recently modified files sort first — background edits by another tool (or a save of the file currently open) naturally surface to the top without any explicit "active file" signal
+ * - project_hue: pre-computed hue (0-359) for the project pill colour; stamped by mergeAggregateRoot using the project's index in the sorted enumeration of all distinct project names visible in the aggregate, fed through hueForProjectIndex (golden-angle spread) — bypasses the djb2-hash fallback in OriginPill, which can collide for some real-world name pairs
+ * - project_label: pre-computed 2-character pill label; stamped by mergeAggregateRoot using buildProjectLabels — the first char is the project's initial, the second is the earliest character that differentiates this project from any other in the aggregate (so notegit→`NG`, notethink→`NT`, countingsheet→`CO`); OriginPill falls back to a single-project first+second-character abbreviation when this is absent (single-file mode, legacy origins)
+ */
 export interface NoteOrigin {
     doc_id: string;
     doc_path: string;
@@ -116,36 +126,10 @@ export interface NoteOrigin {
         name: string;
         id?: string;
     };
-    /**
-     * The ng_view value declared on the originating file's H1, if any.
-     * Used by AutoView to majority-vote view type across the merged tree
-     * (one vote per file).
-     */
     file_view_type?: string;
-    /**
-     * 0-based index of this story within its source file's selected story
-     * list (after the per-file cap + `order` reversal). The implicit ordering
-     * weight: equal across files means equal priority, which relevance ordering
-     * then breaks toward the active editor file.
-     */
     file_rank?: number;
-    /**
-     * Pre-computed hue (0-359) for the project pill colour. Stamped by
-     * mergeAggregateRoot based on the project's index in the sorted enumeration
-     * of all distinct project names visible in the aggregate, fed through
-     * hueForProjectIndex (golden-angle spread). Bypasses the djb2-hash fallback
-     * in OriginPill, which can collide for some real-world name pairs.
-     */
+    file_mtime?: number;
     project_hue?: number;
-    /**
-     * Pre-computed 2-character pill label for the project. Stamped by
-     * mergeAggregateRoot using buildProjectLabels — the first char is the
-     * project's initial; the second is the earliest character that
-     * differentiates this project from any other in the aggregate (so
-     * notegit→`NG`, notethink→`NT`, countingsheet→`CO`). OriginPill falls back
-     * to a single-project first+second-character abbreviation when this is
-     * absent (single-file mode, legacy origins).
-     */
     project_label?: string;
 }
 

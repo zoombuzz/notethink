@@ -2,6 +2,7 @@ import type { Metric } from 'web-vitals';
 
 const reportWebVitals = (onPerfEntry?: (metric: Metric) => void) => {
   if (onPerfEntry && onPerfEntry instanceof Function) {
+    // dynamic import() so the web-vitals bundle only loads when perf reporting is actually wired up
     import('web-vitals').then(({ onCLS, onINP, onFCP, onLCP, onTTFB }) => {
       onCLS(onPerfEntry);
       onINP(onPerfEntry);

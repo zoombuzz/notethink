@@ -1,4 +1,4 @@
-import {NoteProps} from "../../types/NoteProps";
+import type {NoteProps} from "../../types/NoteProps";
 import {getStandardNoteDataProps, renderBodyItems} from "../../lib/renderops";
 
 export default function GenericNoteWrapper(props: NoteProps) {

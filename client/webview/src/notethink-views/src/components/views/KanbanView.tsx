@@ -1,4 +1,5 @@
-import React, { type ReactElement, MouseEvent, Profiler, useMemo } from "react";
+import Debug from 'debug';
+import React, { type ReactElement, Profiler, useMemo } from "react";
 import {
     DragDropContext,
     Draggable,
@@ -7,9 +8,6 @@ import {
     type DropResult,
     type ResponderProvided,
 } from '@hello-pangea/dnd';
-import Debug from 'debug';
-import type { ViewProps } from "../../types/ViewProps";
-import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
 import {
     withinNoteHeadlineOrBodyUpTo,
     kanbanNoteOrder,
@@ -17,6 +15,9 @@ import {
 import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
 import { calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering } from "../../lib/linetagops";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
+import type { ViewProps } from "../../types/ViewProps";
+import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
+import type { EditTextChange } from "../../types/Messages";
 import KanbanColumn from "./KanbanColumn";
 import GenericNote from "../notes/GenericNote";
 import master_view_styles from "../ViewRenderer.module.scss";
@@ -106,20 +107,34 @@ export default function KanbanView(props: ViewProps) {
         return result;
     }, [props.notes_within_parent_context, display_options.settings?.column_order]);
 
+    /**
+     * post revealRange directly rather than going through props.handlers.click so the
+     * dragged note's origin file is targeted, not the active editor's doc — keeps the caret
+     * on the source-of-truth across files in folder mode.
+     */
     const dragStartHandler = (start: DragStart, provided: ResponderProvided): void => {
         const dragged_note_seq = Number(start.draggableId);
         const dragged_note = (props.notes || []).at(dragged_note_seq);
-        if (dragged_note) {
-            props.handlers?.click?.({detail: 1} as unknown as MouseEvent<HTMLElement>, dragged_note, {
+        if (!dragged_note) { return; }
+        if (props.handlers?.postMessage) {
+            props.handlers.postMessage({
+                type: 'revealRange',
                 from: dragged_note.position.start.offset,
-                to: dragged_note.position.end.offset,
-                selection_from: undefined,
-                selection_to: undefined,
-                type: 'note_drag',
+                docId: dragged_note.origin?.doc_id,
+                docPath: dragged_note.origin?.doc_path,
             });
         }
     };
 
+    /**
+     * assemble the edits for a drop and route them per origin file. The status-tag change
+     * always targets the dragged note's origin file; the ordering cascade returns per-doc
+     * partitioned change sets which are merged by docPath. When every change lands on one
+     * file (or there is no origin at all — pure single-file mode) the legacy single-doc
+     * `editText` shape is posted so single-file behaviour stays byte-identical and the
+     * extension takes its fast path; when the cascade spills across files the partitioned
+     * `changes_by_doc` shape is posted instead.
+     */
     const dragEndHandler = (result: DropResult, provided: ResponderProvided): void => {
         const destination_column_position = result.destination?.index || 0;
         if (!result.destination?.droppableId) { return; }
@@ -132,21 +147,68 @@ export default function KanbanView(props: ViewProps) {
         if (!dragged_note) { return; }
         if (dragged_note.locked) { return; }
 
-        const changes: Array<{from: number; to?: number; insert: string}> = [];
-        changes.push(...calculateTextChangesForNewLinetagValue(dragged_note, 'status', destination_column.value, 'untagged'));
+        const dragged_doc_path = dragged_note.origin?.doc_path;
+        const status_changes: Array<EditTextChange> = calculateTextChangesForNewLinetagValue(
+            dragged_note, 'status', destination_column.value, 'untagged',
+        );
+
         const destination_column_children = (destination_column.child_notes || [])
             .filter((note) => (dragged_note.seq !== note.seq));
         destination_column_children.splice(destination_column_position, 0, dragged_note);
-        changes.push(...calculateTextChangesForOrdering(destination_column_children, destination_column_position, 'kanban_ordering_weight'));
+        const ordering_change_sets = calculateTextChangesForOrdering(
+            destination_column_children, destination_column_position, 'kanban_ordering_weight',
+        );
 
-        if (props.handlers?.postMessage && changes.length > 0) {
+        // status-tag goes under the dragged file; each ordering change-set under its own doc_path
+        const changes_by_doc: Record<string, Array<EditTextChange>> = {};
+        const status_key = dragged_doc_path;
+        if (status_changes.length > 0 && status_key !== undefined) {
+            changes_by_doc[status_key] = (changes_by_doc[status_key] || []).concat(status_changes);
+        }
+        for (const set of ordering_change_sets) {
+            if (set.doc_path === undefined) { continue; }
+            if (set.changes.length === 0) { continue; }
+            changes_by_doc[set.doc_path] = (changes_by_doc[set.doc_path] || []).concat(set.changes);
+        }
+        // drop empties defensively
+        for (const key of Object.keys(changes_by_doc)) {
+            if (changes_by_doc[key].length === 0) { delete changes_by_doc[key]; }
+        }
+
+        if (!props.handlers?.postMessage) { return; }
+
+        // pure single-file mode: no origin to key on, flatten into the legacy single-doc shape
+        if (dragged_doc_path === undefined) {
+            const flat: Array<EditTextChange> = [...status_changes];
+            for (const set of ordering_change_sets) { flat.push(...set.changes); }
+            if (flat.length === 0) { return; }
             props.handlers.postMessage({
                 type: 'editText',
-                changes: changes,
-                // folder mode: route to the origin file; undefined in single-file mode
-                docPath: dragged_note.origin?.doc_path,
+                changes: flat,
+                docPath: undefined,
             });
+            return;
         }
+
+        const doc_paths = Object.keys(changes_by_doc);
+        if (doc_paths.length === 0) { return; }
+
+        // every change targets one file — legacy single-doc shape
+        if (doc_paths.length === 1) {
+            const only_doc = doc_paths[0];
+            props.handlers.postMessage({
+                type: 'editText',
+                changes: changes_by_doc[only_doc],
+                docPath: only_doc,
+            });
+            return;
+        }
+
+        // cascade spilled across files — partitioned shape
+        props.handlers.postMessage({
+            type: 'editText',
+            changes_by_doc,
+        });
     };
 
     // scroll focused note (and body item) into view when caret moves

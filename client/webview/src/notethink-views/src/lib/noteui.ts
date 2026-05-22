@@ -1,11 +1,13 @@
+import Debug from "debug";
 import type { MouseEvent } from "react";
 import type { NoteProps, ClickPositionInfo, NoteDisplayOptions } from "../types/NoteProps";
 import type { ViewProps } from "../types/ViewProps";
 import view_specific_styles from "../components/ViewRenderer.module.scss";
 
+const debug = Debug("nodejs:notethink-views:noteui");
+
 /**
- * Build the standard CSS class list for a note element.
- * Used by MarkdownNote, CodeNote, and MermaidNote.
+ * build the standard CSS class list for a note element
  */
 export function buildNoteStyles(note: NoteProps, extra_classes?: string[]): string[] {
     const styles = [view_specific_styles.note].concat(extra_classes || []);

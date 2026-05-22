@@ -1,13 +1,13 @@
+import Debug from 'debug';
 import React, { Profiler, useMemo } from 'react';
-import master_view_styles from "../../components/ViewRenderer.module.scss";
-import view_specific_styles from "../../components/ViewRenderer.module.scss";
-import {ViewProps} from "../../types/ViewProps";
-import {NoteProps} from "../../types/NoteProps";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
-import Debug from 'debug';
+import type { ViewProps } from "../../types/ViewProps";
+import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import GenericNote from "../../components/notes/GenericNote";
+import master_view_styles from "../../components/ViewRenderer.module.scss";
+import view_specific_styles from "../../components/ViewRenderer.module.scss";
 
 declare const NOTETHINK_DEV: boolean | undefined;
 const debug = Debug("nodejs:notethink-views:DocumentView");
@@ -30,7 +30,7 @@ export default React.memo(function DocumentView(props: ViewProps) {
     // virtual caret indicator: pulse-highlight the body item containing the editor caret
     useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
 
-    // Stabilise handlers reference to avoid unnecessary child re-renders
+    // stabilise handlers reference to avoid unnecessary child re-renders
     const note_handlers = useMemo(() => ({
         click: props.handlers?.click,
         setCaretPosition: props.handlers?.setCaretPosition,

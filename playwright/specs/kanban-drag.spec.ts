@@ -64,7 +64,7 @@ test.describe('Kanban Drag and Drop', () => {
 
         // verify editText message was sent
         const messages = await getCapturedMessages(page);
-        const edit_msg = messages.find((m: any) => m.type === 'editText');
+        const edit_msg = messages.find((m) => m.type === 'editText');
         expect(edit_msg).toBeDefined();
         expect(edit_msg!.changes).toBeDefined();
 
@@ -96,7 +96,7 @@ test.describe('Kanban Drag and Drop', () => {
         await keyboardDrag(page, task_a_draggable, 'left', 1);
 
         const messages = await getCapturedMessages(page);
-        const edit_msg = messages.find((m: any) => m.type === 'editText');
+        const edit_msg = messages.find((m) => m.type === 'editText');
         expect(edit_msg).toBeDefined();
 
         // should remove the status tag, not set it to "untagged"

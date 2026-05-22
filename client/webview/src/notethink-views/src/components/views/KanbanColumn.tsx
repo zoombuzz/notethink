@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { formatColumnLabel } from "../../lib/noteops";
 import type { NoteDisplayOptions } from "../../types/NoteProps";
 import view_specific_styles from "../ViewRenderer.module.scss";

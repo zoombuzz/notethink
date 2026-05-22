@@ -231,25 +231,40 @@ export function noteOrder(a: NoteProps, b: NoteProps): number {
 }
 
 /**
- * Kanban ordering: explicit `kanban_ordering_weight` linetag first (set on
- * drag-to-reorder), otherwise the relevance-aware implicit order. Drag
- * precedence is unchanged; relevance only affects unweighted, same-rank cards.
+ * Kanban ordering: explicit `kanban_ordering_weight` linetag is decisive,
+ * including across files. The weight's *value* is what carries the user-chosen
+ * cross-file order, so the comparator never consults `file_rank` / `file_mtime`
+ * when either side carries a weight — that would let relevance shove a
+ * deliberately-placed weighted card past another weighted card from a different
+ * file.
+ *
+ * Order of precedence:
+ *   1. both weighted: numeric weight comparison; ties broken purely by seq
+ *   2. exactly one weighted: unweighted cards sort first (weighted card
+ *      represents a user override and lives below the implicit-order block)
+ *   3. neither weighted: fall through to noteOrder (file_rank → file_mtime → seq)
+ *
+ * The cross-file payoff requires `calculateTextChangesForOrdering` to mint
+ * globally monotonic weight values that encode the user's order.
+ *
+ * A `value_numeric` of 0 counts as unweighted (the pre-refactor convention),
+ * which keeps single-file behaviour byte-identical.
  */
 export function kanbanNoteOrder(a: NoteProps, b: NoteProps): number {
-    if (a?.linetags?.kanban_ordering_weight?.value_numeric) {
-        if (b?.linetags?.kanban_ordering_weight?.value_numeric) {
-            if (a.linetags.kanban_ordering_weight.value_numeric === b.linetags.kanban_ordering_weight.value_numeric) {
-                return (a.seq > b.seq ? 1 : -1);
-            }
-            return (a.linetags.kanban_ordering_weight.value_numeric > b.linetags.kanban_ordering_weight.value_numeric ? 1 : -1);
-        } else {
-            return 1;
+    const weight_a = a?.linetags?.kanban_ordering_weight?.value_numeric;
+    const weight_b = b?.linetags?.kanban_ordering_weight?.value_numeric;
+    const has_a = weight_a !== undefined && weight_a !== 0;
+    const has_b = weight_b !== undefined && weight_b !== 0;
+    // case 1: both weighted — pure numeric compare, seq tiebreak only
+    if (has_a && has_b) {
+        if (weight_a !== weight_b) {
+            return (weight_a! > weight_b! ? 1 : -1);
         }
-    } else {
-        if (b?.linetags?.kanban_ordering_weight?.value_numeric) {
-            return -1;
-        } else {
-            return noteOrder(a, b);
-        }
+        return (a.seq > b.seq ? 1 : -1);
     }
+    // case 2: exactly one weighted — weighted sorts AFTER unweighted
+    if (has_a) { return 1; }
+    if (has_b) { return -1; }
+    // case 3: neither weighted — implicit relevance order
+    return noteOrder(a, b);
 }

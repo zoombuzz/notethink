@@ -1,5 +1,5 @@
 import Debug from "debug";
-import React, { ReactElement, Suspense, useCallback, useRef } from 'react';
+import React, { type ReactElement, Suspense, useCallback, useRef } from 'react';
 import {sanitize} from "hast-util-sanitize";
 import {toHast} from "mdast-util-to-hast";
 import {toJsxRuntime} from "hast-util-to-jsx-runtime";
@@ -23,7 +23,7 @@ export function renderNodeUnified(node: MdastNodes): ReactElement {
         // @ts-ignore safe to ignore type error on jsx and jsxs (https://github.com/syntax-tree/hast-util-to-jsx-runtime)
         return toJsxRuntime(hast, {Fragment, jsx, jsxs});
     } catch (err) {
-        console.error('renderNodeUnified failed:', err);
+        debug('renderNodeUnified failed: %O', err);
         return <></>;
     }
 }

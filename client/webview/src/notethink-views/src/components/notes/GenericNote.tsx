@@ -1,9 +1,10 @@
-import React, {lazy} from 'react';
 import Debug from "debug";
+import React, {lazy} from 'react';
 import type {NoteProps} from "../../types/NoteProps";
 import GenericNoteWrapper from "../../components/notes/GenericNoteWrapper";
 const debug = Debug("nodejs:notethink-views:GenericNote");
 
+// dynamic import() is required by React.lazy for per-note-type code-splitting; static imports would pull every renderer into the initial bundle
 const MarkdownNote = lazy(() => import('./MarkdownNote'));
 const CodeNote = lazy(() => import('./CodeNote'));
 const MermaidNote = lazy(() => import('./MermaidNote'));

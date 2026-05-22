@@ -1,7 +1,7 @@
-import {NoteProps} from "../../types/NoteProps";
-import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
-import { buildNoteStyles, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
 import Debug from 'debug';
+import { buildNoteStyles, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
+import type { NoteProps } from "../../types/NoteProps";
+import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 const debug = Debug("nodejs:notethink-views:CodeNote");
 

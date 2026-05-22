@@ -29,11 +29,21 @@ export interface EditTextChange {
     insert: string;
 }
 
+/**
+ * webview -> extension request to apply text changes to one or more docs.
+ *
+ * Two shapes are supported via a discriminator on the presence of `changes_by_doc`:
+ * - single-doc: `docPath` + `changes` set, `changes_by_doc` omitted. The legacy shape used for kanban reorders that stay within a single file.
+ * - multi-doc: `changes_by_doc` set (keyed by `docPath`), `docPath` + `changes` omitted. Used for folder-mode reorders that span multiple files; each entry is validated and applied independently and a failure on one doc does not abort the batch.
+ *
+ * exactly one of `changes` (paired with `docPath`) or `changes_by_doc` is set on any given message.
+ */
 export interface EditTextMessage {
     type: 'editText';
-    docId: string;
-    docPath: string;
-    changes: EditTextChange[];
+    docId?: string;
+    docPath?: string;
+    changes?: EditTextChange[];
+    changes_by_doc?: Record<string, EditTextChange[]>;
 }
 
 export interface OpenExternalMessage {

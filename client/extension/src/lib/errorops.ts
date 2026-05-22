@@ -4,18 +4,18 @@ import * as vscode from 'vscode';
 import { LogOutputChannelTransport } from 'winston-transport-vscode';
 import * as util from 'util';
 
-const logSourceMaxLen = 24;
-const outputChannel = vscode.window.createOutputChannel('NoteThink', {
+const LOG_SOURCE_MAX_LEN = 24;
+const output_channel = vscode.window.createOutputChannel('NoteThink', {
     log: true,
 });
 
-// --- Dev file log: buffer lines and flush to <notethink>/notethink-extension.log ---
+// --- dev file log: buffer lines and flush to <notethink>/notethink-extension.log ---
 const LOG_BUFFER_MAX = 500;
 const LOG_FLUSH_MS = 1000;
 const logBuffer: string[] = [];
 let logFlushTimer: ReturnType<typeof setTimeout> | undefined;
 
-function flushLogBuffer() {
+function flushLogBuffer(): void {
     logFlushTimer = undefined;
     if (logBuffer.length === 0) { return; }
     const folders = vscode.workspace.workspaceFolders;
@@ -31,7 +31,7 @@ function flushLogBuffer() {
     );
 }
 
-function appendToFileLog(line: string) {
+function appendToFileLog(line: string): void {
     if (typeof NOTETHINK_DEV === 'undefined' || !NOTETHINK_DEV) { return; }
     logBuffer.push(line);
     if (logBuffer.length > LOG_BUFFER_MAX) {
@@ -52,8 +52,8 @@ if (typeof global.setImmediate === 'undefined') {
 
 // https://stackoverflow.com/a/78208018/1444233
 const combineTransform: TransformFunction = (info) => {
-    const output: any = { ...info };
-    const data: any = info[Symbol.for('splat')];
+    const output = { ...info };
+    const data = info[Symbol.for('splat')] as unknown[] | undefined;
     if (data) { output.message = util.format(String(info.message), ...data); }
     return output;
 };
@@ -70,26 +70,18 @@ const default_format = winston.format.combine(
     winston.format.colorize(),
 );
 
-type TransportStream = /*unresolved*/ any
+// winston-transport-vscode does not export a public Transport type we can name here; the cast keeps the array element assignable to winston's transports option
+type TransportStream = any;
 const transports = [
-    // write out logs to stdout (console)
-    // new winston.transports.Console({
-    //     level: 'info',
-    //     format: default_format,
-    // }),
-    // write out to the VSCode output channel
-    new LogOutputChannelTransport({ outputChannel }) as TransportStream,
+    new LogOutputChannelTransport({ outputChannel: output_channel }) as TransportStream,
 ];
 
 const logger = winston.createLogger({
     level: 'trace',
-    // use predefined VS Code log levels
-    // levels: LogOutputChannelTransport.config.levels,
-    // format: LogOutputChannelTransport.format(),
     transports,
 });
 
-export function isRedirect(error: any) {
+export function isRedirect(error: unknown): boolean {
     return error instanceof Response && error.status >= 300 && error.status < 400;
 }
 
@@ -98,7 +90,7 @@ export function isRedirect(error: any) {
  * @param data
  * @param additional
  */
-export function fatalError(data: string, additional: any = {status: 500}) {
+export function fatalError(data: string, additional: ResponseInit = {status: 500}): never {
     throw new Response(data, additional);
 }
 
@@ -130,12 +122,12 @@ export function nonFatalErrorInternally(field: string, type: string, tone: strin
     };
 }
 
-function formatFirstArg(arg: any, length: number) {
+function formatFirstArg(arg: unknown, length: number): string {
     if (arg && typeof arg === 'string') {
         // don't include opening '['
         return arg.slice(-length).padStart(length, ' ') + ']';
     }
-    return arg;
+    return String(arg);
 }
 
 /**
@@ -146,12 +138,12 @@ function formatFirstArg(arg: any, length: number) {
  * data[1] message description
  * data[2] abbreviated shop details (if available)
  */
-export function writeToLogAtLevel(level: string, ...data: Array<any>) {
+export function writeToLogAtLevel(level: string, ...data: Array<unknown>): void {
     // format the first argument as a source
     const raw_data = [...data];
     let source = '';
     if (data[0]) {
-        source = formatFirstArg(data.shift(), logSourceMaxLen);
+        source = formatFirstArg(data.shift(), LOG_SOURCE_MAX_LEN);
     }
     logger.log(level, source, ...data);
     // mirror to file log for CLI access
@@ -160,15 +152,15 @@ export function writeToLogAtLevel(level: string, ...data: Array<any>) {
     appendToFileLog(`${ts} ${level.toUpperCase().padEnd(5)} ${msg}`);
 }
 
-export function writeToLog(...data: Array<any>) {
+export function writeToLog(...data: Array<unknown>): void {
     writeToLogAtLevel('info', ...data);
 }
 
-export function writeToErrorLog(...data: Array<any>) {
+export function writeToErrorLog(...data: Array<unknown>): void {
     writeToLogAtLevel('error', ...data);
 }
 
-export function debug(...args: any[]) {
+export function debug(...args: unknown[]): void {
 	if (process.env.NODE_ENV !== 'production') {
 		console.debug(...args);
 	}

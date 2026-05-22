@@ -1,50 +1,56 @@
 # Jest Test Results
-# Version: 0.2.21
-# Date: 2026-05-21T12:00:00Z
-# Command: bash scripts/test-jest.sh
+# Version: 0.2.22
+# Date: 2026-05-22T09:44:49Z
+# Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
+
+> notethink@0.2.22 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> bash scripts/test-jest.sh
+
 
 > notethink-client-extension@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/extension
 > jest --config jest.config.cjs --forceExit
 
-Test Suites: 6 passed, 6 total
-Tests:       151 passed, 151 total
-Snapshots:   0 total
-Time:        2.049 s
-Ran all test suites.
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+[1mTest Suites: [22m[1m[32m6 passed[39m[22m, 6 total
+[1mTests:       [22m[1m[32m155 passed[39m[22m, 155 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        2.058 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
 > notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
 > jest --config jest.config.cjs --forceExit
 
-Test Suites: 3 passed, 3 total
-Tests:       35 passed, 35 total
-Snapshots:   0 total
-Time:        0.602 s, estimated 1 s
-Ran all test suites.
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+[1mTest Suites: [22m[1m[32m3 passed[39m[22m, 3 total
+[1mTests:       [22m[1m[32m35 passed[39m[22m, 35 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        0.589 s, estimated 1 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
 > @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
 > jest --config jest.config.cjs --forceExit
 
-A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+[33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
 
-Test Suites: 28 passed, 28 total
-Tests:       496 passed, 496 total
-Snapshots:   0 total
-Time:        3.281 s
-Ran all test suites.
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+[1mTest Suites: [22m[1m[32m28 passed[39m[22m, 28 total
+[1mTests:       [22m[1m[32m528 passed[39m[22m, 528 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        [1m[33m3.166 s[39m[22m
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
-┌──────────────────┬───────┬────────┬────────┬─────────┐
-│ Suite            │ Files │ Passed │ Failed │ Time    │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     6 │    151 │      0 │ 2.049 s │
-│ webview          │     3 │     35 │      0 │ 0.602 s │
-│ notethink-views  │    28 │    496 │      0 │ 3.281 s │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    37 │    682 │      0 │         │
-└──────────────────┴───────┴────────┴────────┴─────────┘
+[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
+[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+│ extension        │     6 │ [32m   155[0m │ [2m     0[0m │ 2.058 s │
+│ webview          │     3 │ [32m    35[0m │ [2m     0[0m │ 0.589 s │
+│ notethink-views  │    28 │ [32m   528[0m │ [2m     0[0m │ 3.166 s │
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+[1m│ TOTAL            │    37 │[0m [32m   718[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

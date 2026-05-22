@@ -63,11 +63,42 @@ export interface NoteHandlers {
     [key: string]: unknown;
 }
 
+/**
+ * NoteProps is the unified shape every view consumes. One instance per parsed
+ * heading / list / code-block / list-item paragraph; constructed by
+ * convertMdastToNoteHierarchy and (in folder mode) re-stamped by
+ * mergeAggregateRoot.
+ * - seq: 1-based document-order index assigned during parse. Globally
+ *   renumbered by mergeAggregateRoot when the per-file trees are interleaved,
+ *   which is why React must NOT key on this — see stable_id.
+ * - origin: folder mode metadata stamped on every story and its descendants by
+ *   mergeAggregateRoot; lets callers route edits back to the source file and
+ *   drives implicit cross-file ordering (single-file mode leaves it
+ *   undefined).
+ * - stable_id: identity that survives re-parse and merge shuffles. Used as the
+ *   React key for the kanban view (so DnD + FLIP rect-capture survive
+ *   reparses) and for cross-update animation. Derivation: for story-level
+ *   notes (depth-3 headings collected by mergeAggregateRoot), it is
+ *   `${doc_id}:${slug}` where `slug` is the story's `linetags.id` value when
+ *   present (canonical and author-controlled), otherwise the stripped headline
+ *   plus a same-headline duplicate-occurrence ordinal (`#N` for the N-th
+ *   duplicate in the file). For descendant notes inside a story's subtree it
+ *   is `${story_stable_id}:${note_offset_minus_story_offset}` — a relative
+ *   offset within the story body, which is invariant under sibling story
+ *   insertions OUTSIDE the story (those shift both offsets by the same delta)
+ *   and changes only when the story's own body changes. In single-file mode
+ *   the composer stamps it without an origin so `doc_id` is the active doc id
+ *   instead. Byte offsets / `seq` / `file_rank` are deliberately NOT in the
+ *   derivation: those churn under merge re-shuffles, global seq renumbering,
+ *   and unrelated sibling additions, and using them would defeat the whole
+ *   point.
+ */
 export interface NoteProps {
     seq: number;
     level: number;
+    stable_id?: string;
     children_body: Array<NoteProps | MdastNode>;
-    // manually inherited fields
+    // --- mdast passthrough ---
     type?: string;
     depth?: number;
     lang?: string;
@@ -79,7 +110,7 @@ export interface NoteProps {
         end_body?: TextPosition,
     }
     children: Array<MdastNode>;
-    // note fields
+    // --- tree links ---
     parent_notes?: Array<NoteProps>;
     child_notes?: Array<NoteProps>;
     linetags?: {
@@ -88,16 +119,15 @@ export interface NoteProps {
     linetags_from?: number;
     headline_raw: string;
     body_raw: string;
-    // change flags
+    // --- change flags + folder-mode metadata ---
     hash_sha256?: string;
     updated?: number;
     updated_by_view?: string;
-    // folder mode: which file this note originated in (undefined in single-file mode; set on stories and their descendants by mergeAggregateRoot)
     origin?: NoteOrigin;
-    // rendered at Note parse time
+    // --- rendered at parse time ---
     headline?: ReactElement;
     body?: ReactElement;
-    // fields added at the React render stage
+    // --- runtime decoration added at React render stage ---
     focused?: boolean;
     selected?: boolean;
     locked?: boolean;

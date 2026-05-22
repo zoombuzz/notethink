@@ -2,6 +2,7 @@ import Debug from "debug";
 import { useMemo } from "react";
 import type { Doc } from "../../types/general";
 import { convertMdastToNoteHierarchy } from "../../notethink-views/src/lib/convertMdastToNoteHierarchy";
+import { stampSingleFileStableIds } from "../../notethink-views/src/lib/mergeAggregateRoot";
 import { GenericView } from "../../notethink-views/src/components";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../notethink-views/src/types/NoteProps";
@@ -17,12 +18,19 @@ const debug = Debug("nodejs:notethink:NoteTreeComposer");
  *
  * By doing the MDAST conversion inside this component's render, any errors thrown by
  * convertMdastToNoteHierarchy are caught by the parent ErrorBoundary.
+ *
+ * stable_id is stamped here (no `origin` is present in single-file mode) so React keying
+ * and FLIP rect-capture in the kanban view stay invariant under re-parse.
  */
 export default function NoteTreeComposer({ note_id, note, props }: { note_id: string; note: Doc; props: NoteRendererProps }) {
     // memoize conversion keyed on content hash - avoids redundant work when only selection changes
     const root_note = useMemo(
-        () => convertMdastToNoteHierarchy(note.content!, note.text!),
-        [note.hash_sha256]
+        () => {
+            const root = convertMdastToNoteHierarchy(note.content!, note.text!);
+            stampSingleFileStableIds(root, note_id);
+            return root;
+        },
+        [note.hash_sha256, note_id]
     );
     const selection = note.path ? props.selections?.[note.path] : undefined;
     const all_notes = flattenAllNotes(root_note);

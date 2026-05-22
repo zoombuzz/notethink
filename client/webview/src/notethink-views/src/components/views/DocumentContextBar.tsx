@@ -1,4 +1,4 @@
-import {ViewProps} from "../../types/ViewProps";
+import type {ViewProps} from "../../types/ViewProps";
 import master_view_styles from "../../components/ViewRenderer.module.scss";
 
 export default function DocumentContextBar(props: ViewProps) {

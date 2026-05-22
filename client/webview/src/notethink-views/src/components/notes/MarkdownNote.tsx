@@ -1,17 +1,17 @@
+import Debug from 'debug';
 import {Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useMemo, useState} from "react";
-import {MdastNode, NoteProps} from "../../types/NoteProps";
 import {
     getStandardNoteDataProps,
     isInternalAttribute,
     renderMarkdownNoteHeadline,
     renderBodyItems,
 } from "../../lib/renderops";
-import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
-import OriginPill from "../../components/notes/OriginPill";
 import { buildNoteStyles, headlineClickPosition, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
 import { findFirstIncompleteTaskSeq } from "../../lib/noteops";
+import type { MdastNode, NoteProps } from "../../types/NoteProps";
+import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
+import OriginPill from "../../components/notes/OriginPill";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
-import Debug from 'debug';
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
 // abridge when rendered height exceeds this multiple of width (top-level notes only)

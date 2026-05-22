@@ -1,4 +1,4 @@
-import { findLineTags, parseLineTags, calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering } from './linetagops';
+import { findLineTags, parseLineTags, calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering, flattenOrderingChangeSets } from './linetagops';
 import { kanbanNoteOrder } from './noteops';
 import type { NoteProps } from '../types/NoteProps';
 
@@ -263,14 +263,15 @@ describe('calculateTextChangesForOrdering', () => {
 
     it('returns empty changes when sequence ordering is sufficient', () => {
         const children = [makeNote(1), makeNote(2), makeNote(3)];
-        const changes = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
-        expect(changes).toHaveLength(0);
+        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        expect(result).toHaveLength(0);
     });
 
     it('assigns weight when inserted note breaks sequence order', () => {
         // seq 3 inserted between seq 1 and seq 2 - seq ordering won't work since 3 > 2
         const children = [makeNote(1), makeNote(3), makeNote(2)];
-        const changes = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        const changes = flattenOrderingChangeSets(result);
         expect(changes.length).toBeGreaterThan(0);
         // should assign a weight to the new child at position 1
         expect(changes[0].insert).toContain('kanban_ordering_weight');
@@ -289,8 +290,8 @@ describe('calculateTextChangesForOrdering', () => {
         const new_child = makeNote(2);
         const successor = makeNote(3);
         const children = [predecessor, new_child, successor];
-        const changes = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
-        expect(changes.length).toBeGreaterThan(0);
+        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        expect(flattenOrderingChangeSets(result).length).toBeGreaterThan(0);
     });
 
     it('cascades weights when there is no room between predecessor and successor', () => {
@@ -315,9 +316,17 @@ describe('calculateTextChangesForOrdering', () => {
             },
         });
         const children = [predecessor, new_child, successor];
-        const changes = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
         // should cascade: both new_child and successor get weights
-        expect(changes.length).toBeGreaterThanOrEqual(1);
+        expect(flattenOrderingChangeSets(result).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('single-file mode returns at most one bucket with undefined doc_path', () => {
+        // both children share no origin → undefined doc_path bucket
+        const children = [makeNote(1), makeNote(3), makeNote(2)];
+        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        expect(result).toHaveLength(1);
+        expect(result[0].doc_path).toBeUndefined();
     });
 
     /*
@@ -333,7 +342,7 @@ describe('calculateTextChangesForOrdering', () => {
         const dragged = initial[from_index];
         const column = initial.filter(n => n.seq !== dragged.seq);
         column.splice(to_index, 0, dragged);
-        const changes = calculateTextChangesForOrdering(column, to_index, 'kanban_ordering_weight');
+        const changes = flattenOrderingChangeSets(calculateTextChangesForOrdering(column, to_index, 'kanban_ordering_weight'));
         // a brand-new linetag is inserted at note.position.start.offset + headline_raw.length, so map each change back to its note by that offset
         // notes the algorithm assigned weight 0 (the default) get no change and stay unweighted — kanbanNoteOrder ranks them ahead of weighted cards, which is intended
         const weight_by_offset = new Map<number, number>();
@@ -373,5 +382,156 @@ describe('calculateTextChangesForOrdering', () => {
         const column = [makeNote(10), makeNote(20), makeNote(30), makeNote(40)];
         // drag seq 30 (index 2) to sit just after seq 10 (index 1)
         expect(simulateDrop(column, 2, 1)).toEqual([10, 30, 20, 40]);
+    });
+
+    /*
+     * single-file regression fixture: snapshot the byte-level shape of the
+     * pre-refactor output for a known-good single-file input. if the
+     * partitioned-output rewrite ever stops being byte-identical for
+     * single-file callers this test fails on the literal change list.
+     */
+    it('single-file byte-identical regression: cascade output matches pre-refactor', () => {
+        const predecessor = makeNote(1, {
+            linetags_from: 20,
+            linetags: {
+                'kanban_ordering_weight': {
+                    key: 'kanban_ordering_weight', value: '5', value_numeric: 5,
+                    note_seq: 1, key_offset: 4, value_offset: 25, linktext_offset: 0,
+                },
+            },
+        });
+        const new_child = makeNote(3);
+        const successor = makeNote(2, {
+            linetags_from: 60,
+            linetags: {
+                'kanban_ordering_weight': {
+                    key: 'kanban_ordering_weight', value: '5', value_numeric: 5,
+                    note_seq: 2, key_offset: 4, value_offset: 25, linktext_offset: 0,
+                },
+            },
+        });
+        const children = [predecessor, new_child, successor];
+        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        // exactly one bucket, single-file, doc_path undefined
+        expect(result).toHaveLength(1);
+        expect(result[0].doc_path).toBeUndefined();
+        const flat = flattenOrderingChangeSets(result);
+        // predecessor.seq=1, new_child.seq=3 → predecessor.seq > new_child.seq is false → +0
+        // so min_weight = predecessor_weight (5) + 0 = 5
+        // new_child.seq=3 > successor.seq=2 → max_weight = successor_weight (5) - 1 = 4
+        // 4 < 5 → cascade: new_child gets 5, successor gets 6
+        // new_child has no linetags → a fresh ` [](?kanban_ordering_weight=5)` is inserted after its headline
+        // successor updates the existing value 5 → 6
+        const new_child_insert = flat.find(c => c.from === new_child.position.start.offset + new_child.headline_raw.length);
+        expect(new_child_insert?.insert).toBe(' [](?kanban_ordering_weight=5)');
+        const successor_update = flat.find(c => c.from === (successor.linetags_from || 0) + successor.linetags!['kanban_ordering_weight'].value_offset);
+        expect(successor_update?.insert).toBe('6');
+    });
+});
+
+describe('calculateTextChangesForOrdering cross-file', () => {
+
+    function makeNoteWithOrigin(seq: number, doc_path: string, overrides: Partial<NoteProps> = {}): NoteProps {
+        return {
+            seq,
+            level: 1,
+            children_body: [],
+            position: {
+                start: { offset: seq * 100, line: seq },
+                end: { offset: seq * 100 + 10, line: seq },
+            },
+            children: [],
+            headline_raw: `## Note ${seq}`,
+            body_raw: '',
+            origin: { doc_id: doc_path, doc_path },
+            ...overrides,
+        };
+    }
+
+    function weighted(note: NoteProps, weight: number): NoteProps {
+        return {
+            ...note,
+            linetags_from: note.position.start.offset + note.headline_raw.length - 25,
+            linetags: {
+                kanban_ordering_weight: {
+                    key: 'kanban_ordering_weight', value: `${weight}`, value_numeric: weight,
+                    note_seq: note.seq, key_offset: 4, value_offset: 25, linktext_offset: 0,
+                },
+            },
+        };
+    }
+
+    it('drops a file-B note between two weighted file-A notes via gap insertion (no cascade)', () => {
+        // weighted file-A notes at 10 and 20; drop a file-B note between them. gap 10..20 → integer 15 fits → only the new_child is written, file-A weights untouched.
+        const a_pred = weighted(makeNoteWithOrigin(1, 'a.md'), 10);
+        const new_child = makeNoteWithOrigin(2, 'b.md');
+        const a_succ = weighted(makeNoteWithOrigin(3, 'a.md'), 20);
+        const column = [a_pred, new_child, a_succ];
+        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        // exactly one bucket — only b.md got an edit
+        expect(result).toHaveLength(1);
+        expect(result[0].doc_path).toBe('b.md');
+        // new_child weight is 15 (midpoint between 10 and 20)
+        const flat = flattenOrderingChangeSets(result);
+        const insert = flat.find(c => /kanban_ordering_weight=/.test(c.insert));
+        expect(insert?.insert).toContain('kanban_ordering_weight=15');
+    });
+
+    it('cascade is bounded to the inserted note\'s doc_path when gap insertion fails', () => {
+        // file-A neighbours weighted 5 and 6 (no integer gap); a file-B note dropped between them cascades to b.md only
+        const a_pred = weighted(makeNoteWithOrigin(1, 'a.md'), 5);
+        const new_child = makeNoteWithOrigin(2, 'b.md');
+        const a_succ = weighted(makeNoteWithOrigin(3, 'a.md'), 6);
+        const column = [a_pred, new_child, a_succ];
+        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        // all touched docs must be b.md (file-A weights stay untouched)
+        for (const set of result) {
+            expect(set.doc_path).toBe('b.md');
+        }
+        // and the algorithm did produce at least one change
+        expect(flattenOrderingChangeSets(result).length).toBeGreaterThan(0);
+    });
+
+    it('partitions changes by doc_path when cascade naturally hits multiple files', () => {
+        // cascade steps through several b.md notes with a file-A note mid-column; the file-A note is skipped and only b.md is rewritten
+        const b1 = weighted(makeNoteWithOrigin(1, 'b.md'), 1);
+        const new_child = makeNoteWithOrigin(2, 'b.md');
+        const a_mid = weighted(makeNoteWithOrigin(3, 'a.md'), 2);
+        const b2 = weighted(makeNoteWithOrigin(4, 'b.md'), 3);
+        const column = [b1, new_child, a_mid, b2];
+        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        // every emitted bucket is b.md — a.md never receives a rewrite
+        for (const set of result) {
+            expect(set.doc_path).toBe('b.md');
+        }
+    });
+
+    it('weighted predecessor + unweighted successor cascades (successor blocks unweighted)', () => {
+        // an unweighted successor would sort before a weighted new_child, so a gap insert would invert the order — the cascade runs and stays bounded to b.md
+        const a_pred = weighted(makeNoteWithOrigin(1, 'a.md'), 5);
+        const new_child = makeNoteWithOrigin(2, 'b.md');
+        const a_succ = makeNoteWithOrigin(3, 'a.md');
+        const column = [a_pred, new_child, a_succ];
+        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        for (const set of result) {
+            expect(set.doc_path).toBe('b.md');
+        }
+    });
+
+    it('returns partitioned shape with one entry per touched doc_path', () => {
+        const a_pred = weighted(makeNoteWithOrigin(1, 'a.md'), 10);
+        const new_child = makeNoteWithOrigin(2, 'b.md');
+        const a_succ = weighted(makeNoteWithOrigin(3, 'a.md'), 20);
+        const column = [a_pred, new_child, a_succ];
+        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        // each set must have its doc_path stamped
+        for (const set of result) {
+            expect(set).toHaveProperty('doc_path');
+            expect(set).toHaveProperty('changes');
+            expect(Array.isArray(set.changes)).toBe(true);
+        }
+        // and no two sets share a doc_path
+        const doc_paths = result.map(s => s.doc_path);
+        expect(new Set(doc_paths).size).toBe(doc_paths.length);
     });
 });

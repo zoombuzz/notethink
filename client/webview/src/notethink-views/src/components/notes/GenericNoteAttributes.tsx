@@ -1,9 +1,12 @@
+import Debug from "debug";
+import { type MouseEvent } from "react";
+import { isInternalAttribute } from "../../lib/renderops";
+import type { LineTag, NoteProps } from "../../types/NoteProps";
 import view_specialised_styles from "../../components/ViewRenderer.module.scss";
-import {LineTag, NoteProps} from "../../types/NoteProps";
-import {isInternalAttribute} from "../../lib/renderops";
-import {MouseEvent} from "react";
 
-const hiddenAttributes = [
+const debug = Debug("nodejs:notethink-views:GenericNoteAttributes");
+
+const HIDDEN_ATTRIBUTES = [
     'progress_unit', 'progress_max',
     'kanban_ordering_weight',
 ];
@@ -19,7 +22,7 @@ export default function GenericNoteAttributes(props: NoteProps) {
         >
             {Object.keys(linetags).map((attrib_key: string, index: number) => {
                 // don't show attributes already manually rendered
-                if (hiddenAttributes.includes(attrib_key)) {return;}
+                if (HIDDEN_ATTRIBUTES.includes(attrib_key)) {return;}
                 // don't show internal attributes
                 if (isInternalAttribute(attrib_key)) {return;}
                 // pull out the current value (dynamic typing)

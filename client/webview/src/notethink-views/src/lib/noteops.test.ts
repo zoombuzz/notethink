@@ -307,6 +307,81 @@ describe('noteOrder (relevance)', () => {
     });
 });
 
+describe('kanbanNoteOrder cross-file', () => {
+    function makeCrossFileNote(seq: number, doc_path: string, file_rank: number, file_mtime?: number, weight?: number): NoteProps {
+        return makeNote({
+            seq,
+            position: { start: { offset: seq * 100, line: seq }, end: { offset: seq * 100 + 10, line: seq } },
+            origin: { doc_id: doc_path, doc_path, relative_path: doc_path, file_rank, file_mtime },
+            linetags: weight === undefined ? undefined : {
+                'kanban_ordering_weight': {
+                    key: 'kanban_ordering_weight', value: `${weight}`, value_numeric: weight,
+                    note_seq: seq, key_offset: 0, value_offset: 0, linktext_offset: 0,
+                },
+            },
+        });
+    }
+
+    it('(weighted, weighted) across two origins: weight is decisive', () => {
+        // a has weight 1 on file-a; b has weight 2 on file-b. weight-1 should sort first regardless of file_rank/file_mtime ordering.
+        const a = makeCrossFileNote(5, 'a.md', 5, 1_000, 1);
+        const b = makeCrossFileNote(1, 'b.md', 0, 9_000, 2);
+        expect(kanbanNoteOrder(a, b)).toBeLessThan(0);
+        expect(kanbanNoteOrder(b, a)).toBeGreaterThan(0);
+    });
+
+    it('(weighted, weighted) ties broken by seq only — file_rank/file_mtime ignored', () => {
+        // same weight, different origins; a has worse rank and older mtime but smaller seq → a wins
+        const a = makeCrossFileNote(1, 'a.md', 5, 1_000, 7);
+        const b = makeCrossFileNote(2, 'b.md', 0, 9_000, 7);
+        expect(kanbanNoteOrder(a, b)).toBeLessThan(0);
+        expect(kanbanNoteOrder(b, a)).toBeGreaterThan(0);
+    });
+
+    it('(weighted, unweighted) across origins: unweighted sorts before weighted', () => {
+        const weighted = makeCrossFileNote(1, 'a.md', 0, 9_000, 5);
+        const unweighted = makeCrossFileNote(2, 'b.md', 5, 1_000);
+        expect(kanbanNoteOrder(weighted, unweighted)).toBeGreaterThan(0);
+        expect(kanbanNoteOrder(unweighted, weighted)).toBeLessThan(0);
+    });
+
+    it('(unweighted, weighted) across origins: unweighted sorts before weighted', () => {
+        const unweighted = makeCrossFileNote(1, 'a.md', 5, 1_000);
+        const weighted = makeCrossFileNote(2, 'b.md', 0, 9_000, 5);
+        expect(kanbanNoteOrder(unweighted, weighted)).toBeLessThan(0);
+        expect(kanbanNoteOrder(weighted, unweighted)).toBeGreaterThan(0);
+    });
+
+    it('(unweighted, unweighted) across origins: falls through to noteOrder', () => {
+        // same rank → newer mtime first
+        const older = makeCrossFileNote(1, 'a.md', 0, 1_000);
+        const newer = makeCrossFileNote(2, 'b.md', 0, 9_000);
+        expect(kanbanNoteOrder(older, newer)).toBeGreaterThan(0);
+        expect(kanbanNoteOrder(newer, older)).toBeLessThan(0);
+
+        // same rank, same mtime → seq decides
+        const first = makeCrossFileNote(1, 'a.md', 0, 5_000);
+        const second = makeCrossFileNote(2, 'b.md', 0, 5_000);
+        expect(kanbanNoteOrder(first, second)).toBeLessThan(0);
+        expect(kanbanNoteOrder(second, first)).toBeGreaterThan(0);
+
+        // rank only gates the mtime tiebreak; when ranks differ noteOrder falls through to seq order
+        const seq1_rank5 = makeCrossFileNote(1, 'a.md', 5);
+        const seq2_rank0 = makeCrossFileNote(2, 'b.md', 0);
+        expect(kanbanNoteOrder(seq1_rank5, seq2_rank0)).toBeLessThan(0);
+        expect(kanbanNoteOrder(seq2_rank0, seq1_rank5)).toBeGreaterThan(0);
+    });
+
+    it('weight value (not seq) determines order when both are weighted across files', () => {
+        // smaller seq but larger weight: the LARGER weight sorts LATER (i.e. b sorts later)
+        const a = makeCrossFileNote(1, 'a.md', 0, 5_000, 50);
+        const b = makeCrossFileNote(2, 'b.md', 0, 5_000, 10);
+        // b has smaller weight → b sorts first
+        expect(kanbanNoteOrder(a, b)).toBeGreaterThan(0);
+        expect(kanbanNoteOrder(b, a)).toBeLessThan(0);
+    });
+});
+
 describe('kanbanNoteOrder (relevance + weights)', () => {
     function ranked(seq: number, doc_path: string, file_rank: number, file_mtime?: number, weight?: number): NoteProps {
         return makeNote({

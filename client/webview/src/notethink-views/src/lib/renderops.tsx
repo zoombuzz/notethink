@@ -1,9 +1,9 @@
-import { MdastNode, MdastNodes, NoteProps } from "../types/NoteProps";
+import type { MdastNode, MdastNodes, NoteProps } from "../types/NoteProps";
 import {sanitize} from "hast-util-sanitize";
 import {toHast} from "mdast-util-to-hast";
 import {toMarkdown} from "mdast-util-to-markdown";
 import {toString} from "mdast-util-to-string";
-import {ReactElement} from "react";
+import type {ReactElement} from "react";
 import {toJsxRuntime} from "hast-util-to-jsx-runtime";
 import {Fragment, jsx, jsxs} from "react/jsx-runtime";
 

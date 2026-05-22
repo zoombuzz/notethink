@@ -26,6 +26,7 @@ import master_view_styles from "../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:GenericView");
 
+// dynamic import() is required by React.lazy for per-view code-splitting; static imports would pull every view into the initial bundle
 const AutoView = lazy(() => import('./AutoView'));
 const DocumentView = lazy(() => import('./DocumentView'));
 const KanbanView = lazy(() => import('./KanbanView'));

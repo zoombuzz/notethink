@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { generateIdentifier } from '../lib/crypto';
 import type { HashMapOf, Doc } from '../types/general';
-import { abbrevDoc, getNonce } from '../lib/utils';
+import { getNonce } from '../lib/utils';
 import { debug, writeToLog, writeToErrorLog } from "../lib/errorops";
 import { parse } from '../lib/parseops';
 import { isPathWithin } from '../lib/pathsafe';
@@ -10,13 +10,72 @@ import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DE
 
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
-const BACKGROUND_BATCH_SIZE = 20;
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
 
 // bridge isPathWithin to the live workspace: roots come from vscode.workspace.workspaceFolders so the pure helper stays vscode-free and unit-testable
 function isWithinWorkspace(target_path: string, options?: { requireExtension?: string }): boolean {
 	const root_paths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
 	return isPathWithin(target_path, root_paths, options);
+}
+
+interface TextChange {
+	from: number;
+	to?: number;
+	insert: string;
+}
+
+/**
+ * find the first change whose offsets fall outside [0, doc_length] or have from > to.
+ * Returns that change for logging, or null when every change is valid.
+ */
+function firstInvalidChange(changes: Array<TextChange>, doc_length: number): TextChange | null {
+	for (const change of changes) {
+		const to = change.to ?? change.from;
+		if (change.from < 0 || to < 0 || change.from > doc_length || to > doc_length || change.from > to) {
+			return change;
+		}
+	}
+	return null;
+}
+
+/**
+ * audit-log each pending change with ±10 chars of surrounding context before it is applied.
+ */
+function logEditTextChanges(document: vscode.TextDocument, doc_path: string, changes: Array<TextChange>): void {
+	writeToLog('editText', `${changes.length} changes on ${doc_path} (len=${document.getText().length})`);
+	for (const change of changes) {
+		const ctx = document.getText().slice(Math.max(0, change.from - 10), (change.to ?? change.from) + 10);
+		writeToLog('editText', `from=${change.from} to=${change.to} insert="${change.insert}" ctx="${ctx}"`);
+	}
+}
+
+/**
+ * apply changes to a document end-to-start so earlier offsets stay valid. Prefers an
+ * already-visible editor (never spawns one); otherwise applies a WorkspaceEdit. The
+ * caller must validate offsets first.
+ */
+async function applyEditTextChanges(document: vscode.TextDocument, uri: vscode.Uri, changes: Array<TextChange>): Promise<void> {
+	const sorted_changes = [...changes].sort((a, b) => b.from - a.from);
+	const existing = vscode.window.visibleTextEditors.find(ed => ed.document.uri.path === uri.path);
+	if (existing) {
+		await existing.edit(editBuilder => {
+			for (const change of sorted_changes) {
+				const from = document.positionAt(change.from);
+				const to = change.to !== undefined ? document.positionAt(change.to) : from;
+				if (change.to !== undefined) { editBuilder.replace(new vscode.Range(from, to), change.insert); }
+				else { editBuilder.insert(from, change.insert); }
+			}
+		});
+		return;
+	}
+	const ws_edit = new vscode.WorkspaceEdit();
+	for (const change of sorted_changes) {
+		const from = document.positionAt(change.from);
+		const to = change.to !== undefined ? document.positionAt(change.to) : from;
+		if (change.to !== undefined) { ws_edit.replace(uri, new vscode.Range(from, to), change.insert); }
+		else { ws_edit.insert(uri, from, change.insert); }
+	}
+	await vscode.workspace.applyEdit(ws_edit);
 }
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
@@ -285,8 +344,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			return {
 				view_type: config.get<'auto' | 'document' | 'kanban'>('viewType', 'auto'),
 				column_order: config.get<string[]>('columnOrder', DEFAULT_FOLDER_VIEW_COLUMN_ORDER),
-				include_filter: config.get<string>('includeFilter', '**/*.md'),
-				exclude_filter: config.get<string>('excludeFilter', '**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**'),
+				include_filter: config.get<string>('includeFilter', DEFAULT_INCLUDE_FILTER),
+				exclude_filter: config.get<string>('excludeFilter', DEFAULT_EXCLUDE_FILTER),
 				max_notes_per_file: config.get<number>('maxNotesPerFile', 10),
 				show_context_bars: config.get<boolean>('showContextBars', true),
 				has_workspace_overrides,
@@ -308,127 +367,6 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			writeToErrorLog('failed to build initial document', initialDocument.uri.path, err);
 		}
 		syncActiveFileWatcher();
-
-		const filter_criterion = '**/*.md';
-		const docs: HashMapOf<Doc> = {};
-
-		/**
-		 * @todo multi-file view: load all workspace docs and watch for new ones.
-		 * Call this when multi-file view context is mature enough.
-		 */
-		async function discoverAllWorkspaceDocs() {
-			// phase 1: load docs from visible text editors for fast first paint
-			const load_time = new Date().toISOString();
-			const visible_md_editors = vscode.window.visibleTextEditors.filter(
-				ed => ed.document.uri.path.endsWith('.md')
-			);
-			for (const editor of visible_md_editors) {
-				try {
-					const uri = editor.document.uri;
-					const text = editor.document.getText();
-					const mdast = parse(text);
-					const doc: Doc = {
-						path: uri.path,
-						id: await generateIdentifier(uri.path),
-						content: mdast,
-						text,
-						hash_sha256: await generateIdentifier(text),
-						updatedAt: load_time,
-						createdBy: "visibleTextEditor",
-					};
-					docs[doc.id] = doc;
-					debug('loaded visible editor document', abbrevDoc(doc));
-				} catch (err) {
-					writeToErrorLog('failed to load visible editor document', editor.document.uri.path, err);
-				}
-			}
-			debug('phase 1: loaded %d visible editor docs', Object.keys(docs).length);
-			updateWebview();
-
-			// listen for new documents being created that match the glob
-			const watcher = vscode.workspace.createFileSystemWatcher(filter_criterion);
-			watcher.onDidCreate(async (uri) => {
-				try {
-					const document = await vscode.workspace.openTextDocument(uri);
-					const text = document.getText();
-					const mdast = parse(text);
-					const doc: Doc = {
-						path: uri.path,
-						createdBy: "onDidCreate",
-						id: await generateIdentifier(uri.path),
-						content: mdast,
-						text,
-						hash_sha256: await generateIdentifier(text),
-					};
-					docs[doc.id] = doc;
-					writeToLog('new matching document added in the background', abbrevDoc(doc));
-					updateWebview({ [doc.id]: doc });
-				} catch (err) {
-					writeToErrorLog('failed to load new document', uri.path, err);
-				}
-			});
-
-			// phase 2: discover remaining *.md files in the background
-			const loaded_paths = new Set(Object.values(docs).map(d => d.path));
-			const all_uris = await vscode.workspace.findFiles(filter_criterion);
-			const remaining = all_uris.filter(uri => !loaded_paths.has(uri.path));
-			debug('phase 2: discovering %d remaining docs (%d already loaded)', remaining.length, loaded_paths.size);
-			let batch: HashMapOf<Doc> = {};
-			let batch_count = 0;
-			for (const uri of remaining) {
-				try {
-					const document = await vscode.workspace.openTextDocument(uri);
-					const text = document.getText();
-					const mdast = parse(text);
-					const doc: Doc = {
-						path: uri.path,
-						id: await generateIdentifier(uri.path),
-						content: mdast,
-						text,
-						hash_sha256: await generateIdentifier(text),
-						updatedAt: new Date().toISOString(),
-						createdBy: "backgroundDiscovery",
-					};
-					docs[doc.id] = doc;
-					batch[doc.id] = doc;
-					batch_count++;
-					if (batch_count >= BACKGROUND_BATCH_SIZE) {
-						updateWebview(batch);
-						batch = {};
-						batch_count = 0;
-					}
-				} catch (err) {
-					writeToErrorLog('failed to load background document', uri.path, err);
-				}
-			}
-			if (batch_count > 0) {
-				updateWebview(batch);
-			}
-			debug('phase 2: background discovery complete, %d total docs', Object.keys(docs).length);
-
-			return watcher;
-		}
-
-		/**
-		 * Update the webview content (used by multi-file discovery)
-		 * @param partial_docs optional subset of docs to send; defaults to all docs
-		 */
-		function updateWebview(partial_docs?: HashMapOf<Doc>) {
-			const send_docs = partial_docs ?? docs;
-			const timestamped: HashMapOf<Doc> = {};
-			const now = new Date().toISOString();
-			for (const [id, doc] of Object.entries(send_docs)) {
-				timestamped[id] = { ...doc, updateSentAt: now };
-			}
-			const message = {
-				type: 'update',
-				partial: { docs: timestamped },
-				workspace_root,
-				extension_version,
-			};
-			debug('updateWebview (%d docs)', Object.keys(send_docs).length);
-			webviewPanel.webview.postMessage(message);
-		}
 
 		// debounce change handler - only re-parse the active document
 		let change_timer: ReturnType<typeof setTimeout> | undefined;
@@ -823,84 +761,61 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 					return;
 				}
 				case 'editText': {
-					const doc_path = e.docPath as string;
-					const changes = e.changes as Array<{from: number; to?: number; insert: string}>;
-					try {
-						// webview-supplied paths are untrusted: only allow edits to .md files inside the workspace
-						if (!doc_path || !isWithinWorkspace(doc_path, { requireExtension: '.md' })) {
-							writeToErrorLog('editText: path outside workspace, refusing', doc_path);
-							return;
-						}
-						const uri = vscode.Uri.file(doc_path);
-						const document = await vscode.workspace.openTextDocument(uri);
-						const doc_length = document.getText().length;
-
-						// validate all change offsets before applying
-						for (const change of changes) {
-							const to = change.to ?? change.from;
-							if (change.from < 0 || to < 0 || change.from > doc_length || to > doc_length || change.from > to) {
-								writeToErrorLog('editText: invalid offsets, skipping',
-									`from=${change.from} to=${to} len=${doc_length} insert="${change.insert}"`);
+					/**
+					 * dispatches on shape: `changes_by_doc` (multi-doc folder-mode batch,
+					 * one entry per file) vs `docPath`+`changes` (single-doc back-compat).
+					 * Both forms route per-doc work through `apply_one`; the batch path
+					 * applies sequentially so concurrent applyEdit calls do not race on
+					 * change_timer / active state. A single bad doc in a batch is logged
+					 * and skipped — the remaining docs still apply.
+					 */
+					const apply_one = async (doc_path: string, changes: Array<TextChange>): Promise<void> => {
+						try {
+							// webview-supplied paths are untrusted: only allow edits to .md files inside the workspace
+							if (!doc_path || !isWithinWorkspace(doc_path, { requireExtension: '.md' })) {
+								writeToErrorLog('editText: path outside workspace, refusing', doc_path);
 								return;
 							}
-						}
-
-						writeToLog('editText', `${changes.length} changes on ${doc_path} (len=${doc_length})`);
-						for (const change of changes) {
-							const ctx = document.getText().slice(Math.max(0, change.from - 10), (change.to ?? change.from) + 10);
-							writeToLog('editText', `from=${change.from} to=${change.to} insert="${change.insert}" ctx="${ctx}"`);
-						}
-
-						// apply changes end-to-start to preserve offsets
-						const sorted_changes = [...changes].sort((a, b) => (b.from) - (a.from));
-
-						// Prefer editing through an existing visible editor (never spawn a new one)
-						const existing = vscode.window.visibleTextEditors.find(
-							ed => ed.document.uri.path === doc_path
-						);
-						if (existing) {
-							await existing.edit(editBuilder => {
-								for (const change of sorted_changes) {
-									const from = document.positionAt(change.from);
-									const to = change.to !== undefined ? document.positionAt(change.to) : from;
-									if (change.to !== undefined) {
-										editBuilder.replace(new vscode.Range(from, to), change.insert);
-									} else {
-										editBuilder.insert(from, change.insert);
-									}
-								}
-							});
-						} else {
-							// No visible editor - apply edits via WorkspaceEdit (never opens a new editor)
-							const wsEdit = new vscode.WorkspaceEdit();
-							for (const change of sorted_changes) {
-								const from = document.positionAt(change.from);
-								const to = change.to !== undefined ? document.positionAt(change.to) : from;
-								if (change.to !== undefined) {
-									wsEdit.replace(uri, new vscode.Range(from, to), change.insert);
-								} else {
-									wsEdit.insert(uri, from, change.insert);
-								}
+							if (!Array.isArray(changes) || changes.length === 0) {
+								writeToErrorLog('editText: no changes supplied for doc, skipping', doc_path);
+								return;
 							}
-							await vscode.workspace.applyEdit(wsEdit);
+							const uri = vscode.Uri.file(doc_path);
+							const document = await vscode.workspace.openTextDocument(uri);
+							const invalid = firstInvalidChange(changes, document.getText().length);
+							if (invalid) {
+								writeToErrorLog('editText: invalid offsets, skipping',
+									`from=${invalid.from} to=${invalid.to ?? invalid.from} len=${document.getText().length} insert="${invalid.insert}" doc=${doc_path}`);
+								return;
+							}
+							logEditTextChanges(document, doc_path, changes);
+							await applyEditTextChanges(document, uri, changes);
+							const edited_doc = await buildDoc(document);
+							if (document.uri.path === active_path) {
+								active_doc = edited_doc;
+								sendDoc(active_doc);
+								sendCurrentSelection();
+							} else {
+								// folder/background edit: route through sendDoc so the merge strategy applies
+								sendDoc(edited_doc);
+							}
+						} catch (err) {
+							writeToErrorLog('editText failed', doc_path, err);
 						}
-						// bypass debounce: immediately re-parse and send the updated doc
-						// (the edit above already fired onDidChangeTextDocument which set a
-						// debounce timer - clear it to avoid a redundant delayed update)
-						if (change_timer) { clearTimeout(change_timer); change_timer = undefined; }
-						const edited_document = existing?.document ?? document;
-						const edited_doc = await buildDoc(edited_document);
-						if (edited_document.uri.path === active_path) {
-							active_doc = edited_doc;
-							sendDoc(active_doc);
-							sendCurrentSelection();
-						} else {
-							// folder mode (or background) edit: route the updated doc through sendDoc so the merge strategy is applied correctly
-							sendDoc(edited_doc);
+					};
+					const changes_by_doc = e.changes_by_doc as Record<string, Array<{from: number; to?: number; insert: string}>> | undefined;
+					if (changes_by_doc && typeof changes_by_doc === 'object') {
+						// sequential so per-doc edits cannot race on shared change_timer / active_doc state
+						for (const [doc_path, changes] of Object.entries(changes_by_doc)) {
+							await apply_one(doc_path, changes);
 						}
-					} catch (err) {
-						writeToErrorLog('editText failed', doc_path, err);
+					} else {
+						const doc_path = e.docPath as string;
+						const changes = e.changes as Array<{from: number; to?: number; insert: string}>;
+						await apply_one(doc_path, changes);
 					}
+					// clear the debounce timer the edits set, so the batch doesn't re-emit a delayed update
+					if (change_timer) { clearTimeout(change_timer); change_timer = undefined; }
 					return;
 				}
 				case 'openExternal': {

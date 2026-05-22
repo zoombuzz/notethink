@@ -8,6 +8,8 @@ import type { GlobalSettingsPayload, FolderViewSettingsPayload } from '../noteth
 import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE, DEFAULT_FOLDER_VIEW_COLUMN_ORDER } from '../constants';
 import { FOLDER_VIEW_STATE_ID } from '../notethink-views/src/lib/mergeAggregateRoot';
 
+const debug = Debug("nodejs:notethink:ExtensionReceiver");
+
 function anyViewStateTaggedFolder(view_states: Record<string, ViewState>): boolean {
     if (view_states[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode === 'folder') { return true; }
     for (const id of Object.keys(view_states)) {
@@ -27,8 +29,6 @@ const DEFAULT_FOLDER_VIEW_SETTINGS: FolderViewSettingsPayload = {
     has_workspace_overrides: false,
 };
 
-const debug = Debug("nodejs:notethink:ExtensionReceiver");
-
 type VSCodeState = {
     docs?: HashMapOf<Doc>;
     viewStates?: Record<string, ViewState>;
@@ -46,11 +46,12 @@ export interface ViewState {
 // reuse the API instance acquired in the inline boot script (notethinkEditor.ts);
 // fall back to acquireVsCodeApi() for test environments where the inline script doesn't run
 function getVscodeApi(): ReturnType<typeof acquireVsCodeApi<VSCodeState>> {
-    if ((window as any).__notethinkVscodeApi) {
-        return (window as any).__notethinkVscodeApi;
+    const win = window as Window & { __notethinkVscodeApi?: ReturnType<typeof acquireVsCodeApi<VSCodeState>> };
+    if (win.__notethinkVscodeApi) {
+        return win.__notethinkVscodeApi;
     }
     const api = acquireVsCodeApi<VSCodeState>();
-    (window as any).__notethinkVscodeApi = api;
+    win.__notethinkVscodeApi = api;
     return api;
 }
 const vscode = getVscodeApi();
@@ -104,13 +105,13 @@ export default function ExtensionReceiver() {
     // folder mode: the effective include/exclude globs the extension is using, echoed back so the Files drawer can show them
     const [include_filter, setIncludeFilter] = useState<string | undefined>(undefined);
     const [exclude_filter, setExcludeFilter] = useState<string | undefined>(undefined);
-    const [viewStates, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
-    // ref mirror so the empty-deps onMessage callback can read the current viewStates without re-binding
-    const viewStatesRef = useRef<Record<string, ViewState>>(viewStates);
-    useEffect(() => { viewStatesRef.current = viewStates; }, [viewStates]);
-    const navigationCallbackRef = useRef<((direction: string) => void) | undefined>(undefined);
-    const [globalSettings, setGlobalSettings] = useState<GlobalSettingsPayload>({ show_line_numbers: false, watch_unopened_files_in_viewer: true });
-    const [folderViewSettings, setFolderViewSettings] = useState<FolderViewSettingsPayload>(DEFAULT_FOLDER_VIEW_SETTINGS);
+    const [view_states, setViewStates] = useState<Record<string, ViewState>>(saved_state?.viewStates || {});
+    // ref mirror so the empty-deps onMessage callback can read the current view_states without re-binding
+    const view_states_ref = useRef<Record<string, ViewState>>(view_states);
+    useEffect(() => { view_states_ref.current = view_states; }, [view_states]);
+    const navigation_callback_ref = useRef<((direction: string) => void) | undefined>(undefined);
+    const [global_settings, setGlobalSettings] = useState<GlobalSettingsPayload>({ show_line_numbers: false, watch_unopened_files_in_viewer: true });
+    const [folder_view_settings, setFolderViewSettings] = useState<FolderViewSettingsPayload>(DEFAULT_FOLDER_VIEW_SETTINGS);
     const [connected, setConnected] = useState(!!saved_state?.docs && Object.keys(saved_state.docs).length > 0);
     const [timed_out, setTimedOut] = useState(false);
 
@@ -131,7 +132,7 @@ export default function ExtensionReceiver() {
                     vscode.postMessage({ type: 'openExternal', url });
                 }
             } catch (err) {
-                console.error('handleLinkClick failed:', err);
+                debug('handleLinkClick failed: %O', err);
             }
         };
         document.addEventListener('click', handleLinkClick, true);
@@ -252,8 +253,7 @@ export default function ExtensionReceiver() {
                 setState(state => {
                     const incoming_docs = message.partial.docs || {};
                     const current_docs = state.docs || {};
-                    // merge_strategy: 'merge' upserts incoming docs into the current map (used by folder mode watcher for incremental updates)
-                    // anything else replaces the map entirely (single-file view, or folder mode's initial findFiles bulk update)
+                    // merge_strategy: 'merge' upserts incoming docs into the current map (folder-mode incremental updates); anything else replaces the map entirely (single-file view, or folder-mode initial bulk load)
                     const merge_strategy = (message as { merge_strategy?: string }).merge_strategy;
                     if (merge_strategy === 'merge') {
                         // upsert: keep existing docs not in incoming
@@ -329,7 +329,7 @@ export default function ExtensionReceiver() {
                     case 'setViewType':
                         updateAllViewStates(view_state => ({ ...view_state, type: message.viewType }));
                         // cascade: if folder mode is currently active, persist the new view type
-                        if (anyViewStateTaggedFolder(viewStatesRef.current)) {
+                        if (anyViewStateTaggedFolder(view_states_ref.current)) {
                             vscode.postMessage({ type: 'updateFolderViewSetting', setting: 'view_type', value: message.viewType });
                         }
                         return;
@@ -356,14 +356,14 @@ export default function ExtensionReceiver() {
                             };
                         });
                         // cascade: only show_context_bars is in the folder-view cascade today
-                        if (setting_key === 'show_context_bars' && anyViewStateTaggedFolder(viewStatesRef.current) && next_value !== undefined) {
+                        if (setting_key === 'show_context_bars' && anyViewStateTaggedFolder(view_states_ref.current) && next_value !== undefined) {
                             vscode.postMessage({ type: 'updateFolderViewSetting', setting: 'show_context_bars', value: next_value });
                         }
                         return;
                     }
                     case 'navigate':
-                        if (navigationCallbackRef.current) {
-                            navigationCallbackRef.current(message.direction);
+                        if (navigation_callback_ref.current) {
+                            navigation_callback_ref.current(message.direction);
                         }
                         return;
                 }
@@ -376,8 +376,8 @@ export default function ExtensionReceiver() {
     // before the extension sends the first document
     useEffect(() => {
         if (!state.docs || Object.keys(state.docs).length === 0) { return; }
-        vscode.setState({ docs: state.docs, viewStates });
-    }, [state.docs, viewStates]);
+        vscode.setState({ docs: state.docs, viewStates: view_states });
+    }, [state.docs, view_states]);
 
     // listen for messages sent from the extension to the webview
     useEffect(() => {
@@ -438,14 +438,14 @@ export default function ExtensionReceiver() {
         notes={state.docs || {}}
         selections={selections}
         postMessage={postMessageToExtension}
-        viewStates={viewStates}
+        viewStates={view_states}
         setViewManagedState={handleSetViewManagedState}
-        onNavigationCommand={navigationCallbackRef}
+        onNavigationCommand={navigation_callback_ref}
         workspace_root={workspace_root}
         aggregate_total_discovered={aggregate_total_discovered}
         include_filter={include_filter}
         exclude_filter={exclude_filter}
-        globalSettings={globalSettings}
-        folderViewSettings={folderViewSettings}
+        globalSettings={global_settings}
+        folderViewSettings={folder_view_settings}
     />;
 }

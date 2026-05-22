@@ -61,6 +61,8 @@ interface ButtonProps {
 }
 ```
 
+**Exception — snake_case data fields and the parameters that carry them.** This codebase follows a deliberate *snake_case for data, camelCase for behaviour* split. Fields on the note/view data shapes and message payloads (`NoteProps`, `ViewProps`, `NoteOrigin`, the `*Message` types) use `snake_case` — e.g. `doc_path`, `relative_path`, `workspace_root`, `aggregate_total_discovered`, `include_filter` — because they mirror the serialized extension↔webview wire format, which is snake_case end-to-end. Renaming them to camelCase would split the field name from its on-the-wire key. Function **parameters that receive these data values** therefore also stay `snake_case` (`function processNote(note_id: string)`), consistent with the local-variable rule. What stays `camelCase`: genuine UI event-handler props (`onClick`, `onSubmit`, `onNoteChange`) and function/callback names (including service-callback props like `setViewManagedState`, `postMessage` — these are functions, named per Function Naming, not `on*` UI events).
+
 ### Types and Interfaces
 
 Use `PascalCase` for types, interfaces, and components.
@@ -100,13 +102,14 @@ const user_count = users.length;  // snake_case, not a constant
 
 ### Import Grouping
 
-Organize imports in this order:
+Organize imports in this order. **`import Debug from "debug"` always comes first** (the Debug Logger Pattern rule overrides grouping — it sits above React even though `debug` is otherwise an "external dependency"):
 
 ```typescript
+// 0. Debug (first import in every webview file — see Debug Logger Pattern)
+import Debug from 'debug';
 // 1. React and framework imports
 import React, { useState, useEffect, useCallback } from 'react';
 // 2. External dependencies (alphabetized)
-import Debug from 'debug';
 import { marked } from 'marked';
 // 3. UI framework / component library
 import { Button, Modal } from '@zoombuzz/notethink-views';
@@ -125,6 +128,33 @@ import './global.css';
 ```
 
 ## Code Style
+
+### Function Length and Decomposition
+
+- **Keep functions short — aim for ≤ 30–35 lines of body.** When a function grows past that, break it into meaningful, well-named sub-functions rather than letting it sprawl. The threshold is guidance, not a hard cap: a flat data literal or an unavoidable single dispatch can run longer, but branching logic that spills past ~35 lines is almost always hiding extractable steps.
+- **Extract by responsibility, not by line count.** Each sub-function should do one nameable thing. Split where there is a genuine seam (validation → transformation → output, or a self-contained sub-algorithm), not at an arbitrary line picked to satisfy the number.
+- **The caller should read as a sequence of named steps.** After decomposition the top-level body reads like a table of contents — `firstInvalidChange(...)`, `logEditTextChanges(...)`, `applyEditTextChanges(...)` — so a reader follows the flow without diving into every detail. Well-named calls replace narration.
+- **Favor function-header comments over interleaved line comments.** Put the explanation (what, why, invariants) in the block comment immediately above the function. Both header and inline comments are permitted, but the header is the default home for anything longer than a one-line local note. If you find yourself narrating each step inline, that is a signal the steps want to become named sub-functions — inline comments should stay sparse because the code already reads logically.
+- **The point is explicit inputs/outputs and testable seams, not the number.** Line count is the symptom you watch; the cause you fix is *shared mutable state and implicit dependencies*. A 40-line function whose every input is a parameter and whose output is a return value is fine; a 25-line function reaching into ten ambient mutable variables is not. Optimise for "I can read this unit's signature and know its whole contract," and for "I can unit-test it without standing up its whole surrounding context."
+- **Closures-as-objects should be real classes.** When a long function owns several pieces of mutable state that many inner closures read and write (a per-session/per-panel controller written as one big function), the length is a symptom of missing encapsulation: every nested closure has ambient access to everything, nothing has a contract, and the unit is untestable except through its outer boundary. Promote it to a **class** — the mutable state becomes private fields, the closures become methods, and each method's dependencies become explicit (`this.x`). This is the preferred fix for stateful **non-React** closures.
+- **In React, decompose with custom hooks and child components — not plain helpers.** The Rules of Hooks forbid lifting a block that calls `useState`/`useEffect`/`useMemo` into an ordinary function. Extract a cohesive hook+derivation cluster into a **custom hook** (`useFolderDocs()`), and a JSX subtree into a **child component** (`<KanbanBoard>`). A long component body is shortened by moving these out, never by splitting at an arbitrary line.
+
+```typescript
+// avoid — one function doing validation, logging, application, and dispatch inline
+async function applyEdit(doc_path, changes) {
+    // ...60+ lines mixing offset checks, audit logging, edit application, re-emit...
+}
+
+// prefer — the caller reads as named steps; each helper has a header comment
+async function applyEdit(doc_path: string, changes: TextChange[]): Promise<void> {
+    if (!isWithinWorkspace(doc_path)) { return; }
+    const invalid = firstInvalidChange(changes, doc_length);
+    if (invalid) { logRejection(invalid); return; }
+    logEditTextChanges(document, doc_path, changes);
+    await applyEditTextChanges(document, uri, changes);
+    reEmit(document);
+}
+```
 
 ### Block Organization
 
@@ -267,13 +297,15 @@ import { NoteComponent, type NoteProps } from '@/components';
 - Do not declare the same constant inline within multiple functions - hoist it to module level
 
 ### Debug Logger Pattern
-**Always include the debug import and constant in production files**, even if not currently used. This serves as a placeholder for adding debug statements during development. This applies to production source files (`.ts`, `.tsx`), not test files (`.test.ts`, `.test.tsx`).
+**Always include the debug import and constant in webview production files**, even if not currently used. This serves as a placeholder for adding debug statements during development. This applies to webview production source files (`.ts`, `.tsx`), not test files (`.test.ts`, `.test.tsx`).
 
 **Rules:**
 - `import Debug from "debug"` must be the **first import** in every file
 - `const debug = Debug("nodejs:...")` should appear after imports, before the component/function
 - **Never remove** the debug constant, even if ESLint reports it as unused
-- The debug namespace should follow the pattern: `nodejs:{path}:{filename}`
+- The debug namespace is `nodejs:<area>:<File>` where `<area>` is the bundle/package the file belongs to (`notethink` for the webview app, `notethink-views` for the component library) and `<File>` is the source basename — e.g. `Debug("nodejs:notethink-views:KanbanView")`. It is **area-based, not a literal directory path**.
+
+**Scope — webview only.** This pattern (the npm `debug` library + `nodejs:` namespace) is the convention for the **webview / notethink-views** bundles. The **extension host** (`client/extension/**`) does not use it: extension code logs through `writeToLog` / `writeToErrorLog` (winston, in `lib/errorops.ts`). Extension files therefore do **not** carry an `import Debug from "debug"` placeholder — adding one would introduce an unused dependency that doesn't match the extension's logging stack. Pure type-definition modules (files containing only `interface` / `type` declarations, e.g. `types/NoteProps.ts`) are also exempt: they have no statements to instrument and a runtime import would defeat their erasability.
 
 ### Extension Points
 - **Keep single-case switch statements** that currently dispatch on only one value. The switch structure signals "this is an extension point — add new variants here alongside the existing case". Do not collapse to `if (x !== 'only-value') return null` — it hides the intent and forces the next contributor to re-derive the pattern.
@@ -442,7 +474,7 @@ function parseConfig(json: string): Config | null {
 
 ### Test File Location
 
-Place tests next to source files:
+Place Jest tests next to source files:
 
 ```
 components/
@@ -450,6 +482,8 @@ components/
 ├── DocumentView.test.tsx
 └── DocumentView.module.scss
 ```
+
+**Exception — VS Code extension-host Mocha suite.** Tests that exercise the live VS Code API (`client/extension/src/test/suite/**`) run under the `@vscode/test-electron` Mocha runner, not Jest, and are deliberately kept in that central suite rather than colocated. The runner discovers them by directory, and they need the real extension-host environment a colocated Jest test can't provide. Colocate everything else (pure logic, webview components) next to source as above.
 
 ### Test Naming
 
@@ -532,8 +566,8 @@ Always rebuild the extension after each code change so the developer can preview
 |------|---------|
 | Lint only | `pnpm run lint` |
 | Build only | `pnpm run build` |
-| Rollup only | `cd client/webview/src/notethink-views && pnpm run rollup` |
-| Jest only | `pnpm run jest-test` |
+| Rollup only | `pnpm -C client/webview/src/notethink-views run rollup` |
+| Jest only | `pnpm run test-jest` |
 | Playwright E2E | `pnpm run test-playwright` |
 | Everything | `pnpm run check` |
 

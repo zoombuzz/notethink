@@ -1,97 +1,240 @@
 # Todo [](?ng_view=kanban)
 
 
-### Stable note identity and multi-file kanban ordering refactor [](?id=multi-file-ordering-stable-identity)
+### Coding standards audit and remediation [](?id=coding-standards-audit-remediation&status=doing)
 
-Data-layer prerequisite for [[folder-mode-dnd]] and [[animated-passive-transitions]]. No UX change in this story — pure refactor + tests. Sits at the top of todo.md as the priority because both downstream stories depend on it.
+Audit the codebase against every rule in `CODING_STANDARDS.md` and remediate non-compliant patterns in small, reviewable passes. Redo audit completed with six parallel section owners plus local AST scans: naming/React, imports/debug, code style, TypeScript, file/code-quality/error-handling, and testing/pre-push.
+
++ inventory scope
+  + reviewed 138 TS/TSX files in `client/` and `playwright/`, excluding generated `dist`, dependency trees, `.git`, `.vscode-test-web`, coverage/build/out artifacts
+  + classification used by the naming/TypeScript passes: 75 production files and 63 test/support files
+  + stricter import/debug pass audited 70 production TS/TSX files, excluding tests, mocks, setup, declarations, generated code, and Playwright
+  + code-style pass audited 71 production files and 67 test/support files, covering 452 production functions and 1619 test/support functions
+  + file/code-quality pass scanned 101 production tracked code/style files and 56 test files
++ rule matrix
+  + Naming Conventions > Variable Naming: non-compliant
+    + production: 59 of 919 local/hook/computed variable occurrences violate snake_case; tests/support: 160 of 2140
+    + examples: `convertMdastToNoteHierarchy.ts:34` has `lineIndex`, `headingIndex`, `parentEndOffset`, `seqCounter`; `notethinkEditor.test.ts` has 55 variable violations
+  + Naming Conventions > Function Naming: mostly compliant with exceptions
+    + production: 4 of 206 function/event-handler names violate camelCase; tests/support: 8 of 122
+    + examples: `notethinkEditor.ts:894` `apply_one`, `viewhooks.ts:94` `on_scrollend`, `DocumentView.test.tsx:105` `make_props`
+  + Naming Conventions > Props and Parameters: non-compliant
+    + parameters: 111 of 530 production parameters and 46 of 559 test/support parameters violate camelCase, often because the codebase uses snake_case parameters
+    + component props: 40 of 140 production prop fields violate camelCase; largest cluster is `ViewProps.ts:8` with `doc_path`, `doc_relative_path`, `workspace_root`, `aggregate_total_discovered`, `include_filter`
+    + ambiguous: service callback props such as `setViewManagedState`, `deleteViewFromManagedState`, `postMessage`, and `getClearHandler` do not use the `on*` event prop pattern but may not be UI events
+  + Naming Conventions > Types and Interfaces: compliant in scanned files
+    + production: 0 violations across 87 types/interfaces/classes; tests/support: 0 violations across 15
+  + Naming Conventions > Components: compliant in scanned files
+    + production: 0 PascalCase component violations across 25 detected components; tests/support: 0 across 2
+  + Naming Conventions > Constants: mostly compliant with semantic caveats
+    + SCREAMING_SNAKE_CASE violations: production 1 of 43 likely true constants, tests/support 2 of 20
+    + examples: `inserts/en.ts:37` `index`; `notethinkEditor.test.ts:73-74` `defaultDocPath`, `defaultDocText`
+    + ambiguity: true constants are semantic; some local compile-time literals may be intentional local values rather than constants
+  + Import Organization > Import Placement: partially compliant
+    + no static import declarations were found after non-import code
+    + 7 runtime `import()` expressions lack explanatory comments: `GenericNote.tsx:7-9`, `GenericView.tsx:29-31`, `reportWebVitals.ts:5`
+  + Import Organization > Import Grouping: non-compliant
+    + 22 production files have grouping-order issues
+    + examples: `errorops.ts:3` imports `vscode` after externals; `index.tsx:5` imports `App` after `index.css`; `FilesDrawer.tsx:5` imports `globMatch` after SCSS; `renderops.tsx:2` imports an external after a relative type import
+  + Import Organization > External Dependency Alphabetization: non-compliant
+    + 4 production alphabetization issues: `errorops.ts:1`, `parseops.ts:1`, `NoteRenderer.tsx:3`, `renderops.tsx:2`
+  + Import Organization > Type-Only Imports: non-compliant
+    + import/debug pass: 6 production import statements are type-only but not `import type`
+    + TypeScript pass: 15 production and 13 test/support imports appear type-only but are value imports
+    + examples: `ErrorBoundary.tsx:1`, `GenericNoteWrapper.tsx:1`, `DocumentContextBar.tsx:1`, `KanbanColumn.tsx:1`, `renderops.tsx:1`, `renderops.tsx:6`
+  + Code Style > Function Length and Decomposition: non-compliant
+    + code-style pass: 41 production and 138 test/support functions exceed 35 body lines; local broader scan found 179 total over 35 body lines
+    + largest production examples: `notethinkEditor.ts:110`/`:113` `myWebviewPanel` 886 lines, `GenericView.tsx:41` 730, `ExtensionReceiver.tsx:98` 353, `MarkdownNote.tsx:22` 263, `KanbanView.tsx:63` 239
+    + largest test/support example: `notethinkEditor.test.ts:76` anonymous suite/callback 1068 lines
+  + Code Style > Block Organization: review needed
+    + mechanical scan found 300 production and 1442 test/support blank lines inside function bodies
+    + examples: `extension.ts:7`, `extension.ts:12`, `notethinkEditor.ts:121`, `l10n-bundles.test.ts:13`
+    + ambiguity: the rule allows blank lines between logical sections, so this count needs review rather than automatic remediation
+  + Code Style > Comments: non-compliant
+    + comments scanned: 419 production and 388 test/support
+    + uppercase-start comments: 93 production, 159 tests; single-sentence comments ending with a period: 58 production, 19 tests; stacked `//` comment lines: 53 production, 29 tests
+    + examples: `ExtensionReceiver.tsx:180`, `ExtensionReceiver.tsx:186`, `notethinkEditor.ts:1038` 11-line stacked comment block, `parseops.test.ts:86`
+    + inline comments: 8 production, 9 tests; none exceeded the ~100-character inline threshold
+    + back-reference/current-context comments: 3 production, 1 test; examples `ExtensionReceiver.tsx:256`, `noteui.ts:9`, `NoteProps.ts:139`, `__mocks__/vscode.ts:1`
+    + project-management version-number comments: 0 found
+    + per-field comments in data/type structures: 32 production, 8 tests; examples `NoteRenderer.tsx:39`, `mergeAggregateRoot.ts:36`, `NoteProps.ts:101`, `playwright/helpers/inject-multi-docs.ts:8`
+  + Code Style > TODO Comments: compliant in scan
+    + no TODO comments were found, so no malformed TODO comments were found
+  + Code Style > Braces and Blocks: compliant in scan
+    + AST scan found 0 unbraced `if`, `for`, `while`, or `do` control bodies
+  + TypeScript Guidelines > Explicit Types: non-compliant
+    + missing parameter types: 101 production, 211 tests/support
+    + missing return types: 343 production and 1540 tests/support across all function-like nodes; stricter non-callback/non-simple bucket is 103 production and 56 tests/support
+    + examples: `crypto.ts:2` defaulted `algo`, `errorops.ts:54` `combineTransform(info)`, `NoteRenderer.tsx:80` callback destructuring, `errorops.ts:18` `flushLogBuffer`, `errorops.ts:92` `isRedirect`, `renderops.tsx:10` `getStandardNoteDataProps`
+  + TypeScript Guidelines > Avoid `any`: non-compliant
+    + strict production source: 9 `any` usages, all in `errorops.ts`; tests/support: 173
+    + examples: `errorops.ts:55`, `:56`, `:73`, `:101`, `:133`, `:149`, `:163`, `:167`, `:171`
+    + heaviest test files: `notethinkEditor.test.ts` 73, `parseops.test.ts` 45, `convertMdastToNoteHierarchy.test.ts` 28
+    + note: broader local scan counted mocks as production and produced higher production numbers; remediation should treat `__mocks__` as test/support
+  + TypeScript Guidelines > Loop Safety: non-compliant under written rule
+    + 12 production `while`/unclear-bound loops and 3 test/support loops
+    + examples: `GenericNote.tsx:21`, `convertMdastToNoteHierarchy.ts:37`, `convertMdastToNoteHierarchy.ts:231`, `linetagops.ts:34`, `noteops.ts:128`, `noteui.ts:88`, `mergeAggregateRoot.test.ts:825`
+    + ambiguity: several loops are bounded by regex progress or data-structure exhaustion, but the written standard says avoid `while` without explicit bounds
+  + TypeScript Guidelines > Type Placement: non-compliant
+    + broad AST count: 32 production and 2 test/support findings
+    + hard examples: `mergeAggregateRoot.ts:227` `CollectedStory`, `notethinkEditor.ts:299` `FolderViewKey`, `noteui.test.ts:136-137`
+    + ambiguity: some top-of-file ordering findings are caused by debug/constants preceding types
+  + TypeScript Guidelines > Constants Placement: non-compliant
+    + hard bucket: 16 production constants after runtime declarations and 14 test/support findings
+    + examples: `ExtensionReceiver.tsx:94` `saved_state`, `ExtensionReceiver.tsx:96` `CONNECTION_TIMEOUT_MS`, `renderops.tsx:77` `renderCache`, `mergeAggregateRoot.ts:70` `ORDER_NEWEST_AT_BOTTOM`, `notethinkEditor.test.ts:73-74`
+  + TypeScript Guidelines > Debug Logger Pattern: non-compliant
+    + import/debug pass: 48 production files missing `Debug` as first import, 49 missing `const debug = Debug(...)`, 2 misplaced debug constants, 21 namespace mismatches
+    + examples: missing `extension.ts:1`, `errorops.ts:1`, `App.tsx:1`, `renderops.tsx:1`, `reportWebVitals.ts:1`; misplaced `DocumentView.tsx:13`, `KanbanView.tsx:27`; namespace examples `pathsafe.ts:4`, `NoteRenderer.tsx:16`, `CodeNote.tsx:6`, `noteui.ts:7`
+    + ambiguity: `CODING_STANDARDS.md` import grouping shows React before Debug, but Debug Logger Pattern says Debug must be first; namespace root is not fully defined
+  + TypeScript Guidelines > Extension Points: compliant in current diff
+    + single-case switches found and preserved: `GenericNoteAttributes.tsx:32`, `GenericNote.tsx:67`
+    + no trivial extension-point helper collapse was detected because this was a read-only audit
+  + React Patterns > Component Structure: non-compliant
+    + 23 component-structure ordering findings across 26 production components
+    + examples: `GenericView.tsx:41` has derived values before hooks and later hooks/effects after handlers/render-prep; `ExtensionReceiver.tsx:111` has an effect before later state/ref hooks and later effects after callbacks
+  + React Patterns > Hook Return Values: non-compliant
+    + 5 of 62 production hook returns violate snake_case, all in `ExtensionReceiver.tsx:108+`: `viewStates`, `viewStatesRef`, `navigationCallbackRef`, `globalSettings`, `folderViewSettings`
+  + React Patterns > Event Handler Props: explicit `on*` props are compliant; callback-prop naming ambiguous
+    + explicit `on*` props: 0 violations across 102 production and 13 test/support props
+    + 13 production function-valued callback props lack `on*`, including `ViewProps.ts:39` `setViewManagedState`, `deleteViewFromManagedState`, `postMessage`, `getClearHandler`; these may be service callbacks rather than UI events
+  + File Organization > Directory Structure: mostly compliant
+    + major source trees follow `src/components`, `src/lib`, and `src/types`; no misplaced major source trees found
+  + File Organization > File Naming: partially non-compliant or ambiguous
+    + component and style module naming passed
+    + utility filename exceptions: `convertMdastToNoteHierarchy.ts`, `globMatch.ts`, `mergeAggregateRoot.ts`
+    + type filename exceptions: `client/extension/src/types/general.ts`, `client/webview/src/types/general.ts`
+    + tracked generated/legacy JS beside TS: `client/webview/src/reportWebVitals.js`, `client/webview/src/setupTests.js`, `client/webview/src/types/general.js`
+    + ambiguity: standards use `parseops.ts` as an accepted utility example, so camelCase utility filenames may be legacy violations or standards drift
+  + File Organization > Test File Location: partially non-compliant or underspecified
+    + most webview/notethink-views unit tests are adjacent
+    + non-adjacent or cross-cutting examples: `client/extension/src/test/suite/lib/crypto.test.ts`, `client/extension/src/test/suite/extension.test.ts`, `client/extension/src/test/suite/openview-experiment.test.ts`, `client/webview/src/notethink-views/src/components/l10n-rendering.test.tsx`
+    + missing adjacent test candidates: `FolderTreeComposer.tsx`, `NoteTreeComposer.tsx`, `GenericNoteAttributes.tsx`, `DocumentContextBar.tsx`, `viewhooks.ts`
+    + ambiguity: extension Mocha integration tests and cross-cutting l10n tests need an explicit exception if they are intended
+  + File Organization > Styles: compliant in scan
+    + all CSS modules use `*.module.scss`; one global style exists as `client/webview/src/index.css`
+  + Code Quality > Avoid Duplication: partially non-compliant
+    + mirrored constants across extension/webview: `client/extension/src/constants.ts:6` with `client/webview/src/constants.ts:2`, and `client/extension/src/constants.ts:12` with `client/webview/src/constants.ts:9`
+    + repeated hardcoded settings/config keys: `extension.ts:70`, `notethinkEditor.ts:277`, `notethinkEditor.ts:307`, `ExtensionReceiver.tsx:360`, `SettingsCommonControls.tsx:79`
+    + ambiguity: extension and webview package boundaries may make shared constants non-trivial
+  + Code Quality > Remove Unused Code: mostly compliant by lint, with exceptions
+    + `pnpm run lint` passed, so no compiler/lint unused imports or vars are currently reported
+    + active exploratory test file: `client/extension/src/test/suite/openview-experiment.test.ts:4-11`
+    + diagnostic test logs: `extension.test.ts:202`, `:215`, `:258`
+    + TS suppressions or eslint disables: 4 production hits in 4 files
+    + no confirmed dead commented-out code found by the second pass; earlier unresolved marker remains `errorops.ts:73`
+  + Error Handling > Use Error Utilities: partially non-compliant
+    + extension-side code often uses `errorops`, but webview/library code often uses `console.*`; 18 production `console.*` hits in 10 files and 24 test hits in 6 files
+    + examples: `ErrorBoundary.tsx:26`, `renderops.tsx:99`, `notethinkEditor.ts:1073`, `NoteRenderer.tsx:25`, `ExtensionReceiver.tsx:133`, `GenericView.tsx:178`
+    + ambiguity: webview has no local browser-side error utility, so the standard may need one or an exception
+  + Error Handling > Avoid Silent Failures: non-compliant
+    + two production bare `catch {}` hits: `extension.ts:33`, `notethinkEditor.ts:699`
+    + additional intentionally swallowed/fallback cases should be reviewed: `notethinkEditor.ts:1056`, `notethinkEditor.ts:1065`
+  + Testing Standards > Test Naming: mostly compliant
+    + test names generally use behavior-oriented `describe`/`it`/`test`; extension integration tests use Mocha `suite`/`test`, matching project guidance
+  + Testing Standards > Test Structure: mostly compliant with style variations
+    + exact `default_props` appears in 6 files, including `DocumentView.test.tsx:24`
+    + more complex tests use camelCase helper functions such as `makeViewProps`, which is function naming compliant but differs from the sample object style
+  + Testing Standards > E2E no reloads as workarounds: compliant in scan
+    + no `page.reload()` found; all 12 `page.goto(...)` calls are in `test.beforeEach` initial harness setup, e.g. `kanban-drag.spec.ts:9`
+  + Testing Standards > Disabling specs indefinitely: compliant in scan
+    + no `test.skip(...)`, `.skip(...)`, or commented-out `test`/`it`/`describe` specs found in scoped test files
+  + Pre-Push Verification > `pnpm run check`: non-compliant documentation/runtime mismatch
+    + `CODING_STANDARDS.md` requires `pnpm run check`, but root `package.json` has no `check` script
+    + command table says `pnpm run jest-test`, but actual root script is `test-jest`; no `jest-test` script found
+  + Pre-Push Verification > No web dev server: mostly compliant, but wording ambiguity
+    + no root `dev` script found
+    + Playwright starts an HTTP harness via `playwright.config.ts:16` and `playwright/harness/serve.mjs:28`; likely test infrastructure, but the standard says “no HTTP server” literally
+  + Pre-Push Verification > Build after every code change: process-only, not statically verifiable
+    + `pnpm run build` exists and maps to webpack; `test-playwright` also builds before Playwright
+    + working tree is dirty, but file inspection cannot prove whether build was run after each change
+  + Pre-Push Verification > Individual Commands: partially non-compliant
+    + build, rollup, lint, and Playwright commands exist or are backed by package scripts
+    + Jest command in table is wrong (`jest-test` vs `test-jest`)
+    + documented Rollup command uses `cd ... && pnpm run rollup`, conflicting with workspace guidance to prefer `pnpm -C`
++ remediation plan
+  + [ ] add automated audit checks for debug imports, type-only imports, explicit return types, `any`, unbounded `while`, unbraced control bodies, function length, and comment shape where ESLint/AST checks can enforce them
+  + [ ] decide and document ambiguity resolutions: Debug import ordering vs import grouping, debug namespace root, browser-side error utility expectation, extension-test colocated exception, Playwright harness exception, utility filename casing
+  + [ ] fix `CODING_STANDARDS.md`/`package.json` mismatch by adding `check` or changing the documented command; correct `jest-test` to `test-jest`
+  + [ ] normalise imports and debug logger pattern in production files, starting with `notethink-views/src/components`
+  + [ ] convert type-only imports to `import type` and reorder import groups consistently
+  + [ ] add explanatory comments to runtime `import()` expressions or convert them to static imports
+  + [ ] rename locals, hook returns, computed values, functions, parameters, props, and constants according to the naming matrix; preserve public wire-format fields only where deliberately documented
+  + [ ] split long production functions by responsibility, prioritising bodies over 100 lines before test callbacks
+  + [ ] add missing explicit parameter and return types, starting with production non-callback functions and `errorops.ts`
+  + [ ] replace production `any` with concrete types or `unknown` plus narrowing; quarantine unavoidable test casts behind helper types
+  + [ ] move file-level type definitions and constants near the head of each file
+  + [ ] replace unbounded `while` loops with bounded loops or documented safe alternatives
+  + [ ] rewrite comments to lowercase, single-thought, non-field-comment style; remove stale back-reference/current-context comments
+  + [ ] refactor component bodies toward documented React structure: hooks first, effects, handlers, early returns, render
+  + [ ] reconcile file naming and test-location exceptions, or update `CODING_STANDARDS.md` to document intended exceptions
+  + [ ] consolidate duplicated defaults/settings keys where package boundaries allow; otherwise document why they must be mirrored
+  + [ ] replace silent catches and console-only production error handling with `debug` or shared error utilities; add a webview-side utility if needed
+  + [ ] remove diagnostic test logging, active exploratory test code, tracked generated JS files, TS suppressions where avoidable, and unresolved marker comments
+  + [ ] run `pnpm run check` or the corrected equivalent after each remediation batch and fix any red lint, build, rollup, or Jest failures
++ acceptance
+  + every rule in `CODING_STANDARDS.md` is either compliant, remediated, or explicitly documented as an intentional exception
+  + automated checks prevent recurrence for rules that can be checked mechanically
+  + production files comply with the resolved debug logger convention
+  + imports are grouped consistently and type-only imports are used where appropriate
+  + naming violations are removed or documented where they are public wire-format compatibility fields
+  + production functions over the 35-line guideline are decomposed or explicitly justified as flat dispatch/data-literal exceptions
+  + no avoidable production `any`, unbounded `while`, silent failure, or console-only error handling remains
+  + comments follow the lowercase, single-thought, non-field-comment style
+  + test-suite structure and pre-push commands match the documented standards
+  + `pnpm run check` or the corrected equivalent is green
+
+
+### Decompose long functions into objects, hooks, and helpers [](?id=function-decomposition)
+
+Execute the Function Length finding from [[coding-standards-audit-remediation]] (41 production functions over 35 body lines). The goal is not the line count itself but *explicit dependencies, minimal shared mutable state, and testable seams* — the fix differs by the kind of function, so this story splits the work by category rather than by file.
 
 + goal
-  + cross-file `kanban_ordering_weight` participates in the column comparator so notes from multiple files can be interleaved by user-chosen order
-  + every note carries a stable identity that survives re-parse (file additions/removals, global `seq` renumbering, file_rank shuffling) so React keying and FLIP rect-capture both work across updates
+  + the worst stateful closures become classes whose methods have explicit `this` dependencies and can be unit-tested without the surrounding context
+  + long React components shrink by moving cohesive hook clusters into custom hooks and JSX subtrees into child components
+  + pure-logic functions decompose into named helpers that read as a sequence of steps
 + background
-  + `kanbanNoteOrder()` (`noteops.ts:225-242`) currently considers `kanban_ordering_weight` only when both sides have one; otherwise it falls to `noteOrder()` (`noteops.ts:206-218`) which uses `file_rank` then `file_mtime` then `seq`. Cross-file weight comparison never participates.
-  + `calculateTextChangesForOrdering()` (`linetagops.ts:88-131`) assumes all neighbours share a single seq-space; the weight-gap arithmetic and the cascade fallback are both undefined when neighbours come from different files.
-  + Notes are React-keyed by `note.seq` (`KanbanView.tsx:195`), which is renumbered globally by `mergeAggregateRoot()` on every re-parse (`mergeAggregateRoot.ts:133-327`). Identity drifts when a file is added, removed, or re-parsed with a new sibling story — the same logical note looks like delete+insert to React.
-+ scope
-  + stable identity: stamp `stable_id` (kebab-case-slug derived from `origin.doc_id + heading character offset`, picked because it is invariant under sibling additions and round-robin merge shuffles) on every note in both single-file (`NoteTreeComposer`) and aggregate (`AggregateTreeComposer` via `mergeAggregateRoot`) paths
-  + cross-file comparator: rework `kanbanNoteOrder()` so `kanban_ordering_weight` is decisive across origins (weight-A vs weight-B always compared even when origins differ); `file_rank → file_mtime → seq` is the tiebreak chain only when neither side carries a weight
-  + reorder algorithm: factor `calculateTextChangesForOrdering()` to operate on a generic ordered list with no seq-arithmetic between cross-file neighbours; weight-gap math becomes per-file output (cascade only touches notes in the same file); the cross-file ordering decision is encoded in the *value* of the assigned weight, not in any shared seq space
-  + change-set partitioning: the algorithm returns changes grouped by `origin.doc_path` so the extension can apply per-file edits independently (the wire format change ships with [[folder-mode-dnd]] but the data shape lands here)
+  + `notethinkEditor.ts` `myWebviewPanel` (~760 lines after dead-code removal) is a closure-as-object: ~11 mutable vars (`active_doc`, `active_path`, `integration_path`, `integration_watcher`, `integration_docs`, `change_timer`, …) shared ambiently by ~11 inner closures (`buildDoc`, `sendDoc`, `sendSelection`, `sendCurrentSelection`, `syncActiveFileWatcher`, `apply_one`, the `onDidReceiveMessage` handler). No closure has a contract; the unit is only testable through its outer boundary
+  + React components (`GenericView` 730, `ExtensionReceiver` 353, `MarkdownNote` 263, `KanbanView` 239) are long for a different reason — the Rules of Hooks forbid lifting hook-containing blocks into plain functions, so they must become custom hooks or child components
+  + pure-logic helpers already decompose cleanly (done for `calculateTextChangesForOrdering`, `mergeAggregateRoot`'s walk)
++ scope — extension closure → class
+  + extract `myWebviewPanel` into a `PanelSession` class: the mutable state becomes private fields, the closures become methods (`buildDoc`, `sendDoc`, `applyEditText`, `syncActiveFileWatcher`, `handleMessage`, …), `webviewPanel`/`context` become constructor args
+  + add characterization tests around the panel boundary FIRST (message-in → doc-out, editText apply, integration flip) so the refactor is safety-netted before any code moves
+  + split the `onDidReceiveMessage` switch so each `case` delegates to a named method rather than an inline block
++ scope — React components → hooks + subcomponents
+  + `ExtensionReceiver`: extract state+effect clusters into custom hooks (e.g. `useVscodeMessages`, `useFolderViewSettings`, `usePersistedViewStates`); keep the component a thin wiring shell
+  + `GenericView`: move derived-value/hook clusters into hooks and large JSX subtrees into child components; align the body with the documented React structure (hooks → effects → handlers → early returns → render)
+  + `KanbanView` / `MarkdownNote`: extract column-derivation and render subtrees as the [[view-hierarchy-and-card-types]] work will also touch these — coordinate so the two stories don't fight
++ scope — pure logic
+  + continue extracting named helpers from any remaining long pure functions (`convertMdastToNoteHierarchy` helpers, etc.) as they are touched
 + out of scope
-  + UI for dragging across files — covered in [[folder-mode-dnd]]
-  + animation layer — covered in [[animated-passive-transitions]]
-  + changing single-file kanban behaviour — single-file callers must produce byte-identical text output before and after this refactor
-+ files
-  + `client/webview/src/notethink-views/src/lib/noteops.ts` — comparator rewrite
-  + `client/webview/src/notethink-views/src/lib/linetagops.ts` — `calculateTextChangesForOrdering` generalisation
-  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` — stamp `stable_id` during merge
-  + `client/webview/src/notethink-views/src/types/NoteProps.ts` — add `stable_id: string` to `NoteProps`; document derivation in the structure's header comment per `CODING_STANDARDS.md` "no per-field comments inside data structures"
-  + `client/webview/src/components/composers/NoteTreeComposer.tsx` and `client/webview/src/components/composers/AggregateTreeComposer.tsx` — assign `stable_id` in the single-file path as well so callers can rely on it in both modes
-+ [ ] design `stable_id` derivation and document the choice in the `NoteProps` header comment
-+ [ ] stamp `stable_id` in `mergeAggregateRoot` for aggregate mode and in the single-file composer path
-+ [ ] rewrite `kanbanNoteOrder()` so weight participates across origins; preserve single-file output exactly
-+ [ ] generalise `calculateTextChangesForOrdering()` to partition output by `origin.doc_path`
-+ [ ] regression: existing single-file kanban specs untouched and green
-+ [ ] jest: cross-file comparator covers (weighted, weighted), (weighted, unweighted), (unweighted, weighted), (unweighted, unweighted) across two origins
-+ [ ] jest: reorder algorithm emits correct per-file change sets when neighbours come from different files; cascade stays within the originating file
-+ [ ] jest: `stable_id` invariant across (a) file added to aggregate, (b) file removed, (c) same file re-parsed unchanged, (d) same file re-parsed with a new sibling note inserted before it
-+ [ ] jest: full `mergeAggregateRoot` round-trip preserves `stable_id` for unchanged notes across re-parse
-+ [ ] `pnpm run check` green
+  + behavioural change of any kind — every refactor must be byte/behaviour identical, proven by the existing + new characterization tests
+  + chasing the 35-line number on flat dispatch switches, JSX returns, or data literals — these are documented exceptions, justify in a header comment rather than splitting
+  + test-callback length (the 1068-line `notethinkEditor.test.ts` suite) — lower priority than production bodies
++ approach
+  + incremental: one seam per change, `pnpm run check` green between each — never a big-bang rewrite
+  + production bodies over 100 lines first (`myWebviewPanel`, `GenericView`), then the 35–100 band
+  + add tests before extracting, not after, wherever the unit is currently only covered through its boundary
++ files (primary)
+  + `client/extension/src/vscode/notethinkEditor.ts` → new `PanelSession` class (same file or a new `vscode/PanelSession.ts`)
+  + `client/webview/src/components/ExtensionReceiver.tsx` + new `client/webview/src/hooks/*` custom hooks
+  + `client/webview/src/notethink-views/src/components/views/GenericView.tsx` + extracted child components/hooks
++ [ ] add characterization tests around `myWebviewPanel`'s message/edit/integration boundary
++ [ ] extract `PanelSession` class; `myWebviewPanel` becomes a thin constructor + wire-up
++ [ ] split `onDidReceiveMessage` so each case delegates to a named `PanelSession` method
++ [ ] extract `ExtensionReceiver` state/effect clusters into custom hooks; component becomes a wiring shell
++ [ ] decompose `GenericView` into hooks + child components; align with documented React structure
++ [ ] decompose `KanbanView` / `MarkdownNote` render subtrees, coordinating with [[view-hierarchy-and-card-types]]
++ [ ] extract remaining long pure-logic helpers as touched
++ [ ] each production function over 35 lines is decomposed or carries a header comment justifying the exception
++ [ ] `pnpm run check` green after every batch
 + acceptance
-  + all existing tests pass
-  + new jest suite covers the cross-file comparator and per-file partitioned reorder
-  + single-file kanban output byte-identical to prior behaviour against the existing fixtures
-  + `stable_id` present on every note in both modes; derivation documented in the `NoteProps` header
+  + `myWebviewPanel` is a `PanelSession` class with private fields and method-level contracts; no ambient-state closures remain
+  + long React components are thin shells over custom hooks + child components, following the documented structure
+  + every retained over-length function has a one-line header justification
+  + behaviour is identical — existing + new tests green, no Playwright regressions
 + commit message draft
-  + notethink 0.2.14: kanban ordering comparator respects `kanban_ordering_weight` across file boundaries
-  + `calculateTextChangesForOrdering` returns per-`origin.doc_path` partitioned change sets so the extension can route per-file edits independently
-  + stamp `stable_id` (`origin.doc_id` + heading character offset) on every note in both single-file and aggregate paths so React keying and FLIP rect-capture survive re-parse
-  + single-file kanban output byte-identical to prior behaviour
-  + tests N jest
-
-
-### Folder-mode drag-and-drop [](?id=folder-mode-dnd)
-
-Extend the existing kanban DnD UX to multi-file folder mode. Depends on [[multi-file-ordering-stable-identity]] (comparator + per-file partitioned reorder algorithm). Paired with [[animated-passive-transitions]], which is the visible payoff once both DnD paths land.
-
-+ symptom
-  + in folder mode, dropping a note into a different column writes a status edit to the right file (`docPath` is already carried in `editText`, `KanbanView.tsx:147`) but the within-column reorder weight-cascade produces nonsense because `calculateTextChangesForOrdering` assumes one seq-space across all visible neighbours
-  + notes from different files in the same column cannot be deliberately interleaved by the user — the comparator falls back to `file_rank → file_mtime → seq` and ignores any weight one side carries
-+ scope
-  + hook the rewritten reorder algorithm from [[multi-file-ordering-stable-identity]] into `KanbanView.dragEndHandler` so per-file change sets are emitted as a single `editText` with `changes` grouped by `docPath`
-  + extension side: when an `editText` message carries changes spanning multiple docs, apply each batch atomically per file and re-emit parse updates for every touched doc; today the handler assumes one `docPath`
-  + visual parity: dragging in folder mode looks identical to single-file mode (lift + rotate + shadow). No CSS edits expected — only verify
-  + caret reveal: in single-file mode `dragStartHandler` invokes the click handler with the note's caret position. In folder mode the caret target must be in the *originating* file — `revealRange` needs a `docPath` field (or equivalent multi-file addressing) if it doesn't have one already
-+ out of scope
-  + animations during automatic (non-drag) updates — covered in [[animated-passive-transitions]]
-  + anything touching the drag-in-flight visual (`ViewRenderer.module.scss:1103-1115`) — stays unchanged
-+ files
-  + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx` — `dragEndHandler` assembles multi-doc change set; `dragStartHandler` reveals caret in the originating file
-  + `client/extension/src/vscode/notethinkEditor.ts` — `editText` handler accepts per-`docPath` partitioned changes
-  + `client/extension/src/types/Messages.ts` — `editText` payload extended to carry `changes_by_doc?: Record<string, Change[]>` alongside the existing single-doc shape, discriminated on presence
-  + new helper if justified: `client/webview/src/notethink-views/src/lib/dnd/assembleMultiDocChangeSet.ts`
-+ [ ] extend `editText` message shape to carry per-`docPath` change sets; keep backward compatibility with the single-doc form
-+ [ ] update `KanbanView.dragEndHandler` to call the refactored algorithm and post the per-doc change set
-+ [ ] extension applies multi-doc `editText` atomically and re-emits parse updates for every touched doc
-+ [ ] `dragStartHandler` caret reveal works for notes whose origin is not the active file
-+ [ ] verify drag-in-flight visual is unchanged in folder mode (no CSS edits expected, just confirm)
-+ [ ] jest: `KanbanView.dragEndHandler` emits the right `changes_by_doc` shape for cross-file moves
-+ [ ] jest: extension `editText` handler applies multi-doc batches in the correct order with one parse-update per touched doc
-+ [ ] playwright: folder-mode kanban — drag a note from one file across columns; assert only the source file is edited
-+ [ ] playwright: folder-mode kanban — within a column containing notes from two files, drag a file-B note above a file-A note; re-fire a parse update for an unrelated doc; assert the user-chosen order survives
-+ [ ] playwright: single-file kanban regressions all green
-+ [ ] `pnpm run check` green
-+ manual: drag a note from one file to another column in folder mode and confirm the source file's markdown shows the new status tag
-+ manual: interleave two files' notes in one column, close and re-open the folder, confirm order survives
-+ acceptance
-  + dragging a note in folder mode shows the same in-flight visual as in single-file mode
-  + the dropped state survives a re-parse
-  + notes from multiple files in one column can be interleaved deliberately
-  + single-file mode behaviour byte-identical to before the change
-+ commit message draft
-  + notethink 0.2.15: kanban drag-and-drop works across multi-file columns in folder mode
-  + `editText` accepts per-`docPath` partitioned change sets; extension applies multi-doc batches atomically
-  + `dragStartHandler` reveals caret in the originating file
+  + notethink 0.2.x: decompose `myWebviewPanel` into a `PanelSession` class and split long React components into hooks + child components
+  + behaviour-identical refactor backed by new characterization tests; per-method contracts replace ambient closure state
   + tests N jest, N playwright
 
 

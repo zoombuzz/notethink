@@ -314,6 +314,127 @@ describe('NotethinkEditorProvider', () => {
 				changes: [{ from: 0, insert: 'x' }],
 			});
 		});
+
+		// regression: legacy single-doc payload (docPath + changes) still applies one edit
+		it('single-doc payload still applies a single edit', async () => {
+			const doc = mockTextDocument(docText, docPath);
+			const editor = mockTextEditor(doc);
+			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
+
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				docPath,
+				changes: [{ from: 0, to: 5, insert: 'Howdy' }],
+			});
+
+			expect(editor.edit).toHaveBeenCalledTimes(1);
+			expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
+		});
+	});
+
+	// ---- editText multi-doc batch ------------------------------------------------
+
+	describe('editText multi-doc batch', () => {
+		const docPathA = '/workspace/a.md';
+		const docPathB = '/workspace/b.md';
+		const docTextA = 'Alpha contents';
+		const docTextB = 'Bravo contents';
+
+		beforeEach(() => setWorkspaceRoots(['/workspace']));
+		afterEach(() => setWorkspaceRoots(undefined));
+
+		// dispatch openTextDocument by uri so the batch can read each doc back individually
+		function rigOpenByPath(docs_by_path: Record<string, ReturnType<typeof mockTextDocument>>) {
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (arg: any) => {
+				const target_path: string = typeof arg === 'string' ? arg : (arg?.path || arg?.fsPath || arg?.toString?.() || '');
+				const found = docs_by_path[target_path];
+				if (!found) {
+					throw new Error(`no mock doc for ${target_path}`);
+				}
+				return found;
+			});
+		}
+
+		it('applies edits to every named doc in the batch', async () => {
+			const docA = mockTextDocument(docTextA, docPathA);
+			const docB = mockTextDocument(docTextB, docPathB);
+			const editorA = mockTextEditor(docA);
+			const editorB = mockTextEditor(docB);
+			(vscode.window as any).visibleTextEditors = [editorA, editorB];
+			rigOpenByPath({ [docPathA]: docA, [docPathB]: docB });
+
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				changes_by_doc: {
+					[docPathA]: [{ from: 0, to: 5, insert: 'AAAAA' }],
+					[docPathB]: [{ from: 0, to: 5, insert: 'BBBBB' }],
+				},
+			});
+
+			expect(editorA.edit).toHaveBeenCalledTimes(1);
+			expect(editorB.edit).toHaveBeenCalledTimes(1);
+			expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
+		});
+
+		it('re-emits sendDoc for every touched doc in the batch', async () => {
+			const docA = mockTextDocument(docTextA, docPathA);
+			const docB = mockTextDocument(docTextB, docPathB);
+			const editorA = mockTextEditor(docA);
+			const editorB = mockTextEditor(docB);
+			(vscode.window as any).visibleTextEditors = [editorA, editorB];
+			rigOpenByPath({ [docPathA]: docA, [docPathB]: docB });
+
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				changes_by_doc: {
+					[docPathA]: [{ from: 0, to: 5, insert: 'AAAAA' }],
+					[docPathB]: [{ from: 0, to: 5, insert: 'BBBBB' }],
+				},
+			});
+
+			const updates = panelHelper.postedMessages.filter((m: any) => m.type === 'update');
+			const touched_paths = new Set<string>();
+			for (const update of updates) {
+				for (const entry of Object.values(update.partial.docs) as any[]) {
+					touched_paths.add(entry.path);
+				}
+			}
+			expect(touched_paths.has(docPathA)).toBe(true);
+			expect(touched_paths.has(docPathB)).toBe(true);
+		});
+
+		it('applies the good docs and rejects the bad path when one entry is out of workspace', async () => {
+			const docA = mockTextDocument(docTextA, docPathA);
+			const editorA = mockTextEditor(docA);
+			const bad_path = '/etc/shadow';
+			(vscode.window as any).visibleTextEditors = [editorA];
+			rigOpenByPath({ [docPathA]: docA });
+			const errorLogSpy = jest.spyOn(require('../lib/errorops'), 'writeToErrorLog');
+
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				changes_by_doc: {
+					[docPathA]: [{ from: 0, to: 5, insert: 'AAAAA' }],
+					[bad_path]: [{ from: 0, insert: 'pwned' }],
+				},
+			});
+
+			expect(editorA.edit).toHaveBeenCalledTimes(1);
+			// openTextDocument must never be called for the rejected out-of-workspace path
+			const open_calls = (vscode.workspace.openTextDocument as jest.Mock).mock.calls;
+			for (const call of open_calls) {
+				const arg = call[0];
+				const called_path: string = typeof arg === 'string' ? arg : (arg?.path || arg?.fsPath || '');
+				expect(called_path).not.toBe(bad_path);
+			}
+			expect(errorLogSpy).toHaveBeenCalledWith(
+				expect.stringContaining('path outside workspace'),
+				bad_path,
+			);
+			errorLogSpy.mockRestore();
+		});
 	});
 
 	// ---- revealRange --------------------------------------------------------

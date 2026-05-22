@@ -1,4 +1,5 @@
-import { mergeAggregateRoot, anyViewInFolderMode, firstIntegrationPath, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from './mergeAggregateRoot';
+import { mergeAggregateRoot, anyViewInFolderMode, firstIntegrationPath, stampSingleFileStableIds, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from './mergeAggregateRoot';
+import { convertMdastToNoteHierarchy } from './convertMdastToNoteHierarchy';
 import type { MdastNode } from '../types/NoteProps';
 
 /**
@@ -624,6 +625,108 @@ describe('mergeAggregateRoot', () => {
         expect(root.child_notes![0].origin?.file_view_type).toBe('kanban');
     });
 
+    describe('stable_id', () => {
+
+        it('stamps stable_id on every note in the merged tree', () => {
+            const docA = simpleFile('id-a', 'a/todo.md', 'A', ['Story Alpha', 'Story Beta']);
+            const docB = simpleFile('id-b', 'b/todo.md', 'B', ['Story Gamma']);
+            const { root, all_notes } = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB }, '/repo/');
+            expect(root.stable_id).toBeDefined();
+            for (const note of all_notes) {
+                expect(note.stable_id).toBeDefined();
+                expect(typeof note.stable_id).toBe('string');
+                expect((note.stable_id ?? '').length).toBeGreaterThan(0);
+            }
+            const ids = all_notes.map(n => n.stable_id);
+            const unique = new Set(ids);
+            expect(unique.size).toBe(ids.length);
+        });
+
+        it('round-trips: parse → merge → re-parse same docs → stable_ids identical', () => {
+            const docA = simpleFile('id-a', 'a/todo.md', 'A', ['Story Alpha', 'Story Beta']);
+            const docB = simpleFile('id-b', 'b/todo.md', 'B', ['Story Gamma', 'Story Delta']);
+            const first = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB }, '/repo/');
+            // re-build the same docs from scratch so the second pass shares no object identity with the first
+            const docA2 = simpleFile('id-a', 'a/todo.md', 'A', ['Story Alpha', 'Story Beta']);
+            const docB2 = simpleFile('id-b', 'b/todo.md', 'B', ['Story Gamma', 'Story Delta']);
+            const second = mergeAggregateRoot({ 'id-a': docA2, 'id-b': docB2 }, '/repo/');
+            const by_headline_first = new Map(first.root.child_notes!.map(n => [n.headline_raw, n.stable_id]));
+            const by_headline_second = new Map(second.root.child_notes!.map(n => [n.headline_raw, n.stable_id]));
+            expect(by_headline_first).toEqual(by_headline_second);
+        });
+
+        it('adding a new file to the aggregate keeps existing stories\' stable_ids', () => {
+            const docA = simpleFile('id-a', 'a/todo.md', 'A', ['Story Alpha']);
+            const docB = simpleFile('id-b', 'b/todo.md', 'B', ['Story Beta']);
+            const before = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB }, '/repo/');
+            const docC = simpleFile('id-c', 'c/todo.md', 'C', ['Story Gamma']);
+            const after = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB, 'id-c': docC }, '/repo/');
+            // every story from `before` must keep its stable_id in `after`
+            const before_by_headline = new Map(before.root.child_notes!.map(n => [n.headline_raw, n.stable_id]));
+            for (const note of after.root.child_notes!) {
+                const previous = before_by_headline.get(note.headline_raw);
+                if (previous !== undefined) {
+                    expect(note.stable_id).toBe(previous);
+                }
+            }
+            // the new story is present too
+            expect(after.root.child_notes!.find(n => n.headline_raw === '### Story Gamma')).toBeDefined();
+        });
+
+        it('removing a file from the aggregate keeps remaining stories\' stable_ids', () => {
+            const docA = simpleFile('id-a', 'a/todo.md', 'A', ['Story Alpha']);
+            const docB = simpleFile('id-b', 'b/todo.md', 'B', ['Story Beta']);
+            const docC = simpleFile('id-c', 'c/todo.md', 'C', ['Story Gamma']);
+            const before = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB, 'id-c': docC }, '/repo/');
+            const after = mergeAggregateRoot({ 'id-a': docA, 'id-c': docC }, '/repo/');
+            const before_by_headline = new Map(before.root.child_notes!.map(n => [n.headline_raw, n.stable_id]));
+            for (const note of after.root.child_notes!) {
+                expect(note.stable_id).toBe(before_by_headline.get(note.headline_raw));
+            }
+        });
+
+        it('inserting a new sibling story BEFORE an existing one keeps the existing one\'s stable_id', () => {
+            // file before: # A / ### Existing
+            const before_doc = simpleFile('id-a', 'a/todo.md', 'A', ['Existing']);
+            const before = mergeAggregateRoot({ 'id-a': before_doc }, '/repo/');
+            const before_existing = before.root.child_notes!.find(n => n.headline_raw === '### Existing')!;
+            // file after: # A / ### Inserted Before / ### Existing — the new sibling sits earlier in the file, so `Existing` has a higher offset than it did before
+            const after_doc = simpleFile('id-a', 'a/todo.md', 'A', ['Inserted Before', 'Existing']);
+            const after = mergeAggregateRoot({ 'id-a': after_doc }, '/repo/');
+            const after_existing = after.root.child_notes!.find(n => n.headline_raw === '### Existing')!;
+            // sanity check: the new sibling really did shift the offsets, so the fixture still exercises the case
+            expect(after_existing.position.start.offset).toBeGreaterThan(before_existing.position.start.offset);
+            // the stable_id must survive the shift — this is the case that rules out offset-based derivation
+            expect(after_existing.stable_id).toBe(before_existing.stable_id);
+        });
+
+        it('duplicate same-headline stories within a file are disambiguated', () => {
+            // two stories share the stripped headline "Dup" — the second must get a `#1` suffix so stable_ids remain unique within the file
+            const doc = simpleFile('id-a', 'a/todo.md', 'A', ['Dup', 'Dup']);
+            const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/');
+            const ids = root.child_notes!.map(n => n.stable_id);
+            expect(ids[0]).not.toBe(ids[1]);
+            expect(ids[1]).toMatch(/#1$/);
+        });
+
+        it('explicit `[](?id=...)` linetag on a story is used as the slug', () => {
+            // # Todo / ### Wire alerts [](?id=wire-alerts)
+            const story_headline = '### Wire alerts [](?id=wire-alerts)';
+            const text = `# Todo\n${story_headline}\n`;
+            const h1_end = 6;
+            const h3_start = h1_end + 1;
+            const h3_end = h3_start + story_headline.length;
+            const children: MdastNode[] = [
+                mdastNode('heading', 0, h1_end, { depth: 1 }),
+                mdastNode('heading', h3_start, h3_end, { depth: 3 }),
+            ];
+            const doc = makeDoc('id-doc', 'x/todo.md', text, children);
+            const { root } = mergeAggregateRoot({ 'id-doc': doc }, '/repo/');
+            expect(root.child_notes![0].stable_id).toBe('id-doc:wire-alerts');
+        });
+
+    });
+
 });
 
 describe('anyViewInFolderMode', () => {
@@ -691,4 +794,91 @@ describe('firstIntegrationPath', () => {
         };
         expect(firstIntegrationPath(view_states)).toBeUndefined();
     });
+});
+
+describe('stampSingleFileStableIds', () => {
+    // the single-file path NoteTreeComposer takes; the aggregate suite's invariants must hold against doc_id-namespaced ids
+
+    function buildSingleFile(stories: string[]): { text: string; root: ReturnType<typeof convertMdastToNoteHierarchy>; } {
+        const lines: string[] = ['# Doc'];
+        for (const s of stories) { lines.push(`### ${s}`); }
+        const text = lines.join('\n') + '\n';
+        let offset = 0;
+        const h1_line = '# Doc';
+        const children: MdastNode[] = [
+            { type: 'heading', depth: 1, position: { start: { offset: 0, line: 1 }, end: { offset: h1_line.length, line: 1 } }, children: [] },
+        ];
+        offset = h1_line.length + 1;
+        for (const s of stories) {
+            const line = `### ${s}`;
+            children.push({ type: 'heading', depth: 3, position: { start: { offset, line: 1 }, end: { offset: offset + line.length, line: 1 } }, children: [] });
+            offset += line.length + 1;
+        }
+        const mdast = { type: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 1 } }, children } as MdastNode;
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        return { text, root };
+    }
+
+    // single-file mode tree shape: root → H1 → [Story1, Story2, ...]. The H1 sits in root.child_notes and the depth-3 stories are H1's child_notes.
+    function findStoryByHeadline(root: ReturnType<typeof convertMdastToNoteHierarchy>, headline: string) {
+        const stack = [...(root.child_notes ?? [])];
+        while (stack.length > 0) {
+            const top = stack.pop()!;
+            if (top.headline_raw === headline) { return top; }
+            for (const c of (top.child_notes ?? [])) { stack.push(c); }
+        }
+        return undefined;
+    }
+
+    it('stamps stable_id on every note in the tree', () => {
+        const { root } = buildSingleFile(['Alpha', 'Beta']);
+        stampSingleFileStableIds(root, 'doc-1');
+        expect(root.stable_id).toBe('doc-1:__root__');
+        // walk the whole tree and assert every note carries a stable_id
+        const stack = [...(root.child_notes ?? [])];
+        const seen: string[] = [];
+        while (stack.length > 0) {
+            const top = stack.pop()!;
+            expect(top.stable_id).toBeDefined();
+            seen.push(top.stable_id!);
+            for (const c of (top.child_notes ?? [])) { stack.push(c); }
+        }
+        expect(seen.length).toBeGreaterThan(0);
+    });
+
+    it('keeps a story\'s stable_id when an earlier sibling is inserted in the same file', () => {
+        const { root: before_root } = buildSingleFile(['Existing']);
+        stampSingleFileStableIds(before_root, 'doc-1');
+        const before_existing = findStoryByHeadline(before_root, '### Existing')!;
+        const { root: after_root } = buildSingleFile(['Inserted Before', 'Existing']);
+        stampSingleFileStableIds(after_root, 'doc-1');
+        const after_existing = findStoryByHeadline(after_root, '### Existing')!;
+        expect(after_existing.position.start.offset).toBeGreaterThan(before_existing.position.start.offset);
+        expect(after_existing.stable_id).toBe(before_existing.stable_id);
+    });
+
+    it('is idempotent — calling twice produces the same stable_ids', () => {
+        const { root } = buildSingleFile(['Alpha', 'Beta']);
+        stampSingleFileStableIds(root, 'doc-1');
+        const first_a = findStoryByHeadline(root, '### Alpha')!.stable_id;
+        const first_b = findStoryByHeadline(root, '### Beta')!.stable_id;
+        stampSingleFileStableIds(root, 'doc-1');
+        const second_a = findStoryByHeadline(root, '### Alpha')!.stable_id;
+        const second_b = findStoryByHeadline(root, '### Beta')!.stable_id;
+        expect(second_a).toBe(first_a);
+        expect(second_b).toBe(first_b);
+    });
+
+    it('namespaces ids by doc_id so the same headlines across two files don\'t collide', () => {
+        const { root: root_a } = buildSingleFile(['Same']);
+        const { root: root_b } = buildSingleFile(['Same']);
+        stampSingleFileStableIds(root_a, 'doc-a');
+        stampSingleFileStableIds(root_b, 'doc-b');
+        const id_a = findStoryByHeadline(root_a, '### Same')!.stable_id;
+        const id_b = findStoryByHeadline(root_b, '### Same')!.stable_id;
+        expect(id_a).not.toBe(id_b);
+        expect(id_a).toBe('doc-a:Same');
+        expect(id_b).toBe('doc-b:Same');
+    });
+
 });

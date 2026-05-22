@@ -85,49 +85,224 @@ export function parseLineTags(input: string, note_seq: number): HashMapOf<LineTa
     return linetags;
 }
 
-export function calculateTextChangesForOrdering(column_children: Array<NoteProps>, new_child_position: number, ordering_weight_key_name: string) {
-    // find the minimum weight the inserted node needs to go in beneath its predecessor
-    const new_child = column_children[new_child_position];
-    const predecessor = column_children[new_child_position-1];
-    const min_weight = (
-        predecessor ?
-            // min weight is the value of the predecessor, +1 if the sequence numbers don't give us order
-            (
-                (predecessor?.linetags && predecessor?.linetags[ordering_weight_key_name] && predecessor?.linetags[ordering_weight_key_name].value_numeric || 0)
-                + (predecessor.seq > new_child.seq ? 1 : 0)
-            )
-            // or 0 if there's no predecessor
-            : 0
-    );
-    // find the maximum weight the inserted node can be to go in above its successor
-    const successor = column_children[new_child_position+1];
-    const max_weight = (
-        // max weight is either the weight of the successor, -1 if the sequence numbers don't give us order
-        successor ?
-            (successor?.linetags && successor?.linetags[ordering_weight_key_name] && successor?.linetags[ordering_weight_key_name].value_numeric || 0)
-            - (new_child.seq > successor.seq ? 1 : 0)
-            // or min_weight if there's no successor
-            : min_weight
-    );
-    // first see if we can get away with making no ordering weight changes whatsoever
-    if (min_weight === 0 && max_weight === 0 && (new_child?.linetags && new_child?.linetags[ordering_weight_key_name] && new_child?.linetags[ordering_weight_key_name].value_numeric || 0) === 0) {
-        // predecessor seq is < x and successor seq is > x, so can leave to sequence ordering
-        // so long as the new_child doesn't already have a weight
-        return [];
-    }
-    // otherwise if there's room without reordering, apply a weight to only the new_child
-    else if (max_weight >= min_weight) {
-        return calculateTextChangesForNewLinetagValue(new_child, ordering_weight_key_name, `${min_weight}`, '0');
-    }
-    // otherwise cascade through rest of children list, setting same weight for all
-    else {
-        const changes = [];
-        for (let weight_counter = min_weight, i=new_child_position ; i<column_children.length ; ++weight_counter, ++i) {
-            const note = column_children[i];
-            changes.push(...calculateTextChangesForNewLinetagValue(note, ordering_weight_key_name, `${weight_counter}`, '0'));
+/**
+ * a change record produced by the ordering algorithm. Matches the shape
+ * `calculateTextChangesForNewLinetagValue` already returns: `{from, to?, insert}`.
+ */
+export interface OrderingChange {
+    from: number;
+    to?: number;
+    insert: string;
+}
+
+/**
+ * per-doc partitioned change set returned by `calculateTextChangesForOrdering`.
+ * `doc_path` is the `origin.doc_path` of every note that contributed a change in
+ * this batch; `undefined` is the single-file (no-origin) bucket. The extension
+ * applies each batch atomically against the corresponding file.
+ */
+export interface OrderingChangeSet {
+    doc_path: string | undefined;
+    changes: Array<OrderingChange>;
+}
+
+/**
+ * decide whether the column shares a single origin file (or has no origins at all). that is the byte-identical single-file path; anything else activates the cross-file algorithm.
+ */
+function columnIsSingleFile(column_children: Array<NoteProps>): boolean {
+    let seen: string | undefined;
+    let seen_any = false;
+    for (const note of column_children) {
+        const dp = note.origin?.doc_path;
+        if (!seen_any) {
+            seen = dp;
+            seen_any = true;
+            continue;
         }
-        return changes;
+        if (seen !== dp) { return false; }
     }
+    return true;
+}
+
+/**
+ * calculate the text changes needed so that, after applying them and re-sorting
+ * by `kanbanNoteOrder`, `column_children` holds the order the caller passed in.
+ *
+ * The caller MUST pre-sort `column_children` into the desired user-facing order
+ * (e.g. by filtering the dragged note out and splicing it at the drop index).
+ * This function decides how to encode that order into `kanban_ordering_weight`
+ * values, and partitions the resulting text edits by `origin.doc_path`.
+ *
+ * Return shape: `Array<OrderingChangeSet>` — one entry per touched doc, with
+ * `doc_path` set to that file's path (or `undefined` in single-file mode).
+ * Empty array means no edits are needed (sequence/seq ordering already matches).
+ *
+ * Single-file contract: when every child shares one `origin.doc_path` (or all
+ * are undefined) the output is byte-identical to the pre-refactor algorithm —
+ * see `singleFileOrderingChanges`. Cross-file ordering is handled by
+ * `crossFileOrderingChanges`. Single-file callers can flatten the result with
+ * `flattenOrderingChangeSets()`.
+ */
+export function calculateTextChangesForOrdering(
+    column_children: Array<NoteProps>,
+    new_child_position: number,
+    ordering_weight_key_name: string,
+): Array<OrderingChangeSet> {
+    if (column_children.length === 0) { return []; }
+    if (!column_children[new_child_position]) { return []; }
+    if (columnIsSingleFile(column_children)) {
+        return singleFileOrderingChanges(column_children, new_child_position, ordering_weight_key_name);
+    }
+    return crossFileOrderingChanges(column_children, new_child_position, ordering_weight_key_name);
+}
+
+/**
+ * single-file ordering, byte-identical to the pre-refactor algorithm: weight the
+ * inserted note into the gap between its neighbours' weights, falling back to a
+ * full incrementing cascade through the rest of the column when no gap exists.
+ * The +1/-1 nudges keep the chosen weight consistent with document `seq` order.
+ */
+function singleFileOrderingChanges(
+    column_children: Array<NoteProps>,
+    new_child_position: number,
+    key: string,
+): Array<OrderingChangeSet> {
+    const new_child = column_children[new_child_position];
+    const doc_path = new_child.origin?.doc_path;
+    const predecessor = column_children[new_child_position - 1];
+    const successor = column_children[new_child_position + 1];
+    const min_weight = predecessor
+        ? (predecessor.linetags?.[key]?.value_numeric || 0) + (predecessor.seq > new_child.seq ? 1 : 0)
+        : 0;
+    const max_weight = successor
+        ? (successor.linetags?.[key]?.value_numeric || 0) - (new_child.seq > successor.seq ? 1 : 0)
+        : min_weight;
+    const new_child_weight = new_child.linetags?.[key]?.value_numeric || 0;
+    // sequence ordering already suffices — no weights needed
+    if (min_weight === 0 && max_weight === 0 && new_child_weight === 0) { return []; }
+    // room to weight only the new_child
+    if (max_weight >= min_weight) {
+        const changes = calculateTextChangesForNewLinetagValue(new_child, key, `${min_weight}`, '0');
+        return changes.length ? [{ doc_path, changes }] : [];
+    }
+    // no gap — cascade incrementing weights through the rest of the column
+    const changes: Array<OrderingChange> = [];
+    for (let weight = min_weight, i = new_child_position; i < column_children.length; ++weight, ++i) {
+        changes.push(...calculateTextChangesForNewLinetagValue(column_children[i], key, `${weight}`, '0'));
+    }
+    return changes.length ? [{ doc_path, changes }] : [];
+}
+
+/**
+ * cross-file ordering: the chosen weight value carries the user's order, so the
+ * comparator never needs `seq`. Tries a gap insertion (a weight strictly between
+ * the weighted neighbours) and falls back to a same-file cascade. A gap insert is
+ * only valid when neither neighbour is unweighted — per `kanbanNoteOrder` case-2 a
+ * weighted note sorts after an unweighted one, so a weighted new_child would jump
+ * ahead of an unweighted successor and invert the requested order.
+ */
+function crossFileOrderingChanges(
+    column_children: Array<NoteProps>,
+    new_child_position: number,
+    key: string,
+): Array<OrderingChangeSet> {
+    const new_child = column_children[new_child_position];
+    const predecessor = column_children[new_child_position - 1];
+    const successor = column_children[new_child_position + 1];
+    const predecessor_weight = predecessor?.linetags?.[key]?.value_numeric;
+    const successor_weight = successor?.linetags?.[key]?.value_numeric;
+    const new_child_weight = new_child.linetags?.[key]?.value_numeric;
+    const blocks_gap = (predecessor !== undefined && predecessor_weight === undefined)
+        || (successor !== undefined && successor_weight === undefined);
+    if (!blocks_gap) {
+        const candidate = pickGapWeight(predecessor_weight, successor_weight);
+        if (candidate !== undefined && candidate === new_child_weight) { return []; }
+        if (candidate !== undefined) {
+            const changes = calculateTextChangesForNewLinetagValue(new_child, key, `${candidate}`, '0');
+            return changes.length ? groupChangesByDocPath([{ note: new_child, changes }]) : [];
+        }
+    }
+    return cascadeSameFileWeights(column_children, new_child_position, key, predecessor_weight);
+}
+
+/**
+ * pick an integer weight strictly between the predecessor and successor weights,
+ * treating absent neighbours as ±infinity. Returns undefined when no integer fits
+ * and the caller must cascade.
+ */
+function pickGapWeight(predecessor_weight: number | undefined, successor_weight: number | undefined): number | undefined {
+    const lower = predecessor_weight ?? Number.NEGATIVE_INFINITY;
+    const upper = successor_weight ?? Number.POSITIVE_INFINITY;
+    if (lower === Number.NEGATIVE_INFINITY && upper === Number.POSITIVE_INFINITY) { return 1; }
+    if (lower === Number.NEGATIVE_INFINITY) { return upper - 1; }
+    if (upper === Number.POSITIVE_INFINITY) { return lower + 1; }
+    if (upper - lower >= 2) {
+        const mid = Math.floor((lower + upper) / 2);
+        return (mid === lower || mid === upper) ? lower + 1 : mid;
+    }
+    return undefined;
+}
+
+/**
+ * cascade increasing weights from the inserted position to the end of the column,
+ * emitting edits only for notes sharing the inserted note's origin file. Other-file
+ * notes are stepped over — the counter leapfrogs their existing weight so same-file
+ * notes still sort above them — and never rewritten.
+ */
+function cascadeSameFileWeights(
+    column_children: Array<NoteProps>,
+    new_child_position: number,
+    key: string,
+    predecessor_weight: number | undefined,
+): Array<OrderingChangeSet> {
+    const new_child_doc_path = column_children[new_child_position].origin?.doc_path;
+    let weight_counter = (predecessor_weight ?? 0) + 1;
+    const grouped: Array<{ note: NoteProps; changes: Array<OrderingChange> }> = [];
+    for (let i = new_child_position; i < column_children.length; ++i) {
+        const note = column_children[i];
+        if (note.origin?.doc_path !== new_child_doc_path) {
+            const note_weight = note.linetags?.[key]?.value_numeric;
+            if (note_weight !== undefined && note_weight >= weight_counter) { weight_counter = note_weight + 1; }
+            continue;
+        }
+        const note_changes = calculateTextChangesForNewLinetagValue(note, key, `${weight_counter}`, '0');
+        if (note_changes.length > 0) { grouped.push({ note, changes: note_changes }); }
+        ++weight_counter;
+    }
+    return grouped.length ? groupChangesByDocPath(grouped) : [];
+}
+
+/**
+ * partition a flat list of (note, changes) pairs into per-doc_path buckets,
+ * preserving the order in which changes were generated within each bucket.
+ */
+function groupChangesByDocPath(
+    items: Array<{ note: NoteProps; changes: Array<OrderingChange> }>,
+): Array<OrderingChangeSet> {
+    const buckets = new Map<string | undefined, Array<OrderingChange>>();
+    const key_order: Array<string | undefined> = [];
+    for (const item of items) {
+        const key = item.note.origin?.doc_path;
+        if (!buckets.has(key)) {
+            buckets.set(key, []);
+            key_order.push(key);
+        }
+        buckets.get(key)!.push(...item.changes);
+    }
+    return key_order.map(key => ({ doc_path: key, changes: buckets.get(key)! }));
+}
+
+/**
+ * flatten partitioned ordering changes into a single array — for callers that
+ * are still single-file aware. Folder-mode DnD consumes the partitioned shape
+ * directly via the multi-doc `editText` payload.
+ */
+export function flattenOrderingChangeSets(change_sets: Array<OrderingChangeSet>): Array<OrderingChange> {
+    const out: Array<OrderingChange> = [];
+    for (const set of change_sets) {
+        out.push(...set.changes);
+    }
+    return out;
 }
 
 export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name: string, new_value: string, default_value: string) {

@@ -1523,3 +1523,95 @@ Yesterday's tiebreak surfaces stories from the file currently focused in the edi
   + every folder view setting listed in the symptom round-trips through current-file mode without loss
 
 
+### Stable note identity and multi-file kanban ordering refactor [](?id=multi-file-ordering-stable-identity)
+
+Data-layer prerequisite for [[folder-mode-dnd]] and [[animated-passive-transitions]]. No UX change in this story — pure refactor + tests. Sits at the top of todo.md as the priority because both downstream stories depend on it.
+
++ goal
+  + cross-file `kanban_ordering_weight` participates in the column comparator so notes from multiple files can be interleaved by user-chosen order
+  + every note carries a stable identity that survives re-parse (file additions/removals, global `seq` renumbering, file_rank shuffling) so React keying and FLIP rect-capture both work across updates
++ background
+  + `kanbanNoteOrder()` (`noteops.ts:225-242`) currently considers `kanban_ordering_weight` only when both sides have one; otherwise it falls to `noteOrder()` (`noteops.ts:206-218`) which uses `file_rank` then `file_mtime` then `seq`. Cross-file weight comparison never participates.
+  + `calculateTextChangesForOrdering()` (`linetagops.ts:88-131`) assumes all neighbours share a single seq-space; the weight-gap arithmetic and the cascade fallback are both undefined when neighbours come from different files.
+  + Notes are React-keyed by `note.seq` (`KanbanView.tsx:195`), which is renumbered globally by `mergeAggregateRoot()` on every re-parse (`mergeAggregateRoot.ts:133-327`). Identity drifts when a file is added, removed, or re-parsed with a new sibling story — the same logical note looks like delete+insert to React.
++ scope
+  + stable identity: stamp `stable_id` (kebab-case-slug derived from `origin.doc_id + heading character offset`, picked because it is invariant under sibling additions and round-robin merge shuffles) on every note in both single-file (`NoteTreeComposer`) and aggregate (`AggregateTreeComposer` via `mergeAggregateRoot`) paths
+  + cross-file comparator: rework `kanbanNoteOrder()` so `kanban_ordering_weight` is decisive across origins (weight-A vs weight-B always compared even when origins differ); `file_rank → file_mtime → seq` is the tiebreak chain only when neither side carries a weight
+  + reorder algorithm: factor `calculateTextChangesForOrdering()` to operate on a generic ordered list with no seq-arithmetic between cross-file neighbours; weight-gap math becomes per-file output (cascade only touches notes in the same file); the cross-file ordering decision is encoded in the *value* of the assigned weight, not in any shared seq space
+  + change-set partitioning: the algorithm returns changes grouped by `origin.doc_path` so the extension can apply per-file edits independently (the wire format change ships with [[folder-mode-dnd]] but the data shape lands here)
++ out of scope
+  + UI for dragging across files — covered in [[folder-mode-dnd]]
+  + animation layer — covered in [[animated-passive-transitions]]
+  + changing single-file kanban behaviour — single-file callers must produce byte-identical text output before and after this refactor
++ files
+  + `client/webview/src/notethink-views/src/lib/noteops.ts` — comparator rewrite
+  + `client/webview/src/notethink-views/src/lib/linetagops.ts` — `calculateTextChangesForOrdering` generalisation
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` — stamp `stable_id` during merge
+  + `client/webview/src/notethink-views/src/types/NoteProps.ts` — add `stable_id: string` to `NoteProps`; document derivation in the structure's header comment per `CODING_STANDARDS.md` "no per-field comments inside data structures"
+  + `client/webview/src/components/composers/NoteTreeComposer.tsx` and `client/webview/src/components/composers/AggregateTreeComposer.tsx` — assign `stable_id` in the single-file path as well so callers can rely on it in both modes
++ [ ] design `stable_id` derivation and document the choice in the `NoteProps` header comment
++ [ ] stamp `stable_id` in `mergeAggregateRoot` for aggregate mode and in the single-file composer path
++ [ ] rewrite `kanbanNoteOrder()` so weight participates across origins; preserve single-file output exactly
++ [ ] generalise `calculateTextChangesForOrdering()` to partition output by `origin.doc_path`
++ [ ] regression: existing single-file kanban specs untouched and green
++ [ ] jest: cross-file comparator covers (weighted, weighted), (weighted, unweighted), (unweighted, weighted), (unweighted, unweighted) across two origins
++ [ ] jest: reorder algorithm emits correct per-file change sets when neighbours come from different files; cascade stays within the originating file
++ [ ] jest: `stable_id` invariant across (a) file added to aggregate, (b) file removed, (c) same file re-parsed unchanged, (d) same file re-parsed with a new sibling note inserted before it
++ [ ] jest: full `mergeAggregateRoot` round-trip preserves `stable_id` for unchanged notes across re-parse
++ [ ] `pnpm run check` green
++ acceptance
+  + all existing tests pass
+  + new jest suite covers the cross-file comparator and per-file partitioned reorder
+  + single-file kanban output byte-identical to prior behaviour against the existing fixtures
+  + `stable_id` present on every note in both modes; derivation documented in the `NoteProps` header
++ commit message draft
+  + notethink 0.2.14: kanban ordering comparator respects `kanban_ordering_weight` across file boundaries
+  + `calculateTextChangesForOrdering` returns per-`origin.doc_path` partitioned change sets so the extension can route per-file edits independently
+  + stamp `stable_id` (`origin.doc_id` + heading character offset) on every note in both single-file and aggregate paths so React keying and FLIP rect-capture survive re-parse
+  + single-file kanban output byte-identical to prior behaviour
+  + tests N jest
+
+
+### Folder-mode drag-and-drop [](?id=folder-mode-dnd)
+
+Extend the existing kanban DnD UX to multi-file folder mode. Depends on [[multi-file-ordering-stable-identity]] (comparator + per-file partitioned reorder algorithm). Paired with [[animated-passive-transitions]], which is the visible payoff once both DnD paths land.
+
++ symptom
+  + in folder mode, dropping a note into a different column writes a status edit to the right file (`docPath` is already carried in `editText`, `KanbanView.tsx:147`) but the within-column reorder weight-cascade produces nonsense because `calculateTextChangesForOrdering` assumes one seq-space across all visible neighbours
+  + notes from different files in the same column cannot be deliberately interleaved by the user — the comparator falls back to `file_rank → file_mtime → seq` and ignores any weight one side carries
++ scope
+  + hook the rewritten reorder algorithm from [[multi-file-ordering-stable-identity]] into `KanbanView.dragEndHandler` so per-file change sets are emitted as a single `editText` with `changes` grouped by `docPath`
+  + extension side: when an `editText` message carries changes spanning multiple docs, apply each batch atomically per file and re-emit parse updates for every touched doc; today the handler assumes one `docPath`
+  + visual parity: dragging in folder mode looks identical to single-file mode (lift + rotate + shadow). No CSS edits expected — only verify
+  + caret reveal: in single-file mode `dragStartHandler` invokes the click handler with the note's caret position. In folder mode the caret target must be in the *originating* file — `revealRange` needs a `docPath` field (or equivalent multi-file addressing) if it doesn't have one already
++ out of scope
+  + animations during automatic (non-drag) updates — covered in [[animated-passive-transitions]]
+  + anything touching the drag-in-flight visual (`ViewRenderer.module.scss:1103-1115`) — stays unchanged
++ files
+  + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx` — `dragEndHandler` assembles multi-doc change set; `dragStartHandler` reveals caret in the originating file
+  + `client/extension/src/vscode/notethinkEditor.ts` — `editText` handler accepts per-`docPath` partitioned changes
+  + `client/extension/src/types/Messages.ts` — `editText` payload extended to carry `changes_by_doc?: Record<string, Change[]>` alongside the existing single-doc shape, discriminated on presence
+  + new helper if justified: `client/webview/src/notethink-views/src/lib/dnd/assembleMultiDocChangeSet.ts`
++ [ ] extend `editText` message shape to carry per-`docPath` change sets; keep backward compatibility with the single-doc form
++ [ ] update `KanbanView.dragEndHandler` to call the refactored algorithm and post the per-doc change set
++ [ ] extension applies multi-doc `editText` atomically and re-emits parse updates for every touched doc
++ [ ] `dragStartHandler` caret reveal works for notes whose origin is not the active file
++ [ ] verify drag-in-flight visual is unchanged in folder mode (no CSS edits expected, just confirm)
++ [ ] jest: `KanbanView.dragEndHandler` emits the right `changes_by_doc` shape for cross-file moves
++ [ ] jest: extension `editText` handler applies multi-doc batches in the correct order with one parse-update per touched doc
++ [ ] playwright: folder-mode kanban — drag a note from one file across columns; assert only the source file is edited
++ [ ] playwright: folder-mode kanban — within a column containing notes from two files, drag a file-B note above a file-A note; re-fire a parse update for an unrelated doc; assert the user-chosen order survives
++ [ ] playwright: single-file kanban regressions all green
++ [ ] `pnpm run check` green
++ manual: drag a note from one file to another column in folder mode and confirm the source file's markdown shows the new status tag
++ manual: interleave two files' notes in one column, close and re-open the folder, confirm order survives
++ acceptance
+  + dragging a note in folder mode shows the same in-flight visual as in single-file mode
+  + the dropped state survives a re-parse
+  + notes from multiple files in one column can be interleaved deliberately
+  + single-file mode behaviour byte-identical to before the change
++ commit message draft
+  + notethink 0.2.15: kanban drag-and-drop works across multi-file columns in folder mode
+  + `editText` accepts per-`docPath` partitioned change sets; extension applies multi-doc batches atomically
+  + `dragStartHandler` reveals caret in the originating file
+  + tests N jest, N playwright

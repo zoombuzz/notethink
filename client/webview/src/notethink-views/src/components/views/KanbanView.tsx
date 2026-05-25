@@ -40,7 +40,7 @@ interface Column {
     display_options?: NoteDisplayOptions;
 }
 
-const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, display_options: NoteDisplayOptions) => {
+const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, display_options: NoteDisplayOptions): ReactElement => {
     const filtered_children_body = note.children_body.filter((child) => !('seq' in child && child.seq !== undefined));
     return <GenericNote
         {...note}
@@ -60,7 +60,8 @@ const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, dis
     />;
 };
 
-export default function KanbanView(props: ViewProps) {
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
+export default function KanbanView(props: ViewProps): ReactElement {
 
     const display_options: NoteDisplayOptions = {
         ...props.display_options,

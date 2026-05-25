@@ -1,7 +1,10 @@
-import type { LineTag, MdastNode, NoteProps, TextPosition } from "../types/NoteProps";
+import Debug from "debug";
+import type { Root as MdastRoot } from "mdast";
 import { findLineTags, parseLineTags } from "./linetagops";
+import type { LineTag, MdastNode, NoteProps, TextPosition } from "../types/NoteProps";
 
-type MdastRoot = import("mdast").Root;
+const debug = Debug("nodejs:notethink-views:convertMdastToNoteHierarchy");
+
 export type MdastInput = MdastNode | MdastRoot;
 
 /**
@@ -31,12 +34,12 @@ function buildLineIndex(text: string): number[] {
  * Convert a character offset to a TextPosition using a pre-computed line index.
  * Uses binary search: O(log n) instead of O(offset).
  */
-function makePosition(offset: number, _text: string, lineIndex: number[]): TextPosition {
-    // binary search for the number of newlines before `offset`
-    let lo = 0, hi = lineIndex.length;
+function makePosition(offset: number, _text: string, line_index: number[]): TextPosition {
+    // binary search for the number of newlines before offset
+    let lo = 0, hi = line_index.length;
     while (lo < hi) {
         const mid = (lo + hi) >>> 1;
-        if (lineIndex[mid] < offset) { lo = mid + 1; } else { hi = mid; }
+        if (line_index[mid] < offset) { lo = mid + 1; } else { hi = mid; }
     }
     return { offset, line: lo + 1 };
 }
@@ -46,19 +49,19 @@ function makePosition(offset: number, _text: string, lineIndex: number[]): TextP
  * Scans forward through siblings to find the next heading with depth <= this heading's depth.
  */
 function computeHeadingEndBody(
-    headingIndex: number,
+    heading_index: number,
     siblings: MdastNode[],
-    parentEndOffset: number,
+    parent_end_offset: number,
 ): number {
-    const heading = siblings[headingIndex];
-    const headingDepth = heading.depth ?? 0;
-    for (let i = headingIndex + 1; i < siblings.length; i++) {
+    const heading = siblings[heading_index];
+    const heading_depth = heading.depth ?? 0;
+    for (let i = heading_index + 1; i < siblings.length; i++) {
         const sibling = siblings[i];
-        if (sibling.type === 'heading' && (sibling.depth ?? 0) <= headingDepth) {
+        if (sibling.type === 'heading' && (sibling.depth ?? 0) <= heading_depth) {
             return sibling.position.start.offset;
         }
     }
-    return parentEndOffset;
+    return parent_end_offset;
 }
 
 /**
@@ -72,8 +75,8 @@ function extractHeadlineRaw(node: MdastNode, text: string): string {
 /**
  * Extract body_raw for a heading section: text between end of heading node and end_body.
  */
-function extractBodyRaw(nodeEndOffset: number, endBodyOffset: number, text: string): string {
-    return text.slice(nodeEndOffset, endBodyOffset);
+function extractBodyRaw(node_end_offset: number, end_body_offset: number, text: string): string {
+    return text.slice(node_end_offset, end_body_offset);
 }
 
 /**
@@ -90,8 +93,8 @@ function isNoteNode(node: MdastNode): boolean {
  * Determine if a child of a listItem should become a NoteProps.
  * Paragraphs under listItems become notes (for task list rendering).
  */
-function isListItemChildNote(node: MdastNode, parentType: string): boolean {
-    if (parentType === 'listItem' && node.type === 'paragraph') {
+function isListItemChildNote(node: MdastNode, parent_type: string): boolean {
+    if (parent_type === 'listItem' && node.type === 'paragraph') {
         return true;
     }
     return isNoteNode(node);
@@ -101,39 +104,40 @@ function isListItemChildNote(node: MdastNode, parentType: string): boolean {
  * Recursively find child notes from MDAST children.
  * Returns flat array of all notes found (nesting done later by nestChildNotes).
  */
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 function findChildNotes(
-    parentType: string,
+    parent_type: string,
     children: MdastNode[],
     text: string,
-    seqCounter: SeqCounter,
-    parentEndOffset: number,
-    allNotes: NoteProps[],
-    childrenBodyAccumulator: Array<NoteProps | MdastNode>,
-    lineIndex: number[],
+    seq_counter: SeqCounter,
+    parent_end_offset: number,
+    all_notes: NoteProps[],
+    children_body_accumulator: Array<NoteProps | MdastNode>,
+    line_index: number[],
 ): void {
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        const shouldBeNote = parentType === 'listItem'
-            ? isListItemChildNote(child, parentType)
+        const should_be_note = parent_type === 'listItem'
+            ? isListItemChildNote(child, parent_type)
             : isNoteNode(child);
 
-        if (!shouldBeNote) {
-            // Non-note nodes go into children_body as raw MdastNode
-            childrenBodyAccumulator.push(child);
+        if (!should_be_note) {
+            // non-note nodes go into children_body as raw MdastNode
+            children_body_accumulator.push(child);
             continue;
         }
 
-        seqCounter.value++;
-        const seq = seqCounter.value;
+        seq_counter.value++;
+        const seq = seq_counter.value;
 
         let headline_raw = '';
         let body_raw = '';
         let end_body_offset: number | undefined;
-        const noteChildrenBody: Array<NoteProps | MdastNode> = [];
+        const note_children_body: Array<NoteProps | MdastNode> = [];
 
         if (child.type === 'heading') {
             headline_raw = extractHeadlineRaw(child, text);
-            end_body_offset = computeHeadingEndBody(i, children, parentEndOffset);
+            end_body_offset = computeHeadingEndBody(i, children, parent_end_offset);
             body_raw = extractBodyRaw(child.position.end.offset, end_body_offset, text);
         } else if (child.type === 'code') {
             headline_raw = child.lang || 'code';
@@ -156,51 +160,51 @@ function findChildNotes(
             value: child.value,
             checked: child.checked,
             position: {
-                start: makePosition(child.position.start.offset, text, lineIndex),
-                end: makePosition(child.position.end.offset, text, lineIndex),
+                start: makePosition(child.position.start.offset, text, line_index),
+                end: makePosition(child.position.end.offset, text, line_index),
                 ...(end_body_offset !== undefined ? {
-                    end_body: makePosition(end_body_offset, text, lineIndex),
+                    end_body: makePosition(end_body_offset, text, line_index),
                 } : {}),
             },
             children: child.children || [],
-            children_body: noteChildrenBody,
+            children_body: note_children_body,
             headline_raw,
             body_raw,
         };
 
-        // Parse linetags from headline (port of Note.parseForLinetags)
+        // parse linetags from headline (port of Note.parseForLinetags)
         const linetags_str = findLineTags(headline_raw);
         if (linetags_str) {
             note.linetags_from = child.position.start.offset + headline_raw.length - linetags_str.length;
             note.linetags = parseLineTags(linetags_str, seq);
         }
 
-        // Push to allNotes BEFORE recursing so parent appears before children in nestChildNotes
-        allNotes.push(note);
-        childrenBodyAccumulator.push(note);
+        // push to all_notes before recursing so parent appears before children in nestChildNotes
+        all_notes.push(note);
+        children_body_accumulator.push(note);
 
-        // Now recurse into section/list children
+        // recurse into section/list children
         if (child.type === 'heading' && end_body_offset !== undefined) {
-            const sectionChildren: MdastNode[] = [];
+            const section_children: MdastNode[] = [];
             let consumed = 0;
             for (let j = i + 1; j < children.length; j++) {
                 const sibling = children[j];
                 if (sibling.position.start.offset >= end_body_offset) { break; }
-                sectionChildren.push(sibling);
+                section_children.push(sibling);
                 consumed++;
             }
-            // Skip consumed siblings in parent loop so they aren't double-processed
+            // skip consumed siblings in parent loop so they aren't double-processed
             i += consumed;
-            if (sectionChildren.length > 0) {
+            if (section_children.length > 0) {
                 findChildNotes(
                     child.type,
-                    sectionChildren,
+                    section_children,
                     text,
-                    seqCounter,
+                    seq_counter,
                     end_body_offset,
-                    allNotes,
-                    noteChildrenBody,
-                    lineIndex,
+                    all_notes,
+                    note_children_body,
+                    line_index,
                 );
             }
         } else if ((child.type === 'list' || child.type === 'listItem') && child.children?.length) {
@@ -208,11 +212,11 @@ function findChildNotes(
                 child.type,
                 child.children,
                 text,
-                seqCounter,
+                seq_counter,
                 child.position.end.offset,
-                allNotes,
-                noteChildrenBody,
-                lineIndex,
+                all_notes,
+                note_children_body,
+                line_index,
             );
         }
     }
@@ -222,16 +226,16 @@ function findChildNotes(
  * Assign levels to notes based on position containment.
  * Uses an ancestor stack for O(n) instead of O(n²) backward scan.
  */
-function nestChildNotes(allNotes: NoteProps[], rootLevel: number): void {
-    // Stack of open ancestors - each note's range must contain the current note
+function nestChildNotes(all_notes: NoteProps[], root_level: number): void {
+    // stack of open ancestors - each note's range must contain the current note
     const stack: NoteProps[] = [];
-    for (const note of allNotes) {
-        const noteStart = note.position.start.offset;
-        // Pop ancestors whose range has ended (no longer contain this note)
+    for (const note of all_notes) {
+        const note_start = note.position.start.offset;
+        // pop ancestors whose range has ended (no longer contain this note)
         while (stack.length > 0) {
             const top = stack[stack.length - 1];
-            const topEnd = top.position.end_body?.offset ?? top.position.end.offset;
-            if (noteStart < topEnd) { break; }
+            const top_end = top.position.end_body?.offset ?? top.position.end.offset;
+            if (note_start < top_end) { break; }
             stack.pop();
         }
         if (stack.length > 0) {
@@ -241,7 +245,7 @@ function nestChildNotes(allNotes: NoteProps[], rootLevel: number): void {
                 ? [...parent.parent_notes, parent]
                 : [parent];
         } else {
-            note.level = rootLevel + 1;
+            note.level = root_level + 1;
             note.parent_notes = undefined;
         }
         stack.push(note);
@@ -269,14 +273,14 @@ function collectInheritableLinetags(note: NoteProps, prefix: string): Array<[str
 /**
  * Create an inherited LineTag from a source tag, with the key stripped to the child-facing name.
  */
-function makeInheritedTag(strippedKey: string, source: LineTag, targetNoteSeq: number): LineTag {
+function makeInheritedTag(stripped_key: string, source: LineTag, target_note_seq: number): LineTag {
     return {
-        key: strippedKey,
+        key: stripped_key,
         value: source.value,
         key_offset: 0,
         value_offset: 0,
         linktext_offset: 0,
-        note_seq: targetNoteSeq,
+        note_seq: target_note_seq,
         inherited: true,
         ...(source.value_numeric !== undefined ? { value_numeric: source.value_numeric } : {}),
     };
@@ -286,35 +290,35 @@ function makeInheritedTag(strippedKey: string, source: LineTag, targetNoteSeq: n
  * Propagate ng_child_*, ng_child2y_*, and ng_childall_* linetags from parents to descendants.
  * Child's own linetags always take precedence over inherited ones.
  */
-export function applyChildAttributeInheritance(allNotes: NoteProps[]): void {
-    for (const note of allNotes) {
+export function applyChildAttributeInheritance(all_notes: NoteProps[]): void {
+    for (const note of all_notes) {
         if (!note.parent_notes?.length) { continue; }
 
-        const directParent = note.parent_notes[note.parent_notes.length - 1];
+        const direct_parent = note.parent_notes[note.parent_notes.length - 1];
 
         // ng_child_ → inherited by direct children only
-        for (const [strippedKey, sourceTag] of collectInheritableLinetags(directParent, 'ng_child_')) {
-            if (note.linetags?.[strippedKey]) { continue; }
+        for (const [stripped_key, source_tag] of collectInheritableLinetags(direct_parent, 'ng_child_')) {
+            if (note.linetags?.[stripped_key]) { continue; }
             if (!note.linetags) { note.linetags = {}; }
-            note.linetags[strippedKey] = makeInheritedTag(strippedKey, sourceTag, note.seq);
+            note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
         }
 
         // ng_child2y_ → inherited by grandchildren only (parent_notes has at least 2 entries)
         if (note.parent_notes.length >= 2) {
             const grandparent = note.parent_notes[note.parent_notes.length - 2];
-            for (const [strippedKey, sourceTag] of collectInheritableLinetags(grandparent, 'ng_child2y_')) {
-                if (note.linetags?.[strippedKey]) { continue; }
+            for (const [stripped_key, source_tag] of collectInheritableLinetags(grandparent, 'ng_child2y_')) {
+                if (note.linetags?.[stripped_key]) { continue; }
                 if (!note.linetags) { note.linetags = {}; }
-                note.linetags[strippedKey] = makeInheritedTag(strippedKey, sourceTag, note.seq);
+                note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
             }
         }
 
         // ng_childall_ → inherited from every ancestor in the chain
         for (const ancestor of note.parent_notes) {
-            for (const [strippedKey, sourceTag] of collectInheritableLinetags(ancestor, 'ng_childall_')) {
-                if (note.linetags?.[strippedKey]) { continue; }
+            for (const [stripped_key, source_tag] of collectInheritableLinetags(ancestor, 'ng_childall_')) {
+                if (note.linetags?.[stripped_key]) { continue; }
                 if (!note.linetags) { note.linetags = {}; }
-                note.linetags[strippedKey] = makeInheritedTag(strippedKey, sourceTag, note.seq);
+                note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
             }
         }
     }
@@ -324,34 +328,34 @@ export function applyChildAttributeInheritance(allNotes: NoteProps[]): void {
  * Main entry point: convert MDAST root + raw text to a NoteProps hierarchy.
  */
 export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): NoteProps {
-    const seqCounter: SeqCounter = { value: 0 };
-    const allNotes: NoteProps[] = [];
-    const rootChildrenBody: Array<NoteProps | MdastNode> = [];
+    const seq_counter: SeqCounter = { value: 0 };
+    const all_notes: NoteProps[] = [];
+    const root_children_body: Array<NoteProps | MdastNode> = [];
 
-    // Pre-compute line-offset index for O(log n) position lookups
-    const lineIndex = buildLineIndex(text);
+    // pre-compute line-offset index for O(log n) position lookups
+    const line_index = buildLineIndex(text);
 
     // normalise children from either MdastRoot (typed) or MdastNode (local)
     const mdast_children = (mdast.children || []) as MdastNode[];
-    const rootEndOffset = mdast.position?.end?.offset ?? text.length;
+    const root_end_offset = mdast.position?.end?.offset ?? text.length;
 
-    // Find all child notes from the MDAST root
+    // find all child notes from the MDAST root
     findChildNotes(
         'root',
         mdast_children,
         text,
-        seqCounter,
-        rootEndOffset,
-        allNotes,
-        rootChildrenBody,
-        lineIndex,
+        seq_counter,
+        root_end_offset,
+        all_notes,
+        root_children_body,
+        line_index,
     );
 
-    // Assign levels based on containment
-    nestChildNotes(allNotes, 0);
+    // assign levels based on containment
+    nestChildNotes(all_notes, 0);
 
-    // Populate child_notes arrays (direct children only, used for kanban column assignment)
-    for (const note of allNotes) {
+    // populate child_notes arrays (direct children only, used for kanban column assignment)
+    for (const note of all_notes) {
         if (note.parent_notes?.length) {
             const direct_parent = note.parent_notes[note.parent_notes.length - 1];
             if (!direct_parent.child_notes) {
@@ -361,21 +365,21 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         }
     }
 
-    // Propagate ng_child_*, ng_child2y_*, ng_childall_* linetags to descendants
-    applyChildAttributeInheritance(allNotes);
+    // propagate ng_child_*, ng_child2y_*, ng_childall_* linetags to descendants
+    applyChildAttributeInheritance(all_notes);
 
-    // Build the root note
+    // build the root note
     const root: NoteProps = {
         seq: 0,
         level: 0,
         type: 'root',
         position: {
-            start: makePosition(mdast.position?.start?.offset ?? 0, text, lineIndex),
-            end: makePosition(rootEndOffset, text, lineIndex),
+            start: makePosition(mdast.position?.start?.offset ?? 0, text, line_index),
+            end: makePosition(root_end_offset, text, line_index),
         },
         children: mdast_children,
-        children_body: rootChildrenBody,
-        child_notes: allNotes.filter(n => !n.parent_notes?.length),
+        children_body: root_children_body,
+        child_notes: all_notes.filter(n => !n.parent_notes?.length),
         headline_raw: '',
         body_raw: text,
     };

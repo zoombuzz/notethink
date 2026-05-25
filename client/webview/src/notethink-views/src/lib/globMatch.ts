@@ -1,3 +1,7 @@
+import Debug from "debug";
+
+const debug = Debug("nodejs:notethink-views:globMatch");
+
 /**
  * Minimal VS Code-style glob matcher for client-side (instant) file filtering.
  *

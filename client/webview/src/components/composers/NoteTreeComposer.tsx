@@ -1,12 +1,13 @@
 import Debug from "debug";
-import { useMemo } from "react";
-import type { Doc } from "../../types/general";
+import { type ReactElement, useMemo } from "react";
+import { GenericView } from "../../notethink-views/src/components";
 import { convertMdastToNoteHierarchy } from "../../notethink-views/src/lib/convertMdastToNoteHierarchy";
 import { stampSingleFileStableIds } from "../../notethink-views/src/lib/mergeAggregateRoot";
-import { GenericView } from "../../notethink-views/src/components";
+import type { Doc } from "../../types/general";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../NoteRenderer";
+
 const debug = Debug("nodejs:notethink:NoteTreeComposer");
 
 /**
@@ -22,7 +23,7 @@ const debug = Debug("nodejs:notethink:NoteTreeComposer");
  * stable_id is stamped here (no `origin` is present in single-file mode) so React keying
  * and FLIP rect-capture in the kanban view stay invariant under re-parse.
  */
-export default function NoteTreeComposer({ note_id, note, props }: { note_id: string; note: Doc; props: NoteRendererProps }) {
+export default function NoteTreeComposer({ note_id, note, props }: { note_id: string; note: Doc; props: NoteRendererProps }): ReactElement {
     // memoize conversion keyed on content hash - avoids redundant work when only selection changes
     const root_note = useMemo(
         () => {
@@ -89,7 +90,7 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
  */
 function flattenAllNotes(root: NoteProps): NoteProps[] {
     const result: NoteProps[] = [root];
-    function walk(items: Array<unknown>) {
+    function walk(items: Array<unknown>): void {
         for (const item of items) {
             if (item && typeof item === 'object' && 'seq' in item && typeof (item as NoteProps).seq === 'number' && (item as NoteProps).seq > 0) {
                 const note = item as NoteProps;

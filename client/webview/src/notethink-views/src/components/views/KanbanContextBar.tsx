@@ -1,7 +1,11 @@
+import Debug from "debug";
+import type { ReactElement } from "react";
 import type { ViewProps } from "../../types/ViewProps";
 import master_view_styles from "../ViewRenderer.module.scss";
 
-export default function KanbanContextBar(props: ViewProps) {
+const debug = Debug("nodejs:notethink-views:KanbanContextBar");
+
+export default function KanbanContextBar(props: ViewProps): ReactElement {
 
     const container_styles: Array<string> = [master_view_styles.contextBar];
 

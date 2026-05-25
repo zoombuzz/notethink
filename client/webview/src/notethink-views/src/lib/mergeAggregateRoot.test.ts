@@ -820,7 +820,7 @@ describe('stampSingleFileStableIds', () => {
     }
 
     // single-file mode tree shape: root → H1 → [Story1, Story2, ...]. The H1 sits in root.child_notes and the depth-3 stories are H1's child_notes.
-    function findStoryByHeadline(root: ReturnType<typeof convertMdastToNoteHierarchy>, headline: string) {
+    function findStoryByHeadline(root: ReturnType<typeof convertMdastToNoteHierarchy>, headline: string): ReturnType<typeof convertMdastToNoteHierarchy> | undefined {
         const stack = [...(root.child_notes ?? [])];
         while (stack.length > 0) {
             const top = stack.pop()!;

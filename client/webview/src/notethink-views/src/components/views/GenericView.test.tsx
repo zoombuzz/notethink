@@ -1,5 +1,5 @@
-import React, { Suspense, createRef } from 'react';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import React, { Suspense, createRef, type MouseEvent as ReactMouseEvent } from 'react';
+import { render, screen, waitFor, fireEvent, act, type RenderResult } from '@testing-library/react';
 import GenericView from './GenericView';
 import type { ViewProps, ViewApi } from '../../types/ViewProps';
 import type { NoteProps, ClickPositionInfo } from '../../types/NoteProps';
@@ -124,13 +124,13 @@ function makeViewProps(overrides: Partial<ViewProps> = {}): ViewProps {
     };
 }
 
-function mockClickEvent(overrides: Record<string, unknown> = {}): import('react').MouseEvent<HTMLElement> {
+function mockClickEvent(overrides: Record<string, unknown> = {}): ReactMouseEvent<HTMLElement> {
     return {
         detail: 1,
         target: {},
         stopPropagation: jest.fn(),
         ...overrides,
-    } as unknown as import('react').MouseEvent<HTMLElement>;
+    } as unknown as ReactMouseEvent<HTMLElement>;
 }
 
 /** Get the handlers passed to the most recent DocumentView render */
@@ -993,7 +993,7 @@ describe('GenericView navigation callback', () => {
 
     describe('settings drawer', () => {
 
-        function renderWithToolbar(view_overrides: Partial<ViewProps> = {}) {
+        function renderWithToolbar(view_overrides: Partial<ViewProps> = {}): RenderResult {
             // a non-'auto' type renders the toolbar (which holds the gear button) + the drawer
             return render(
                 <Suspense fallback={<div>loading</div>}>
@@ -1181,7 +1181,7 @@ describe('GenericView navigation callback', () => {
 
 describe('GenericView folder files drawer', () => {
 
-    function renderFolderView(view_overrides: Partial<ViewProps> = {}) {
+    function renderFolderView(view_overrides: Partial<ViewProps> = {}): RenderResult {
         // folder integration mode + a non-'auto' type renders the FilesDrawer
         return render(
             <Suspense fallback={<div>loading</div>}>

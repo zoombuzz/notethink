@@ -1,7 +1,10 @@
-import type { ChangeEvent } from "react";
+import Debug from "debug";
+import type { ChangeEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
-import type { ViewProps } from "../../types/ViewProps";
 import { SELECTABLE_VIEWTYPES } from "./GenericView";
+import type { ViewProps } from "../../types/ViewProps";
+
+const debug = Debug("nodejs:notethink-views:ViewTypeSelector");
 
 function capitalize(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1);
@@ -18,8 +21,8 @@ interface ViewTypeSelectorProps {
     onFolderCascadeWrite?: (viewType: string) => void;
 }
 
-export default function ViewTypeSelector(props: ViewTypeSelectorProps) {
-    const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
+export default function ViewTypeSelector(props: ViewTypeSelectorProps): ReactElement {
+    const handleChange = (e: ChangeEvent<HTMLSelectElement>): void => {
         const viewType = e.target.value;
         props.handlers?.setViewManagedState?.([{
             id: props.id,

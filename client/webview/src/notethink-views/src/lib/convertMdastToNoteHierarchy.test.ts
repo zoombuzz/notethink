@@ -1,5 +1,5 @@
 import { convertMdastToNoteHierarchy, applyChildAttributeInheritance } from './convertMdastToNoteHierarchy';
-import { MdastNode } from '../types/NoteProps';
+import type { MdastNode, NoteProps } from '../types/NoteProps';
 import { calculateTextChangesForNewLinetagValue } from './linetagops';
 
 /**
@@ -49,7 +49,7 @@ describe('convertMdastToNoteHierarchy', () => {
         const root = convertMdastToNoteHierarchy(mdast, text);
         expect(root.children_body).toHaveLength(1);
 
-        const heading = root.children_body[0] as any;
+        const heading = root.children_body[0] as NoteProps;
         expect(heading.seq).toBe(1);
         expect(heading.type).toBe('heading');
         expect(heading.headline_raw).toBe('# Hello World');
@@ -72,7 +72,7 @@ describe('convertMdastToNoteHierarchy', () => {
         const root = convertMdastToNoteHierarchy(mdast, text);
         expect(root.children_body).toHaveLength(1);
 
-        const code = root.children_body[0] as any;
+        const code = root.children_body[0] as NoteProps;
         expect(code.seq).toBe(1);
         expect(code.type).toBe('code');
         expect(code.lang).toBe('js');
@@ -95,7 +95,7 @@ describe('convertMdastToNoteHierarchy', () => {
         const root = convertMdastToNoteHierarchy(mdast, text);
 
         const allNotes = flattenNotes(root);
-        const seqs = allNotes.map((n: any) => n.seq);
+        const seqs = allNotes.map(n => n.seq);
         expect(seqs).toEqual([1, 2, 3]);
     });
 
@@ -115,10 +115,10 @@ describe('convertMdastToNoteHierarchy', () => {
         const root = convertMdastToNoteHierarchy(mdast, text);
 
         const allNotes = flattenNotes(root);
-        const h1 = allNotes.find((n: any) => n.depth === 1);
-        const h2 = allNotes.find((n: any) => n.depth === 2);
-        expect(h1.level).toBe(1);
-        expect(h2.level).toBe(2);
+        const h1 = allNotes.find(n => n.depth === 1);
+        const h2 = allNotes.find(n => n.depth === 2);
+        expect(h1?.level).toBe(1);
+        expect(h2?.level).toBe(2);
     });
 
     it('heading end_body covers until next same-level heading', () => {
@@ -180,12 +180,12 @@ describe('convertMdastToNoteHierarchy', () => {
         const root = convertMdastToNoteHierarchy(mdast, text);
 
         // Root has a list note
-        const listNote = root.children_body[0] as any;
+        const listNote = root.children_body[0] as NoteProps;
         expect(listNote.type).toBe('list');
         expect(listNote.seq).toBeGreaterThan(0);
 
         // List has listItem children in children_body
-        const listItemNotes = listNote.children_body.filter((c: any) => c.seq !== undefined);
+        const listItemNotes = listNote.children_body.filter((c): c is NoteProps => 'seq' in c && c.seq !== undefined);
         expect(listItemNotes.length).toBe(2);
         expect(listItemNotes[0].type).toBe('listItem');
         expect(listItemNotes[1].type).toBe('listItem');
@@ -264,7 +264,7 @@ describe('convertMdastToNoteHierarchy', () => {
 
         // The paragraph should appear in the heading's children_body as a raw MdastNode
         expect(heading.children_body.length).toBeGreaterThan(0);
-        const bodyPara = heading.children_body.find((c: any) => !('seq' in c) && c.type === 'paragraph');
+        const bodyPara = heading.children_body.find(c => !('seq' in c) && c.type === 'paragraph');
         expect(bodyPara).toBeDefined();
     });
 });
@@ -284,7 +284,7 @@ describe('child attribute inheritance', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        const child = allNotes.find((n: any) => n.depth === 2);
+        const child = allNotes.find(n => n.depth === 2);
 
         expect(child.linetags).toBeDefined();
         expect(child.linetags!['status']).toBeDefined();
@@ -306,7 +306,7 @@ describe('child attribute inheritance', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        const grandchild = allNotes.find((n: any) => n.depth === 3);
+        const grandchild = allNotes.find(n => n.depth === 3);
 
         // Grandchild should NOT have inherited status from ng_child_
         expect(grandchild.linetags?.['status']).toBeUndefined();
@@ -325,8 +325,8 @@ describe('child attribute inheritance', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        const parent = allNotes.find((n: any) => n.depth === 2);
-        const grandchild = allNotes.find((n: any) => n.depth === 3);
+        const parent = allNotes.find(n => n.depth === 2);
+        const grandchild = allNotes.find(n => n.depth === 3);
 
         // Direct child should NOT have it
         expect(parent.linetags?.['priority']).toBeUndefined();
@@ -349,8 +349,8 @@ describe('child attribute inheritance', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        const child = allNotes.find((n: any) => n.depth === 2);
-        const grandchild = allNotes.find((n: any) => n.depth === 3);
+        const child = allNotes.find(n => n.depth === 2);
+        const grandchild = allNotes.find(n => n.depth === 3);
 
         expect(child.linetags!['team'].value).toBe('alpha');
         expect(child.linetags!['team'].inherited).toBe(true);
@@ -370,7 +370,7 @@ describe('child attribute inheritance', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        const child = allNotes.find((n: any) => n.depth === 2);
+        const child = allNotes.find(n => n.depth === 2);
 
         expect(child.linetags!['status'].value).toBe('doing');
         expect(child.linetags!['status'].inherited).toBeUndefined();
@@ -388,11 +388,11 @@ describe('child attribute inheritance', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        const child = allNotes.find((n: any) => n.depth === 2);
+        const child = allNotes.find(n => n.depth === 2);
 
         expect(child.linetags!['status'].inherited).toBe(true);
         // Parent should NOT have inherited flag on ng_child_status
-        const parent = allNotes.find((n: any) => n.depth === 1);
+        const parent = allNotes.find(n => n.depth === 1);
         expect(parent.linetags!['ng_child_status'].inherited).toBeUndefined();
     });
 });
@@ -411,7 +411,7 @@ describe('drag-drop on inherited-status notes', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        const child = allNotes.find((n: any) => n.depth === 2);
+        const child = allNotes.find(n => n.depth === 2);
 
         // Simulate dragging to "doing" column
         const changes = calculateTextChangesForNewLinetagValue(child, 'status', 'doing', 'untagged');
@@ -432,7 +432,7 @@ describe('drag-drop on inherited-status notes', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        const child = allNotes.find((n: any) => n.depth === 2);
+        const child = allNotes.find(n => n.depth === 2);
 
         // Setting back to "default" value should produce no edits
         const changes = calculateTextChangesForNewLinetagValue(child, 'status', 'untagged', 'untagged');
@@ -517,7 +517,7 @@ describe('nestChildNotes stack-based nesting', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        expect(allNotes.map((n: any) => n.level)).toEqual([1, 2, 3]);
+        expect(allNotes.map(n => n.level)).toEqual([1, 2, 3]);
     });
 
     it('pops stack correctly when sibling follows nested child (h1 → h2 → h1)', () => {
@@ -534,7 +534,7 @@ describe('nestChildNotes stack-based nesting', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
-        expect(allNotes.map((n: any) => n.level)).toEqual([1, 2, 1]);
+        expect(allNotes.map(n => n.level)).toEqual([1, 2, 1]);
     });
 
     it('parent_notes chain is built correctly for deep nesting', () => {
@@ -673,9 +673,9 @@ describe('benchmark: large file parsing', () => {
 /**
  * Helper to extract all NoteProps (by seq) from a root note's children_body tree.
  */
-function flattenNotes(root: any): any[] {
-    const result: any[] = [];
-    function walk(items: any[]) {
+function flattenNotes(root: NoteProps): NoteProps[] {
+    const result: NoteProps[] = [];
+    function walk(items: Array<NoteProps | MdastNode>): void {
         for (const item of items) {
             if ('seq' in item && item.seq !== undefined && item.seq > 0) {
                 result.push(item);
@@ -704,7 +704,7 @@ describe('edge cases: frontmatter nodes', () => {
         const root = convertMdastToNoteHierarchy(mdast, text);
 
         // yaml node should appear as raw MdastNode (no seq)
-        const yaml_node = root.children_body.find((c: any) => c.type === 'yaml');
+        const yaml_node = root.children_body.find(c => c.type === 'yaml');
         expect(yaml_node).toBeDefined();
         expect('seq' in yaml_node!).toBe(false);
 
@@ -726,7 +726,7 @@ describe('edge cases: frontmatter nodes', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
 
-        const toml_node = root.children_body.find((c: any) => c.type === 'toml');
+        const toml_node = root.children_body.find(c => c.type === 'toml');
         expect(toml_node).toBeDefined();
         expect('seq' in toml_node!).toBe(false);
     });
@@ -797,7 +797,7 @@ describe('edge cases: GFM table nodes in hierarchy', () => {
         expect(allNotes[0].type).toBe('heading');
 
         // table should be in heading's children_body as raw MdastNode
-        const table_node = allNotes[0].children_body.find((c: any) => c.type === 'table');
+        const table_node = allNotes[0].children_body.find(c => c.type === 'table');
         expect(table_node).toBeDefined();
         expect('seq' in table_node!).toBe(false);
     });

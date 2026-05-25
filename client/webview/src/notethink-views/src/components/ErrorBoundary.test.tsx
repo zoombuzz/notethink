@@ -11,7 +11,7 @@ afterAll(() => {
     console.error = original_console_error;
 });
 
-function GoodChild() {
+function GoodChild(): React.ReactElement {
     return <div data-testid="good-child">Hello</div>;
 }
 
@@ -59,7 +59,7 @@ describe('ErrorBoundary', () => {
     it('"Try Again" button resets error state and re-renders children', () => {
         let should_throw = true;
 
-        function ConditionalChild() {
+        function ConditionalChild(): React.ReactElement {
             if (should_throw) {
                 throw new Error('conditional failure');
             }

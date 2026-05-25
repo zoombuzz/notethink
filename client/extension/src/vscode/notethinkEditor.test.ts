@@ -9,11 +9,82 @@
  */
 
 import * as vscode from 'vscode';
-import { createMockWebviewPanel, Position, Range, Selection, WorkspaceEdit, Uri } from '../__mocks__/vscode';
+import { createMockWebviewPanel, Position, Selection, Uri } from '../__mocks__/vscode';
 import { NotethinkEditorProvider } from './notethinkEditor';
 import { DEFAULT_EXCLUDE_FILTER } from '../constants';
 
 // ---- helpers ----------------------------------------------------------------
+
+type MockTextDocument = {
+	uri: Uri;
+	getText: jest.Mock<string, []>;
+	positionAt: jest.Mock<Position, [number]>;
+	offsetAt: jest.Mock<number, [Position]>;
+};
+
+type EditBuilder = {
+	replace: jest.Mock;
+	insert: jest.Mock;
+	delete: jest.Mock;
+};
+
+type MockTextEditor = {
+	document: MockTextDocument;
+	selection: Selection;
+	edit: jest.Mock<Promise<boolean>, [(eb: EditBuilder) => void]>;
+	revealRange: jest.Mock;
+};
+
+type WorkspaceMutable = {
+	workspaceFolders: Array<{ uri: Uri; name: string; index: number }> | undefined;
+};
+
+type WindowMutable = {
+	visibleTextEditors: MockTextEditor[];
+};
+
+/** Generic message record posted to or arriving on the webview. */
+type MessageRecord = Record<string, unknown>;
+/** Shape of update messages (helps narrow `partial.docs` lookups). */
+type UpdateDocEntry = {
+	path: string;
+	text?: string;
+	relative_path?: string;
+	createdBy?: string;
+	[key: string]: unknown;
+};
+type UpdatePartial = { docs: Record<string, UpdateDocEntry> };
+type UpdateMessage = MessageRecord & {
+	type: 'update';
+	partial: UpdatePartial;
+	workspace_root?: string;
+	merge_strategy?: string;
+	include_filter?: string;
+	exclude_filter?: string | null;
+	aggregate_total_discovered?: number;
+	aggregate_truncated?: boolean;
+};
+type SelectionMessage = MessageRecord & {
+	type: 'selectionChanged';
+	docPath: string;
+	selection: { head: number; anchor: number };
+};
+
+function getUpdates(msgs: MessageRecord[]): UpdateMessage[] {
+	return msgs.filter(m => m.type === 'update') as UpdateMessage[];
+}
+function getSelections(msgs: MessageRecord[]): SelectionMessage[] {
+	return msgs.filter(m => m.type === 'selectionChanged') as SelectionMessage[];
+}
+function findUpdate(msgs: MessageRecord[]): UpdateMessage | undefined {
+	return msgs.find(m => m.type === 'update') as UpdateMessage | undefined;
+}
+function findSelection(msgs: MessageRecord[]): SelectionMessage | undefined {
+	return msgs.find(m => m.type === 'selectionChanged') as SelectionMessage | undefined;
+}
+function findByType(msgs: MessageRecord[], type: string): MessageRecord | undefined {
+	return msgs.find(m => m.type === type);
+}
 
 /** Build a minimal mock ExtensionContext */
 function mockExtensionContext(): vscode.ExtensionContext {
@@ -28,7 +99,7 @@ function mockExtensionContext(): vscode.ExtensionContext {
  * Build a mock TextDocument that translates character offsets to
  * Position objects in a single-line manner for simplicity.
  */
-function mockTextDocument(text: string, uriPath: string) {
+function mockTextDocument(text: string, uriPath: string): MockTextDocument {
 	return {
 		uri: Uri.file(uriPath),
 		getText: jest.fn(() => text),
@@ -43,12 +114,12 @@ function mockTextDocument(text: string, uriPath: string) {
 /**
  * Build a mock TextEditor wrapping a document.
  */
-function mockTextEditor(doc: ReturnType<typeof mockTextDocument>) {
-	const editor: any = {
+function mockTextEditor(doc: MockTextDocument): MockTextEditor {
+	const editor: MockTextEditor = {
 		document: doc,
 		selection: new Selection(new Position(0, 0), new Position(0, 0)),
-		edit: jest.fn(async (callback: (eb: any) => void) => {
-			const editBuilder = {
+		edit: jest.fn(async (callback: (eb: EditBuilder) => void) => {
+			const editBuilder: EditBuilder = {
 				replace: jest.fn(),
 				insert: jest.fn(),
 				delete: jest.fn(),
@@ -62,8 +133,8 @@ function mockTextEditor(doc: ReturnType<typeof mockTextDocument>) {
 }
 
 // point the mocked workspace at the given roots so the host-side path-containment guard treats paths under them as in-workspace
-function setWorkspaceRoots(roots: string[] | undefined) {
-	(vscode.workspace as any).workspaceFolders = roots
+function setWorkspaceRoots(roots: string[] | undefined): void {
+	(vscode.workspace as unknown as WorkspaceMutable).workspaceFolders = roots
 		? roots.map((root, index) => ({ uri: Uri.file(root), name: root, index }))
 		: undefined;
 }
@@ -85,13 +156,13 @@ describe('NotethinkEditorProvider', () => {
 		// set up a visible editor for the initial document so sendCurrentSelection finds it
 		const initialDoc = mockTextDocument(defaultDocText, defaultDocPath);
 		const initialEditor = mockTextEditor(initialDoc);
-		(vscode.window as any).visibleTextEditors = [initialEditor];
+		(vscode.window as unknown as WindowMutable).visibleTextEditors = [initialEditor];
 
-		provider = new NotethinkEditorProvider(mockExtensionContext() as any);
+		provider = new NotethinkEditorProvider(mockExtensionContext());
 		panelHelper = createMockWebviewPanel();
 
 		// call myWebviewPanel with the initial document
-		await (provider as any).myWebviewPanel(panelHelper.panel, initialDoc);
+		await (provider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(panelHelper.panel, initialDoc);
 
 		// the constructor no longer pushes the initial doc - requestInitialState (sent by the webview on mount) triggers it
 		await panelHelper.simulateMessage({ type: 'requestInitialState' });
@@ -105,24 +176,24 @@ describe('NotethinkEditorProvider', () => {
 
 	describe('initial document load', () => {
 		it('sends the initial document as an update message', () => {
-			const updates = panelHelper.postedMessages.filter((m: any) => m.type === 'update');
+			const updates = getUpdates(panelHelper.postedMessages);
 			expect(updates.length).toBeGreaterThanOrEqual(1);
 			const first_update = updates[0];
-			const doc_entries = Object.values(first_update.partial.docs) as any[];
+			const doc_entries = Object.values(first_update.partial.docs) as UpdateDocEntry[];
 			expect(doc_entries.length).toBe(1);
 			expect(doc_entries[0].path).toBe(defaultDocPath);
 			expect(doc_entries[0].text).toBe(defaultDocText);
 		});
 
 		it('sends workspace_root in the update message', () => {
-			const updates = panelHelper.postedMessages.filter((m: any) => m.type === 'update');
+			const updates = getUpdates(panelHelper.postedMessages);
 			expect(updates.length).toBeGreaterThanOrEqual(1);
-			// When getWorkspaceFolder returns undefined, workspace_root should be ''
+			// when getWorkspaceFolder returns undefined, workspace_root should be ''
 			expect(updates[0].workspace_root).toBe('');
 		});
 
 		it('sends an initial selectionChanged message for styled first render', () => {
-			const selections = panelHelper.postedMessages.filter((m: any) => m.type === 'selectionChanged');
+			const selections = getSelections(panelHelper.postedMessages);
 			expect(selections.length).toBeGreaterThanOrEqual(1);
 			const first_selection = selections[0];
 			expect(first_selection.docPath).toBe(defaultDocPath);
@@ -133,7 +204,7 @@ describe('NotethinkEditorProvider', () => {
 
 	describe('workspace_root with real workspace folder', () => {
 		it('sends workspace_root from getWorkspaceFolder when available', async () => {
-			// Set up getWorkspaceFolder to return a workspace folder
+			// set up getWorkspaceFolder to return a workspace folder
 			const workspaceRoot = '/mnt/secure/home/alex/git/github.com/active_development';
 			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({
 				uri: Uri.file(workspaceRoot),
@@ -144,18 +215,18 @@ describe('NotethinkEditorProvider', () => {
 			const docPath = workspaceRoot + '/countingsheet/nodejs/ledger/docs/todo.md';
 			const doc = mockTextDocument('# Todo', docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 
-			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
+			const newProvider = new NotethinkEditorProvider(mockExtensionContext());
 			const newPanel = createMockWebviewPanel();
-			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+			await (newProvider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(newPanel.panel, doc);
 			await newPanel.simulateMessage({ type: 'requestInitialState' });
 
-			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
+			const updates = getUpdates(newPanel.postedMessages);
 			expect(updates.length).toBeGreaterThanOrEqual(1);
 			expect(updates[0].workspace_root).toBe(workspaceRoot);
 
-			// Restore mock
+			// restore mock
 			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue(undefined);
 		});
 
@@ -166,53 +237,55 @@ describe('NotethinkEditorProvider', () => {
 				name: 'active_development',
 				index: 0,
 			});
-			// Simulate asRelativePath returning a relative path (no leading /)
+			// simulate asRelativePath returning a relative path (no leading /)
 			(vscode.workspace.asRelativePath as jest.Mock).mockReturnValue('countingsheet/nodejs/ledger/docs/todo.md');
 
 			const docPath = workspaceRoot + '/countingsheet/nodejs/ledger/docs/todo.md';
 			const doc = mockTextDocument('# Todo', docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 
-			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
+			const newProvider = new NotethinkEditorProvider(mockExtensionContext());
 			const newPanel = createMockWebviewPanel();
-			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+			await (newProvider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(newPanel.panel, doc);
 			await newPanel.simulateMessage({ type: 'requestInitialState' });
 
-			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
+			const updates = getUpdates(newPanel.postedMessages);
 			expect(updates.length).toBeGreaterThanOrEqual(1);
-			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			const doc_entries = Object.values(updates[0].partial.docs) as UpdateDocEntry[];
 			expect(doc_entries[0].relative_path).toBe('countingsheet/nodejs/ledger/docs/todo.md');
 
-			// Restore mocks
+			// restore mocks
 			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue(undefined);
-			(vscode.workspace.asRelativePath as jest.Mock).mockImplementation((pathOrUri: any) => {
-				const p = typeof pathOrUri === 'string' ? pathOrUri : pathOrUri?.path || pathOrUri?.toString?.() || '';
+			(vscode.workspace.asRelativePath as jest.Mock).mockImplementation((pathOrUri: unknown) => {
+				const u = pathOrUri as { path?: string; toString?: () => string } | string | undefined;
+				const p = typeof u === 'string' ? u : u?.path || u?.toString?.() || '';
 				return p;
 			});
 		});
 
 		it('does NOT set relative_path when asRelativePath returns an absolute path', async () => {
-			// When file is outside workspace, asRelativePath returns the full absolute path
+			// when file is outside workspace, asRelativePath returns the full absolute path
 			const docPath = '/other/location/file.md';
 			(vscode.workspace.asRelativePath as jest.Mock).mockReturnValue(docPath);
 
 			const doc = mockTextDocument('# Test', docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 
-			const newProvider = new NotethinkEditorProvider(mockExtensionContext() as any);
+			const newProvider = new NotethinkEditorProvider(mockExtensionContext());
 			const newPanel = createMockWebviewPanel();
-			await (newProvider as any).myWebviewPanel(newPanel.panel, doc);
+			await (newProvider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(newPanel.panel, doc);
 			await newPanel.simulateMessage({ type: 'requestInitialState' });
 
-			const updates = newPanel.postedMessages.filter((m: any) => m.type === 'update');
-			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			const updates = getUpdates(newPanel.postedMessages);
+			const doc_entries = Object.values(updates[0].partial.docs) as UpdateDocEntry[];
 			expect(doc_entries[0].relative_path).toBeUndefined();
 
-			// Restore mock
-			(vscode.workspace.asRelativePath as jest.Mock).mockImplementation((pathOrUri: any) => {
-				const p = typeof pathOrUri === 'string' ? pathOrUri : pathOrUri?.path || pathOrUri?.toString?.() || '';
+			// restore mock
+			(vscode.workspace.asRelativePath as jest.Mock).mockImplementation((pathOrUri: unknown) => {
+				const u = pathOrUri as { path?: string; toString?: () => string } | string | undefined;
+				const p = typeof u === 'string' ? u : u?.path || u?.toString?.() || '';
 				return p;
 			});
 		});
@@ -230,7 +303,7 @@ describe('NotethinkEditorProvider', () => {
 		it('uses editor.edit() when a visible editor exists', async () => {
 			const doc = mockTextDocument(docText, docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
 
 			await panelHelper.simulateMessage({
@@ -240,13 +313,13 @@ describe('NotethinkEditorProvider', () => {
 			});
 
 			expect(editor.edit).toHaveBeenCalledTimes(1);
-			// WorkspaceEdit.applyEdit should NOT have been called
+			// WorkspaceEdit.applyEdit should NOT have been called (WorkspaceEdit is a vscode class — proper noun)
 			expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
 		});
 
 		it('uses WorkspaceEdit when no visible editor exists', async () => {
 			const doc = mockTextDocument(docText, docPath);
-			(vscode.window as any).visibleTextEditors = [];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
 			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
 
 			await panelHelper.simulateMessage({
@@ -261,7 +334,7 @@ describe('NotethinkEditorProvider', () => {
 		it('sorts changes end-to-start to preserve offsets', async () => {
 			const doc = mockTextDocument('abcdefghij', docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
 
 			await panelHelper.simulateMessage({
@@ -273,21 +346,21 @@ describe('NotethinkEditorProvider', () => {
 				],
 			});
 
-			// The edit callback receives sorted changes (highest from first)
+			// the edit callback receives sorted changes (highest from first)
 			expect(editor.edit).toHaveBeenCalledTimes(1);
 			const editCallback = editor.edit.mock.calls[0][0];
 			const editBuilder = { replace: jest.fn(), insert: jest.fn(), delete: jest.fn() };
 			editCallback(editBuilder);
-			// First replace should be at offset 7 (the higher offset)
+			// first replace should be at offset 7 (the higher offset)
 			expect(editBuilder.replace.mock.calls[0][0].start.character).toBe(7);
-			// Second replace should be at offset 0
+			// second replace should be at offset 0
 			expect(editBuilder.replace.mock.calls[1][0].start.character).toBe(0);
 		});
 
 		it('uses insert (not replace) when change has no "to" field', async () => {
 			const doc = mockTextDocument(docText, docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
 
 			await panelHelper.simulateMessage({
@@ -307,7 +380,7 @@ describe('NotethinkEditorProvider', () => {
 		it('handles errors without crashing', async () => {
 			(vscode.workspace.openTextDocument as jest.Mock).mockRejectedValue(new Error('file not found'));
 
-			// Should not throw
+			// should not throw
 			await panelHelper.simulateMessage({
 				type: 'editText',
 				docPath: '/workspace/nonexistent.md',
@@ -319,7 +392,7 @@ describe('NotethinkEditorProvider', () => {
 		it('single-doc payload still applies a single edit', async () => {
 			const doc = mockTextDocument(docText, docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
 
 			await panelHelper.simulateMessage({
@@ -330,6 +403,51 @@ describe('NotethinkEditorProvider', () => {
 
 			expect(editor.edit).toHaveBeenCalledTimes(1);
 			expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
+		});
+
+		// editing the active doc re-emits the updated doc plus a fresh selection so the webview never holds stale MDAST
+		it('re-emits an update for the edited active doc and a selectionChanged', async () => {
+			const doc = mockTextDocument(defaultDocText, defaultDocPath);
+			const editor = mockTextEditor(doc);
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
+
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				docPath: defaultDocPath,
+				changes: [{ from: 0, to: 5, insert: 'XXXXX' }],
+			});
+
+			const update = findUpdate(panelHelper.postedMessages);
+			expect(update).toBeDefined();
+			const doc_entries = Object.values(update.partial.docs) as UpdateDocEntry[];
+			expect(doc_entries[0].path).toBe(defaultDocPath);
+			const selection = findSelection(panelHelper.postedMessages);
+			expect(selection).toBeDefined();
+			expect(selection.docPath).toBe(defaultDocPath);
+		});
+
+		// the edit clears the debounce timer so a queued onDidChangeTextDocument re-parse cannot re-emit a delayed stale update after the batch
+		it('clears the pending change-debounce timer so no delayed update follows the edit', async () => {
+			const change_cb = (vscode.workspace.onDidChangeTextDocument as jest.Mock).mock.calls.slice(-1)[0][0];
+			const doc = mockTextDocument(defaultDocText, defaultDocPath);
+			const editor = mockTextEditor(doc);
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
+
+			// arm the debounce timer first, then apply an edit that should clear it
+			change_cb({ document: mockTextDocument('# pending', defaultDocPath) });
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				docPath: defaultDocPath,
+				changes: [{ from: 0, to: 5, insert: 'YYYYY' }],
+			});
+
+			panelHelper.postedMessages.length = 0;
+			await new Promise(resolve => setTimeout(resolve, 350));
+			const delayed = getUpdates(panelHelper.postedMessages);
+			expect(delayed.length).toBe(0);
 		});
 	});
 
@@ -345,9 +463,10 @@ describe('NotethinkEditorProvider', () => {
 		afterEach(() => setWorkspaceRoots(undefined));
 
 		// dispatch openTextDocument by uri so the batch can read each doc back individually
-		function rigOpenByPath(docs_by_path: Record<string, ReturnType<typeof mockTextDocument>>) {
-			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (arg: any) => {
-				const target_path: string = typeof arg === 'string' ? arg : (arg?.path || arg?.fsPath || arg?.toString?.() || '');
+		function rigOpenByPath(docs_by_path: Record<string, ReturnType<typeof mockTextDocument>>): void {
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (arg: unknown) => {
+				const a = arg as { path?: string; fsPath?: string; toString?: () => string } | string | undefined;
+				const target_path: string = typeof a === 'string' ? a : (a?.path || a?.fsPath || a?.toString?.() || '');
 				const found = docs_by_path[target_path];
 				if (!found) {
 					throw new Error(`no mock doc for ${target_path}`);
@@ -361,7 +480,7 @@ describe('NotethinkEditorProvider', () => {
 			const docB = mockTextDocument(docTextB, docPathB);
 			const editorA = mockTextEditor(docA);
 			const editorB = mockTextEditor(docB);
-			(vscode.window as any).visibleTextEditors = [editorA, editorB];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editorA, editorB];
 			rigOpenByPath({ [docPathA]: docA, [docPathB]: docB });
 
 			await panelHelper.simulateMessage({
@@ -382,7 +501,7 @@ describe('NotethinkEditorProvider', () => {
 			const docB = mockTextDocument(docTextB, docPathB);
 			const editorA = mockTextEditor(docA);
 			const editorB = mockTextEditor(docB);
-			(vscode.window as any).visibleTextEditors = [editorA, editorB];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editorA, editorB];
 			rigOpenByPath({ [docPathA]: docA, [docPathB]: docB });
 
 			panelHelper.postedMessages.length = 0;
@@ -394,10 +513,10 @@ describe('NotethinkEditorProvider', () => {
 				},
 			});
 
-			const updates = panelHelper.postedMessages.filter((m: any) => m.type === 'update');
+			const updates = getUpdates(panelHelper.postedMessages);
 			const touched_paths = new Set<string>();
 			for (const update of updates) {
-				for (const entry of Object.values(update.partial.docs) as any[]) {
+				for (const entry of Object.values(update.partial.docs) as UpdateDocEntry[]) {
 					touched_paths.add(entry.path);
 				}
 			}
@@ -409,7 +528,7 @@ describe('NotethinkEditorProvider', () => {
 			const docA = mockTextDocument(docTextA, docPathA);
 			const editorA = mockTextEditor(docA);
 			const bad_path = '/etc/shadow';
-			(vscode.window as any).visibleTextEditors = [editorA];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editorA];
 			rigOpenByPath({ [docPathA]: docA });
 			const errorLogSpy = jest.spyOn(require('../lib/errorops'), 'writeToErrorLog');
 
@@ -448,7 +567,7 @@ describe('NotethinkEditorProvider', () => {
 		it('sets selection and calls revealRange on an existing editor', async () => {
 			const doc = mockTextDocument('Hello World', docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 
 			await panelHelper.simulateMessage({
 				type: 'revealRange',
@@ -461,9 +580,9 @@ describe('NotethinkEditorProvider', () => {
 		});
 
 		it('does nothing when no existing editor is visible', async () => {
-			(vscode.window as any).visibleTextEditors = [];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
 
-			// Should not throw
+			// should not throw
 			await panelHelper.simulateMessage({
 				type: 'revealRange',
 				docPath,
@@ -471,13 +590,13 @@ describe('NotethinkEditorProvider', () => {
 				to: 5,
 			});
 
-			// No editor to call revealRange on, so nothing should happen
+			// no editor to call revealRange on, so nothing should happen
 		});
 
 		it('uses from as both start and end when to is absent', async () => {
 			const doc = mockTextDocument('Hello World', docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 
 			await panelHelper.simulateMessage({
 				type: 'revealRange',
@@ -486,7 +605,7 @@ describe('NotethinkEditorProvider', () => {
 			});
 
 			expect(editor.revealRange).toHaveBeenCalledTimes(1);
-			// Selection should have same anchor and active when from === to
+			// selection should have same anchor and active when from === to
 			expect(editor.selection.anchor.character).toBe(3);
 			expect(editor.selection.active.character).toBe(3);
 		});
@@ -503,7 +622,7 @@ describe('NotethinkEditorProvider', () => {
 		it('sets selection with head !== anchor (reversed)', async () => {
 			const doc = mockTextDocument('Hello World', docPath);
 			const editor = mockTextEditor(doc);
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 
 			await panelHelper.simulateMessage({
 				type: 'selectRange',
@@ -512,7 +631,7 @@ describe('NotethinkEditorProvider', () => {
 				to: 8,
 			});
 
-			// When from !== to, Selection(end_pos, start_pos) is used
+			// when from !== to, Selection(end_pos, start_pos) is used
 			// anchor = end_pos (8), active = start_pos (2)
 			expect(editor.selection.anchor.character).toBe(8);
 			expect(editor.selection.active.character).toBe(2);
@@ -520,7 +639,7 @@ describe('NotethinkEditorProvider', () => {
 		});
 
 		it('does nothing when no existing editor is visible', async () => {
-			(vscode.window as any).visibleTextEditors = [];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
 
 			await panelHelper.simulateMessage({
 				type: 'selectRange',
@@ -534,7 +653,7 @@ describe('NotethinkEditorProvider', () => {
 	// ---- setIntegration folder filters -----------------------------------
 
 	describe('setIntegration folder filters', () => {
-		const flush = () => new Promise(resolve => setImmediate(resolve));
+		const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
 		beforeEach(() => setWorkspaceRoots(['/workspace']));
 		afterEach(() => setWorkspaceRoots(undefined));
@@ -548,7 +667,7 @@ describe('NotethinkEditorProvider', () => {
 			expect(find_call[0].pattern).toBe('**/*.md');
 			expect(find_call[1]).toBe(DEFAULT_EXCLUDE_FILTER);
 
-			const update = panelHelper.postedMessages.filter((m: any) => m.type === 'update').pop();
+			const update = getUpdates(panelHelper.postedMessages).pop();
 			expect(update.include_filter).toBe('**/*.md');
 			expect(update.exclude_filter).toBe(DEFAULT_EXCLUDE_FILTER);
 		});
@@ -565,7 +684,7 @@ describe('NotethinkEditorProvider', () => {
 			expect(find_call[0].pattern).toBe('**/users/**');
 			expect(find_call[1]).toBeNull();
 
-			const update = panelHelper.postedMessages.filter((m: any) => m.type === 'update').pop();
+			const update = getUpdates(panelHelper.postedMessages).pop();
 			expect(update.include_filter).toBe('**/users/**');
 			expect(update.exclude_filter).toBe('');
 		});
@@ -597,6 +716,55 @@ describe('NotethinkEditorProvider', () => {
 			expect(second_call[1]).toBeNull();
 		});
 
+		it('emits a docDeleted tombstone when the folder watcher fires onDidDelete for a loaded doc', async () => {
+			const file_path = '/workspace/notes/gone.md';
+			const loaded_doc = mockTextDocument('# present', file_path);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(loaded_doc);
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_path)]);
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			while (getUpdates(panelHelper.postedMessages).length < 2) {
+				await new Promise(resolve => setImmediate(resolve));
+			}
+
+			const folder_watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_delete_cb = folder_watcher.onDidDelete.mock.calls[0][0];
+
+			panelHelper.postedMessages.length = 0;
+			await on_delete_cb(Uri.file(file_path));
+
+			const tombstone = findByType(panelHelper.postedMessages, 'docDeleted');
+			expect(tombstone).toBeDefined();
+			expect(tombstone.docPath).toBe(file_path);
+		});
+
+		it('a watcher-driven onDidCreate add re-sends the stored discovery totals (not 0/false)', async () => {
+			const file_a = '/workspace/notes/a.md';
+			const file_b = '/workspace/notes/b.md';
+			const file_c = '/workspace/notes/c.md';
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(mockTextDocument('# a', file_a));
+			// discovery finds three files so total_discovered=3, truncated=false
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_a), Uri.file(file_b), Uri.file(file_c)]);
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			while (getUpdates(panelHelper.postedMessages).length < 2) {
+				await new Promise(resolve => setImmediate(resolve));
+			}
+
+			const folder_watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_create_cb = folder_watcher.onDidCreate.mock.calls[0][0];
+			const new_file = '/workspace/notes/d.md';
+			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode('# d'));
+
+			panelHelper.postedMessages.length = 0;
+			await on_create_cb(Uri.file(new_file));
+
+			const update = getUpdates(panelHelper.postedMessages).pop();
+			expect(update).toBeDefined();
+			expect(update.aggregate_total_discovered).toBe(3);
+			expect(update.aggregate_truncated).toBe(false);
+		});
+
 		it('switching to current_file tears down the folder integration and re-sends the active doc as a replace', async () => {
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
 			await flush();
@@ -606,10 +774,10 @@ describe('NotethinkEditorProvider', () => {
 			await flush();
 
 			// the active doc is re-sent with no merge_strategy so the webview replaces (prunes) the stale folder docs
-			const update = panelHelper.postedMessages.find((m: any) => m.type === 'update');
+			const update = findUpdate(panelHelper.postedMessages);
 			expect(update).toBeDefined();
 			expect(update.merge_strategy).toBeUndefined();
-			const doc_entries = Object.values(update.partial.docs) as any[];
+			const doc_entries = Object.values(update.partial.docs) as UpdateDocEntry[];
 			expect(doc_entries.length).toBe(1);
 			expect(doc_entries[0].path).toBe(defaultDocPath);
 		});
@@ -622,7 +790,7 @@ describe('NotethinkEditorProvider', () => {
 		afterEach(() => setWorkspaceRoots(undefined));
 
 		it('editText refuses an out-of-workspace path', async () => {
-			(vscode.window as any).visibleTextEditors = [];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
 
 			await panelHelper.simulateMessage({
 				type: 'editText',
@@ -635,7 +803,7 @@ describe('NotethinkEditorProvider', () => {
 		});
 
 		it('editText refuses an in-workspace non-markdown path', async () => {
-			(vscode.window as any).visibleTextEditors = [];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
 
 			await panelHelper.simulateMessage({
 				type: 'editText',
@@ -648,7 +816,7 @@ describe('NotethinkEditorProvider', () => {
 		});
 
 		it('revealRange refuses an out-of-workspace path', async () => {
-			(vscode.window as any).visibleTextEditors = [];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
 
 			await panelHelper.simulateMessage({
 				type: 'revealRange',
@@ -709,14 +877,14 @@ describe('NotethinkEditorProvider', () => {
 			await panelHelper.simulateMessage({ type: 'requestInitialState' });
 
 			expect(panelHelper.panel.webview.postMessage).toHaveBeenCalled();
-			const update_msg = panelHelper.postedMessages.find((m: any) => m.type === 'update');
+			const update_msg = findUpdate(panelHelper.postedMessages);
 			expect(update_msg).toBeDefined();
 			expect(update_msg.partial.docs).toBeDefined();
-			const doc_entries = Object.values(update_msg.partial.docs) as any[];
+			const doc_entries = Object.values(update_msg.partial.docs) as UpdateDocEntry[];
 			expect(doc_entries.length).toBe(1);
 			expect(doc_entries[0].path).toBe(defaultDocPath);
 
-			const selection_msg = panelHelper.postedMessages.find((m: any) => m.type === 'selectionChanged');
+			const selection_msg = findSelection(panelHelper.postedMessages);
 			expect(selection_msg).toBeDefined();
 			expect(selection_msg.docPath).toBe(defaultDocPath);
 		});
@@ -737,10 +905,10 @@ describe('NotethinkEditorProvider', () => {
 		});
 
 		it('does nothing when no active panel exists', () => {
-			// Simulate panel disposal
+			// simulate panel disposal
 			panelHelper.simulateDispose();
 
-			// Should not throw
+			// should not throw
 			provider.sendCommandToActiveWebview('testCommand');
 		});
 	});
@@ -760,7 +928,7 @@ describe('NotethinkEditorProvider', () => {
 	// ---- active editor switching --------------------------------------------
 
 	describe('active editor switching', () => {
-		let onActiveEditorCallback: (editor: any) => Promise<void>;
+		let onActiveEditorCallback: (editor: MockTextEditor | undefined) => Promise<void>;
 
 		beforeEach(() => {
 			onActiveEditorCallback = (vscode.window.onDidChangeActiveTextEditor as jest.Mock).mock.calls[0][0];
@@ -769,19 +937,19 @@ describe('NotethinkEditorProvider', () => {
 		it('switches document when a different .md editor becomes active', async () => {
 			const newDoc = mockTextDocument('# New File', '/workspace/new.md');
 			const newEditor = mockTextEditor(newDoc);
-			(vscode.window as any).visibleTextEditors = [newEditor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [newEditor];
 
 			panelHelper.postedMessages.length = 0;
 
 			await onActiveEditorCallback(newEditor);
 
-			const update = panelHelper.postedMessages.find((m: any) => m.type === 'update');
+			const update = findUpdate(panelHelper.postedMessages);
 			expect(update).toBeDefined();
-			const doc_entries = Object.values(update.partial.docs) as any[];
+			const doc_entries = Object.values(update.partial.docs) as UpdateDocEntry[];
 			expect(doc_entries.length).toBe(1);
 			expect(doc_entries[0].path).toBe('/workspace/new.md');
 
-			const selection = panelHelper.postedMessages.find((m: any) => m.type === 'selectionChanged');
+			const selection = findSelection(panelHelper.postedMessages);
 			expect(selection).toBeDefined();
 			expect(selection.docPath).toBe('/workspace/new.md');
 		});
@@ -839,9 +1007,9 @@ describe('NotethinkEditorProvider', () => {
 			// wait for debounce (250ms + buffer)
 			await new Promise(resolve => setTimeout(resolve, 350));
 
-			const updates = panelHelper.postedMessages.filter((m: any) => m.type === 'update');
+			const updates = getUpdates(panelHelper.postedMessages);
 			expect(updates.length).toBe(1);
-			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			const doc_entries = Object.values(updates[0].partial.docs) as UpdateDocEntry[];
 			expect(doc_entries[0].text).toBe('# Updated Content');
 		});
 
@@ -870,9 +1038,9 @@ describe('NotethinkEditorProvider', () => {
 
 			await new Promise(resolve => setTimeout(resolve, 350));
 
-			const updates = panelHelper.postedMessages.filter((m: any) => m.type === 'update');
+			const updates = getUpdates(panelHelper.postedMessages);
 			expect(updates.length).toBe(1);
-			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			const doc_entries = Object.values(updates[0].partial.docs) as UpdateDocEntry[];
 			expect(doc_entries[0].text).toBe('# Second change');
 		});
 	});
@@ -880,7 +1048,7 @@ describe('NotethinkEditorProvider', () => {
 	// ---- selection tracking -------------------------------------------------
 
 	describe('selection tracking', () => {
-		let onSelectionCallback: (e: any) => void;
+		let onSelectionCallback: (e: { textEditor: { document: MockTextDocument; selection: Selection }; selections: Selection[] }) => void;
 
 		beforeEach(() => {
 			jest.useFakeTimers();
@@ -905,7 +1073,7 @@ describe('NotethinkEditorProvider', () => {
 
 			jest.advanceTimersByTime(150);
 
-			const selection = panelHelper.postedMessages.find((m: any) => m.type === 'selectionChanged');
+			const selection = findSelection(panelHelper.postedMessages);
 			expect(selection).toBeDefined();
 			expect(selection.docPath).toBe(defaultDocPath);
 		});
@@ -914,7 +1082,7 @@ describe('NotethinkEditorProvider', () => {
 			const doc = mockTextDocument(defaultDocText, defaultDocPath);
 			panelHelper.postedMessages.length = 0;
 
-			// Fire three rapid selection changes
+			// fire three rapid selection changes
 			for (const offset of [5, 10, 15]) {
 				onSelectionCallback({
 					textEditor: {
@@ -927,8 +1095,8 @@ describe('NotethinkEditorProvider', () => {
 
 			jest.advanceTimersByTime(150);
 
-			// Only the last one should have been sent
-			const selectionMessages = panelHelper.postedMessages.filter((m: any) => m.type === 'selectionChanged');
+			// only the last one should have been sent
+			const selectionMessages = getSelections(panelHelper.postedMessages);
 			expect(selectionMessages).toHaveLength(1);
 			expect(selectionMessages[0].selection.head).toBe(15);
 		});
@@ -957,7 +1125,7 @@ describe('NotethinkEditorProvider', () => {
 		const docPath = '/workspace/lonely.md';
 		const docText = '# Lonely';
 
-		function makeWatcher() {
+		function makeWatcher(): { onDidCreate: jest.Mock; onDidChange: jest.Mock; onDidDelete: jest.Mock; dispose: jest.Mock } {
 			return {
 				onDidCreate: jest.fn(),
 				onDidChange: jest.fn(),
@@ -967,7 +1135,7 @@ describe('NotethinkEditorProvider', () => {
 		}
 
 		// build a panel for a doc with no visible editor — the precondition that arms the watcher
-		async function setupUnvisitedDoc(opts: { settingOn?: boolean } = {}) {
+		async function setupUnvisitedDoc(opts: { settingOn?: boolean } = {}): Promise<{ provider: NotethinkEditorProvider; panel: ReturnType<typeof createMockWebviewPanel>; doc: MockTextDocument }> {
 			const setting_on = opts.settingOn ?? true;
 			(vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
 				get: jest.fn((_key: string, fallback: unknown) => {
@@ -976,11 +1144,11 @@ describe('NotethinkEditorProvider', () => {
 				}),
 				update: jest.fn(async () => {}),
 			});
-			(vscode.window as any).visibleTextEditors = [];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
 			const doc = mockTextDocument(docText, docPath);
-			const local_provider = new NotethinkEditorProvider(mockExtensionContext() as any);
+			const local_provider = new NotethinkEditorProvider(mockExtensionContext());
 			const local_panel = createMockWebviewPanel();
-			await (local_provider as any).myWebviewPanel(local_panel.panel, doc);
+			await (local_provider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(local_panel.panel, doc);
 			await local_panel.simulateMessage({ type: 'requestInitialState' });
 			return { provider: local_provider, panel: local_panel, doc };
 		}
@@ -1036,9 +1204,9 @@ describe('NotethinkEditorProvider', () => {
 			await on_change_cb(Uri.file(docPath));
 
 			expect(vscode.workspace.fs.readFile).toHaveBeenCalled();
-			const updates = panel.postedMessages.filter((m: any) => m.type === 'update');
+			const updates = getUpdates(panel.postedMessages);
 			expect(updates.length).toBeGreaterThanOrEqual(1);
-			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			const doc_entries = Object.values(updates[0].partial.docs) as UpdateDocEntry[];
 			expect(doc_entries[0].text).toBe(fresh_text);
 			expect(doc_entries[0].createdBy).toBe('fsWatcher');
 		});
@@ -1052,7 +1220,7 @@ describe('NotethinkEditorProvider', () => {
 
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
 			// phase-1 loadOne uses crypto.subtle.digest in buildDoc which spans multiple event-loop cycles; wait until both phase-1 messages (per-file merge + Promise.allSettled.then canonical) have landed before clearing, otherwise a late-arriving v1 merge would race the watcher's v2 post and become updates[0]
-			while (panelHelper.postedMessages.filter((m: any) => m.type === 'update').length < 2) {
+			while (getUpdates(panelHelper.postedMessages).length < 2) {
 				await new Promise(resolve => setImmediate(resolve));
 			}
 
@@ -1071,9 +1239,9 @@ describe('NotethinkEditorProvider', () => {
 			await on_change_cb(Uri.file(file_path));
 
 			expect(vscode.workspace.fs.readFile).toHaveBeenCalled();
-			const updates = panelHelper.postedMessages.filter((m: any) => m.type === 'update');
+			const updates = getUpdates(panelHelper.postedMessages);
 			expect(updates.length).toBeGreaterThanOrEqual(1);
-			const doc_entries = Object.values(updates[0].partial.docs) as any[];
+			const doc_entries = Object.values(updates[0].partial.docs) as UpdateDocEntry[];
 			expect(doc_entries[0].text).toBe(fresh_text);
 			expect(doc_entries[0].createdBy).toBe('fsWatcher');
 		});
@@ -1127,6 +1295,25 @@ describe('NotethinkEditorProvider', () => {
 			expect(watcher_instance.dispose).toHaveBeenCalledTimes(1);
 		});
 
+		// onDidCreate shares the same disk-bypass re-parse path as onDidChange (file recreated after delete)
+		it('re-parses from disk when the watcher fires onDidCreate', async () => {
+			const { panel } = await setupUnvisitedDoc();
+			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_create_cb = watcher_instance.onDidCreate.mock.calls[0][0];
+
+			const fresh_text = '# Lonely recreated';
+			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode(fresh_text));
+
+			panel.postedMessages.length = 0;
+			await on_create_cb(Uri.file(docPath));
+
+			expect(vscode.workspace.fs.readFile).toHaveBeenCalled();
+			const updates = getUpdates(panel.postedMessages);
+			expect(updates.length).toBeGreaterThanOrEqual(1);
+			const doc_entries = Object.values(updates[0].partial.docs) as UpdateDocEntry[];
+			expect(doc_entries[0].text).toBe(fresh_text);
+		});
+
 		it('re-evaluates when the visible-editor set changes (visible→hidden re-arms; hidden→visible disposes)', async () => {
 			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockClear();
 			// start with no visible editor → watcher armed on first sync
@@ -1135,7 +1322,7 @@ describe('NotethinkEditorProvider', () => {
 
 			// now simulate an editor becoming visible for the same file
 			const editor = mockTextEditor(mockTextDocument(docText, docPath));
-			(vscode.window as any).visibleTextEditors = [editor];
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
 			const on_visible_cb = (vscode.window.onDidChangeVisibleTextEditors as jest.Mock).mock.calls.slice(-1)[0][0];
 			on_visible_cb([editor]);
 

@@ -79,6 +79,8 @@ The NoteThink view runs in a webview iframe. To inspect it:
 - In the dev host: **Help > Toggle Developer Tools** (`Shift+Ctrl+I`)
 - Enable debug logging in the console: `localStorage.debug = 'nodejs:*'`
 
+For a fuller walkthrough — where host vs webview logs land, how the dev-only `notethink-extension.log` file works, and what to capture when filing a bug — see [docstech/bug-reports.md](docstech/bug-reports.md).
+
 ### Commands
 
 | Command | Description |

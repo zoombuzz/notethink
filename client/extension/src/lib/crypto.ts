@@ -1,5 +1,4 @@
-
-export async function generateIdentifier(message: string, algo = 'SHA-256') {
+export async function generateIdentifier(message: string, algo: AlgorithmIdentifier = 'SHA-256'): Promise<string> {
     return Array.from(
         new Uint8Array(
             await crypto.subtle.digest(algo, new TextEncoder().encode(message))

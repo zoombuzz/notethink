@@ -1,7 +1,8 @@
 import Debug from 'debug';
-import type { NoteProps } from "../../types/NoteProps";
-import { getStandardNoteDataProps } from "../../lib/renderops";
+import React from "react";
 import { buildNoteStyles, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
+import { getStandardNoteDataProps } from "../../lib/renderops";
+import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteAttributes from "./GenericNoteAttributes";
 import { MermaidDiagram } from "./MermaidDiagram";
 import view_specific_styles from "../ViewRenderer.module.scss";
@@ -17,7 +18,7 @@ function deriveDiagramType(input: string): string {
     return (matches?.length ? matches[0] : fallback_default);
 }
 
-export default function MermaidNote(props: NoteProps) {
+export default function MermaidNote(props: NoteProps): React.ReactElement {
     const note = props;
     const data_props = getStandardNoteDataProps(note);
 

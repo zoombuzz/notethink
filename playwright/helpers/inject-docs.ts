@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
@@ -9,14 +9,14 @@ interface InjectOptions {
     relative_path?: string;
 }
 
-export async function injectDocsFromFixture(page: Page, fixture_name: string, doc_path?: string, workspace_root_or_options?: string | InjectOptions) {
+export async function injectDocsFromFixture(page: Page, fixture_name: string, doc_path?: string, workspace_root_or_options?: string | InjectOptions): Promise<{ id: string; path: string }> {
     const fixture_path = path.join(__dirname, '..', 'fixtures', fixture_name);
     const text = fs.readFileSync(fixture_path, 'utf-8');
     const resolved_path = doc_path || `/workspace/${fixture_name}`;
     const id = crypto.createHash('sha256').update(resolved_path).digest('hex').slice(0, 16);
     const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
 
-    // Parse markdown server-side using the same mdast libraries as the extension
+    // parse markdown server-side using the same mdast libraries as the extension
     const mdast = parse(text);
 
     const options: InjectOptions = typeof workspace_root_or_options === 'string'

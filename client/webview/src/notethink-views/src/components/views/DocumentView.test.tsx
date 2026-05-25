@@ -5,7 +5,7 @@ import type { ViewProps } from '../../types/ViewProps';
 
 // mock IntersectionObserver
 beforeEach(() => {
-    (global as any).IntersectionObserver = jest.fn((callback: IntersectionObserverCallback) => {
+    (global as unknown as { IntersectionObserver: typeof IntersectionObserver }).IntersectionObserver = jest.fn((callback: IntersectionObserverCallback) => {
         return {
             observe: (target: Element) => {
                 callback([{ isIntersecting: true, target } as IntersectionObserverEntry], {} as IntersectionObserver);

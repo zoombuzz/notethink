@@ -1,13 +1,16 @@
-import type { MdastNode, MdastNodes, NoteProps } from "../types/NoteProps";
+import Debug from "debug";
+import {toJsxRuntime} from "hast-util-to-jsx-runtime";
 import {sanitize} from "hast-util-sanitize";
 import {toHast} from "mdast-util-to-hast";
 import {toMarkdown} from "mdast-util-to-markdown";
 import {toString} from "mdast-util-to-string";
-import type {ReactElement} from "react";
-import {toJsxRuntime} from "hast-util-to-jsx-runtime";
 import {Fragment, jsx, jsxs} from "react/jsx-runtime";
+import type {ReactElement} from "react";
+import type { MdastNode, MdastNodes, NoteProps } from "../types/NoteProps";
 
-export function getStandardNoteDataProps(note: NoteProps) {
+const debug = Debug("nodejs:notethink-views:renderops");
+
+export function getStandardNoteDataProps(note: NoteProps): Record<string, unknown> {
     return {
         "data-seq": note.seq,
         "data-mdast-type": note.type,
@@ -25,7 +28,7 @@ interface RenderOptions {
     linetags_from?: number;
 }
 
-export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderOptions = {}) {
+export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderOptions = {}): ReactElement {
     const options = Object.assign({}, {
         render: 'all_children',
         output_type: 'html',
@@ -73,7 +76,7 @@ export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderO
     return headline;
 }
 
-// Cache rendered JSX by node reference - nodes from unchanged MDAST trees keep the same identity
+// cache rendered JSX by node reference - nodes from unchanged MDAST trees keep the same identity
 const renderCache = new WeakMap<MdastNode, ReactElement>();
 
 export function renderNodeUnified(node: MdastNode, options_arg: RenderOptions = {}): ReactElement {
@@ -96,17 +99,17 @@ export function renderNodeUnified(node: MdastNode, options_arg: RenderOptions = 
             renderCache.set(node, result);
             return result;
         } catch (err) {
-            console.error('renderNodeUnified failed:', err);
+            debug('renderNodeUnified failed: %O', err);
             return <></>;
         }
     }
 }
 
-export function isInternalAttribute(key: string) {
+export function isInternalAttribute(key: string): boolean {
     return (key.length >= 3 && key.substring(0, 3) === 'ng_');
 }
 
-export function isChildNote(child: NoteProps | MdastNode) {
+export function isChildNote(child: NoteProps | MdastNode): boolean {
     return ('seq' in child && child.seq !== undefined);
 }
 
@@ -114,7 +117,7 @@ export function isChildNote(child: NoteProps | MdastNode) {
 // declare require for webpack's runtime (avoids @types/node in this browser-targeted package)
 declare const require: (id: string) => { default: React.ComponentType<NoteProps> };
 let LazyGenericNote: React.ComponentType<NoteProps> | undefined;
-function getGenericNote() {
+function getGenericNote(): React.ComponentType<NoteProps> {
     if (!LazyGenericNote) {
         LazyGenericNote = require("../components/notes/GenericNote").default;
     }
@@ -125,7 +128,7 @@ function getGenericNote() {
  * Render a note's children_body array: child notes as GenericNote with IDs,
  * MDAST body nodes as divs with data-offset-start/end for caret tracking.
  */
-export function renderBodyItems(note: NoteProps, items: (NoteProps | MdastNode)[], additional_props: Partial<NoteProps> = {}) {
+export function renderBodyItems(note: NoteProps, items: (NoteProps | MdastNode)[], additional_props: Partial<NoteProps> = {}): ReactElement[] {
     const GenericNote = getGenericNote();
     return items.map((child: MdastNode | NoteProps, i: number) => {
         if (isChildNote(child)) {

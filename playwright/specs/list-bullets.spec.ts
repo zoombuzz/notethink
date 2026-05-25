@@ -29,7 +29,7 @@ test.describe('List bullets', () => {
             return out;
         });
 
-        const find = (needle: string) => rows.find((r) => r.text.startsWith(needle));
+        const find = (needle: string): { text: string; listStyleType: string } | undefined => rows.find((r) => r.text.startsWith(needle));
 
         expect(find('plain parent item with no children')?.listStyleType).toBe('disc');
         // the bug: this parent's bullet used to disappear because a descendant had a checkbox

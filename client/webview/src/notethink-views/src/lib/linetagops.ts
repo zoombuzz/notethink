@@ -1,4 +1,7 @@
+import Debug from "debug";
 import type {LineTag, NoteProps} from "../types/NoteProps";
+
+const debug = Debug("nodejs:notethink-views:linetagops");
 
 type HashMapOf<S> = { [key: string]: S };
 
@@ -305,30 +308,31 @@ export function flattenOrderingChangeSets(change_sets: Array<OrderingChangeSet>)
     return out;
 }
 
-export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name: string, new_value: string, default_value: string) {
-    const changes = [];
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
+export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name: string, new_value: string, default_value: string): Array<OrderingChange> {
+    const changes: Array<OrderingChange> = [];
     const setting_as_default = (new_value === default_value);
 
-    // If the existing linetag is inherited (from a parent's ng_child_* attribute),
+    // if the existing linetag is inherited (from a parent's ng_child_* attribute),
     // treat it as if the note has no linetag for this key - either generate a new one
     // or skip if setting back to default (inherited value handles it)
-    const existingTag = note.linetags?.[key_name];
-    if (existingTag?.inherited) {
+    const existing_tag = note.linetags?.[key_name];
+    if (existing_tag?.inherited) {
         if (setting_as_default) { return []; }
-        // Write a real linetag: if note has other (non-inherited) linetags, append to them;
+        // write a real linetag: if note has other (non-inherited) linetags, append to them;
         // otherwise generate a fresh linetag block
-        const hasRealLinetags = note.linetags && Object.keys(note.linetags).some(k => !note.linetags![k].inherited);
-        if (hasRealLinetags) {
-            const firstRealKey = Object.keys(note.linetags!).find(k => !note.linetags![k].inherited)!;
-            const firstRealTag = note.linetags![firstRealKey];
-            const first_position = (note.linetags_from || 0) + firstRealTag.key_offset;
+        const has_real_linetags = note.linetags && Object.keys(note.linetags).some(k => !note.linetags![k].inherited);
+        if (has_real_linetags) {
+            const first_real_key = Object.keys(note.linetags!).find(k => !note.linetags![k].inherited)!;
+            const first_real_tag = note.linetags![first_real_key];
+            const first_position = (note.linetags_from || 0) + first_real_tag.key_offset;
             changes.push({
                 from: first_position,
                 insert: `${key_name}=${new_value}&`,
             });
             return changes;
         }
-        // No real linetags at all - generate a new linetag block
+        // no real linetags at all - generate a new linetag block
         changes.push({
             from: note.position.start.offset + note.headline_raw.length,
             insert: ` [](?${key_name}=${new_value})`,
@@ -360,8 +364,7 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
         const linetag_keys = Object.keys(note.linetags);
         if (linetag_keys.length === 1 && linetag_keys[0] === key_name) {
             // sole key - remove the entire linetag including the leading space
-            // headline_raw ends at start.offset + headline_raw.length; the linetag
-            // string starts at linetags_from
+            // headline_raw ends at start.offset + headline_raw.length; the linetag string starts at linetags_from
             const linetag_start = linetags_base;
             const headline_end = note.position.start.offset + note.headline_raw.length;
             // include the leading space before the linetag if present
@@ -377,7 +380,7 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
             const removing = note.linetags[key_name];
             const key_abs = linetags_base + removing.key_offset;
             const value_end_abs = linetags_base + removing.value_offset + removing.value.length;
-            // Check if there's a '&' after the value (this key is not last)
+            // check if there's a '&' after the value (this key is not last)
             const headline_text = note.headline_raw;
             const rel_value_end = removing.value_offset + removing.value.length;
             const linetags_str = headline_text.slice(linetags_base - note.position.start.offset);

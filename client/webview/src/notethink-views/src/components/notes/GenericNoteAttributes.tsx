@@ -1,5 +1,5 @@
 import Debug from "debug";
-import { type MouseEvent } from "react";
+import React, { type MouseEvent } from "react";
 import { isInternalAttribute } from "../../lib/renderops";
 import type { LineTag, NoteProps } from "../../types/NoteProps";
 import view_specialised_styles from "../../components/ViewRenderer.module.scss";
@@ -11,7 +11,7 @@ const HIDDEN_ATTRIBUTES = [
     'kanban_ordering_weight',
 ];
 
-export default function GenericNoteAttributes(props: NoteProps) {
+export default function GenericNoteAttributes(props: NoteProps): React.ReactElement {
     const note = props;
     const selectable = note.display_options?.deepest?.selectable_note || note;
     const linetags: { [key: string]: LineTag } = note.linetags || {};

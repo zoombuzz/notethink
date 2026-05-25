@@ -284,6 +284,7 @@ import { NoteComponent, type NoteProps } from '@/components';
 ### Loop Safety
 - **Avoid potentially infinite loops** (do-while, while without bounds)
 - Use bounded for-loops with a maximum iteration count instead
+- **Exception — `while` driven by a strictly-progressing finite iterator.** A `while` loop whose continuation is a finite iterator that cannot stall is acceptable without an explicit counter: `regexp.exec(str)` with a **non-zero-width** pattern (lastIndex advances each match), `TreeWalker.nextNode()` (walks a finite DOM and returns null at the end), and a stack/queue drain that only `pop()`s (strictly shrinks). These terminate by construction; a `MAX_ITERATIONS` guard would be defensive clutter. The rule targets loops that *could* run forever (unbounded conditions, zero-width regex matches) — those still need a bound.
 
 ### Type Placement
 - **File-level type definitions** (`type Foo = ...`, `interface Bar {...}`) should be declared **near the head of the file**, below imports and above constants/functions
@@ -420,6 +421,7 @@ src/
 - Types: `PascalCase.ts` (e.g., `NoteProps.ts`)
 - Tests: `*.test.tsx` or `*.test.ts` next to source file
 - Styles: `Component.module.scss` (CSS modules)
+- **Multi-word utility modules may use `camelCase.ts`** when the name reads as a phrase — `convertMdastToNoteHierarchy.ts`, `mergeAggregateRoot.ts`, `globMatch.ts`. This is an accepted alternative to `kebab-case` for lib functions whose filename mirrors the primary exported function; pick one style per module and keep it stable.
 
 ## Code Quality
 
@@ -427,6 +429,7 @@ src/
 - Extract repeated code into shared utility functions
 - Use shared constants instead of hardcoding values
 - Create shared components for repeated UI patterns
+- **Exception — mirrored constants across the extension/webview bundle boundary.** A small set of folder-view defaults (include/exclude globs, default column order, max-notes-per-file) is intentionally duplicated in `client/extension/src/constants.ts` and `client/webview/src/constants.ts`. The two run as **separate webpack bundles with no shared module graph**, so there is no import path to a single source; the duplication is the wire contract (both sides must agree on the same defaults). Keep the two copies byte-identical and cross-reference them in a comment rather than trying to share a module.
 
 ### Remove Unused Code
 - Remove unused imports
@@ -436,6 +439,8 @@ src/
 ## Error Handling
 
 ### Use Error Utilities
+
+**Extension host** logs through `writeToLog` / `writeToErrorLog` (winston, `client/extension/src/lib/errorops.ts`). **Webview** has no winston/output-channel access, so it logs through the `debug` library instance (`const debug = Debug("nodejs:...")`) and, for render failures that should reach the host, posts a `renderError` message to the extension. Either way, **`console.*` is not the error utility** — see "No `console.log` in committed code" in the workspace `AGENTS.md`. A caught error that is intentionally non-fatal must still be logged (`debug('… %O', err)` in the webview, `writeToErrorLog(...)` in the extension), never silently swallowed.
 
 ```typescript
 import { createError, handleError } from '@/lib/errorops';
@@ -555,6 +560,8 @@ CI only runs lint and build (no tests). Tests are the developer's responsibility
 
 ### No web dev server
 notethink is a VS Code extension — there is no `pnpm run dev` and no HTTP server to start. The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host. Per the `/open-dev` skill's special cases, this project is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`).
+
+The "no HTTP server" rule is about a long-running **dev** server. The Playwright **test** harness (`playwright.config.ts` auto-starts `playwright/harness/serve.mjs` on port 9123 for the run, then tears it down) is throwaway test infrastructure, not a dev server, and is exempt.
 
 ### After every code change
 

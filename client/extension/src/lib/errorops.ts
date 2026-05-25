@@ -1,8 +1,8 @@
-import {type TransformFunction} from "logform";
-import * as winston from "winston";
-import * as vscode from 'vscode';
-import { LogOutputChannelTransport } from 'winston-transport-vscode';
+import { type TransformFunction } from "logform";
 import * as util from 'util';
+import * as vscode from 'vscode';
+import * as winston from "winston";
+import { LogOutputChannelTransport } from 'winston-transport-vscode';
 
 const LOG_SOURCE_MAX_LEN = 24;
 const output_channel = vscode.window.createOutputChannel('NoteThink', {
@@ -71,6 +71,7 @@ const default_format = winston.format.combine(
 );
 
 // winston-transport-vscode does not export a public Transport type we can name here; the cast keeps the array element assignable to winston's transports option
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- documented escape hatch: winston-transport-vscode does not export a public Transport type
 type TransportStream = any;
 const transports = [
     new LogOutputChannelTransport({ outputChannel: output_channel }) as TransportStream,
@@ -101,7 +102,7 @@ export function fatalError(data: string, additional: ResponseInit = {status: 500
  * @param tone
  * @param status
  */
-export function nonFatalErrorReport(field: string, type: string, tone: string, status = 500) {
+export function nonFatalErrorReport(field: string, type: string, tone: string, status = 500): never {
     return fatalError(JSON.stringify(nonFatalErrorInternally(field, type, tone)), {status: status});
 }
 
@@ -112,7 +113,7 @@ export function nonFatalErrorReport(field: string, type: string, tone: string, s
  * @param tone
  * @param status
  */
-export function nonFatalErrorInternally(field: string, type: string, tone: string, status = 500) {
+export function nonFatalErrorInternally(field: string, type: string, tone: string, status = 500): { errors: { field: string; type: string; tone: string } } {
     return {
         errors: {
             'field': field,

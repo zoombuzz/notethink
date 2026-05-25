@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, type RenderResult } from '@testing-library/react';
 import InsertModal from './InsertModal';
 
 beforeAll(() => {
@@ -17,7 +17,7 @@ const default_props = {
     onInsert: jest.fn(),
 };
 
-function renderModal(overrides: Partial<typeof default_props> = {}) {
+function renderModal(overrides: Partial<typeof default_props> = {}): RenderResult {
     const props = { ...default_props, ...overrides };
     return render(<InsertModal {...props} />);
 }

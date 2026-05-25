@@ -79,7 +79,7 @@ function makeList(seq: number, items: NoteProps[]): NoteProps {
     };
 }
 
-function simulateOverflow(el: HTMLElement, scrollHeight: number, offsetWidth: number) {
+function simulateOverflow(el: HTMLElement, scrollHeight: number, offsetWidth: number): void {
     Object.defineProperty(el, 'scrollHeight', { value: scrollHeight, configurable: true });
     Object.defineProperty(el, 'offsetWidth', { value: offsetWidth, configurable: true });
     if (resizeCallback) {

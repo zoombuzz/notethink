@@ -1,7 +1,10 @@
-import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NoteProps";
+import Debug from "debug";
 import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNoteHierarchy";
 import { stripHeadlineLinetags } from "./noteops";
 import { buildProjectLabels, hueForProjectIndex, projectNameFromRelativePath } from "../components/notes/OriginPill";
+import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NoteProps";
+
+const debug = Debug("nodejs:notethink-views:mergeAggregateRoot");
 
 /**
  * Aggregate (Folder) mode entry point.
@@ -31,10 +34,15 @@ export interface MergeAggregateRootResult {
     all_notes: NoteProps[];
 }
 
+/**
+ * one parsed source file.
+ * - root: synthetic root from convertMdastToNoteHierarchy
+ * - h1: the file's # heading, if any
+ */
 interface PerFileParse {
     doc: AggregatedDocInput;
-    root: NoteProps;          // synthetic root from convertMdastToNoteHierarchy
-    h1: NoteProps | undefined; // the file's # heading, if any
+    root: NoteProps;
+    h1: NoteProps | undefined;
 }
 
 /**
@@ -51,8 +59,11 @@ function storyStableIdSlug(story: NoteProps): string {
     return stripped || `headline:${story.position?.start?.line ?? 0}`;
 }
 
+/**
+ * an epic registry entry. `name` is the stripped headline.
+ */
 interface EpicEntry {
-    name: string;       // stripped headline
+    name: string;
     id: string | undefined;
 }
 
@@ -64,6 +75,13 @@ interface EpicEntry {
 interface SeqWalkContext {
     all_notes: NoteProps[];
     next_seq: number;
+}
+
+interface CollectedStory {
+    story: NoteProps;
+    origin: NoteOrigin;
+    file_epic_by_id: Map<string, EpicEntry>;
+    file_epic_by_name: Map<string, EpicEntry>;
 }
 
 // file H1 `order` linetag value: newest stories are appended at the bottom of the file (e.g. done.md)
@@ -189,6 +207,7 @@ function walkStorySubtree(
  * contributes. Undefined → no cap (unchanged behaviour). Which end is kept depends on
  * the file H1's `order` linetag (see trimFileStories).
  */
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function mergeAggregateRoot(
     docs: { [key: string]: AggregatedDocInput | undefined },
     integration_path: string,
@@ -224,12 +243,6 @@ export function mergeAggregateRoot(
     const project_label_by_name = buildProjectLabels(distinct_project_names);
 
     // 2. for each file, build epic registries and collect stories
-    interface CollectedStory {
-        story: NoteProps;
-        origin: NoteOrigin;
-        file_epic_by_id: Map<string, EpicEntry>;
-        file_epic_by_name: Map<string, EpicEntry>;
-    }
     // each file's selected stories, kept in stable file order (parsed is sorted by relative_path)
     const per_file_lists: CollectedStory[][] = [];
 

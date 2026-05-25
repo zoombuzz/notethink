@@ -1,8 +1,17 @@
 import Debug from "debug";
-import { MouseEvent, useEffect, useState } from "react";
+import React, { useEffect, useState, type MouseEvent } from "react";
 import type { NoteOrigin } from "../../types/NoteProps";
 import styles from "./OriginPill.module.scss";
+
 const debug = Debug("nodejs:notethink-views:OriginPill");
+
+interface OriginPillProps {
+    origin: NoteOrigin;
+    onClick?: (event: MouseEvent<HTMLElement>) => void;
+}
+
+// golden angle (≈ 360 - 360/φ). Used to spread sorted-index inputs around the hue wheel so adjacent indices land ~137° apart, far from each other on the colour wheel
+const GOLDEN_ANGLE_DEG = 137.50776405003785;
 
 /**
  * Origin pill: shown next to a story's headline in folder mode.
@@ -25,9 +34,6 @@ function djb2(str: string): number {
     }
     return Math.abs(hash);
 }
-
-// golden angle (≈ 360 - 360/φ). Used to spread sorted-index inputs around the hue wheel so adjacent indices land ~137° apart, far from each other on the colour wheel
-const GOLDEN_ANGLE_DEG = 137.50776405003785;
 
 /**
  * Deterministic hue (0-359) for a project given its 0-based index in a stable sorted enumeration of all distinct project names visible in the folder view. Using a golden-angle multiplier instead of a hash-mod ensures any number of projects get visually-distinct hues — hash%360 happens to collide for our real-world names (calfam/shopify-uncomplicated, notegit/countingsheet).
@@ -122,12 +128,7 @@ function detectThemeAttribute(): 'dark' | 'light' {
     return scheme === 'light' ? 'light' : 'dark';
 }
 
-interface OriginPillProps {
-    origin: NoteOrigin;
-    onClick?: (event: MouseEvent<HTMLElement>) => void;
-}
-
-export default function OriginPill({ origin, onClick }: OriginPillProps) {
+export default function OriginPill({ origin, onClick }: OriginPillProps): React.ReactElement {
     // re-render on theme change so colour swatches stay readable when the user toggles VS Code theme
     const [theme, setTheme] = useState<'dark' | 'light'>(detectThemeAttribute);
     useEffect(() => {

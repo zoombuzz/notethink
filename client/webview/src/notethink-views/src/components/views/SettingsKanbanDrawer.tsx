@@ -27,7 +27,7 @@ interface SettingsKanbanDrawerProps {
     canResetToDefault?: boolean;
 }
 
-function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps) {
+function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps): React.ReactElement {
 
     // every column the board shows must be reorderable here: start from the saved order, then append any live column (a new status like testing, or untagged) not yet in it — otherwise a status absent from a stale saved order is unreachable in this list
     const saved_order = props.settings.column_order;

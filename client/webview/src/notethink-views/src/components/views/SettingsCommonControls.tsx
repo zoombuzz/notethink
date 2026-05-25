@@ -1,4 +1,5 @@
 import Debug from "debug";
+import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import styles from "../ViewRenderer.module.scss";
 import type { GlobalSettingKey } from "../../types/Messages";
@@ -28,7 +29,7 @@ interface SettingsCommonControlsProps {
     canResetToDefault?: boolean;
 }
 
-export default function SettingsCommonControls(props: SettingsCommonControlsProps) {
+export default function SettingsCommonControls(props: SettingsCommonControlsProps): ReactElement {
     const show_linetags = props.settings.show_linetags_in_headlines ?? false;
     const scroll_into_view = props.settings.scroll_note_into_view ?? false;
     const auto_expand = props.settings.auto_expand_focused_note ?? false;

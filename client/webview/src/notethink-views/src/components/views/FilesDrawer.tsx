@@ -1,5 +1,6 @@
 import Debug from "debug";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import styles from "../ViewRenderer.module.scss";
 import { globMatches } from "../../lib/globMatch";
@@ -29,7 +30,8 @@ interface FilesDrawerProps {
  * view can persist the globs/cap and post a background setIntegration that re-discovers the
  * whole folder view. The per-file cap is webview-only and never round-trips to the extension.
  */
-function FilesDrawer(props: FilesDrawerProps) {
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
+function FilesDrawer(props: FilesDrawerProps): ReactElement {
     // controlled input state, seeded from the effective globs/cap
     const [include_value, setIncludeValue] = useState(props.include);
     const [exclude_value, setExcludeValue] = useState(props.exclude);

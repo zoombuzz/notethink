@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, type RenderResult } from '@testing-library/react';
 import FilesDrawer from './FilesDrawer';
 
 // library-side test fixture: a realistic exclude glob to feed the drawer prop. intentionally not coupled to the app's DEFAULT_EXCLUDE_FILTER (extension/webview own those) — this test exercises FilesDrawer rendering, not the app default
@@ -15,7 +15,7 @@ const default_props = {
     onApplyFilters: jest.fn(),
 };
 
-function renderDrawer(overrides: Partial<typeof default_props> = {}) {
+function renderDrawer(overrides: Partial<typeof default_props> = {}): RenderResult & { props: typeof default_props } {
     const props = { ...default_props, ...overrides };
     return { props, ...render(<FilesDrawer {...props} />) };
 }

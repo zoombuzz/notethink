@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
@@ -62,7 +62,7 @@ export async function injectMultipleDocsFromFixtures(
 /**
  * Toggle the integration selector dropdown to 'folder' mode via the existing UI.
  */
-export async function selectFolderMode(page: Page) {
+export async function selectFolderMode(page: Page): Promise<void> {
     const selector = page.locator('[data-testid="view-integration-selector"]').first();
     await selector.selectOption('folder');
 }

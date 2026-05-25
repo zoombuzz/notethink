@@ -1,12 +1,14 @@
 import Debug from "debug";
 import { useMemo } from "react";
-import type { HashMapOf, Doc } from "../../types/general";
-import { mergeAggregateRoot, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from "../../notethink-views/src/lib/mergeAggregateRoot";
 import { GenericView } from "../../notethink-views/src/components";
+import { mergeAggregateRoot, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from "../../notethink-views/src/lib/mergeAggregateRoot";
+import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE } from "../../constants";
+import type { ReactElement } from "react";
+import type { HashMapOf, Doc } from "../../types/general";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
 import type { NoteDisplayOptions } from "../../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../NoteRenderer";
-import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE } from "../../constants";
+
 const debug = Debug("nodejs:notethink:FolderTreeComposer");
 
 /**
@@ -16,7 +18,8 @@ const debug = Debug("nodejs:notethink:FolderTreeComposer");
  * Tree-composers sit one layer above views (Document/Kanban/Auto): each composer produces
  * the note tree handed to a leaf view. Companion to NoteTreeComposer for single-file mode.
  */
-export default function FolderTreeComposer({ docs, integration_path, props }: { docs: HashMapOf<Doc>; integration_path: string; props: NoteRendererProps }) {
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
+export default function FolderTreeComposer({ docs, integration_path, props }: { docs: HashMapOf<Doc>; integration_path: string; props: NoteRendererProps }): ReactElement {
     // memoize merged root keyed on the joined content hashes of the docs - changes when any doc reparses
     const merge_key = useMemo(() => {
         return Object.entries(docs)

@@ -20,21 +20,21 @@ export class Uri {
 		this.fsPath = path;
 	}
 
-	static file(path: string) {
+	static file(path: string): Uri {
 		return new Uri('file', '', path, '', '');
 	}
 
-	static parse(value: string) {
+	static parse(value: string): Uri {
 		const match = value.match(/^([^:]+):\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/);
 		if (!match) { return new Uri('', '', value, '', ''); }
 		return new Uri(match[1], match[2], match[3], (match[4] ?? '').replace(/^\?/, ''), (match[5] ?? '').replace(/^#/, ''));
 	}
 
-	static joinPath(base: Uri, ...pathSegments: string[]) {
+	static joinPath(base: Uri, ...pathSegments: string[]): Uri {
 		return new Uri(base.scheme, base.authority, [base.path, ...pathSegments].join('/'), '', '');
 	}
 
-	toString() {
+	toString(): string {
 		return `${this.scheme}://${this.authority}${this.path}`;
 	}
 }
@@ -53,21 +53,21 @@ export class RelativePattern {
 
 export class Disposable {
 	constructor(private callOnDispose: () => void) {}
-	dispose() { this.callOnDispose(); }
+	dispose(): void { this.callOnDispose(); }
 }
 
 export class EventEmitter<T> {
 	private listeners: Array<(e: T) => void> = [];
-	event = (listener: (e: T) => void) => {
+	event = (listener: (e: T) => void): Disposable => {
 		this.listeners.push(listener);
 		return new Disposable(() => {
 			this.listeners = this.listeners.filter(l => l !== listener);
 		});
 	};
-	fire(data: T) {
+	fire(data: T): void {
 		for (const listener of this.listeners) { listener(data); }
 	}
-	dispose() { this.listeners = []; }
+	dispose(): void { this.listeners = []; }
 }
 
 export enum FileType {
@@ -89,34 +89,34 @@ export class FileSystemError extends Error {
 		super(typeof messageOrUri === 'string' ? messageOrUri : messageOrUri?.toString());
 		this.code = '';
 	}
-	static FileNotFound(messageOrUri?: string | Uri) {
+	static FileNotFound(messageOrUri?: string | Uri): FileSystemError {
 		const e = new FileSystemError(messageOrUri);
-		(e as any).code = 'FileNotFound';
+		(e as { code: string }).code = 'FileNotFound';
 		return e;
 	}
-	static FileExists(messageOrUri?: string | Uri) {
+	static FileExists(messageOrUri?: string | Uri): FileSystemError {
 		const e = new FileSystemError(messageOrUri);
-		(e as any).code = 'FileExists';
+		(e as { code: string }).code = 'FileExists';
 		return e;
 	}
-	static FileNotADirectory(messageOrUri?: string | Uri) {
+	static FileNotADirectory(messageOrUri?: string | Uri): FileSystemError {
 		const e = new FileSystemError(messageOrUri);
-		(e as any).code = 'FileNotADirectory';
+		(e as { code: string }).code = 'FileNotADirectory';
 		return e;
 	}
-	static FileIsADirectory(messageOrUri?: string | Uri) {
+	static FileIsADirectory(messageOrUri?: string | Uri): FileSystemError {
 		const e = new FileSystemError(messageOrUri);
-		(e as any).code = 'FileIsADirectory';
+		(e as { code: string }).code = 'FileIsADirectory';
 		return e;
 	}
-	static NoPermissions(messageOrUri?: string | Uri) {
+	static NoPermissions(messageOrUri?: string | Uri): FileSystemError {
 		const e = new FileSystemError(messageOrUri);
-		(e as any).code = 'NoPermissions';
+		(e as { code: string }).code = 'NoPermissions';
 		return e;
 	}
-	static Unavailable(messageOrUri?: string | Uri) {
+	static Unavailable(messageOrUri?: string | Uri): FileSystemError {
 		const e = new FileSystemError(messageOrUri);
-		(e as any).code = 'Unavailable';
+		(e as { code: string }).code = 'Unavailable';
 		return e;
 	}
 }
@@ -147,15 +147,15 @@ export class Selection {
 export class WorkspaceEdit {
 	private _edits: Array<{ uri: Uri; range: Range; newText: string }> = [];
 
-	replace(uri: Uri, range: Range, newText: string) {
+	replace(uri: Uri, range: Range, newText: string): void {
 		this._edits.push({ uri, range, newText });
 	}
 
-	insert(uri: Uri, position: Position, newText: string) {
+	insert(uri: Uri, position: Position, newText: string): void {
 		this._edits.push({ uri, range: new Range(position, position), newText });
 	}
 
-	get edits() {
+	get edits(): Array<{ uri: Uri; range: Range; newText: string }> {
 		return this._edits;
 	}
 }
@@ -204,8 +204,8 @@ export const window = {
 	showTextDocument: jest.fn(),
 	createWebviewPanel: jest.fn(),
 	registerWebviewPanelSerializer: jest.fn(() => ({ dispose: jest.fn() })),
-	activeTextEditor: undefined as any,
-	visibleTextEditors: [] as any[],
+	activeTextEditor: undefined as unknown,
+	visibleTextEditors: [] as unknown[],
 	onDidChangeTextEditorSelection: jest.fn(() => ({ dispose: jest.fn() })),
 	onDidChangeActiveTextEditor: jest.fn(() => ({ dispose: jest.fn() })),
 	onDidChangeVisibleTextEditors: jest.fn(() => ({ dispose: jest.fn() })),
@@ -223,10 +223,11 @@ export const workspace = {
 	onDidChangeTextDocument: jest.fn(() => ({ dispose: jest.fn() })),
 	applyEdit: jest.fn(async () => true),
 	getWorkspaceFolder: jest.fn(() => undefined),
-	workspaceFolders: undefined as any,
-	asRelativePath: jest.fn((pathOrUri: any) => {
-		// Default mock: return the path unchanged (no workspace folder to relativize against)
-		const p = typeof pathOrUri === 'string' ? pathOrUri : pathOrUri?.path || pathOrUri?.toString?.() || '';
+	workspaceFolders: undefined as unknown,
+	asRelativePath: jest.fn((pathOrUri: unknown) => {
+		// default mock: return the path unchanged (no workspace folder to relativize against)
+		const u = pathOrUri as { path?: string; toString?: () => string } | string | undefined;
+		const p = typeof u === 'string' ? u : u?.path || u?.toString?.() || '';
 		return p;
 	}),
 	getConfiguration: jest.fn(() => ({
@@ -256,23 +257,32 @@ export const ExtensionContext = jest.fn();
 
 /**
  * Helper: create a mock WebviewPanel for testing message handlers.
+ * The returned `panel` is typed as `unknown` because the production code accepts
+ * `vscode.WebviewPanel`; tests cast it through `as unknown as vscode.WebviewPanel`.
  */
-export function createMockWebviewPanel() {
-	const onDidReceiveMessageListeners: Array<(e: any) => void> = [];
-	const onDidDisposeListeners: Array<() => void> = [];
-	const onDidChangeViewStateListeners: Array<(e: any) => void> = [];
-	const postedMessages: any[] = [];
+export interface MockWebviewPanelHelper {
+	panel: unknown;
+	postedMessages: Array<Record<string, unknown>>;
+	simulateMessage: (msg: Record<string, unknown>) => Promise<void>;
+	simulateDispose: () => void;
+}
 
-	const panel: any = {
+export function createMockWebviewPanel(): MockWebviewPanelHelper {
+	const onDidReceiveMessageListeners: Array<(e: Record<string, unknown>) => void> = [];
+	const onDidDisposeListeners: Array<() => void> = [];
+	const onDidChangeViewStateListeners: Array<(e: Record<string, unknown>) => void> = [];
+	const postedMessages: Array<Record<string, unknown>> = [];
+
+	const panel = {
 		active: true,
 		webview: {
 			options: {},
 			html: '',
-			postMessage: jest.fn((msg: any) => {
+			postMessage: jest.fn((msg: Record<string, unknown>) => {
 				postedMessages.push(msg);
 				return Promise.resolve(true);
 			}),
-			onDidReceiveMessage: jest.fn((listener: (e: any) => void) => {
+			onDidReceiveMessage: jest.fn((listener: (e: Record<string, unknown>) => void) => {
 				onDidReceiveMessageListeners.push(listener);
 				return { dispose: jest.fn() };
 			}),
@@ -283,7 +293,7 @@ export function createMockWebviewPanel() {
 			onDidDisposeListeners.push(listener);
 			return { dispose: jest.fn() };
 		}),
-		onDidChangeViewState: jest.fn((listener: (e: any) => void) => {
+		onDidChangeViewState: jest.fn((listener: (e: Record<string, unknown>) => void) => {
 			onDidChangeViewStateListeners.push(listener);
 			return { dispose: jest.fn() };
 		}),
@@ -293,12 +303,12 @@ export function createMockWebviewPanel() {
 		panel,
 		postedMessages,
 		/** Simulate a message arriving from the webview */
-		simulateMessage: async (msg: any) => {
+		simulateMessage: async (msg: Record<string, unknown>): Promise<void> => {
 			for (const listener of onDidReceiveMessageListeners) {
 				await listener(msg);
 			}
 		},
-		simulateDispose: () => {
+		simulateDispose: (): void => {
 			for (const listener of onDidDisposeListeners) {
 				listener();
 			}

@@ -1,6 +1,17 @@
 import React from 'react';
 import { render, screen, act } from '@testing-library/react';
+import Debug from 'debug';
 import ExtensionReceiver from './ExtensionReceiver';
+
+// mock the debug library so message-validation logging can be asserted (validation logs via the debug
+// instance, not console). the spy is created inside the factory so it exists when the hooks' module-load
+// `Debug(namespace)` calls run; every namespace returns the same shared spy
+jest.mock('debug', () => {
+    const mock_log = jest.fn();
+    return { __esModule: true, default: () => mock_log };
+});
+// the shared spy the hooks log through (the mocked Debug ignores the namespace and returns the same fn)
+const mockDebugLog = (Debug('test') as unknown) as jest.Mock;
 
 // mock NoteRenderer to isolate ExtensionReceiver
 const mockNoteRendererProps = jest.fn();
@@ -27,7 +38,7 @@ describe('ExtensionReceiver', () => {
     beforeEach(() => {
         mockNoteRendererProps.mockClear();
         post_message_spy = jest.spyOn(
-            (globalThis as any).acquireVsCodeApi(), 'postMessage'
+            acquireVsCodeApi(), 'postMessage'
         );
     });
 
@@ -258,14 +269,9 @@ describe('ExtensionReceiver', () => {
     // --- Runtime validation tests ---
 
     describe('message validation', () => {
-        let warn_spy: jest.SpyInstance;
 
         beforeEach(() => {
-            warn_spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-        });
-
-        afterEach(() => {
-            warn_spy.mockRestore();
+            mockDebugLog.mockClear();
         });
 
         it('discards message with missing type (no state change)', () => {
@@ -277,7 +283,7 @@ describe('ExtensionReceiver', () => {
             });
             const renderer = screen.getByTestId('NoteRenderer');
             expect(renderer).toHaveAttribute('data-note-count', '0');
-            expect(warn_spy).toHaveBeenCalledWith(
+            expect(mockDebugLog).toHaveBeenCalledWith(
                 expect.stringContaining('missing or invalid type'),
                 expect.anything(),
             );
@@ -292,7 +298,7 @@ describe('ExtensionReceiver', () => {
             });
             const renderer = screen.getByTestId('NoteRenderer');
             expect(renderer).toHaveAttribute('data-note-count', '0');
-            expect(warn_spy).toHaveBeenCalledWith(
+            expect(mockDebugLog).toHaveBeenCalledWith(
                 expect.stringContaining('missing or invalid type'),
                 expect.anything(),
             );
@@ -307,7 +313,7 @@ describe('ExtensionReceiver', () => {
             });
             const renderer = screen.getByTestId('NoteRenderer');
             expect(renderer).toHaveAttribute('data-note-count', '0');
-            expect(warn_spy).toHaveBeenCalledWith(
+            expect(mockDebugLog).toHaveBeenCalledWith(
                 expect.stringContaining('missing or invalid type'),
                 null,
             );
@@ -322,7 +328,7 @@ describe('ExtensionReceiver', () => {
             });
             const renderer = screen.getByTestId('NoteRenderer');
             expect(renderer).toHaveAttribute('data-note-count', '0');
-            expect(warn_spy).toHaveBeenCalledWith(
+            expect(mockDebugLog).toHaveBeenCalledWith(
                 expect.stringContaining('invalid partial.docs'),
                 expect.anything(),
             );
@@ -337,7 +343,7 @@ describe('ExtensionReceiver', () => {
             });
             const renderer = screen.getByTestId('NoteRenderer');
             expect(renderer).toHaveAttribute('data-note-count', '0');
-            expect(warn_spy).toHaveBeenCalledWith(
+            expect(mockDebugLog).toHaveBeenCalledWith(
                 expect.stringContaining('invalid partial.docs'),
                 expect.anything(),
             );
@@ -350,7 +356,7 @@ describe('ExtensionReceiver', () => {
                     data: { type: 'selectionChanged', docPath: '/test.md' },
                 }));
             });
-            expect(warn_spy).toHaveBeenCalledWith(
+            expect(mockDebugLog).toHaveBeenCalledWith(
                 expect.stringContaining('invalid selection'),
                 expect.anything(),
             );
@@ -367,7 +373,7 @@ describe('ExtensionReceiver', () => {
                     },
                 }));
             });
-            expect(warn_spy).toHaveBeenCalledWith(
+            expect(mockDebugLog).toHaveBeenCalledWith(
                 expect.stringContaining('invalid selection'),
                 expect.anything(),
             );
@@ -380,7 +386,7 @@ describe('ExtensionReceiver', () => {
                     data: { type: 'command' },
                 }));
             });
-            expect(warn_spy).toHaveBeenCalledWith(
+            expect(mockDebugLog).toHaveBeenCalledWith(
                 expect.stringContaining('invalid command'),
                 expect.anything(),
             );
@@ -400,7 +406,7 @@ describe('ExtensionReceiver', () => {
             });
             const renderer = screen.getByTestId('NoteRenderer');
             expect(renderer).toHaveAttribute('data-note-count', '1');
-            expect(warn_spy).not.toHaveBeenCalled();
+            expect(mockDebugLog).not.toHaveBeenCalledWith(expect.stringContaining('discarding'), expect.anything());
         });
 
         it('valid selectionChanged message still works after validation', () => {
@@ -414,7 +420,7 @@ describe('ExtensionReceiver', () => {
                     },
                 }));
             });
-            expect(warn_spy).not.toHaveBeenCalled();
+            expect(mockDebugLog).not.toHaveBeenCalledWith(expect.stringContaining('discarding'), expect.anything());
         });
 
         it('valid command message still works after validation', () => {
@@ -428,7 +434,7 @@ describe('ExtensionReceiver', () => {
                     },
                 }));
             });
-            expect(warn_spy).not.toHaveBeenCalled();
+            expect(mockDebugLog).not.toHaveBeenCalledWith(expect.stringContaining('discarding'), expect.anything());
         });
     });
 

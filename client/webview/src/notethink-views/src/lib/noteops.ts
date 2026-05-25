@@ -1,9 +1,12 @@
+import Debug from "debug";
 import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } from "../types/NoteProps";
+
+const debug = Debug("nodejs:notethink-views:noteops");
 
 /**
  * Check if a position is within a note headline or body.
  */
-export function withinNoteHeadlineOrBody(pos: number | undefined, note: NoteProps) {
+export function withinNoteHeadlineOrBody(pos: number | undefined, note: NoteProps): boolean {
     if (pos === undefined) { return false; }
     return (pos >= note.position.start.offset) && (pos <= (note.position.end_body?.offset || note.position.end.offset));
 }
@@ -11,7 +14,7 @@ export function withinNoteHeadlineOrBody(pos: number | undefined, note: NoteProp
 /**
  * Check if a position is within a note headline or body (up to a point).
  */
-export function withinNoteHeadlineOrBodyUpTo(pos: number | undefined, note: NoteProps, end_offset: number) {
+export function withinNoteHeadlineOrBodyUpTo(pos: number | undefined, note: NoteProps, end_offset: number): boolean {
     if (pos === undefined) { return false; }
     return (pos >= note.position.start.offset) && (pos <= end_offset);
 }
@@ -66,7 +69,7 @@ export function aggregateNoteLinetags(notes: Array<NoteProps>): { [key: string]:
 /**
  * Checks if a note element is partially visible within a view element.
  */
-export function noteIsVisible(note_element: HTMLElement, view_element: HTMLElement, partial_visibility: boolean = true) {
+export function noteIsVisible(note_element: HTMLElement, view_element: HTMLElement, partial_visibility: boolean = true): boolean {
     const rect = note_element.getBoundingClientRect();
     const parent_rect = view_element.getBoundingClientRect();
     if (partial_visibility) {
@@ -115,18 +118,18 @@ export function findBodyItemElement(note_element: HTMLElement, caret_offset: num
  * Searches for `- [ ] text` or `- [x] text` patterns in the note's body_raw,
  * using a regex to avoid matching linetags or markdown links.
  */
-export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check: boolean, match_text: string, match_context: Array<string>) {
+export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check: boolean, match_text: string, match_context: Array<string>): Array<{ from: number; to: number; insert: string }> {
     const content = note.body_raw;
     if (!content) { return []; }
     let content_start_position = note.position.end;
     if (!note.position.end_body) {
         content_start_position = note.position.start;
     }
-    // Find all checkbox patterns: `[x]` or `[ ]` preceded by `- ` on the same line
+    // find all checkbox patterns: `[x]` or `[ ]` preceded by `- ` on the same line
     const checkbox_re = /- \[([ xX])\]/g;
     let match: RegExpExecArray | null;
     while ((match = checkbox_re.exec(content)) !== null) {
-        // Check if the text after this checkbox matches match_text
+        // check if the text after this checkbox matches match_text
         const bracket_close = match.index + match[0].length; // position after `]`
         const text_after = content.slice(bracket_close);
         if (match_text && (text_after.startsWith(match_text) || text_after.startsWith(` ${match_text}`))) {
@@ -134,7 +137,7 @@ export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check
             const bracket_start = match.index + 2; // `- [`  →  index of `[`
             const from = content_start_position.offset + bracket_start + 1;
             const to = content_start_position.offset + bracket_start + 2;
-            // Validate: from < to and the replacement makes sense
+            // validate: from < to and the replacement makes sense
             if (from >= to || to - from !== 1) { return []; }
             return [{
                 from,

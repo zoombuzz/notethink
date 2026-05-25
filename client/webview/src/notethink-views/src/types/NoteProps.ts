@@ -1,4 +1,5 @@
 import type {ReactElement, MouseEvent} from "react";
+import type { Nodes as MdastNodesImport } from "mdast";
 
 export interface ClickPositionInfo {
     from: number;
@@ -161,7 +162,7 @@ export interface NoteOrigin {
     project_label?: string;
 }
 
-export type MdastNodes = import("mdast").Nodes;
+export type MdastNodes = MdastNodesImport;
 export type MdastNode = {
     type?: string;
     depth?: number;
@@ -177,8 +178,12 @@ export type MdastNode = {
 }
 
 /**
- * LineTag, thing at the end of a line used to encode metadata
- * changes to LineTag types need to be parsed in `parseLineTag`
+ * LineTag, thing at the end of a line used to encode metadata. Changes to
+ * LineTag types need to be parsed in `parseLineTag`.
+ * - note_seq: attachment flag binding this tag to its owning note
+ * - inherited: true when this linetag was propagated from a parent's ng_child_* attribute
+ * - updated / updated_by_view: change flags
+ * - handlers: added at the React render stage
  */
 export interface LineTag {
     key: string,
@@ -190,18 +195,10 @@ export interface LineTag {
     value_numeric_previous?: number,
     linktext?: string,
     linktext_offset: number,
-
-    // attachment flags
     note_seq: number,
-
-    // inheritance flag: true when this linetag was propagated from a parent's ng_child_* attribute
     inherited?: true,
-
-    // change flags
     updated?: number,
     updated_by_view?: string,
-
-    // fields added at the React render stage
     handlers?: NoteHandlers,
 }
 

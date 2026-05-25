@@ -1,5 +1,6 @@
 import Debug from "debug";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import inserts from "../inserts/en";
 import type { Insert } from "../inserts/types";
@@ -27,7 +28,8 @@ function getPositionLabels(): Record<InsertPoint, string> {
     };
 }
 
-export default function InsertModal(props: InsertModalProps) {
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
+export default function InsertModal(props: InsertModalProps): ReactElement {
     const dialog_ref = useRef<HTMLDialogElement>(null);
     const search_ref = useRef<HTMLInputElement>(null);
 

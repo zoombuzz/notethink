@@ -15,7 +15,7 @@ export interface MermaidDiagramProps {
 
 let instance_count: number;
 
-const MermaidDiagram = (props: MermaidDiagramProps) => {
+const MermaidDiagram = (props: MermaidDiagramProps): React.ReactElement => {
     const [element, setElement] = useState<HTMLDivElement>();
     const [render_result, setRenderResult] = useState<RenderResult>();
     if (instance_count === undefined) { instance_count = 0; }

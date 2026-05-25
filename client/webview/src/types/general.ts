@@ -1,8 +1,10 @@
+import type { Root } from "mdast";
+
 export type HashMapOf<S> = { [key: string]: S };
 
 export type EmptyObject = Record<string, never>;
 
-export type MdastRoot = import("mdast").Root;
+export type MdastRoot = Root;
 
 /**
  * Doc represents a loaded markdown file on its way from extension to webview.

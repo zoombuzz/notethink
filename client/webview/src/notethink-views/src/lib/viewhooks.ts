@@ -1,6 +1,9 @@
+import Debug from "debug";
 import { useEffect, useRef } from 'react';
 import { findBodyItemElement } from './noteops';
 import type { NoteDisplayOptions, TextSelection } from '../types/NoteProps';
+
+const debug = Debug("nodejs:notethink-views:viewhooks");
 
 /**
  * Resolve the focused note's DOM element and the body item containing the caret.
@@ -29,7 +32,7 @@ export function useScrollToCaret(
     display_options: NoteDisplayOptions,
     view_id: string,
     selection: TextSelection | undefined,
-) {
+): void {
     const scroll_raf_ref = useRef<number>(0);
     useEffect(() => {
         if (!display_options.settings?.scroll_note_into_view || !display_options.focused_seqs?.length) { return; }
@@ -61,7 +64,7 @@ export function useCaretIndicator(
     view_id: string,
     selection: TextSelection | undefined,
     caret_class: string,
-) {
+): void {
     const prev_target_ref = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
@@ -90,8 +93,8 @@ export function useCaretIndicator(
 
         // off screen - a scroll is about to start; wait for it to finish + 150ms settle
         let timer: ReturnType<typeof setTimeout> | undefined;
-        const apply = () => { target.classList.add(caret_class); };
-        const on_scrollend = () => { clearTimeout(timer); timer = setTimeout(apply, 150); };
+        const apply = (): void => { target.classList.add(caret_class); };
+        const on_scrollend = (): void => { clearTimeout(timer); timer = setTimeout(apply, 150); };
         document.addEventListener('scrollend', on_scrollend, { once: true });
         // fallback if no scroll happens (scrollend never fires);
         // 1000ms allows for long smooth scrolls in case scrollend is missed

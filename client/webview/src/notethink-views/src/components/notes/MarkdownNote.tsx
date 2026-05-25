@@ -1,5 +1,6 @@
 import Debug from 'debug';
-import {Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useMemo, useState} from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ReactElement } from "react";
 import {
     getStandardNoteDataProps,
     isInternalAttribute,
@@ -8,10 +9,11 @@ import {
 } from "../../lib/renderops";
 import { buildNoteStyles, headlineClickPosition, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
 import { findFirstIncompleteTaskSeq } from "../../lib/noteops";
-import type { MdastNode, NoteProps } from "../../types/NoteProps";
+import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
 import OriginPill from "../../components/notes/OriginPill";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
+
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
 // abridge when rendered height exceeds this multiple of width (top-level notes only)
@@ -19,7 +21,8 @@ const HEIGHT_RATIO = 1;
 // pixels of completed-task context to show above the first incomplete task when scrolled
 const SCROLL_CONTEXT_PX = 40;
 
-export default memo(function MarkdownNote(props: NoteProps) {
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
+export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     const [overflow_state, setOverflowState] = useState<{ overflows: boolean; max_height: number }>({ overflows: false, max_height: 0 });
     const [scrolled_top, setScrolledTop] = useState(0);
     const [at_bottom, setAtBottom] = useState(false);
@@ -53,7 +56,7 @@ export default memo(function MarkdownNote(props: NoteProps) {
             return;
         }
         const el = body_ref.current;
-        const check = () => {
+        const check = (): void => {
             // skip measurement during drag - element is position:fixed with wrong dimensions
             if (getComputedStyle(el).position === 'fixed') { return; }
             const width = el.offsetWidth;

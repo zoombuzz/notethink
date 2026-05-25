@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, type RenderResult } from '@testing-library/react';
 import SettingsCommonControls from './SettingsCommonControls';
 
 const default_props = {
@@ -10,7 +10,7 @@ const default_props = {
     onGlobalSettingChange: jest.fn(),
 };
 
-function renderControls(overrides: Partial<typeof default_props> = {}) {
+function renderControls(overrides: Partial<typeof default_props> = {}): RenderResult {
     const props = { ...default_props, ...overrides };
     return render(<SettingsCommonControls {...props} />);
 }

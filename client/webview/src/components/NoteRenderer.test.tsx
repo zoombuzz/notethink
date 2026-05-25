@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import type { Root as MdastRoot } from 'mdast';
 import type { HashMapOf, Doc } from '../types/general';
 
 // mock ESM-only dependencies that the webview jest config can't transform
@@ -53,7 +54,7 @@ describe('NoteRenderer', () => {
             'abc': {
                 id: 'abc',
                 path: '/test.md',
-                content: { type: 'root', children: [] } as any,
+                content: { type: 'root', children: [] } as MdastRoot,
                 text: '# Hello',
             },
         };
@@ -69,7 +70,7 @@ describe('NoteRenderer', () => {
                 content: {
                     type: 'root',
                     children: [{ type: 'paragraph', children: [{ type: 'text', value: 'hello' }] }],
-                } as any,
+                } as MdastRoot,
             },
         };
         const { container } = render(<NoteRenderer notes={notes} />);
@@ -81,12 +82,12 @@ describe('NoteRenderer', () => {
         const notes: HashMapOf<Doc> = {
             'a': {
                 id: 'a', path: '/a.md',
-                content: { type: 'root', children: [] } as any,
+                content: { type: 'root', children: [] } as MdastRoot,
                 text: '# A',
             },
             'b': {
                 id: 'b', path: '/b.md',
-                content: { type: 'root', children: [] } as any,
+                content: { type: 'root', children: [] } as MdastRoot,
                 text: '# B',
             },
         };

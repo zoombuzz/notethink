@@ -1615,3 +1615,213 @@ Extend the existing kanban DnD UX to multi-file folder mode. Depends on [[multi-
   + `editText` accepts per-`docPath` partitioned change sets; extension applies multi-doc batches atomically
   + `dragStartHandler` reveals caret in the originating file
   + tests N jest, N playwright
+
+
+### Decompose long functions into objects, hooks, and helpers — wave 1 [](?id=function-decomposition)
+
+Wave 1 of the Function Length finding from [[coding-standards-audit-remediation]]: the three highest-value, file-disjoint long-function targets, decomposed behaviour-identically (one agent each, gated). The goal was explicit dependencies, minimal shared mutable state, and testable seams — not the line count itself. Wave 2 (KanbanView/MarkdownNote, pure-logic) split into [[function-decomposition-wave2]].
+
++ what shipped
+  + `myWebviewPanel` → `PanelSession` class: `notethinkEditor.ts` 968→136 lines, new `vscode/PanelSession.ts`; ~11 ambient mutable vars became private fields, ~11 closures became methods with explicit `this` deps, `onDidReceiveMessage` delegates each case to a named `handle*` method
+  + `ExtensionReceiver` → 6 custom hooks under `client/webview/src/hooks/` + thin wiring shell; persisted `viewStates` key and wire-format message strings preserved
+  + `GenericView` → 730→121 lines; 6 hooks + `<GenericViewToolbar>` / `<GenericViewBreadcrumb>` under `views/generic/` + `lib/columnorder.ts`; view-dispatch semantics untouched
++ approach
+  + characterization tests added around the panel boundary BEFORE extracting; one behaviour-identity bug caught + fixed (watcher-driven folder adds re-send the stored discovery totals, not 0/false)
+  + closing review split CODING_STANDARDS across two reviewers; React decomposition via custom hooks + child components per the new guidelines
++ [X] characterization tests around `myWebviewPanel`'s message/edit/integration boundary
++ [X] extract `PanelSession` class; `myWebviewPanel` becomes a thin constructor + wire-up
++ [X] split `onDidReceiveMessage` so each case delegates to a named `PanelSession` method
++ [X] extract `ExtensionReceiver` state/effect clusters into custom hooks; component becomes a wiring shell
++ [X] decompose `GenericView` into hooks + child components; align with documented React structure
++ [X] `pnpm run check` green (lint, build, rollup, 723 jest, 47 playwright)
++ acceptance
+  + `myWebviewPanel` is a `PanelSession` class with private fields and method-level contracts; no ambient-state closures remain
+  + the two React components are thin shells over custom hooks + child components, following the documented structure
+  + behaviour identical — 723 jest + 47 playwright green, no regressions
++ commit message draft
+  + notethink 0.3.0: decompose `myWebviewPanel` into a `PanelSession` class and split `ExtensionReceiver`/`GenericView` into custom hooks + child components (behaviour-identical, per-method contracts replace ambient closure state)
+  + tests 723 jest, 47 playwright
+
+
+### Coding standards audit and remediation [](?id=coding-standards-audit-remediation)
+
+Audit the codebase against every rule in `CODING_STANDARDS.md` and remediate non-compliant patterns in small, reviewable passes. Redo audit completed with six parallel section owners plus local AST scans: naming/React, imports/debug, code style, TypeScript, file/code-quality/error-handling, and testing/pre-push.
+
++ inventory scope
+  + reviewed 138 TS/TSX files in `client/` and `playwright/`, excluding generated `dist`, dependency trees, `.git`, `.vscode-test-web`, coverage/build/out artifacts
+  + classification used by the naming/TypeScript passes: 75 production files and 63 test/support files
+  + stricter import/debug pass audited 70 production TS/TSX files, excluding tests, mocks, setup, declarations, generated code, and Playwright
+  + code-style pass audited 71 production files and 67 test/support files, covering 452 production functions and 1619 test/support functions
+  + file/code-quality pass scanned 101 production tracked code/style files and 56 test files
++ rule matrix
+  + Naming Conventions > Variable Naming: non-compliant
+    + production: 59 of 919 local/hook/computed variable occurrences violate snake_case; tests/support: 160 of 2140
+    + examples: `convertMdastToNoteHierarchy.ts:34` has `lineIndex`, `headingIndex`, `parentEndOffset`, `seqCounter`; `notethinkEditor.test.ts` has 55 variable violations
+  + Naming Conventions > Function Naming: mostly compliant with exceptions
+    + production: 4 of 206 function/event-handler names violate camelCase; tests/support: 8 of 122
+    + examples: `notethinkEditor.ts:894` `apply_one`, `viewhooks.ts:94` `on_scrollend`, `DocumentView.test.tsx:105` `make_props`
+  + Naming Conventions > Props and Parameters: non-compliant
+    + parameters: 111 of 530 production parameters and 46 of 559 test/support parameters violate camelCase, often because the codebase uses snake_case parameters
+    + component props: 40 of 140 production prop fields violate camelCase; largest cluster is `ViewProps.ts:8` with `doc_path`, `doc_relative_path`, `workspace_root`, `aggregate_total_discovered`, `include_filter`
+    + ambiguous: service callback props such as `setViewManagedState`, `deleteViewFromManagedState`, `postMessage`, and `getClearHandler` do not use the `on*` event prop pattern but may not be UI events
+  + Naming Conventions > Types and Interfaces: compliant in scanned files
+    + production: 0 violations across 87 types/interfaces/classes; tests/support: 0 violations across 15
+  + Naming Conventions > Components: compliant in scanned files
+    + production: 0 PascalCase component violations across 25 detected components; tests/support: 0 across 2
+  + Naming Conventions > Constants: mostly compliant with semantic caveats
+    + SCREAMING_SNAKE_CASE violations: production 1 of 43 likely true constants, tests/support 2 of 20
+    + examples: `inserts/en.ts:37` `index`; `notethinkEditor.test.ts:73-74` `defaultDocPath`, `defaultDocText`
+    + ambiguity: true constants are semantic; some local compile-time literals may be intentional local values rather than constants
+  + Import Organization > Import Placement: partially compliant
+    + no static import declarations were found after non-import code
+    + 7 runtime `import()` expressions lack explanatory comments: `GenericNote.tsx:7-9`, `GenericView.tsx:29-31`, `reportWebVitals.ts:5`
+  + Import Organization > Import Grouping: non-compliant
+    + 22 production files have grouping-order issues
+    + examples: `errorops.ts:3` imports `vscode` after externals; `index.tsx:5` imports `App` after `index.css`; `FilesDrawer.tsx:5` imports `globMatch` after SCSS; `renderops.tsx:2` imports an external after a relative type import
+  + Import Organization > External Dependency Alphabetization: non-compliant
+    + 4 production alphabetization issues: `errorops.ts:1`, `parseops.ts:1`, `NoteRenderer.tsx:3`, `renderops.tsx:2`
+  + Import Organization > Type-Only Imports: non-compliant
+    + import/debug pass: 6 production import statements are type-only but not `import type`
+    + TypeScript pass: 15 production and 13 test/support imports appear type-only but are value imports
+    + examples: `ErrorBoundary.tsx:1`, `GenericNoteWrapper.tsx:1`, `DocumentContextBar.tsx:1`, `KanbanColumn.tsx:1`, `renderops.tsx:1`, `renderops.tsx:6`
+  + Code Style > Function Length and Decomposition: non-compliant
+    + code-style pass: 41 production and 138 test/support functions exceed 35 body lines; local broader scan found 179 total over 35 body lines
+    + largest production examples: `notethinkEditor.ts:110`/`:113` `myWebviewPanel` 886 lines, `GenericView.tsx:41` 730, `ExtensionReceiver.tsx:98` 353, `MarkdownNote.tsx:22` 263, `KanbanView.tsx:63` 239
+    + largest test/support example: `notethinkEditor.test.ts:76` anonymous suite/callback 1068 lines
+  + Code Style > Block Organization: review needed
+    + mechanical scan found 300 production and 1442 test/support blank lines inside function bodies
+    + examples: `extension.ts:7`, `extension.ts:12`, `notethinkEditor.ts:121`, `l10n-bundles.test.ts:13`
+    + ambiguity: the rule allows blank lines between logical sections, so this count needs review rather than automatic remediation
+  + Code Style > Comments: non-compliant
+    + comments scanned: 419 production and 388 test/support
+    + uppercase-start comments: 93 production, 159 tests; single-sentence comments ending with a period: 58 production, 19 tests; stacked `//` comment lines: 53 production, 29 tests
+    + examples: `ExtensionReceiver.tsx:180`, `ExtensionReceiver.tsx:186`, `notethinkEditor.ts:1038` 11-line stacked comment block, `parseops.test.ts:86`
+    + inline comments: 8 production, 9 tests; none exceeded the ~100-character inline threshold
+    + back-reference/current-context comments: 3 production, 1 test; examples `ExtensionReceiver.tsx:256`, `noteui.ts:9`, `NoteProps.ts:139`, `__mocks__/vscode.ts:1`
+    + project-management version-number comments: 0 found
+    + per-field comments in data/type structures: 32 production, 8 tests; examples `NoteRenderer.tsx:39`, `mergeAggregateRoot.ts:36`, `NoteProps.ts:101`, `playwright/helpers/inject-multi-docs.ts:8`
+  + Code Style > TODO Comments: compliant in scan
+    + no TODO comments were found, so no malformed TODO comments were found
+  + Code Style > Braces and Blocks: compliant in scan
+    + AST scan found 0 unbraced `if`, `for`, `while`, or `do` control bodies
+  + TypeScript Guidelines > Explicit Types: non-compliant
+    + missing parameter types: 101 production, 211 tests/support
+    + missing return types: 343 production and 1540 tests/support across all function-like nodes; stricter non-callback/non-simple bucket is 103 production and 56 tests/support
+    + examples: `crypto.ts:2` defaulted `algo`, `errorops.ts:54` `combineTransform(info)`, `NoteRenderer.tsx:80` callback destructuring, `errorops.ts:18` `flushLogBuffer`, `errorops.ts:92` `isRedirect`, `renderops.tsx:10` `getStandardNoteDataProps`
+  + TypeScript Guidelines > Avoid `any`: non-compliant
+    + strict production source: 9 `any` usages, all in `errorops.ts`; tests/support: 173
+    + examples: `errorops.ts:55`, `:56`, `:73`, `:101`, `:133`, `:149`, `:163`, `:167`, `:171`
+    + heaviest test files: `notethinkEditor.test.ts` 73, `parseops.test.ts` 45, `convertMdastToNoteHierarchy.test.ts` 28
+    + note: broader local scan counted mocks as production and produced higher production numbers; remediation should treat `__mocks__` as test/support
+  + TypeScript Guidelines > Loop Safety: non-compliant under written rule
+    + 12 production `while`/unclear-bound loops and 3 test/support loops
+    + examples: `GenericNote.tsx:21`, `convertMdastToNoteHierarchy.ts:37`, `convertMdastToNoteHierarchy.ts:231`, `linetagops.ts:34`, `noteops.ts:128`, `noteui.ts:88`, `mergeAggregateRoot.test.ts:825`
+    + ambiguity: several loops are bounded by regex progress or data-structure exhaustion, but the written standard says avoid `while` without explicit bounds
+  + TypeScript Guidelines > Type Placement: non-compliant
+    + broad AST count: 32 production and 2 test/support findings
+    + hard examples: `mergeAggregateRoot.ts:227` `CollectedStory`, `notethinkEditor.ts:299` `FolderViewKey`, `noteui.test.ts:136-137`
+    + ambiguity: some top-of-file ordering findings are caused by debug/constants preceding types
+  + TypeScript Guidelines > Constants Placement: non-compliant
+    + hard bucket: 16 production constants after runtime declarations and 14 test/support findings
+    + examples: `ExtensionReceiver.tsx:94` `saved_state`, `ExtensionReceiver.tsx:96` `CONNECTION_TIMEOUT_MS`, `renderops.tsx:77` `renderCache`, `mergeAggregateRoot.ts:70` `ORDER_NEWEST_AT_BOTTOM`, `notethinkEditor.test.ts:73-74`
+  + TypeScript Guidelines > Debug Logger Pattern: non-compliant
+    + import/debug pass: 48 production files missing `Debug` as first import, 49 missing `const debug = Debug(...)`, 2 misplaced debug constants, 21 namespace mismatches
+    + examples: missing `extension.ts:1`, `errorops.ts:1`, `App.tsx:1`, `renderops.tsx:1`, `reportWebVitals.ts:1`; misplaced `DocumentView.tsx:13`, `KanbanView.tsx:27`; namespace examples `pathsafe.ts:4`, `NoteRenderer.tsx:16`, `CodeNote.tsx:6`, `noteui.ts:7`
+    + ambiguity: `CODING_STANDARDS.md` import grouping shows React before Debug, but Debug Logger Pattern says Debug must be first; namespace root is not fully defined
+  + TypeScript Guidelines > Extension Points: compliant in current diff
+    + single-case switches found and preserved: `GenericNoteAttributes.tsx:32`, `GenericNote.tsx:67`
+    + no trivial extension-point helper collapse was detected because this was a read-only audit
+  + React Patterns > Component Structure: non-compliant
+    + 23 component-structure ordering findings across 26 production components
+    + examples: `GenericView.tsx:41` has derived values before hooks and later hooks/effects after handlers/render-prep; `ExtensionReceiver.tsx:111` has an effect before later state/ref hooks and later effects after callbacks
+  + React Patterns > Hook Return Values: non-compliant
+    + 5 of 62 production hook returns violate snake_case, all in `ExtensionReceiver.tsx:108+`: `viewStates`, `viewStatesRef`, `navigationCallbackRef`, `globalSettings`, `folderViewSettings`
+  + React Patterns > Event Handler Props: explicit `on*` props are compliant; callback-prop naming ambiguous
+    + explicit `on*` props: 0 violations across 102 production and 13 test/support props
+    + 13 production function-valued callback props lack `on*`, including `ViewProps.ts:39` `setViewManagedState`, `deleteViewFromManagedState`, `postMessage`, `getClearHandler`; these may be service callbacks rather than UI events
+  + File Organization > Directory Structure: mostly compliant
+    + major source trees follow `src/components`, `src/lib`, and `src/types`; no misplaced major source trees found
+  + File Organization > File Naming: partially non-compliant or ambiguous
+    + component and style module naming passed
+    + utility filename exceptions: `convertMdastToNoteHierarchy.ts`, `globMatch.ts`, `mergeAggregateRoot.ts`
+    + type filename exceptions: `client/extension/src/types/general.ts`, `client/webview/src/types/general.ts`
+    + tracked generated/legacy JS beside TS: `client/webview/src/reportWebVitals.js`, `client/webview/src/setupTests.js`, `client/webview/src/types/general.js`
+    + ambiguity: standards use `parseops.ts` as an accepted utility example, so camelCase utility filenames may be legacy violations or standards drift
+  + File Organization > Test File Location: partially non-compliant or underspecified
+    + most webview/notethink-views unit tests are adjacent
+    + non-adjacent or cross-cutting examples: `client/extension/src/test/suite/lib/crypto.test.ts`, `client/extension/src/test/suite/extension.test.ts`, `client/extension/src/test/suite/openview-experiment.test.ts`, `client/webview/src/notethink-views/src/components/l10n-rendering.test.tsx`
+    + missing adjacent test candidates: `FolderTreeComposer.tsx`, `NoteTreeComposer.tsx`, `GenericNoteAttributes.tsx`, `DocumentContextBar.tsx`, `viewhooks.ts`
+    + ambiguity: extension Mocha integration tests and cross-cutting l10n tests need an explicit exception if they are intended
+  + File Organization > Styles: compliant in scan
+    + all CSS modules use `*.module.scss`; one global style exists as `client/webview/src/index.css`
+  + Code Quality > Avoid Duplication: partially non-compliant
+    + mirrored constants across extension/webview: `client/extension/src/constants.ts:6` with `client/webview/src/constants.ts:2`, and `client/extension/src/constants.ts:12` with `client/webview/src/constants.ts:9`
+    + repeated hardcoded settings/config keys: `extension.ts:70`, `notethinkEditor.ts:277`, `notethinkEditor.ts:307`, `ExtensionReceiver.tsx:360`, `SettingsCommonControls.tsx:79`
+    + ambiguity: extension and webview package boundaries may make shared constants non-trivial
+  + Code Quality > Remove Unused Code: mostly compliant by lint, with exceptions
+    + `pnpm run lint` passed, so no compiler/lint unused imports or vars are currently reported
+    + active exploratory test file: `client/extension/src/test/suite/openview-experiment.test.ts:4-11`
+    + diagnostic test logs: `extension.test.ts:202`, `:215`, `:258`
+    + TS suppressions or eslint disables: 4 production hits in 4 files
+    + no confirmed dead commented-out code found by the second pass; earlier unresolved marker remains `errorops.ts:73`
+  + Error Handling > Use Error Utilities: partially non-compliant
+    + extension-side code often uses `errorops`, but webview/library code often uses `console.*`; 18 production `console.*` hits in 10 files and 24 test hits in 6 files
+    + examples: `ErrorBoundary.tsx:26`, `renderops.tsx:99`, `notethinkEditor.ts:1073`, `NoteRenderer.tsx:25`, `ExtensionReceiver.tsx:133`, `GenericView.tsx:178`
+    + ambiguity: webview has no local browser-side error utility, so the standard may need one or an exception
+  + Error Handling > Avoid Silent Failures: non-compliant
+    + two production bare `catch {}` hits: `extension.ts:33`, `notethinkEditor.ts:699`
+    + additional intentionally swallowed/fallback cases should be reviewed: `notethinkEditor.ts:1056`, `notethinkEditor.ts:1065`
+  + Testing Standards > Test Naming: mostly compliant
+    + test names generally use behavior-oriented `describe`/`it`/`test`; extension integration tests use Mocha `suite`/`test`, matching project guidance
+  + Testing Standards > Test Structure: mostly compliant with style variations
+    + exact `default_props` appears in 6 files, including `DocumentView.test.tsx:24`
+    + more complex tests use camelCase helper functions such as `makeViewProps`, which is function naming compliant but differs from the sample object style
+  + Testing Standards > E2E no reloads as workarounds: compliant in scan
+    + no `page.reload()` found; all 12 `page.goto(...)` calls are in `test.beforeEach` initial harness setup, e.g. `kanban-drag.spec.ts:9`
+  + Testing Standards > Disabling specs indefinitely: compliant in scan
+    + no `test.skip(...)`, `.skip(...)`, or commented-out `test`/`it`/`describe` specs found in scoped test files
+  + Pre-Push Verification > `pnpm run check`: non-compliant documentation/runtime mismatch
+    + `CODING_STANDARDS.md` requires `pnpm run check`, but root `package.json` has no `check` script
+    + command table says `pnpm run jest-test`, but actual root script is `test-jest`; no `jest-test` script found
+  + Pre-Push Verification > No web dev server: mostly compliant, but wording ambiguity
+    + no root `dev` script found
+    + Playwright starts an HTTP harness via `playwright.config.ts:16` and `playwright/harness/serve.mjs:28`; likely test infrastructure, but the standard says “no HTTP server” literally
+  + Pre-Push Verification > Build after every code change: process-only, not statically verifiable
+    + `pnpm run build` exists and maps to webpack; `test-playwright` also builds before Playwright
+    + working tree is dirty, but file inspection cannot prove whether build was run after each change
+  + Pre-Push Verification > Individual Commands: partially non-compliant
+    + build, rollup, lint, and Playwright commands exist or are backed by package scripts
+    + Jest command in table is wrong (`jest-test` vs `test-jest`)
+    + documented Rollup command uses `cd ... && pnpm run rollup`, conflicting with workspace guidance to prefer `pnpm -C`
++ remediation plan
+  + scope note: "production" is fully swept; the **test-side backlog** (173 test `any`, ~1330 test missing return types, etc.) is intentionally out of scope and surfaced at **warn-level** by the new ESLint rules (bump to error once cleared). Long-function decomposition was spun out to [[function-decomposition]] (wave 1 shipped) + [[function-decomposition-wave2]].
+  + [X] add automated audit checks (ESLint): `no-explicit-any`, `consistent-type-imports`, `explicit-function-return-type`, `max-lines-per-function` added at warn-level (curly/eqeqeq/semi already on); Debug-first and finite-`while` have no stock rule and are documented instead
+  + [X] decide and document ambiguity resolutions — all six documented in `CODING_STANDARDS.md` (Debug-first ordering, area-based namespace, webview-uses-`debug` error utility, Mocha extension-test exception, Playwright-harness exception, camelCase utility-filename allowance)
+  + [X] fix `CODING_STANDARDS.md`/`package.json` mismatch — added `check` script; corrected `jest-test`→`test-jest` and the rollup command in the table
+  + [X] normalise imports + debug logger pattern across all production dirs (5 file-disjoint agents); `Debug` first-import + namespaced const added to webview files that lacked it; extension stays on errorops
+  + [X] convert type-only imports to `import type` + reorder import groups (production swept)
+  + [X] add explanatory comments to the runtime `import()` expressions (GenericNote, GenericView, reportWebVitals)
+  + [X] rename locals/hook-returns/computed values/constants per the matrix (incl. `convertMdastToNoteHierarchy`); params/props that carry wire-format data documented as the snake_case-data exception
+  + [X] split long production functions — spun out to [[function-decomposition]]; the >100-line bodies (`myWebviewPanel`→`PanelSession`, `GenericView`, `ExtensionReceiver`) shipped in wave 1; `KanbanView`/`MarkdownNote` tracked in [[function-decomposition-wave2]]
+  + [X] add explicit param + return types on production non-callback functions + `errorops.ts` (test-side surfaced at warn)
+  + [X] replace production `any` — `errorops` cleared (one documented winston escape hatch); `utils`; the `PanelSession` vscode-message envelope is the original implicit-`any`, surfaced at warn
+  + [X] move file-level types + constants to the head (CollectedStory, OriginPillProps/GOLDEN_ANGLE_DEG, hook type-then-const, etc.)
+  + [X] document the finite-iterator `while` exception in `CODING_STANDARDS.md` (TreeWalker/non-zero-width-regex/stack-pop terminate by construction)
+  + [X] rewrite comments to lowercase/single-thought/non-field; back-reference comments removed (closing review confirmed no proper-noun over-lowercasing)
+  + [X] refactor the two largest component bodies to the documented React structure (via [[function-decomposition]] wave 1)
+  + [X] reconcile file-naming + test-location exceptions — Mocha-suite + camelCase-utility-filename documented
+  + [X] document why the extension/webview folder-view default constants are mirrored (separate bundles, no shared module)
+  + [X] replace silent catches + console-only error handling — bare `catch {}` logged; webview `console.*`→`debug`; documented that the webview's error utility IS the `debug` instance
+  + [X] remove diagnostic test logging, exploratory test code (`openview-experiment.test.ts`), and tracked generated JS (`reportWebVitals.js`, `setupTests.js`, `general.js`, the stale `ExtensionReceiver/NoteRenderer/App` `.js`/`.test.js` twins); the remaining `@ts-ignore`/jsx-runtime suppressions are justified library-interop
+  + [X] `pnpm run check` green after each batch (final: lint 0 errors, build, rollup, 723 jest, 47 playwright)
++ acceptance
+  + every rule in `CODING_STANDARDS.md` is either compliant, remediated, or explicitly documented as an intentional exception
+  + automated checks prevent recurrence for rules that can be checked mechanically
+  + production files comply with the resolved debug logger convention
+  + imports are grouped consistently and type-only imports are used where appropriate
+  + naming violations are removed or documented where they are public wire-format compatibility fields
+  + production functions over the 35-line guideline are decomposed or explicitly justified as flat dispatch/data-literal exceptions
+  + no avoidable production `any`, unbounded `while`, silent failure, or console-only error handling remains
+  + comments follow the lowercase, single-thought, non-field-comment style
+  + test-suite structure and pre-push commands match the documented standards
+  + `pnpm run check` or the corrected equivalent is green

@@ -22,7 +22,7 @@ interface SettingsDocumentDrawerProps {
     canResetToDefault?: boolean;
 }
 
-function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps) {
+function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps): React.ReactElement {
     return (
         <div className={styles.settingsDrawerBody} data-testid="settings-drawer-document">
             <div className={styles.settingsDrawerGroups}>

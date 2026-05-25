@@ -1,27 +1,31 @@
-import { MouseEvent, useMemo, Fragment } from "react";
+import Debug from "debug";
+import type { MouseEvent, ReactElement } from "react";
+import { useMemo, Fragment } from "react";
 import * as l10n from "@vscode/l10n";
-import type { NoteProps } from "../../types/NoteProps";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import { stripHeadlineLinetags } from "../../lib/noteops";
+import type { NoteProps } from "../../types/NoteProps";
 import styles from "./BreadcrumbTrail.module.scss";
 
+const debug = Debug("nodejs:notethink-views:BreadcrumbTrail");
+
+/**
+ * integration_path: when set, breadcrumb path segments reflect this folder (folder mode)
+ * instead of the current file's path; clicking a segment narrows the aggregation to that subfolder.
+ * file_count / note_count / aggregate_total_discovered: folder mode only, rendered as "(X in Y files)"
+ * after the path (or "(X in Y of M files)" when the discovery cap truncated the set), never in single-file mode.
+ * X = note_count (top-level stories), Y = file_count (source files loaded), M = aggregate_total_discovered (files found before the cap).
+ * onFileCountClick: clicking the count opens the Files drawer, receiving the count element so the drawer can scroll-anchor to it.
+ */
 export interface BreadcrumbTrailProps extends NoteProps {
     doc_path?: string;
     doc_relative_path?: string;
     workspace_root?: string;
-    /**
-     * When set, breadcrumb path segments reflect this folder (folder mode)
-     * instead of the current file's path. Clicking a segment narrows the
-     * aggregation to that subfolder.
-     */
     integration_path?: string;
-    // folder mode only: rendered as "(X in Y files)" after the path (or "(X in Y of M files)" when the discovery cap truncated the set); not shown in single-file mode
-    // X = note_count (top-level stories), Y = file_count (source files loaded), M = aggregate_total_discovered (files found before the cap)
     file_count?: number;
     note_count?: number;
     aggregate_total_discovered?: number;
     onFolderClick?: (folder_path: string) => void;
-    // clicking the "(X in Y files)" count opens the Files drawer; receives the count element so the drawer can scroll-anchor to it
     onFileCountClick?: (anchor: HTMLElement) => void;
 }
 
@@ -31,15 +35,15 @@ export interface BreadcrumbTrailProps extends NoteProps {
  * E.g. "/workspace/docs/todo.md" → [{label:"workspace",path:"/workspace"}, {label:"docs",path:"/workspace/docs"}, {label:"todo.md",path:"/workspace/docs/todo.md"}]
  */
 function splitPathSegments(doc_path: string, workspace_root?: string, doc_relative_path?: string): Array<{ label: string; path: string }> {
-    // Prefer doc_relative_path (computed by extension via asRelativePath, handles symlinks)
-    // Fall back to stripping workspace_root prefix manually
+    // prefer doc_relative_path (computed by extension via asRelativePath, handles symlinks)
+    // fall back to stripping workspace_root prefix manually
     let relative_path: string;
     let prefix: string;
 
     if (doc_relative_path) {
-        // Extension already computed the relative path - use it directly
+        // extension already computed the relative path - use it directly
         relative_path = doc_relative_path;
-        // Derive the prefix by removing the relative path from the full doc_path
+        // derive the prefix by removing the relative path from the full doc_path
         const suffix_index = doc_path.lastIndexOf(doc_relative_path);
         prefix = suffix_index > 0 ? doc_path.slice(0, suffix_index).replace(/\/$/, '') : '';
     } else if (workspace_root && doc_path.startsWith(workspace_root)) {
@@ -67,7 +71,8 @@ function splitPathSegments(doc_path: string, workspace_root?: string, doc_relati
     return segments;
 }
 
-export default function BreadcrumbTrail(props: BreadcrumbTrailProps) {
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
+export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactElement {
     const parent_context = props;
     const parent_context_headlines_raw = (parent_context.parent_notes || []).map((item: NoteProps) => item.headline_raw).join(' > ');
 

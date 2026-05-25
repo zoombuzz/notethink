@@ -1,7 +1,10 @@
-import type { ReactNode } from "react";
+import Debug from "debug";
+import type { ReactElement, ReactNode } from "react";
 import { formatColumnLabel } from "../../lib/noteops";
 import type { NoteDisplayOptions } from "../../types/NoteProps";
 import view_specific_styles from "../ViewRenderer.module.scss";
+
+const debug = Debug("nodejs:notethink-views:KanbanColumn");
 
 interface KanbanColumnProps {
     seq: number;
@@ -12,7 +15,7 @@ interface KanbanColumnProps {
     children?: ReactNode;
 }
 
-export default function KanbanColumn(props: KanbanColumnProps) {
+export default function KanbanColumn(props: KanbanColumnProps): ReactElement {
     const note_styles = [view_specific_styles.column];
     if (props.type) { note_styles.push(view_specific_styles.pseudo); }
     if (props.display_options?.draglight) { note_styles.push(view_specific_styles.draglight); }

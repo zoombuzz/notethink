@@ -1,5 +1,5 @@
 import { renderMarkdownNoteHeadline, renderNodeUnified } from './renderops';
-import { NoteProps, MdastNode } from '../types/NoteProps';
+import type { NoteProps, MdastNode } from '../types/NoteProps';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 /**
@@ -67,7 +67,7 @@ describe('renderNodeUnified cache', () => {
     });
 
     it('returns different elements for different MdastNode objects with same content', () => {
-        const makeNode = () => ({
+        const makeNode = (): MdastNode => ({
             type: 'heading',
             position: {
                 start: { offset: 0, line: 1 },

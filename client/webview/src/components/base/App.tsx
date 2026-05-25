@@ -1,8 +1,11 @@
-import React from 'react';
+import Debug from 'debug';
+import React, { type ReactElement } from 'react';
 import ErrorBoundary from '../../notethink-views/src/components/ErrorBoundary';
 import ExtensionReceiver from '../ExtensionReceiver';
 
-function App() {
+const debug = Debug("nodejs:notethink:App");
+
+function App(): ReactElement {
   return (
     <ErrorBoundary>
       <ExtensionReceiver />

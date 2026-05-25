@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 test.describe('Error Boundary', () => {
 
@@ -12,7 +13,7 @@ test.describe('Error Boundary', () => {
      * convertMdastToNoteHierarchy to throw (position: null on a heading node
      * triggers a TypeError when accessing position.start.offset).
      */
-    async function injectMalformedDoc(page: import('@playwright/test').Page): Promise<string> {
+    async function injectMalformedDoc(page: Page): Promise<string> {
         const doc_id = 'malformed-test-doc';
         await page.evaluate(({ id }) => {
             window.dispatchEvent(new MessageEvent('message', {

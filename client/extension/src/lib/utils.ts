@@ -1,6 +1,6 @@
 import type { Doc } from "../types/general";
 
-export function abbrevDoc(doc: Pick<Doc, 'path' | 'id'>) {
+export function abbrevDoc(doc: Pick<Doc, 'path' | 'id'>): Pick<Doc, 'path' | 'id'> {
     return {
 		path: doc.path,
         id: doc.id,

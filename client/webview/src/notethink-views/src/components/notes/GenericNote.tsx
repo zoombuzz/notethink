@@ -1,7 +1,8 @@
 import Debug from "debug";
-import React, {lazy} from 'react';
-import type {NoteProps} from "../../types/NoteProps";
+import React, { lazy } from 'react';
+import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteWrapper from "../../components/notes/GenericNoteWrapper";
+
 const debug = Debug("nodejs:notethink-views:GenericNote");
 
 // dynamic import() is required by React.lazy for per-note-type code-splitting; static imports would pull every renderer into the initial bundle
@@ -12,7 +13,6 @@ const MermaidNote = lazy(() => import('./MermaidNote'));
 export const SELECTABLE_NOTETYPES = ['markdown'];
 
 export default React.memo(function GenericNote(props: NoteProps) {
-
     const note = props;
     let deepest_selectable_note = note;
     let cropped_focused_seqs = note.display_options?.focused_seqs || [];

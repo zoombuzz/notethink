@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, type RenderResult } from '@testing-library/react';
 import SettingsKanbanDrawer from './SettingsKanbanDrawer';
 
 const default_props = {
@@ -11,7 +11,7 @@ const default_props = {
     onColumnOrderChange: jest.fn(),
 };
 
-function renderDrawer(overrides: Partial<typeof default_props> = {}) {
+function renderDrawer(overrides: Partial<typeof default_props> = {}): RenderResult {
     const props = { ...default_props, ...overrides };
     return render(<SettingsKanbanDrawer {...props} />);
 }

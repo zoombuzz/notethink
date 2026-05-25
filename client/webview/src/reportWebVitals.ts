@@ -1,6 +1,9 @@
+import Debug from 'debug';
 import type { Metric } from 'web-vitals';
 
-const reportWebVitals = (onPerfEntry?: (metric: Metric) => void) => {
+const debug = Debug("nodejs:notethink:reportWebVitals");
+
+const reportWebVitals = (onPerfEntry?: (metric: Metric) => void): void => {
   if (onPerfEntry && onPerfEntry instanceof Function) {
     // dynamic import() so the web-vitals bundle only loads when perf reporting is actually wired up
     import('web-vitals').then(({ onCLS, onINP, onFCP, onLCP, onTTFB }) => {

@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
@@ -10,7 +10,7 @@ test.describe('Kanban Drag and Drop', () => {
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
     });
 
-    async function setupKanbanView(page: Page) {
+    async function setupKanbanView(page: Page): Promise<{ id: string; path: string }> {
         const { id, path: doc_path } = await injectDocsFromFixture(page, 'kanban.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
         await simulateSelectionChanged(page, doc_path, 2);
@@ -23,7 +23,7 @@ test.describe('Kanban Drag and Drop', () => {
      * The library supports keyboard drag: focus the draggable, press Space to
      * lift, arrow keys to move between droppables, Space to drop.
      */
-    async function keyboardDrag(page: Page, draggable_locator: import('@playwright/test').Locator, direction: 'right' | 'left', moves: number) {
+    async function keyboardDrag(page: Page, draggable_locator: Locator, direction: 'right' | 'left', moves: number): Promise<void> {
         // focus the drag handle element
         await draggable_locator.focus();
         await page.waitForTimeout(100);

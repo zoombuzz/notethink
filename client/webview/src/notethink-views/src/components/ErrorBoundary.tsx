@@ -1,5 +1,8 @@
+import Debug from "debug";
 import React, { Component, type ErrorInfo, type ReactNode } from "react";
 import * as l10n from "@vscode/l10n";
+
+const debug = Debug("nodejs:notethink-views:ErrorBoundary");
 
 interface ErrorBoundaryProps {
     children: ReactNode;
@@ -23,7 +26,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     }
 
     componentDidCatch(error: Error, info: ErrorInfo): void {
-        console.error("ErrorBoundary caught an error:", error, info);
+        debug("ErrorBoundary caught an error: %O %O", error, info);
         this.props.onError?.(error, info);
     }
 

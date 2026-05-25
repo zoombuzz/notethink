@@ -1,12 +1,13 @@
 import Debug from "debug";
 import React, { type ReactElement, Suspense, useCallback, useRef } from 'react';
-import {sanitize} from "hast-util-sanitize";
-import {toHast} from "mdast-util-to-hast";
-import {toJsxRuntime} from "hast-util-to-jsx-runtime";
-import {Fragment, jsx, jsxs} from "react/jsx-runtime";
-import type { HashMapOf, Doc } from "../types/general";
-import { anyViewInFolderMode, firstIntegrationPath } from "../notethink-views/src/lib/mergeAggregateRoot";
+import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+import { sanitize } from "hast-util-sanitize";
+import { toJsxRuntime } from "hast-util-to-jsx-runtime";
+import { toHast } from "mdast-util-to-hast";
 import { ErrorBoundary } from "../notethink-views/src/components";
+import { anyViewInFolderMode, firstIntegrationPath } from "../notethink-views/src/lib/mergeAggregateRoot";
+import type { Nodes as MdastNodesType } from "mdast";
+import type { HashMapOf, Doc } from "../types/general";
 import type { TextSelection } from "../notethink-views/src/types/NoteProps";
 import type { GlobalSettingsPayload, FolderViewSettingsPayload } from "../notethink-views/src/types/Messages";
 import type { ViewState } from './ExtensionReceiver';
@@ -15,7 +16,7 @@ import FolderTreeComposer from './composers/FolderTreeComposer';
 
 const debug = Debug("nodejs:notethink:NoteRenderer");
 
-export type MdastNodes = import("mdast").Nodes;
+export type MdastNodes = MdastNodesType;
 
 export function renderNodeUnified(node: MdastNodes): ReactElement {
     try {
@@ -36,9 +37,7 @@ export interface NoteRendererProps {
     setViewManagedState?: (updates: Array<Record<string, unknown>>) => void;
     onNavigationCommand?: React.MutableRefObject<((direction: string) => void) | undefined>;
     workspace_root?: string;
-    // folder mode: total files discovered before the MAX_AGGREGATE_FILES cap
     aggregate_total_discovered?: number;
-    // folder mode: effective include/exclude globs echoed by the extension
     include_filter?: string;
     exclude_filter?: string;
     globalSettings?: GlobalSettingsPayload;
@@ -52,7 +51,7 @@ export interface NoteRendererProps {
  * in practice with one Doc at a time). Aggregate (folder) mode renders a single
  * FolderTreeComposer that merges every Doc into one synthetic root.
  */
-export default function NoteRenderer(props: NoteRendererProps) {
+export default function NoteRenderer(props: NoteRendererProps): ReactElement {
     const ref = useRef<HTMLDivElement>(null);
 
     const handleRenderError = useCallback((error: Error) => {

@@ -1,7 +1,11 @@
-import type {ViewProps} from "../../types/ViewProps";
+import Debug from "debug";
+import type { ReactElement } from "react";
+import type { ViewProps } from "../../types/ViewProps";
 import master_view_styles from "../../components/ViewRenderer.module.scss";
 
-export default function DocumentContextBar(props: ViewProps) {
+const debug = Debug("nodejs:notethink-views:DocumentContextBar");
+
+export default function DocumentContextBar(props: ViewProps): ReactElement {
 
     const container_styles: Array<string> = [master_view_styles.contextBar];
 

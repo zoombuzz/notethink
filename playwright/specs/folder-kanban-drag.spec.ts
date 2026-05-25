@@ -9,7 +9,7 @@ const PATH_B = `${WORKSPACE_ROOT}/beta/docstech/board.md`;
 const PATH_C = `${WORKSPACE_ROOT}/gamma/docstech/board.md`;
 
 // keyboard-based drag — @hello-pangea/dnd supports lift (Space) + arrow moves + drop (Space). matches the established pattern in kanban-drag.spec.ts so the folder-mode specs use the same wire boundary as single-file mode
-async function keyboardDrag(page: Page, draggable_locator: Locator, direction: 'right' | 'left' | 'up' | 'down', moves: number) {
+async function keyboardDrag(page: Page, draggable_locator: Locator, direction: 'right' | 'left' | 'up' | 'down', moves: number): Promise<void> {
     await draggable_locator.scrollIntoViewIfNeeded();
     await draggable_locator.focus();
     await page.waitForTimeout(200);
@@ -27,7 +27,7 @@ async function keyboardDrag(page: Page, draggable_locator: Locator, direction: '
     await page.waitForTimeout(500);
 }
 
-async function setupFolderKanban(page: Page, docs?: Array<{ fixture: string; doc_path: string; relative_path: string }>) {
+async function setupFolderKanban(page: Page, docs?: Array<{ fixture: string; doc_path: string; relative_path: string }>): Promise<void> {
     const specs = docs ?? [
         { fixture: 'kanban-folder-a.md', doc_path: PATH_A, relative_path: 'alpha/docstech/board.md' },
         { fixture: 'kanban-folder-b.md', doc_path: PATH_B, relative_path: 'beta/docstech/board.md' },

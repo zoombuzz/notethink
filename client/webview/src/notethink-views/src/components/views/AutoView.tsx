@@ -1,8 +1,12 @@
+import Debug from "debug";
+import type { ReactElement } from "react";
+import { aggregateNoteLinetags } from "../../lib/noteops";
 import type { ViewProps } from "../../types/ViewProps";
 import type { LineTag, NoteProps } from "../../types/NoteProps";
-import { aggregateNoteLinetags } from "../../lib/noteops";
 import GenericView from "./GenericView";
 import view_specific_styles from "../ViewRenderer.module.scss";
+
+const debug = Debug("nodejs:notethink-views:AutoView");
 
 /**
  * Detect whether the root parent_context is a synthetic aggregate root (one whose
@@ -48,7 +52,7 @@ function majorityNgView(notes: NoteProps[] | undefined): string | undefined {
     return tied ? undefined : best_type;
 }
 
-export default function AutoView(props: ViewProps) {
+export default function AutoView(props: ViewProps): ReactElement {
 
     // set default auto view type, then hunt for doc-selected auto view type
     const derived_attributes: { type: string; display_options: Record<string, unknown> } = {

@@ -1,5 +1,8 @@
+import Debug from "debug";
 import React from "react";
 import styles from "../ViewRenderer.module.scss";
+
+const debug = Debug("nodejs:notethink-views:ToolbarDrawer");
 
 interface ToolbarDrawerProps {
     open: boolean;
@@ -16,7 +19,7 @@ interface ToolbarDrawerProps {
  * can serve whichever drawer is active. The 0fr→1fr grid trick lives in
  * ViewRenderer.module.scss (.settingsDrawerGrid / .settingsDrawer), reused verbatim.
  */
-function ToolbarDrawer(props: ToolbarDrawerProps) {
+function ToolbarDrawer(props: ToolbarDrawerProps): React.ReactElement {
     return (
         <div
             id={props.id}

@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 interface CapturedMessage {
     type: string;
@@ -10,11 +10,11 @@ interface CapturedMessage {
 }
 
 export async function getCapturedMessages(page: Page): Promise<CapturedMessage[]> {
-    return page.evaluate(() => (window as any).__captured_messages);
+    return page.evaluate(() => (window as unknown as { __captured_messages: CapturedMessage[] }).__captured_messages);
 }
 
 export async function clearCapturedMessages(page: Page): Promise<void> {
-    await page.evaluate(() => { (window as any).__captured_messages = []; });
+    await page.evaluate(() => { (window as unknown as { __captured_messages: CapturedMessage[] }).__captured_messages = []; });
 }
 
 export async function findRevealMessage(page: Page): Promise<CapturedMessage | undefined> {

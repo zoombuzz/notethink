@@ -1,5 +1,8 @@
-import type { ChangeEvent } from "react";
+import Debug from "debug";
+import type { ChangeEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
+
+const debug = Debug("nodejs:notethink-views:ViewIntegrationSelector");
 
 export const INTEGRATION_MODES = ['current_file', 'folder'] as const;
 export type IntegrationMode = typeof INTEGRATION_MODES[number];
@@ -16,8 +19,8 @@ interface ViewIntegrationSelectorProps {
     onChange: (mode: IntegrationMode) => void;
 }
 
-export default function ViewIntegrationSelector(props: ViewIntegrationSelectorProps) {
-    const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
+export default function ViewIntegrationSelector(props: ViewIntegrationSelectorProps): ReactElement {
+    const handleChange = (e: ChangeEvent<HTMLSelectElement>): void => {
         props.onChange(e.target.value as IntegrationMode);
     };
 

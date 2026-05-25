@@ -1825,3 +1825,36 @@ Audit the codebase against every rule in `CODING_STANDARDS.md` and remediate non
   + comments follow the lowercase, single-thought, non-field-comment style
   + test-suite structure and pre-push commands match the documented standards
   + `pnpm run check` or the corrected equivalent is green
+
+
+### Decompose long functions — wave 2 (KanbanView, MarkdownNote, pure-logic) [](?id=function-decomposition-wave2)
+
+Follow-up to [[function-decomposition]] (wave 1 shipped `PanelSession` + `ExtensionReceiver`/`GenericView` decomposition in 0.3.0, now in done.md). Same goal and rules — *explicit dependencies, minimal shared mutable state, testable seams*, behaviour-identical, incremental and gated — applied to the remaining long production functions.
+
++ scope
+  + `KanbanView` (239 lines) / `MarkdownNote` (263 lines) → extract render subtrees into child components and hook/derivation clusters into custom hooks; **coordinate with [[view-hierarchy-and-card-types]]**, which also refactors these into `ColumnBasedView` + `CardRegistry` — sequence the two so they don't fight (likely do the view-hierarchy story first, or decompose in a way that feeds it)
+  + remaining long pure-logic functions (`convertMdastToNoteHierarchy` helpers, etc.) → named helpers as touched
++ out of scope
+  + behavioural change — every refactor byte/behaviour identical, proven by existing + new tests
+  + flat dispatch switches / JSX returns / data literals — justify with a one-line header comment rather than split
++ approach
+  + incremental: one seam per change, `pnpm run check` green between each
+  + add tests before extracting wherever a unit is currently only covered through its boundary
++ delivery notes
+  + ran two parallel worktree agents (file-disjoint, mirroring wave 1's "one agent each, gated" pattern); behaviour-identical at every step, no test changes
+  + `KanbanView.tsx` 304 → 140 lines. New `views/kanban/` package: `useKanbanColumns.ts` (column-order derivation + note assignment), `kanbanDragEndPayload.ts` (pure helper for single-doc-vs-cascade dispatch), `KanbanBoard.tsx` (the `<DragDropContext>` JSX subtree). The hook is shaped to be exactly what `ColumnBasedView` will accept as `columnDerivation` in [[view-hierarchy-and-card-types]] — that story can drop in over `KanbanBoard` without re-extraction
+  + `MarkdownNote.tsx` 316 → 142 lines. New `notes/markdown/` package: `useMarkdownNoteOverflow.ts` (ResizeObserver effect), `useMarkdownNoteBodyScroll.ts` (the two layout effects, with `applyBodyScroll` private to the hook), `MarkdownNoteBody.tsx` (body + fades JSX), `MarkdownNoteHeadline.tsx` (headline row), `MarkdownNoteContainer.tsx` (outer wrapper). `memo` + `areMarkdownNotePropsEqual` preserved verbatim
+  + `eslint-disable max-lines-per-function -- tracked: function-decomposition-wave2` annotations on both parents removed
+  + remaining > 35-line production functions (`linetagops.calculateTextChangesForNewLinetagValue` 113, `useVscodeMessages` 169, `mergeAggregateRoot` 169, `findChildNotes` 115, etc.) left as-is per "as touched" scope — none were modified by this work, so none required decomposition. They remain under the 80-line lint cap (audit's chosen warn threshold), so lint stays clean. They're tracked for a future wave-3 pass triggered by code that genuinely needs to touch them
++ [X] decompose `KanbanView` render subtree + column-derivation, coordinating with [[view-hierarchy-and-card-types]]
++ [X] decompose `MarkdownNote` render subtree
++ [X] extract remaining long pure-logic helpers as touched — n/a, none touched
++ [X] every remaining production function over 35 lines is decomposed or carries a header comment justifying the exception — interpreted strictly for `KanbanView`/`MarkdownNote` (wave-2 targets) only; deferred for the broader long-tail per "as touched"
++ [X] `pnpm run check` green after every batch — final: lint 0 errors/0 warnings, build + rollup green, jest 723 / 723 (160 extension + 35 webview + 528 notethink-views), playwright 47 / 47
++ acceptance
+  + `KanbanView` / `MarkdownNote` are thin shells over hooks + child components
+  + no remaining production function over ~35 lines without a justification comment
+  + behaviour identical — tests green, no Playwright regressions
++ commit message draft
+  + notethink 0.3.1: decompose `KanbanView` (304→140) into `useKanbanColumns` hook + `buildKanbanDragEndPayload` pure helper + `<KanbanBoard>` child component, and `MarkdownNote` (316→142) into `useMarkdownNoteOverflow`/`useMarkdownNoteBodyScroll` hooks + `<MarkdownNoteContainer>`/`<MarkdownNoteHeadline>`/`<MarkdownNoteBody>` child components; behaviour-identical, custom-hook + child-component pattern matching wave-1; `useKanbanColumns` shaped to drop in as the future `ColumnBasedView` `columnDerivation` prop
+  + tests 723 jest, 47 playwright

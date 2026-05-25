@@ -84,30 +84,6 @@ Three small, independent webview-viewer polish fixes spotted in browser context 
   + tests N jest, N playwright
 
 
-### Decompose long functions — wave 2 (KanbanView, MarkdownNote, pure-logic) [](?id=function-decomposition-wave2)
-
-Follow-up to [[function-decomposition]] (wave 1 shipped `PanelSession` + `ExtensionReceiver`/`GenericView` decomposition in 0.3.0, now in done.md). Same goal and rules — *explicit dependencies, minimal shared mutable state, testable seams*, behaviour-identical, incremental and gated — applied to the remaining long production functions.
-
-+ scope
-  + `KanbanView` (239 lines) / `MarkdownNote` (263 lines) → extract render subtrees into child components and hook/derivation clusters into custom hooks; **coordinate with [[view-hierarchy-and-card-types]]**, which also refactors these into `ColumnBasedView` + `CardRegistry` — sequence the two so they don't fight (likely do the view-hierarchy story first, or decompose in a way that feeds it)
-  + remaining long pure-logic functions (`convertMdastToNoteHierarchy` helpers, etc.) → named helpers as touched
-+ out of scope
-  + behavioural change — every refactor byte/behaviour identical, proven by existing + new tests
-  + flat dispatch switches / JSX returns / data literals — justify with a one-line header comment rather than split
-+ approach
-  + incremental: one seam per change, `pnpm run check` green between each
-  + add tests before extracting wherever a unit is currently only covered through its boundary
-+ [ ] decompose `KanbanView` render subtree + column-derivation, coordinating with [[view-hierarchy-and-card-types]]
-+ [ ] decompose `MarkdownNote` render subtree
-+ [ ] extract remaining long pure-logic helpers as touched
-+ [ ] every remaining production function over 35 lines is decomposed or carries a header comment justifying the exception
-+ [ ] `pnpm run check` green after every batch
-+ acceptance
-  + `KanbanView` / `MarkdownNote` are thin shells over hooks + child components
-  + no remaining production function over ~35 lines without a justification comment
-  + behaviour identical — tests green, no Playwright regressions
-
-
 ### Animated passive transitions in the kanban view [](?id=animated-passive-transitions)
 
 The visible UX payoff. When the kanban view changes layout because of a *passive* update (external file edit from another VS Code window or editor, AI-agent edit, mtime change, anything not driven by the user's own drag) the affected notes and columns animate from old state to new state in a way that mimics manual drag-and-drop. Depends on [[multi-file-ordering-stable-identity]] (stable note identity is the keying contract) and [[folder-mode-dnd]] (so the manual and automatic UX stay consistent in folder mode).

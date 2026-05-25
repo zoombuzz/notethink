@@ -1,31 +1,19 @@
 import Debug from 'debug';
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
-import {
-    getStandardNoteDataProps,
-    isInternalAttribute,
-    renderMarkdownNoteHeadline,
-    renderBodyItems,
-} from "../../lib/renderops";
-import { buildNoteStyles, headlineClickPosition, bodyClickPosition, createNoteClickHandler } from "../../lib/noteui";
-import { findFirstIncompleteTaskSeq } from "../../lib/noteops";
+import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
-import OriginPill from "../../components/notes/OriginPill";
+import MarkdownNoteBody from "./markdown/MarkdownNoteBody";
+import MarkdownNoteContainer from "./markdown/MarkdownNoteContainer";
+import MarkdownNoteHeadline from "./markdown/MarkdownNoteHeadline";
+import { useMarkdownNoteOverflow } from "./markdown/useMarkdownNoteOverflow";
+import { useMarkdownNoteBodyScroll } from "./markdown/useMarkdownNoteBodyScroll";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
-// abridge when rendered height exceeds this multiple of width (top-level notes only)
-const HEIGHT_RATIO = 1;
-// pixels of completed-task context to show above the first incomplete task when scrolled
-const SCROLL_CONTEXT_PX = 40;
-
-// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default memo(function MarkdownNote(props: NoteProps): ReactElement {
-    const [overflow_state, setOverflowState] = useState<{ overflows: boolean; max_height: number }>({ overflows: false, max_height: 0 });
-    const [scrolled_top, setScrolledTop] = useState(0);
-    const [at_bottom, setAtBottom] = useState(false);
     const note_ref = useRef<HTMLDivElement>(null);
     const body_ref = useRef<HTMLDivElement>(null);
 
@@ -49,32 +37,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         && props.display_options?.provided?.draggableProps?.style !== null
         && (props.display_options.provided.draggableProps.style as Record<string, unknown>).position === 'fixed';
 
-    // measure body dimensions and detect overflow (runs regardless of focus so we always know)
-    useEffect(() => {
-        if (!is_top_level || !body_ref.current) {
-            setOverflowState({ overflows: false, max_height: 0 });
-            return;
-        }
-        const el = body_ref.current;
-        const check = (): void => {
-            // skip measurement during drag - element is position:fixed with wrong dimensions
-            if (getComputedStyle(el).position === 'fixed') { return; }
-            const width = el.offsetWidth;
-            // skip measurement when element has no width (e.g. during initial layout or hidden tab)
-            // - otherwise max_height becomes 0, hiding all body content
-            if (width === 0) { return; }
-            const max_h = width * HEIGHT_RATIO;
-            const naturally_overflows = el.scrollHeight > max_h;
-            setOverflowState(prev => {
-                if (prev.overflows === naturally_overflows && prev.max_height === max_h) { return prev; }
-                return { overflows: naturally_overflows, max_height: max_h };
-            });
-        };
-        const observer = new ResizeObserver(check);
-        observer.observe(el);
-        check();
-        return () => observer.disconnect();
-    }, [is_top_level]);
+    const overflow_state = useMarkdownNoteOverflow(body_ref, is_top_level);
 
     // manual expand state: tracks user's "Show more" click when auto-expand is off
     const [manually_expanded, setManuallyExpanded] = useState(false);
@@ -96,76 +59,14 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     if (!is_dragging) { clip_lock_ref.current = should_clip_base; }
     const should_clip = is_dragging ? clip_lock_ref.current : should_clip_base;
 
-    // helper: set body scrollTop and update scrolled_top / at_bottom state
-    const applyBodyScroll = useCallback((scroll_to: number) => {
-        if (!body_ref.current) { return; }
-        body_ref.current.scrollTop = scroll_to;
-        setScrolledTop(scroll_to);
-        setAtBottom(body_ref.current.scrollTop + body_ref.current.clientHeight >= body_ref.current.scrollHeight - 2);
-    }, []);
-
-    // scroll body to first incomplete task when clipped
-    const first_incomplete_seq = useMemo(
-        () => findFirstIncompleteTaskSeq(props.children_body),
-        [props.body_raw],
-    );
-    useLayoutEffect(() => {
-        if (!body_ref.current) { return; }
-        if (!should_clip) {
-            applyBodyScroll(0);
-            return;
-        }
-        if (first_incomplete_seq === undefined) {
-            applyBodyScroll(0);
-            return;
-        }
-        const task_el = body_ref.current.querySelector(`[data-seq="${first_incomplete_seq}"]`) as HTMLElement | null;
-        if (!task_el) {
-            applyBodyScroll(0);
-            return;
-        }
-        applyBodyScroll(Math.max(0, task_el.offsetTop - SCROLL_CONTEXT_PX));
-    }, [should_clip, first_incomplete_seq, props.body_raw]);
-
-    // scroll body to caret position when focused and clipped - overrides task-aware scroll;
-    // when focus leaves, restore task-aware scroll to first incomplete task
-    const caret_offset = props.display_options?.caret_offset as number | undefined;
-    useLayoutEffect(() => {
-        if (!body_ref.current || !should_clip) { return; }
-        if (!props.focused) {
-            // focus left - restore task-aware scroll position
-            const task_el = first_incomplete_seq !== undefined
-                ? body_ref.current.querySelector(`[data-seq="${first_incomplete_seq}"]`) as HTMLElement | null
-                : null;
-            applyBodyScroll(task_el ? Math.max(0, task_el.offsetTop - SCROLL_CONTEXT_PX) : 0);
-            return;
-        }
-        if (caret_offset === undefined) { return; }
-        // find the body item containing the caret
-        const candidates = body_ref.current.querySelectorAll<HTMLElement>('[data-offset-start]');
-        let target_el: HTMLElement | undefined;
-        for (let i = candidates.length - 1; i >= 0; --i) {
-            const el = candidates[i];
-            const start = Number(el.dataset.offsetStart);
-            const end = Number(el.dataset.offsetEnd);
-            if (!isNaN(start) && !isNaN(end) && caret_offset >= start && caret_offset <= end) {
-                target_el = el;
-                break;
-            }
-        }
-        if (!target_el) { return; }
-        // check if the target is already visible within the clipped body
-        const body_rect = body_ref.current.getBoundingClientRect();
-        const target_rect = target_el.getBoundingClientRect();
-        const fade_top = 64;   // 4em - matches .abridgeFadeTop height
-        const fade_bottom = 96; // 6em - matches .abridgeFade height
-        const visible_top = body_rect.top + fade_top;
-        const visible_bottom = body_rect.bottom - fade_bottom;
-        if (target_rect.top >= visible_top && target_rect.bottom <= visible_bottom) { return; }
-        // scroll body to show target, centred between fades
-        const target_offset_in_body = target_rect.top - body_rect.top + body_ref.current.scrollTop;
-        applyBodyScroll(Math.max(0, target_offset_in_body - fade_top));
-    }, [should_clip, props.focused, caret_offset]);
+    const { scrolled_top, at_bottom } = useMarkdownNoteBodyScroll({
+        body_ref,
+        should_clip,
+        focused: props.focused,
+        children_body: props.children_body,
+        body_raw: props.body_raw,
+        caret_offset: props.display_options?.caret_offset as number | undefined,
+    });
 
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
     // always strip linetag link nodes from MDAST - they render as invisible empty <a> elements;
@@ -186,95 +87,19 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         ...props
     };
 
-    // render note
-    const has_body = !!(note.children_body?.length);
     return (
-        <div className={buildNoteStyles(note, note.display_options?.additional_classes).join(' ')}
-             id={note.display_options?.id}
-             {...getStandardNoteDataProps(note)}
-             /**
-              * debugging support
-              */
-             data-level={note.level}
-             data-deepest-selectable-level={note.display_options?.deepest?.selectable_level}
-             data-deepest-selectable-note-level={note.display_options?.deepest?.selectable_note?.level}
-             data-focused-seqs={note.display_options?.focused_seqs?.join(',')}
-             data-cropped-focused-seqs={note.display_options?.cropped_focused_seqs?.join(',')}
-             data-selected-seqs={note.display_options?.selected_seqs?.join(',')}
-             data-cropped-selected-seqs={note.display_options?.cropped_selected_seqs?.join(',')}
-             // passed-on inherited props (such as draggable)
-             {...props.display_options?.provided?.draggableProps}
-             {...props.display_options?.provided?.dragHandleProps}
-             ref={set_refs}
-             role={'row'} aria-current={note.focused} aria-selected={note.selected}
-             style={props.display_options?.provided?.draggableProps?.style as React.CSSProperties | undefined}
-        >
-            <div className={view_specific_styles.headline}
-                 role={'rowheader'}
-                 data-offset-start={note.position.start.offset}
-                 data-offset-end={note.position.end.offset}
-                 onClick={createNoteClickHandler(note, headlineClickPosition(note))}
-            >
-                {note.display_options?.settings?.show_line_numbers && note.level === note.display_options?.deepest?.selectable_level && (<span className={view_specific_styles.lineno}><span>{note.position.start.line}</span></span>)}
-                {note.origin && note.level === 1 && (
-                    <OriginPill
-                        origin={note.origin}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            note.handlers?.postMessage?.({
-                                type: 'revealRange',
-                                from: note.position.start.offset,
-                                docPath: note.origin!.doc_path,
-                            });
-                        }}
-                    />
-                )}
-                {note.headline}
-                {note.display_options?.settings?.show_linetags_in_headlines && note.linetags && Object.entries(note.linetags)
-                    .filter(([key]) => !isInternalAttribute(key))
-                    .map(([key, tag]) => (
-                        <span key={key} className={view_specific_styles.linetagInline}>{key}={tag.value}</span>
-                    ))
-                }
-            </div>
-            { note.linetags && <GenericNoteAttributes
-                {...note}
-            /> }
-            { has_body && (
-                <div style={{ position: 'relative' }}>
-                    <div className={view_specific_styles.body}
-                         ref={body_ref}
-                         onClick={createNoteClickHandler(note, bodyClickPosition(note))}
-                         style={should_clip ? { maxHeight: `${overflow_state.max_height}px`, overflow: 'hidden', scrollPaddingTop: '4em', scrollPaddingBottom: '6em' } : undefined}
-                    >
-                        {renderBodyItems(note, note.children_body)}
-                    </div>
-                    {should_clip && scrolled_top > 0 && (
-                        <div className={view_specific_styles.abridgeFadeTop}>
-                            <span className={view_specific_styles.readMoreRow}>
-                                <span
-                                    className={view_specific_styles.readMoreToggle}
-                                    onClick={(e) => { e.stopPropagation(); setManuallyExpanded(true); }}
-                                    role="button"
-                                >Show more</span>
-                                <span className={view_specific_styles.readMoreArrow + ' ' + view_specific_styles.readMoreArrowDown}>{'\u00BB'}</span>
-                            </span>
-                        </div>
-                    )}
-                    {should_clip && !at_bottom && (
-                        <div className={view_specific_styles.abridgeFade}>
-                            <span className={view_specific_styles.readMoreRow}>
-                                <span
-                                    className={view_specific_styles.readMoreToggle}
-                                    onClick={(e) => { e.stopPropagation(); setManuallyExpanded(true); }}
-                                    role="button"
-                                >Show more</span>
-                                <span className={view_specific_styles.readMoreArrow + ' ' + view_specific_styles.readMoreArrowUp}>{'\u00BB'}</span>
-                            </span>
-                        </div>
-                    )}
-                </div>
-            )}
+        <MarkdownNoteContainer note={note} set_refs={set_refs}>
+            <MarkdownNoteHeadline note={note} />
+            { note.linetags && <GenericNoteAttributes {...note} /> }
+            <MarkdownNoteBody
+                note={note}
+                body_ref={body_ref}
+                should_clip={should_clip}
+                max_height={overflow_state.max_height}
+                scrolled_top={scrolled_top}
+                at_bottom={at_bottom}
+                onExpand={() => setManuallyExpanded(true)}
+            />
             {!should_clip && is_top_level && overflow_state.overflows && (
                 <div className={view_specific_styles.showLessBar}>
                     <span
@@ -284,7 +109,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
                     >Show less</span>
                 </div>
             )}
-        </div>
+        </MarkdownNoteContainer>
     );
 }, areMarkdownNotePropsEqual);
 

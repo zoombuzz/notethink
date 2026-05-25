@@ -1,25 +1,19 @@
 import Debug from 'debug';
-import React, { type ReactElement, Profiler, useMemo } from "react";
-import {
-    DragDropContext,
-    Draggable,
-    Droppable,
-    type DragStart,
-    type DropResult,
-    type ResponderProvided,
+import React, { type ReactElement, Profiler } from "react";
+import type {
+    DragStart,
+    DropResult,
+    ResponderProvided,
 } from '@hello-pangea/dnd';
-import {
-    withinNoteHeadlineOrBodyUpTo,
-    kanbanNoteOrder,
-} from "../../lib/noteops";
+import { withinNoteHeadlineOrBodyUpTo } from "../../lib/noteops";
 import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
-import { calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering } from "../../lib/linetagops";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
-import type { EditTextChange } from "../../types/Messages";
-import KanbanColumn from "./KanbanColumn";
 import GenericNote from "../notes/GenericNote";
+import { useKanbanColumns } from "./kanban/useKanbanColumns";
+import { buildKanbanDragEndPayload } from "./kanban/kanbanDragEndPayload";
+import KanbanBoard from "./kanban/KanbanBoard";
 import master_view_styles from "../ViewRenderer.module.scss";
 import view_specific_styles from "../ViewRenderer.module.scss";
 
@@ -31,14 +25,6 @@ const onProfilerRender = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV)
         debug('Profiler %s %s %dms', id, phase, actualDuration.toFixed(1));
     }
     : undefined;
-
-interface Column {
-    seq?: number;
-    value: string;
-    type?: string;
-    child_notes?: Array<NoteProps>;
-    display_options?: NoteDisplayOptions;
-}
 
 const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, display_options: NoteDisplayOptions): ReactElement => {
     const filtered_children_body = note.children_body.filter((child) => !('seq' in child && child.seq !== undefined));
@@ -60,7 +46,6 @@ const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, dis
     />;
 };
 
-// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function KanbanView(props: ViewProps): ReactElement {
 
     const display_options: NoteDisplayOptions = {
@@ -72,41 +57,7 @@ export default function KanbanView(props: ViewProps): ReactElement {
         },
     };
 
-    const columns = useMemo<Array<Column>>(() => {
-        const status_values = new Set<string>();
-        for (const note of (props.notes_within_parent_context || [])) {
-            if (note.linetags?.status?.value) {
-                status_values.add(note.linetags.status.value);
-            }
-        }
-        const custom_order = display_options.settings?.column_order;
-        if (custom_order && custom_order.length > 0) {
-            // start with custom order, then append any new status values not in the order
-            const ordered: Column[] = custom_order.map((value, index) => ({
-                seq: index,
-                value,
-                type: value === 'untagged' ? 'pseudo' : undefined,
-            }));
-            const ordered_values = new Set(custom_order);
-            for (const value of Array.from(status_values).sort()) {
-                if (!ordered_values.has(value)) {
-                    ordered.push({ seq: ordered.length, value });
-                }
-            }
-            // ensure untagged is present (at end if not explicitly placed)
-            if (!ordered_values.has('untagged')) {
-                ordered.push({ seq: ordered.length, value: 'untagged', type: 'pseudo' });
-            }
-            return ordered;
-        }
-        // default: named columns alphabetically, then untagged last
-        const result: Column[] = [];
-        Array.from(status_values).sort().forEach((value, index) => {
-            result.push({ seq: index, value });
-        });
-        result.push({ seq: result.length, value: "untagged", type: "pseudo" });
-        return result;
-    }, [props.notes_within_parent_context, display_options.settings?.column_order]);
+    const columns = useKanbanColumns(props.notes_within_parent_context, display_options.settings?.column_order);
 
     /**
      * post revealRange directly rather than going through props.handlers.click so the
@@ -128,16 +79,12 @@ export default function KanbanView(props: ViewProps): ReactElement {
     };
 
     /**
-     * assemble the edits for a drop and route them per origin file. The status-tag change
-     * always targets the dragged note's origin file; the ordering cascade returns per-doc
-     * partitioned change sets which are merged by docPath. When every change lands on one
-     * file (or there is no origin at all — pure single-file mode) the legacy single-doc
-     * `editText` shape is posted so single-file behaviour stays byte-identical and the
-     * extension takes its fast path; when the cascade spills across files the partitioned
-     * `changes_by_doc` shape is posted instead.
+     * thin React adapter around `buildKanbanDragEndPayload`: pulls the dragged note and
+     * destination column out of the drop result, applies the lock + no-destination guards,
+     * then delegates payload assembly (status-tag rewrite + ordering cascade + single-doc
+     * vs multi-doc routing) to the pure helper and posts whatever it returns.
      */
     const dragEndHandler = (result: DropResult, provided: ResponderProvided): void => {
-        const destination_column_position = result.destination?.index || 0;
         if (!result.destination?.droppableId) { return; }
         const destination_column_seq = Number(result.destination?.droppableId);
         const destination_column = columns[destination_column_seq];
@@ -147,69 +94,15 @@ export default function KanbanView(props: ViewProps): ReactElement {
         const dragged_note = (props.notes || []).at(dragged_note_seq);
         if (!dragged_note) { return; }
         if (dragged_note.locked) { return; }
-
-        const dragged_doc_path = dragged_note.origin?.doc_path;
-        const status_changes: Array<EditTextChange> = calculateTextChangesForNewLinetagValue(
-            dragged_note, 'status', destination_column.value, 'untagged',
-        );
-
-        const destination_column_children = (destination_column.child_notes || [])
-            .filter((note) => (dragged_note.seq !== note.seq));
-        destination_column_children.splice(destination_column_position, 0, dragged_note);
-        const ordering_change_sets = calculateTextChangesForOrdering(
-            destination_column_children, destination_column_position, 'kanban_ordering_weight',
-        );
-
-        // status-tag goes under the dragged file; each ordering change-set under its own doc_path
-        const changes_by_doc: Record<string, Array<EditTextChange>> = {};
-        const status_key = dragged_doc_path;
-        if (status_changes.length > 0 && status_key !== undefined) {
-            changes_by_doc[status_key] = (changes_by_doc[status_key] || []).concat(status_changes);
-        }
-        for (const set of ordering_change_sets) {
-            if (set.doc_path === undefined) { continue; }
-            if (set.changes.length === 0) { continue; }
-            changes_by_doc[set.doc_path] = (changes_by_doc[set.doc_path] || []).concat(set.changes);
-        }
-        // drop empties defensively
-        for (const key of Object.keys(changes_by_doc)) {
-            if (changes_by_doc[key].length === 0) { delete changes_by_doc[key]; }
-        }
-
         if (!props.handlers?.postMessage) { return; }
-
-        // pure single-file mode: no origin to key on, flatten into the legacy single-doc shape
-        if (dragged_doc_path === undefined) {
-            const flat: Array<EditTextChange> = [...status_changes];
-            for (const set of ordering_change_sets) { flat.push(...set.changes); }
-            if (flat.length === 0) { return; }
-            props.handlers.postMessage({
-                type: 'editText',
-                changes: flat,
-                docPath: undefined,
-            });
-            return;
-        }
-
-        const doc_paths = Object.keys(changes_by_doc);
-        if (doc_paths.length === 0) { return; }
-
-        // every change targets one file — legacy single-doc shape
-        if (doc_paths.length === 1) {
-            const only_doc = doc_paths[0];
-            props.handlers.postMessage({
-                type: 'editText',
-                changes: changes_by_doc[only_doc],
-                docPath: only_doc,
-            });
-            return;
-        }
-
-        // cascade spilled across files — partitioned shape
-        props.handlers.postMessage({
-            type: 'editText',
-            changes_by_doc,
+        const payload = buildKanbanDragEndPayload({
+            dragged_note,
+            destination_column_value: destination_column.value,
+            destination_column_children: destination_column.child_notes || [],
+            destination_column_position: result.destination?.index || 0,
         });
+        if (payload === null) { return; }
+        props.handlers.postMessage(payload);
     };
 
     // scroll focused note (and body item) into view when caret moves
@@ -218,73 +111,10 @@ export default function KanbanView(props: ViewProps): ReactElement {
     // virtual caret indicator: pulse-highlight the body item containing the editor caret
     useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
 
-    // assign notes to columns
-    const kanban_order = kanbanNoteOrder;
-    columns.map((column: Column) => {
-        column.child_notes = (props.notes_within_parent_context || [])
-            .filter((note: NoteProps) => (
-                (note?.linetags?.status && note?.linetags?.status.value === column.value)
-                || (!note?.linetags?.status && column.value === 'untagged')
-            ))
-            .sort(kanban_order);
-    });
-
     // only render columns that contain stories (a stale column_order can list statuses no note currently uses)
     // fall back to all columns when nothing has stories so an empty board is never blank
     const populated_columns = columns.filter(col => (col.child_notes?.length ?? 0) > 0);
     const visible_columns = populated_columns.length > 0 ? populated_columns : columns;
-
-    const rendered_board: ReactElement = <div className={view_specific_styles.board} data-total-columns={visible_columns.length}>
-        <DragDropContext onDragEnd={dragEndHandler} onDragStart={dragStartHandler}>
-            {visible_columns.map((column: Column, i: number, column_array: Array<Column>) => (
-                <Droppable key={i} droppableId={`${column.seq}`}>
-                    {(provided_drop) => (
-                        <KanbanColumn
-                            seq={column.seq || i}
-                            value={column.value}
-                            type={column.type}
-                            count={column.child_notes?.length ?? 0}
-                            display_options={{
-                                ...column?.display_options,
-                                total_columns: column_array.length,
-                                provided: {
-                                    droppableProps: { ...provided_drop.droppableProps },
-                                    innerRef: provided_drop.innerRef,
-                                },
-                            }}
-                        >
-                            {(column.child_notes || [])
-                                .map((note: NoteProps, index: number) => (
-                                    <Draggable key={note.seq} draggableId={`${note.seq}`} index={index}>
-                                        {(provided_drag, snapshot_drag) => (
-                                            <GenericNote
-                                                {...note}
-                                                display_options={{
-                                                    ...buildChildNoteDisplayOptions(display_options, note, props),
-                                                    additional_classes: snapshot_drag.isDragging ? ['dragging'] : undefined,
-                                                    provided: {
-                                                        draggableProps: { ...provided_drag.draggableProps },
-                                                        dragHandleProps: provided_drag.dragHandleProps ? { ...provided_drag.dragHandleProps } : undefined,
-                                                        innerRef: provided_drag.innerRef,
-                                                    },
-                                                }}
-                                                handlers={{
-                                                    click: props.handlers?.click,
-                                                    setCaretPosition: props.handlers?.setCaretPosition,
-                                                    postMessage: props.handlers?.postMessage,
-                                                }}
-                                            />
-                                        )}
-                                    </Draggable>
-                                ))
-                            }
-                            {provided_drop.placeholder}
-                        </KanbanColumn>
-                    )}
-                </Droppable>
-            ))}
-        </DragDropContext>
-    </div>;
 
     const container_styles: Array<string> = [view_specific_styles.viewKanban, master_view_styles.content];
 
@@ -293,7 +123,13 @@ export default function KanbanView(props: ViewProps): ReactElement {
              onClick={(display_options.focused_notes?.length ? props.handlers?.getClearHandler?.(display_options.focused_notes) : undefined)}
              data-level={display_options.level} data-parent-content-seq={display_options.parent_context_seq}>
             {props.nested?.parent_context && renderTopLevelNoteWithoutChildren(props.nested?.parent_context, props, display_options)}
-            {rendered_board}
+            <KanbanBoard
+                visible_columns={visible_columns}
+                display_options={display_options}
+                view={props}
+                onDragStart={dragStartHandler}
+                onDragEnd={dragEndHandler}
+            />
         </div>
     );
 

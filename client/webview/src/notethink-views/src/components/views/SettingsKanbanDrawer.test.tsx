@@ -29,7 +29,7 @@ describe('SettingsKanbanDrawer', () => {
     });
 
     it('shows column order list (custom order if set, else natural)', () => {
-        renderDrawer({ settings: { column_order: ['done', 'doing', 'untagged'] } });
+        renderDrawer({ settings: { columnOrder: ['done', 'doing', 'untagged'] } });
         // formatColumnLabel formats the raw status slug (dashes → spaces, title-case)
         const items = screen.getAllByText(/^(Doing|Done|Untagged)$/);
         expect(items.map(el => el.textContent)).toEqual(['Done', 'Doing', 'Untagged']);
@@ -43,9 +43,9 @@ describe('SettingsKanbanDrawer', () => {
 
     it('appends live columns missing from a stale saved order so they stay reorderable', () => {
         // a note has status=testing (so naturalColumnOrder includes it) but the
-        // saved column_order predates it — testing must still appear and be movable
+        // saved columnOrder predates it — testing must still appear and be movable
         renderDrawer({
-            settings: { column_order: ['done', 'doing', 'untagged'] },
+            settings: { columnOrder: ['done', 'doing', 'untagged'] },
             naturalColumnOrder: ['doing', 'done', 'testing', 'untagged'],
         });
         const items = screen.getAllByText(/^(Doing|Done|Testing|Untagged)$/);
@@ -77,7 +77,7 @@ describe('SettingsKanbanDrawer', () => {
     it('clicking Reset order dispatches onColumnOrderChange with the natural order', () => {
         const on_order = jest.fn();
         renderDrawer({
-            settings: { column_order: ['done', 'doing', 'untagged'] },
+            settings: { columnOrder: ['done', 'doing', 'untagged'] },
             onColumnOrderChange: on_order,
         });
         fireEvent.click(screen.getByText('Reset order'));
@@ -93,7 +93,7 @@ describe('SettingsKanbanDrawer', () => {
         )!;
         fireEvent.click(linetags_cb);
         expect(on_change).toHaveBeenCalledTimes(1);
-        expect(on_change).toHaveBeenCalledWith('show_linetags_in_headlines', true);
+        expect(on_change).toHaveBeenCalledWith('showLinetagsInHeadlines', true);
     });
 
     it('toggling the line numbers checkbox dispatches onGlobalSettingChange immediately', () => {
@@ -104,7 +104,7 @@ describe('SettingsKanbanDrawer', () => {
         )!;
         fireEvent.click(line_cb);
         expect(on_global).toHaveBeenCalledTimes(1);
-        expect(on_global).toHaveBeenCalledWith('show_line_numbers', true);
+        expect(on_global).toHaveBeenCalledWith('showLineNumbers', true);
     });
 
     it('has no Save or Cancel button', () => {

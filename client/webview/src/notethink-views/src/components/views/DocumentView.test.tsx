@@ -59,7 +59,7 @@ describe('DocumentView', () => {
         const props_with_context_bar: ViewProps = {
             ...default_props,
             display_options: {
-                settings: { show_context_bars: true },
+                settings: { showContextBars: true },
             },
         };
         render(<DocumentView {...props_with_context_bar} />);

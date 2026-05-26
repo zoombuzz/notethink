@@ -9,7 +9,7 @@ import { anyViewInFolderMode, firstIntegrationPath } from "../notethink-views/sr
 import type { Nodes as MdastNodesType } from "mdast";
 import type { HashMapOf, Doc } from "../types/general";
 import type { TextSelection } from "../notethink-views/src/types/NoteProps";
-import type { GlobalSettingsPayload, FolderViewSettingsPayload } from "../notethink-views/src/types/Messages";
+import type { GlobalSettingsPayload, SettingsCascadePayload } from "../notethink-views/src/types/Messages";
 import type { ViewState } from './ExtensionReceiver';
 import NoteTreeComposer from './composers/NoteTreeComposer';
 import FolderTreeComposer from './composers/FolderTreeComposer';
@@ -38,18 +38,39 @@ export interface NoteRendererProps {
     onNavigationCommand?: React.MutableRefObject<((direction: string) => void) | undefined>;
     workspace_root?: string;
     aggregate_total_discovered?: number;
-    include_filter?: string;
-    exclude_filter?: string;
+    includeFilter?: string;
+    excludeFilter?: string;
     globalSettings?: GlobalSettingsPayload;
-    folderViewSettings?: FolderViewSettingsPayload;
+    settingsCascade?: SettingsCascadePayload;
+}
+
+/**
+ * Pick the most-recently-sent doc from the map (ISO `updateSentAt` lex-compares as
+ * chronological). Used in current_file mode to render exactly one composer regardless
+ * of how the docs map got populated — a doc stamped by the extension's sendDoc is the
+ * one the extension considers active.
+ */
+function pickMostRecentlySentDoc(notes: HashMapOf<Doc>): [string, Doc] | undefined {
+    let best_entry: [string, Doc] | undefined;
+    let best_ts = '';
+    for (const entry of Object.entries(notes)) {
+        const ts = entry[1].updateSentAt ?? '';
+        if (!best_entry || ts > best_ts) {
+            best_entry = entry;
+            best_ts = ts;
+        }
+    }
+    return best_entry;
 }
 
 /**
  * NoteRenderer dispatches the loaded Docs to a tree-composer.
  *
- * Single-file mode renders one NoteTreeComposer per Doc (legacy stacked-views shape, used
- * in practice with one Doc at a time). Aggregate (folder) mode renders a single
- * FolderTreeComposer that merges every Doc into one synthetic root.
+ * Current_file mode renders one NoteTreeComposer for the active doc (the most-recently
+ * sent doc — `updateSentAt`-stamped by the extension). Stale entries lingering in the
+ * docs map (folder→current_file transition states, message races) must not stack up as
+ * extra single-file views. Aggregate (folder) mode renders a single FolderTreeComposer
+ * that merges every Doc into one synthetic root.
  */
 export default function NoteRenderer(props: NoteRendererProps): ReactElement {
     const ref = useRef<HTMLDivElement>(null);
@@ -76,23 +97,25 @@ export default function NoteRenderer(props: NoteRendererProps): ReactElement {
         </div>;
     }
 
-    const rendered_notes = Object.entries(props.notes).map(([note_id, note]) => {
-        if (!note.content) {
-            return null;
-        }
-        if (note.text) {
-            return <Suspense key={note_id} fallback={<div>Loading...</div>}>
+    // current_file mode: render exactly one composer for the most-recently-sent doc; never stack N single-file views
+    const active_entry = pickMostRecentlySentDoc(props.notes);
+    let rendered_note: ReactElement | null = null;
+    if (active_entry) {
+        const [note_id, note] = active_entry;
+        if (note.content && note.text) {
+            rendered_note = <Suspense key={note_id} fallback={<div>Loading...</div>}>
                 <ErrorBoundary onError={handleRenderError}>
                     <NoteTreeComposer note_id={note_id} note={note} props={props} />
                 </ErrorBoundary>
             </Suspense>;
+        } else if (note.content) {
+            // fallback: raw MDAST rendering for docs without text
+            rendered_note = <div key={note_id} className="note-renderer">
+                {renderNodeUnified(note.content)}
+            </div>;
         }
-        // fallback: raw MDAST rendering for docs without text
-        return <div key={note_id} className="note-renderer">
-            {renderNodeUnified(note.content)}
-        </div>;
-    });
+    }
     return <div ref={ref} data-testid="NoteRenderer">
-        {rendered_notes}
+        {rendered_note}
     </div>;
 }

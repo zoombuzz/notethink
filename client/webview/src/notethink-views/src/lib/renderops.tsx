@@ -35,7 +35,8 @@ export function renderMarkdownNoteHeadline(note: NoteProps, options_arg: RenderO
     }, options_arg);
     let headline;
     if (note.type === 'root') {
-        headline = <span>Root</span>;
+        // synthetic root container has no meaningful headline; its children render unchanged
+        headline = <></>;
     } else {
         const checked_set = (note.checked === true || note.checked === false);
         let render_target: MdastNode = note;

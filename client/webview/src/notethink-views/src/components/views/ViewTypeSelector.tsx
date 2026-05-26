@@ -11,14 +11,14 @@ function capitalize(s: string): string {
 }
 
 /**
- * - onFolderCascadeWrite: when present, called after `setViewManagedState` so the parent can round-trip the change to VS Code config; the parent only passes it in folder mode
+ * - onCascadeWrite: called after `setViewManagedState` so the parent can round-trip the change to VS Code config under notethink.settings.*. Fires in any integration mode — viewType is a view-type setting, not folder-specific
  */
 interface ViewTypeSelectorProps {
     currentType: string;
     autoResolvedType?: string;
     handlers?: ViewProps['handlers'];
     id: string;
-    onFolderCascadeWrite?: (viewType: string) => void;
+    onCascadeWrite?: (viewType: string) => void;
 }
 
 export default function ViewTypeSelector(props: ViewTypeSelectorProps): ReactElement {
@@ -28,7 +28,7 @@ export default function ViewTypeSelector(props: ViewTypeSelectorProps): ReactEle
             id: props.id,
             type: viewType,
         }]);
-        props.onFolderCascadeWrite?.(viewType);
+        props.onCascadeWrite?.(viewType);
     };
 
     return (

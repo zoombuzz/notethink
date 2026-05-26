@@ -2,6 +2,7 @@ import Debug from "debug";
 import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNoteHierarchy";
 import { stripHeadlineLinetags } from "./noteops";
 import { buildProjectLabels, hueForProjectIndex, projectNameFromRelativePath } from "../components/notes/OriginPill";
+import { INTEGRATION_MODE_FOLDER } from "../types/IntegrationMode";
 import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NoteProps";
 
 const debug = Debug("nodejs:notethink-views:mergeAggregateRoot");
@@ -88,7 +89,7 @@ interface CollectedStory {
 const ORDER_NEWEST_AT_BOTTOM = 'newest-at-bottom';
 
 /**
- * canonical viewState key for folder mode. All folder-mode reads and writes use this key so settings (column_order, filters, view type, etc.) survive a flip to current_file mode and back.
+ * canonical viewState key for folder mode. All folder-mode reads and writes use this key so settings (columnOrder, filters, view type, etc.) survive a flip to current_file mode and back.
  */
 export const FOLDER_VIEW_STATE_ID = '__folder__';
 
@@ -203,7 +204,7 @@ function walkStorySubtree(
  *
  * Renumbers seqs globally and rewrites parent_notes so the merged tree has a single root.
  *
- * `max_notes_per_file` (optional) caps how many top-level stories each source file
+ * `maxNotesPerFile` (optional) caps how many top-level stories each source file
  * contributes. Undefined → no cap (unchanged behaviour). Which end is kept depends on
  * the file H1's `order` linetag (see trimFileStories).
  */
@@ -211,7 +212,7 @@ function walkStorySubtree(
 export function mergeAggregateRoot(
     docs: { [key: string]: AggregatedDocInput | undefined },
     integration_path: string,
-    max_notes_per_file?: number,
+    maxNotesPerFile?: number,
 ): MergeAggregateRootResult {
     // 1. parse each doc once
     const parsed: PerFileParse[] = [];
@@ -313,7 +314,7 @@ export function mergeAggregateRoot(
             // ignore other depths and non-heading types at file root
         }
 
-        per_file_lists.push(selectFileStories(file_stories, max_notes_per_file, file_order));
+        per_file_lists.push(selectFileStories(file_stories, maxNotesPerFile, file_order));
     }
 
     // interleave round-robin by per-file rank so each column shows the latest picture across projects: rank-0 of every file (in stable file order), then rank-1, etc; a file with fewer stories simply drops out of later rounds while longer ones keep contributing
@@ -380,37 +381,35 @@ export function mergeAggregateRoot(
 }
 
 /**
- * helper used by NoteRenderer to detect whether any of the supplied view states has switched to folder aggregation. Exported so tests can exercise it. Checks the canonical FOLDER_VIEW_STATE_ID first, then falls back to a scan for any entry tagged integration_mode='folder' so a stranded doc-path-keyed viewState still resolves to folder mode.
+ * helper used by NoteRenderer to detect whether any of the supplied view states has switched to folder aggregation. Exported so tests can exercise it. Checks the canonical FOLDER_VIEW_STATE_ID first, then falls back to a scan for any entry tagged integration_mode='folder' so a stranded doc-path-keyed viewState still resolves to folder mode (legacy rescue — necessary for pre-fix persisted state that never had a canonical entry; the dispatcher's clearing-on-flip is what eventually cleans this up).
  */
 export function anyViewInFolderMode(
     view_states: Record<string, { display_options?: { integration_mode?: string } }> | undefined,
 ): boolean {
     if (!view_states) { return false; }
-    if (view_states[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode === 'folder') { return true; }
+    if (view_states[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER) { return true; }
     for (const id of Object.keys(view_states)) {
         if (id === FOLDER_VIEW_STATE_ID) { continue; }
-        if (view_states[id]?.display_options?.integration_mode === 'folder') { return true; }
+        if (view_states[id]?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER) { return true; }
     }
     return false;
 }
 
 /**
- * Reads the integration_path from the folder viewState. Checks the canonical key first,
- * then falls back to the first legacy entry tagged integration_mode='folder' for state
- * stranded under a doc-path key by the pre-fix dispatch bug.
+ * Reads the integration_path from the folder viewState. Checks the canonical key first, then falls back to the first legacy entry tagged integration_mode='folder' for state stranded under a doc-path key by the pre-fix dispatch bug (legacy rescue).
  */
 export function firstIntegrationPath(
     view_states: Record<string, { display_options?: { integration_mode?: string; integration_path?: string } }> | undefined,
 ): string | undefined {
     if (!view_states) { return undefined; }
     const canonical = view_states[FOLDER_VIEW_STATE_ID];
-    if (canonical?.display_options?.integration_mode === 'folder' && typeof canonical.display_options.integration_path === 'string') {
+    if (canonical?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER && typeof canonical.display_options.integration_path === 'string') {
         return canonical.display_options.integration_path;
     }
     for (const id of Object.keys(view_states)) {
         if (id === FOLDER_VIEW_STATE_ID) { continue; }
         const v = view_states[id];
-        if (v?.display_options?.integration_mode === 'folder' && typeof v.display_options.integration_path === 'string') {
+        if (v?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER && typeof v.display_options.integration_path === 'string') {
             return v.display_options.integration_path;
         }
     }

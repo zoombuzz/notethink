@@ -29,9 +29,9 @@ describe('SettingsDocumentDrawer', () => {
     it('checkboxes reflect initial settings values', () => {
         renderDrawer({
             settings: {
-                show_linetags_in_headlines: true,
-                scroll_note_into_view: false,
-                auto_expand_focused_note: true,
+                showLinetagsInHeadlines: true,
+                scrollNoteIntoView: false,
+                autoExpandFocusedNote: true,
             },
         });
         const checkboxes = screen.getAllByRole('checkbox');
@@ -53,13 +53,13 @@ describe('SettingsDocumentDrawer', () => {
 
     it('toggling a per-view checkbox dispatches onSettingChange immediately', () => {
         const on_change = jest.fn();
-        renderDrawer({ settings: { auto_expand_focused_note: false }, onSettingChange: on_change });
+        renderDrawer({ settings: { autoExpandFocusedNote: false }, onSettingChange: on_change });
         const expand_cb = screen.getAllByRole('checkbox').find(
             cb => cb.closest('label')?.textContent?.includes('Auto-expand')
         )!;
         fireEvent.click(expand_cb);
         expect(on_change).toHaveBeenCalledTimes(1);
-        expect(on_change).toHaveBeenCalledWith('auto_expand_focused_note', true);
+        expect(on_change).toHaveBeenCalledWith('autoExpandFocusedNote', true);
     });
 
     it('has no Save or Cancel button', () => {
@@ -90,7 +90,7 @@ describe('SettingsDocumentDrawer', () => {
         )!;
         fireEvent.click(line_cb);
         expect(on_global).toHaveBeenCalledTimes(1);
-        expect(on_global).toHaveBeenCalledWith('show_line_numbers', true);
+        expect(on_global).toHaveBeenCalledWith('showLineNumbers', true);
     });
 
     it('renders the version label', () => {

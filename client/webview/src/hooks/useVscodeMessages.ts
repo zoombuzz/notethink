@@ -1,9 +1,10 @@
 import Debug from 'debug';
 import { useCallback, useEffect, useState } from 'react';
 import { anyViewStateTaggedFolder } from './usePersistedViewStates';
+import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { TextSelection } from '../notethink-views/src/types/NoteProps';
-import type { GlobalSettingsPayload, FolderViewSettingsPayload } from '../notethink-views/src/types/Messages';
+import type { GlobalSettingsPayload, SettingsCascadePayload } from '../notethink-views/src/types/Messages';
 import type { ViewState } from './usePersistedViewStates';
 
 const debug = Debug("nodejs:notethink:useVscodeMessages");
@@ -18,7 +19,7 @@ interface VscodeMessagesDeps {
     postMessage: (message: unknown) => void;
     markConnected: () => void;
     setGlobalSettings: (settings: GlobalSettingsPayload) => void;
-    setFolderViewSettings: (settings: FolderViewSettingsPayload) => void;
+    setSettingsCascade: (settings: SettingsCascadePayload) => void;
     updateAllViewStates: (updater: (view_state: ViewState) => ViewState) => void;
     view_states_ref: React.MutableRefObject<Record<string, ViewState>>;
     navigation_callback_ref: React.MutableRefObject<((direction: string) => void) | undefined>;
@@ -29,8 +30,8 @@ interface VscodeMessagesState {
     selections: SelectionState;
     workspace_root: string;
     aggregate_total_discovered: number | undefined;
-    include_filter: string | undefined;
-    exclude_filter: string | undefined;
+    includeFilter: string | undefined;
+    excludeFilter: string | undefined;
 }
 
 // validate the message envelope and per-type payload; returns false (and warns) when the message must be discarded
@@ -65,9 +66,9 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
             return false;
         }
     }
-    if (message.type === 'folderViewSettings') {
+    if (message.type === 'settingsCascade') {
         if (message.settings === null || message.settings === undefined || typeof message.settings !== 'object') {
-            debug('discarding folderViewSettings message with invalid settings %O', message);
+            debug('discarding settingsCascade message with invalid settings %O', message);
             return false;
         }
     }
@@ -113,18 +114,18 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial
 }
 
 // own the core doc/selection/workspace state, the host message listener, and the dispatch
-// the message-type string literals ('update', 'selectionChanged', 'command', 'globalSettings', 'folderViewSettings') are the on-the-wire contract and must stay exactly as-is
+// the message-type string literals ('update', 'selectionChanged', 'command', 'globalSettings', 'settingsCascade') are the on-the-wire contract and must stay exactly as-is
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState {
-    const { postMessage, markConnected, setGlobalSettings, setFolderViewSettings, updateAllViewStates, view_states_ref, navigation_callback_ref, saved_view_states } = deps;
+    const { postMessage, markConnected, setGlobalSettings, setSettingsCascade, updateAllViewStates, view_states_ref, navigation_callback_ref, saved_view_states } = deps;
     const [docs_state, setDocsState] = useState<{ docs?: HashMapOf<Doc> }>({ docs: deps.initial_docs || {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
     // folder mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
     const [aggregate_total_discovered, setAggregateTotalDiscovered] = useState<number | undefined>(undefined);
     // folder mode: the effective include/exclude globs the extension is using, echoed back so the Files drawer can show them
-    const [include_filter, setIncludeFilter] = useState<string | undefined>(undefined);
-    const [exclude_filter, setExcludeFilter] = useState<string | undefined>(undefined);
+    const [includeFilter, setIncludeFilter] = useState<string | undefined>(undefined);
+    const [excludeFilter, setExcludeFilter] = useState<string | undefined>(undefined);
 
     // dispatch a validated command message to the appropriate viewState mutation / navigation
     const handleCommand = useCallback((message: { command: string; viewType?: string; setting?: string; direction?: string }) => {
@@ -134,12 +135,12 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 updateAllViewStates(view_state => ({ ...view_state, type: message.viewType }));
                 // cascade: if folder mode is currently active, persist the new view type
                 if (anyViewStateTaggedFolder(view_states_ref.current)) {
-                    postMessage({ type: 'updateFolderViewSetting', setting: 'view_type', value: message.viewType });
+                    postMessage({ type: 'updateSetting', setting: 'viewType', value: message.viewType });
                 }
                 return;
             case 'toggleSetting': {
                 const setting_map: Record<string, string> = {
-                    contextBars: 'show_context_bars',
+                    contextBars: 'showContextBars',
                 };
                 const setting_key = setting_map[message.setting as string];
                 if (!setting_key) {return;}
@@ -159,9 +160,9 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                         },
                     };
                 });
-                // cascade: only show_context_bars is in the folder-view cascade today
-                if (setting_key === 'show_context_bars' && anyViewStateTaggedFolder(view_states_ref.current) && next_value !== undefined) {
-                    postMessage({ type: 'updateFolderViewSetting', setting: 'show_context_bars', value: next_value });
+                // cascade: only showContextBars is in the settings cascade today
+                if (setting_key === 'showContextBars' && anyViewStateTaggedFolder(view_states_ref.current) && next_value !== undefined) {
+                    postMessage({ type: 'updateSetting', setting: 'showContextBars', value: next_value });
                 }
                 return;
             }
@@ -192,11 +193,11 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 if (typeof message.aggregate_total_discovered === 'number') {
                     setAggregateTotalDiscovered(message.aggregate_total_discovered);
                 }
-                if (typeof message.include_filter === 'string') {
-                    setIncludeFilter(message.include_filter);
+                if (typeof message.includeFilter === 'string') {
+                    setIncludeFilter(message.includeFilter);
                 }
-                if (typeof message.exclude_filter === 'string') {
-                    setExcludeFilter(message.exclude_filter);
+                if (typeof message.excludeFilter === 'string') {
+                    setExcludeFilter(message.excludeFilter);
                 }
                 setDocsState(current => mergeUpdatedDocs(current, message));
                 return;
@@ -230,15 +231,15 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 debug('received globalSettings %O', message.settings);
                 setGlobalSettings(message.settings as GlobalSettingsPayload);
                 return;
-            case 'folderViewSettings':
-                debug('received folderViewSettings %O', message.settings);
-                setFolderViewSettings(message.settings as FolderViewSettingsPayload);
+            case 'settingsCascade':
+                debug('received settingsCascade %O', message.settings);
+                setSettingsCascade(message.settings as SettingsCascadePayload);
                 return;
             case 'command':
                 handleCommand(message);
                 return;
         }
-    }, [markConnected, setGlobalSettings, setFolderViewSettings, handleCommand]);
+    }, [markConnected, setGlobalSettings, setSettingsCascade, handleCommand]);
 
     // listen for messages sent from the extension to the webview
     useEffect(() => {
@@ -249,16 +250,16 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         if (saved_view_states) {
             for (const id of Object.keys(saved_view_states)) {
                 const vs = saved_view_states[id];
-                if (vs?.display_options?.integration_mode === 'folder' && vs?.display_options?.integration_path) {
+                if (vs?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER && vs?.display_options?.integration_path) {
                     debug('restoring folder integration on reload: %s', vs.display_options.integration_path);
                     // host re-validates this path against the workspace before acting — persisted webview state is untrusted (defense-in-depth)
                     // replay any persisted custom filters so a reload restores them rather than snapping back to the defaults
                     postMessage({
                         type: 'setIntegration',
-                        mode: 'folder',
+                        mode: INTEGRATION_MODE_FOLDER,
                         path: vs.display_options.integration_path,
-                        include: vs.display_options.include_filter,
-                        exclude: vs.display_options.exclude_filter,
+                        include: vs.display_options.includeFilter,
+                        exclude: vs.display_options.excludeFilter,
                     });
                     break;
                 }
@@ -281,7 +282,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         selections,
         workspace_root,
         aggregate_total_discovered,
-        include_filter,
-        exclude_filter,
+        includeFilter,
+        excludeFilter,
     };
 }

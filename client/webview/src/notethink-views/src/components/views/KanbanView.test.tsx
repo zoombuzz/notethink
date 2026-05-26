@@ -243,7 +243,7 @@ describe('KanbanView', () => {
         expect(within(backlog_column).getByTestId('note-2')).toBeInTheDocument();
     });
 
-    it('respects custom column_order from display_options', () => {
+    it('respects custom columnOrder from display_options', () => {
         const doing_note = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -263,7 +263,7 @@ describe('KanbanView', () => {
             notes_within_parent_context: [doing_note, review_note],
             display_options: {
                 settings: {
-                    column_order: ['review', 'untagged', 'doing'],
+                    columnOrder: ['review', 'untagged', 'doing'],
                 },
             },
         });
@@ -274,7 +274,7 @@ describe('KanbanView', () => {
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });
 
-    it('appends new status values not in column_order', () => {
+    it('appends new status values not in columnOrder', () => {
         const doing_note = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -294,12 +294,12 @@ describe('KanbanView', () => {
             notes_within_parent_context: [doing_note, blocked_note],
             display_options: {
                 settings: {
-                    column_order: ['untagged', 'doing'],
+                    columnOrder: ['untagged', 'doing'],
                 },
             },
         });
         render(<KanbanView {...props} />);
-        // 'blocked' is not in column_order but should still appear; empty Untagged hidden
+        // 'blocked' is not in columnOrder but should still appear; empty Untagged hidden
         expect(screen.getByTestId('column-blocked')).toBeInTheDocument();
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
         expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
@@ -355,7 +355,7 @@ describe('KanbanView', () => {
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });
 
-    it('hides an empty named column left over in a stale column_order', () => {
+    it('hides an empty named column left over in a stale columnOrder', () => {
         const doing_note = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -368,7 +368,7 @@ describe('KanbanView', () => {
             display_options: {
                 settings: {
                     // 'done' and 'review' are remembered in the order but no note uses them now
-                    column_order: ['review', 'done', 'doing', 'untagged'],
+                    columnOrder: ['review', 'done', 'doing', 'untagged'],
                 },
             },
         });
@@ -384,7 +384,7 @@ describe('KanbanView', () => {
             notes_within_parent_context: [],
             display_options: {
                 settings: {
-                    column_order: ['done', 'doing', 'untagged'],
+                    columnOrder: ['done', 'doing', 'untagged'],
                 },
             },
         });

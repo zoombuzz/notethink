@@ -39,6 +39,7 @@
   "{0} notes in {1} files — open the Files panel": "{0} notes in {1} files — open the Files panel",
   "{0} in {1} files": "{0} in {1} files",
   "Files": "Files",
+  "File settings": "File settings",
   "Include filter": "Include filter",
   "Exclude filter": "Exclude filter",
   "No files match the current filters": "No files match the current filters",

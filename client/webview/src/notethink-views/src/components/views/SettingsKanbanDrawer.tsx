@@ -4,6 +4,7 @@ import * as l10n from "@vscode/l10n";
 import { formatColumnLabel } from "../../lib/noteops";
 import styles from "../ViewRenderer.module.scss";
 import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } from "./SettingsCommonControls";
+import SettingsCascadeButtons from "./SettingsCascadeButtons";
 import type { GlobalSettingKey } from "../../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:SettingsKanbanDrawer");
@@ -11,7 +12,7 @@ const debug = Debug("nodejs:notethink-views:SettingsKanbanDrawer");
 declare const NOTETHINK_VERSION: string | undefined;
 
 export interface KanbanSettings extends CommonSettings {
-    column_order?: string[];
+    columnOrder?: string[];
 }
 
 interface SettingsKanbanDrawerProps {
@@ -30,7 +31,7 @@ interface SettingsKanbanDrawerProps {
 function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps): React.ReactElement {
 
     // every column the board shows must be reorderable here: start from the saved order, then append any live column (a new status like testing, or untagged) not yet in it — otherwise a status absent from a stale saved order is unreachable in this list
-    const saved_order = props.settings.column_order;
+    const saved_order = props.settings.columnOrder;
     const ordered_columns: string[] = (saved_order && saved_order.length > 0)
         ? [...saved_order, ...props.naturalColumnOrder.filter(value => !saved_order.includes(value))]
         : props.naturalColumnOrder;
@@ -93,9 +94,6 @@ function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps): React.ReactElem
                         watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
                         onSettingChange={props.onSettingChange}
                         onGlobalSettingChange={props.onGlobalSettingChange}
-                        onMakeDefault={props.onMakeDefault}
-                        onResetToDefault={props.onResetToDefault}
-                        canResetToDefault={props.canResetToDefault}
                     />
                 </section>
             </div>
@@ -106,6 +104,13 @@ function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps): React.ReactElem
                     NoteThink v{typeof NOTETHINK_VERSION !== 'undefined' ? NOTETHINK_VERSION : 'dev'}
                     {' '}(ext: {(window as unknown as Record<string, unknown>).__NOTETHINK_EXTENSION_VERSION__ as string || '?'})
                 </p>
+                {props.onMakeDefault && props.onResetToDefault && (
+                    <SettingsCascadeButtons
+                        onMakeDefault={props.onMakeDefault}
+                        onResetToDefault={props.onResetToDefault}
+                        canResetToDefault={props.canResetToDefault}
+                    />
+                )}
             </aside>
         </div>
     );

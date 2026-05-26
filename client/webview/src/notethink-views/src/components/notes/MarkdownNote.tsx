@@ -41,7 +41,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
 
     // manual expand state: tracks user's "Show more" click when auto-expand is off
     const [manually_expanded, setManuallyExpanded] = useState(false);
-    const auto_expand = props.display_options?.settings?.auto_expand_focused_note;
+    const auto_expand = props.display_options?.settings?.autoExpandFocusedNote;
 
     // reset manually_expanded when note content changes
     useEffect(() => {
@@ -70,7 +70,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
 
     // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
     // always strip linetag link nodes from MDAST - they render as invisible empty <a> elements;
-    // visible linetag badges are appended separately when show_linetags_in_headlines is enabled
+    // visible linetag badges are appended separately when showLinetagsInHeadlines is enabled
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(props, {
             render: 'strip_linetags',
@@ -129,9 +129,9 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
     if ((prev.children_body?.length ?? 0) !== (next.children_body?.length ?? 0)) { return false; }
     if (prev.display_options?.id !== next.display_options?.id) { return false; }
     if (prev.display_options?.parent_context_seq !== next.display_options?.parent_context_seq) { return false; }
-    if (prev.display_options?.settings?.show_linetags_in_headlines !== next.display_options?.settings?.show_linetags_in_headlines) { return false; }
-    if (prev.display_options?.settings?.show_line_numbers !== next.display_options?.settings?.show_line_numbers) { return false; }
-    if (prev.display_options?.settings?.auto_expand_focused_note !== next.display_options?.settings?.auto_expand_focused_note) { return false; }
+    if (prev.display_options?.settings?.showLinetagsInHeadlines !== next.display_options?.settings?.showLinetagsInHeadlines) { return false; }
+    if (prev.display_options?.settings?.showLineNumbers !== next.display_options?.settings?.showLineNumbers) { return false; }
+    if (prev.display_options?.settings?.autoExpandFocusedNote !== next.display_options?.settings?.autoExpandFocusedNote) { return false; }
     // caret offset drives body scroll in clipped notes - only re-render focused notes
     if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
     // DnD: provided changes during drag (draggableProps.style contains transform)

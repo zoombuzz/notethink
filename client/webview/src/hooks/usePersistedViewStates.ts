@@ -1,6 +1,7 @@
 import Debug from 'debug';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FOLDER_VIEW_STATE_ID } from '../notethink-views/src/lib/mergeAggregateRoot';
+import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { NoteDisplayOptions } from '../notethink-views/src/types/NoteProps';
 
@@ -23,10 +24,10 @@ type PersistVscodeState = (state: { docs: HashMapOf<Doc>; viewStates: Record<str
 
 // true if any persisted viewState (canonical key or otherwise) is tagged folder mode
 export function anyViewStateTaggedFolder(view_states: Record<string, ViewState>): boolean {
-    if (view_states[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode === 'folder') { return true; }
+    if (view_states[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER) { return true; }
     for (const id of Object.keys(view_states)) {
         if (id === FOLDER_VIEW_STATE_ID) { continue; }
-        if (view_states[id]?.display_options?.integration_mode === 'folder') { return true; }
+        if (view_states[id]?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER) { return true; }
     }
     return false;
 }

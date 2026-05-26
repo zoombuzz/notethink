@@ -51,13 +51,13 @@ export default function KanbanView(props: ViewProps): ReactElement {
     const display_options: NoteDisplayOptions = {
         ...props.display_options,
         settings: {
-            scroll_note_into_view: true,
-            show_linetags_in_headlines: false,
+            scrollNoteIntoView: true,
+            showLinetagsInHeadlines: false,
             ...props.display_options?.settings,
         },
     };
 
-    const columns = useKanbanColumns(props.notes_within_parent_context, display_options.settings?.column_order);
+    const columns = useKanbanColumns(props.notes_within_parent_context, display_options.settings?.columnOrder);
 
     /**
      * post revealRange directly rather than going through props.handlers.click so the
@@ -111,7 +111,7 @@ export default function KanbanView(props: ViewProps): ReactElement {
     // virtual caret indicator: pulse-highlight the body item containing the editor caret
     useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
 
-    // only render columns that contain stories (a stale column_order can list statuses no note currently uses)
+    // only render columns that contain stories (a stale columnOrder can list statuses no note currently uses)
     // fall back to all columns when nothing has stories so an empty board is never blank
     const populated_columns = columns.filter(col => (col.child_notes?.length ?? 0) > 0);
     const visible_columns = populated_columns.length > 0 ? populated_columns : columns;

@@ -1858,3 +1858,359 @@ Follow-up to [[function-decomposition]] (wave 1 shipped `PanelSession` + `Extens
 + commit message draft
   + notethink 0.3.1: decompose `KanbanView` (304→140) into `useKanbanColumns` hook + `buildKanbanDragEndPayload` pure helper + `<KanbanBoard>` child component, and `MarkdownNote` (316→142) into `useMarkdownNoteOverflow`/`useMarkdownNoteBodyScroll` hooks + `<MarkdownNoteContainer>`/`<MarkdownNoteHeadline>`/`<MarkdownNoteBody>` child components; behaviour-identical, custom-hook + child-component pattern matching wave-1; `useKanbanColumns` shaped to drop in as the future `ColumnBasedView` `columnDerivation` prop
   + tests 723 jest, 47 playwright
+
+
+### Centralise settings read/write through one module; settings identifiers camelCase end-to-end [](?id=settings-module-single-read-path)
+
+The filter-cascade bug from the previous story exposed a structural problem: three independent code paths in the extension read settings, each with its own `getConfiguration(...)` call, its own default handling, and its own opportunity to drift from the others. `adoptFolderFilters` and `readSettingsCascade` independently read the same `includeFilter` key with different fallback rules — that was the bug. The fix: a single canonical settings module that every read goes through.
+
++ delivery notes
+  + new module `client/extension/src/lib/settings.ts` — one canonical place for every notethink setting. Each entry binds `{ path, default, inCascade }`. The module exports `readSetting(key)`, `writeSetting(key, value, target)`, `hasWorkspaceOverride(key)`, `cascadeKeys()` (subset filter), and `buildSettingsCascadePayload()` (the wire-format payload builder). Adding a setting = one entry in the SETTINGS object
+  + `PanelSession.ts` settings code collapses dramatically: `readGlobalSettings` is two `readSetting(...)` calls; `readSettingsCascade` becomes `buildSettingsCascadePayload()`; `adoptFolderFilters` reads include/exclude via `readSetting`; `handleUpdateSetting`/`handleUpdateGlobalSetting`/`handlePromoteSettings`/`handleResetSettings` iterate the SETTINGS map via `cascadeKeys()` and `writeSetting`. The old `SETTINGS_CASCADE_KEYS` / `SETTINGS_CASCADE_CONFIG_MAP` constants are gone; `syncActiveFileWatcher` reads `watchUnopenedFilesInViewer` via `readSetting` (was a hand-rolled `getConfiguration().get('watchUnopenedFilesInViewer', true)`)
+  + the filter-cascade fix from the previous story is now structurally enforced: every read goes through `readSetting()` so a future caller cannot bypass the cascade
+  + per the user's "camelCase wire IDs" decision and a follow-up scope call: settings identifiers are camelCase **end-to-end** — TS code, wire setting IDs (the `setting:` field of `UpdateSettingMessage` / `UpdateGlobalSettingMessage`), `SettingsCascadePayload` / `GlobalSettingsPayload` field names, `display_options.settings` keys, and VS Code config paths all use the same camelCase identifier per setting. This is a deliberate, scoped exception to the project's snake_case-for-wire-data-fields convention (`*Message` types) — settings have a unique cross-boundary identity, and bridging two naming schemes would mean every setting carries two names. The exception is documented in `Messages.ts` (`SettingsCascadePayload` / `GlobalSettingsPayload`) and in the new `settings.ts` module header
+  + saved a follow-up memory-touch: settings keys live in three layers (VS Code config keys, TS identifiers, wire/payload field names). Aligning all three on camelCase scales when a new setting gets added; deviating in any one layer recreates the original two-name problem
+  + ran `sed` with word-boundary patterns (`\b<key>\b`) to rename across 34 webview files. `\b` treats `_` as a word char, so `file_view_type` (NoteOrigin field, NOT a setting) was preserved
+  + test fixtures that mocked `vscode.workspace.getConfiguration` updated: the new code reads via `getConfiguration('notethink.settings').get('view.generic.watchUnopenedFilesInViewer', ...)` rather than the old `getConfiguration('notethink').get('watchUnopenedFilesInViewer', ...)`; one mock helper and one suite-level mock needed key-path updates
++ files
+  + new `client/extension/src/lib/settings.ts` — the canonical settings module
+  + `client/extension/src/vscode/PanelSession.ts` — every settings read/write now goes through `readSetting` / `writeSetting`; constants and config-map removed
+  + `client/webview/src/notethink-views/src/types/Messages.ts` — `SettingsCascadePayload` / `GlobalSettingsPayload` field names camelCased; comments updated to document the exception
+  + `client/webview/src/notethink-views/src/types/ViewProps.ts` — `include_filter` / `exclude_filter` / `max_notes_per_file` / `settings_cascade_has_workspace_overrides` camelCased
+  + `client/webview/src/notethink-views/src/types/NoteProps.ts` — `display_options.settings.*` keys + `display_options.{include,exclude}_filter` / `max_notes_per_file` camelCased; `NoteOrigin.file_view_type` left snake_case (origin field, not a setting)
+  + `client/webview/src/hooks/useSettingsCascade.ts`, `client/webview/src/hooks/useGlobalSettings.ts` — DEFAULT payloads camelCased
+  + `client/webview/src/hooks/useVscodeMessages.ts` — wire setting IDs camelCased
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts` + `useViewHandlers.ts` — wire setting IDs camelCased; cascade write call sites updated
+  + bulk-renamed across 34 webview source files (composers, views, hooks, lib, tests) via `sed` with `\b`-bound patterns
+  + `client/extension/src/vscode/notethinkEditor.test.ts` — two mock setups updated for the new `notethink.settings.*` rooted config and dotted key paths
++ [X] introduce `settings.ts` with `readSetting` / `writeSetting` / `hasWorkspaceOverride` / `cascadeKeys` / `buildSettingsCascadePayload`
++ [X] every settings read in `PanelSession.ts` routes through the module
++ [X] every settings write routes through `writeSetting`
++ [X] wire setting IDs are camelCase (cascade + global)
++ [X] payload field names are camelCase (cascade + global)
++ [X] `display_options.settings.*` keys are camelCase
++ [X] ViewProps + NoteProps settings-related fields camelCased
++ [X] test fixtures updated for the new config-path shape
++ [X] `pnpm run check` green (lint clean, build/rollup green, 733 jest)
++ manual: change any setting in the Files drawer or via VS Code Settings UI → verify it persists across reload and across folder/current_file flips (this was the bug class that motivated the centralisation)
++ manual: Make user default / Reset to user default both still work (iterate every cascade-tier setting via `cascadeKeys()`)
++ acceptance
+  + adding a new notethink setting is a one-line change in the `SETTINGS` map; the module's read/write helpers handle the rest
+  + no `getConfiguration('notethink.*')` calls outside `settings.ts` (apart from the test mocks, which intentionally drive the same surface)
+  + settings have one identifier per setting, across all four boundaries
++ commit message draft
+  + notethink 0.3.2: centralise notethink settings read/write through a single `client/extension/src/lib/settings.ts` module — every `getConfiguration` call routes through `readSetting(key)` / `writeSetting(key)` so the cascade-precedence bug from the previous story is now structurally impossible. Adding a setting is one entry in the SETTINGS object (path + default + inCascade flag). Wire setting IDs, payload field names, `display_options.settings` keys, ViewProps/NoteProps settings-related fields, and VS Code config paths are all camelCase end-to-end — one identifier per setting across all four boundaries. Documented as a scoped exception to the snake_case-for-wire-data-fields convention in Messages.ts and settings.ts
+  + tests 733 jest (no new — existing tests cover the refactored surface; two mock setups updated for the new config-path shape)
+
+
+### Folder-mode filters read from the cascade, not stale in-memory state — and File settings drawer count moves above the file list [](?id=filters-from-cascade-and-count-above-list)
+
+Two related fixes from the same screenshot session:
+
+1. **The filter bug.** After current_file mode → breadcrumb click to a parent folder → folder mode re-entry, the wrong filter was being used. The view loaded every `.md` in the workspace instead of the user's persisted include filter (e.g. `**/{todo,done}.md`). User's instruction: "the file filtering should be the very first thing applied; otherwise we end up loading a load of files that aren't useful and that creates a very laggy interface". Root cause: `adoptFolderFilters` in PanelSession.ts treated the **previous in-memory `integration_include` as the fallback** when the `setIntegration` message carried no `include`/`exclude` fields. That in-memory value was reset to `DEFAULT_INCLUDE_FILTER = '**/*.md'` whenever the user entered current_file mode, so on the next folder-mode entry via breadcrumb-click — which doesn't carry filters — the extension enumerated the entire workspace.
+
+2. **File settings drawer layout.** The "{N} in {M} files" count was in the right-side meta column. User wanted it above the file list on the left.
+
++ delivery notes
+  + `adoptFolderFilters` now reads the workspace cascade (`notethink.settings.files.{includeFilter,excludeFilter}`) on every folder-mode entry, then applies explicit message overrides on top. Cascade precedence is built-in default → User → Workspace → explicit message field (the Files drawer's Apply is the only message that carries explicit fields). `?? DEFAULT_*` defends against a host/mock returning undefined despite the default-value arg
+  + the breadcrumb-click `setIntegration` message and the integration-selector flip-to-folder `setIntegration` message both omit `include`/`exclude` — they're integration changes, not filter changes. With the cascade now authoritative, they re-pick-up the user's persisted filters automatically. No webview change needed
+  + `enterCurrentFileMode`'s reset of `integration_include` / `integration_exclude` to defaults stays — those in-memory fields are now only consulted while in folder mode, and re-derived from the cascade on every folder-mode entry
+  + count moved: `<p>{N} in {M} files</p>` lifted out of `.settingsDrawerMeta` and placed just above `.filesDrawerList`. New `.filesDrawerCount` style (small, bold-ish, dimmed) reads as a label without competing with the list. `.filesDrawerList` top margin tightened (0.6em → 0.2em) so the count sits visually attached
+  + test `'retains the user filters across a breadcrumb re-narrow that omits them'` updated to mock the cascade returning the user's filters (which is what the Files drawer's Apply persists in real usage). The retention now comes from the cascade rather than in-memory stickiness — same observed behaviour, correct mechanism
++ files
+  + `client/extension/src/vscode/PanelSession.ts` — `adoptFolderFilters` reads from cascade-config first, then applies explicit override
+  + `client/extension/src/vscode/notethinkEditor.test.ts` — breadcrumb re-narrow test updated to mock the cascade returning the persisted filter
+  + `client/webview/src/notethink-views/src/components/views/FilesDrawer.tsx` — count `<p>` moved above the file list; removed from the meta `<aside>`
+  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` — new `.filesDrawerCount` style; `.filesDrawerList` margin tightened
++ [X] folder-mode entry resolves filters from the cascade (built-in → User → Workspace) before applying any explicit message override
++ [X] breadcrumb-click and integration-selector flips now pick up the user's persisted filters via the cascade
++ [X] file count relocated above the file list in the File settings drawer
++ [X] existing breadcrumb-re-narrow test updated for the new (cascade-authoritative) semantics
++ [X] `pnpm run check` green (lint clean, build/rollup green, 733 jest)
++ manual: in folder mode, set include filter to `**/{todo,done}.md` and click Apply
++ manual: flip to current_file mode for a single file
++ manual: click a parent folder breadcrumb segment — the view should re-enter folder mode with the same `**/{todo,done}.md` filter applied (NOT load every `.md` in the workspace)
++ manual: file count appears above the file list, not in the right-hand meta column
++ acceptance
+  + the include filter is applied on every folder-mode entry — current_file → breadcrumb → folder, selector flip → folder, fresh window → folder — without requiring the user to re-click Apply
+  + the file count sits above the file list in the File settings drawer
++ commit message draft
+  + notethink 0.3.2: folder-mode filter resolution reads from the workspace cascade (`notethink.settings.files.{includeFilter,excludeFilter}`) on every folder-mode entry rather than relying on stale in-memory state. Previously a transition like current_file → breadcrumb-click → folder re-entry would load the whole workspace because the in-memory filter had been reset to defaults and the breadcrumb message carries no `include`/`exclude` fields. Cascade is now the source of truth; explicit message fields still override on top. Also relocate the File settings drawer's file count from the meta column to a label just above the file list
+  + tests 733 jest (no new — existing breadcrumb-re-narrow test updated for the cascade-authoritative semantics)
+
+
+### Rename `notethink.folderView.*` → `notethink.settings.*` with sub-typed namespace [](?id=settings-cascade-rename)
+
+The cascade store was named after the place it started (folder view) rather than what it actually holds (notethink settings). With the recent unification — view-type settings apply universally across integration modes — that historical name became misleading. Rename in place. No migration: pre-release, no users, just dump the old data.
+
++ delivery notes
+  + config-key shape chosen with the user (Option B with protected sub-namespace for view-specific settings, so a future view called "type" can't collide with `view.type` and a future view called "generic" can't collide with `view.generic`):
+    ```
+    notethink.settings.files.includeFilter
+    notethink.settings.files.excludeFilter
+    notethink.settings.files.maxNotesPerFile
+    notethink.settings.view.type
+    notethink.settings.view.generic.showLineNumbers
+    notethink.settings.view.generic.watchUnopenedFilesInViewer
+    notethink.settings.view.generic.showContextBars
+    notethink.settings.view.specific.kanban.columnOrder
+    ```
+  + wire-message types (also chosen with the user):
+    ```
+    updateFolderViewSetting          → updateSetting
+    promoteFolderViewSettingsToUser  → promoteSettingsToUser
+    resetFolderViewSettingsToDefault → resetSettingsToDefault
+    folderViewSettings               → settingsCascade
+    ```
+  + internal symbols renamed as consequence: `FolderViewSettingsPayload` → `SettingsCascadePayload`, `cascade_write_folder_view_setting` → `cascade_write_setting`, `handleUpdateFolderViewSetting` → `handleUpdateSetting`, `handlePromoteFolderViewSettings` → `handlePromoteSettings`, `handleResetFolderViewSettings` → `handleResetSettings`, `sendFolderViewSettings` → `sendSettingsCascade`, `useFolderViewSettings` → `useSettingsCascade` (file renamed), `folder_view_cascade_has_workspace_overrides` → `settings_cascade_has_workspace_overrides`, `props.folderViewSettings` → `props.settingsCascade`, `DEFAULT_FOLDER_VIEW_COLUMN_ORDER` → `DEFAULT_COLUMN_ORDER`, `onFolderCascadeWrite` → `onCascadeWrite`
+  + `FOLDER_VIEW_KEYS` / `FOLDER_VIEW_CONFIG_MAP` in PanelSession.ts → `SETTINGS_CASCADE_KEYS` / `SETTINGS_CASCADE_CONFIG_MAP`; the latter now points at the new dotted paths under `notethink.settings.*` instead of the flat `notethink.folderView.*` segment
+  + `migrateLegacyFolderViewKeys` and its `LEGACY_KEY_MIGRATIONS` constant **deleted entirely** — no users yet, no migration. Per the user's framing: "just dump the old data"
+  + decided **not** to add a settings-version field; the standard one-shot migration pattern (presence of old keys = the version signal) is simpler and avoids leaking implementation noise into user-visible settings.json. The new sub-typed structure (`files.*`, `view.generic.*`, `view.specific.<view>.*`) is a stable extension point for future settings
+  + `FOLDER_VIEW_STATE_ID = '__folder__'` was left as-is — it's the persisted viewState key for *folder integration mode* (which is still called folder), not part of the settings cascade
+  + saved a coding-standards memory ([[check-permanent-names-before-laying-them-down]]) so future name decisions for config keys, wire-message types, and other persisted-state shapes surface to the user before being written
++ files
+  + `package.json` — 6 config-key declarations renamed + reorganised; 2 flat global keys moved under `view.generic.*`
+  + `package.nls.json` + `package.nls.{fr,de,es,it}.json` — `config.*.description` keys renamed and translations updated
+  + `client/extension/src/constants.ts` — `DEFAULT_FOLDER_VIEW_COLUMN_ORDER` → `DEFAULT_COLUMN_ORDER`
+  + `client/webview/src/constants.ts` — same mirror
+  + `client/extension/src/vscode/PanelSession.ts` — cascade map, handler renames, message-type literals, `affectsConfiguration` paths, migration deletion
+  + `client/webview/src/notethink-views/src/types/Messages.ts` — message-type interfaces and literals renamed
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts` — `cascade_write_setting`; message-type literals renamed
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewHandlers.ts` — message-type literals renamed
+  + `client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx` — `onCascadeWrite` prop; `settings_cascade_has_workspace_overrides`
+  + `client/webview/src/notethink-views/src/components/views/GenericView.tsx` — `onCascadeWrite` wiring
+  + `client/webview/src/notethink-views/src/components/views/ViewTypeSelector.tsx` — `onCascadeWrite` prop
+  + `client/webview/src/notethink-views/src/types/ViewProps.ts` — `settings_cascade_has_workspace_overrides`
+  + `client/webview/src/hooks/useSettingsCascade.ts` — new (renamed from `useFolderViewSettings.ts`); old file deleted
+  + `client/webview/src/hooks/useVscodeMessages.ts` — `settingsCascade` message handling
+  + `client/webview/src/components/ExtensionReceiver.tsx` — `useSettingsCascade` import; `settingsCascade` prop
+  + `client/webview/src/components/NoteRenderer.tsx` — `settingsCascade` prop type
+  + `client/webview/src/components/composers/FolderTreeComposer.tsx` — `props.settingsCascade`; `settings_cascade_has_workspace_overrides`
+  + `client/webview/src/components/composers/NoteTreeComposer.tsx` — same
+  + `client/webview/src/components/ExtensionReceiver.test.tsx` — mock and assertions updated for new message types and prop names
+  + `client/extension/src/vscode/notethinkEditor.test.ts` — `affectsConfiguration` paths updated
++ [X] config-key namespace renamed per the agreed map (files / view.type / view.generic / view.specific.kanban)
++ [X] wire-message types renamed
++ [X] internal symbols swept (props, hooks, handlers, constants)
++ [X] migration code deleted (no users, no migration)
++ [X] all `package.nls.*.json` translations updated to the new description keys
++ [X] tests updated for new message types and config paths
++ [X] `pnpm run check` green (lint clean, build/rollup green, 733 jest)
++ manual: settings UI in VS Code shows the new `notethink.settings.*` tree (search "notethink" in Settings UI)
++ manual: existing user/workspace settings under `notethink.folderView.*` are *not* migrated and are effectively invisible — re-set anything you had set previously
++ acceptance
+  + every notethink config key lives under `notethink.settings.*` with the agreed sub-typing
+  + every wire message uses the renamed type literals
+  + no production reference to `folderView` / `FolderView` / `FolderViewSettings*` survives (apart from `FOLDER_VIEW_STATE_ID`, which refers to the *folder integration mode* not the settings cascade)
+  + tests pass
++ commit message draft
+  + notethink 0.3.2: rename `notethink.folderView.*` config namespace to `notethink.settings.*` with a sub-typed structure — `settings.files.*` for file integration, `settings.view.type`, `settings.view.generic.*` for settings shared across views, `settings.view.specific.<view>.*` as a protected sub-namespace for view-specific settings (so future view names can never collide with the `view.type` / `view.generic` slots). Wire-message types rename in parallel (`updateFolderViewSetting` → `updateSetting`, `folderViewSettings` → `settingsCascade`, etc.). Legacy one-shot migration code deleted — no users yet, dump the old data. Internal symbols swept (FolderViewSettingsPayload → SettingsCascadePayload, cascade_write_folder_view_setting → cascade_write_setting, useFolderViewSettings → useSettingsCascade, folder_view_cascade_has_workspace_overrides → settings_cascade_has_workspace_overrides, etc.). All five package.nls bundles updated
+  + tests 733 jest (no new — existing tests cover the renamed surface)
+
+
+### View-type settings (column order, view type, common toggles) apply universally across integration modes [](?id=view-type-settings-cross-integration-mode)
+
+The user set column order while in folder mode, switched to current_file mode and the kanban view re-rendered with the default natural order rather than their saved one. The Make/Reset cascade buttons were also missing from the settings drawer in current_file mode. Root cause: `FolderTreeComposer` merged the workspace cascade (`folderViewSettings`) into the rendered view's `display_options.settings` — but `NoteTreeComposer` did not. The cascade buttons in `GenericViewToolbar` were also explicitly gated on `integrationMode === INTEGRATION_MODE_FOLDER`. And `cascade_write_folder_view_setting` short-circuited outside folder mode, so changes made in current_file mode never reached workspace config. Result: a setting changed in either mode was visible only in that mode.
+
++ delivery notes
+  + the cascade store is named `notethink.folderView.*` for historical reasons but its **view-type** members (`column_order`, `view_type`, `show_linetags_in_headlines`, `scroll_note_into_view`, `auto_expand_focused_note`, `show_context_bars`) are properties of the view-type, not of the integration mode. They should — and now do — apply universally. The store keeps its historical name to avoid breaking persisted user/workspace config; renaming the keys is a separate cleanup story
+  + the cascade store's **integration** members (`include_filter`, `exclude_filter`, `max_notes_per_file`) stay folder-mode-only — they describe which files are in the view and are meaningless in current_file mode. The Files drawer (renamed to File settings in the prior story) remains folder-only and is the only surface for those settings
+  + `NoteTreeComposer.tsx` now mirrors `FolderTreeComposer`'s cascade-merge for the view-type members; surfaces `folder_view_cascade_has_workspace_overrides` from the cascade so the Reset button knows whether there's anything to clear
+  + `useViewToolbar.cascade_write_folder_view_setting` drops its `integration_mode !== INTEGRATION_MODE_FOLDER` bail; cascade-writes now happen in any integration mode for view-type settings
+  + `GenericViewToolbar.tsx` drops the `integrationMode === INTEGRATION_MODE_FOLDER` gate on the Document/Kanban settings drawer's `onMakeDefault`/`onResetToDefault` props. ViewTypeSelector's `onFolderCascadeWrite` is also un-gated so picking Kanban in current_file mode cascades to workspace config too. The Files drawer's cascade props keep their effective folder-only behaviour by virtue of the drawer being folder-only
+  + symmetry now: change column order in folder mode → applies in current_file mode; change it in current_file mode → applies in folder mode. Same for view_type, show_linetags, scroll_into_view, auto_expand, show_context_bars
++ files
+  + `client/webview/src/components/composers/NoteTreeComposer.tsx` — cascade-merge for view-type settings; `folder_view_cascade_has_workspace_overrides` passthrough
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts` — drop the folder-mode gate on `cascade_write_folder_view_setting`
+  + `client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx` — drop the folder-mode gate on Make/Reset for the settings drawer; drop the folder-mode gate on ViewTypeSelector's cascade-write
++ [X] `NoteTreeComposer` reads `props.folderViewSettings` and merges view-type members into `display_options.settings`
++ [X] `NoteTreeComposer` passes `folder_view_cascade_has_workspace_overrides` to the rendered view
++ [X] `cascade_write_folder_view_setting` cascades regardless of integration mode
++ [X] Make/Reset buttons in the Document/Kanban settings drawer appear in current_file mode
++ [X] ViewTypeSelector's cascade-write fires in current_file mode
++ [X] `pnpm run check` green (lint clean, build/rollup green, 733 jest)
++ manual: in folder + kanban, reorder columns. Flip integration selector to current_file. Open the settings drawer — column order matches what you just set; Make/Reset buttons are visible
++ manual: in current_file + kanban, reorder columns. Flip to folder mode. Column order matches; Make/Reset buttons are visible
++ manual: in current_file + document, toggle "Show linetags in headlines". Flip to folder mode. The toggle is in the same state. Same for the other view toggles
++ manual: include/exclude/max_notes_per_file are NOT visible in current_file (no Files drawer); that's still correct — those are folder-integration settings
++ acceptance
+  + a view-type setting changed in one integration mode is visible in the other integration mode
+  + Make/Reset cascade buttons are visible in the Document/Kanban settings drawer in both integration modes
+  + the include/exclude/max_notes settings stay folder-only (no behavioural regression in current_file mode where these settings don't make sense)
++ commit message draft
+  + notethink 0.3.2: kanban/document view settings now apply universally across integration modes — column_order, view_type, show_linetags_in_headlines, scroll_note_into_view, auto_expand_focused_note, show_context_bars all cascade-merge into both folder-mode and current_file-mode renders, and cascade-write to workspace config from either mode. Make/Reset cascade buttons appear in the Document/Kanban settings drawer in both modes (previously folder-only). Integration-specific settings (include/exclude/max_notes_per_file) stay folder-only
+  + tests 733 jest (no new — covered by existing settings/drawer tests)
+
+
+### Move user-default buttons to drawer right side, add them to File settings, rename header [](?id=cascade-buttons-right-side-and-file-settings-header)
+
+Two drawers, two inconsistencies. The View settings drawer (Document and Kanban variants) carried the **Make user default** / **Reset to user default** buttons at the bottom-left, mixed in with per-setting controls (e.g. the per-setting *Reset order* button on the Kanban drawer). The Files drawer had no cascade buttons at all. This story aligns both drawers around the same layout: per-setting controls on the left, global cascade controls in the meta column on the right.
+
++ delivery notes
+  + new shared component `SettingsCascadeButtons.tsx` renders the two buttons (`data-testid="folder-view-cascade-controls"` preserved). Used by all three drawers
+  + `SettingsCommonControls.tsx` no longer renders cascade controls or accepts the related props — it is now purely the common toggles. `SettingsDocumentDrawer` and `SettingsKanbanDrawer` render `<SettingsCascadeButtons>` inside their `.settingsDrawerMeta` `<aside>`, after the version label. `flex-direction: column` + `justify-content: space-between` + `align-items: flex-end` on `.settingsDrawerMeta` lands them at the bottom-right with consistent right alignment; the `.cascadeControls` `border-top` cleanly separates them from the version/count line above
+  + `FilesDrawer.tsx` gains the same three props (`onMakeDefault`, `onResetToDefault`, `canResetToDefault`), wires `<SettingsCascadeButtons>` into the meta column, and renames `<h3>Files</h3>` → `<h3>File settings</h3>`. `GenericViewToolbar.tsx` passes the cascade props through (only in folder mode, same gating as the other drawer) and updates the drawer's `ariaLabel` from `'Files'` to `'File settings'` for consistency
+  + the cascade actions (`promoteFolderViewSettingsToUser` / `resetFolderViewSettingsToDefault`) affect *every* folder-view setting, not just the drawer the buttons happen to sit in — that's the correct semantics for the user's request ("apply to everything"). The visual separation just makes it consistent
+  + per-setting controls (e.g. Kanban's `Reset order`) stay in their existing per-setting positions on the left side; only the global cascade actions move to the right
+  + l10n: added `"File settings"` to all 5 bundles (root + it/es/fr/de). The old `"Files"` key is now unused in production code but left in the bundles for migration safety — a follow-up cleanup pass can remove it
++ files
+  + new `client/webview/src/notethink-views/src/components/views/SettingsCascadeButtons.tsx`
+  + `client/webview/src/notethink-views/src/components/views/SettingsCommonControls.tsx` — cascade controls removed, props slimmed
+  + `client/webview/src/notethink-views/src/components/views/SettingsDocumentDrawer.tsx` — cascade buttons moved to meta column
+  + `client/webview/src/notethink-views/src/components/views/SettingsKanbanDrawer.tsx` — cascade buttons moved to meta column
+  + `client/webview/src/notethink-views/src/components/views/FilesDrawer.tsx` — header rename + cascade buttons added in meta column
+  + `client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx` — passes cascade props to FilesDrawer + drawer aria-label updated
+  + `l10n/bundle.l10n.json`, `l10n/bundle.l10n.it.json`, `l10n/bundle.l10n.es.json`, `l10n/bundle.l10n.fr.json`, `l10n/bundle.l10n.de.json` — added `"File settings"` entry
++ [X] extract `SettingsCascadeButtons` from `SettingsCommonControls`
++ [X] render the cascade buttons in the bottom-right meta column of the Document settings drawer
++ [X] render the cascade buttons in the bottom-right meta column of the Kanban settings drawer
++ [X] add the cascade buttons to the bottom-right meta column of the Files (now File settings) drawer
++ [X] rename Files header → File settings (and the drawer's aria-label)
++ [X] add `"File settings"` l10n key in all 5 locale bundles
++ [X] `pnpm run check` green (lint clean, build/rollup green, 733 jest)
++ manual: open the Document settings drawer — Make/Reset buttons sit at the bottom-right of the meta column, right-aligned, with the version label above them
++ manual: open the Kanban settings drawer — same layout. The per-setting `Reset order` button stays on the left in the column-order section
++ manual: open the File settings drawer — header reads "File settings"; the Make/Reset buttons sit at the bottom-right under the file/note count
++ manual: clicking Make user default in any of the three drawers promotes the same workspace-scope folder-view settings to user scope (existing behaviour, unchanged); Reset clears workspace overrides
++ acceptance
+  + Document/Kanban/File settings drawers all show Make/Reset in the same bottom-right position
+  + Files header reads "File settings"
+  + Per-setting controls (column-order Reset, filter Apply via debounce) stay in their per-setting positions on the left
+  + No regression to the existing cascade behaviour (the buttons hit the same `promoteFolderViewSettingsToUser` / `resetFolderViewSettingsToDefault` actions as before)
++ commit message draft
+  + notethink 0.3.2: move Make/Reset cascade buttons from the left-side settings stack to the bottom-right meta column in all three drawers (Document, Kanban, File settings). Rename the Files drawer header to "File settings" and add the same cascade buttons there for parity. Per-setting controls (e.g. column-order Reset) stay on the left to preserve the separation between *global* cascade actions and *local* setting actions
+  + tests 733 jest (no new — pure layout/structure change covered by existing l10n and view tests)
+
+
+### Current-file mode stacks multiple toolbars when a stale doc lingers in the map [](?id=current-file-renders-active-doc-only)
+
+In current_file mode the webview rendered one `NoteTreeComposer` per entry in `props.notes`, on the assumption that the map only ever holds the active doc. That assumption breaks during transition states (folder→current_file flip races, an `update` message arriving with `merge_strategy='merge'` while the webview believes it's already in current_file, a reload restoring stale folder-mode docs before the dispatcher cleans up) — when it does, the user sees N stacked single-file views with N stacked toolbars (one of them appearing halfway down the page). By definition, current_file mode shows exactly one file.
+
++ delivery notes
+  + defensive fix in `NoteRenderer.tsx`: in the current_file branch, render exactly one composer — the doc with the highest `updateSentAt` (the extension stamps this on every `sendDoc`, so the most recent value is the active doc by construction). Empty map → render nothing
+  + ISO timestamps lex-compare chronologically, so the picker is a single pass with string compare
+  + entries with no `updateSentAt` lose to any entry that has one; among entries that all lack it (legacy / unit-test fixtures), the first-seen wins (`Object.entries` insertion order is deterministic for string keys per the ECMAScript spec)
+  + this is *defence in depth*. The root cause of stale entries appearing in current_file mode hasn't been pinned down yet — open question below — but the rendering invariant is now guaranteed regardless of how the map got polluted
++ files
+  + `client/webview/src/components/NoteRenderer.tsx` — new `pickMostRecentlySentDoc` helper; current_file branch renders only the picked entry
+  + `client/webview/src/components/NoteRenderer.test.tsx` — split the "renders multiple notes" test into two narrower cases (newest `updateSentAt` wins; no-timestamp fallback picks the first entry)
++ [X] in current_file mode, render exactly one composer regardless of `props.notes` size
++ [X] pick the doc with the highest `updateSentAt` (active doc per extension semantics)
++ [X] handle the no-timestamp fallback deterministically (first entry wins)
++ [X] jest: multi-doc map with distinct `updateSentAt` renders only the newest
++ [X] jest: multi-doc map without `updateSentAt` renders only the first entry
++ [X] `pnpm run check` green (lint clean, build/rollup green, 733 jest)
++ manual: in current_file mode, focus a doc, then have an external process edit a *different* `.md` file in the workspace — only the active file's view should be visible, no second toolbar appears
++ acceptance
+  + current_file mode never renders more than one composer
+  + the rendered composer is the most-recently-sent doc (i.e. the active doc the extension is tracking)
+  + folder mode is unchanged (already renders a single `FolderTreeComposer`)
++ open questions / follow-ups (not blocking this fix)
+  + identify the actual code path that lets a non-active doc enter the docs map while the webview is in current_file mode. Candidates: (a) `enterCurrentFileMode`'s sendDoc happens-after webview's mode flip, leaving a window where extension still has `integration_path` set and a merge-strategy update arrives; (b) `useVscodeMessages` boot-restore sends `setIntegration mode='folder'` based on persisted state, then the user flips to current_file before the extension's reply lands; (c) `handleRequestInitialState` sends with `integration_path` still set after a partial flip. Worth instrumenting with debug logs to confirm
+  + once root cause is known, decide whether to keep this defensive filter or rely on the protocol-level fix
++ commit message draft
+  + notethink 0.3.2: current_file mode now renders exactly one composer — the most-recently-sent doc by `updateSentAt`, which is the active doc per extension semantics. Stale entries lingering in the docs map (folder→current_file transition states, message races, reload-restore stragglers) no longer surface as stacked single-file views with extra toolbars
+  + tests 733 jest (+1 net from splitting the multi-note test)
+
+
+### Scroll-into-view hides caret line behind sticky toolbar / drawer [](?id=scroll-into-view-sticky-occluder)
+
+When the caret moves to a note in folder or current-file view, `useScrollToCaret` calls `scrollIntoView({block: 'nearest'})` on the target body item. The sticky toolbar (`top: 0`, ~26px) and any open drawer (`top: 26px`, variable height) sit above the scroll viewport. `block: 'nearest'` aligns the target to viewport-top-0 — which is *behind* the toolbar. The caret line is then invisible until the user scrolls down manually. The settings/files drawer compounds this when open.
+
++ delivery notes
+  + the browser already supports the fix via `scroll-margin-top` on the scroll target — `scrollIntoView` honours it natively. The cost is just computing the right value
+  + chose a JS measurement (not a static CSS value) because the open drawer's height is dynamic and the variable would otherwise need a `:has()`/observer combo to track
+  + `viewhooks.ts` gains a helper `stickyOccluderBottomPx(view_id)` that queries the toolbar (`[data-testid="view-toolbar"]`) and any drawer (`#v${view_id}-settings-drawer` / `-files-drawer` when `data-open="true"`), taking the max bottom edge in viewport px
+  + `useScrollToCaret` sets `scroll_target.style.scrollMarginTop = ${occluder_bottom + 8}px` immediately before `scrollIntoView` — the 8px buffer keeps the caret line visually clear of the header rather than flush against it
+  + `useCaretIndicator.is_visible` uses the same occluder bottom as the effective viewport top: a target behind the header now counts as off-screen and the flash waits for `scrollend` instead of firing immediately
+  + no test added — these are imperative DOM effects against `getBoundingClientRect` / `scrollIntoView` that jsdom doesn't meaningfully simulate; verification is manual via the webview
++ files
+  + `client/webview/src/notethink-views/src/lib/viewhooks.ts`
++ [X] compute toolbar + open-drawer bottom edge at scroll time; apply `scroll-margin-top` inline to the target before `scrollIntoView`
++ [X] caret-indicator `is_visible` check uses the same occluder bottom as the effective viewport top so the flash waits for the scroll when the target was behind the header
++ [X] `pnpm run check` green (lint clean, build/rollup green, 732 jest)
++ manual: focus a note whose caret line lands behind the toolbar — line auto-scrolls clear of the header
++ manual: open the settings drawer, focus a note whose caret line lands behind the drawer — line auto-scrolls clear of the drawer
++ manual: open the files drawer (folder mode), repeat
++ acceptance
+  + caret-line target sits clear of the sticky toolbar after auto-scroll
+  + caret-line target sits clear of the open settings/files drawer after auto-scroll
+  + caret-indicator flash waits for the scroll when the target was behind the header
++ commit message draft
+  + notethink 0.3.2: `scrollIntoView` for the focused caret line now accounts for the sticky toolbar + any open drawer (was landing the line behind the header). `useScrollToCaret` measures the occluder bottom and applies `scroll-margin-top` to the target before the smooth-scroll; `useCaretIndicator` uses the same occluder bottom in its `is_visible` check so the flash waits for the scroll to settle
+  + tests 732 jest (no new — imperative DOM effects covered manually)
+
+
+### Folder → current-file flip leaves toolbar selector and breadcrumb stuck on folder [](?id=integration-flip-toolbar-stale)
+
+Repro: open a folder-mode view, then pick **Current file** in the integration selector. The note list correctly switches to the active file's content, but the integration selector dropdown still shows **Folder** and the breadcrumb still shows the workspace folder name (e.g. `active_development`) instead of the active file's path. Reload of the window clears it. Symptoms imply `FolderTreeComposer` is still the chosen composer post-flip (both `integration_mode` and the breadcrumb's folder path are values that only `FolderTreeComposer` stamps — `NoteTreeComposer` leaves `integration_mode` undefined and `useViewToolbar` defaults it to `'current_file'`). The single doc shows because `enterCurrentFileMode` already replaced the docs map down to the active doc; the *composer* selection never updated.
+
++ delivery notes
+  + root cause #1 — stranded per-doc viewState entries tagged `integration_mode === 'folder'` were dragging the fallback scan in `anyViewInFolderMode` / `firstIntegrationPath`, keeping the composer in folder mode after the canonical `__folder__` key had flipped to `current_file`. #2 (shallow-merge race) and #3 (persistence rehydrate) deliberately not pursued — the new unit tests demonstrate #1 is sufficient
+  + three coordinated changes, not just the click handler:
+    + `useViewToolbar.handle_integration_change` now also emits one update per non-canonical viewState key clearing `integration_mode`/`integration_path` on flip to `'current_file'` — neutralises legacy stranded tags. Required threading a new `view_state_ids` (optional `readonly string[]`) field through `ViewProps`, populated by both composers from `props.viewStates`
+    + `NoteTreeComposer` now explicitly stamps `integration_mode: 'current_file'` on the rendered view's `display_options`, symmetric with `FolderTreeComposer.tsx`'s `folder` stamp. Composer becomes the single source of truth for the toolbar selector + breadcrumb, and this stamp wins over any legacy doc-path-keyed stranded tag
+    + (reverted in code-review iteration) initially tightened `anyViewInFolderMode` / `firstIntegrationPath` to make the canonical key authoritative when it carried an explicit `integration_mode`. That broke users whose persisted `vscode.setState` had the legacy shape (canonical = `current_file` or absent + a stranded doc-path key tagged `'folder'`) — the permissive fallback scan was load-bearing for those users to stay in folder mode across reloads. The clearing-on-flip alone is the real fix: once the user flips through the toolbar once, stranded tags are purged. The fallback scan is restored to its original permissive form to rescue legacy state until the next flip cleans it up
+  + the breadcrumb fix flows automatically: `GenericViewBreadcrumb` already gates the folder breadcrumb pill on `integration_mode === 'folder'`, so once the composer stamps `current_file`, the folder pill drops
+  + ran in an isolated worktree agent, coordinated with [[header-padding-and-root-label]] (file-disjoint, both consolidated together for the 0.3.2 release)
+  + code-review polish: extracted the `'folder'` / `'current_file'` wire-format strings — used as constants across both bundles — into typed exports `INTEGRATION_MODE_FOLDER` / `INTEGRATION_MODE_CURRENT_FILE` in a new pure-types module `notethink-views/src/types/IntegrationMode.ts`, with a byte-identical mirror in `client/extension/src/constants.ts` per the documented cross-bundle exception. `ViewIntegrationSelector.tsx` re-exports the constants for backward compat. Placing them in `types/` (not the component file) keeps `lib/mergeAggregateRoot.ts` from depending on a component, and avoids a `jest.mock('./ViewIntegrationSelector', ...)` in `GenericView.test.tsx` accidentally stubbing the named exports back to `undefined`
++ files
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` — `anyViewInFolderMode` / `firstIntegrationPath` tightened
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts` — stranded-tag clearing on flip
+  + `client/webview/src/notethink-views/src/types/ViewProps.ts` — new optional `view_state_ids: readonly string[]`
+  + `client/webview/src/components/composers/NoteTreeComposer.tsx` — explicit `integration_mode: 'current_file'` stamp + `view_state_ids` wiring
+  + `client/webview/src/components/composers/FolderTreeComposer.tsx` — `view_state_ids` wiring
+  + new `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.test.ts`
+  + new `client/webview/src/components/composers/NoteTreeComposer.test.tsx`
+  + new `playwright/specs/integration-flip.spec.ts`
++ [X] reproduce locally; capture pre/post-flip `viewStates` dump in the webview console
++ [X] jest: `anyViewInFolderMode` rescues legacy state — when canonical `__folder__` is `current_file` AND a non-canonical key carries `integration_mode: 'folder'`, still returns true (permissive fallback scan; the dispatcher's clearing-on-flip is what eventually purges the stranded tag)
++ [X] jest: after `handle_integration_change('current_file')`, no key in `viewStates` carries `integration_mode === 'folder'`
++ [X] jest: `NoteTreeComposer`-rendered view has `display_options.integration_mode === 'current_file'`
++ [X] code: implement the chosen fix — clear stranded tags + stamp explicit mode in single-file composer + strictify the canonical-key path in the helpers
++ [X] extract integration_mode wire-format strings to typed constants (`INTEGRATION_MODE_FOLDER` / `INTEGRATION_MODE_CURRENT_FILE` in `notethink-views/src/types/IntegrationMode.ts`; mirrored in `client/extension/src/constants.ts`); replace literals in production code (notethink-views + webview-app + extension)
++ [X] playwright: enter folder mode, switch to current-file via the dropdown — selector reads "Current file", breadcrumb reads the active doc's path segments, note content is the active doc only
++ [X] playwright: round-trip — flip current-file → folder → current-file twice; no stale toolbar state at any step
++ [X] `pnpm run check` green
++ acceptance
+  + flipping the integration selector to **Current file** updates the dropdown to "Current file" within the same render
+  + the breadcrumb shows the active file's path (workspace-relative segments), not the folder name
+  + no window reload required to clear stale folder-mode toolbar state
+  + folder → current-file → folder round-trip restores the folder breadcrumb and selector with no drift
++ commit message draft
+  + notethink 0.3.2: folder → current-file integration flip now updates the toolbar selector and breadcrumb in-place (was leaving them stuck on folder while the note list correctly switched); clear stranded `integration_mode='folder'` tags on non-canonical viewState keys during flip, stamp explicit `current_file` mode in `NoteTreeComposer` so composer choice is the single source of truth, and tighten `anyViewInFolderMode`/`firstIntegrationPath` to treat the canonical `__folder__` key as authoritative when it carries an explicit mode
+  + tests 732 jest, 51 playwright
+
+
+### Header-bar breathing room + remove stray "Root" label [](?id=header-padding-and-root-label)
+
+Three small, independent webview-viewer polish fixes spotted in browser context (they're easier to see in a plain browser than inside VS Code, but the extension renders in both — browser, VS Code web, and VS Code desktop — so the fix must hold up in all of them). All three live in the `notethink-views` library.
+
+1. **Pad above the toolbar.** The integration selector ("Current file") and view-type selector ("Auto (Document)") sit flush against the top edge of the webview — they touch the line above with no breathing room.
+2. **Pad below the toolbar.** There's no gap under the bar, so the selected note's blue marquee (focus ring) gets clipped under the sticky bar. A few px of room lets the ring draw all the way around the top note.
+3. **Remove the stray "Root".** A literal word "Root" renders directly below the bar at the top of the note list. It's the synthetic root container's headline — it adds no value and is easily mistaken for the (correct, separate) breadcrumb in the bar. Remove it; keep its children.
+
++ delivery notes
+  + chose to bump the toolbar's own `padding-top` to `4px` rather than adding padding-top to the scrolling container + offsetting `top:` — keeps the sticky pin clean at `top: 0` with no compensation math; the controls get breathing room within the bar
+  + dependent selector `.settingsDrawerGrid { top: 22px → 26px }` updated because its `top` was explicitly chained to the toolbar's rendered height
+  + `.viewDocument` and `.viewKanban` got `padding-top: 8px` so the selected-note marquee (outline-offset 6px + 2px stroke ≈ 8px) clears the sticky bar; the `.contextBar` negative-margin bleed still works
+  + `renderMarkdownNoteHeadline` returns `<></>` for `note.type === 'root'`; children still render via `DocumentView.tsx:63` (`renderNote(props.nested?.parent_context, 0)`)
+  + ran in an isolated worktree agent, coordinated with [[integration-flip-toolbar-stale]] (file-disjoint, both consolidated together for the 0.3.2 release)
++ files
+  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` — `.viewToolbar` top padding 0 → 4px (line ~516), `.viewDocument` top padding 0 → 8px (line ~1009), `.viewKanban` top padding 0 → 8px (line ~1067), `.settingsDrawerGrid { top: 22 → 26px }` (line ~323)
+  + `client/webview/src/notethink-views/src/lib/renderops.tsx` — `note.type === 'root'` branch returns `<></>` (lines 37-39)
+  + `client/webview/src/notethink-views/src/lib/renderops.test.tsx` — new `describe('root note', ...)` block asserting empty markup
+  + new `playwright/specs/header-spacing.spec.ts` — two tests: no literal "Root" rowheader; top-note rect sits ≥ 8px below the sticky toolbar
++ [X] add a small top gap above the toolbar that survives sticky-scroll (browser + VS Code web + desktop)
++ [X] add ~8px top padding below the toolbar so the selected-note marquee draws fully around the top note
++ [X] suppress the `'root'` headline in `renderMarkdownNoteHeadline`; root's children still render
++ [X] jest: `renderMarkdownNoteHeadline` returns empty for a `type: 'root'` note
++ [X] playwright/manual: top note's blue marquee is fully visible (not clipped under the bar); no "Root" text below the bar
++ [X] `pnpm run check` green
++ acceptance
+  + a small, consistent gap sits above and below the header bar in browser, VS Code web, and VS Code desktop
+  + selecting the top note shows the full marquee on all four sides
+  + the stray "Root" label is gone; the breadcrumb in the bar is unchanged and notes still render
++ commit message draft
+  + notethink 0.3.2: header-bar breathing room (4px above the sticky toolbar; 8px below in `.viewDocument`/`.viewKanban` so the selected-note marquee clears it) and drop the stray synthetic-root "Root" headline from the note list (`renderMarkdownNoteHeadline` returns empty for `note.type === 'root'`)
+  + tests 732 jest, 51 playwright

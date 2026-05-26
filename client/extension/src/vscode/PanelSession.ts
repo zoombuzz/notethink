@@ -1,43 +1,16 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_FOLDER_VIEW_COLUMN_ORDER } from '../constants';
+import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from '../constants';
 import { generateIdentifier } from '../lib/crypto';
 import { debug, writeToLog, writeToErrorLog } from '../lib/errorops';
 import { parse } from '../lib/parseops';
 import { isPathWithin } from '../lib/pathsafe';
+import { SETTINGS, type SettingKey, isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, cascadeKeys, buildSettingsCascadePayload } from '../lib/settings';
 import type { HashMapOf, Doc } from '../types/general';
 
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
-
-// folder view settings — built-in default → User → Workspace cascade
-// keys map between the webview payload (snake_case) and the VS Code config keys (camelCase under notethink.folderView.*)
-const FOLDER_VIEW_KEYS = [
-	'view_type',
-	'column_order',
-	'include_filter',
-	'exclude_filter',
-	'max_notes_per_file',
-	'show_context_bars',
-] as const;
-type FolderViewKey = typeof FOLDER_VIEW_KEYS[number];
-
-const FOLDER_VIEW_CONFIG_MAP: Record<FolderViewKey, string> = {
-	view_type: 'viewType',
-	column_order: 'columnOrder',
-	include_filter: 'includeFilter',
-	exclude_filter: 'excludeFilter',
-	max_notes_per_file: 'maxNotesPerFile',
-	show_context_bars: 'showContextBars',
-};
-
-// one-shot rename of legacy `notethink.folderView.aggregate*` keys (any scope) to their new names
-const LEGACY_KEY_MIGRATIONS: Array<[string, string]> = [
-	['aggregateInclude', 'includeFilter'],
-	['aggregateExclude', 'excludeFilter'],
-	['aggregateMaxNotesPerFile', 'maxNotesPerFile'],
-];
 
 interface TextChange {
 	from: number;
@@ -275,8 +248,7 @@ export class PanelSession {
 		// folder mode has integration_watcher; double-armed watchers would re-parse the same file twice
 		if (this.integration_path) { return; }
 		if (!this.active_path) { return; }
-		const config = vscode.workspace.getConfiguration('notethink');
-		if (!config.get<boolean>('watchUnopenedFilesInViewer', true)) { return; }
+		if (!readSetting('watchUnopenedFilesInViewer')) { return; }
 		// a visible text editor already drives onDidChangeTextDocument for on-disk changes; we only fill the gap when there's no editor
 		const visible = vscode.window.visibleTextEditors.find(ed => ed.document.uri.path === this.active_path);
 		if (visible) { return; }
@@ -311,11 +283,10 @@ export class PanelSession {
 
 	// --- settings ---
 
-	private readGlobalSettings(): { show_line_numbers: boolean; watch_unopened_files_in_viewer: boolean } {
-		const config = vscode.workspace.getConfiguration('notethink');
+	private readGlobalSettings(): { showLineNumbers: boolean; watchUnopenedFilesInViewer: boolean } {
 		return {
-			show_line_numbers: config.get<boolean>('showLineNumbers', false),
-			watch_unopened_files_in_viewer: config.get<boolean>('watchUnopenedFilesInViewer', true),
+			showLineNumbers: readSetting('showLineNumbers'),
+			watchUnopenedFilesInViewer: readSetting('watchUnopenedFilesInViewer'),
 		};
 	}
 
@@ -323,52 +294,8 @@ export class PanelSession {
 		this.webviewPanel.webview.postMessage({ type: 'globalSettings', settings: this.readGlobalSettings() });
 	}
 
-	private readFolderViewSettings(): Record<string, unknown> {
-		const config = vscode.workspace.getConfiguration('notethink.folderView');
-		// true iff any of the six folder-view keys has a Workspace-scope value; the webview uses it to enable the Reset button
-		let has_workspace_overrides = false;
-		for (const key of FOLDER_VIEW_KEYS) {
-			const inspected = config.inspect(FOLDER_VIEW_CONFIG_MAP[key]);
-			if (inspected?.workspaceValue !== undefined) {
-				has_workspace_overrides = true;
-				break;
-			}
-		}
-		return {
-			view_type: config.get<'auto' | 'document' | 'kanban'>('viewType', 'auto'),
-			column_order: config.get<string[]>('columnOrder', DEFAULT_FOLDER_VIEW_COLUMN_ORDER),
-			include_filter: config.get<string>('includeFilter', DEFAULT_INCLUDE_FILTER),
-			exclude_filter: config.get<string>('excludeFilter', DEFAULT_EXCLUDE_FILTER),
-			max_notes_per_file: config.get<number>('maxNotesPerFile', 10),
-			show_context_bars: config.get<boolean>('showContextBars', true),
-			has_workspace_overrides,
-		};
-	}
-
-	private sendFolderViewSettings(): void {
-		this.webviewPanel.webview.postMessage({ type: 'folderViewSettings', settings: this.readFolderViewSettings() });
-	}
-
-	/**
-	 * one-shot rename of legacy aggregate* keys (any scope) to their new names; runs
-	 * before the first read so the cascade reflects the migrated values.
-	 */
-	private async migrateLegacyFolderViewKeys(): Promise<void> {
-		const config = vscode.workspace.getConfiguration('notethink.folderView');
-		for (const [old_key, new_key] of LEGACY_KEY_MIGRATIONS) {
-			const inspected = config.inspect(old_key);
-			if (!inspected) { continue; }
-			for (const target of [vscode.ConfigurationTarget.Global, vscode.ConfigurationTarget.Workspace] as const) {
-				const value = target === vscode.ConfigurationTarget.Global ? inspected.globalValue : inspected.workspaceValue;
-				if (value === undefined) { continue; }
-				try {
-					await config.update(new_key, value, target);
-					await config.update(old_key, undefined, target);
-				} catch (err) {
-					writeToErrorLog('migrateLegacyFolderViewKeys failed', `${old_key} → ${new_key}`, err);
-				}
-			}
-		}
+	private sendSettingsCascade(): void {
+		this.webviewPanel.webview.postMessage({ type: 'settingsCascade', settings: buildSettingsCascadePayload() });
 	}
 
 	// --- vscode listeners ---
@@ -430,15 +357,16 @@ export class PanelSession {
 	}
 
 	private onDidChangeConfiguration(e: vscode.ConfigurationChangeEvent): void {
-		if (e.affectsConfiguration('notethink.showLineNumbers')) {
+		if (e.affectsConfiguration('notethink.settings.view.generic.showLineNumbers')) {
 			this.sendGlobalSettings();
 		}
-		if (e.affectsConfiguration('notethink.watchUnopenedFilesInViewer')) {
+		if (e.affectsConfiguration('notethink.settings.view.generic.watchUnopenedFilesInViewer')) {
 			this.sendGlobalSettings();
 			this.syncActiveFileWatcher();
 		}
-		if (e.affectsConfiguration('notethink.folderView')) {
-			this.sendFolderViewSettings();
+		// catch-all for any cascade setting change (covers the two above and the cascade keys)
+		if (e.affectsConfiguration('notethink.settings')) {
+			this.sendSettingsCascade();
 		}
 	}
 
@@ -465,9 +393,9 @@ export class PanelSession {
 			switch (e.type) {
 				case 'requestInitialState': return this.handleRequestInitialState();
 				case 'updateGlobalSetting': return this.handleUpdateGlobalSetting(e);
-				case 'updateFolderViewSetting': return this.handleUpdateFolderViewSetting(e);
-				case 'promoteFolderViewSettingsToUser': return this.handlePromoteFolderViewSettings();
-				case 'resetFolderViewSettingsToDefault': return this.handleResetFolderViewSettings();
+				case 'updateSetting': return this.handleUpdateSetting(e);
+				case 'promoteSettingsToUser': return this.handlePromoteSettings();
+				case 'resetSettingsToDefault': return this.handleResetSettings();
 				case 'revealRange':
 				case 'selectRange': return this.handleRevealRange(e);
 				case 'setIntegration': return this.handleSetIntegration(e);
@@ -495,85 +423,89 @@ export class PanelSession {
 				this.sendCurrentSelection();
 			}
 			this.sendGlobalSettings();
-			await this.migrateLegacyFolderViewKeys();
-			this.sendFolderViewSettings();
+			this.sendSettingsCascade();
 			this.syncActiveFileWatcher();
 		} catch (err) {
 			writeToErrorLog('requestInitialState failed', '', err);
 		}
 	}
 
+	// per-setting storage target preference for the two non-cascade globals: showLineNumbers persists per-workspace; watchUnopenedFilesInViewer is a personal preference that follows the user across projects
+	private readonly GLOBAL_SETTING_TARGETS: Partial<Record<SettingKey, vscode.ConfigurationTarget>> = {
+		showLineNumbers: vscode.ConfigurationTarget.Workspace,
+		watchUnopenedFilesInViewer: vscode.ConfigurationTarget.Global,
+	};
+
 	private async handleUpdateGlobalSetting(e: Record<string, unknown>): Promise<void> {
-		const setting = e.setting as string;
+		const setting = e.setting as unknown;
 		const value = e.value as unknown;
 		try {
-			const config = vscode.workspace.getConfiguration('notethink');
-			// per-setting storage target: showLineNumbers persists per-workspace; watchUnopenedFilesInViewer is a personal preference that follows the user across projects
-			const setting_map: Record<string, { configKey: string; target: vscode.ConfigurationTarget }> = {
-				show_line_numbers: { configKey: 'showLineNumbers', target: vscode.ConfigurationTarget.Workspace },
-				watch_unopened_files_in_viewer: { configKey: 'watchUnopenedFilesInViewer', target: vscode.ConfigurationTarget.Global },
-			};
-			const entry = setting_map[setting];
-			if (entry) {
-				await config.update(entry.configKey, value, entry.target);
+			if (!isSettingKey(setting) || SETTINGS[setting].inCascade) {
+				writeToErrorLog('updateGlobalSetting: unknown or not-global setting', String(setting));
+				return;
 			}
+			const target = this.GLOBAL_SETTING_TARGETS[setting];
+			if (!target) {
+				writeToErrorLog('updateGlobalSetting: no per-setting target configured', setting);
+				return;
+			}
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- writeSetting's generic narrows on the key; the value's union widens to unknown at this boundary because e.value is untyped
+			await writeSetting(setting, value as any, target);
 		} catch (err) {
-			writeToErrorLog('updateGlobalSetting failed', setting, err);
+			writeToErrorLog('updateGlobalSetting failed', String(setting), err);
 		}
 	}
 
-	private async handleUpdateFolderViewSetting(e: Record<string, unknown>): Promise<void> {
+	private async handleUpdateSetting(e: Record<string, unknown>): Promise<void> {
 		// scope defaults to workspace so user edits stay local; promote-to-default uses scope='global'
-		const setting = e.setting as FolderViewKey;
+		const setting = e.setting as unknown;
 		const value = e.value as unknown;
 		const scope = (e.scope as 'workspace' | 'global' | undefined) ?? 'workspace';
 		try {
-			if (!FOLDER_VIEW_KEYS.includes(setting)) {
-				writeToErrorLog('updateFolderViewSetting: unknown setting', setting);
+			if (!isSettingKey(setting) || !SETTINGS[setting].inCascade) {
+				writeToErrorLog('updateSetting: unknown or not-cascade setting', String(setting));
 				return;
 			}
-			const config = vscode.workspace.getConfiguration('notethink.folderView');
 			const target = scope === 'global' ? vscode.ConfigurationTarget.Global : vscode.ConfigurationTarget.Workspace;
-			await config.update(FOLDER_VIEW_CONFIG_MAP[setting], value, target);
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- value's union widens to unknown at the wire boundary
+			await writeSetting(setting, value as any, target);
 		} catch (err) {
-			writeToErrorLog('updateFolderViewSetting failed', setting, err);
+			writeToErrorLog('updateSetting failed', String(setting), err);
 		}
 	}
 
-	private async handlePromoteFolderViewSettings(): Promise<void> {
-		// copy every currently-resolved value to User scope, then clear Workspace so the cascade reads from User next time
+	private async handlePromoteSettings(): Promise<void> {
+		// snapshot every currently-resolved cascade value first (workspace may shadow user), promote each to Global, then clear Workspace so the cascade reads from User next time
 		try {
-			const config = vscode.workspace.getConfiguration('notethink.folderView');
-			const resolved = this.readFolderViewSettings();
-			for (const key of FOLDER_VIEW_KEYS) {
-				await config.update(FOLDER_VIEW_CONFIG_MAP[key], resolved[key], vscode.ConfigurationTarget.Global);
+			const keys = cascadeKeys();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- per-key value types are heterogeneous; the snapshot is opaque
+			const resolved: Record<string, any> = {};
+			for (const key of keys) {
+				resolved[key] = readSetting(key);
 			}
-			// second pass clears Workspace overrides so they don't shadow the freshly-promoted User values
-			for (const key of FOLDER_VIEW_KEYS) {
-				const config_key = FOLDER_VIEW_CONFIG_MAP[key];
-				const inspected = config.inspect(config_key);
-				if (inspected?.workspaceValue !== undefined) {
-					await config.update(config_key, undefined, vscode.ConfigurationTarget.Workspace);
+			for (const key of keys) {
+				await writeSetting(key, resolved[key], vscode.ConfigurationTarget.Global);
+			}
+			for (const key of keys) {
+				if (hasWorkspaceOverride(key)) {
+					await writeSetting(key, undefined, vscode.ConfigurationTarget.Workspace);
 				}
 			}
 		} catch (err) {
-			writeToErrorLog('promoteFolderViewSettingsToUser failed', '', err);
+			writeToErrorLog('promoteSettingsToUser failed', '', err);
 		}
 	}
 
-	private async handleResetFolderViewSettings(): Promise<void> {
-		// clear every Workspace-scope override so the cascade falls back to User then built-in
+	private async handleResetSettings(): Promise<void> {
+		// clear every Workspace-scope cascade override so the cascade falls back to User then built-in
 		try {
-			const config = vscode.workspace.getConfiguration('notethink.folderView');
-			for (const key of FOLDER_VIEW_KEYS) {
-				const config_key = FOLDER_VIEW_CONFIG_MAP[key];
-				const inspected = config.inspect(config_key);
-				if (inspected?.workspaceValue !== undefined) {
-					await config.update(config_key, undefined, vscode.ConfigurationTarget.Workspace);
+			for (const key of cascadeKeys()) {
+				if (hasWorkspaceOverride(key)) {
+					await writeSetting(key, undefined, vscode.ConfigurationTarget.Workspace);
 				}
 			}
 		} catch (err) {
-			writeToErrorLog('resetFolderViewSettingsToDefault failed', '', err);
+			writeToErrorLog('resetSettingsToDefault failed', '', err);
 		}
 	}
 
@@ -654,14 +586,14 @@ export class PanelSession {
 	private async handleSetIntegration(e: Record<string, unknown>): Promise<void> {
 		const mode = e.mode as string;
 		const folder_path = e.path as string;
-		if (mode === 'folder' && folder_path) {
+		if (mode === INTEGRATION_MODE_FOLDER && folder_path) {
 			// validate before any teardown so a poisoned path can't dismantle a legitimate integration (folder, so no extension requirement)
 			if (!isWithinWorkspace(folder_path)) {
 				writeToErrorLog('setIntegration: folder outside workspace, refusing', folder_path);
 				return;
 			}
 			await this.enterFolderMode(folder_path, e);
-		} else if (mode === 'current_file') {
+		} else if (mode === INTEGRATION_MODE_CURRENT_FILE) {
 			await this.enterCurrentFileMode();
 		}
 		// folder mode: integration_path is now set so this disposes any active-file watcher; current_file mode: it arms one if the active file has no visible editor
@@ -676,6 +608,7 @@ export class PanelSession {
 			}
 			for (const key of Object.keys(this.integration_docs)) { delete this.integration_docs[key]; }
 			this.integration_path = folder_path;
+			// resolve filters BEFORE discovery so we never load a wider set than the user actually wants — the workspace cascade is the source of truth, and an explicit message field overrides on top
 			this.adoptFolderFilters(e);
 			const pattern = new vscode.RelativePattern(vscode.Uri.file(folder_path), this.integration_include);
 			await this.discoverFolderDocs(pattern, folder_path);
@@ -685,8 +618,12 @@ export class PanelSession {
 		}
 	}
 
-	// only adopt filters the message explicitly carries so a breadcrumb re-narrow keeps the user's current filters; an empty include is degenerate so falls back to the default, an empty exclude legitimately means "exclude nothing"
+	// resolve folder-mode filters with cascade precedence: built-in default → User config → Workspace config → explicit message override. The previous behaviour (only adopt explicit fields) left stale defaults in place when transitioning from current_file mode via a breadcrumb click, loading the whole workspace before the user's saved filter was applied
 	private adoptFolderFilters(e: Record<string, unknown>): void {
+		// cascade as the base; the settings module funnels every read through one place so this cannot drift from readSettingsCascade
+		this.integration_include = readSetting('includeFilter');
+		this.integration_exclude = readSetting('excludeFilter');
+		// explicit message override wins so the Files drawer's Apply can re-narrow without round-tripping through config first; empty include is degenerate so falls back to the default, empty exclude legitimately means "exclude nothing"
 		if (typeof e.include === 'string') {
 			this.integration_include = e.include.trim() === '' ? DEFAULT_INCLUDE_FILTER : e.include;
 		}

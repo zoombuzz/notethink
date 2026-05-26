@@ -104,7 +104,7 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     onMakeDefault={toolbar.handle_make_default}
                     onResetToDefault={toolbar.handle_reset_to_default}
                     onApplyFilters={handle_apply_filters}
-                    onFolderCascadeWrite={toolbar.cascade_write_folder_view_setting}
+                    onCascadeWrite={toolbar.cascade_write_setting}
                 />
             )}
             {props.type === 'auto' && <AutoView {...enriched_props} />}

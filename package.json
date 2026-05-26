@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -171,56 +171,56 @@
             "default": "verbose",
             "description": "%config.trace.description%"
           },
-          "notethink.showLineNumbers": {
-            "type": "boolean",
-            "scope": "resource",
-            "default": false,
-            "description": "%config.showLineNumbers.description%"
-          },
-          "notethink.watchUnopenedFilesInViewer": {
-            "type": "boolean",
-            "scope": "window",
-            "default": true,
-            "description": "%config.watchUnopenedFilesInViewer.description%"
-          },
-          "notethink.folderView.viewType": {
+          "notethink.settings.view.type": {
             "type": "string",
             "scope": "resource",
             "enum": ["auto", "document", "kanban"],
             "default": "auto",
-            "description": "%config.folderView.viewType.description%"
+            "description": "%config.settings.view.type.description%"
           },
-          "notethink.folderView.columnOrder": {
+          "notethink.settings.view.generic.showLineNumbers": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": false,
+            "description": "%config.settings.view.generic.showLineNumbers.description%"
+          },
+          "notethink.settings.view.generic.watchUnopenedFilesInViewer": {
+            "type": "boolean",
+            "scope": "window",
+            "default": true,
+            "description": "%config.settings.view.generic.watchUnopenedFilesInViewer.description%"
+          },
+          "notethink.settings.view.generic.showContextBars": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": true,
+            "description": "%config.settings.view.generic.showContextBars.description%"
+          },
+          "notethink.settings.view.specific.kanban.columnOrder": {
             "type": "array",
             "scope": "resource",
             "items": { "type": "string" },
             "default": ["untagged", "doing", "code-review", "testing", "done"],
-            "description": "%config.folderView.columnOrder.description%"
+            "description": "%config.settings.view.specific.kanban.columnOrder.description%"
           },
-          "notethink.folderView.includeFilter": {
+          "notethink.settings.files.includeFilter": {
             "type": "string",
             "scope": "resource",
             "default": "**/*.md",
-            "description": "%config.folderView.includeFilter.description%"
+            "description": "%config.settings.files.includeFilter.description%"
           },
-          "notethink.folderView.excludeFilter": {
+          "notethink.settings.files.excludeFilter": {
             "type": "string",
             "scope": "resource",
             "default": "**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**",
-            "description": "%config.folderView.excludeFilter.description%"
+            "description": "%config.settings.files.excludeFilter.description%"
           },
-          "notethink.folderView.maxNotesPerFile": {
+          "notethink.settings.files.maxNotesPerFile": {
             "type": "integer",
             "scope": "resource",
             "minimum": 1,
             "default": 10,
-            "description": "%config.folderView.maxNotesPerFile.description%"
-          },
-          "notethink.folderView.showContextBars": {
-            "type": "boolean",
-            "scope": "resource",
-            "default": true,
-            "description": "%config.folderView.showContextBars.description%"
+            "description": "%config.settings.files.maxNotesPerFile.description%"
           }
         }
       }

@@ -1,14 +1,30 @@
 # Jest Test Results
-# Version: 0.3.0
-# Date: 2026-05-25T15:43:49Z
+# Version: 0.3.2
+# Date: 2026-05-26T19:17:53Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
-┌──────────────────┬───────┬────────┬────────┬─────────┐
-│ Suite            │ Files │ Passed │ Failed │ Time    │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     6 │   160 │      0 │ 2.431 s │
-│ webview          │     3 │    35 │      0 │ 0.565 s │
-│ notethink-views  │    28 │   528 │      0 │ 3.059 s │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    37 │   723 │      0 │         │
-└──────────────────┴───────┴────────┴────────┴─────────┘
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+
+> @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
+> jest --config jest.config.cjs --forceExit
+
+[33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
+
+[1mTest Suites: [22m[1m[32m29 passed[39m[22m, 29 total
+[1mTests:       [22m[1m[32m534 passed[39m[22m, 534 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        [1m[33m3.112 s[39m[22m
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+
+[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
+[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+│ extension        │     6 │ [32m   160[0m │ [2m     0[0m │ 2.485 s │
+│ webview          │     4 │ [32m    39[0m │ [2m     0[0m │ 0.675 s │
+│ notethink-views  │    29 │ [32m   534[0m │ [2m     0[0m │ 3.112 s │
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+[1m│ TOTAL            │    39 │[0m [32m   733[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

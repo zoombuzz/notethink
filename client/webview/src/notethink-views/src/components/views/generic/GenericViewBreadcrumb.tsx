@@ -2,6 +2,7 @@ import Debug from "debug";
 import React from "react";
 import type { NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
+import { INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import BreadcrumbTrail from "../BreadcrumbTrail";
 
 const debug = Debug("nodejs:notethink-views:GenericViewBreadcrumb");
@@ -37,7 +38,7 @@ export default function GenericViewBreadcrumb(component_props: GenericViewBreadc
             doc_path={props.doc_path}
             doc_relative_path={props.doc_relative_path}
             workspace_root={props.workspace_root}
-            integration_path={props.display_options?.integration_mode === 'folder' ? props.display_options?.integration_path : undefined}
+            integration_path={props.display_options?.integration_mode === INTEGRATION_MODE_FOLDER ? props.display_options?.integration_path : undefined}
             file_count={props.file_count}
             note_count={props.note_count}
             aggregate_total_discovered={props.aggregate_total_discovered}

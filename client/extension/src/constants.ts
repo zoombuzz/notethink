@@ -8,5 +8,9 @@ export const DEFAULT_INCLUDE_FILTER = '**/*.md';
 // skip standard derived/dependency directories whose .md files (readmes, changelogs) would otherwise flood the folder view; the user may override or clear this from the Files drawer. .claude is in here because agent worktrees under .claude/worktrees/ mirror the repo tree and would otherwise duplicate every story
 export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**';
 
-// default kanban column order for folder mode; columns not in the user's data are culled, so the list is just an ordering hint. Keep in lockstep with package.json's notethink.folderView.columnOrder default
-export const DEFAULT_FOLDER_VIEW_COLUMN_ORDER: string[] = ['untagged', 'doing', 'code-review', 'testing', 'done'];
+// default kanban column order; columns not in the user's data are culled, so the list is just an ordering hint. Keep in lockstep with package.json's notethink.settings.view.specific.kanban.columnOrder default
+export const DEFAULT_COLUMN_ORDER: string[] = ['untagged', 'doing', 'code-review', 'testing', 'done'];
+
+// mirror of the IntegrationMode values from notethink-views (client/webview/src/notethink-views/src/components/views/ViewIntegrationSelector.tsx); these are wire-format strings on the `setIntegration` message and must stay byte-identical with the webview side
+export const INTEGRATION_MODE_CURRENT_FILE = 'current_file';
+export const INTEGRATION_MODE_FOLDER = 'folder';

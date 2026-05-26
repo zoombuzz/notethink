@@ -470,7 +470,7 @@ describe('mergeAggregateRoot', () => {
         return makeDoc(id, relative_path, text, children);
     }
 
-    describe('max_notes_per_file cap', () => {
+    describe('maxNotesPerFile cap', () => {
 
         it('undefined max: no cap (behaviour unchanged)', () => {
             const doc = simpleFile('id-a', 'a/todo.md', 'T', ['S1', 'S2', 'S3', 'S4', 'S5']);
@@ -757,9 +757,18 @@ describe('anyViewInFolderMode', () => {
         expect(anyViewInFolderMode(view_states)).toBe(false);
     });
 
-    it('returns true when canonical is current_file but a legacy entry is still tagged folder', () => {
+    it('legacy rescue: returns true via stranded folder tag even when canonical is current_file (covers pre-fix persisted state until the next flip cleans up)', () => {
+        // the dispatcher's clearing-on-flip is what eventually purges stranded tags; until that happens the helper must keep rescuing legacy state so users who never explicitly flipped still see their folder view
         const view_states = {
             [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'current_file' } },
+            '/repo/a.md': { display_options: { integration_mode: 'folder' } },
+        };
+        expect(anyViewInFolderMode(view_states)).toBe(true);
+    });
+
+    it('falls back to non-canonical scan when the canonical key has no integration_mode at all', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { } },
             '/repo/a.md': { display_options: { integration_mode: 'folder' } },
         };
         expect(anyViewInFolderMode(view_states)).toBe(true);
@@ -780,9 +789,17 @@ describe('firstIntegrationPath', () => {
         expect(firstIntegrationPath(view_states)).toBe('/canonical');
     });
 
-    it('falls back to legacy entry when canonical has no folder tag', () => {
+    it('legacy rescue: returns the stranded legacy path even when canonical is current_file (covers pre-fix persisted state until the next flip cleans up)', () => {
         const view_states = {
             [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'current_file' } },
+            '/repo/a.md': { display_options: { integration_mode: 'folder', integration_path: '/legacy' } },
+        };
+        expect(firstIntegrationPath(view_states)).toBe('/legacy');
+    });
+
+    it('falls back to legacy entry when the canonical key has no integration_mode at all', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { } },
             '/repo/a.md': { display_options: { integration_mode: 'folder', integration_path: '/legacy' } },
         };
         expect(firstIntegrationPath(view_states)).toBe('/legacy');

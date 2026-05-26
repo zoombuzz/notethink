@@ -5,6 +5,9 @@ import type { NoteDisplayOptions, TextSelection } from '../types/NoteProps';
 
 const debug = Debug("nodejs:notethink-views:viewhooks");
 
+// small extra so the caret line sits clear of the sticky header rather than flush against it
+const SCROLL_OCCLUDER_BUFFER_PX = 8;
+
 /**
  * Resolve the focused note's DOM element and the body item containing the caret.
  * Returns undefined if the note element is not in the DOM.
@@ -23,6 +26,27 @@ function resolveCaretTarget(
 }
 
 /**
+ * Return the maximum bottom edge (viewport px) of the sticky header stack — the view's
+ * toolbar plus any currently-open drawer. Used to set scroll-margin-top before
+ * scrollIntoView so the caret line lands below the header instead of behind it, and to
+ * decide whether the target is genuinely visible (vs technically on-screen but occluded).
+ * Returns 0 if no occluders are found.
+ */
+function stickyOccluderBottomPx(view_id: string): number {
+    const doc = window?.document;
+    if (!doc) { return 0; }
+    let max_bottom = 0;
+    const toolbar = doc.querySelector<HTMLElement>('[data-testid="view-toolbar"]');
+    if (toolbar) { max_bottom = Math.max(max_bottom, toolbar.getBoundingClientRect().bottom); }
+    for (const suffix of ['-settings-drawer', '-files-drawer']) {
+        const drawer = doc.getElementById(`v${view_id}${suffix}`);
+        if (!drawer || drawer.dataset.open !== 'true') { continue; }
+        max_bottom = Math.max(max_bottom, drawer.getBoundingClientRect().bottom);
+    }
+    return Math.max(0, max_bottom);
+}
+
+/**
  * Scroll the focused note (and body item) into view when the caret moves.
  * When the target is inside a clipped (abridged) note body, scrollIntoView
  * natively scrolls the overflow:hidden container too - scroll-padding on the
@@ -35,18 +59,21 @@ export function useScrollToCaret(
 ): void {
     const scroll_raf_ref = useRef<number>(0);
     useEffect(() => {
-        if (!display_options.settings?.scroll_note_into_view || !display_options.focused_seqs?.length) { return; }
+        if (!display_options.settings?.scrollNoteIntoView || !display_options.focused_seqs?.length) { return; }
         const caret_offset = selection?.main.head;
         cancelAnimationFrame(scroll_raf_ref.current);
         scroll_raf_ref.current = requestAnimationFrame(() => {
             const resolved = resolveCaretTarget(display_options.focused_seqs, view_id, caret_offset);
             if (!resolved) { return; }
             const scroll_target = resolved.body_item || resolved.note_element;
+            // sticky toolbar (and any open drawer) sit above the scroll viewport; without this offset scrollIntoView's `block: nearest` lands the target at viewport top, hidden behind the header
+            const occluder_bottom = stickyOccluderBottomPx(view_id);
+            scroll_target.style.scrollMarginTop = `${occluder_bottom + SCROLL_OCCLUDER_BUFFER_PX}px`;
             scroll_target.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
         });
         return () => cancelAnimationFrame(scroll_raf_ref.current);
     }, [
-        display_options.settings?.scroll_note_into_view,
+        display_options.settings?.scrollNoteIntoView,
         display_options.focused_seqs?.length && display_options.focused_seqs[display_options.focused_seqs.length - 1],
         view_id,
         selection?.main.head,
@@ -81,9 +108,10 @@ export function useCaretIndicator(
         if (target === prev_target_ref.current) { return; }
         prev_target_ref.current = target;
 
-        // check if the target is already in the viewport
+        // check if the target is already in the viewport; treat the sticky header stack as the effective top edge so a target hidden behind the toolbar/drawer counts as off-screen and we wait for the scroll
         const rect = target.getBoundingClientRect();
-        const is_visible = rect.top < window.innerHeight && rect.bottom > 0;
+        const occluder_bottom = stickyOccluderBottomPx(view_id);
+        const is_visible = rect.top >= occluder_bottom && rect.top < window.innerHeight && rect.bottom > occluder_bottom;
 
         if (is_visible) {
             // already on screen - flash immediately

@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import type { MouseEvent } from "react";
 import { calculateTextChangesForCheckbox, resolveCaretPosition } from "../../../lib/noteops";
 import { FOLDER_VIEW_STATE_ID } from "../../../lib/mergeAggregateRoot";
+import { INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { ClickPositionInfo, NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 
@@ -146,43 +147,43 @@ export function useViewHandlers(
         handlers.setViewManagedState([{
             id: FOLDER_VIEW_STATE_ID,
             display_options: {
-                integration_mode: 'folder',
+                integration_mode: INTEGRATION_MODE_FOLDER,
                 integration_path: folder_path,
             },
         }]);
         handlers.postMessage?.({
             type: 'setIntegration',
-            mode: 'folder',
+            mode: INTEGRATION_MODE_FOLDER,
             path: folder_path,
         });
     }, [handlers]);
 
     // persist edited globs + per-file story cap to per-view state (survives reload) and post a background setIntegration so the extension re-discovers the folder set with the new filters
-    // also round-trip each cascading setting to VS Code config via updateFolderViewSetting so it survives across windows when promoted to default
+    // also round-trip each cascading setting to VS Code config via updateSetting so it survives across windows when promoted to default
     const handle_apply_filters = useCallback((next_include: string, next_exclude: string, next_max_notes_per_file: number): void => {
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
-                include_filter: next_include,
-                exclude_filter: next_exclude,
-                max_notes_per_file: next_max_notes_per_file,
+                includeFilter: next_include,
+                excludeFilter: next_exclude,
+                maxNotesPerFile: next_max_notes_per_file,
             },
         }]);
         const integration_path = props.display_options?.integration_path;
         if (integration_path) {
             handlers.postMessage?.({
                 type: 'setIntegration',
-                mode: 'folder',
+                mode: INTEGRATION_MODE_FOLDER,
                 path: integration_path,
                 include: next_include,
                 exclude: next_exclude,
             });
         }
         // cascade round-trip: filters drawer is only reachable in folder mode, so we always write
-        if (props.display_options?.integration_mode === 'folder') {
-            handlers.postMessage?.({ type: 'updateFolderViewSetting', setting: 'include_filter', value: next_include });
-            handlers.postMessage?.({ type: 'updateFolderViewSetting', setting: 'exclude_filter', value: next_exclude });
-            handlers.postMessage?.({ type: 'updateFolderViewSetting', setting: 'max_notes_per_file', value: next_max_notes_per_file });
+        if (props.display_options?.integration_mode === INTEGRATION_MODE_FOLDER) {
+            handlers.postMessage?.({ type: 'updateSetting', setting: 'includeFilter', value: next_include });
+            handlers.postMessage?.({ type: 'updateSetting', setting: 'excludeFilter', value: next_exclude });
+            handlers.postMessage?.({ type: 'updateSetting', setting: 'maxNotesPerFile', value: next_max_notes_per_file });
         }
     }, [handlers, props.id, props.display_options?.integration_path, props.display_options?.integration_mode]);
 

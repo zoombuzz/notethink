@@ -15,18 +15,23 @@ interface MarkdownNoteHeadlineProps {
 /**
  * render-only headline row: optional line number badge, optional origin pill,
  * the rendered headline content, and inline linetag badges when
- * show_linetags_in_headlines is enabled.
+ * showLinetagsInHeadlines is enabled.
  *
  * State-less: all inputs come from the note prop. The click handler is built
  * via createNoteClickHandler so the same selection-mutation pathway used by
  * the rest of the note tree is preserved.
+ *
+ * The synthetic root container renders no headline row at all — empty rowheader
+ * elements would otherwise be picked up by `[role="rowheader"]` selectors as
+ * zero-height non-visible matches.
  */
-export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): ReactElement {
+export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): ReactElement | null {
     const { note } = props;
-    const show_lineno = note.display_options?.settings?.show_line_numbers
+    if (note.type === 'root') { return null; }
+    const show_lineno = note.display_options?.settings?.showLineNumbers
         && note.level === note.display_options?.deepest?.selectable_level;
     const show_origin = note.origin && note.level === 1;
-    const show_inline_linetags = note.display_options?.settings?.show_linetags_in_headlines && note.linetags;
+    const show_inline_linetags = note.display_options?.settings?.showLinetagsInHeadlines && note.linetags;
     return (
         <div className={view_specific_styles.headline}
              role={'rowheader'}

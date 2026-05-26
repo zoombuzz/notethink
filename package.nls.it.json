@@ -15,12 +15,12 @@
   "command.clearFocus": "NoteThink: Cancella selezione",
   "config.title": "NoteThink",
   "config.trace.description": "Traccia la comunicazione tra VS Code e l'estensione.",
-  "config.showLineNumbers.description": "Mostra i numeri di riga nelle viste NoteThink.",
-  "config.watchUnopenedFilesInViewer.description": "Monitora le modifiche su disco del file visualizzato quando non è aperto in un editor di testo (aggiorna il visualizzatore quando un altro strumento lo modifica).",
-  "config.folderView.viewType.description": "Tipo di vista predefinito per la modalità cartella (aggregata). L'impostazione utente si applica a ogni area di lavoro, salvo che venga sovrascritta localmente.",
-  "config.folderView.columnOrder.description": "Ordine predefinito delle colonne Kanban in modalità cartella (slug di stato grezzi come 'doing', 'done'). Le colonne non elencate vengono dopo, ordinate alfabeticamente, con 'untagged' alla fine.",
-  "config.folderView.includeFilter.description": "Glob dei file da includere in modalità cartella.",
-  "config.folderView.excludeFilter.description": "Glob dei file da escludere in modalità cartella.",
-  "config.folderView.maxNotesPerFile.description": "Limite al numero di storie di primo livello prese da ciascun file sorgente nella fusione aggregata di cartella.",
-  "config.folderView.showContextBars.description": "Mostra le barre di contesto sopra le storie in modalità cartella."
+  "config.settings.view.type.description": "Tipo di vista predefinito. L'impostazione utente si applica a ogni area di lavoro, salvo che venga sovrascritta localmente.",
+  "config.settings.view.generic.showLineNumbers.description": "Mostra i numeri di riga nelle viste NoteThink.",
+  "config.settings.view.generic.watchUnopenedFilesInViewer.description": "Monitora le modifiche su disco del file visualizzato quando non è aperto in un editor di testo (aggiorna il visualizzatore quando un altro strumento lo modifica).",
+  "config.settings.view.generic.showContextBars.description": "Mostra le barre di contesto sopra le storie.",
+  "config.settings.view.specific.kanban.columnOrder.description": "Ordine delle colonne Kanban (slug di stato grezzi come 'doing', 'done'). Le colonne non elencate vengono dopo, ordinate alfabeticamente, con 'untagged' alla fine.",
+  "config.settings.files.includeFilter.description": "Glob dei file da includere in modalità cartella.",
+  "config.settings.files.excludeFilter.description": "Glob dei file da escludere in modalità cartella.",
+  "config.settings.files.maxNotesPerFile.description": "Limite al numero di storie di primo livello prese da ciascun file sorgente nella fusione aggregata di cartella."
 }

@@ -1,11 +1,11 @@
 import Debug from "debug";
 import type { ChangeEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
+import { INTEGRATION_MODES, type IntegrationMode } from "../../types/IntegrationMode";
 
 const debug = Debug("nodejs:notethink-views:ViewIntegrationSelector");
 
-export const INTEGRATION_MODES = ['current_file', 'folder'] as const;
-export type IntegrationMode = typeof INTEGRATION_MODES[number];
+export { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, INTEGRATION_MODES, type IntegrationMode } from "../../types/IntegrationMode";
 
 function getModeLabels(): Record<IntegrationMode, string> {
     return {

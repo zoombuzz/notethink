@@ -180,4 +180,29 @@ describe('renderMarkdownNoteHeadline', () => {
             expect(html).toContain('[](?status=doing)');
         });
     });
+
+    describe('root note', () => {
+
+        it('returns empty markup for a note with type "root"', () => {
+            // synthetic root containers have no headline text; their children render via renderBodyItems
+            const root_note: NoteProps = {
+                seq: 0,
+                level: 0,
+                type: 'root',
+                position: {
+                    start: { offset: 0, line: 1 },
+                    end: { offset: 0, line: 1 },
+                },
+                children: [],
+                children_body: [],
+                headline_raw: '',
+                body_raw: '',
+            };
+
+            const result = renderMarkdownNoteHeadline(root_note);
+            const html = renderToStaticMarkup(result);
+            expect(html).toBe('');
+            expect(html).not.toContain('Root');
+        });
+    });
 });

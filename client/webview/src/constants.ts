@@ -6,4 +6,4 @@ export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,.git,.svn,.hg,.terraform
 export const DEFAULT_MAX_NOTES_PER_FILE = 10;
 
 // mirror of client/extension/src/constants.ts; the cascade and the package.json default must match this
-export const DEFAULT_FOLDER_VIEW_COLUMN_ORDER: string[] = ['untagged', 'doing', 'code-review', 'testing', 'done'];
+export const DEFAULT_COLUMN_ORDER: string[] = ['untagged', 'doing', 'code-review', 'testing', 'done'];

@@ -12,11 +12,12 @@ export interface ViewProps {
     file_count?: number;
     aggregate_total_discovered?: number;
     note_count?: number;
-    include_filter?: string;
-    exclude_filter?: string;
-    max_notes_per_file?: number;
+    includeFilter?: string;
+    excludeFilter?: string;
+    maxNotesPerFile?: number;
     aggregate_loaded_files?: Array<string>;
-    folder_view_cascade_has_workspace_overrides?: boolean;
+    settingsCascadeHasWorkspaceOverrides?: boolean;
+    view_state_ids?: readonly string[];
     display_options?: NoteDisplayOptions;
     nested?: {
         menus?: Record<string, unknown>;

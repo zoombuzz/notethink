@@ -18,7 +18,7 @@ const mockNoteRendererProps = jest.fn();
 jest.mock('./NoteRenderer', () => {
     return {
         __esModule: true,
-        default: (props: { notes: Record<string, unknown>; selections?: Record<string, unknown>; postMessage?: unknown; viewStates?: Record<string, unknown>; setViewManagedState?: unknown; onNavigationCommand?: unknown; globalSettings?: Record<string, unknown>; folderViewSettings?: Record<string, unknown> }) => {
+        default: (props: { notes: Record<string, unknown>; selections?: Record<string, unknown>; postMessage?: unknown; viewStates?: Record<string, unknown>; setViewManagedState?: unknown; onNavigationCommand?: unknown; globalSettings?: Record<string, unknown>; settingsCascade?: Record<string, unknown> }) => {
             mockNoteRendererProps(props);
             return <div
                 data-testid="NoteRenderer"
@@ -26,7 +26,7 @@ jest.mock('./NoteRenderer', () => {
                 data-has-selections={props.selections ? 'true' : 'false'}
                 data-view-states={JSON.stringify(props.viewStates || {})}
                 data-global-settings={JSON.stringify(props.globalSettings || {})}
-                data-folder-view-settings={JSON.stringify(props.folderViewSettings || {})}
+                data-settings-cascade={JSON.stringify(props.settingsCascade || {})}
             />;
         },
     };
@@ -238,13 +238,13 @@ describe('ExtensionReceiver', () => {
             window.dispatchEvent(new MessageEvent('message', {
                 data: {
                     type: 'globalSettings',
-                    settings: { show_line_numbers: true },
+                    settings: { showLineNumbers: true },
                 },
             }));
         });
         const renderer = screen.getByTestId('NoteRenderer');
         const global_settings = JSON.parse(renderer.getAttribute('data-global-settings') || '{}');
-        expect(global_settings.show_line_numbers).toBe(true);
+        expect(global_settings.showLineNumbers).toBe(true);
     });
 
     it('navigate command invokes callback ref', () => {
@@ -438,36 +438,36 @@ describe('ExtensionReceiver', () => {
         });
     });
 
-    describe('folder view cascade', () => {
+    describe('settings cascade', () => {
         const FOLDER_KEY = '__folder__';
 
-        it('threads folderViewSettings from the message into NoteRenderer props', () => {
+        it('threads settingsCascade from the message into NoteRenderer props', () => {
             render(<ExtensionReceiver />);
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {
                     data: {
-                        type: 'folderViewSettings',
+                        type: 'settingsCascade',
                         settings: {
-                            view_type: 'kanban',
-                            column_order: ['done', 'doing'],
-                            include_filter: '**/notes/**',
-                            exclude_filter: '',
-                            max_notes_per_file: 5,
-                            show_context_bars: false,
-                            has_workspace_overrides: true,
+                            viewType: 'kanban',
+                            columnOrder: ['done', 'doing'],
+                            includeFilter: '**/notes/**',
+                            excludeFilter: '',
+                            maxNotesPerFile: 5,
+                            showContextBars: false,
+                            hasWorkspaceOverrides: true,
                         },
                     },
                 }));
             });
             const renderer = screen.getByTestId('NoteRenderer');
-            const settings = JSON.parse(renderer.getAttribute('data-folder-view-settings') || '{}');
-            expect(settings.view_type).toBe('kanban');
-            expect(settings.column_order).toEqual(['done', 'doing']);
-            expect(settings.max_notes_per_file).toBe(5);
-            expect(settings.has_workspace_overrides).toBe(true);
+            const settings = JSON.parse(renderer.getAttribute('data-settings-cascade') || '{}');
+            expect(settings.viewType).toBe('kanban');
+            expect(settings.columnOrder).toEqual(['done', 'doing']);
+            expect(settings.maxNotesPerFile).toBe(5);
+            expect(settings.hasWorkspaceOverrides).toBe(true);
         });
 
-        it('setViewType command in folder mode round-trips to updateFolderViewSetting', () => {
+        it('setViewType command in folder mode round-trips to updateSetting', () => {
             render(<ExtensionReceiver />);
             const last_call = mockNoteRendererProps.mock.calls[mockNoteRendererProps.mock.calls.length - 1][0];
             // establish folder mode by writing the canonical viewState's integration_mode tag
@@ -486,17 +486,17 @@ describe('ExtensionReceiver', () => {
             });
             // expect the cascade write (the only postMessage caused by this command in folder mode)
             const cascade_call = post_message_spy.mock.calls.find(
-                c => c[0]?.type === 'updateFolderViewSetting' && c[0]?.setting === 'view_type'
+                c => c[0]?.type === 'updateSetting' && c[0]?.setting === 'viewType'
             );
             expect(cascade_call).toBeDefined();
             expect(cascade_call![0]).toEqual({
-                type: 'updateFolderViewSetting',
-                setting: 'view_type',
+                type: 'updateSetting',
+                setting: 'viewType',
                 value: 'kanban',
             });
         });
 
-        it('setViewType command in single-file mode does NOT round-trip to updateFolderViewSetting', () => {
+        it('setViewType command in single-file mode does NOT round-trip to updateSetting', () => {
             render(<ExtensionReceiver />);
             // no folder-tagged viewState exists; firing setViewType should not cascade
             post_message_spy.mockClear();
@@ -506,17 +506,17 @@ describe('ExtensionReceiver', () => {
                 }));
             });
             const cascade_call = post_message_spy.mock.calls.find(
-                c => c[0]?.type === 'updateFolderViewSetting'
+                c => c[0]?.type === 'updateSetting'
             );
             expect(cascade_call).toBeUndefined();
         });
     });
 
-    // when the integration_mode tag is dispatched to the canonical folder key, the folder viewState's other settings (column_order, filters, ...) must survive a flip to current_file and back
+    // when the integration_mode tag is dispatched to the canonical folder key, the folder viewState's other settings (columnOrder, filters, ...) must survive a flip to current_file and back
     describe('folder viewState survives integration_mode flip', () => {
         const FOLDER_KEY = '__folder__';
 
-        it('flipping folder → current_file → folder preserves column_order and filters', () => {
+        it('flipping folder → current_file → folder preserves columnOrder and filters', () => {
             render(<ExtensionReceiver />);
             const last_call = mockNoteRendererProps.mock.calls[mockNoteRendererProps.mock.calls.length - 1][0];
 
@@ -537,10 +537,10 @@ describe('ExtensionReceiver', () => {
                     id: FOLDER_KEY,
                     type: 'kanban',
                     display_options: {
-                        settings: { column_order: ['done', 'doing', 'todo'] },
-                        include_filter: '**/todo.md',
-                        exclude_filter: '',
-                        max_notes_per_file: 5,
+                        settings: { columnOrder: ['done', 'doing', 'todo'] },
+                        includeFilter: '**/todo.md',
+                        excludeFilter: '',
+                        maxNotesPerFile: 5,
                     },
                 }]);
             });
@@ -574,10 +574,10 @@ describe('ExtensionReceiver', () => {
             expect(folder_state.type).toBe('kanban');
             expect(folder_state.display_options.integration_mode).toBe('folder');
             expect(folder_state.display_options.integration_path).toBe('/repo/notes');
-            expect(folder_state.display_options.settings.column_order).toEqual(['done', 'doing', 'todo']);
-            expect(folder_state.display_options.include_filter).toBe('**/todo.md');
-            expect(folder_state.display_options.exclude_filter).toBe('');
-            expect(folder_state.display_options.max_notes_per_file).toBe(5);
+            expect(folder_state.display_options.settings.columnOrder).toEqual(['done', 'doing', 'todo']);
+            expect(folder_state.display_options.includeFilter).toBe('**/todo.md');
+            expect(folder_state.display_options.excludeFilter).toBe('');
+            expect(folder_state.display_options.maxNotesPerFile).toBe(5);
         });
 
         it('current_file flip writes the mode tag to the canonical key without stranding a doc-path orphan', () => {
@@ -591,7 +591,7 @@ describe('ExtensionReceiver', () => {
                     display_options: {
                         integration_mode: 'folder',
                         integration_path: '/repo',
-                        settings: { column_order: ['a', 'b'] },
+                        settings: { columnOrder: ['a', 'b'] },
                     },
                 }]);
             });
@@ -613,7 +613,7 @@ describe('ExtensionReceiver', () => {
             const keys = Object.keys(view_states);
             expect(keys).toEqual([FOLDER_KEY]);
             // settings preserved under the canonical key by the shallow merge in display_options
-            expect(view_states[FOLDER_KEY].display_options.settings.column_order).toEqual(['a', 'b']);
+            expect(view_states[FOLDER_KEY].display_options.settings.columnOrder).toEqual(['a', 'b']);
             // tag flipped
             expect(view_states[FOLDER_KEY].display_options.integration_mode).toBe('current_file');
         });

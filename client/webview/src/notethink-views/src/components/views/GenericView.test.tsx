@@ -1063,7 +1063,7 @@ describe('GenericView navigation callback', () => {
             expect(set_state).toHaveBeenCalledTimes(1);
             const update = set_state.mock.calls[0][0][0];
             expect(update.id).toBe('test-view');
-            expect(update.display_options.settings.show_linetags_in_headlines).toBe(true);
+            expect(update.display_options.settings.showLinetagsInHeadlines).toBe(true);
         });
 
         it('toggling the line-numbers checkbox dispatches postMessage updateGlobalSetting', async () => {
@@ -1084,12 +1084,12 @@ describe('GenericView navigation callback', () => {
             fireEvent.click(line_cb);
             expect(post_message).toHaveBeenCalledWith({
                 type: 'updateGlobalSetting',
-                setting: 'show_line_numbers',
+                setting: 'showLineNumbers',
                 value: true,
             });
         });
 
-        it('Kanban column reorder dispatches setViewManagedState with column_order; reset persists undefined', async () => {
+        it('Kanban column reorder dispatches setViewManagedState with columnOrder; reset persists undefined', async () => {
             const set_state = jest.fn();
             const status_note_a = makeNote({
                 seq: 1, level: 2,
@@ -1118,12 +1118,12 @@ describe('GenericView navigation callback', () => {
             fireEvent.click(screen.getByLabelText('Move Done up'));
             expect(set_state).toHaveBeenCalledTimes(1);
             const reorder_update = set_state.mock.calls[0][0][0];
-            expect(reorder_update.display_options.settings.column_order).toEqual(['done', 'doing', 'untagged']);
+            expect(reorder_update.display_options.settings.columnOrder).toEqual(['done', 'doing', 'untagged']);
             // resetting to natural order persists undefined
             set_state.mockClear();
             fireEvent.click(screen.getByText('Reset order'));
             const reset_update = set_state.mock.calls[0][0][0];
-            expect(reset_update.display_options.settings.column_order).toBeUndefined();
+            expect(reset_update.display_options.settings.columnOrder).toBeUndefined();
         });
 
         it('Escape closes the drawer and returns focus to the gear button', async () => {
@@ -1188,8 +1188,8 @@ describe('GenericView folder files drawer', () => {
                 <GenericView {...makeViewProps({
                     type: 'document',
                     display_options: { integration_mode: 'folder', integration_path: '/workspace/project/docs' },
-                    include_filter: '**/*.md',
-                    exclude_filter: '**/node_modules/**',
+                    includeFilter: '**/*.md',
+                    excludeFilter: '**/node_modules/**',
                     ...view_overrides,
                 })} />
             </Suspense>
@@ -1201,7 +1201,7 @@ describe('GenericView folder files drawer', () => {
             display_options: {
                 integration_mode: 'folder',
                 integration_path: '/workspace/project/docs',
-                max_notes_per_file: 25,
+                maxNotesPerFile: 25,
             },
         });
         await waitFor(() => expect(screen.getByTestId('files-drawer-mock')).toBeInTheDocument());
@@ -1215,7 +1215,7 @@ describe('GenericView folder files drawer', () => {
         expect(capturedFilesDrawerProps?.maxNotesPerFile).toBe(10);
     });
 
-    it('persists max_notes_per_file via setViewManagedState and excludes it from the setIntegration postMessage', async () => {
+    it('persists maxNotesPerFile via setViewManagedState and excludes it from the setIntegration postMessage', async () => {
         const post_message = jest.fn();
         const set_view_managed_state = jest.fn();
         renderFolderView({
@@ -1234,9 +1234,9 @@ describe('GenericView folder files drawer', () => {
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: 'test-view',
             display_options: {
-                include_filter: '**/users/**',
-                exclude_filter: '**/dist/**',
-                max_notes_per_file: 7,
+                includeFilter: '**/users/**',
+                excludeFilter: '**/dist/**',
+                maxNotesPerFile: 7,
             },
         }]);
 
@@ -1252,7 +1252,7 @@ describe('GenericView folder files drawer', () => {
             ([msg]) => msg?.type === 'setIntegration',
         );
         expect(set_integration_call).toBeDefined();
-        expect(set_integration_call![0]).not.toHaveProperty('max_notes_per_file');
-        expect(set_integration_call![0]).not.toHaveProperty('max_notes_per_file');
+        expect(set_integration_call![0]).not.toHaveProperty('maxNotesPerFile');
+        expect(set_integration_call![0]).not.toHaveProperty('maxNotesPerFile');
     });
 });

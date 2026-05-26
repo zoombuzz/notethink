@@ -13,7 +13,7 @@ export function buildNoteStyles(note: NoteProps, extra_classes?: string[]): stri
     const styles = [view_specific_styles.note].concat(extra_classes || []);
     if (note.focused) { styles.push(view_specific_styles.focused); }
     if (note.selected) { styles.push(view_specific_styles.selected); }
-    if (note.display_options?.settings?.show_line_numbers) { styles.push(view_specific_styles.addGutter); }
+    if (note.display_options?.settings?.showLineNumbers) { styles.push(view_specific_styles.addGutter); }
     return styles;
 }
 

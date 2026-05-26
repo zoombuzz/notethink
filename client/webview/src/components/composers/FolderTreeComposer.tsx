@@ -2,6 +2,7 @@ import Debug from "debug";
 import { useMemo } from "react";
 import { GenericView } from "../../notethink-views/src/components";
 import { mergeAggregateRoot, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from "../../notethink-views/src/lib/mergeAggregateRoot";
+import { INTEGRATION_MODE_FOLDER } from "../../notethink-views/src/types/IntegrationMode";
 import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE } from "../../constants";
 import type { ReactElement } from "react";
 import type { HashMapOf, Doc } from "../../types/general";
@@ -36,7 +37,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
         if (canonical) { return canonical; }
         for (const id of Object.keys(props.viewStates)) {
             if (id === FOLDER_VIEW_STATE_ID) { continue; }
-            if (props.viewStates[id]?.display_options?.integration_mode === 'folder') {
+            if (props.viewStates[id]?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER) {
                 return props.viewStates[id];
             }
         }
@@ -44,9 +45,9 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
     })();
 
     // precedence for every cascading setting below: per-session viewState override > cascade resolved by the extension > webview built-in default
-    const cascade = props.folderViewSettings;
-    const max_notes_per_file = view_state?.display_options?.max_notes_per_file
-        ?? cascade?.max_notes_per_file
+    const cascade = props.settingsCascade;
+    const maxNotesPerFile = view_state?.display_options?.maxNotesPerFile
+        ?? cascade?.maxNotesPerFile
         ?? DEFAULT_MAX_NOTES_PER_FILE;
 
     const { merged_root, all_notes } = useMemo(() => {
@@ -63,22 +64,22 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
                 };
             }
         }
-        const { root, all_notes } = mergeAggregateRoot(input, integration_path, max_notes_per_file);
+        const { root, all_notes } = mergeAggregateRoot(input, integration_path, maxNotesPerFile);
         return { merged_root: root, all_notes };
-    }, [merge_key, integration_path, max_notes_per_file]);
-    const view_type = view_state?.type || cascade?.view_type || 'auto';
-    const cascade_column_order = cascade?.column_order && cascade.column_order.length > 0
-        ? cascade.column_order
+    }, [merge_key, integration_path, maxNotesPerFile]);
+    const viewType = view_state?.type || cascade?.viewType || 'auto';
+    const cascade_column_order = cascade?.columnOrder && cascade.columnOrder.length > 0
+        ? cascade.columnOrder
         : undefined;
     const cascade_settings: Record<string, unknown> = {
-        show_line_numbers: props.globalSettings?.show_line_numbers ?? false,
-        watch_unopened_files_in_viewer: props.globalSettings?.watch_unopened_files_in_viewer ?? true,
-        show_context_bars: cascade?.show_context_bars ?? true,
+        showLineNumbers: props.globalSettings?.showLineNumbers ?? false,
+        watchUnopenedFilesInViewer: props.globalSettings?.watchUnopenedFilesInViewer ?? true,
+        showContextBars: cascade?.showContextBars ?? true,
     };
-    if (cascade_column_order) { cascade_settings.column_order = cascade_column_order; }
+    if (cascade_column_order) { cascade_settings.columnOrder = cascade_column_order; }
     const view_display_options: NoteDisplayOptions = {
         ...view_state?.display_options,
-        integration_mode: 'folder',
+        integration_mode: INTEGRATION_MODE_FOLDER,
         integration_path,
         settings: {
             ...cascade_settings,
@@ -92,34 +93,36 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
     const note_count = merged_root.child_notes?.length ?? 0;
 
     // precedence: per-session override > extension's echoed effective globs > cascade > built-in default. `''` is a valid user value (exclude cleared) so ?? is correct (only null/undefined fall through)
-    const include_filter = view_state?.display_options?.include_filter
-        ?? props.include_filter ?? cascade?.include_filter ?? DEFAULT_INCLUDE_FILTER;
-    const exclude_filter = view_state?.display_options?.exclude_filter
-        ?? props.exclude_filter ?? cascade?.exclude_filter ?? DEFAULT_EXCLUDE_FILTER;
+    const includeFilter = view_state?.display_options?.includeFilter
+        ?? props.includeFilter ?? cascade?.includeFilter ?? DEFAULT_INCLUDE_FILTER;
+    const excludeFilter = view_state?.display_options?.excludeFilter
+        ?? props.excludeFilter ?? cascade?.excludeFilter ?? DEFAULT_EXCLUDE_FILTER;
 
     // loaded source files (workspace-relative where known) for the Files drawer list, stable order
     const aggregate_loaded_files = Object.values(docs)
         .map(d => d.relative_path ?? d.path)
         .sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
 
+    const view_state_ids = props.viewStates ? Object.keys(props.viewStates) : undefined;
+
     const view_props: ViewProps = {
         id: view_state_id,
-        type: view_type,
+        type: viewType,
         // doc_path/doc_relative_path/doc_text intentionally undefined for the merged view
         workspace_root: props.workspace_root,
         file_count,
         aggregate_total_discovered: props.aggregate_total_discovered,
         note_count,
-        include_filter,
-        exclude_filter,
+        includeFilter,
+        excludeFilter,
         aggregate_loaded_files,
-        folder_view_cascade_has_workspace_overrides: cascade?.has_workspace_overrides,
+        settingsCascadeHasWorkspaceOverrides: cascade?.hasWorkspaceOverrides,
+        view_state_ids,
         display_options: view_display_options,
         nested: {
             parent_context: merged_root,
         },
         notes: all_notes,
-        // no single selection in folder mode
         selection: undefined,
         handlers: {
             setViewManagedState: props.setViewManagedState || (() => {}),

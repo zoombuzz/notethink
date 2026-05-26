@@ -6,7 +6,7 @@ import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { GlobalSettingKey } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import type { CommonSettingKey } from "../SettingsCommonControls";
-import type { IntegrationMode } from "../ViewIntegrationSelector";
+import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type IntegrationMode } from "../../../types/IntegrationMode";
 
 const debug = Debug("nodejs:notethink-views:useViewToolbar");
 
@@ -19,7 +19,7 @@ export interface ViewToolbar {
     handle_column_order_change: (next_order: string[]) => void;
     handle_make_default: () => void;
     handle_reset_to_default: () => void;
-    cascade_write_folder_view_setting: (setting: string, value: unknown) => void;
+    cascade_write_setting: (setting: string, value: unknown) => void;
 }
 
 /**
@@ -27,7 +27,7 @@ export interface ViewToolbar {
  * settings/column-order/cascade dispatchers. Per-view setting changes dispatch
  * setViewManagedState immediately; global keys are stripped from per-view state
  * (the extension owns them via VS Code config) and cascading folder-mode writes
- * round-trip to config via updateFolderViewSetting.
+ * round-trip to config via updateSetting.
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useViewToolbar(
@@ -37,37 +37,48 @@ export function useViewToolbar(
     notes_within_parent_context: Array<NoteProps>,
 ): ViewToolbar {
     // integration mode (current_file vs folder)
-    const integration_mode: IntegrationMode = (props.display_options?.integration_mode as IntegrationMode) || 'current_file';
+    const integration_mode: IntegrationMode = (props.display_options?.integration_mode as IntegrationMode) || INTEGRATION_MODE_CURRENT_FILE;
 
     const handle_integration_change = useCallback((mode: IntegrationMode): void => {
-        const folder_path = mode === 'folder' && props.doc_path
+        const folder_path = mode === INTEGRATION_MODE_FOLDER && props.doc_path
             ? props.doc_path.replace(/\/[^/]+$/, '')
             : undefined;
-        // dispatch the integration_mode tag to the canonical folder key (not props.id)
-        // so the folder viewState's other settings (column_order, filters, etc.) survive
-        // a flip to current_file and back
-        handlers.setViewManagedState([{
+        // dispatch the integration_mode tag to the canonical folder key (not props.id) so the folder viewState's other settings (columnOrder, filters, etc.) survive a flip to current_file and back
+        const updates: Array<Record<string, unknown>> = [{
             id: FOLDER_VIEW_STATE_ID,
             display_options: {
                 integration_mode: mode,
                 integration_path: folder_path,
             },
-        }]);
-        if (mode === 'folder' && folder_path) {
+        }];
+        // on flip to current_file also clear any stranded `integration_mode='folder'` tags on non-canonical keys (legacy pre-fix dispatch wrote the tag onto doc-path keys); without this the fallback scans in anyViewInFolderMode/firstIntegrationPath still resolve to folder mode and the composer + toolbar selector stay stuck on folder
+        if (mode === INTEGRATION_MODE_CURRENT_FILE) {
+            for (const id of (props.view_state_ids ?? [])) {
+                if (id === FOLDER_VIEW_STATE_ID) { continue; }
+                updates.push({
+                    id,
+                    display_options: {
+                        integration_mode: undefined,
+                        integration_path: undefined,
+                    },
+                });
+            }
+        }
+        handlers.setViewManagedState(updates);
+        if (mode === INTEGRATION_MODE_FOLDER && folder_path) {
             handlers.postMessage?.({
                 type: 'setIntegration',
-                mode: 'folder',
+                mode: INTEGRATION_MODE_FOLDER,
                 path: folder_path,
             });
-        } else if (mode === 'current_file') {
-            // notify the extension so it disposes the folder watcher and re-sends just the active doc
-            // without this the stale folder docs keep rendering as stacked single-file views
+        } else if (mode === INTEGRATION_MODE_CURRENT_FILE) {
+            // notify the extension so it disposes the folder watcher and re-sends just the active doc; without this the stale folder docs keep rendering as stacked single-file views
             handlers.postMessage?.({
                 type: 'setIntegration',
-                mode: 'current_file',
+                mode: INTEGRATION_MODE_CURRENT_FILE,
             });
         }
-    }, [handlers, props.doc_path]);
+    }, [handlers, props.doc_path, props.view_state_ids]);
 
     // natural column order for the Kanban drawer (alphabetical + 'untagged' last)
     const natural_column_order = useMemo<string[]>(() => {
@@ -75,27 +86,26 @@ export function useViewToolbar(
         return deriveNaturalColumnOrder(notes_within_parent_context);
     }, [props.type, notes_within_parent_context]);
 
-    // cascade write to VS Code config (Workspace scope on the extension side); no-op outside folder mode so dispatchers can call it unconditionally
-    const cascade_write_folder_view_setting = useCallback((setting: string, value: unknown): void => {
-        if (integration_mode !== 'folder') { return; }
+    // cascade write to VS Code config (Workspace scope on the extension side) under notethink.settings.*. View-type members (columnOrder, viewType, showLinetagsInHeadlines, scrollNoteIntoView, autoExpandFocusedNote, showContextBars) cascade-write in any integration mode so a setting changed in current_file mode is visible in folder mode and vice versa
+    const cascade_write_setting = useCallback((setting: string, value: unknown): void => {
         handlers.postMessage?.({
-            type: 'updateFolderViewSetting',
+            type: 'updateSetting',
             setting,
             value,
         });
-    }, [handlers, integration_mode]);
+    }, [handlers]);
 
     const handle_make_default = useCallback((): void => {
-        handlers.postMessage?.({ type: 'promoteFolderViewSettingsToUser' });
+        handlers.postMessage?.({ type: 'promoteSettingsToUser' });
     }, [handlers]);
 
     const handle_reset_to_default = useCallback((): void => {
-        handlers.postMessage?.({ type: 'resetFolderViewSettingsToDefault' });
+        handlers.postMessage?.({ type: 'resetSettingsToDefault' });
     }, [handlers]);
 
     // real-time apply: per-view setting change dispatches setViewManagedState immediately. Global keys are stripped so they don't get baked into per-view state — the extension owns them via vscode workspace config
     const handle_setting_change = useCallback((key: CommonSettingKey, value: boolean): void => {
-        const { show_line_numbers: _sln, watch_unopened_files_in_viewer: _wu, ...per_view_settings } = display_options.settings || {};
+        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, ...per_view_settings } = display_options.settings || {};
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
@@ -114,7 +124,7 @@ export function useViewToolbar(
 
     // real-time apply: Kanban column order change. Normalise: if next_order matches the natural order, persist undefined locally; cascade always carries an explicit array (empty == natural)
     const handle_column_order_change = useCallback((next_order: string[]): void => {
-        const { show_line_numbers: _sln, watch_unopened_files_in_viewer: _wu, ...per_view_settings } = display_options.settings || {};
+        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, ...per_view_settings } = display_options.settings || {};
         const matches_natural = arraysEqual(next_order, natural_column_order);
         const persisted_order = matches_natural ? undefined : next_order;
         handlers.setViewManagedState([{
@@ -122,13 +132,13 @@ export function useViewToolbar(
             display_options: {
                 settings: {
                     ...per_view_settings,
-                    column_order: persisted_order,
+                    columnOrder: persisted_order,
                 },
             },
         }]);
         // cascade payload uses [] (not undefined) for "natural order" to match the package.json default's shape
-        cascade_write_folder_view_setting('column_order', matches_natural ? [] : next_order);
-    }, [handlers, props.id, display_options.settings, natural_column_order, cascade_write_folder_view_setting]);
+        cascade_write_setting('columnOrder', matches_natural ? [] : next_order);
+    }, [handlers, props.id, display_options.settings, natural_column_order, cascade_write_setting]);
 
     return {
         integration_mode,
@@ -139,6 +149,6 @@ export function useViewToolbar(
         handle_column_order_change,
         handle_make_default,
         handle_reset_to_default,
-        cascade_write_folder_view_setting,
+        cascade_write_setting,
     };
 }

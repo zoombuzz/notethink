@@ -4,9 +4,10 @@ import * as l10n from '@vscode/l10n';
 import { useVscodeMessages } from '../hooks/useVscodeMessages';
 import { usePersistedViewStates, useVscodeStatePersistence } from '../hooks/usePersistedViewStates';
 import { useGlobalSettings } from '../hooks/useGlobalSettings';
-import { useFolderViewSettings } from '../hooks/useFolderViewSettings';
+import { useSettingsCascade } from '../hooks/useSettingsCascade';
 import { useLinkInterceptor } from '../hooks/useLinkInterceptor';
 import { useConnectionTimeout } from '../hooks/useConnectionTimeout';
+import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { ViewState } from '../hooks/usePersistedViewStates';
 import NoteRenderer from './NoteRenderer';
@@ -44,7 +45,7 @@ function persistVscodeState(state: { docs: HashMapOf<Doc>; viewStates: Record<st
 }
 
 // normalise persisted viewState across past renames so downstream reads only see the current shape:
-// integration_mode 'directory' → 'folder', legacy aggregate_* display_options fields → include_filter / exclude_filter / max_notes_per_file, and the folder-mode viewState key '__aggregate__' → '__folder__'
+// integration_mode 'directory' → 'folder', legacy aggregate_* display_options fields → includeFilter / excludeFilter / maxNotesPerFile, and the folder-mode viewState key '__aggregate__' → '__folder__'
 function migrateSavedState(s: VSCodeState | undefined): VSCodeState | undefined {
     if (!s?.viewStates) { return s; }
     // rename the legacy folder-mode viewState key on the map
@@ -56,18 +57,18 @@ function migrateSavedState(s: VSCodeState | undefined): VSCodeState | undefined 
         const dopts = s.viewStates[id]?.display_options as (Record<string, unknown> | undefined);
         if (!dopts) { continue; }
         if (dopts.integration_mode === 'directory') {
-            dopts.integration_mode = 'folder';
+            dopts.integration_mode = INTEGRATION_MODE_FOLDER;
         }
         if ('aggregate_include' in dopts) {
-            dopts.include_filter = dopts.aggregate_include;
+            dopts.includeFilter = dopts.aggregate_include;
             delete dopts.aggregate_include;
         }
         if ('aggregate_exclude' in dopts) {
-            dopts.exclude_filter = dopts.aggregate_exclude;
+            dopts.excludeFilter = dopts.aggregate_exclude;
             delete dopts.aggregate_exclude;
         }
         if ('aggregate_max_notes_per_file' in dopts) {
-            dopts.max_notes_per_file = dopts.aggregate_max_notes_per_file;
+            dopts.maxNotesPerFile = dopts.aggregate_max_notes_per_file;
             delete dopts.aggregate_max_notes_per_file;
         }
     }
@@ -83,7 +84,7 @@ export default function ExtensionReceiver(): React.ReactElement {
         !!saved_state?.docs && Object.keys(saved_state.docs).length > 0,
     );
     const { global_settings, setGlobalSettings } = useGlobalSettings();
-    const { folder_view_settings, setFolderViewSettings } = useFolderViewSettings();
+    const { settings_cascade, setSettingsCascade } = useSettingsCascade();
     const {
         view_states,
         view_states_ref,
@@ -95,15 +96,15 @@ export default function ExtensionReceiver(): React.ReactElement {
         selections,
         workspace_root,
         aggregate_total_discovered,
-        include_filter,
-        exclude_filter,
+        includeFilter,
+        excludeFilter,
     } = useVscodeMessages({
         initial_docs: saved_state?.docs,
         saved_view_states: saved_state?.viewStates,
         postMessage: postMessageToExtension,
         markConnected,
         setGlobalSettings,
-        setFolderViewSettings,
+        setSettingsCascade,
         updateAllViewStates,
         view_states_ref,
         navigation_callback_ref,
@@ -134,9 +135,9 @@ export default function ExtensionReceiver(): React.ReactElement {
         onNavigationCommand={navigation_callback_ref}
         workspace_root={workspace_root}
         aggregate_total_discovered={aggregate_total_discovered}
-        include_filter={include_filter}
-        exclude_filter={exclude_filter}
+        includeFilter={includeFilter}
+        excludeFilter={excludeFilter}
         globalSettings={global_settings}
-        folderViewSettings={folder_view_settings}
+        settingsCascade={settings_cascade}
     />;
 }

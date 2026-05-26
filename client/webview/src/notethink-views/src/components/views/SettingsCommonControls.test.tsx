@@ -28,9 +28,9 @@ describe('SettingsCommonControls', () => {
     });
 
     it.each([
-        ['show_linetags_in_headlines', 'linetag'],
-        ['scroll_note_into_view', 'Scroll'],
-        ['auto_expand_focused_note', 'Auto-expand'],
+        ['showLinetagsInHeadlines', 'linetag'],
+        ['scrollNoteIntoView', 'Scroll'],
+        ['autoExpandFocusedNote', 'Auto-expand'],
     ] as const)('toggles %s via onSettingChange', (key, label_match) => {
         const on_change = jest.fn();
         renderControls({ onSettingChange: on_change });
@@ -42,7 +42,7 @@ describe('SettingsCommonControls', () => {
         expect(on_change).toHaveBeenCalledWith(key, true);
     });
 
-    it('toggles show_line_numbers via onGlobalSettingChange (not onSettingChange)', () => {
+    it('toggles showLineNumbers via onGlobalSettingChange (not onSettingChange)', () => {
         const on_change = jest.fn();
         const on_global = jest.fn();
         renderControls({ onSettingChange: on_change, onGlobalSettingChange: on_global });
@@ -52,10 +52,10 @@ describe('SettingsCommonControls', () => {
         fireEvent.click(cb);
         expect(on_change).not.toHaveBeenCalled();
         expect(on_global).toHaveBeenCalledTimes(1);
-        expect(on_global).toHaveBeenCalledWith('show_line_numbers', true);
+        expect(on_global).toHaveBeenCalledWith('showLineNumbers', true);
     });
 
-    it('toggles watch_unopened_files_in_viewer via onGlobalSettingChange (default-on shows checked)', () => {
+    it('toggles watchUnopenedFilesInViewer via onGlobalSettingChange (default-on shows checked)', () => {
         const on_change = jest.fn();
         const on_global = jest.fn();
         renderControls({ onSettingChange: on_change, onGlobalSettingChange: on_global });
@@ -66,6 +66,6 @@ describe('SettingsCommonControls', () => {
         fireEvent.click(cb);
         expect(on_change).not.toHaveBeenCalled();
         expect(on_global).toHaveBeenCalledTimes(1);
-        expect(on_global).toHaveBeenCalledWith('watch_unopened_files_in_viewer', false);
+        expect(on_global).toHaveBeenCalledWith('watchUnopenedFilesInViewer', false);
     });
 });

@@ -10,8 +10,8 @@ interface GlobalSettingsState {
 }
 
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsPayload = {
-    show_line_numbers: false,
-    watch_unopened_files_in_viewer: true,
+    showLineNumbers: false,
+    watchUnopenedFilesInViewer: true,
 };
 
 // hold the host-pushed global settings (line numbers, unopened-file watching)

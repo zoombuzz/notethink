@@ -50,17 +50,16 @@ test.describe('Kanban Drag and Drop', () => {
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 
-        // Task A is in backlog column
-        const backlog_column = page.locator('[role="region"][aria-label="backlog"]');
-        await expect(backlog_column.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 3000 });
+        // Task B is in doing column. Driving the drag from `doing` rather than `backlog` keeps the test resilient to the settings cascade default column order, which puts backlog at the rightmost position so a right-drag from backlog would be a no-op
+        const doing_column = page.locator('[role="region"][aria-label="doing"]');
+        await expect(doing_column.getByRole('heading', { name: 'Task B' })).toBeVisible({ timeout: 3000 });
 
-        // find the drag handle for Task A (the draggable element with data-rbd-drag-handle attributes)
-        const task_a_draggable = backlog_column.locator('[data-rfd-drag-handle-draggable-id]').first();
+        const task_b_draggable = doing_column.locator('[data-rfd-drag-handle-draggable-id]').first();
 
         await clearCapturedMessages(page);
 
-        // keyboard drag: backlog → doing (one column to the right)
-        await keyboardDrag(page, task_a_draggable, 'right', 1);
+        // keyboard drag: doing → one column to the right
+        await keyboardDrag(page, task_b_draggable, 'right', 1);
 
         // verify editText message was sent
         const messages = await getCapturedMessages(page);
@@ -72,9 +71,8 @@ test.describe('Kanban Drag and Drop', () => {
         const changes = edit_msg!.changes as Array<{ from: number; to?: number; insert: string }>;
         expect(changes.length).toBeGreaterThanOrEqual(1);
 
-        // the change replaces the old value with the new column value
-        // (e.g. replaces "backlog" with "doing" at the linetag value offset)
-        const has_value_change = changes.some(c => c.to !== undefined && c.insert !== 'backlog');
+        // the change replaces the old value (`doing`) with the new column value
+        const has_value_change = changes.some(c => c.to !== undefined && c.insert !== 'doing');
         expect(has_value_change).toBe(true);
     });
 

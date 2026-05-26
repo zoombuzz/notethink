@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import styles from "../ViewRenderer.module.scss";
 import { globMatches } from "../../lib/globMatch";
+import SettingsCascadeButtons from "./SettingsCascadeButtons";
 
 const debug = Debug("nodejs:notethink-views:FilesDrawer");
 
@@ -20,6 +21,9 @@ interface FilesDrawerProps {
     noteCount: number;
     files: Array<string>;
     onApplyFilters: (include: string, exclude: string, maxNotesPerFile: number) => void;
+    onMakeDefault?: () => void;
+    onResetToDefault?: () => void;
+    canResetToDefault?: boolean;
 }
 
 /**
@@ -144,6 +148,9 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
                             onChange={handleMaxNotesChange}
                         />
                     </p>
+                    <p className={styles.filesDrawerCount} data-testid="files-drawer-count">
+                        {l10n.t('{0} in {1} files', String(props.noteCount), String(props.fileCount))}
+                    </p>
                     <ul className={styles.filesDrawerList} data-testid="files-drawer-list">
                         {visible_files.length === 0 && (
                             <li className={styles.filesDrawerEmpty}>{l10n.t('No files match the current filters')}</li>
@@ -156,10 +163,14 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
             </div>
 
             <aside className={styles.settingsDrawerMeta}>
-                <h3>{l10n.t('Files')}</h3>
-                <p className={styles.settingsDrawerVersion} data-testid="files-drawer-count">
-                    {l10n.t('{0} in {1} files', String(props.noteCount), String(props.fileCount))}
-                </p>
+                <h3>{l10n.t('File settings')}</h3>
+                {props.onMakeDefault && props.onResetToDefault && (
+                    <SettingsCascadeButtons
+                        onMakeDefault={props.onMakeDefault}
+                        onResetToDefault={props.onResetToDefault}
+                        canResetToDefault={props.canResetToDefault}
+                    />
+                )}
             </aside>
         </div>
     );

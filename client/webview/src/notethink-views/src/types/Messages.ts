@@ -58,27 +58,27 @@ export interface UpdateGlobalSettingMessage {
 }
 
 /**
- * per-key write to a folder-view setting. Scope defaults to 'workspace' on the extension side when omitted; 'global' is the promote path.
+ * per-key write to a cascade setting. Scope defaults to 'workspace' on the extension side when omitted; 'global' is the promote path.
  */
-export interface UpdateFolderViewSettingMessage {
-    type: 'updateFolderViewSetting';
-    setting: keyof FolderViewSettingsPayload;
+export interface UpdateSettingMessage {
+    type: 'updateSetting';
+    setting: keyof SettingsCascadePayload;
     value: unknown;
     scope?: 'workspace' | 'global';
 }
 
 /**
- * promote every currently-resolved folder-view setting into User scope, then clear the Workspace overrides so the cascade reads from User next time.
+ * promote every currently-resolved cascade setting into User scope, then clear the Workspace overrides so the cascade reads from User next time.
  */
-export interface PromoteFolderViewSettingsToUserMessage {
-    type: 'promoteFolderViewSettingsToUser';
+export interface PromoteSettingsToUserMessage {
+    type: 'promoteSettingsToUser';
 }
 
 /**
- * clear every Workspace-scope folder-view override so the cascade falls back to User (or built-in default if no User override exists).
+ * clear every Workspace-scope cascade override so the cascade falls back to User (or built-in default if no User override exists).
  */
-export interface ResetFolderViewSettingsToDefaultMessage {
-    type: 'resetFolderViewSettingsToDefault';
+export interface ResetSettingsToDefaultMessage {
+    type: 'resetSettingsToDefault';
 }
 
 export type WebviewToExtensionMessage =
@@ -87,9 +87,9 @@ export type WebviewToExtensionMessage =
     | EditTextMessage
     | OpenExternalMessage
     | UpdateGlobalSettingMessage
-    | UpdateFolderViewSettingMessage
-    | PromoteFolderViewSettingsToUserMessage
-    | ResetFolderViewSettingsToDefaultMessage;
+    | UpdateSettingMessage
+    | PromoteSettingsToUserMessage
+    | ResetSettingsToDefaultMessage;
 
 // Extension -> Webview messages
 
@@ -117,9 +117,10 @@ export interface CommandMessage {
     direction?: 'up' | 'down' | 'drillIn' | 'drillOut' | 'clearFocus';
 }
 
+// settings identifiers are camelCase end-to-end (TS keys, wire IDs, payload field names, VS Code config paths) — see client/extension/src/lib/settings.ts. This deviates from the project-wide snake_case-for-wire-data-fields convention because settings have a unique cross-boundary identity, and bridging two cases would mean every setting carries two names
 export interface GlobalSettingsPayload {
-    show_line_numbers: boolean;
-    watch_unopened_files_in_viewer: boolean;
+    showLineNumbers: boolean;
+    watchUnopenedFilesInViewer: boolean;
 }
 
 export type GlobalSettingKey = keyof GlobalSettingsPayload;
@@ -130,24 +131,26 @@ export interface GlobalSettingsMessage {
 }
 
 /**
- * resolved cascade values for the folder-view settings. The extension reads each key via vscode.workspace.getConfiguration() (built-in default → User → Workspace) and sends this payload on requestInitialState and whenever onDidChangeConfiguration fires for any of the underlying keys.
- * - has_workspace_overrides: true iff at least one key has a value at ConfigurationTarget.Workspace; drives whether the Reset button is enabled in the UI
+ * resolved values for the settings cascade. The extension reads each key via vscode.workspace.getConfiguration() (built-in default → User → Workspace) under `notethink.settings.*` and sends this payload on requestInitialState and whenever onDidChangeConfiguration fires for any of the underlying keys.
+ * - hasWorkspaceOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace; drives whether the Reset button is enabled in the UI
+ *
+ * Settings identifiers are camelCase end-to-end (see client/extension/src/lib/settings.ts).
  */
-export interface FolderViewSettingsPayload {
-    view_type: 'auto' | 'document' | 'kanban';
-    column_order: string[];
-    include_filter: string;
-    exclude_filter: string;
-    max_notes_per_file: number;
-    show_context_bars: boolean;
-    has_workspace_overrides: boolean;
+export interface SettingsCascadePayload {
+    viewType: 'auto' | 'document' | 'kanban';
+    columnOrder: string[];
+    includeFilter: string;
+    excludeFilter: string;
+    maxNotesPerFile: number;
+    showContextBars: boolean;
+    hasWorkspaceOverrides: boolean;
 }
 
-export type FolderViewSettingKey = Exclude<keyof FolderViewSettingsPayload, 'has_workspace_overrides'>;
+export type SettingsCascadeKey = Exclude<keyof SettingsCascadePayload, 'hasWorkspaceOverrides'>;
 
-export interface FolderViewSettingsMessage {
-    type: 'folderViewSettings';
-    settings: FolderViewSettingsPayload;
+export interface SettingsCascadeMessage {
+    type: 'settingsCascade';
+    settings: SettingsCascadePayload;
 }
 
 export type ExtensionToWebviewMessage =
@@ -155,4 +158,4 @@ export type ExtensionToWebviewMessage =
     | SelectionChangedMessage
     | CommandMessage
     | GlobalSettingsMessage
-    | FolderViewSettingsMessage;
+    | SettingsCascadeMessage;

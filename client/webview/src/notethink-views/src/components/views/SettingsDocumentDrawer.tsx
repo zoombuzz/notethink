@@ -3,6 +3,7 @@ import React from "react";
 import * as l10n from "@vscode/l10n";
 import styles from "../ViewRenderer.module.scss";
 import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } from "./SettingsCommonControls";
+import SettingsCascadeButtons from "./SettingsCascadeButtons";
 import type { GlobalSettingKey } from "../../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:SettingsDocumentDrawer");
@@ -33,9 +34,6 @@ function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps): React.React
                         watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
                         onSettingChange={props.onSettingChange}
                         onGlobalSettingChange={props.onGlobalSettingChange}
-                        onMakeDefault={props.onMakeDefault}
-                        onResetToDefault={props.onResetToDefault}
-                        canResetToDefault={props.canResetToDefault}
                     />
                 </section>
             </div>
@@ -46,6 +44,13 @@ function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps): React.React
                     NoteThink v{typeof NOTETHINK_VERSION !== 'undefined' ? NOTETHINK_VERSION : 'dev'}
                     {' '}(ext: {(window as unknown as Record<string, unknown>).__NOTETHINK_EXTENSION_VERSION__ as string || '?'})
                 </p>
+                {props.onMakeDefault && props.onResetToDefault && (
+                    <SettingsCascadeButtons
+                        onMakeDefault={props.onMakeDefault}
+                        onResetToDefault={props.onResetToDefault}
+                        canResetToDefault={props.canResetToDefault}
+                    />
+                )}
             </aside>
         </div>
     );

@@ -78,7 +78,28 @@ describe('NoteRenderer', () => {
         expect(fallback).toBeInTheDocument();
     });
 
-    it('renders multiple notes', () => {
+    it('current_file mode: renders only the most-recently-sent doc when the map has multiple entries', () => {
+        // current_file mode by definition shows exactly one file — stale entries (folder→current_file transition state, message races) must not stack as extra single-file views; the most recent updateSentAt is the active doc by construction
+        const notes: HashMapOf<Doc> = {
+            'a': {
+                id: 'a', path: '/a.md',
+                content: { type: 'root', children: [] } as MdastRoot,
+                text: '# A',
+                updateSentAt: '2026-05-26T12:00:00.000Z',
+            },
+            'b': {
+                id: 'b', path: '/b.md',
+                content: { type: 'root', children: [] } as MdastRoot,
+                text: '# B',
+                updateSentAt: '2026-05-26T13:00:00.000Z',
+            },
+        };
+        render(<NoteRenderer notes={notes} />);
+        expect(screen.queryByTestId('docview-a')).not.toBeInTheDocument();
+        expect(screen.getByTestId('docview-b')).toBeInTheDocument();
+    });
+
+    it('current_file mode: when no updateSentAt timestamps are present, deterministically picks the first entry', () => {
         const notes: HashMapOf<Doc> = {
             'a': {
                 id: 'a', path: '/a.md',
@@ -93,6 +114,6 @@ describe('NoteRenderer', () => {
         };
         render(<NoteRenderer notes={notes} />);
         expect(screen.getByTestId('docview-a')).toBeInTheDocument();
-        expect(screen.getByTestId('docview-b')).toBeInTheDocument();
+        expect(screen.queryByTestId('docview-b')).not.toBeInTheDocument();
     });
 });

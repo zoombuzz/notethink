@@ -15,12 +15,12 @@
   "command.clearFocus": "NoteThink: Clear Focus",
   "config.title": "NoteThink",
   "config.trace.description": "Traces the communication between VS Code and the extension.",
-  "config.showLineNumbers.description": "Show line numbers in NoteThink views.",
-  "config.watchUnopenedFilesInViewer.description": "Watch the active viewed file for on-disk changes when it isn't open in a text editor (refreshes the viewer when another tool edits it).",
-  "config.folderView.viewType.description": "Default view type for folder (aggregate) mode. The user default applies in every workspace unless that workspace overrides it.",
-  "config.folderView.columnOrder.description": "Default kanban column order for folder mode (raw status slugs like 'code-review' or 'done'). Columns not in the list appear after, sorted alphabetically with 'untagged' last.",
-  "config.folderView.includeFilter.description": "Glob of files to include in folder mode.",
-  "config.folderView.excludeFilter.description": "Glob of files to exclude in folder mode.",
-  "config.folderView.maxNotesPerFile.description": "Cap on stories taken from each source file when merging the folder aggregate.",
-  "config.folderView.showContextBars.description": "Show context bars above stories in folder mode."
+  "config.settings.view.type.description": "Default view type. The user default applies in every workspace unless that workspace overrides it.",
+  "config.settings.view.generic.showLineNumbers.description": "Show line numbers in NoteThink views.",
+  "config.settings.view.generic.watchUnopenedFilesInViewer.description": "Watch the active viewed file for on-disk changes when it isn't open in a text editor (refreshes the viewer when another tool edits it).",
+  "config.settings.view.generic.showContextBars.description": "Show context bars above stories.",
+  "config.settings.view.specific.kanban.columnOrder.description": "Kanban column order (raw status slugs like 'code-review' or 'done'). Columns not in the list appear after, sorted alphabetically with 'untagged' last.",
+  "config.settings.files.includeFilter.description": "Glob of files to include in folder mode.",
+  "config.settings.files.excludeFilter.description": "Glob of files to exclude in folder mode.",
+  "config.settings.files.maxNotesPerFile.description": "Cap on stories taken from each source file when merging the folder aggregate."
 }

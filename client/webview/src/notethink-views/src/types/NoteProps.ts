@@ -17,14 +17,14 @@ export interface NoteDisplayOptions {
     level?: number;
     parent_context_seq?: number;
     settings?: {
-        show_context_bars?: boolean;
-        show_linetags_in_headlines?: boolean;
-        show_line_numbers?: boolean;
-        watch_unopened_files_in_viewer?: boolean;
-        scroll_text_into_view?: boolean;
-        scroll_note_into_view?: boolean;
-        auto_expand_focused_note?: boolean;
-        column_order?: string[];
+        showContextBars?: boolean;
+        showLinetagsInHeadlines?: boolean;
+        showLineNumbers?: boolean;
+        watchUnopenedFilesInViewer?: boolean;
+        scrollTextIntoView?: boolean;
+        scrollNoteIntoView?: boolean;
+        autoExpandFocusedNote?: boolean;
+        columnOrder?: string[];
     };
     deepest?: {
         selectable_level?: number;
@@ -40,9 +40,9 @@ export interface NoteDisplayOptions {
     cropped_selected_seqs?: number[];
     integration_mode?: string;
     integration_path?: string;
-    include_filter?: string;
-    exclude_filter?: string;
-    max_notes_per_file?: number;
+    includeFilter?: string;
+    excludeFilter?: string;
+    maxNotesPerFile?: number;
     additional_classes?: string[];
     total_columns?: number;
     provided?: {

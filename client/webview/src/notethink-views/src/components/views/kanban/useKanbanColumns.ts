@@ -26,7 +26,7 @@ export interface KanbanColumnDescriptor {
  *
  * inputs:
  * - notes: the notes visible within the parent context (typically `props.notes_within_parent_context`)
- * - custom_order: optional explicit ordering of column values (typically `display_options.settings?.column_order`)
+ * - custom_order: optional explicit ordering of column values (typically `display_options.settings?.columnOrder`)
  *
  * column ordering:
  * - when `custom_order` is set: columns start in that order, then any newly-seen status values are appended alphabetically;

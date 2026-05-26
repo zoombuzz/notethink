@@ -6,7 +6,7 @@ import type { NoteDisplayOptions } from "../../../types/NoteProps";
 import type { GlobalSettingKey } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import type { CommonSettingKey } from "../SettingsCommonControls";
-import type { IntegrationMode } from "../ViewIntegrationSelector";
+import { INTEGRATION_MODE_FOLDER, type IntegrationMode } from "../../../types/IntegrationMode";
 import FilesDrawer from "../FilesDrawer";
 import SettingsDocumentDrawer from "../SettingsDocumentDrawer";
 import SettingsKanbanDrawer from "../SettingsKanbanDrawer";
@@ -36,7 +36,7 @@ interface GenericViewToolbarProps {
     onMakeDefault: () => void;
     onResetToDefault: () => void;
     onApplyFilters: (next_include: string, next_exclude: string, next_max_notes_per_file: number) => void;
-    onFolderCascadeWrite: (setting: string, value: unknown) => void;
+    onCascadeWrite: (setting: string, value: unknown) => void;
 }
 
 // shared inline style for the toolbar's icon buttons (insert, settings gear)
@@ -77,7 +77,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         onMakeDefault,
         onResetToDefault,
         onApplyFilters,
-        onFolderCascadeWrite,
+        onCascadeWrite,
     } = component_props;
     return (
         <>
@@ -94,9 +94,8 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                     autoResolvedType={autoResolvedType}
                     handlers={handlers}
                     id={props.id}
-                    onFolderCascadeWrite={integrationMode === 'folder'
-                        ? (view_type) => onFolderCascadeWrite('view_type', view_type)
-                        : undefined}
+                    // viewType is a view-type setting (not integration-specific): cascade-write in any integration mode so picking Kanban here also persists for folder mode and vice versa
+                    onCascadeWrite={(viewType) => onCascadeWrite('viewType', viewType)}
                 />
                 <button
                     data-testid="view-insert-button"
@@ -129,54 +128,57 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                 {props.type === 'document' && (
                     <SettingsDocumentDrawer
                         settings={{
-                            show_linetags_in_headlines: displayOptions.settings?.show_linetags_in_headlines,
-                            scroll_note_into_view: displayOptions.settings?.scroll_note_into_view,
-                            auto_expand_focused_note: displayOptions.settings?.auto_expand_focused_note,
+                            showLinetagsInHeadlines: displayOptions.settings?.showLinetagsInHeadlines,
+                            scrollNoteIntoView: displayOptions.settings?.scrollNoteIntoView,
+                            autoExpandFocusedNote: displayOptions.settings?.autoExpandFocusedNote,
                         }}
-                        showLineNumbers={displayOptions.settings?.show_line_numbers}
-                        watchUnopenedFilesInViewer={displayOptions.settings?.watch_unopened_files_in_viewer}
+                        showLineNumbers={displayOptions.settings?.showLineNumbers}
+                        watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}
                         onSettingChange={onSettingChange}
                         onGlobalSettingChange={onGlobalSettingChange}
-                        onMakeDefault={integrationMode === 'folder' ? onMakeDefault : undefined}
-                        onResetToDefault={integrationMode === 'folder' ? onResetToDefault : undefined}
-                        canResetToDefault={props.folder_view_cascade_has_workspace_overrides ?? false}
+                        onMakeDefault={onMakeDefault}
+                        onResetToDefault={onResetToDefault}
+                        canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
                     />
                 )}
                 {props.type === 'kanban' && (
                     <SettingsKanbanDrawer
                         settings={{
-                            show_linetags_in_headlines: displayOptions.settings?.show_linetags_in_headlines,
-                            scroll_note_into_view: displayOptions.settings?.scroll_note_into_view,
-                            auto_expand_focused_note: displayOptions.settings?.auto_expand_focused_note,
-                            column_order: displayOptions.settings?.column_order,
+                            showLinetagsInHeadlines: displayOptions.settings?.showLinetagsInHeadlines,
+                            scrollNoteIntoView: displayOptions.settings?.scrollNoteIntoView,
+                            autoExpandFocusedNote: displayOptions.settings?.autoExpandFocusedNote,
+                            columnOrder: displayOptions.settings?.columnOrder,
                         }}
                         naturalColumnOrder={naturalColumnOrder}
-                        showLineNumbers={displayOptions.settings?.show_line_numbers}
-                        watchUnopenedFilesInViewer={displayOptions.settings?.watch_unopened_files_in_viewer}
+                        showLineNumbers={displayOptions.settings?.showLineNumbers}
+                        watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}
                         onSettingChange={onSettingChange}
                         onGlobalSettingChange={onGlobalSettingChange}
                         onColumnOrderChange={onColumnOrderChange}
-                        onMakeDefault={integrationMode === 'folder' ? onMakeDefault : undefined}
-                        onResetToDefault={integrationMode === 'folder' ? onResetToDefault : undefined}
-                        canResetToDefault={props.folder_view_cascade_has_workspace_overrides ?? false}
+                        onMakeDefault={onMakeDefault}
+                        onResetToDefault={onResetToDefault}
+                        canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
                     />
                 )}
             </ToolbarDrawer>
-            {integrationMode === 'folder' && (
+            {integrationMode === INTEGRATION_MODE_FOLDER && (
                 <ToolbarDrawer
                     open={activeDrawer === 'files'}
                     id={`v${props.id}-files-drawer`}
                     testId="files-drawer-grid"
-                    ariaLabel={l10n.t('Files')}
+                    ariaLabel={l10n.t('File settings')}
                 >
                     <FilesDrawer
-                        include={props.include_filter ?? ''}
-                        exclude={props.exclude_filter ?? ''}
-                        maxNotesPerFile={props.display_options?.max_notes_per_file ?? 10}
+                        include={props.includeFilter ?? ''}
+                        exclude={props.excludeFilter ?? ''}
+                        maxNotesPerFile={props.display_options?.maxNotesPerFile ?? 10}
                         fileCount={props.file_count ?? 0}
                         noteCount={props.note_count ?? 0}
                         files={props.aggregate_loaded_files ?? []}
                         onApplyFilters={onApplyFilters}
+                        onMakeDefault={onMakeDefault}
+                        onResetToDefault={onResetToDefault}
+                        canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
                     />
                 </ToolbarDrawer>
             )}

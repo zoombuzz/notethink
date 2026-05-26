@@ -39,6 +39,7 @@
   "{0} notes in {1} files — open the Files panel": "{0} notas en {1} archivos: abrir el panel de archivos",
   "{0} in {1} files": "{0} en {1} archivos",
   "Files": "Archivos",
+  "File settings": "Configuración de archivos",
   "Include filter": "Filtro de inclusión",
   "Exclude filter": "Filtro de exclusión",
   "No files match the current filters": "Ningún archivo coincide con los filtros actuales",

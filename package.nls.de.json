@@ -15,12 +15,12 @@
   "command.clearFocus": "NoteThink: Fokus aufheben",
   "config.title": "NoteThink",
   "config.trace.description": "Verfolgt die Kommunikation zwischen VS Code und der Erweiterung.",
-  "config.showLineNumbers.description": "Zeilennummern in NoteThink-Ansichten anzeigen.",
-  "config.watchUnopenedFilesInViewer.description": "Die aktiv angezeigte Datei auf Änderungen auf der Festplatte überwachen, wenn sie nicht in einem Text-Editor geöffnet ist (aktualisiert die Ansicht, wenn ein anderes Werkzeug sie bearbeitet).",
-  "config.folderView.viewType.description": "Standard-Ansichtstyp für den Ordner-(Aggregat-)Modus. Die Benutzereinstellung gilt für jeden Arbeitsbereich, sofern dieser sie nicht überschreibt.",
-  "config.folderView.columnOrder.description": "Standard-Spaltenreihenfolge für Kanban im Ordner-Modus (rohe Status-Slugs wie 'doing', 'done'). Nicht aufgeführte Spalten erscheinen danach, alphabetisch sortiert mit 'untagged' am Ende.",
-  "config.folderView.includeFilter.description": "Glob der Dateien, die im Ordner-Modus eingeschlossen werden.",
-  "config.folderView.excludeFilter.description": "Glob der Dateien, die im Ordner-Modus ausgeschlossen werden.",
-  "config.folderView.maxNotesPerFile.description": "Obergrenze für die Anzahl der obersten Stories, die beim Zusammenführen des Ordner-Aggregats aus jeder Quelldatei genommen werden.",
-  "config.folderView.showContextBars.description": "Kontextleisten über den Stories im Ordner-Modus anzeigen."
+  "config.settings.view.type.description": "Standard-Ansichtstyp. Die Benutzereinstellung gilt für jeden Arbeitsbereich, sofern dieser sie nicht überschreibt.",
+  "config.settings.view.generic.showLineNumbers.description": "Zeilennummern in NoteThink-Ansichten anzeigen.",
+  "config.settings.view.generic.watchUnopenedFilesInViewer.description": "Die aktiv angezeigte Datei auf Änderungen auf der Festplatte überwachen, wenn sie nicht in einem Text-Editor geöffnet ist (aktualisiert die Ansicht, wenn ein anderes Werkzeug sie bearbeitet).",
+  "config.settings.view.generic.showContextBars.description": "Kontextleisten über den Stories anzeigen.",
+  "config.settings.view.specific.kanban.columnOrder.description": "Spaltenreihenfolge für Kanban (rohe Status-Slugs wie 'doing', 'done'). Nicht aufgeführte Spalten erscheinen danach, alphabetisch sortiert mit 'untagged' am Ende.",
+  "config.settings.files.includeFilter.description": "Glob der Dateien, die im Ordner-Modus eingeschlossen werden.",
+  "config.settings.files.excludeFilter.description": "Glob der Dateien, die im Ordner-Modus ausgeschlossen werden.",
+  "config.settings.files.maxNotesPerFile.description": "Obergrenze für die Anzahl der obersten Stories, die beim Zusammenführen des Ordner-Aggregats aus jeder Quelldatei genommen werden."
 }

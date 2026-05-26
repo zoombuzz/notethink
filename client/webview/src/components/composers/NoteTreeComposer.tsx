@@ -3,6 +3,7 @@ import { type ReactElement, useMemo } from "react";
 import { GenericView } from "../../notethink-views/src/components";
 import { convertMdastToNoteHierarchy } from "../../notethink-views/src/lib/convertMdastToNoteHierarchy";
 import { stampSingleFileStableIds } from "../../notethink-views/src/lib/mergeAggregateRoot";
+import { INTEGRATION_MODE_CURRENT_FILE } from "../../notethink-views/src/types/IntegrationMode";
 import type { Doc } from "../../types/general";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../notethink-views/src/types/NoteProps";
@@ -37,23 +38,39 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
     const all_notes = flattenAllNotes(root_note);
 
     const view_state = props.viewStates?.[note_id] || props.viewStates?.['__default'];
-    const view_type = view_state?.type || 'auto';
+    // precedence for every cascading setting below: per-session viewState override > cascade resolved by the extension > webview built-in default. View-type members (columnOrder, showLinetagsInHeadlines, scrollNoteIntoView, autoExpandFocusedNote, showContextBars, viewType) apply universally — a setting changed in folder mode shows up in current_file mode and vice versa
+    const cascade = props.settingsCascade;
+    const viewType = view_state?.type || cascade?.viewType || 'auto';
+    const cascade_column_order = cascade?.columnOrder && cascade.columnOrder.length > 0
+        ? cascade.columnOrder
+        : undefined;
+    const cascade_settings: Record<string, unknown> = {
+        showLineNumbers: props.globalSettings?.showLineNumbers ?? false,
+        watchUnopenedFilesInViewer: props.globalSettings?.watchUnopenedFilesInViewer ?? true,
+        showContextBars: cascade?.showContextBars ?? true,
+    };
+    if (cascade_column_order) { cascade_settings.columnOrder = cascade_column_order; }
+    // explicit `current_file` stamp makes the composer the single source of truth for the toolbar selector + breadcrumb (symmetric with FolderTreeComposer's `integration_mode: 'folder'` stamp); without it the toolbar's selector falls back to a hard-coded default and any stale stranded tag on this view's display_options can still register as folder
     const view_display_options: NoteDisplayOptions = {
         ...view_state?.display_options,
+        integration_mode: INTEGRATION_MODE_CURRENT_FILE,
+        integration_path: undefined,
         settings: {
-            show_line_numbers: props.globalSettings?.show_line_numbers ?? false,
-            watch_unopened_files_in_viewer: props.globalSettings?.watch_unopened_files_in_viewer ?? true,
+            ...cascade_settings,
             ...view_state?.display_options?.settings,
         },
     };
+    const view_state_ids = props.viewStates ? Object.keys(props.viewStates) : undefined;
 
     const view_props: ViewProps = {
         id: note_id,
-        type: view_type,
+        type: viewType,
         doc_path: note.path,
         doc_relative_path: note.relative_path,
         doc_text: note.text,
         workspace_root: props.workspace_root,
+        settingsCascadeHasWorkspaceOverrides: cascade?.hasWorkspaceOverrides,
+        view_state_ids,
         display_options: view_display_options,
         nested: {
             parent_context: root_note,

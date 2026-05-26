@@ -701,13 +701,29 @@ describe('NotethinkEditorProvider', () => {
 			expect(find_call[1]).toBe('**/skip/**');
 		});
 
-		it('retains the user filters across a breadcrumb re-narrow that omits them', async () => {
+		it('retains the user filters across a breadcrumb re-narrow that omits them — read from the workspace cascade, not stale in-memory state', async () => {
+			// simulate the user's filters being persisted under notethink.settings.files.* (what the Files drawer's Apply does via updateSetting). The settings module reads via getConfiguration('notethink.settings') and dotted paths
+			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation((section: string) => {
+				if (section === 'notethink.settings') {
+					return {
+						get: jest.fn((key: string) => {
+							if (key === 'files.includeFilter') { return '**/users/**'; }
+							if (key === 'files.excludeFilter') { return ''; }
+							return undefined;
+						}),
+						update: jest.fn(async () => {}),
+						inspect: jest.fn(() => undefined),
+					};
+				}
+				return { get: jest.fn(() => undefined), update: jest.fn(async () => {}), inspect: jest.fn(() => undefined) };
+			});
+
 			await panelHelper.simulateMessage({
 				type: 'setIntegration', mode: 'folder', path: '/workspace/notes',
 				include: '**/users/**', exclude: '',
 			});
 			await flush();
-			// a breadcrumb segment click re-narrows to a subdirectory without carrying filters
+			// a breadcrumb segment click re-narrows to a subdirectory without carrying filters; the cascade is now the source of truth, so the same filters are picked up
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes/users' });
 			await flush();
 
@@ -1139,10 +1155,11 @@ describe('NotethinkEditorProvider', () => {
 			const setting_on = opts.settingOn ?? true;
 			(vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
 				get: jest.fn((_key: string, fallback: unknown) => {
-					if (_key === 'watchUnopenedFilesInViewer') { return setting_on; }
+					if (_key === 'view.generic.watchUnopenedFilesInViewer') { return setting_on; }
 					return fallback;
 				}),
 				update: jest.fn(async () => {}),
+				inspect: jest.fn(() => undefined),
 			});
 			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
 			const doc = mockTextDocument(docText, docPath);
@@ -1257,7 +1274,7 @@ describe('NotethinkEditorProvider', () => {
 				update: jest.fn(async () => {}),
 			});
 			const on_config_cb = (vscode.workspace.onDidChangeConfiguration as jest.Mock).mock.calls.slice(-1)[0][0];
-			on_config_cb({ affectsConfiguration: (key: string) => key === 'notethink.watchUnopenedFilesInViewer' });
+			on_config_cb({ affectsConfiguration: (key: string) => key === 'notethink.settings.view.generic.watchUnopenedFilesInViewer' });
 
 			expect(watcher_instance.dispose).toHaveBeenCalledTimes(1);
 		});
@@ -1272,7 +1289,7 @@ describe('NotethinkEditorProvider', () => {
 				update: jest.fn(async () => {}),
 			});
 			const on_config_cb = (vscode.workspace.onDidChangeConfiguration as jest.Mock).mock.calls.slice(-1)[0][0];
-			on_config_cb({ affectsConfiguration: (key: string) => key === 'notethink.watchUnopenedFilesInViewer' });
+			on_config_cb({ affectsConfiguration: (key: string) => key === 'notethink.settings.view.generic.watchUnopenedFilesInViewer' });
 
 			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(1);
 		});

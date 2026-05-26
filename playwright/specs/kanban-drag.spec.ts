@@ -82,16 +82,16 @@ test.describe('Kanban Drag and Drop', () => {
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 
-        // Task A is in backlog column
-        const backlog_column = page.locator('[role="region"][aria-label="backlog"]');
-        await expect(backlog_column.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 3000 });
+        // Task B is in doing column. With the settings cascade default ordering [untagged, doing, done, backlog], doing is the column immediately to the right of untagged, so a left-drag of one column lands on untagged
+        const doing_column = page.locator('[role="region"][aria-label="doing"]');
+        await expect(doing_column.getByRole('heading', { name: 'Task B' })).toBeVisible({ timeout: 3000 });
 
-        const task_a_draggable = backlog_column.locator('[data-rfd-drag-handle-draggable-id]').first();
+        const task_b_draggable = doing_column.locator('[data-rfd-drag-handle-draggable-id]').first();
 
         await clearCapturedMessages(page);
 
-        // keyboard drag: backlog → untagged (one column to the left)
-        await keyboardDrag(page, task_a_draggable, 'left', 1);
+        // keyboard drag: doing → untagged (one column to the left)
+        await keyboardDrag(page, task_b_draggable, 'left', 1);
 
         const messages = await getCapturedMessages(page);
         const edit_msg = messages.find((m) => m.type === 'editText');
@@ -109,12 +109,13 @@ test.describe('Kanban Drag and Drop', () => {
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 
-        const backlog_column = page.locator('[role="region"][aria-label="backlog"]');
-        const task_a_draggable = backlog_column.locator('[data-rfd-drag-handle-draggable-id]').first();
-        const has_draggable = await task_a_draggable.count() > 0;
+        // drag Task B (doing) → done — a real cross-column move under the cascade-default ordering, so the drag actually completes rather than being a no-op
+        const doing_column = page.locator('[role="region"][aria-label="doing"]');
+        const task_b_draggable = doing_column.locator('[data-rfd-drag-handle-draggable-id]').first();
+        const has_draggable = await task_b_draggable.count() > 0;
 
         if (has_draggable) {
-            await keyboardDrag(page, task_a_draggable, 'right', 1);
+            await keyboardDrag(page, task_b_draggable, 'right', 1);
         }
 
         await page.waitForTimeout(300);

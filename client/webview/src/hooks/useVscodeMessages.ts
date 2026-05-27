@@ -29,6 +29,7 @@ interface VscodeMessagesState {
     docs: HashMapOf<Doc> | undefined;
     selections: SelectionState;
     workspace_root: string;
+    workspace_projects: string[];
     aggregate_total_discovered: number | undefined;
     includeFilter: string | undefined;
     excludeFilter: string | undefined;
@@ -121,6 +122,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     const [docs_state, setDocsState] = useState<{ docs?: HashMapOf<Doc> }>({ docs: deps.initial_docs || {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
+    const [workspace_projects, setWorkspaceProjects] = useState<string[]>([]);
     // folder mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
     const [aggregate_total_discovered, setAggregateTotalDiscovered] = useState<number | undefined>(undefined);
     // folder mode: the effective include/exclude globs the extension is using, echoed back so the Files drawer can show them
@@ -186,6 +188,9 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 debug('received update, docs: %O', Object.keys(message.partial.docs || {}));
                 if (message.workspace_root) {
                     setWorkspaceRoot(message.workspace_root);
+                }
+                if (Array.isArray(message.workspace_projects)) {
+                    setWorkspaceProjects((message.workspace_projects as unknown[]).filter((p): p is string => typeof p === 'string'));
                 }
                 if (message.extension_version) {
                     (window as unknown as Record<string, unknown>).__NOTETHINK_EXTENSION_VERSION__ = message.extension_version;
@@ -253,13 +258,11 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 if (vs?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER && vs?.display_options?.integration_path) {
                     debug('restoring folder integration on reload: %s', vs.display_options.integration_path);
                     // host re-validates this path against the workspace before acting — persisted webview state is untrusted (defense-in-depth)
-                    // replay any persisted custom filters so a reload restores them rather than snapping back to the defaults
+                    // do NOT replay the persisted includeFilter / excludeFilter here: the workspace cascade (notethink.settings.files.*) is the source of truth, and replaying a snapshot from an earlier session masks any later edit the user made in settings.json. handle_apply_filters writes user-applied filters through to the cascade, so the cascade is always up to date with the user's intent after a fresh Apply
                     postMessage({
                         type: 'setIntegration',
                         mode: INTEGRATION_MODE_FOLDER,
                         path: vs.display_options.integration_path,
-                        include: vs.display_options.includeFilter,
-                        exclude: vs.display_options.excludeFilter,
                     });
                     break;
                 }
@@ -281,6 +284,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         docs: docs_state.docs,
         selections,
         workspace_root,
+        workspace_projects,
         aggregate_total_discovered,
         includeFilter,
         excludeFilter,

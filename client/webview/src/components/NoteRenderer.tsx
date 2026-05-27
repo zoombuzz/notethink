@@ -37,6 +37,7 @@ export interface NoteRendererProps {
     setViewManagedState?: (updates: Array<Record<string, unknown>>) => void;
     onNavigationCommand?: React.MutableRefObject<((direction: string) => void) | undefined>;
     workspace_root?: string;
+    workspace_projects?: string[];
     aggregate_total_discovered?: number;
     includeFilter?: string;
     excludeFilter?: string;

@@ -50,7 +50,7 @@ test.describe('Aggregate (Folder) view', () => {
         expect(project_attrs).toEqual(expect.arrayContaining(['oma', 'oma', 'notegit', 'notegit']));
     });
 
-    test('click on an origin pill sends revealRange with the origin doc path', async ({ page }) => {
+    test('click on an origin pill descends the folder root to the project subfolder', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
@@ -62,19 +62,26 @@ test.describe('Aggregate (Folder) view', () => {
         // clear any messages from the mode-switch handshake
         await page.evaluate(() => { (window as unknown as { __captured_messages: unknown[] }).__captured_messages = []; });
 
-        // click the first oma origin pill — should route to oma's todo.md
+        // click the first oma origin pill — should descend the folder root to `${WORKSPACE_ROOT}/oma`, via the same setIntegration pipeline the breadcrumb uses (no revealRange)
         const pill = page.locator('[data-testid="origin-project-pill"][data-project="oma"]').first();
         await expect(pill).toBeVisible({ timeout: 5000 });
         await pill.click({ force: true });
 
         await expect.poll(async () =>
             await page.evaluate(() => {
-                const msgs = (window as unknown as { __captured_messages: Array<{ type?: string; docPath?: string }> }).__captured_messages;
-                const reveal = msgs.find((m) => m.type === 'revealRange');
-                return reveal ? reveal.docPath : undefined;
+                const msgs = (window as unknown as { __captured_messages: Array<{ type?: string; mode?: string; path?: string }> }).__captured_messages;
+                const descend = msgs.find((m) => m.type === 'setIntegration' && m.mode === 'folder');
+                return descend ? descend.path : undefined;
             }),
             { timeout: 5000 }
-        ).toBe(`${WORKSPACE_ROOT}/oma/docstech/todo.md`);
+        ).toBe(`${WORKSPACE_ROOT}/oma`);
+
+        // pill click should NOT post a revealRange — that path was dropped when the pill became a navigation lever
+        const reveal_count = await page.evaluate(() => {
+            const msgs = (window as unknown as { __captured_messages: Array<{ type?: string }> }).__captured_messages;
+            return msgs.filter((m) => m.type === 'revealRange').length;
+        });
+        expect(reveal_count).toBe(0);
     });
 
     test('breadcrumb segment click in folder mode sends setIntegration', async ({ page }) => {

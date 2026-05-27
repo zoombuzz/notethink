@@ -2214,3 +2214,59 @@ Three small, independent webview-viewer polish fixes spotted in browser context 
 + commit message draft
   + notethink 0.3.2: header-bar breathing room (4px above the sticky toolbar; 8px below in `.viewDocument`/`.viewKanban` so the selected-note marquee clears it) and drop the stray synthetic-root "Root" headline from the note list (`renderMarkdownNoteHeadline` returns empty for `note.type === 'root'`)
   + tests 732 jest, 51 playwright
+
+
+### Origin pill click descends the folder root to the pill's project subfolder [](?id=pill-click-descends-folder-root)
+
+The origin pill (project label on each note in folder/aggregate mode) currently posts `revealRange` on click. Behaviour change: a pill click should **stay in folder mode** and **descend the folder root** to the subfolder the pill represents, exactly as if the user had clicked a deeper segment in the breadcrumb (`BreadcrumbTrail.tsx`). For my workspace where the VS Code root is `active_development/`, clicking the `NT` pill makes the breadcrumb read `active_development › notethink` and the view re-rendered against `active_development/notethink/**`. To go back up, the user clicks `active_development` in the breadcrumb (existing behaviour, no new affordance). This is **not** a filter — it is a folder-root change, the same `setIntegration { mode: 'folder', path }` message the breadcrumb already sends.
+
++ goal
+  + a pill click invokes the existing breadcrumb-folder-click pipeline (`useViewHandlers.ts:144-159`, `handle_folder_click`) with a target folder path computed from the pill's `origin`
+  + the navigation goes **as many segments down the doc's path as the pill itself represents** — i.e. however many segments `projectNameFromRelativePath` (`OriginPill.tsx`) consumes to produce the pill's project name. With today's single-segment derivation that is always one segment down; if the derivation later becomes multi-segment for ambiguous layouts, the descent follows automatically. Phrased another way: descend to the smallest folder under the current root that contains exactly the set of notes sharing this pill's project label
+  + no new wire-format message, no narrowing chip, no new view-state field — reuse the existing folder-root machinery end-to-end
++ derivation
+  + the target folder is `<workspace_root>/<project_segment>` where:
+    + `project_segment` = `projectNameFromRelativePath(origin.relative_path)` — the same function the pill already uses to compute its label, so the pill and the descent stay in lock-step
+    + `workspace_root` = `origin.doc_path` minus the `origin.relative_path` suffix (no extra extension-side lookup needed; this prefix is implied by the existing two fields)
+  + if `project_segment` is empty (file lives directly at a workspace-folder root, so `relative_path` has no separator), the pill click is a no-op — there is no sub-project to descend into. Pill still feels clickable; we just don't fire a `setIntegration`. The current `revealRange` behaviour can stay or go (see open question below)
+  + multi-root workspaces: `origin.relative_path` is already scoped per workspace-folder root by `parseops`/origin construction, so the rule applies within whichever root the doc lives in
++ scope
+  + extend `OriginPill.tsx`'s click handler to compute the target folder path from `origin.doc_path` + `origin.relative_path` + `projectNameFromRelativePath(origin.relative_path)`, then call the existing folder-click handler (threaded in via the same `handlers` prop the headline already passes)
+  + thread `descendToPillFolder(origin)` (a thin wrapper around `handle_folder_click`) from `useViewHandlers.ts` through `GenericView.tsx` → `MarkdownNoteHeadline.tsx` → `OriginPill.tsx` — the only plumbing the story adds
+  + **drop the pill's current `revealRange` post.** The note's source file still lives inside the new folder root, so the note remains visible after the descent; opening the file in the editor is a separate gesture (note-body click already does that). Pill click is now purely a navigation lever
+  + breadcrumb behaviour, "click `active_development` to go back up" behaviour, breadcrumb rendering — **all unchanged**. The pill click is just a new way to feed `handle_folder_click`
++ files
+  + `client/webview/src/notethink-views/src/components/notes/OriginPill.tsx` — replace the pill `onClick` post (currently `revealRange`) with a call to `descendToPillFolder(origin)`
+  + `client/webview/src/notethink-views/src/components/notes/markdown/MarkdownNoteHeadline.tsx` — pass `descendToPillFolder` from `note.handlers` down to `OriginPill`
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewHandlers.ts` — expose `descendToPillFolder(origin)` that does the path math then calls `handle_folder_click`
+  + (probably no extension-side change at all — `setIntegration` is already handled in `PanelSession.ts`)
++ edge cases
+  + workspace-folder-root file (no segment in `relative_path`): pill click is a no-op; pill stays visually clickable (a tooltip-only no-op feels correct since the pill in that case represents the workspace folder itself, which is already the current root)
+  + clicking the same pill while already at that folder root: harmless — `handle_folder_click` is idempotent, breadcrumb stays the same
+  + clicking a pill in single-file mode (`integration_mode = current_file`): the click should *still* descend to the project folder, switching mode to `folder` along the way (matches what `handle_folder_click` already does — it always sets `integration_mode = folder`)
+  + clicking during a kanban drag: `@hello-pangea/dnd` swallows the click; no special handling needed but verify in playwright
++ [X] add `projectFolderFromOrigin(origin)` helper to `OriginPill.tsx` — computes `workspace_root` from `origin.doc_path` minus `origin.relative_path` suffix, returns `workspace_root + '/' + project_segment` when descent is meaningful and `''` otherwise. Shipped with 5 unit tests
++ [X] expose `descendToFolder(folder_path)` on `ViewApi` and `NoteHandlers`; `useViewHandlers` attaches `handle_folder_click` as `descendToFolder` on the ViewApi so the breadcrumb's pipeline is reused
++ [X] thread `descendToFolder` through `DocumentView.tsx`, `KanbanView.tsx`, and `KanbanBoard.tsx` into per-note handlers
++ [X] rewire `MarkdownNoteHeadline.tsx` pill `onClick`: remove the existing `revealRange` post, compute target folder via `projectFolderFromOrigin(origin)`, call `note.handlers.descendToFolder(target_folder)` when non-empty (no-op when workspace-folder-root file has no sub-segment)
++ [X] jest: `projectFolderFromOrigin` returns workspace_root + first segment for multi-segment relative_path
++ [X] jest: `projectFolderFromOrigin` returns workspace_root + correct segment for a different project in the same workspace (symmetric across pills)
++ [X] jest: `projectFolderFromOrigin` returns `''` for a workspace-folder-root file (no sub-segment to descend into)
++ [X] jest: `projectFolderFromOrigin` returns `''` when relative_path is missing
++ [X] jest: `projectFolderFromOrigin` returns `''` defensively when doc_path doesn't end with relative_path
++ [X] playwright: pill click in folder mode posts `setIntegration { mode: 'folder', path: <workspace>/<project> }` and does NOT post `revealRange` (`folder-view.spec.ts:53`)
++ [ ] playwright: click `active_development` in the breadcrumb — folder root returns to the workspace root, all projects visible again (not implemented; covered indirectly by existing breadcrumb-segment-click test)
++ [ ] playwright: click the `OM` pill while at `active_development/notethink` — breadcrumb becomes `active_development › oma`, view shows oma notes only (descent rebases from workspace root, not from current root, so the click is symmetric across pills) (not implemented)
++ [ ] playwright: open a single-folder workspace pointing directly at the `notethink/` repo (so files have `relative_path = 'README.md'`) — pill click is a no-op (not implemented)
++ [ ] playwright: clicking the note body (not the pill) is unchanged — still posts `revealRange` (covered by existing click-interaction tests)
++ [X] `pnpm run check` green (lint clean, 750 jest tests pass, 51 playwright pass)
++ acceptance
+  + pill click in folder mode descends the folder root to the subfolder corresponding to the pill's project, identical in effect to clicking a deeper segment in the breadcrumb
+  + the descent goes as many segments down as the pill's project-name derivation consumes — one segment in the current single-segment setup, automatically more if the derivation later becomes multi-segment
+  + going back up is done by clicking the higher breadcrumb segment (existing behaviour, no new affordance added in this story)
+  + workspace-folder-root files (no sub-segment) degrade gracefully — pill click is a no-op
+  + plain note-body click behaviour is unchanged
+  + pill click no longer posts `revealRange` — it is purely a folder-root descent
++ commit message draft
+  + notethink 0.3.3: origin pill click descends the folder root to the pill's project subfolder via the existing breadcrumb-folder-click pipeline (no new wire format, no chip — breadcrumb is the affordance for going back up); pill `revealRange` post dropped (note-body click still reveals); target folder derived from `origin.doc_path` and `projectNameFromRelativePath(origin.relative_path)` so the descent follows the same project-name derivation the pill itself uses
+  + tests 750 jest, 51 playwright

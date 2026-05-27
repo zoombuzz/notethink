@@ -50,6 +50,8 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
         ?? cascade?.maxNotesPerFile
         ?? DEFAULT_MAX_NOTES_PER_FILE;
 
+    const workspace_projects = props.workspace_projects;
+    const workspace_projects_key = workspace_projects ? workspace_projects.join('|') : '';
     const { merged_root, all_notes } = useMemo(() => {
         const input: { [key: string]: AggregatedDocInput | undefined } = {};
         for (const [id, d] of Object.entries(docs)) {
@@ -64,9 +66,9 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
                 };
             }
         }
-        const { root, all_notes } = mergeAggregateRoot(input, integration_path, maxNotesPerFile);
+        const { root, all_notes } = mergeAggregateRoot(input, integration_path, maxNotesPerFile, workspace_projects);
         return { merged_root: root, all_notes };
-    }, [merge_key, integration_path, maxNotesPerFile]);
+    }, [merge_key, integration_path, maxNotesPerFile, workspace_projects_key]);
     const viewType = view_state?.type || cascade?.viewType || 'auto';
     const cascade_column_order = cascade?.columnOrder && cascade.columnOrder.length > 0
         ? cascade.columnOrder

@@ -94,6 +94,22 @@ const DEFAULT_TIMEOUT_MS = 5000;
 const user_count = users.length;  // snake_case, not a constant
 ```
 
+### Permanent name check
+
+**This rule only applies to names that get stored in some permanent or semi-permanent state *outside the notethink codebase*.** Internal names (variables, function names, types, in-memory data shapes, transient wire-format messages between the extension and webview bundles) do **not** need the check — pick a name and rename freely later.
+
+The check applies because the names below land in a store this codebase can't unilaterally rewrite. A later rename requires either a migration path for existing data or simply breaks any user / tool that already pinned the old name:
+
+- VS Code (or any host) config keys (`notethink.settings.X.Y`) — written to `settings.json` on disk, on machines we don't own
+- Persisted-state keys (`vscode.setState` shapes, IndexedDB key names, JSON file keys on user disk)
+- Database table / column names; cookie / header names; URL path segments
+- Public API names that code outside this repo will import (anything exported from a published npm package)
+- File / directory names that other tools, scripts, or workflows target (workflows, glob patterns, lockfiles, manifests, schema files)
+
+Before introducing or renaming anything in those categories, surface the candidate to the user and get explicit sign-off.
+
+**Why this rule exists.** The `notethink.folderView.*` workspace-config namespace was originally introduced when the only place those settings lived was the folder view; the scope later grew to cover all view-type settings but the namespace name didn't, forcing a rename pass (and would have required a user-facing migration if there had been external users). A 30-second naming check at the moment of introduction would have prevented the whole episode. When in doubt, default to asking — the question is cheap, the rename is expensive.
+
 ## Import Organization
 
 ### Import Placement
@@ -193,6 +209,7 @@ function complexProcess(data: Data) {
 - **No back-reference comments.** Never write inline comments that point readers at context elsewhere in the same file or function — `// see function header for the rationale`, `// see above`, `// see the JSDoc`, `// (see comment on line 42)`. The reader is already there; pointers add clutter without information and rot when the layout changes. When lifting a long inline comment to a function-header JSDoc, either delete the inline outright (the JSDoc + well-named identifiers usually suffice) or replace it with a *short* self-contained factual one-liner that stands on its own — never leave a stub that says "see header for rationale". Same anti-pattern as the rule against referencing the current task / fix / callers (`// used by X`, `// added for the Y flow`, `// handles the case from issue #123`) — pointers belong in the PR description, not inline.
 - **No project-management version numbers in comments.** Never write inline comments like `// added in 2.11.0`, `// fixed in 2.12.3`, `// from v2.10 release`, etc. Project-management versions belong in `package.json` and any place that actively uses them — never in comments that don't get re-rendered when the version changes. Stale version-tagged comments accumulate every release and force a search-and-purge pass on the next minor bump. The only acceptable place a version literal appears in code is a block that actively *uses* it.
 - **No per-field comments inside data structures.** See workspace `AGENTS.md` > Code conventions > No per-field comments inside data structures.
+  - **Exception — section dividers.** Short comments that group related fields by purpose (e.g. `// --- identity ---`, `// --- mdast passthrough ---`, `// --- tree links ---`, `// --- runtime decoration added at React render stage ---`) are explicitly permitted and load-bearing as visual structure in long interfaces. Don't strip these when sweeping a data structure for comment violations. Classify each inline comment: a per-single-field explanation gets removed (lift to the type's header comment if useful); a comment that introduces ≥2 conceptually-grouped fields with a single purpose stays. A comment grouping the *absence* of related fields (e.g. `// doc_path/doc_relative_path/doc_text intentionally undefined for the merged view` above three `undefined` assignments) still qualifies as a section divider.
 
 ```typescript
 // correct
@@ -452,6 +469,39 @@ try {
 }
 ```
 
+### Reading VS Code logs
+
+NoteThink runs as a **web worker extension** (not Node), so its logs are under `exthost/webWorker/` not `exthost/`. Log sessions rotate — a new session dir is created each time VS Code starts. Reading these files needs `dangerouslyDisableSandbox: true` (they're under `~/.config/`).
+
+```
+~/.config/Code/logs/<session-timestamp>/
+  main.log                            # VS Code main process
+  window1/
+    renderer.log                      # renderer (webview crashes, perf warnings)
+    exthost/
+      exthost.log                     # Node extension host (other extensions)
+      webWorker/
+        workerexthost.log             # web-worker extension host (activation errors)
+        ZoomBuzz.notethink/
+          NoteThink.log               # NoteThink OutputChannel (winston via LogOutputChannelTransport)
+```
+
+```bash
+# find the latest session
+ls -t ~/.config/Code/logs/ | head -1
+
+# read the NoteThink extension log (captures writeToLog / writeToErrorLog)
+cat ~/.config/Code/logs/<latest>/window1/exthost/webWorker/ZoomBuzz.notethink/NoteThink.log
+
+# read renderer errors
+tail -50 ~/.config/Code/logs/<latest>/window1/renderer.log
+
+# read web-worker extension-host log
+cat ~/.config/Code/logs/<latest>/window1/exthost/webWorker/workerexthost.log
+```
+
+The `debug` library (webview only — `const debug = Debug("nodejs:...")`) is **not** captured to any file. Enable it via `localStorage.debug = 'nodejs:*'` in the webview Developer Tools console. Webview `console.error()` / `console.warn()` is also not file-captured — only visible in "Developer: Open Webview Developer Tools".
+
 ### Avoid Silent Failures
 
 ```typescript
@@ -540,6 +590,16 @@ describe('DocumentView', () => {
 - **Required structure for a commented-out spec**: leading comment line stating the disable reason and the re-enable trigger, then the entire file body commented out (`//` per line or a single `/* … */` block), and a trailing `export {};` so the file still parses as a TypeScript module. When the feature re-lands, uncomment in one sweep.
 - Same principle applies to a single `test(...)` within a larger `test.describe`: comment it out inline rather than `test.skip(...)` it.
 
+## Working Style
+
+### Present, don't force a decision
+
+When the user asks to "have a look", "let me see them", "just present them", or "show me the options", **present the artifacts/options with a brief honest assessment and stop**. Do not follow up with an `AskUserQuestion` (or any other prompt) that forces an immediate choice. The user wants to evaluate on their own time and will volunteer the choice. Reserve `AskUserQuestion` for genuinely blocking ambiguity — not "which do you prefer?" when the user has explicitly asked to look first.
+
+### No speculative specs in todo.md
+
+When working through a story's planned phases, **do not invent new feature specs, phases, or tasks beyond what was originally scoped**. Phases and tasks come from the user, not extrapolated by Claude. Speculative additions clutter the backlog and waste time on work the user didn't ask for. If a follow-up genuinely seems worth doing, mention it in the wrap-up so the user can choose to add it — do not write it into `todo.md` unilaterally.
+
 ---
 
 ## Pre-Push Verification
@@ -566,6 +626,14 @@ The "no HTTP server" rule is about a long-running **dev** server. The Playwright
 ### After every code change
 
 Always rebuild the extension after each code change so the developer can preview it in the VS Code dev host. Run `pnpm run build` (or `pnpm run check` which includes the build) before considering a change complete.
+
+**For webview/React changes specifically**, a source edit alone does NOT change what VS Code shows — the extension serves the prebuilt `client/webview/dist/index.js`. After editing anything under `client/webview/src/`:
+
+1. **Identify the live code path first** when the component has multiple branches. Example: `BreadcrumbTrail.tsx` has two independent code paths — a single-file `splitPathSegments` branch (used when the toolbar shows "Current file") and a directory-aggregate `integration_path` branch. Determine which one is live from the current screenshot/state before editing, otherwise you'll edit the wrong branch and the visible behaviour will not change.
+2. Run `pnpm run build` (webpack compiles `notethink-views` from `src/`). `build-and-rollup` also refreshes `notethink-views/dist/esm`.
+3. **Confirm the edit landed in the bundle**: `grep client/webview/dist/index.js` for a token from your edit.
+4. The user must **reload the VS Code window** for an already-open webview to pick up the new bundle.
+5. Never report a UI change as done from a source edit alone — verify the bundle and ask the user to reload.
 
 ### Individual commands
 

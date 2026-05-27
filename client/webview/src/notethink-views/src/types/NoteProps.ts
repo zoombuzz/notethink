@@ -54,6 +54,10 @@ export interface NoteDisplayOptions {
     [key: string]: unknown;
 }
 
+/**
+ * NoteHandlers, the per-note handler surface threaded from a view down to each rendered note.
+ * - descendToFolder: switch the view into folder integration mode at the given absolute folder path; used by the origin pill click to descend the folder view into the pill's project subfolder
+ */
 export interface NoteHandlers {
     click?: NoteClickHandler;
     singleClick?: NoteClickHandler;
@@ -61,6 +65,7 @@ export interface NoteHandlers {
     setCaretPosition?: (position: number) => void;
     setParentContextSeq?: (seq: number) => void;
     postMessage?: (message: unknown) => void;
+    descendToFolder?: (folder_path: string) => void;
     [key: string]: unknown;
 }
 

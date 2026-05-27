@@ -158,6 +158,9 @@ export function useViewHandlers(
         });
     }, [handlers]);
 
+    // expose the same folder-descent gesture on the ViewApi so the origin pill (which only sees note-level handlers) can descend into its project subfolder via the same pipeline the breadcrumb uses
+    handlers.descendToFolder = handle_folder_click;
+
     // persist edited globs + per-file story cap to per-view state (survives reload) and post a background setIntegration so the extension re-discovers the folder set with the new filters
     // also round-trip each cascading setting to VS Code config via updateSetting so it survives across windows when promoted to default
     const handle_apply_filters = useCallback((next_include: string, next_exclude: string, next_max_notes_per_file: number): void => {

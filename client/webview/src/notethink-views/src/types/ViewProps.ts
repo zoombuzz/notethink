@@ -40,6 +40,7 @@ export interface ViewProps {
  * ViewApi, the handler surface a view exposes.
  * - setParentContextSeq and below are injected by functional components in certain situations
  * - postMessage: extension communication (replaces notegit's sync_view.dispatch())
+ * - descendToFolder: switch the view into folder integration mode at the given absolute folder path; same gesture the breadcrumb uses, exposed here so the origin pill can descend into its project subfolder
  * - onNavigationCommand: navigation callback ref — GenericView registers handler, ExtensionReceiver invokes via ref
  */
 export interface ViewApi {
@@ -53,5 +54,6 @@ export interface ViewApi {
     singleClick?: NoteHandlers['click'];
     doubleClick?: NoteHandlers['click'];
     postMessage?: (message: unknown) => void;
+    descendToFolder?: (folder_path: string) => void;
     onNavigationCommand?: MutableRefObject<((direction: string) => void) | undefined>;
 }

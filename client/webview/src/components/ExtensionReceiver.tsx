@@ -95,6 +95,7 @@ export default function ExtensionReceiver(): React.ReactElement {
         docs,
         selections,
         workspace_root,
+        workspace_projects,
         aggregate_total_discovered,
         includeFilter,
         excludeFilter,
@@ -134,6 +135,7 @@ export default function ExtensionReceiver(): React.ReactElement {
         setViewManagedState={handleSetViewManagedState}
         onNavigationCommand={navigation_callback_ref}
         workspace_root={workspace_root}
+        workspace_projects={workspace_projects}
         aggregate_total_discovered={aggregate_total_discovered}
         includeFilter={includeFilter}
         excludeFilter={excludeFilter}

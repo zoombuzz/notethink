@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import OriginPill, { buildProjectLabels, hueForProjectIndex, originPillColour, pillColourForHue, projectAbbreviation, projectNameFromRelativePath } from './OriginPill';
+import OriginPill, { buildProjectLabels, hueForProjectIndex, originPillColour, pillColourForHue, projectAbbreviation, projectFolderFromOrigin, projectNameFromRelativePath } from './OriginPill';
 import type { NoteOrigin } from '../../types/NoteProps';
 
 describe('originPillColour', () => {
@@ -145,6 +145,44 @@ describe('projectNameFromRelativePath', () => {
     });
     it('handles undefined', () => {
         expect(projectNameFromRelativePath(undefined)).toBe('');
+    });
+});
+
+describe('projectFolderFromOrigin', () => {
+    const makeOrigin = (overrides: Partial<NoteOrigin> = {}): NoteOrigin => ({
+        doc_id: 'd',
+        doc_path: '/abs/active_development/notethink/docstech/users/alex/todo.md',
+        relative_path: 'notethink/docstech/users/alex/todo.md',
+        ...overrides,
+    } as NoteOrigin);
+
+    it('returns workspace_root + first segment for a multi-segment relative_path', () => {
+        expect(projectFolderFromOrigin(makeOrigin())).toBe('/abs/active_development/notethink');
+    });
+
+    it('handles a different project in the same workspace symmetrically', () => {
+        expect(projectFolderFromOrigin(makeOrigin({
+            doc_path: '/abs/active_development/oma/server/src/index.md',
+            relative_path: 'oma/server/src/index.md',
+        }))).toBe('/abs/active_development/oma');
+    });
+
+    it('returns empty string for a workspace-folder-root file (no sub-segment to descend into)', () => {
+        expect(projectFolderFromOrigin(makeOrigin({
+            doc_path: '/abs/active_development/README.md',
+            relative_path: 'README.md',
+        }))).toBe('');
+    });
+
+    it('returns empty string when relative_path is missing', () => {
+        expect(projectFolderFromOrigin(makeOrigin({ relative_path: undefined }))).toBe('');
+    });
+
+    it('returns empty string when doc_path does not actually end with relative_path (defensive)', () => {
+        expect(projectFolderFromOrigin(makeOrigin({
+            doc_path: '/abs/active_development/notethink/docstech/users/alex/todo.md',
+            relative_path: 'oma/docstech/users/alex/todo.md',
+        }))).toBe('');
     });
 });
 

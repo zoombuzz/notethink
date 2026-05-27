@@ -85,6 +85,7 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                                                         click: view.handlers?.click,
                                                         setCaretPosition: view.handlers?.setCaretPosition,
                                                         postMessage: view.handlers?.postMessage,
+                                                        descendToFolder: view.handlers?.descendToFolder,
                                                     }}
                                                 />
                                             )}

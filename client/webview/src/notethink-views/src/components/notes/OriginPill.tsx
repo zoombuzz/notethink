@@ -70,6 +70,30 @@ export function projectNameFromRelativePath(relative_path: string | undefined): 
 }
 
 /**
+ * Compute the absolute folder path to descend the folder view into when this pill is clicked.
+ *
+ * Returns the workspace-folder root joined with the pill's project segment — the folder
+ * whose contents the pill represents (e.g. `/path/to/active_development/notethink` for a
+ * pill whose origin sits at `notethink/docstech/users/alex/todo.md` inside the
+ * `active_development` workspace folder). Derives the root by stripping the
+ * `relative_path` suffix from `doc_path`, so the rule works for any workspace layout
+ * without assuming a particular root name.
+ *
+ * Returns an empty string when descent is not meaningful: missing relative_path,
+ * relative_path with no `/` (file lives directly at the workspace-folder root, so
+ * there is no sub-project to descend into), or missing doc_path.
+ */
+export function projectFolderFromOrigin(origin: NoteOrigin): string {
+    const project_segment = projectNameFromRelativePath(origin.relative_path);
+    if (!project_segment || !origin.relative_path || !origin.doc_path) { return ''; }
+    if (!origin.relative_path.includes('/')) { return ''; }
+    if (!origin.doc_path.endsWith(origin.relative_path)) { return ''; }
+    const workspace_root = origin.doc_path.slice(0, origin.doc_path.length - origin.relative_path.length).replace(/\/$/, '');
+    if (!workspace_root) { return ''; }
+    return `${workspace_root}/${project_segment}`;
+}
+
+/**
  * Single-project abbreviation used as a fallback in single-file mode or when the
  * merged origin doesn't carry a precomputed label. First char + second char of the
  * project name, both uppercased; a single-letter name yields the single letter; an

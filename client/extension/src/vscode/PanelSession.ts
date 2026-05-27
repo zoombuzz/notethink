@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from '../constants';
 import { generateIdentifier } from '../lib/crypto';
 import { debug, writeToLog, writeToErrorLog } from '../lib/errorops';
+import { globMatches } from '../lib/globMatch';
 import { parse } from '../lib/parseops';
 import { isPathWithin } from '../lib/pathsafe';
 import { SETTINGS, type SettingKey, isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, cascadeKeys, buildSettingsCascadePayload } from '../lib/settings';
@@ -100,6 +101,7 @@ export class PanelSession {
 	// folder-size metadata from the latest discovery, surfaced to the webview so the breadcrumb can show "(loaded of discovered)"; watcher-driven incremental updates re-send these so the count doesn't reset to zero
 	private integration_total_discovered = 0;
 	private integration_truncated = false;
+	private workspace_projects: string[] = [];
 	// in single-file mode, onDidChangeTextDocument only fires for editor-open docs; this watcher refreshes the viewer when the shown file is edited externally with no visible editor backing it
 	private active_file_watcher: vscode.FileSystemWatcher | undefined;
 	private change_timer: ReturnType<typeof setTimeout> | undefined;
@@ -179,7 +181,7 @@ export class PanelSession {
 		const timestamped = { ...doc, updateSentAt: new Date().toISOString() };
 		debug('sendDoc %s', doc.path);
 		// in folder mode only docs inside integration_path go into the merged view; selection updates for out-of-integration docs still flow through sendSelection separately
-		if (this.integration_path && !doc.path.startsWith(this.integration_path)) {
+		if (this.integration_path && !this.isWithinIntegrationPath(doc.path)) {
 			debug('sendDoc: skipping out-of-integration doc %s', doc.path);
 			return;
 		}
@@ -367,6 +369,15 @@ export class PanelSession {
 		// catch-all for any cascade setting change (covers the two above and the cascade keys)
 		if (e.affectsConfiguration('notethink.settings')) {
 			this.sendSettingsCascade();
+		}
+		// folder-mode filter settings changed in workspace/user config (e.g. user edited settings.json directly): re-discover so the new filters take effect immediately. without this the panel's in-memory integration_include / integration_exclude stays at the value set during the last enterFolderMode call, and added exclude tokens like "vendored" silently never apply
+		const filter_settings_changed =
+			e.affectsConfiguration('notethink.settings.files.includeFilter') ||
+			e.affectsConfiguration('notethink.settings.files.excludeFilter');
+		if (filter_settings_changed && this.integration_path) {
+			void this.enterFolderMode(this.integration_path, {}).catch(err =>
+				writeToErrorLog('re-enter folder mode on filter change failed', this.integration_path ?? '', err)
+			);
 		}
 	}
 
@@ -610,6 +621,8 @@ export class PanelSession {
 			this.integration_path = folder_path;
 			// resolve filters BEFORE discovery so we never load a wider set than the user actually wants — the workspace cascade is the source of truth, and an explicit message field overrides on top
 			this.adoptFolderFilters(e);
+			// recompute the workspace project universe AFTER filters are resolved so the exclude pattern is current; webview uses this list to stabilise pill labels + hues across folder descents
+			await this.computeWorkspaceProjects();
 			const pattern = new vscode.RelativePattern(vscode.Uri.file(folder_path), this.integration_include);
 			await this.discoverFolderDocs(pattern, folder_path);
 			this.armFolderWatcher(pattern);
@@ -632,6 +645,41 @@ export class PanelSession {
 		}
 	}
 
+	// single source of truth for "is this path inside the current folder integration?". Reused by sendDoc, loadFolderDoc (and any future caller) so the containment semantics never diverge between code paths. Uses isPathWithin (rigorous against `..` traversal and sibling-prefix matches like /ws vs /ws-evil) rather than a naive startsWith
+	private isWithinIntegrationPath(target_path: string): boolean {
+		if (!this.integration_path) { return false; }
+		return isPathWithin(target_path, [this.integration_path]);
+	}
+
+	// check whether a discovered or watcher-delivered URI is excluded by the current integration_exclude. Matches against the path relative to the integration folder, which is the same convention the user writes excludes in (e.g. **/{...,vendored}/**). Empty exclude => never excluded
+	private isExcludedByIntegrationFilter(uri: vscode.Uri, folder_path: string): boolean {
+		if (this.integration_exclude.trim() === '') { return false; }
+		const relative_path = path.relative(folder_path, uri.fsPath).split(path.sep).join('/');
+		return !globMatches(relative_path, '', this.integration_exclude);
+	}
+
+	// enumerate top-level subfolders of the VS Code workspace root, filter by exclude, sort alphabetically. The webview uses this set as the stable universe for pill labels + hues so descending into a sub-project doesn't re-derive the disambiguation against a smaller visible set (e.g. notethink "NT" suddenly becoming "NO" because notegit fell out of view)
+	private async computeWorkspaceProjects(): Promise<void> {
+		if (!this.workspace_root) {
+			this.workspace_projects = [];
+			return;
+		}
+		try {
+			const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(this.workspace_root));
+			const dir_names = entries
+				.filter(([, type]) => type === vscode.FileType.Directory)
+				.map(([name]) => name);
+			// run each candidate through the same glob matcher used for file discovery (synthetic placeholder child path) so .git, node_modules, .claude, vendored, etc. don't consume hue indices
+			const filtered = this.integration_exclude.trim() === ''
+				? dir_names
+				: dir_names.filter(name => globMatches(`${name}/dummy.md`, '', this.integration_exclude));
+			this.workspace_projects = filtered.sort();
+		} catch (err) {
+			writeToErrorLog('computeWorkspaceProjects failed', this.workspace_root, err);
+			this.workspace_projects = [];
+		}
+	}
+
 	/**
 	 * phase 1: discover and load in parallel; each file streams its own merge update
 	 * as it completes so a slow file never blocks the others. After all settle, a
@@ -641,8 +689,10 @@ export class PanelSession {
 		// an empty exclude becomes null so findFiles applies no exclusions at all; the default skips derived/dependency dirs and overrides files.exclude/search.exclude
 		const find_exclude = this.integration_exclude.trim() === '' ? null : this.integration_exclude;
 		const discovered = await vscode.workspace.findFiles(pattern, find_exclude);
+		// defense in depth: post-filter against the same exclude using the host-side globMatches helper. findFiles' brace-expanded exclude has had edge cases bite us in practice (a "vendored" segment leaking through despite **/{...,vendored}/**), and the file-system watcher armed below has no exclude at all — applying the filter here AND in loadFolderDoc gives both paths one deterministic gate
+		const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri, folder_path));
 		// deterministic order so the capped subset is stable across reloads
-		const sorted_uris = [...discovered].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+		const sorted_uris = [...filtered].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 		// store on the session so later watcher-driven incremental updates re-send the same totals (reproduces the original closure-capture behaviour)
 		this.integration_total_discovered = sorted_uris.length;
 		this.integration_truncated = sorted_uris.length > MAX_AGGREGATE_FILES;
@@ -659,6 +709,7 @@ export class PanelSession {
 				type: 'update',
 				partial: { docs: this.integration_docs },
 				workspace_root: this.workspace_root,
+				workspace_projects: this.workspace_projects,
 				extension_version: this.extension_version,
 				aggregate_total_discovered: this.integration_total_discovered,
 				aggregate_truncated: this.integration_truncated,
@@ -676,6 +727,14 @@ export class PanelSession {
 	 */
 	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean } = {}): Promise<void> {
 		try {
+			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them — when the user descends folders (e.g. pill click from active_development → calfam), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the relative-path-based isExcludedByIntegrationFilter check below misses sibling paths (their relative_path starts with `..` which doesn't match `**/{...}/**` excludes)
+			if (!this.isWithinIntegrationPath(uri.fsPath)) {
+				return;
+			}
+			// the file system watcher armed in armFolderWatcher takes only an include pattern — createFileSystemWatcher has no exclude argument — so a vendored or otherwise-excluded path inside integration_path can fire onDidCreate/onDidChange and reach this loader. gate every entry here against integration_exclude so the watcher cannot leak excluded files into integration_docs. The `!` is sound here because isWithinIntegrationPath above returns false (and we returned) whenever integration_path is undefined
+			if (this.isExcludedByIntegrationFilter(uri, this.integration_path!)) {
+				return;
+			}
 			// respect the cap for watcher-driven adds too: never grow a new path past MAX_AGGREGATE_FILES (re-parses of already-loaded paths still pass)
 			const already_loaded = Object.values(this.integration_docs).some(d => d.path === uri.path);
 			if (!already_loaded && Object.keys(this.integration_docs).length >= MAX_AGGREGATE_FILES) {
@@ -691,12 +750,17 @@ export class PanelSession {
 				const document = await vscode.workspace.openTextDocument(uri);
 				doc = await this.buildDoc(document);
 			}
+			// re-check the integration-path containment AFTER the async load — between the guard at the top and now, the awaits above gave other handlers a chance to run, and a concurrent enterFolderMode (e.g. pill click descending into a sub-project) can clear integration_docs and switch integration_path. Without this re-check, a watcher event for a sibling project that started loading under the old integration_path can land in the new integration_path's integration_docs after the switch, surfacing as "stories from another project mysteriously appearing after an update" (clears on window reload because reload re-enters folder mode and re-runs discovery)
+			if (!this.isWithinIntegrationPath(uri.fsPath)) {
+				return;
+			}
 			this.integration_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
 			this.webviewPanel.webview.postMessage({
 				type: 'update',
 				partial: { docs: { [doc.id]: this.integration_docs[doc.id] } },
 				merge_strategy: 'merge',
 				workspace_root: this.workspace_root,
+				workspace_projects: this.workspace_projects,
 				extension_version: this.extension_version,
 				aggregate_total_discovered: this.integration_total_discovered,
 				aggregate_truncated: this.integration_truncated,

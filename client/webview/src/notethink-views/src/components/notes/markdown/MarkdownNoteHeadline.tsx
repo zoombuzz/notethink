@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { isInternalAttribute } from "../../../lib/renderops";
 import { headlineClickPosition, createNoteClickHandler } from "../../../lib/noteui";
 import type { NoteProps } from "../../../types/NoteProps";
-import OriginPill from "../../../components/notes/OriginPill";
+import OriginPill, { projectFolderFromOrigin } from "../../../components/notes/OriginPill";
 import view_specific_styles from "../../../components/ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:MarkdownNoteHeadline");
@@ -45,11 +45,10 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
                     origin={note.origin!}
                     onClick={(event) => {
                         event.stopPropagation();
-                        note.handlers?.postMessage?.({
-                            type: 'revealRange',
-                            from: note.position.start.offset,
-                            docPath: note.origin!.doc_path,
-                        });
+                        // pill click descends the folder view into the pill's project subfolder via the same pipeline the breadcrumb uses. A file living directly at the workspace-folder root has no sub-project to descend into — projectFolderFromOrigin returns '' and the click becomes a no-op
+                        const target_folder = projectFolderFromOrigin(note.origin!);
+                        if (!target_folder) { return; }
+                        note.handlers?.descendToFolder?.(target_folder);
                     }}
                 />
             )}

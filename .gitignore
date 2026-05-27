@@ -65,3 +65,7 @@ docstech/design/logos/render/
 **/playwright/tmp
 **/test-results
 .playwright-mcp/
+
+# Exclude local Claude Code runtime state, but version skills
+.claude/*
+!.claude/skills/

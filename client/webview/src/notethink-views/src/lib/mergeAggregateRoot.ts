@@ -207,12 +207,20 @@ function walkStorySubtree(
  * `maxNotesPerFile` (optional) caps how many top-level stories each source file
  * contributes. Undefined → no cap (unchanged behaviour). Which end is kept depends on
  * the file H1's `order` linetag (see trimFileStories).
+ *
+ * `workspace_projects` (optional) is the universe of top-level subfolder names of the
+ * VS Code workspace root (already exclude-filter applied and sorted by the extension).
+ * When provided + non-empty, this is the stable universe used to assign pill labels and
+ * hue indices so descending into a sub-project doesn't re-derive labels against a smaller
+ * visible set (e.g. "NT" suddenly becoming "NO"). When undefined / empty, falls back to
+ * the visible-set derivation (preserves the legacy behaviour for tests and single-file callers).
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function mergeAggregateRoot(
     docs: { [key: string]: AggregatedDocInput | undefined },
     integration_path: string,
     maxNotesPerFile?: number,
+    workspace_projects?: string[],
 ): MergeAggregateRootResult {
     // 1. parse each doc once
     const parsed: PerFileParse[] = [];
@@ -230,9 +238,17 @@ export function mergeAggregateRoot(
         return ar < br ? -1 : ar > br ? 1 : 0;
     });
 
-    // assign each distinct project (first path segment of relative_path) a hue based on its position in the sorted enumeration, fed through the golden-angle spread. The old djb2(name)%360 fallback in OriginPill happens to collide for real-world pairs like calfam/shopify-uncomplicated and notegit/countingsheet; a sorted-index assignment is the only way to guarantee a minimum gap on the hue wheel for arbitrary project names
+    // seed the project hue + label universe from workspace_projects when provided, then append any visible-set project not already in it. The workspace-driven seed is what keeps labels/hues stable across folder descents
     const project_hue_by_name = new Map<string, number>();
     const distinct_project_names: string[] = [];
+    if (workspace_projects && workspace_projects.length > 0) {
+        for (const name of workspace_projects) {
+            if (!project_hue_by_name.has(name)) {
+                project_hue_by_name.set(name, hueForProjectIndex(project_hue_by_name.size));
+                distinct_project_names.push(name);
+            }
+        }
+    }
     for (const file of parsed) {
         const project_name = projectNameFromRelativePath(file.doc.relative_path);
         if (project_name && !project_hue_by_name.has(project_name)) {
@@ -240,7 +256,7 @@ export function mergeAggregateRoot(
             distinct_project_names.push(project_name);
         }
     }
-    // 2-character pill label per project — first letter + earliest character that differentiates this project from any other in the merged aggregate (notegit→NG, notethink→NT)
+    // 2-character pill label per project — first letter + earliest character that differentiates this project from any other in the universe (notegit→NG, notethink→NT). Driven by the workspace universe when available so labels are stable across descents
     const project_label_by_name = buildProjectLabels(distinct_project_names);
 
     // 2. for each file, build epic registries and collect stories

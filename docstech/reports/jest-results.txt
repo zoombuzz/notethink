@@ -1,30 +1,51 @@
 # Jest Test Results
 # Version: 0.3.2
-# Date: 2026-05-26T19:17:53Z
+# Date: 2026-05-27T15:44:09Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
-[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+> notethink@0.3.2 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> bash scripts/test-jest.sh
+
+
+> notethink-client-extension@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/extension
+> jest --config jest.config.cjs --forceExit
+
+
+Test Suites: 7 passed, 7 total
+Tests:       169 passed, 169 total
+Snapshots:   0 total
+Time:        2.45 s
+Ran all test suites.
+
+
+> notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
+> jest --config jest.config.cjs --forceExit
+
+
+Test Suites: 4 passed, 4 total
+Tests:       39 passed, 39 total
+Snapshots:   0 total
+Time:        0.624 s, estimated 1 s
+Ran all test suites.
 
 
 > @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
 > jest --config jest.config.cjs --forceExit
 
-[33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
-
-[1mTest Suites: [22m[1m[32m29 passed[39m[22m, 29 total
-[1mTests:       [22m[1m[32m534 passed[39m[22m, 534 total
-[1mSnapshots:   [22m0 total
-[1mTime:[22m        [1m[33m3.112 s[39m[22m
-[2mRan all test suites[22m[2m.[22m
-[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+Test Suites: 29 passed, 29 total
+Tests:       542 passed, 542 total
+Snapshots:   0 total
+Time:        2.963 s, estimated 3 s
+Ran all test suites.
 
 
-[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
-[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
-[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │     6 │ [32m   160[0m │ [2m     0[0m │ 2.485 s │
-│ webview          │     4 │ [32m    39[0m │ [2m     0[0m │ 0.675 s │
-│ notethink-views  │    29 │ [32m   534[0m │ [2m     0[0m │ 3.112 s │
-[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-[1m│ TOTAL            │    39 │[0m [32m   733[0m [1m│[0m [2m     0[0m [1m│         │[0m
-[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m
+┌──────────────────┬───────┬────────┬────────┬─────────┐
+│ Suite            │ Files │ Passed │ Failed │ Time    │
+├──────────────────┼───────┼────────┼────────┼─────────┤
+│ extension        │     7 │    169 │      0 │  2.45 s │
+│ webview          │     4 │    39  │      0 │ 0.624 s │
+│ notethink-views  │    29 │    542 │      0 │ 2.963 s │
+├──────────────────┼───────┼────────┼────────┼─────────┤
+│ TOTAL            │    40 │    750 │      0 │         │
+└──────────────────┴───────┴────────┴────────┴─────────┘

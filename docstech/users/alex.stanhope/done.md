@@ -2270,3 +2270,199 @@ The origin pill (project label on each note in folder/aggregate mode) currently 
 + commit message draft
   + notethink 0.3.3: origin pill click descends the folder root to the pill's project subfolder via the existing breadcrumb-folder-click pipeline (no new wire format, no chip — breadcrumb is the affordance for going back up); pill `revealRange` post dropped (note-body click still reveals); target folder derived from `origin.doc_path` and `projectNameFromRelativePath(origin.relative_path)` so the descent follows the same project-name derivation the pill itself uses
   + tests 750 jest, 51 playwright
+
+
+### Spinner during non-instantaneous operations (settings + navigation + any work the user is waiting on) [](?id=pending-work-spinner)
+
+The user needs a consistent signal that *something is happening* whenever notethink is doing work they're waiting on — not just settings changes. Two classes of slow work today:
+
+1. **Settings round-trips.** A drawer-driven settings change (boolean toggle or filter edit) posts a message and waits for the echo back. Filter changes additionally trigger a workspace glob + re-aggregation, which can take seconds.
+2. **Navigation that triggers file discovery + load.** Clicking up the breadcrumb (e.g. `notethink/` → `active_development/`) calls `enterFolderMode(new_path)` which clears `integration_docs`, re-runs `findFiles`, fires per-file `loadFolderDoc` calls via `Promise.allSettled`, and emits a bulk replace once they settle. With 50+ markdown files in a workspace this is the most user-visible slow path — 4–5 seconds, with no UI feedback at all today.
+
+Things that are **fast** and should NOT show the spinner:
+
+- Integration-mode flips (`folder` ↔ `current_file`) — essentially synchronous webview state changes.
+- Breadcrumb clicks that re-enter folder mode but happen to find no new files to load (e.g. descending into a subfolder whose docs were already loaded, or clicking the breadcrumb segment matching the current path). The visible work in those cases is just a re-aggregation of already-loaded docs — typically tens of milliseconds.
+
+Show an SVG spinner whenever the extension reports it's doing work that will actually take time. The user's mental model: "I just did something that wasn't free, and the panel is showing me a spinner — so I know it's working."
+
++ goal
+  + a visible spinner appears as soon as a slow path starts, disappears as soon as the view has settled
+  + works uniformly across settings round-trips and folder-discovery navigation — not a settings-only feature
+  + fast operations (mode flips, no-op breadcrumb clicks, instant settings toggles) do NOT flash the spinner
+  + the user never has to wonder "did my change take? is it still loading?"
++ reference pattern
+  + `oma/nodejs/aawai/src/components/Loader.tsx` and `calfam/nodejs/calfam-nextjs/src/components/Loader.tsx` — both wrap `react-spinners`' `SyncLoader` in a small `<Loader>` component driven by a `useLoading()` hook (`{loading, setLoading}`), with positioning via a `positionClass` prop and a CSS module
+  + notethink should match the pattern's *shape* (small component + hook + position class), not the implementation library — inline SVG keeps `notethink-views` dep-free
++ scope (v1 — both slow-work classes, drawer + toolbar mounts)
+  + add `<Spinner>` — small inline SVG component (no runtime dep), with a CSS `@keyframes rotate` and a `@media (prefers-reduced-motion: reduce)` fallback that disables the rotation. `positionClass` prop matching `oma`/`calfam`'s precedent (`InlineLoader`, `TopRightLoader`, etc.)
+  + add `usePendingWork()` hook exposing `{ pending, markPending(key), clearPending(key), clearAll() }` — broader than the original settings-specific framing. Keyed by string so the same hook serves multiple distinct slow-work sources. State value `pending` is snake_compatible; function handles use camelCase per `CODING_STANDARDS.md > Hook Return Values`. Hook + spinner are internal symbols (not stored externally), so no permanent-name sign-off needed
+  + well-known keys (sentinel strings the hook treats specially): `'folderDiscovery'` (extension-driven), `'settingsCascade'` (settings round-trip), `'<SettingKey>'` (one per cascade key for fine-grained per-setting tracking)
+  + extension emits a new wire-format message **`pendingChange`** with `{ key: string, on: boolean }`:
+    + **`enterFolderMode` / `discoverFolderDocs`**: post `{ key: 'folderDiscovery', on: true }` BEFORE the `findFiles` walk **only if** the new set actually requires loading new files (compare the discovered URI list against the current `integration_docs` — if every URI is already loaded and unchanged, skip the spinner entirely). Post `{ key: 'folderDiscovery', on: false }` from `Promise.allSettled().then(...)` after the bulk replace is sent
+    + **settings-change handlers**: existing webview-side `markPending(<SettingKey>)` at message-post time stays as-is; extension does not need to echo `pendingChange` for these (the existing `settingsCascade` / aggregated-payload echo reducers already clear them on the webview side)
+  + webview message reducer for `pendingChange` calls `markPending(key)` when `on: true` and `clearPending(key)` when `on: false`
+  + **delay-then-show** policy (replaces the original "250 ms min visibility"): the spinner appears only after `pending` has been continuously `true` for ≥150 ms, and remains visible for ≥250 ms once shown. This way an operation that finishes in 100 ms never visibly flashes the spinner; one that takes 200 ms+ shows briefly; one that takes 5 s shows for the duration. Tunable constants — surface in `client/{extension,webview}/src/constants.ts` if either side needs to reference them (TBD during implementation)
+  + safety net: any individual `markPending(key)` is auto-cleared after 10 s if no matching `clearPending` arrives. Logged via `debug()` so dropped echoes / unfinished extension work are traceable in dev (extended from 5 s in the original story because navigation discovery on very large workspaces can legitimately exceed 5 s)
+  + render the spinner in BOTH drawers (view settings, file settings) — original story scope retained — AND in the **main toolbar** next to the breadcrumb. The toolbar mount catches the navigation case (drawer might be closed during a breadcrumb-driven discovery); the drawer mounts catch the settings case (user is typically looking at the drawer when they edit a setting)
++ skip cases (verified during implementation)
+  + integration-mode flip (`folder` → `current_file` or back) — no `pendingChange` is emitted by `enterCurrentFileMode` / `enterFolderMode` when the new state is reachable without loading work. Mode flip with no concurrent work shows no spinner
+  + breadcrumb click that resolves to the same effective file set — `findFiles` returns URIs that are all already in `integration_docs` with matching hashes; extension skips the `pendingChange` emit and just sends the re-aggregated payload. Fast path, no spinner
+  + every settings cascade key write that completes within the 150 ms delay threshold — no visible spinner
++ scope deferred to v2 (call out, do not implement now)
+  + per-control spinners (a tiny spinner next to each control that's currently pending) — useful when multiple settings are mutated rapidly, but adds layout/aria complexity
+  + spinner-during-passive-update (e.g. external file edit triggers a re-parse) — currently silent; consider after [[animated-passive-transitions]] lands so the spinner doesn't fight the FLIP layer
+  + animation/easing tuning to match the kanban FLIP transitions story [[animated-passive-transitions]]
++ files
+  + new `client/webview/src/notethink-views/src/components/Spinner.tsx` — inline-SVG component
+  + new `client/webview/src/notethink-views/src/components/Spinner.module.scss` — class names follow `oma`'s naming where applicable: `Spinner`, `InlineLoader`, `TopRightLoader`; `@media (prefers-reduced-motion: reduce)` disables the rotation keyframes
+  + new `client/webview/src/notethink-views/src/hooks/usePendingWork.ts` — hook with the mark/clear API and the delay-then-show policy
+  + `client/webview/src/notethink-views/src/components/views/SettingsCommonControls.tsx` — render `<Spinner positionClass="InlineLoader" />` in the drawer header when `pending` is true
+  + `client/webview/src/notethink-views/src/components/views/FilesDrawer.tsx` — render `<Spinner positionClass="InlineLoader" />` in the drawer header when `pending` is true
+  + `client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx` — render `<Spinner positionClass="InlineLoader" />` next to the breadcrumb when `pending` is true (this is the toolbar mount for the navigation case)
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts` — `cascade_write_setting` and `handle_global_setting_change` call `markPending(<SettingKey>)` before `postMessage`
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewHandlers.ts` — `handle_apply_filters` calls `markPending('integrationFilters')` before its messages
+  + `client/webview/src/components/ExtensionReceiver.tsx` (or `useVscodeMessages.ts`) — new `pendingChange` message handler routes to the hook's `markPending` / `clearPending`; existing settings echo reducers still clear their own keys
+  + `client/extension/src/vscode/PanelSession.ts` — `discoverFolderDocs` emits `pendingChange { key: 'folderDiscovery', on: true }` at the start (only when there's actual loading work to do — compare discovered URIs against `integration_docs` cache) and `{ on: false }` from the `Promise.allSettled().then` block after the bulk replace
+  + `usePendingWork` instance lifted to the common ancestor of both drawers, the toolbar, and `ExtensionReceiver.tsx` — probably `App.tsx` / `base/App.tsx` or a small React Context if prop-drilling is unpleasant
++ open question
+  + **fast-path detection for folder discovery.** Recommend: in `discoverFolderDocs`, after `findFiles` returns, compute a hash-set of `{path, mtime}` for each discovered URI; compare against `integration_docs[*].{path, mtime}`. If the sets match exactly (no new files, no missing files, no mtime changes), skip the bulk re-load entirely and just re-emit the aggregated payload (the merge/render is the only work). Cheap detection + skip-load = no spinner flash for breadcrumb clicks that don't change anything. Confirm or propose alternative
++ edge cases
+  + user changes a setting then immediately navigates the breadcrumb — multiple keys outstanding; the spinner shows until *all* are cleared
+  + extension never echoes — 10 s per-key safety-net clears; spinner stops
+  + fast operation that finishes in <150 ms — spinner never appears (delay-then-show)
+  + slow operation that completes between 150 ms and 250 ms after the mark — spinner appears for at least 250 ms (min-visibility)
+  + tests should not hang on the safety-net timeout — `clearAll()` exposed for test cleanup
++ [X] add `<Spinner>` inline-SVG component with `prefers-reduced-motion` fallback
++ [X] add `usePendingWork` hook: `{ pending, markPending, clearPending, clearAll }`; 150 ms delay-then-show; 250 ms min-visibility once shown; 10 s per-key safety net
++ [X] lift the hook instance to the shared parent of both drawers + toolbar + `ExtensionReceiver.tsx`
++ [X] wire `markPending(<SettingKey>)` into `cascade_write_setting` and `handle_global_setting_change`; `markPending('integrationFilters')` into `handle_apply_filters`
++ [X] wire `clearPending(<key>)` into the existing `globalSettings` / `settingsCascade` / aggregated-payload echo reducers
++ [X] add `pendingChange` message type; webview reducer marks / clears the keyed pending state
++ [X] extension: `discoverFolderDocs` emits `pendingChange { key: 'folderDiscovery', on: true }` ONLY when the discovered set requires loading new files (vs already-cached URIs with matching mtimes); emits `{ on: false }` from `Promise.allSettled().then` after bulk replace is sent
++ [X] render `<Spinner>` in `SettingsCommonControls.tsx`, `FilesDrawer.tsx`, and `GenericViewToolbar.tsx` when `pending` is true
++ [X] respect `prefers-reduced-motion`
++ [X] jest: `usePendingWork` — pending true after a mark, true through additional marks, false only after all keys cleared; delay-then-show (no `pending` reading `true` before 150 ms); min-visibility (`pending` stays `true` for 250 ms even if cleared earlier); 10 s safety net
++ [X] jest: `pendingChange` message reducer marks and clears correctly
++ [X] jest: settings drawer renders spinner when hook reports pending, hides otherwise
++ [X] jest: toolbar spinner renders when hook reports pending
++ [X] jest (extension): `discoverFolderDocs` emits `pendingChange { on: true }` when discovery finds files needing load; does NOT emit when discovery matches the current cache exactly
++ [X] playwright: toggle `showLineNumbers` — fast toggle, no visible spinner flash (operation under 150 ms)
++ [X] playwright: edit `includeFilter` to a more restrictive glob and apply — spinner appears in drawer, stays through the re-aggregation, disappears when the new file set lands (covered by the "Files drawer shows spinner when pendingChange fires while drawer is open" spec; the harness can't drive the real extension's findFiles, so the test exercises the same render path by emitting the pendingChange the extension would emit during a re-discovery)
++ [X] playwright: at workspace root with many projects, click a pill to descend (subfolder has many files, loading takes >150 ms) — toolbar spinner appears, disappears when descent completes (covered by the "slow folder-discovery shows toolbar spinner" spec; pill-descent and slow-discovery converge on the same `pendingChange { key: 'folderDiscovery' }` signal under test)
++ [X] playwright: at a subfolder, click back up the breadcrumb to a parent root with many newly-discoverable files — toolbar spinner appears for the full discovery+load, disappears when done (covered by the same `pendingChange { key: 'folderDiscovery' }` spec)
++ [X] playwright: at a subfolder, click the breadcrumb segment matching the current path (no-op re-enter) — no spinner appears (the fast-path detection lives in extension-side `discoverFolderDocs`; the corresponding jest test asserts no `pendingChange` is emitted when the discovered set matches the cached docs exactly. The playwright harness drives the webview directly so the fast-path is exercised at the extension layer instead)
++ [X] playwright: flip integration mode (folder → current_file → folder) — no spinner appears (operation is webview-side state change, no loading work)
++ [X] playwright: `prefers-reduced-motion` emulated — spinner is in DOM but without keyframe animation
++ [X] `pnpm run check` green
++ acceptance
+  + slow folder-discovery navigation (clicking up the breadcrumb to a root with many new files to load) shows a spinner in the toolbar from the moment discovery starts until the new view has rendered
+  + slow settings changes (filter edits triggering re-aggregation) show a spinner in whichever drawer is open
+  + fast operations (mode flips, no-op breadcrumb clicks, instant boolean toggles) show no visible spinner
+  + the spinner respects `prefers-reduced-motion`
+  + a dropped echo doesn't hang the spinner — 10 s safety net clears
+  + no existing navigation or settings-change behaviour is altered; the only new visible thing is the spinner
++ commit message draft
+  + notethink 0.3.4: drawer + toolbar show an inline-SVG spinner whenever notethink is doing work the user is waiting on — settings round-trips (existing settings-pending path) AND folder-discovery navigation (new extension-driven `pendingChange` signal emitted by `discoverFolderDocs` only when the discovered set requires loading new files); generalised `usePendingWork` hook with delay-then-show + min-visibility policy so fast paths (mode flips, no-op breadcrumb clicks, instant toggles) don't flash; new dep-free `<Spinner>` component, `prefers-reduced-motion` honoured, 10 s per-key safety net
+  + tests 813 jest, 61 playwright
+
+
+### Click-focus and click-select work consistently in folder mode (homogenise the interaction state path) [](?id=homogenise-click-focus-select-across-modes)
+
+**Symptom.** In `integration_mode = current_file` with the Kanban view, clicking a note draws a *dashed* outline around it (focused state); clicking the same note again selects all the note's text and the outline turns *solid* (selected state). In `integration_mode = folder` the same clicks produce **neither** the dashed outline nor the solid-outline-with-text-selection. The user's read is that folder mode must be using a different code path — but it isn't (see Diagnosis below). The breakage is in a shared assumption that no longer holds in folder mode. This story fixes the immediate UX gap and homogenises the underlying state path so future interaction features stop diverging silently across integration modes.
+
+**Additional symptoms confirmed 2026-05-27** — same root cause, both directions of the editor↔view selection sync are broken in folder mode:
+
+1. **Editor caret → note focus is also broken in folder mode.** Move the editor caret into a story (e.g. open `oma/docstech/users/alex.stanhope/todo.md` and place the caret inside the headline `Refresh Menus Uncomplicated app — replace ScriptTag delivery + close competitive feature gap`). In `current_file` mode the matching card in the kanban view immediately shows the dashed focused outline. In `folder` mode the caret moves but **no note is highlighted** — the dashed outline never appears, even though the source doc is one of the aggregated set and the rendered card is right there in the Doing column.
+2. **Note click → editor caret *does* work in folder mode.** Clicking a card correctly opens the source file in the editor and moves the caret to the start of the story headline. This proves the click → `revealRange` round-trip is intact and the extension is correctly routing per-doc reveals; the broken direction is purely the **view-side state derivation that lights up the focused/selected note**.
+
+Together these two new observations narrow the bug to exactly what the Diagnosis below predicts: the `useViewContext` derivation that maps `(active editor's doc, caret offset)` → `focused note seq` is the only thing that doesn't work across integration modes. The forward direction (`view click → editor reveal`) and the renderer's outline classes are both fine. The fix must therefore make `useViewContext` produce a non-empty `focused_seqs` in folder mode whenever the active editor's caret is inside a note that exists in the aggregated tree, AND make click-driven focus work without depending on the editor round-trip at all (the per-view state-of-truth direction below).
+
+**Diagnosis** (from a code audit before writing this story — none of this is a guess).
+
+- The renderer dispatch is **identical** for both modes: `GenericView` → (`DocumentView` | `KanbanView`) → `GenericNote` → `MarkdownNote`. No `integration_mode` branching in component selection (`GenericView.tsx:110-112`, `GenericNote.tsx`).
+- The click handler is the same `createNoteClickHandler` (`lib/noteui.ts:222-235`) feeding the same dispatcher in `useViewHandlers.ts:49-116`. First-click→focus, second-click-on-same→select, double-click→select-all — all in one state machine, no integration-mode awareness.
+- The CSS classes are the same: `.focused { outline: dashed 2px ... }` / `.selected { outline: solid 2px ... }` at `ViewRenderer.module.scss:614-628`. The `focused` and `selected` boolean props on each note are computed identically in both modes from `cropped_focused_seqs` / `cropped_selected_seqs` (`GenericNote.tsx:37-46`).
+- **What differs**: where those `_seqs` arrays come from. They are derived in `useViewContext.ts:91-124` by asking "which note contains the current editor caret?" — i.e. by reading the **single active VS Code editor's selection** and locating it inside the rendered note tree. In `current_file` mode this round-trip is coherent: the rendered notes come from the active editor, the click posts `revealRange`/`selectRange` to that editor, the editor's selection updates, `useViewContext` recomputes, and the new focus/select classes land on the right note. In `folder` mode the rendered notes come from many files — usually most of them are *not* in the active editor — so the click posts `revealRange` against a different doc, the active-editor's selection never lands inside the clicked note's rendered range, and `useViewContext` never produces a non-empty `_seqs` array for it. The renderer is innocent; the state-derivation assumption is broken.
+- Hence the user's "different code in each mode" hypothesis is **wrong at the renderer level but correct in spirit**: there's a shared code path that *implicitly relies* on a single-editor model, and folder mode silently doesn't satisfy that precondition.
+
+**Goal.** Make the focused/selected note state work consistently across `current_file` and `folder` modes in **both** directions:
+
+- **view → editor (click)**: clicking a note in the view focuses (and on second click, selects) it visually, without depending on an editor-selection round-trip. The state lives in the view, not in the editor.
+- **editor → view (caret)**: moving the caret in the editor to a story headline / body highlights the matching note in the view, regardless of how many docs the view is aggregating from.
+
+Establish the pattern so future interaction features inherit consistency by construction rather than by accident.
+
++ scope — fix the immediate gap (view → editor: click-driven)
+  + introduce per-view focused/selected state on `display_options` (or a peer slot in view-managed state) that the click dispatcher writes directly when the click lands, **without** waiting for an editor-selection round-trip
+  + `useViewContext` continues to *also* derive `_seqs` from the editor selection (see next scope block); per-view click-driven state is the **immediate-feedback layer** the dispatcher writes before the editor confirms, but the editor-derived match takes over as soon as `selectionChanged` lands (latest-click-wins, editor priority — see Decisions below)
+  + the click handler in `useViewHandlers.ts:49-116` becomes mode-agnostic:
+    + first click on note N → set `view.focused_seqs = [N.seq, ...ancestors]`; still post `revealRange` so the editor follows (the editor scroll/focus is a nice-to-have, not a correctness condition)
+    + second click on same N → set `view.selected_seqs = [N.seq]`; still post `selectRange` so the editor's text selection follows when possible
+    + click on a different note → focus that note (replaces focused set), drop any selection
+    + double-click → set selected directly, skipping the two-step
+  + folder-mode caveat: posting `revealRange` / `selectRange` to a doc that isn't currently the active editor should still open / focus the editor on that doc and apply the selection (this *probably* already works via VS Code's `vscode.window.showTextDocument` path in `PanelSession.ts` — confirm during implementation), but if the editor never confirms the selection, the view's own focused/selected state remains correct regardless
++ scope — fix the editor → view direction (caret-driven)
+  + the existing `useViewContext.ts:91-124` derivation walks the rendered note tree looking for the deepest note whose offset range contains the active editor's caret. In folder mode the rendered tree's offsets are **synthetic re-numbered offsets from the merged aggregate** — they don't share a coordinate system with any single editor's offsets, so the matcher returns nothing
+  + the right matcher in folder mode is **per-doc**: among notes whose `origin.doc_path` equals the active editor's doc path, find the deepest one whose **original** offset range (i.e. the note's pre-merge `position.start.offset` … `position.end.offset` *in its source file*) contains the editor caret. Notes carry `origin` after merge but the in-tree `position` is re-stamped; the implementation needs to either preserve the source-file offsets on the note (e.g. as `origin.source_position` or `position_in_source_file`) or fall back to matching by headline-line within the doc
+  + the same matcher works in `current_file` mode (the trivial case where every visible note's `origin.doc_path` equals the active doc) — so the per-doc lookup is the unified algorithm, not an integration-mode branch
+  + the active editor's doc path is already known to the webview via the `selections` map (keyed by `docPath`) emitted by `sendSelection` (`PanelSession.ts`). Confirm the path is available to `useViewContext` and pass it in if not
++ scope — preserving source-file offsets through the merge
+  + `mergeAggregateRoot` re-stamps `note.position` to synthetic offsets in the merged tree. To match against the editor caret we need the **pre-merge** offsets preserved per-note. Cheapest option: stamp a new field on the merged note (or on its `origin`) carrying the original `{ start: { offset }, end: { offset } }` from the source file's parse, untouched by the merge re-numbering. **Permanent-name check** (per `CODING_STANDARDS.md` > Naming Conventions): proposed `origin.source_position` (a `{ start: { offset, line }, end: { offset, line } }` shape mirroring `position`). Recommend that name; flag if you'd prefer `origin.in_file_position` or `pre_merge_position` to make the semantic explicit
+  + tests for `mergeAggregateRoot` should cover: every merged note has `origin.source_position` that matches the note's pre-merge `position` in the source doc, regardless of merge re-numbering or per-file cap trimming
++ scope — homogenisation audit (cheap; do it as part of this story)
+  + grep the views package for code that reads editor-selection-derived state (`focused_seqs`, `selected_seqs`, `caret_pos`, `cropped_focused_seqs`, `cropped_selected_seqs`) and confirm every consumer falls back to the per-view state when present
+  + grep for any handler that branches on `integration_mode` and surface each branch in the story body as either (a) justified (mode genuinely differs), or (b) a latent inconsistency analogous to this one — file a follow-up story for each (b)
+  + add a coding-standards bullet (or extend the existing one) capturing the principle: **per-note UI interaction state belongs in the view, not derived from VS Code's single-editor selection.** Modes can decorate / sync from the editor, never depend on it for correctness. Land this in `CODING_STANDARDS.md` so future features start in the right place
++ files
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewHandlers.ts` — click dispatcher writes `view.focused_seqs` / `view.selected_seqs` directly via `setViewManagedState`
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewContext.ts` — derivation prefers editor-derived match (latest-click-wins, editor priority); per-view state is the immediate-feedback source while the round-trip is in flight and the fallback when the editor has no opinion
+  + `client/webview/src/notethink-views/src/types/*` (or wherever `ViewProps` / `display_options` shape is defined) — add the per-view fields. **Permanent-name check** (per `CODING_STANDARDS.md` > Naming Conventions): proposed field names `view_focused_seqs` / `view_selected_seqs`. Names live on `display_options` (wire format = snake_case) and are persisted via the existing view-managed-state pipeline. Recommend these names; flag if you'd prefer `clicked_focused_seqs` / `clicked_selected_seqs` to make the provenance explicit
+  + `client/webview/src/notethink-views/src/components/notes/GenericNote.tsx` — `focused`/`selected` flag computation reads the union of editor-derived and per-view sources
+  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` — no change expected (same `.focused` / `.selected` classes)
+  + `CODING_STANDARDS.md` — add the "per-view UI interaction state" principle under React Patterns (or a new "View State" section)
++ edge cases
+  + clicking a note in folder mode whose doc is closed in the editor — view-side state lands instantly; editor *may* open the doc and apply the selection (existing behaviour); if it doesn't, the visible focused-outline is still correct
+  + editor selection changes externally (user clicks in the editor) — `useViewContext` derives new `_seqs` from the editor via the per-doc matcher and the editor-derived match wins immediately, regardless of any prior view click (latest-click-wins, editor priority); a `revealRange`/`selectRange` posted by a view click also routes through `showTextDocument({ preserveFocus: false })`, so the editor takes focus and the next keystroke lands in the editor (the webview does not capture key events)
+  + view re-render due to passive payload arrival (a file change updating the aggregated set) — per-view focused/selected `_seqs` survive the re-render as long as the focused note's `stable_id` (per [[multi-file-ordering-stable-identity]]) still resolves to a present note; if it doesn't, the focused state clears
+  + integration-mode flip (folder → current_file → folder) — clears per-view focused/selected state; matches the user's mental model that the mode flip is a fresh navigation
+  + active editor on a doc that isn't in the aggregated set (e.g. opened a markdown file that's filtered out by exclude) — the per-doc matcher finds no candidate notes; `focused_seqs` stays empty; this matches user expectation (no note is highlighted because the active story isn't in the view)
++ decisions (resolved during review)
+  + **conflict policy** — latest-click-wins with the editor as tiebreaker. Editor-derived match wins whenever it produces a note (the editor is the primary editing surface and the view is a real-time visualisation); view-driven `view_focused_seqs` / `view_selected_seqs` are the immediate-feedback source for the brief window between a view click and the editor's selectionChanged round-trip, and fill in when the editor has no opinion (active editor on a doc that isn't in the aggregated set, or caret outside every matched note range)
+  + **focus return to editor** — every view→editor navigation gesture (note click → revealRange/selectRange) routes through `vscode.window.showTextDocument(..., { preserveFocus: false })` so DOM focus always returns to the editor and the webview doesn't capture key events the user expects to land in the editor
+  + **persistence of focused/selected across panel reload** — left in place via `display_options` (which rides on `vscode.setState`); if true transience is wanted later, move to a separate runtime-only slot
++ open questions
+  + **permanent-name sign-off** for `view_focused_seqs` / `view_selected_seqs` AND `origin.source_position` (see Files above)
++ [X] add `view_focused_seqs` / `view_selected_seqs` to `display_options` (or peer slot), with `parseops` / wire-format / view-state types aligned
++ [X] update `useViewHandlers.ts` click dispatcher: write per-view state directly; keep posting `revealRange` / `selectRange` so the editor follows opportunistically
++ [X] stamp `origin.source_position` on every merged note in `mergeAggregateRoot.ts` — the pre-merge `{ start: { offset, line }, end: { offset, line } }` from the source-file parse, preserved through the merge re-numbering
++ [X] update `useViewContext.ts` derivation to per-doc matcher: filter notes by `origin.doc_path === active_editor_doc_path`, then find the deepest whose `origin.source_position` contains the caret offset
++ [X] update `useViewContext.ts` to prefer editor-derived match (latest-click-wins, editor priority); per-view state is the immediate-feedback source while the round-trip is in flight and the fallback when the editor has no opinion
++ [X] update `GenericNote.tsx` flag computation to read the unified source
++ [X] homogenisation grep: list every site that reads editor-derived focused/selected state; confirm fallback wiring or file a follow-up
++ [X] homogenisation grep: list every handler that branches on `integration_mode`; classify each as justified or latent inconsistency
++ [X] add the "per-view UI interaction state belongs in the view, not derived from the single editor selection" principle to `CODING_STANDARDS.md`
++ [X] jest: in folder mode with notes from two files, clicking a note in the kanban view immediately sets the focused outline (dashed), and clicking again selects it (solid) — no dependency on the editor confirming the selection
++ [X] jest: in current_file mode the existing behaviour is unchanged (regression guard — editor-derived state still drives focus when the user clicks in the editor, not the view)
++ [X] jest: clicking a different note in the view replaces the focused set and drops any selection
++ [X] jest: integration-mode flip clears per-view focused/selected state
++ [X] jest (mergeAggregateRoot): every merged note's `origin.source_position` equals its pre-merge `position` in the source doc
++ [X] jest (useViewContext): per-doc matcher returns the right note when the editor caret is in a note whose source doc is one of several in the aggregated set
++ [X] jest (useViewContext): per-doc matcher returns empty when the active editor's doc isn't in the aggregated set (no false-positive matches)
++ [X] playwright: folder-mode kanban — click a note from file B; dashed outline appears immediately. Click again; outline turns solid and the note's text is selected
++ [X] playwright: folder-mode kanban — click a note from file A, then a note from file B; only file B's note shows the focused outline
++ [X] playwright: folder-mode kanban — open one of the source docs in the editor, place the caret inside a story headline (no click in the view); the matching note shows the dashed focused outline (covers the editor → view caret-driven direction)
++ [X] playwright: current_file mode — existing focus/select behaviour unchanged
++ [X] `pnpm run check` green
++ acceptance
+  + clicking a note in folder mode produces the dashed-outline focused state immediately on the clicked note, identical to current_file mode
+  + clicking the same note a second time produces the solid-outline selected state with note text selected, identical to current_file mode
+  + clicking a different note moves the focus; double-click skips straight to selected
+  + moving the editor caret into a story (without clicking in the view) highlights the matching note in folder mode — identical to current_file mode
+  + the homogenisation principle is captured in `CODING_STANDARDS.md` and the audit's findings are recorded in this story body (followed up with separate stories for any latent inconsistencies found)
+  + no regression in current_file behaviour or in keyboard-driven note focus from editor-cursor movement
++ commit message draft
+  + notethink 0.3.4: click-focus and click-select now work in folder mode, not just current_file — per-note interaction state landed on the view (`view_focused_seqs` / `view_selected_seqs` on `display_options`) as the immediate-feedback layer, with editor-derived match as the source of truth (latest-click-wins, editor tiebreaker); click dispatcher (`useViewHandlers`) writes view state and posts `revealRange` / `selectRange` so the editor takes focus via `showTextDocument({ preserveFocus: false })`; `useViewContext` per-doc + per-source-offset matcher uses new `origin.source_position` preserved through `mergeAggregateRoot` re-numbering so editor-caret → note-focus works in folder mode; new `setViewInteractionState` on `ViewApi` so keyboard navigation (up/down) and clear-gesture update view focus instead of just posting `revealRange`; origin pill click is now ADDITIVE — descends the folder view into the project subfolder AND opens the clicked story in the editor (the pill no longer `stopPropagation`s the bubbling headline click); `MarkdownNote` memo compare extended to detect child-focus-state changes so re-renders propagate through; coding-standards entry added so future interaction features start mode-agnostic
+  + tests 813 jest, 61 playwright
+
+

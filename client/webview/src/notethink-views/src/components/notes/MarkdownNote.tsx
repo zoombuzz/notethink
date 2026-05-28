@@ -1,6 +1,7 @@
 import Debug from 'debug';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
+import { arraysEqual } from "../../lib/noteops";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
@@ -134,6 +135,9 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
     if (prev.display_options?.settings?.autoExpandFocusedNote !== next.display_options?.settings?.autoExpandFocusedNote) { return false; }
     // caret offset drives body scroll in clipped notes - only re-render focused notes
     if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
+    // children's focused/selected status flows through display_options.focused_seqs / selected_seqs; when those change, child notes need to re-render even if this note's own focused/selected didn't
+    if (!arraysEqual(prev.display_options?.focused_seqs, next.display_options?.focused_seqs)) { return false; }
+    if (!arraysEqual(prev.display_options?.selected_seqs, next.display_options?.selected_seqs)) { return false; }
     // DnD: provided changes during drag (draggableProps.style contains transform)
     if (prev.display_options?.provided?.draggableProps !== next.display_options?.provided?.draggableProps) { return false; }
     if (prev.display_options?.provided?.dragHandleProps !== next.display_options?.provided?.dragHandleProps) { return false; }

@@ -1,8 +1,17 @@
 import {
+    arraysEqual,
+    deriveNaturalColumnOrder,
     withinNoteHeadlineOrBody,
     withinNoteHeadlineOrBodyUpTo,
     findDeepestNote,
+    findDeepestNoteByOriginPosition,
     findSelectedNotes,
+    findSelectedNotesByOriginPosition,
+    flattenAllNotes,
+    isAggregateRoot,
+    majorityNgView,
+    navigateToNeighbour,
+    resolveFocusedNote,
     selectionSpans,
     aggregateNoteLinetags,
     noteIsVisible,
@@ -15,7 +24,7 @@ import {
     findFirstIncompleteTaskSeq,
     formatColumnLabel,
 } from './noteops';
-import type { NoteProps, TextSelection } from '../types/NoteProps';
+import type { NoteProps, NoteOrigin, TextSelection } from '../types/NoteProps';
 
 function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
     return {
@@ -679,5 +688,378 @@ describe('formatColumnLabel', () => {
 
     it('preserves the canonical "untagged" bucket label as Untagged', () => {
         expect(formatColumnLabel('untagged')).toBe('Untagged');
+    });
+});
+
+describe('findDeepestNoteByOriginPosition', () => {
+    function noteWithOrigin(seq: number, doc_path: string, sp_start: number, sp_end: number, sp_end_body?: number): NoteProps {
+        const origin: NoteOrigin = {
+            doc_id: doc_path,
+            doc_path,
+            source_position: {
+                start: { offset: sp_start, line: 1 },
+                end: { offset: sp_end, line: 2 },
+                end_body: sp_end_body === undefined ? undefined : { offset: sp_end_body, line: 3 },
+            },
+        };
+        return makeNote({ seq, origin });
+    }
+
+    it('returns the deepest (latest-start) same-doc note that contains the caret', () => {
+        const outer = noteWithOrigin(1, '/repo/a.md', 0, 20, 100);
+        const inner = noteWithOrigin(2, '/repo/a.md', 30, 40, 80);
+        const result = findDeepestNoteByOriginPosition([outer, inner], '/repo/a.md', 35);
+        expect(result?.seq).toBe(2);
+    });
+
+    it('returns undefined when no same-doc note has source_position', () => {
+        const note = makeNote({ seq: 1 });
+        expect(findDeepestNoteByOriginPosition([note], '/repo/a.md', 5)).toBeUndefined();
+    });
+
+    it('returns undefined when the active doc does not match any note origin', () => {
+        const note = noteWithOrigin(1, '/repo/a.md', 0, 20, 50);
+        expect(findDeepestNoteByOriginPosition([note], '/repo/b.md', 10)).toBeUndefined();
+    });
+
+    it('falls back to end.offset when end_body is absent', () => {
+        const note = noteWithOrigin(1, '/repo/a.md', 0, 20);
+        expect(findDeepestNoteByOriginPosition([note], '/repo/a.md', 15)?.seq).toBe(1);
+        expect(findDeepestNoteByOriginPosition([note], '/repo/a.md', 25)).toBeUndefined();
+    });
+});
+
+describe('findSelectedNotesByOriginPosition', () => {
+    function noteWithOrigin(seq: number, doc_path: string, sp_start: number, sp_end_body: number): NoteProps {
+        return makeNote({
+            seq,
+            origin: {
+                doc_id: doc_path,
+                doc_path,
+                source_position: {
+                    start: { offset: sp_start, line: 1 },
+                    end: { offset: sp_end_body, line: 2 },
+                    end_body: { offset: sp_end_body, line: 2 },
+                },
+            },
+        });
+    }
+
+    it('returns notes whose source_position is fully spanned by the selection', () => {
+        const a = noteWithOrigin(1, '/repo/a.md', 10, 50);
+        const b = noteWithOrigin(2, '/repo/a.md', 60, 90);
+        const result = findSelectedNotesByOriginPosition([a, b], '/repo/a.md', 0, 100);
+        expect(result.map(n => n.seq).sort()).toEqual([1, 2]);
+    });
+
+    it('handles reverse selection (head before anchor)', () => {
+        const a = noteWithOrigin(1, '/repo/a.md', 10, 50);
+        const result = findSelectedNotesByOriginPosition([a], '/repo/a.md', 100, 0);
+        expect(result).toHaveLength(1);
+    });
+
+    it('excludes notes only partially covered by the selection', () => {
+        const a = noteWithOrigin(1, '/repo/a.md', 10, 50);
+        const result = findSelectedNotesByOriginPosition([a], '/repo/a.md', 20, 40);
+        expect(result).toHaveLength(0);
+    });
+
+    it('excludes notes from other docs', () => {
+        const a = noteWithOrigin(1, '/repo/a.md', 10, 50);
+        const b = noteWithOrigin(2, '/repo/b.md', 10, 50);
+        const result = findSelectedNotesByOriginPosition([a, b], '/repo/a.md', 0, 100);
+        expect(result.map(n => n.seq)).toEqual([1]);
+    });
+
+    it('falls back to in-tree position check for notes without source_position', () => {
+        const in_tree = makeNote({
+            seq: 1,
+            position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 2 }, end_body: { offset: 50, line: 3 } },
+        });
+        const result = findSelectedNotesByOriginPosition([in_tree], '/repo/a.md', 20, 40);
+        expect(result).toHaveLength(1);
+    });
+});
+
+describe('resolveFocusedNote', () => {
+    it('prefers editor-derived match over view-driven seqs', () => {
+        const editor_match = makeNote({ seq: 1 });
+        const other = makeNote({ seq: 2 });
+        const result = resolveFocusedNote([2], [editor_match, other], editor_match);
+        expect(result?.seq).toBe(1);
+    });
+
+    it('falls back to view-driven seqs when editor has no match', () => {
+        const note_a = makeNote({ seq: 1 });
+        const note_b = makeNote({ seq: 2 });
+        const result = resolveFocusedNote([2], [note_a, note_b], undefined);
+        expect(result?.seq).toBe(2);
+    });
+
+    it('returns undefined when neither source produces a match', () => {
+        const note = makeNote({ seq: 1 });
+        expect(resolveFocusedNote(undefined, [note], undefined)).toBeUndefined();
+        expect(resolveFocusedNote([], [note], undefined)).toBeUndefined();
+    });
+
+    it('returns undefined when view_focused_seqs points at a missing seq and the editor has no match', () => {
+        const note = makeNote({ seq: 1 });
+        expect(resolveFocusedNote([99], [note], undefined)).toBeUndefined();
+    });
+
+    it('uses the last seq in the chain as the deepest focused note', () => {
+        const parent = makeNote({ seq: 1 });
+        const child = makeNote({ seq: 2 });
+        const result = resolveFocusedNote([1, 2], [parent, child], undefined);
+        expect(result?.seq).toBe(2);
+    });
+});
+
+describe('isAggregateRoot', () => {
+    function rootWithChildren(seq: number, headline_raw: string, children: NoteProps[]): NoteProps {
+        return makeNote({ seq, headline_raw, child_notes: children });
+    }
+
+    it('returns true when children carry two or more distinct doc_ids', () => {
+        const child_a = makeNote({ seq: 1, origin: { doc_id: 'a', doc_path: '/repo/a.md' } });
+        const child_b = makeNote({ seq: 2, origin: { doc_id: 'b', doc_path: '/repo/b.md' } });
+        const root = rootWithChildren(0, '', [child_a, child_b]);
+        expect(isAggregateRoot(root)).toBe(true);
+    });
+
+    it('returns true for a single-origin synthetic seq-0 root with empty headline', () => {
+        const child = makeNote({ seq: 1, origin: { doc_id: 'a', doc_path: '/repo/a.md' } });
+        const root = rootWithChildren(0, '', [child]);
+        expect(isAggregateRoot(root)).toBe(true);
+    });
+
+    it('returns false for a single-origin root with a real headline', () => {
+        const child = makeNote({ seq: 1, origin: { doc_id: 'a', doc_path: '/repo/a.md' } });
+        const root = rootWithChildren(0, '# Real headline', [child]);
+        expect(isAggregateRoot(root)).toBe(false);
+    });
+
+    it('returns false when children have no origins', () => {
+        const root = rootWithChildren(0, '', [makeNote({ seq: 1 })]);
+        expect(isAggregateRoot(root)).toBe(false);
+    });
+
+    it('returns false for undefined parent_context', () => {
+        expect(isAggregateRoot(undefined)).toBe(false);
+    });
+});
+
+describe('majorityNgView', () => {
+    function noteFrom(seq: number, doc_id: string, view: string | undefined): NoteProps {
+        return makeNote({ seq, origin: { doc_id, doc_path: doc_id, file_view_type: view } });
+    }
+
+    it('returns the majority winner across distinct files', () => {
+        const notes = [
+            noteFrom(1, 'a', 'kanban'),
+            noteFrom(2, 'b', 'kanban'),
+            noteFrom(3, 'c', 'document'),
+        ];
+        expect(majorityNgView(notes)).toBe('kanban');
+    });
+
+    it('returns undefined on a tie', () => {
+        const notes = [
+            noteFrom(1, 'a', 'kanban'),
+            noteFrom(2, 'b', 'document'),
+        ];
+        expect(majorityNgView(notes)).toBeUndefined();
+    });
+
+    it('returns undefined when no note has a file_view_type', () => {
+        const notes = [noteFrom(1, 'a', undefined), noteFrom(2, 'b', undefined)];
+        expect(majorityNgView(notes)).toBeUndefined();
+    });
+
+    it('counts one vote per file even when many notes share a doc_id', () => {
+        const notes = [
+            noteFrom(1, 'a', 'kanban'),
+            noteFrom(2, 'a', 'kanban'),
+            noteFrom(3, 'a', 'kanban'),
+            noteFrom(4, 'b', 'document'),
+        ];
+        // a votes kanban once, b votes document once → tie → undefined
+        expect(majorityNgView(notes)).toBeUndefined();
+    });
+
+    it('returns undefined for empty or missing input', () => {
+        expect(majorityNgView([])).toBeUndefined();
+        expect(majorityNgView(undefined)).toBeUndefined();
+    });
+});
+
+describe('navigateToNeighbour', () => {
+    const a = makeNote({ seq: 1 });
+    const b = makeNote({ seq: 2 });
+    const c = makeNote({ seq: 3 });
+
+    it('returns the previous note when direction is -1', () => {
+        expect(navigateToNeighbour([a, b, c], [2], -1)?.seq).toBe(1);
+    });
+
+    it('returns the next note when direction is +1', () => {
+        expect(navigateToNeighbour([a, b, c], [2], 1)?.seq).toBe(3);
+    });
+
+    it('clamps at the first element when stepping back from the first', () => {
+        expect(navigateToNeighbour([a, b, c], [1], -1)?.seq).toBe(1);
+    });
+
+    it('clamps at the last element when stepping forward from the last', () => {
+        expect(navigateToNeighbour([a, b, c], [3], 1)?.seq).toBe(3);
+    });
+
+    it('treats a missing focused seq as before-the-first (up → first, down → first)', () => {
+        // current_index = -1; up → max(-1, 0) = 0; down → -1 + 1 = 0
+        expect(navigateToNeighbour([a, b, c], [99], -1)?.seq).toBe(1);
+        expect(navigateToNeighbour([a, b, c], [99], 1)?.seq).toBe(1);
+    });
+
+    it('returns undefined for an empty notes list', () => {
+        expect(navigateToNeighbour([], [1], -1)).toBeUndefined();
+        expect(navigateToNeighbour([], undefined, 1)).toBeUndefined();
+    });
+
+    it('uses the last seq in focused_seqs (the deepest focused note)', () => {
+        // chain [1, 2] — deepest is seq 2; down → seq 3
+        expect(navigateToNeighbour([a, b, c], [1, 2], 1)?.seq).toBe(3);
+    });
+});
+
+describe('flattenAllNotes', () => {
+    it('produces a flat array with the root at index 0', () => {
+        const root = makeNote({ seq: 0, children_body: [] });
+        expect(flattenAllNotes(root)).toEqual([root]);
+    });
+
+    it('descends children_body in order, skipping seq-0 entries (root only)', () => {
+        const child_1 = makeNote({ seq: 1, children_body: [] });
+        const child_2 = makeNote({ seq: 2, children_body: [] });
+        const root = makeNote({ seq: 0, children_body: [child_1, child_2] });
+        expect(flattenAllNotes(root).map(n => n.seq)).toEqual([0, 1, 2]);
+    });
+
+    it('walks nested children_body recursively', () => {
+        const grandchild = makeNote({ seq: 3, children_body: [] });
+        const child = makeNote({ seq: 2, children_body: [grandchild] });
+        const root = makeNote({ seq: 0, children_body: [child] });
+        expect(flattenAllNotes(root).map(n => n.seq)).toEqual([0, 2, 3]);
+    });
+
+    it('skips children without a positive numeric seq (mdast leaves)', () => {
+        const mdast_leaf = { type: 'paragraph', children: [], position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } } };
+        const real_child = makeNote({ seq: 5, children_body: [] });
+        const root = makeNote({ seq: 0, children_body: [mdast_leaf as never, real_child] });
+        expect(flattenAllNotes(root).map(n => n.seq)).toEqual([0, 5]);
+    });
+});
+
+describe('arraysEqual', () => {
+
+    it('treats two undefineds as equal', () => {
+        expect(arraysEqual(undefined, undefined)).toBe(true);
+    });
+
+    it('returns false when only one side is undefined', () => {
+        expect(arraysEqual([1, 2], undefined)).toBe(false);
+        expect(arraysEqual(undefined, [1, 2])).toBe(false);
+    });
+
+    it('treats two empty arrays as equal', () => {
+        expect(arraysEqual([], [])).toBe(true);
+    });
+
+    it('compares equal number arrays element-wise', () => {
+        expect(arraysEqual([1, 2, 3], [1, 2, 3])).toBe(true);
+    });
+
+    it('compares equal string arrays element-wise', () => {
+        expect(arraysEqual(['a', 'b'], ['a', 'b'])).toBe(true);
+    });
+
+    it('short-circuits on same reference', () => {
+        const a = [1, 2, 3];
+        expect(arraysEqual(a, a)).toBe(true);
+    });
+
+    it('returns false for different lengths', () => {
+        expect(arraysEqual([1, 2], [1, 2, 3])).toBe(false);
+        expect(arraysEqual([1, 2, 3], [1, 2])).toBe(false);
+    });
+
+    it('returns false when number elements differ', () => {
+        expect(arraysEqual([1, 2, 3], [1, 2, 4])).toBe(false);
+    });
+
+    it('returns false when string elements differ', () => {
+        expect(arraysEqual(['a', 'b'], ['a', 'c'])).toBe(false);
+    });
+
+    it('is order-sensitive', () => {
+        expect(arraysEqual([1, 2, 3], [3, 2, 1])).toBe(false);
+    });
+});
+
+describe('deriveNaturalColumnOrder', () => {
+
+    function makeStatusNote(seq: number, status: string | undefined): NoteProps {
+        const note: NoteProps = {
+            seq, level: 1, children_body: [], children: [],
+            position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } },
+            headline_raw: '', body_raw: '',
+        };
+        if (status !== undefined) {
+            note.linetags = { status: { key: 'status', key_offset: 0, value: status, value_offset: 0, linktext_offset: 0, note_seq: seq } };
+        }
+        return note;
+    }
+
+    it('returns just [untagged] for an empty notes list', () => {
+        expect(deriveNaturalColumnOrder([])).toEqual(['untagged']);
+    });
+
+    it('handles undefined input as empty', () => {
+        expect(deriveNaturalColumnOrder(undefined as unknown as NoteProps[])).toEqual(['untagged']);
+    });
+
+    it('returns alphabetical status values with untagged appended', () => {
+        const notes = [
+            makeStatusNote(1, 'doing'),
+            makeStatusNote(2, 'backlog'),
+            makeStatusNote(3, 'done'),
+        ];
+        expect(deriveNaturalColumnOrder(notes)).toEqual(['backlog', 'doing', 'done', 'untagged']);
+    });
+
+    it('deduplicates repeated status values', () => {
+        const notes = [
+            makeStatusNote(1, 'doing'),
+            makeStatusNote(2, 'doing'),
+            makeStatusNote(3, 'done'),
+            makeStatusNote(4, 'doing'),
+        ];
+        expect(deriveNaturalColumnOrder(notes)).toEqual(['doing', 'done', 'untagged']);
+    });
+
+    it('treats notes with no status linetag as belonging to untagged (not synthesised into the status list)', () => {
+        const notes = [
+            makeStatusNote(1, 'doing'),
+            makeStatusNote(2, undefined),
+        ];
+        expect(deriveNaturalColumnOrder(notes)).toEqual(['doing', 'untagged']);
+    });
+
+    it('places untagged last even when a real status sorts after it alphabetically', () => {
+        // 'untagged' alphabetically sorts before 'z*' but the rule pins it last regardless
+        const notes = [
+            makeStatusNote(1, 'zeta'),
+            makeStatusNote(2, 'alpha'),
+        ];
+        expect(deriveNaturalColumnOrder(notes)).toEqual(['alpha', 'zeta', 'untagged']);
     });
 });

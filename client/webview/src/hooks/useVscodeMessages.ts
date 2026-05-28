@@ -1,6 +1,6 @@
 import Debug from 'debug';
 import { useCallback, useEffect, useState } from 'react';
-import { anyViewStateTaggedFolder } from './usePersistedViewStates';
+import { anyViewInFolderMode } from '../notethink-views/src/lib/viewstateops';
 import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { TextSelection } from '../notethink-views/src/types/NoteProps';
@@ -23,11 +23,18 @@ interface VscodeMessagesDeps {
     updateAllViewStates: (updater: (view_state: ViewState) => ViewState) => void;
     view_states_ref: React.MutableRefObject<Record<string, ViewState>>;
     navigation_callback_ref: React.MutableRefObject<((direction: string) => void) | undefined>;
+    markPending: (key: string) => void;
+    clearPending: (key: string) => void;
 }
 
+/**
+ * State exposed by useVscodeMessages: aggregated doc/selection/workspace state distilled from the wire-format messages the extension posts to the webview.
+ * - active_editor_doc_path: path of the doc whose editor most recently emitted a selectionChanged — the closest proxy for "what the user is currently editing" available to the webview, since the extension only sends per-doc selection updates and never an explicit `activeEditor` signal
+ */
 interface VscodeMessagesState {
     docs: HashMapOf<Doc> | undefined;
     selections: SelectionState;
+    active_editor_doc_path: string | undefined;
     workspace_root: string;
     workspace_projects: string[];
     aggregate_total_discovered: number | undefined;
@@ -70,6 +77,12 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
     if (message.type === 'settingsCascade') {
         if (message.settings === null || message.settings === undefined || typeof message.settings !== 'object') {
             debug('discarding settingsCascade message with invalid settings %O', message);
+            return false;
+        }
+    }
+    if (message.type === 'pendingChange') {
+        if (typeof message.key !== 'string' || typeof message.on !== 'boolean') {
+            debug('discarding pendingChange message with invalid key/on %O', message);
             return false;
         }
     }
@@ -118,9 +131,10 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial
 // the message-type string literals ('update', 'selectionChanged', 'command', 'globalSettings', 'settingsCascade') are the on-the-wire contract and must stay exactly as-is
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState {
-    const { postMessage, markConnected, setGlobalSettings, setSettingsCascade, updateAllViewStates, view_states_ref, navigation_callback_ref, saved_view_states } = deps;
+    const { postMessage, markConnected, setGlobalSettings, setSettingsCascade, updateAllViewStates, view_states_ref, navigation_callback_ref, saved_view_states, markPending, clearPending } = deps;
     const [docs_state, setDocsState] = useState<{ docs?: HashMapOf<Doc> }>({ docs: deps.initial_docs || {} });
     const [selections, setSelections] = useState<SelectionState>({});
+    const [active_editor_doc_path, setActiveEditorDocPath] = useState<string | undefined>(undefined);
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
     const [workspace_projects, setWorkspaceProjects] = useState<string[]>([]);
     // folder mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
@@ -136,7 +150,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
             case 'setViewType':
                 updateAllViewStates(view_state => ({ ...view_state, type: message.viewType }));
                 // cascade: if folder mode is currently active, persist the new view type
-                if (anyViewStateTaggedFolder(view_states_ref.current)) {
+                if (anyViewInFolderMode(view_states_ref.current)) {
                     postMessage({ type: 'updateSetting', setting: 'viewType', value: message.viewType });
                 }
                 return;
@@ -163,7 +177,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                     };
                 });
                 // cascade: only showContextBars is in the settings cascade today
-                if (setting_key === 'showContextBars' && anyViewStateTaggedFolder(view_states_ref.current) && next_value !== undefined) {
+                if (setting_key === 'showContextBars' && anyViewInFolderMode(view_states_ref.current) && next_value !== undefined) {
                     postMessage({ type: 'updateSetting', setting: 'showContextBars', value: next_value });
                 }
                 return;
@@ -176,6 +190,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         }
     }, [postMessage, updateAllViewStates, view_states_ref, navigation_callback_ref]);
 
+    // eslint-disable-next-line max-lines-per-function -- onMessage dispatches on every wire-format message type; further decomposition would split the switch across two functions without making the contract clearer (tracked: function-decomposition-wave2)
     const onMessage = useCallback((event: MessageEvent) => {
         const message = event.data;
         // any message from the extension host proves it's alive
@@ -205,6 +220,10 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                     setExcludeFilter(message.excludeFilter);
                 }
                 setDocsState(current => mergeUpdatedDocs(current, message));
+                // a bulk replace update (no merge_strategy) carrying aggregate totals is the apply-filters round-trip echo; clear the filter-edit sentinel so the spinner drops once the new file set has landed
+                if (!message.merge_strategy && typeof message.aggregate_total_discovered === 'number') {
+                    clearPending('integrationFilters');
+                }
                 return;
             case 'docDeleted':
                 // folder mode: drop a single doc by id when the watcher sees a delete
@@ -231,20 +250,39 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                         },
                     },
                 }));
+                // the doc whose selection just changed is the active editor — folder mode's per-doc matcher reads this to scope the caret-to-note resolution
+                setActiveEditorDocPath(message.docPath);
                 return;
             case 'globalSettings':
                 debug('received globalSettings %O', message.settings);
                 setGlobalSettings(message.settings as GlobalSettingsPayload);
+                // echo confirms the global-setting round-trip completed; clear any marks for those keys
+                for (const key of Object.keys((message.settings as GlobalSettingsPayload) ?? {})) {
+                    clearPending(key);
+                }
                 return;
             case 'settingsCascade':
                 debug('received settingsCascade %O', message.settings);
                 setSettingsCascade(message.settings as SettingsCascadePayload);
+                // echo confirms the cascade round-trip completed; clear any marks for each cascade key and the aggregate 'settingsCascade' sentinel
+                clearPending('settingsCascade');
+                for (const key of Object.keys((message.settings as SettingsCascadePayload) ?? {})) {
+                    clearPending(key);
+                }
+                return;
+            case 'pendingChange':
+                debug('received pendingChange key=%s on=%s', message.key, message.on);
+                if (message.on) {
+                    markPending(message.key as string);
+                } else {
+                    clearPending(message.key as string);
+                }
                 return;
             case 'command':
                 handleCommand(message);
                 return;
         }
-    }, [markConnected, setGlobalSettings, setSettingsCascade, handleCommand]);
+    }, [markConnected, setGlobalSettings, setSettingsCascade, handleCommand, markPending, clearPending]);
 
     // listen for messages sent from the extension to the webview
     useEffect(() => {
@@ -283,6 +321,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     return {
         docs: docs_state.docs,
         selections,
+        active_editor_doc_path,
         workspace_root,
         workspace_projects,
         aggregate_total_discovered,

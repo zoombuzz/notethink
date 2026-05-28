@@ -1,4 +1,4 @@
-import { type TransformFunction } from "logform";
+import type { TransformFunction } from "logform";
 import * as util from 'util';
 import * as vscode from 'vscode';
 import * as winston from "winston";

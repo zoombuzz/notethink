@@ -1,7 +1,8 @@
 import Debug from "debug";
 import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNoteHierarchy";
 import { stripHeadlineLinetags } from "./noteops";
-import { buildProjectLabels, hueForProjectIndex, projectNameFromRelativePath } from "../components/notes/OriginPill";
+import { FOLDER_VIEW_STATE_ID } from "./viewstateops";
+import { buildProjectLabels, hueForProjectIndex, projectNameFromRelativePath } from "./originops";
 import { INTEGRATION_MODE_FOLDER } from "../types/IntegrationMode";
 import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NoteProps";
 
@@ -88,10 +89,7 @@ interface CollectedStory {
 // file H1 `order` linetag value: newest stories are appended at the bottom of the file (e.g. done.md)
 const ORDER_NEWEST_AT_BOTTOM = 'newest-at-bottom';
 
-/**
- * canonical viewState key for folder mode. All folder-mode reads and writes use this key so settings (columnOrder, filters, view type, etc.) survive a flip to current_file mode and back.
- */
-export const FOLDER_VIEW_STATE_ID = '__folder__';
+export { FOLDER_VIEW_STATE_ID, anyViewInFolderMode } from "./viewstateops";
 
 /**
  * Select a single file's contributed stories for the merged view: trim to at
@@ -158,11 +156,12 @@ function resolveEpicLinetag(
 
 /**
  * walk a story subtree: assign sequential seqs, rewrite parent_notes/level, stamp
- * origin, and keep linetag.note_seq in sync with the renumbered seq. The story root
- * takes `story_stable_id` verbatim; descendants derive
- * `${story_stable_id}:${relative_offset}` against the story's own start offset so
- * sibling-story insertions elsewhere in the file don't churn their ids. Mutates the
- * notes and `ctx` (seq counter + all_notes list) in place.
+ * origin (including the pre-merge `source_position` copy of `position` so the
+ * editor-caret matcher can resolve folder-mode focus in source-file offsets), and
+ * keep linetag.note_seq in sync with the renumbered seq. The story root takes
+ * `story_stable_id` verbatim; descendants derive `${story_stable_id}:${relative_offset}`
+ * against the story's own start offset so sibling-story insertions elsewhere in the
+ * file don't churn their ids. Mutates the notes and `ctx` (seq counter + all_notes list) in place.
  */
 function walkStorySubtree(
     note: NoteProps,
@@ -176,7 +175,13 @@ function walkStorySubtree(
     note.seq = ctx.next_seq++;
     note.level = new_ancestors.length;
     note.parent_notes = new_ancestors.length ? [...new_ancestors] : undefined;
-    note.origin = origin;
+    // stamp a per-note origin that carries this note's source-file offsets; cloning here keeps cross-note origin shape (doc_id, project_hue, …) shared while source_position varies per-note
+    const source_position = note.position ? {
+        start: { offset: note.position.start.offset, line: note.position.start.line },
+        end: { offset: note.position.end.offset, line: note.position.end.line },
+        end_body: note.position.end_body ? { offset: note.position.end_body.offset, line: note.position.end_body.line } : undefined,
+    } : undefined;
+    note.origin = { ...origin, source_position };
     if (note.linetags) {
         for (const key of Object.keys(note.linetags)) {
             note.linetags[key].note_seq = note.seq;
@@ -394,21 +399,6 @@ export function mergeAggregateRoot(
     (synthetic_root as NoteProps & { integration_path?: string }).integration_path = integration_path;
 
     return { root: synthetic_root, all_notes: ctx.all_notes };
-}
-
-/**
- * helper used by NoteRenderer to detect whether any of the supplied view states has switched to folder aggregation. Exported so tests can exercise it. Checks the canonical FOLDER_VIEW_STATE_ID first, then falls back to a scan for any entry tagged integration_mode='folder' so a stranded doc-path-keyed viewState still resolves to folder mode (legacy rescue — necessary for pre-fix persisted state that never had a canonical entry; the dispatcher's clearing-on-flip is what eventually cleans this up).
- */
-export function anyViewInFolderMode(
-    view_states: Record<string, { display_options?: { integration_mode?: string } }> | undefined,
-): boolean {
-    if (!view_states) { return false; }
-    if (view_states[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER) { return true; }
-    for (const id of Object.keys(view_states)) {
-        if (id === FOLDER_VIEW_STATE_ID) { continue; }
-        if (view_states[id]?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER) { return true; }
-    }
-    return false;
 }
 
 /**

@@ -1,8 +1,10 @@
 import Debug from "debug";
 import { useCallback } from "react";
 import type { MouseEvent } from "react";
-import { calculateTextChangesForCheckbox, resolveCaretPosition } from "../../../lib/noteops";
-import { FOLDER_VIEW_STATE_ID } from "../../../lib/mergeAggregateRoot";
+import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
+import { calculateTextChangesForCheckbox, focusedChainFor, resolveCaretPosition } from "../../../lib/noteops";
+import { isAlreadyFocusedClick } from "../../../lib/noteui";
+import { FOLDER_VIEW_STATE_ID, writeViewInteractionState } from "../../../lib/viewstateops";
 import { INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { ClickPositionInfo, NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
@@ -27,6 +29,7 @@ export function useViewHandlers(
     props: ViewProps,
     selection_ref: React.MutableRefObject<ViewProps['selection']>,
 ): ViewHandlers {
+    const { markPending } = usePendingWorkContext();
     // set up view-level default handlers, overridden by props
     const handlers: ViewApi = Object.assign({
 
@@ -44,6 +47,10 @@ export function useViewHandlers(
                     parent_context_seq: seq,
                 }
             }]);
+        },
+
+        setViewInteractionState: (focused_chain: number[], selected_seqs: number[]) => {
+            writeViewInteractionState(props, handlers, focused_chain, selected_seqs);
         },
 
         click: (event: MouseEvent<HTMLElement>, note: NoteProps, click_profile: ClickPositionInfo) => {
@@ -75,13 +82,15 @@ export function useViewHandlers(
                     debug('checkbox click handler failed: %O', err);
                 }
             } else {
-                // click note to reveal in editor;
-                // read selection from ref to avoid stale closure when memo prevents re-render
+                // click note to reveal in editor; read selection from ref to avoid stale closure when memo prevents re-render
                 const caret_pos = resolveCaretPosition(click_profile, note);
                 const current_head = selection_ref.current?.main.head;
                 const origin_doc_path = note.origin?.doc_path;
+                const focused_chain = focusedChainFor(note);
+                const is_already_focused = isAlreadyFocusedClick(note, caret_pos, current_head);
                 if (event.detail === 2) {
-                    // double-click selects the note immediately
+                    // double-click selects the note immediately; per-view state-of-truth, plus the editor reveal so the cursor follows opportunistically
+                    writeViewInteractionState(props, handlers, focused_chain, [note.seq]);
                     props.handlers?.postMessage?.({
                         type: 'selectRange',
                         from: click_profile.selection_from ?? click_profile.from,
@@ -89,14 +98,16 @@ export function useViewHandlers(
                         docPath: origin_doc_path,
                     });
                 } else if (note.selected) {
-                    // click deselects and returns to focused
+                    // click on an already-selected note returns it to focused (drop selection)
+                    writeViewInteractionState(props, handlers, focused_chain, []);
                     props.handlers?.postMessage?.({
                         type: 'revealRange',
                         from: caret_pos,
                         docPath: origin_doc_path,
                     });
-                } else if (current_head === caret_pos) {
-                    // click focused note to make selected
+                } else if (is_already_focused) {
+                    // click on a focused note promotes it to selected
+                    writeViewInteractionState(props, handlers, focused_chain, [note.seq]);
                     props.handlers?.postMessage?.({
                         type: 'selectRange',
                         from: click_profile.selection_from ?? click_profile.from,
@@ -104,7 +115,8 @@ export function useViewHandlers(
                         docPath: origin_doc_path,
                     });
                 } else {
-                    // click note to make focused
+                    // first click on a different note focuses it (replaces focused set, drops selection)
+                    writeViewInteractionState(props, handlers, focused_chain, []);
                     props.handlers?.postMessage?.({
                         type: 'revealRange',
                         from: caret_pos,
@@ -118,6 +130,8 @@ export function useViewHandlers(
         getClearHandler: (focused_notes: Array<NoteProps> | undefined) => {
             return ((event: MouseEvent<HTMLElement>) => {
                 if (event.stopPropagation) { event.stopPropagation(); }
+                // clear view-driven seqs FIRST so the view-driven-wins policy in useViewContext doesn't override the editor-derived state on the next render
+                writeViewInteractionState(props, handlers, [], []);
                 if (!focused_notes?.length) { return; }
                 const deepest_note = focused_notes[focused_notes.length - 1];
                 if (deepest_note.seq === 0) { return; }
@@ -161,9 +175,18 @@ export function useViewHandlers(
     // expose the same folder-descent gesture on the ViewApi so the origin pill (which only sees note-level handlers) can descend into its project subfolder via the same pipeline the breadcrumb uses
     handlers.descendToFolder = handle_folder_click;
 
-    // persist edited globs + per-file story cap to per-view state (survives reload) and post a background setIntegration so the extension re-discovers the folder set with the new filters
-    // also round-trip each cascading setting to VS Code config via updateSetting so it survives across windows when promoted to default
+    /*
+     * handle_apply_filters — apply the user's edited include/exclude globs + per-file
+     * story cap. Persists them to per-view state (so they survive reload), posts a
+     * background setIntegration so the extension re-discovers the folder set, and
+     * round-trips each cascading setting to VS Code config via updateSetting so they
+     * survive across windows when promoted to default. Marks the 'integrationFilters'
+     * sentinel so the spinner appears if the re-discovery is slow; the aggregate-payload
+     * echo reducer clears it, and the extension emits its own pendingChange for the
+     * folder-discovery sub-step.
+     */
     const handle_apply_filters = useCallback((next_include: string, next_exclude: string, next_max_notes_per_file: number): void => {
+        markPending('integrationFilters');
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
@@ -188,7 +211,7 @@ export function useViewHandlers(
             handlers.postMessage?.({ type: 'updateSetting', setting: 'excludeFilter', value: next_exclude });
             handlers.postMessage?.({ type: 'updateSetting', setting: 'maxNotesPerFile', value: next_max_notes_per_file });
         }
-    }, [handlers, props.id, props.display_options?.integration_path, props.display_options?.integration_mode]);
+    }, [handlers, props.id, props.display_options?.integration_path, props.display_options?.integration_mode, markPending]);
 
     return { handlers, handle_folder_click, handle_apply_filters };
 }

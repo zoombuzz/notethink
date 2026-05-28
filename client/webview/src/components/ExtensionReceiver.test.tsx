@@ -1,7 +1,18 @@
 import React from 'react';
 import { render, screen, act } from '@testing-library/react';
 import Debug from 'debug';
-import ExtensionReceiver from './ExtensionReceiver';
+import ExtensionReceiverImpl from './ExtensionReceiver';
+
+// most tests render the receiver without caring about the pending-work plumbing; inject a no-op api so every render() in the suite stays terse
+const NOOP_PENDING_WORK_API = {
+    pending: false,
+    markPending: jest.fn(),
+    clearPending: jest.fn(),
+    clearAll: jest.fn(),
+};
+function ExtensionReceiver(): React.ReactElement {
+    return <ExtensionReceiverImpl pendingWorkApi={NOOP_PENDING_WORK_API} />;
+}
 
 // mock the debug library so message-validation logging can be asserted (validation logs via the debug
 // instance, not console). the spy is created inside the factory so it exists when the hooks' module-load
@@ -245,6 +256,109 @@ describe('ExtensionReceiver', () => {
         const renderer = screen.getByTestId('NoteRenderer');
         const global_settings = JSON.parse(renderer.getAttribute('data-global-settings') || '{}');
         expect(global_settings.showLineNumbers).toBe(true);
+    });
+
+    describe('pendingChange message', () => {
+        it('routes pendingChange { on: true } to markPending and { on: false } to clearPending', () => {
+            const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
+            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'pendingChange', key: 'folderDiscovery', on: true },
+                }));
+            });
+            expect(api.markPending).toHaveBeenCalledWith('folderDiscovery');
+
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'pendingChange', key: 'folderDiscovery', on: false },
+                }));
+            });
+            expect(api.clearPending).toHaveBeenCalledWith('folderDiscovery');
+        });
+
+        it('discards a pendingChange message with non-string key', () => {
+            const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
+            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'pendingChange', key: 123, on: true },
+                }));
+            });
+            expect(api.markPending).not.toHaveBeenCalled();
+            expect(api.clearPending).not.toHaveBeenCalled();
+        });
+
+        it('discards a pendingChange message with non-boolean on', () => {
+            const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
+            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'pendingChange', key: 'folderDiscovery', on: 'yes' },
+                }));
+            });
+            expect(api.markPending).not.toHaveBeenCalled();
+            expect(api.clearPending).not.toHaveBeenCalled();
+        });
+
+        it('a settingsCascade echo clears every cascade setting key', () => {
+            const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
+            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: {
+                        type: 'settingsCascade',
+                        settings: {
+                            viewType: 'kanban',
+                            columnOrder: [],
+                            includeFilter: '',
+                            excludeFilter: '',
+                            maxNotesPerFile: 10,
+                            showContextBars: true,
+                            hasWorkspaceOverrides: false,
+                        },
+                    },
+                }));
+            });
+            const cleared = api.clearPending.mock.calls.map(c => c[0]);
+            expect(cleared).toEqual(expect.arrayContaining(['settingsCascade', 'viewType', 'columnOrder', 'includeFilter', 'excludeFilter', 'maxNotesPerFile', 'showContextBars']));
+        });
+
+        it('a globalSettings echo clears every global setting key', () => {
+            const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
+            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: {
+                        type: 'globalSettings',
+                        settings: { showLineNumbers: false, watchUnopenedFilesInViewer: true },
+                    },
+                }));
+            });
+            const cleared = api.clearPending.mock.calls.map(c => c[0]);
+            expect(cleared).toEqual(expect.arrayContaining(['showLineNumbers', 'watchUnopenedFilesInViewer']));
+        });
+
+        it('a bulk-replace aggregate update clears the integrationFilters sentinel', () => {
+            const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
+            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+
+            act(() => {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: {
+                        type: 'update',
+                        partial: { docs: { 'doc-1': { id: 'doc-1', path: '/a.md' } } },
+                        aggregate_total_discovered: 1,
+                    },
+                }));
+            });
+            expect(api.clearPending).toHaveBeenCalledWith('integrationFilters');
+        });
     });
 
     it('navigate command invokes callback ref', () => {

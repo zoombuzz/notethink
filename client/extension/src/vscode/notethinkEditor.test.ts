@@ -797,6 +797,50 @@ describe('NotethinkEditorProvider', () => {
 			expect(doc_entries.length).toBe(1);
 			expect(doc_entries[0].path).toBe(defaultDocPath);
 		});
+
+		it('emits a pendingChange { key: folderDiscovery, on: true } before loading and { on: false } after the bulk replace', async () => {
+			const file_a = '/workspace/notes/a.md';
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(mockTextDocument('# a', file_a));
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_a)]);
+
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			while (getUpdates(panelHelper.postedMessages).length < 2) {
+				await new Promise(resolve => setImmediate(resolve));
+			}
+
+			const pending_changes = panelHelper.postedMessages.filter(m => m.type === 'pendingChange');
+			const on_msg = pending_changes.find(m => m.key === 'folderDiscovery' && m.on === true);
+			const off_msg = pending_changes.find(m => m.key === 'folderDiscovery' && m.on === false);
+			expect(on_msg).toBeDefined();
+			expect(off_msg).toBeDefined();
+		});
+
+		it('does NOT emit a pendingChange when the discovered set exactly matches the cached docs (fast path)', async () => {
+			const file_a = '/workspace/notes/a.md';
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(mockTextDocument('# a', file_a));
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_a)]);
+			// pin a stable mtime so the second discoverFolderDocs sees the cached + discovered sets match
+			(vscode.workspace.fs.stat as jest.Mock).mockResolvedValue({ type: 1, ctime: 0, mtime: 12345, size: 0 });
+
+			// first entry: populates integration_docs (also emits a pendingChange on, then off)
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			while (getUpdates(panelHelper.postedMessages).length < 2) {
+				await new Promise(resolve => setImmediate(resolve));
+			}
+
+			// second entry: same path, same files, same mtimes — fast path should skip the pendingChange + skip per-file loads
+			panelHelper.postedMessages.length = 0;
+			(vscode.workspace.openTextDocument as jest.Mock).mockClear();
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			await flush();
+
+			const pending_changes = panelHelper.postedMessages.filter(m => m.type === 'pendingChange');
+			expect(pending_changes).toEqual([]);
+			// fast path: no per-file openTextDocument calls beyond the no-ops; the aggregate payload is sent without reloading
+			const aggregate = panelHelper.postedMessages.find(m => m.type === 'update' && (m as Record<string, unknown>).aggregate_total_discovered !== undefined);
+			expect(aggregate).toBeDefined();
+		});
 	});
 
 	// ---- security: webview path containment ---------------------------------

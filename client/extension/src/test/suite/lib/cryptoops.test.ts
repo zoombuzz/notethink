@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import { generateIdentifier } from '../../../lib/crypto';
+import { generateIdentifier } from '../../../lib/cryptoops';
 
-suite('Crypto Utils', () => {
+suite('Crypto ops', () => {
     test('generates consistent hash for same input', async () => {
         const hash1 = await generateIdentifier('test message');
         const hash2 = await generateIdentifier('test message');

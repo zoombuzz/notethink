@@ -1119,8 +1119,7 @@ body.disableAddressBarHidingOnScroll {
         background: var(--vscode-editor-background);
         border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
         border-radius: 8px;
-        // safety net for residual escapees (rare unbreakable inline element); selection/focus ring uses outline + outline-offset and box-shadow is painted by the element itself, so neither is clipped
-        overflow: hidden;
+        // no overflow: hidden on the card itself — lineno badges use margin-left: -2.2em to extend leftward outside the card by design, and a card-level clip would crop those circular badges. Body content is independently clipped by `.body { overflow: hidden }` below (where the real risk lives — non-reflowable images / diagrams). Selection/focus rings use outline + outline-offset and box-shadow is painted by the element itself, so neither needs the safety net
         user-select: none;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
         transition: box-shadow 200ms ease, transform 150ms ease;

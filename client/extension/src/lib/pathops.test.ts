@@ -1,6 +1,6 @@
-import { isPathWithin } from './pathsafe';
+import { isPathWithin } from './pathops';
 
-describe('pathsafe', () => {
+describe('pathops', () => {
 	describe('isPathWithin()', () => {
 		it('returns true for a path inside a root', () => {
 			expect(isPathWithin('/home/user/ws/notes/todo.md', ['/home/user/ws'])).toBe(true);

@@ -45,6 +45,24 @@ describe('useViewToolbar.handle_integration_change', () => {
         expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file' });
     });
 
+    it('flipping integration mode clears per-view focused/selected interaction state on every persisted view key', () => {
+        const { handlers, set_view_managed_state } = makeHandlers();
+        const display_options: NoteDisplayOptions = { integration_mode: 'folder' };
+        const notes: NoteProps[] = [];
+        const view_state_ids = [FOLDER_VIEW_STATE_ID, '/repo/sub/file.md', '__default'];
+        const { result } = renderHook(() =>
+            useViewToolbar(makeProps({ view_state_ids }), handlers, display_options, notes),
+        );
+        act(() => { result.current.handle_integration_change('current_file'); });
+        const updates = set_view_managed_state.mock.calls[0][0] as Array<Record<string, unknown>>;
+        // every dispatched update carries an explicit undefined for the interaction-state seqs, so the persisted state's stale focused/selected from the previous mode is cleared on the flip
+        for (const update of updates) {
+            const dopts = update.display_options as NoteDisplayOptions;
+            expect(dopts.view_focused_seqs).toBeUndefined();
+            expect(dopts.view_selected_seqs).toBeUndefined();
+        }
+    });
+
     it('flipping to current_file also clears stranded folder tags on every non-canonical viewState key', () => {
         const { handlers, set_view_managed_state } = makeHandlers();
         const display_options: NoteDisplayOptions = { integration_mode: 'folder' };
@@ -78,7 +96,7 @@ describe('useViewToolbar.handle_integration_change', () => {
         }
     });
 
-    it('flipping to folder dispatches only the canonical-key update (no stranded-tag sweep)', () => {
+    it('flipping to folder dispatches the canonical-key integration update plus per-view interaction-state clears (no integration-mode tag sweep)', () => {
         const { handlers, set_view_managed_state, post_message } = makeHandlers();
         const display_options: NoteDisplayOptions = { integration_mode: 'current_file' };
         const notes: NoteProps[] = [];
@@ -88,10 +106,21 @@ describe('useViewToolbar.handle_integration_change', () => {
         );
         act(() => { result.current.handle_integration_change('folder'); });
         const updates = set_view_managed_state.mock.calls[0][0] as Array<Record<string, unknown>>;
-        expect(updates).toHaveLength(1);
-        expect(updates[0].id).toBe(FOLDER_VIEW_STATE_ID);
-        expect((updates[0].display_options as NoteDisplayOptions).integration_mode).toBe('folder');
-        expect((updates[0].display_options as NoteDisplayOptions).integration_path).toBe('/repo/sub');
+        // canonical key sets integration_mode/path + clears interaction state; non-canonical keys clear interaction state only (no integration_mode tag written)
+        const canonical = updates.find((u) => u.id === FOLDER_VIEW_STATE_ID);
+        expect(canonical).toBeDefined();
+        expect((canonical!.display_options as NoteDisplayOptions).integration_mode).toBe('folder');
+        expect((canonical!.display_options as NoteDisplayOptions).integration_path).toBe('/repo/sub');
+        expect((canonical!.display_options as NoteDisplayOptions).view_focused_seqs).toBeUndefined();
+        expect((canonical!.display_options as NoteDisplayOptions).view_selected_seqs).toBeUndefined();
+        // non-canonical key: no integration_mode tag set (no stranded-tag sweep), only interaction-state clearance
+        const non_canonical = updates.find((u) => u.id === '/repo/sub/file.md');
+        expect(non_canonical).toBeDefined();
+        const non_canonical_dopts = non_canonical!.display_options as NoteDisplayOptions;
+        expect(non_canonical_dopts.integration_mode).toBeUndefined();
+        expect(non_canonical_dopts.integration_path).toBeUndefined();
+        expect(non_canonical_dopts.view_focused_seqs).toBeUndefined();
+        expect(non_canonical_dopts.view_selected_seqs).toBeUndefined();
         expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'folder', path: '/repo/sub' });
     });
 

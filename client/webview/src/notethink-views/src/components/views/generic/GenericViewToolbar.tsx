@@ -2,6 +2,7 @@ import Debug from "debug";
 import React from "react";
 import * as l10n from "@vscode/l10n";
 import type { ReactElement } from "react";
+import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import type { NoteDisplayOptions } from "../../../types/NoteProps";
 import type { GlobalSettingKey } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
@@ -10,6 +11,7 @@ import { INTEGRATION_MODE_FOLDER, type IntegrationMode } from "../../../types/In
 import FilesDrawer from "../FilesDrawer";
 import SettingsDocumentDrawer from "../SettingsDocumentDrawer";
 import SettingsKanbanDrawer from "../SettingsKanbanDrawer";
+import Spinner from "../../Spinner";
 import ToolbarDrawer from "../ToolbarDrawer";
 import ViewIntegrationSelector from "../ViewIntegrationSelector";
 import ViewTypeSelector from "../ViewTypeSelector";
@@ -79,6 +81,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         onApplyFilters,
         onCascadeWrite,
     } = component_props;
+    const { pending } = usePendingWorkContext();
     return (
         <>
             <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
@@ -89,6 +92,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                 <div className={master_view_styles.viewToolbarBreadcrumb}>
                     {breadcrumbTrail}
                 </div>
+                {pending && <Spinner positionClass="InlineLoader" ariaLabel={l10n.t('Working')} />}
                 <ViewTypeSelector
                     currentType={(props.nested?.replaced_attributes?.type as string) || props.type}
                     autoResolvedType={autoResolvedType}

@@ -3,10 +3,11 @@ import { type ReactElement, useMemo } from "react";
 import { GenericView } from "../../notethink-views/src/components";
 import { convertMdastToNoteHierarchy } from "../../notethink-views/src/lib/convertMdastToNoteHierarchy";
 import { stampSingleFileStableIds } from "../../notethink-views/src/lib/mergeAggregateRoot";
+import { flattenAllNotes } from "../../notethink-views/src/lib/noteops";
+import { buildViewDisplayOptions } from "../../lib/composerops";
 import { INTEGRATION_MODE_CURRENT_FILE } from "../../notethink-views/src/types/IntegrationMode";
 import type { Doc } from "../../types/general";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
-import type { NoteProps, NoteDisplayOptions } from "../../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../NoteRenderer";
 
 const debug = Debug("nodejs:notethink:NoteTreeComposer");
@@ -38,28 +39,9 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
     const all_notes = flattenAllNotes(root_note);
 
     const view_state = props.viewStates?.[note_id] || props.viewStates?.['__default'];
-    // precedence for every cascading setting below: per-session viewState override > cascade resolved by the extension > webview built-in default. View-type members (columnOrder, showLinetagsInHeadlines, scrollNoteIntoView, autoExpandFocusedNote, showContextBars, viewType) apply universally — a setting changed in folder mode shows up in current_file mode and vice versa
-    const cascade = props.settingsCascade;
-    const viewType = view_state?.type || cascade?.viewType || 'auto';
-    const cascade_column_order = cascade?.columnOrder && cascade.columnOrder.length > 0
-        ? cascade.columnOrder
-        : undefined;
-    const cascade_settings: Record<string, unknown> = {
-        showLineNumbers: props.globalSettings?.showLineNumbers ?? false,
-        watchUnopenedFilesInViewer: props.globalSettings?.watchUnopenedFilesInViewer ?? true,
-        showContextBars: cascade?.showContextBars ?? true,
-    };
-    if (cascade_column_order) { cascade_settings.columnOrder = cascade_column_order; }
     // explicit `current_file` stamp makes the composer the single source of truth for the toolbar selector + breadcrumb (symmetric with FolderTreeComposer's `integration_mode: 'folder'` stamp); without it the toolbar's selector falls back to a hard-coded default and any stale stranded tag on this view's display_options can still register as folder
-    const view_display_options: NoteDisplayOptions = {
-        ...view_state?.display_options,
-        integration_mode: INTEGRATION_MODE_CURRENT_FILE,
-        integration_path: undefined,
-        settings: {
-            ...cascade_settings,
-            ...view_state?.display_options?.settings,
-        },
-    };
+    const { viewType, view_display_options } = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
+    const cascade = props.settingsCascade;
     const view_state_ids = props.viewStates ? Object.keys(props.viewStates) : undefined;
 
     const view_props: ViewProps = {
@@ -77,6 +59,8 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
         },
         notes: all_notes,
         selection,
+        // in current_file mode this view's doc IS the active doc; passing it makes useViewContext's per-doc matcher work uniformly across both modes
+        active_editor_doc_path: note.path,
         handlers: {
             setViewManagedState: props.setViewManagedState || (() => {}),
             deleteViewFromManagedState: () => {},
@@ -100,24 +84,4 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
     };
 
     return <GenericView {...view_props} />;
-}
-
-/**
- * Flatten a NoteProps tree into a flat array (root at index 0, children follow by seq).
- */
-function flattenAllNotes(root: NoteProps): NoteProps[] {
-    const result: NoteProps[] = [root];
-    function walk(items: Array<unknown>): void {
-        for (const item of items) {
-            if (item && typeof item === 'object' && 'seq' in item && typeof (item as NoteProps).seq === 'number' && (item as NoteProps).seq > 0) {
-                const note = item as NoteProps;
-                result.push(note);
-                if (note.children_body?.length) {
-                    walk(note.children_body);
-                }
-            }
-        }
-    }
-    if (root.children_body) { walk(root.children_body); }
-    return result;
 }

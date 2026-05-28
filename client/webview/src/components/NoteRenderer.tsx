@@ -6,6 +6,7 @@ import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { toHast } from "mdast-util-to-hast";
 import { ErrorBoundary } from "../notethink-views/src/components";
 import { anyViewInFolderMode, firstIntegrationPath } from "../notethink-views/src/lib/mergeAggregateRoot";
+import { pickMostRecentlySentDoc } from "../lib/docops";
 import type { Nodes as MdastNodesType } from "mdast";
 import type { HashMapOf, Doc } from "../types/general";
 import type { TextSelection } from "../notethink-views/src/types/NoteProps";
@@ -29,9 +30,14 @@ export function renderNodeUnified(node: MdastNodes): ReactElement {
     }
 }
 
+/**
+ * Props plumbed from ExtensionReceiver into the rendered note/view tree.
+ * - activeEditorDocPath: path of the doc whose editor is currently active (the last `selectionChanged` source); feeds the per-doc matcher in useViewContext so the caret-driven note focus works in folder mode where the rendered tree aggregates many files. Surfaces here in camelCase per the component-props naming rule; the composers translate to ViewProps.active_editor_doc_path at the data-shape boundary
+ */
 export interface NoteRendererProps {
     notes: HashMapOf<Doc>;
     selections?: { [docPath: string]: TextSelection };
+    activeEditorDocPath?: string;
     postMessage?: (message: unknown) => void;
     viewStates?: Record<string, ViewState>;
     setViewManagedState?: (updates: Array<Record<string, unknown>>) => void;
@@ -43,25 +49,6 @@ export interface NoteRendererProps {
     excludeFilter?: string;
     globalSettings?: GlobalSettingsPayload;
     settingsCascade?: SettingsCascadePayload;
-}
-
-/**
- * Pick the most-recently-sent doc from the map (ISO `updateSentAt` lex-compares as
- * chronological). Used in current_file mode to render exactly one composer regardless
- * of how the docs map got populated — a doc stamped by the extension's sendDoc is the
- * one the extension considers active.
- */
-function pickMostRecentlySentDoc(notes: HashMapOf<Doc>): [string, Doc] | undefined {
-    let best_entry: [string, Doc] | undefined;
-    let best_ts = '';
-    for (const entry of Object.entries(notes)) {
-        const ts = entry[1].updateSentAt ?? '';
-        if (!best_entry || ts > best_ts) {
-            best_entry = entry;
-            best_ts = ts;
-        }
-    }
-    return best_entry;
 }
 
 /**
@@ -102,7 +89,7 @@ export default function NoteRenderer(props: NoteRendererProps): ReactElement {
     const active_entry = pickMostRecentlySentDoc(props.notes);
     let rendered_note: ReactElement | null = null;
     if (active_entry) {
-        const [note_id, note] = active_entry;
+        const { note_id, note } = active_entry;
         if (note.content && note.text) {
             rendered_note = <Suspense key={note_id} fallback={<div>Loading...</div>}>
                 <ErrorBoundary onError={handleRenderError}>

@@ -1,7 +1,14 @@
 import Debug from "debug";
 import { useMemo, useRef } from "react";
-import { findDeepestNote, findSelectedNotes, noteOrder } from "../../../lib/noteops";
-import { renderMarkdownNoteHeadline } from "../../../lib/renderops";
+import {
+    findDeepestNote,
+    findDeepestNoteByOriginPosition,
+    findSelectedNotes,
+    findSelectedNotesByOriginPosition,
+    focusedChainFor,
+    noteOrder,
+    resolveFocusedNote,
+} from "../../../lib/noteops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { ViewProps } from "../../../types/ViewProps";
 
@@ -32,8 +39,7 @@ export interface ViewContext {
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useViewContext(props: ViewProps): ViewContext {
-    // ref for current selection - the click handler reads this to avoid stale closures
-    // when MarkdownNote's memo prevents re-render after a selection-only change
+    // ref for current selection — the click handler reads this to avoid stale closures when MarkdownNote's memo prevents re-render after a selection-only change
     const selection_ref = useRef(props.selection);
     selection_ref.current = props.selection;
 
@@ -59,16 +65,6 @@ export function useViewContext(props: ViewProps): ViewContext {
     const parent_context_seq: number = display_options?.parent_context_seq || 0;
     const unparsed_parent_context: NoteProps | undefined = (props.notes || []).at(parent_context_seq);
 
-    useMemo(() => {
-        if (unparsed_parent_context) {
-            return renderMarkdownNoteHeadline(unparsed_parent_context);
-        }
-        return undefined;
-    }, [
-        unparsed_parent_context?.headline_raw,
-        unparsed_parent_context?.body_raw,
-    ]);
-
     // get latest updates: always take the `props` version of `note` attributes
     const parent_context = unparsed_parent_context ? {
         ...unparsed_parent_context,
@@ -87,39 +83,71 @@ export function useViewContext(props: ViewProps): ViewContext {
         rendered_level: display_options.level + 2,
     };
 
-    // look for the deepest note that the caret lies within
-    deepest.note = useMemo(() => {
-        if (props.selection !== undefined) {
-            let caret_pos = props.selection?.main.head;
-            // clamp caret to document bounds - selection may arrive before MDAST re-parse
-            const root_end = props.notes?.[0]?.position?.end?.offset;
-            if (caret_pos !== undefined && root_end !== undefined && caret_pos > root_end) {
-                caret_pos = root_end;
-            }
-            return findDeepestNote(props.notes || [], caret_pos) || parent_context;
+    // editor-derived caret match: in current_file mode the trivial case (every note's origin.doc_path matches the active doc, or no origin is present and offsets are coherent) hits findDeepestNote; in folder mode the per-doc + source_position matcher is required because the merged tree's `position` lives in synthetic merged-tree coordinates
+    const editor_derived_match: NoteProps | undefined = useMemo(() => {
+        if (props.selection === undefined) { return undefined; }
+        const caret_pos = props.selection?.main.head;
+        if (caret_pos === undefined) { return undefined; }
+        // per-doc + source_position matcher: works when the visible tree carries origin.doc_path + origin.source_position (folder mode stamps both during mergeAggregateRoot). Coordinate-coherent: caret_pos is in the source file's offset space, so the same value used here is what was emitted by the editor — no clamping against the merged-tree root needed
+        if (props.active_editor_doc_path) {
+            const by_origin = findDeepestNoteByOriginPosition(props.notes || [], props.active_editor_doc_path, caret_pos);
+            if (by_origin) { return by_origin; }
         }
-        return parent_context;
+        // fallback: in-tree position match (current_file mode where offsets are coherent across the rendered tree)
+        // clamp caret to the rendered root's end so a selection that arrived before the MDAST re-parse still resolves to a note rather than nothing
+        let clamped = caret_pos;
+        const root_end = props.notes?.[0]?.position?.end?.offset;
+        if (root_end !== undefined && clamped > root_end) {
+            clamped = root_end;
+        }
+        return findDeepestNote(props.notes || [], clamped);
     }, [
-        parent_context,
         props.notes,
         props.selection,
+        props.active_editor_doc_path,
+    ]);
+
+    // view-driven state-of-truth: per-view focused_seqs / selected_seqs written by the click dispatcher land on display_options and take precedence over the editor-derived match
+    const view_focused_seqs = display_options.view_focused_seqs;
+    const view_selected_seqs = display_options.view_selected_seqs;
+
+    deepest.note = useMemo(() => {
+        return resolveFocusedNote(view_focused_seqs, props.notes || [], editor_derived_match) || parent_context;
+    }, [
+        view_focused_seqs,
+        parent_context,
+        props.notes,
+        editor_derived_match,
     ]);
 
     if (deepest.note) {
         display_options.focused_notes = (deepest.note.parent_notes || []).concat([deepest.note]);
-        display_options.focused_seqs = display_options.focused_notes.map((note: NoteProps) => note.seq);
+        display_options.focused_seqs = focusedChainFor(deepest.note);
     }
     // pass caret offset so clipped notes can scroll their body to the caret position
     display_options.caret_offset = props.selection?.main.head;
 
-    // find the set of notes within this view that are currently selected (use full notes list so subnotes are included)
+    // find the set of notes within this view that are currently selected; editor-derived range selection wins (per-doc + source_position in folder mode; in-tree in single-file mode); view-driven view_selected_seqs is the immediate-feedback source for the brief window between a view click and the editor's selectionChanged round-trip, and fills in when the editor has no range selection
     display_options.selected_notes = useMemo(() => {
-        if (props.selection?.main.head === undefined || props.selection?.main.anchor === undefined) { return []; }
-        if (props.selection?.main.head === props.selection?.main.anchor) { return []; }
-        return findSelectedNotes(props.notes || [], props.selection);
+        const selection = props.selection;
+        if (selection) {
+            const { head, anchor } = selection.main;
+            if (head !== undefined && anchor !== undefined && head !== anchor) {
+                if (props.active_editor_doc_path) {
+                    return findSelectedNotesByOriginPosition(props.notes || [], props.active_editor_doc_path, head, anchor);
+                }
+                return findSelectedNotes(props.notes || [], selection);
+            }
+        }
+        if (view_selected_seqs?.length) {
+            return (props.notes || []).filter(n => view_selected_seqs.includes(n.seq));
+        }
+        return [];
     }, [
+        view_selected_seqs,
         props.notes,
-        props.selection
+        props.selection,
+        props.active_editor_doc_path,
     ]);
     display_options.selected_seqs = display_options.selected_notes?.map((note: NoteProps) => note.seq) || [];
 

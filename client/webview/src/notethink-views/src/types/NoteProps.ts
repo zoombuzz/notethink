@@ -38,6 +38,9 @@ export interface NoteDisplayOptions {
     selected_notes?: NoteProps[];
     cropped_focused_seqs?: number[];
     cropped_selected_seqs?: number[];
+    // --- per-view interaction state (view-driven, persisted on display_options) ---
+    view_focused_seqs?: number[];
+    view_selected_seqs?: number[];
     integration_mode?: string;
     integration_path?: string;
     includeFilter?: string;
@@ -151,6 +154,7 @@ export interface NoteProps {
  * - file_mtime: on-disk mtime (epoch ms) of the source file at parse time; within a file_rank band, stories from more recently modified files sort first — background edits by another tool (or a save of the file currently open) naturally surface to the top without any explicit "active file" signal
  * - project_hue: pre-computed hue (0-359) for the project pill colour; stamped by mergeAggregateRoot using the project's index in the sorted enumeration of all distinct project names visible in the aggregate, fed through hueForProjectIndex (golden-angle spread) — bypasses the djb2-hash fallback in OriginPill, which can collide for some real-world name pairs
  * - project_label: pre-computed 2-character pill label; stamped by mergeAggregateRoot using buildProjectLabels — the first char is the project's initial, the second is the earliest character that differentiates this project from any other in the aggregate (so notegit→`NG`, notethink→`NT`, countingsheet→`CO`); OriginPill falls back to a single-project first+second-character abbreviation when this is absent (single-file mode, legacy origins)
+ * - source_position: the note's pre-merge offset range in its source file, preserved through mergeAggregateRoot's global seq + position re-numbering so the editor-caret → note-focus derivation can match by source-file offsets in folder mode (where merged `position` is in synthetic merged-tree coordinates and doesn't share a coordinate system with any single editor)
  */
 export interface NoteOrigin {
     doc_id: string;
@@ -165,6 +169,11 @@ export interface NoteOrigin {
     file_mtime?: number;
     project_hue?: number;
     project_label?: string;
+    source_position?: {
+        start: TextPosition;
+        end: TextPosition;
+        end_body?: TextPosition;
+    };
 }
 
 export type MdastNodes = MdastNodesImport;

@@ -153,9 +153,19 @@ export interface SettingsCascadeMessage {
     settings: SettingsCascadePayload;
 }
 
+/**
+ * extension-driven signal that some unit of work the user is waiting on has started or finished. Routed by the webview into the pending-work hook keyed by `key`; the spinner appears via the hook's delay-then-show policy after a short threshold so fast operations don't visibly flash. `key` is opaque (well-known values: 'folderDiscovery'); `on=true` marks pending, `on=false` clears it. Snake_case fields would be consistent with the rest of the wire format but `key`/`on` are short enough (and the camel-case message-type name `pendingChange` matches the existing extension-to-webview message naming convention) that this stays camelCase end-to-end like the settings messages
+ */
+export interface PendingChangeMessage {
+    type: 'pendingChange';
+    key: string;
+    on: boolean;
+}
+
 export type ExtensionToWebviewMessage =
     | UpdateMessage
     | SelectionChangedMessage
     | CommandMessage
     | GlobalSettingsMessage
-    | SettingsCascadeMessage;
+    | SettingsCascadeMessage
+    | PendingChangeMessage;

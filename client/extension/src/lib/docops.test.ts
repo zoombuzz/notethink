@@ -1,6 +1,6 @@
-import { abbrevDoc, getNonce } from './utils';
+import { abbrevDoc } from './docops';
 
-describe('utils', () => {
+describe('docops', () => {
 	describe('abbrevDoc()', () => {
 		it('returns an object with only path and id', () => {
 			const doc = {
@@ -38,25 +38,6 @@ describe('utils', () => {
 			const doc = {};
 			const result = abbrevDoc(doc);
 			expect(result).toEqual({ path: undefined, id: undefined });
-		});
-	});
-
-	describe('getNonce()', () => {
-		it('returns a string', () => {
-			const nonce = getNonce();
-			expect(typeof nonce).toBe('string');
-		});
-
-		it('returns a 48-character hex string (24 bytes)', () => {
-			const nonce = getNonce();
-			expect(nonce).toHaveLength(48);
-			expect(nonce).toMatch(/^[0-9a-f]+$/);
-		});
-
-		it('returns different values on successive calls', () => {
-			const nonce1 = getNonce();
-			const nonce2 = getNonce();
-			expect(nonce1).not.toBe(nonce2);
 		});
 	});
 });

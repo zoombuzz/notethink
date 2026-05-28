@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getNonce } from '../lib/utils';
+import { getNonce } from '../lib/cryptoops';
 import { PanelSession } from './PanelSession';
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {

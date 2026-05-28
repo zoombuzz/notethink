@@ -1,10 +1,10 @@
 # Jest Test Results
-# Version: 0.3.2
-# Date: 2026-05-27T15:44:09Z
-# Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
+# Version: 0.3.4
+# Date: 2026-05-28T16:00:00+01:00
+# Command: pnpm run test-jest
 # ---
 
-> notethink@0.3.2 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> notethink@0.3.4 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
 
@@ -12,40 +12,45 @@
 > jest --config jest.config.cjs --forceExit
 
 
-Test Suites: 7 passed, 7 total
-Tests:       169 passed, 169 total
-Snapshots:   0 total
-Time:        2.45 s
-Ran all test suites.
+[1mTest Suites: [22m[1m[32m8 passed[39m[22m, 8 total
+[1mTests:       [22m[1m[32m176 passed[39m[22m, 176 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        2.468 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
 > notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
 > jest --config jest.config.cjs --forceExit
 
 
-Test Suites: 4 passed, 4 total
-Tests:       39 passed, 39 total
-Snapshots:   0 total
-Time:        0.624 s, estimated 1 s
-Ran all test suites.
+[1mTest Suites: [22m[1m[32m7 passed[39m[22m, 7 total
+[1mTests:       [22m[1m[32m77 passed[39m[22m, 77 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        0.775 s, estimated 1 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
 > @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
 > jest --config jest.config.cjs --forceExit
 
-Test Suites: 29 passed, 29 total
-Tests:       542 passed, 542 total
-Snapshots:   0 total
-Time:        2.963 s, estimated 3 s
-Ran all test suites.
+[33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
+
+[1mTest Suites: [22m[1m[32m39 passed[39m[22m, 39 total
+[1mTests:       [22m[1m[32m678 passed[39m[22m, 678 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        [1m[33m3.049 s[39m[22m
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
-┌──────────────────┬───────┬────────┬────────┬─────────┐
-│ Suite            │ Files │ Passed │ Failed │ Time    │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     7 │    169 │      0 │  2.45 s │
-│ webview          │     4 │    39  │      0 │ 0.624 s │
-│ notethink-views  │    29 │    542 │      0 │ 2.963 s │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    40 │    750 │      0 │         │
-└──────────────────┴───────┴────────┴────────┴─────────┘
+[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
+[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+│ extension        │     8 │ [32m   176[0m │ [2m     0[0m │ 2.468 s │
+│ webview          │     7 │ [32m    77[0m │ [2m     0[0m │ 0.775 s │
+│ notethink-views  │    39 │ [32m   678[0m │ [2m     0[0m │ 3.049 s │
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+[1m│ TOTAL            │    54 │[0m [32m   931[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

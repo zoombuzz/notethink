@@ -1,6 +1,6 @@
 import type { MouseEvent } from 'react';
 import type { NoteProps, ClickPositionInfo } from '../types/NoteProps';
-import { extractOffsetFromClickTarget, countTextCharsUpTo, findCharAtPoint, refineOffsetWithSelection, createNoteClickHandler, bodyClickPosition, headlineClickPosition } from './noteui';
+import { extractOffsetFromClickTarget, countTextCharsUpTo, findCharAtPoint, refineOffsetWithSelection, createNoteClickHandler, bodyClickPosition, headlineClickPosition, isAlreadyFocusedClick } from './noteui';
 
 function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
     return {
@@ -359,5 +359,31 @@ describe('createNoteClickHandler - offset-aware clicks', () => {
         expect(captured_position?.from).toBe(60);
         expect(captured_position?.selection_from).toBe(selectable.position.start.offset);
         expect(captured_position?.selection_to).toBe(selectable.position.end_body?.offset);
+    });
+});
+
+describe('isAlreadyFocusedClick', () => {
+    it('returns true via the editor-derived signal when current_head matches caret_pos (sub-heading of focused parent re-focuses)', () => {
+        // editor confirmed selection at the same offset as the click → editor-derived match wins regardless of view-side note.focused
+        const note = makeNote({ focused: false, position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 }, end_body: { offset: 50, line: 5 } } });
+        expect(isAlreadyFocusedClick(note, 25, 25)).toBe(true);
+    });
+
+    it('returns true via the view-derived signal on a headline click of an already-focused note (folder-mode fallback)', () => {
+        // editor hasn't confirmed (no current_head) but the note is view-focused and the click lands at headline start → view-derived match
+        const note = makeNote({ focused: true, position: { start: { offset: 100, line: 1 }, end: { offset: 110, line: 1 }, end_body: { offset: 200, line: 5 } } });
+        expect(isAlreadyFocusedClick(note, 100, undefined)).toBe(true);
+    });
+
+    it('returns false when the view-focused click lands on a sub-heading or body, not the note headline start', () => {
+        // gated on caret_pos === position.start.offset so sub-heading / body clicks still trigger revealRange, not promote to selected
+        const note = makeNote({ focused: true, position: { start: { offset: 100, line: 1 }, end: { offset: 110, line: 1 }, end_body: { offset: 200, line: 5 } } });
+        expect(isAlreadyFocusedClick(note, 150, undefined)).toBe(false);
+    });
+
+    it('returns false when the note is not focused and the editor has not confirmed the position', () => {
+        const note = makeNote({ focused: false, position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 }, end_body: { offset: 50, line: 5 } } });
+        expect(isAlreadyFocusedClick(note, 5, 10)).toBe(false);
+        expect(isAlreadyFocusedClick(note, 5, undefined)).toBe(false);
     });
 });

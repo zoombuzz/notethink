@@ -1,54 +1,18 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from '../constants';
-import { generateIdentifier } from '../lib/crypto';
+import { generateIdentifier } from '../lib/cryptoops';
+import { type TextChange, firstInvalidChange, logEditTextChanges } from '../lib/editops';
 import { debug, writeToLog, writeToErrorLog } from '../lib/errorops';
 import { globMatches } from '../lib/globMatch';
 import { parse } from '../lib/parseops';
-import { isPathWithin } from '../lib/pathsafe';
+import { isPathWithin, isWithinWorkspace } from '../lib/pathops';
 import { SETTINGS, type SettingKey, isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, cascadeKeys, buildSettingsCascadePayload } from '../lib/settings';
 import type { HashMapOf, Doc } from '../types/general';
 
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
-
-interface TextChange {
-	from: number;
-	to?: number;
-	insert: string;
-}
-
-// bridge isPathWithin to the live workspace: roots come from vscode.workspace.workspaceFolders so the pure helper stays vscode-free and unit-testable
-function isWithinWorkspace(target_path: string, options?: { requireExtension?: string }): boolean {
-	const root_paths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
-	return isPathWithin(target_path, root_paths, options);
-}
-
-/**
- * find the first change whose offsets fall outside [0, doc_length] or have from > to.
- * Returns that change for logging, or null when every change is valid.
- */
-function firstInvalidChange(changes: Array<TextChange>, doc_length: number): TextChange | null {
-	for (const change of changes) {
-		const to = change.to ?? change.from;
-		if (change.from < 0 || to < 0 || change.from > doc_length || to > doc_length || change.from > to) {
-			return change;
-		}
-	}
-	return null;
-}
-
-/**
- * audit-log each pending change with ±10 chars of surrounding context before it is applied.
- */
-function logEditTextChanges(document: vscode.TextDocument, doc_path: string, changes: Array<TextChange>): void {
-	writeToLog('editText', `${changes.length} changes on ${doc_path} (len=${document.getText().length})`);
-	for (const change of changes) {
-		const ctx = document.getText().slice(Math.max(0, change.from - 10), (change.to ?? change.from) + 10);
-		writeToLog('editText', `from=${change.from} to=${change.to} insert="${change.insert}" ctx="${ctx}"`);
-	}
-}
 
 /**
  * apply changes to a document end-to-start so earlier offsets stay valid. Prefers an
@@ -617,6 +581,9 @@ export class PanelSession {
 				this.integration_watcher.dispose();
 				this.integration_watcher = undefined;
 			}
+			// snapshot the previous integration_docs so the fast-path detection in discoverFolderDocs can compare against it
+			// clearing the live cache up front would break that check — preserve the entries until discoverFolderDocs decides whether to keep or replace them
+			const previous_docs = { ...this.integration_docs };
 			for (const key of Object.keys(this.integration_docs)) { delete this.integration_docs[key]; }
 			this.integration_path = folder_path;
 			// resolve filters BEFORE discovery so we never load a wider set than the user actually wants — the workspace cascade is the source of truth, and an explicit message field overrides on top
@@ -624,7 +591,7 @@ export class PanelSession {
 			// recompute the workspace project universe AFTER filters are resolved so the exclude pattern is current; webview uses this list to stabilise pill labels + hues across folder descents
 			await this.computeWorkspaceProjects();
 			const pattern = new vscode.RelativePattern(vscode.Uri.file(folder_path), this.integration_include);
-			await this.discoverFolderDocs(pattern, folder_path);
+			await this.discoverFolderDocs(pattern, folder_path, previous_docs);
 			this.armFolderWatcher(pattern);
 		} catch (err) {
 			writeToErrorLog('setIntegration folder failed', folder_path, err);
@@ -684,8 +651,15 @@ export class PanelSession {
 	 * phase 1: discover and load in parallel; each file streams its own merge update
 	 * as it completes so a slow file never blocks the others. After all settle, a
 	 * replace update ships the canonical map, pruning stale docs from a saved session.
+	 *
+	 * Fast-path detection: stat each discovered URI and compare the {path, mtime} set
+	 * against integration_docs. When they match exactly (no new files, no missing files,
+	 * no mtime changes — typical for a breadcrumb re-enter, an integration-mode toggle,
+	 * or a filter edit that doesn't change the result set), skip the per-file reload
+	 * AND skip the pendingChange emit. The aggregated payload still ships so the webview
+	 * re-runs its merge with the cached docs.
 	 */
-	private async discoverFolderDocs(pattern: vscode.RelativePattern, folder_path: string): Promise<void> {
+	private async discoverFolderDocs(pattern: vscode.RelativePattern, folder_path: string, previous_docs: HashMapOf<Doc>): Promise<void> {
 		// an empty exclude becomes null so findFiles applies no exclusions at all; the default skips derived/dependency dirs and overrides files.exclude/search.exclude
 		const find_exclude = this.integration_exclude.trim() === '' ? null : this.integration_exclude;
 		const discovered = await vscode.workspace.findFiles(pattern, find_exclude);
@@ -701,22 +675,65 @@ export class PanelSession {
 		if (this.integration_truncated) {
 			writeToLog('setIntegration folder cap hit', `discovered ${this.integration_total_discovered}, loading first ${MAX_AGGREGATE_FILES} of ${folder_path}`);
 		}
+		const cache_hit = await this.discoveredSetMatchesCache(uris, previous_docs);
+		if (cache_hit) {
+			debug('setIntegration folder: fast-path — discovered set matches cached docs, skipping reload');
+			// restore the previous integration_docs so the aggregate payload below carries the cached map (enterFolderMode cleared the live cache before discovery)
+			for (const [id, doc] of Object.entries(previous_docs)) { this.integration_docs[id] = doc; }
+			this.sendAggregatePayload();
+			return;
+		}
+		// signal the webview that real work has started — only when there's actual loading to do; the fast path above skips this so the spinner never flashes on a no-op breadcrumb click
+		this.sendPendingChange('folderDiscovery', true);
 		// arrow wrapper isolates loadFolderDoc from .map's (value, index, array) trio so the index does not collide with the opts argument
 		const load_promises = uris.map(uri => this.loadFolderDoc(uri));
 		Promise.allSettled(load_promises).then(() => {
 			debug('setIntegration folder: load complete, %d docs', Object.keys(this.integration_docs).length);
-			this.webviewPanel.webview.postMessage({
-				type: 'update',
-				partial: { docs: this.integration_docs },
-				workspace_root: this.workspace_root,
-				workspace_projects: this.workspace_projects,
-				extension_version: this.extension_version,
-				aggregate_total_discovered: this.integration_total_discovered,
-				aggregate_truncated: this.integration_truncated,
-				include_filter: this.integration_include,
-				exclude_filter: this.integration_exclude,
-			});
+			this.sendAggregatePayload();
+			this.sendPendingChange('folderDiscovery', false);
 		});
+	}
+
+	/**
+	 * stat each discovered URI and check whether the {path, mtime} set exactly matches
+	 * the previous integration_docs snapshot. Returns false on any difference (missing,
+	 * new, or mtime-changed file) and on any stat failure (treat as "uncertain — reload").
+	 */
+	private async discoveredSetMatchesCache(uris: vscode.Uri[], previous_docs: HashMapOf<Doc>): Promise<boolean> {
+		const cached_entries = Object.values(previous_docs);
+		if (cached_entries.length !== uris.length) { return false; }
+		const cached_by_path = new Map<string, number | undefined>();
+		for (const doc of cached_entries) { cached_by_path.set(doc.path, doc.mtime); }
+		for (const uri of uris) {
+			const cached_mtime = cached_by_path.get(uri.path);
+			if (cached_mtime === undefined) { return false; }
+			try {
+				const st = await vscode.workspace.fs.stat(uri);
+				if (st.mtime !== cached_mtime) { return false; }
+			} catch (err) {
+				debug('discoveredSetMatchesCache: stat failed for %s: %O', uri.path, err);
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private sendAggregatePayload(): void {
+		this.webviewPanel.webview.postMessage({
+			type: 'update',
+			partial: { docs: this.integration_docs },
+			workspace_root: this.workspace_root,
+			workspace_projects: this.workspace_projects,
+			extension_version: this.extension_version,
+			aggregate_total_discovered: this.integration_total_discovered,
+			aggregate_truncated: this.integration_truncated,
+			include_filter: this.integration_include,
+			exclude_filter: this.integration_exclude,
+		});
+	}
+
+	private sendPendingChange(key: string, on: boolean): void {
+		this.webviewPanel.webview.postMessage({ type: 'pendingChange', key, on });
 	}
 
 	/**

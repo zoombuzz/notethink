@@ -1,6 +1,7 @@
 import Debug from "debug";
 import { useCallback, useEffect } from "react";
 import type { MouseEvent, MutableRefObject } from "react";
+import { focusedChainFor, navigateToNeighbour } from "../../../lib/noteops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { ViewApi } from "../../../types/ViewProps";
 
@@ -20,7 +21,6 @@ export interface ViewNavigationInput {
  * ExtensionReceiver can invoke it. Handles clearFocus / up / down / drillIn /
  * drillOut by posting reveal messages or adjusting the parent context seq.
  */
-// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useViewNavigation(input: ViewNavigationInput): void {
     const {
         display_options,
@@ -43,29 +43,14 @@ export function useViewNavigation(input: ViewNavigationInput): void {
                 }
                 break;
             }
-            case 'up': {
-                if (!notes_within_parent_context?.length) {break;}
-                const deepest_focused_seq = focused_seqs.length > 0 ? focused_seqs[focused_seqs.length - 1] : -1;
-                const current_index = notes_within_parent_context.findIndex(n => n.seq === deepest_focused_seq);
-                const prev_index = current_index > 0 ? current_index - 1 : 0;
-                const target_note = notes_within_parent_context[prev_index];
-                if (target_note) {
-                    // postMessage directly so we can attach the origin doc path in folder mode
-                    handlers.postMessage?.({
-                        type: 'revealRange',
-                        from: target_note.position.start.offset,
-                        docPath: target_note.origin?.doc_path,
-                    });
-                }
-                break;
-            }
+            case 'up':
             case 'down': {
-                if (!notes_within_parent_context?.length) {break;}
-                const deepest_focused_seq = focused_seqs.length > 0 ? focused_seqs[focused_seqs.length - 1] : -1;
-                const current_index = notes_within_parent_context.findIndex(n => n.seq === deepest_focused_seq);
-                const next_index = current_index < notes_within_parent_context.length - 1 ? current_index + 1 : current_index;
-                const target_note = notes_within_parent_context[next_index];
+                const step: -1 | 1 = direction === 'up' ? -1 : 1;
+                const target_note = navigateToNeighbour(notes_within_parent_context, focused_seqs, step);
                 if (target_note) {
+                    // write view-driven seqs so view focus moves under view-driven-wins policy; postMessage drives the editor in parallel and attaches origin doc path for folder mode
+                    const target_chain = focusedChainFor(target_note);
+                    handlers.setViewInteractionState?.(target_chain, []);
                     handlers.postMessage?.({
                         type: 'revealRange',
                         from: target_note.position.start.offset,

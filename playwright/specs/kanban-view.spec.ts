@@ -80,16 +80,12 @@ test.describe('Kanban View', () => {
         await expect(card).toBeVisible();
         await expect(headline).toBeVisible();
 
-        // bounding-box check: the headline's right edge must not cross the card's right edge — proves wrap is doing its job (and the crop would mask any residual)
+        // bounding-box check: the headline's right edge must not cross the card's right edge — proves wrap is doing its job on its own (the card no longer has overflow:hidden as a safety-net crop; that was lifted intentionally so the lineno badge can extend leftward outside the card by design, see ViewRenderer.module.scss kanban-card rule)
         const card_box = await card.boundingBox();
         const headline_box = await headline.boundingBox();
         expect(card_box).not.toBeNull();
         expect(headline_box).not.toBeNull();
         // allow 1px of sub-pixel rounding tolerance
         expect(headline_box!.x + headline_box!.width).toBeLessThanOrEqual(card_box!.x + card_box!.width + 1);
-
-        // computed style check on the card: overflow:hidden is in place as the safety-net crop
-        const card_overflow = await card.evaluate(el => getComputedStyle(el).overflow);
-        expect(card_overflow).toBe('hidden');
     });
 });

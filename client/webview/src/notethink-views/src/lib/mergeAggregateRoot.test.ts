@@ -424,6 +424,66 @@ describe('mergeAggregateRoot', () => {
         expect((root as { integration_path?: string }).integration_path).toBe('/repo/active_development');
     });
 
+    it('stamps origin.source_position on every merged story carrying its pre-merge source-file offsets', () => {
+        // file_a: # Todo (0-6) \n ### Story A (7-18) \n ### Story B (19-30) \n
+        const docA = simpleFile('id-a', 'a/todo.md', 'Todo', ['Story A', 'Story B']);
+        // file_b: # Other (0-7) \n ### Only (8-16) \n
+        const docB = simpleFile('id-b', 'b/todo.md', 'Other', ['Only']);
+        const { root, all_notes } = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB }, '/repo/');
+        // every merged note (apart from the synthetic root) carries origin.source_position equal to the note's pre-merge position
+        for (const note of all_notes.slice(1)) {
+            const sp = note.origin?.source_position;
+            expect(sp).toBeDefined();
+            expect(sp!.start.offset).toBe(note.position.start.offset);
+            expect(sp!.end.offset).toBe(note.position.end.offset);
+        }
+        // sanity: spot-check a known story by headline against the pre-parse offset
+        const story_a = root.child_notes!.find(n => n.headline_raw === '### Story A');
+        expect(story_a?.origin?.source_position?.start.offset).toBe(7);
+    });
+
+    it('source_position survives the global seq renumbering — it carries source-file offsets, not merged-tree offsets', () => {
+        const docA = simpleFile('id-a', 'a/todo.md', 'A', ['A1']);
+        const docB = simpleFile('id-b', 'b/todo.md', 'B', ['B1']);
+        // round-robin interleaves stories — A1 first (file a sorts ahead), then B1
+        const { all_notes } = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB }, '/repo/');
+        const a1 = all_notes.find(n => n.headline_raw === '### A1')!;
+        const b1 = all_notes.find(n => n.headline_raw === '### B1')!;
+        // both stories carry their own pre-merge offsets (which happen to coincide because both files have the same H1 length); the seqs are globally renumbered but source_position is not
+        expect(a1.origin?.source_position?.start.offset).toBe(a1.position.start.offset);
+        expect(b1.origin?.source_position?.start.offset).toBe(b1.position.start.offset);
+        // global seq renumbering puts a1 at seq=1, b1 at seq=2 — source_position is unaffected
+        expect(a1.seq).toBe(1);
+        expect(b1.seq).toBe(2);
+    });
+
+    it('source_position is preserved per-note on descendants too', () => {
+        // story with a sub-bullet child — both story root and the descendant need source_position
+        const text = '# Todo\n### Story A\n+ sub bullet\n';
+        const h1_end = 6;
+        const h3_start = h1_end + 1;
+        const h3_text = '### Story A';
+        const h3_end = h3_start + h3_text.length;
+        const list_start = h3_end + 1;
+        const list_end = list_start + '+ sub bullet'.length;
+        const children: MdastNode[] = [
+            mdastNode('heading', 0, h1_end, { depth: 1 }),
+            mdastNode('heading', h3_start, h3_end, { depth: 3 }),
+            mdastNode('list', list_start, list_end, {
+                children: [mdastNode('listItem', list_start, list_end)],
+            }),
+        ];
+        const doc = makeDoc('id-desc', 'x/todo.md', text, children);
+        const { all_notes } = mergeAggregateRoot({ 'id-desc': doc }, '/repo/');
+        // every walked note (after the synthetic root) carries source_position
+        for (const note of all_notes.slice(1)) {
+            expect(note.origin?.source_position).toBeDefined();
+        }
+        // the descendant's source_position points at the sub-bullet, not the story
+        const sub = all_notes.find(n => n.position.start.offset === list_start);
+        expect(sub?.origin?.source_position?.start.offset).toBe(list_start);
+    });
+
     it('stamps origin.project_label using the aggregate divergence rule', () => {
         const docNg = simpleFile('id-ng', 'notegit/todo.md', 'Notegit', ['Ng1']);
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);

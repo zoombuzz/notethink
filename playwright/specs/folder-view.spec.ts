@@ -50,7 +50,7 @@ test.describe('Aggregate (Folder) view', () => {
         expect(project_attrs).toEqual(expect.arrayContaining(['oma', 'oma', 'notegit', 'notegit']));
     });
 
-    test('click on an origin pill descends the folder root to the project subfolder', async ({ page }) => {
+    test('click on an origin pill descends the folder root to the project subfolder AND opens the clicked story in the editor', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
@@ -62,7 +62,7 @@ test.describe('Aggregate (Folder) view', () => {
         // clear any messages from the mode-switch handshake
         await page.evaluate(() => { (window as unknown as { __captured_messages: unknown[] }).__captured_messages = []; });
 
-        // click the first oma origin pill — should descend the folder root to `${WORKSPACE_ROOT}/oma`, via the same setIntegration pipeline the breadcrumb uses (no revealRange)
+        // click the first oma origin pill — pill click is ADDITIVE: descend the folder root to `${WORKSPACE_ROOT}/oma` via setIntegration AND open the clicked story in the editor via revealRange (the underlying headline click fires alongside the descend because the pill no longer stopPropagates)
         const pill = page.locator('[data-testid="origin-project-pill"][data-project="oma"]').first();
         await expect(pill).toBeVisible({ timeout: 5000 });
         await pill.click({ force: true });
@@ -76,12 +76,14 @@ test.describe('Aggregate (Folder) view', () => {
             { timeout: 5000 }
         ).toBe(`${WORKSPACE_ROOT}/oma`);
 
-        // pill click should NOT post a revealRange — that path was dropped when the pill became a navigation lever
-        const reveal_count = await page.evaluate(() => {
-            const msgs = (window as unknown as { __captured_messages: Array<{ type?: string }> }).__captured_messages;
-            return msgs.filter((m) => m.type === 'revealRange').length;
-        });
-        expect(reveal_count).toBe(0);
+        // pill click ALSO posts a revealRange routed to the clicked story's source doc — the headline click fires after the pill click via event bubbling
+        await expect.poll(async () =>
+            await page.evaluate(() => {
+                const msgs = (window as unknown as { __captured_messages: Array<{ type?: string; docPath?: string }> }).__captured_messages;
+                return msgs.find((m) => m.type === 'revealRange')?.docPath;
+            }),
+            { timeout: 5000 }
+        ).toBe(`${WORKSPACE_ROOT}/oma/docstech/todo.md`);
     });
 
     test('breadcrumb segment click in folder mode sends setIntegration', async ({ page }) => {

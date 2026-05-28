@@ -4,10 +4,11 @@ import { GenericView } from "../../notethink-views/src/components";
 import { mergeAggregateRoot, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from "../../notethink-views/src/lib/mergeAggregateRoot";
 import { INTEGRATION_MODE_FOLDER } from "../../notethink-views/src/types/IntegrationMode";
 import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE } from "../../constants";
+import { buildViewDisplayOptions } from "../../lib/composerops";
 import type { ReactElement } from "react";
 import type { HashMapOf, Doc } from "../../types/general";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
-import type { NoteDisplayOptions } from "../../notethink-views/src/types/NoteProps";
+import type { TextSelection } from "../../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../NoteRenderer";
 
 const debug = Debug("nodejs:notethink:FolderTreeComposer");
@@ -69,25 +70,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
         const { root, all_notes } = mergeAggregateRoot(input, integration_path, maxNotesPerFile, workspace_projects);
         return { merged_root: root, all_notes };
     }, [merge_key, integration_path, maxNotesPerFile, workspace_projects_key]);
-    const viewType = view_state?.type || cascade?.viewType || 'auto';
-    const cascade_column_order = cascade?.columnOrder && cascade.columnOrder.length > 0
-        ? cascade.columnOrder
-        : undefined;
-    const cascade_settings: Record<string, unknown> = {
-        showLineNumbers: props.globalSettings?.showLineNumbers ?? false,
-        watchUnopenedFilesInViewer: props.globalSettings?.watchUnopenedFilesInViewer ?? true,
-        showContextBars: cascade?.showContextBars ?? true,
-    };
-    if (cascade_column_order) { cascade_settings.columnOrder = cascade_column_order; }
-    const view_display_options: NoteDisplayOptions = {
-        ...view_state?.display_options,
-        integration_mode: INTEGRATION_MODE_FOLDER,
-        integration_path,
-        settings: {
-            ...cascade_settings,
-            ...view_state?.display_options?.settings,
-        },
-    };
+    const { viewType, view_display_options } = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_FOLDER, integration_path);
 
     // number of source files actually loaded into the merged view (the breadcrumb shows this)
     const file_count = Object.keys(docs).length;
@@ -107,6 +90,10 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
 
     const view_state_ids = props.viewStates ? Object.keys(props.viewStates) : undefined;
 
+    // pass the active editor's doc path + its current selection: the per-doc matcher in useViewContext uses these to find which merged note the editor caret currently sits inside
+    const active_editor_doc_path = props.activeEditorDocPath;
+    const active_selection: TextSelection | undefined = active_editor_doc_path ? props.selections?.[active_editor_doc_path] : undefined;
+
     const view_props: ViewProps = {
         id: view_state_id,
         type: viewType,
@@ -125,7 +112,8 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
             parent_context: merged_root,
         },
         notes: all_notes,
-        selection: undefined,
+        selection: active_selection,
+        active_editor_doc_path,
         handlers: {
             setViewManagedState: props.setViewManagedState || (() => {}),
             deleteViewFromManagedState: () => {},

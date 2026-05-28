@@ -1,6 +1,6 @@
 import Debug from "debug";
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
-import { findFirstIncompleteTaskSeq } from "../../../lib/noteops";
+import { findBodyItemElement, findFirstIncompleteTaskSeq } from "../../../lib/noteops";
 import type { MdastNode, NoteProps } from "../../../types/NoteProps";
 
 const debug = Debug("nodejs:notethink-views:useMarkdownNoteBodyScroll");
@@ -92,7 +92,7 @@ export function useMarkdownNoteBodyScroll(args: UseMarkdownNoteBodyScrollArgs): 
             return;
         }
         if (caret_offset === undefined) { return; }
-        const target_el = findCaretTargetElement(el, caret_offset);
+        const target_el = findBodyItemElement(el, caret_offset);
         if (!target_el) { return; }
         const body_rect = el.getBoundingClientRect();
         const target_rect = target_el.getBoundingClientRect();
@@ -103,21 +103,4 @@ export function useMarkdownNoteBodyScroll(args: UseMarkdownNoteBodyScrollArgs): 
         applyBodyScroll(Math.max(0, target_offset_in_body - FADE_TOP_PX));
     }, [should_clip, focused, caret_offset]);
     return { scrolled_top, at_bottom };
-}
-
-/**
- * locate the deepest body-item element whose offset range contains caret_offset.
- * Walks candidates in reverse so the innermost match wins when ranges nest.
- */
-function findCaretTargetElement(body_el: HTMLElement, caret_offset: number): HTMLElement | undefined {
-    const candidates = body_el.querySelectorAll<HTMLElement>('[data-offset-start]');
-    for (let i = candidates.length - 1; i >= 0; --i) {
-        const el = candidates[i];
-        const start = Number(el.dataset.offsetStart);
-        const end = Number(el.dataset.offsetEnd);
-        if (!isNaN(start) && !isNaN(end) && caret_offset >= start && caret_offset <= end) {
-            return el;
-        }
-    }
-    return undefined;
 }

@@ -235,6 +235,27 @@ export function createNoteClickHandler(
 }
 
 /**
+ * "Is this click landing on a note that's already focused, at the same exact position?"
+ * — the canonical second-click trigger for promoting a focused note to selected. Two
+ * complementary signals are OR'd:
+ *
+ * - `current_head === caret_pos` (editor-derived): matches the legacy behaviour where
+ *   clicking on a sub-heading of the focused parent re-focuses (different offset)
+ *   rather than promoting to selected. Works when the editor confirms the focus via a
+ *   selectionChanged round-trip.
+ * - `note.focused && caret_pos === note.position.start.offset` (view-derived): the
+ *   folder-mode fallback for when the editor selection may never confirm (the clicked
+ *   note's source file may not be the active editor). Gated on the click landing on
+ *   the note's own headline start, so sub-heading / body clicks still trigger
+ *   revealRange instead of promoting.
+ */
+export function isAlreadyFocusedClick(note: NoteProps, caret_pos: number, current_head: number | undefined): boolean {
+    const is_focused_same_position = current_head !== undefined && current_head === caret_pos;
+    const is_view_focused_headline_click = note.focused === true && caret_pos === note.position.start.offset;
+    return is_focused_same_position || is_view_focused_headline_click;
+}
+
+/**
  * Build display_options for a GenericNote rendered inside a view (DocumentView, KanbanView).
  */
 export function buildChildNoteDisplayOptions(

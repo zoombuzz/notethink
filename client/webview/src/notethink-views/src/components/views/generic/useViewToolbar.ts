@@ -1,7 +1,8 @@
 import Debug from "debug";
 import { useCallback, useMemo } from "react";
-import { FOLDER_VIEW_STATE_ID } from "../../../lib/mergeAggregateRoot";
-import { arraysEqual, deriveNaturalColumnOrder } from "../../../lib/columnorder";
+import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
+import { FOLDER_VIEW_STATE_ID } from "../../../lib/viewstateops";
+import { arraysEqual, deriveNaturalColumnOrder } from "../../../lib/noteops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { GlobalSettingKey } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
@@ -36,33 +37,45 @@ export function useViewToolbar(
     display_options: NoteDisplayOptions,
     notes_within_parent_context: Array<NoteProps>,
 ): ViewToolbar {
+    const { markPending } = usePendingWorkContext();
     // integration mode (current_file vs folder)
     const integration_mode: IntegrationMode = (props.display_options?.integration_mode as IntegrationMode) || INTEGRATION_MODE_CURRENT_FILE;
 
+    /*
+     * handle_integration_change — flip the view between current_file and folder modes.
+     * The integration_mode tag is always dispatched to the canonical FOLDER_VIEW_STATE_ID
+     * (not props.id) so the folder viewState's other settings (columnOrder, filters, etc.)
+     * survive a flip and a flip-back. Per-view click-driven focused/selected state is
+     * transient interaction state and cleared on every mode flip. On flip to current_file
+     * the per-state-id loop additionally clears stranded `integration_mode='folder'` tags
+     * on doc-path keys (legacy pre-fix dispatch wrote the tag there) so the fallback scans
+     * in anyViewInFolderMode / firstIntegrationPath no longer pin folder mode.
+     */
     const handle_integration_change = useCallback((mode: IntegrationMode): void => {
         const folder_path = mode === INTEGRATION_MODE_FOLDER && props.doc_path
             ? props.doc_path.replace(/\/[^/]+$/, '')
             : undefined;
-        // dispatch the integration_mode tag to the canonical folder key (not props.id) so the folder viewState's other settings (columnOrder, filters, etc.) survive a flip to current_file and back
+        const clear_stranded_folder_tag = mode === INTEGRATION_MODE_CURRENT_FILE;
         const updates: Array<Record<string, unknown>> = [{
             id: FOLDER_VIEW_STATE_ID,
             display_options: {
                 integration_mode: mode,
                 integration_path: folder_path,
+                view_focused_seqs: undefined,
+                view_selected_seqs: undefined,
             },
         }];
-        // on flip to current_file also clear any stranded `integration_mode='folder'` tags on non-canonical keys (legacy pre-fix dispatch wrote the tag onto doc-path keys); without this the fallback scans in anyViewInFolderMode/firstIntegrationPath still resolve to folder mode and the composer + toolbar selector stay stuck on folder
-        if (mode === INTEGRATION_MODE_CURRENT_FILE) {
-            for (const id of (props.view_state_ids ?? [])) {
-                if (id === FOLDER_VIEW_STATE_ID) { continue; }
-                updates.push({
-                    id,
-                    display_options: {
-                        integration_mode: undefined,
-                        integration_path: undefined,
-                    },
-                });
+        for (const id of (props.view_state_ids ?? [])) {
+            if (id === FOLDER_VIEW_STATE_ID) { continue; }
+            const non_canonical_display_options: Record<string, unknown> = {
+                view_focused_seqs: undefined,
+                view_selected_seqs: undefined,
+            };
+            if (clear_stranded_folder_tag) {
+                non_canonical_display_options.integration_mode = undefined;
+                non_canonical_display_options.integration_path = undefined;
             }
+            updates.push({ id, display_options: non_canonical_display_options });
         }
         handlers.setViewManagedState(updates);
         if (mode === INTEGRATION_MODE_FOLDER && folder_path) {
@@ -86,14 +99,24 @@ export function useViewToolbar(
         return deriveNaturalColumnOrder(notes_within_parent_context);
     }, [props.type, notes_within_parent_context]);
 
-    // cascade write to VS Code config (Workspace scope on the extension side) under notethink.settings.*. View-type members (columnOrder, viewType, showLinetagsInHeadlines, scrollNoteIntoView, autoExpandFocusedNote, showContextBars) cascade-write in any integration mode so a setting changed in current_file mode is visible in folder mode and vice versa
+    /*
+     * cascade_write_setting — write a view-type setting to VS Code config (Workspace
+     * scope on the extension side) under notethink.settings.*. View-type members
+     * (columnOrder, viewType, showLinetagsInHeadlines, scrollNoteIntoView,
+     * autoExpandFocusedNote, showContextBars) cascade-write in any integration mode so a
+     * setting changed in current_file mode is visible in folder mode and vice versa. Marks
+     * the per-setting key + the 'settingsCascade' sentinel so the spinner appears if the
+     * round-trip is non-instantaneous; the echo reducer clears both keys on arrival.
+     */
     const cascade_write_setting = useCallback((setting: string, value: unknown): void => {
+        markPending(setting);
+        markPending('settingsCascade');
         handlers.postMessage?.({
             type: 'updateSetting',
             setting,
             value,
         });
-    }, [handlers]);
+    }, [handlers, markPending]);
 
     const handle_make_default = useCallback((): void => {
         handlers.postMessage?.({ type: 'promoteSettingsToUser' });
@@ -103,7 +126,12 @@ export function useViewToolbar(
         handlers.postMessage?.({ type: 'resetSettingsToDefault' });
     }, [handlers]);
 
-    // real-time apply: per-view setting change dispatches setViewManagedState immediately. Global keys are stripped so they don't get baked into per-view state — the extension owns them via vscode workspace config
+    /*
+     * handle_setting_change — real-time apply for a per-view (display_options-owned)
+     * setting. Dispatches setViewManagedState immediately. Global keys are stripped from
+     * the persisted shape so they don't get baked into per-view state — the extension
+     * owns them via vscode workspace config.
+     */
     const handle_setting_change = useCallback((key: CommonSettingKey, value: boolean): void => {
         const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, ...per_view_settings } = display_options.settings || {};
         handlers.setViewManagedState([{
@@ -117,12 +145,23 @@ export function useViewToolbar(
         }]);
     }, [handlers, props.id, display_options.settings]);
 
-    // real-time apply: global setting goes via postMessage; the extension writes it to vscode workspace/user config and echoes back via globalSettings
+    /*
+     * handle_global_setting_change — real-time apply for a global (vscode-owned) setting.
+     * The extension writes it to vscode workspace/user config and echoes back via
+     * globalSettings. Marks the setting key as pending; the echo reducer clears it when
+     * globalSettings arrives.
+     */
     const handle_global_setting_change = useCallback((key: GlobalSettingKey, value: boolean): void => {
+        markPending(key);
         handlers.postMessage?.({ type: 'updateGlobalSetting', setting: key, value });
-    }, [handlers]);
+    }, [handlers, markPending]);
 
-    // real-time apply: Kanban column order change. Normalise: if next_order matches the natural order, persist undefined locally; cascade always carries an explicit array (empty == natural)
+    /*
+     * handle_column_order_change — real-time apply for the Kanban column order. Normalises
+     * the persisted shape: if next_order matches the natural order, store undefined
+     * locally (so future natural-order changes propagate); the cascade payload always
+     * carries an explicit array, with empty == natural.
+     */
     const handle_column_order_change = useCallback((next_order: string[]): void => {
         const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, ...per_view_settings } = display_options.settings || {};
         const matches_natural = arraysEqual(next_order, natural_column_order);

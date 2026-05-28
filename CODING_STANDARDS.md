@@ -408,6 +408,18 @@ interface Props {
 <Button onClick={handleClick} onHover={handleHover} />
 ```
 
+### View interaction state: latest-click-wins with the editor as tiebreaker
+
+**Per-view UI interaction state has two layers, and the editor wins ties.** The view writes its own click/drag/hover state directly to `display_options` (or a peer slot in view-managed state) so a gesture lands immediately — no waiting for an editor-selection round-trip. But the editor-derived match (caret-in-note via the per-doc + source-position matcher) is the **source of truth** whenever it produces a result: almost all real editing happens in the editor, and the view is a real-time visualisation that should reflect editor activity instantly. The view-driven layer is the immediate-feedback bridge for the brief window between a view click and the editor's `selectionChanged` round-trip, and the fallback when the editor has no opinion (active editor on a doc that isn't in the aggregated set, or caret outside every matched note).
+
+Two non-negotiable consequences for any view→editor gesture (click, keyboard nav, clear):
+- **Editor takes DOM focus.** `revealRange` / `selectRange` posted by the view must route through `vscode.window.showTextDocument(..., { preserveFocus: false })` so the editor — not the webview — receives subsequent key events. The webview never captures keystrokes the user expects to land in the editor.
+- **The view follows the editor, not the other way round.** If the editor moves to a different note (the user clicked in the editor, an external file edit moved the caret, anything), the view's focused/selected state updates to match on the next derivation — even if the user previously clicked a different note in the view.
+
+Why this matters: the view aggregates from N source files (folder mode); the editor only ever has one active doc. Driving view-interaction state through the editor selection alone silently breaks the moment the rendered tree contains anything outside that single doc — the round-trip never confirms and the view never updates. Pinning view focus on the most-recent view click instead silently breaks the moment the user starts editing in the editor — the visualisation goes stale. The fix is structural: write view state directly from the user's gesture for immediate feedback, then let the editor-derived match override as soon as it has an answer. See `client/webview/src/notethink-views/src/components/views/generic/useViewHandlers.ts` (click dispatcher writes `view_focused_seqs` / `view_selected_seqs` directly via `setViewManagedState`) and `useViewContext.ts` (`resolveFocusedNote` prefers editor-derived; view-driven fills in when the editor has no opinion) for the canonical pattern.
+
+The same principle applies in reverse for editor-driven decoration: when the editor caret should highlight a note, the matcher must work across however many docs the view is aggregating from. Don't write a matcher that assumes a single coherent coordinate space — use per-doc origin metadata (e.g. `origin.doc_path` + `origin.source_position`) so the unified algorithm works in both `current_file` (trivial: all notes share one doc) and `folder` (N-doc merge with synthetic offsets) modes without an `integration_mode` branch.
+
 ## File Organization
 
 ### Directory Structure
@@ -421,9 +433,12 @@ src/
 │   └── notes/           # note-level components
 │       ├── GenericNote.tsx
 │       └── GenericNote.test.tsx
-├── lib/                 # utility functions
-│   ├── crypto.ts
-│   └── parseops.ts
+├── lib/                 # utility functions, grouped by domain (*ops.ts)
+│   ├── noteops.ts       # note traversal, position, classification
+│   ├── originops.ts     # origin / project identification + colour
+│   ├── pathops.ts       # path segmentation, workspace-root derivation
+│   ├── viewstateops.ts  # view-managed-state operations
+│   └── parseops.ts      # parsing
 ├── types/               # shared types
 │   ├── NoteProps.ts
 │   └── ViewProps.ts
@@ -434,11 +449,42 @@ src/
 ### File Naming
 
 - Components: `PascalCase.tsx` (e.g., `DocumentView.tsx`)
-- Utilities: `lowercase.ts` or `kebab-case.ts` (e.g., `crypto.ts`, `parse-ops.ts`)
+- **Domain lib files**: `<noun>ops.ts` — see [Library organisation](#library-organisation) below.
+- **Single-export utility modules**: `camelCase.ts` when the filename mirrors the primary exported function — `convertMdastToNoteHierarchy.ts`, `mergeAggregateRoot.ts`, `globMatch.ts`. This is the accepted alternative to the `*ops.ts` pattern when a file's only purpose is one named operation. Pick one style per module and keep it stable.
+- **Component-local helper files**: keep them next to the component they serve (e.g. `components/views/kanban/kanbanDragEndPayload.ts`), not in `lib/`. The path itself signals "not a general op". Filename follows the single-export camelCase rule above.
 - Types: `PascalCase.ts` (e.g., `NoteProps.ts`)
 - Tests: `*.test.tsx` or `*.test.ts` next to source file
 - Styles: `Component.module.scss` (CSS modules)
-- **Multi-word utility modules may use `camelCase.ts`** when the name reads as a phrase — `convertMdastToNoteHierarchy.ts`, `mergeAggregateRoot.ts`, `globMatch.ts`. This is an accepted alternative to `kebab-case` for lib functions whose filename mirrors the primary exported function; pick one style per module and keep it stable.
+
+### Library organisation
+
+Files under `lib/` group **pure utility functions by domain**, named `<noun>ops.ts` (single concatenated word, no hyphen, no separator). The convention is project-agnostic — apply it whenever you reach for a `lib/` file in any JS/TS project.
+
+**The pattern**:
+
+- `noteops.ts` — operations on `Note` shapes (traversal, position checks, classification, chain construction; also generic array helpers when their only consumers are note-adjacent)
+- `originops.ts` — operations on `Origin` / project metadata (label derivation, hue, identification, folder derivation)
+- `pathops.ts` — path string operations (segmentation, containment, workspace-root derivation)
+- `viewstateops.ts` — operations on view-managed state (canonical-key resolution, state-update builders, mode detection)
+- `docops.ts` — operations on `Doc` shapes (picking, merging, abbreviating)
+- `editops.ts` — operations on text edits (change validation, audit logging)
+- `cryptoops.ts` — hashing, nonces, identifiers
+- `vscodeops.ts` — VS Code API wrappers + persisted state shape (project-specific example)
+
+**The rules**:
+
+1. **Group by the noun the operations act on, not by where the code is called from.** A function that walks notes goes in `noteops.ts` regardless of which component imports it. A function that builds a view-state payload goes in `viewstateops.ts` even if only one site calls it today.
+2. **Pure functions only.** No React hooks, no JSX, no `useState`/`useEffect`/`useRef`. Closures over component state belong in the component or a custom hook.
+3. **Prefer extending an existing `*ops.ts` over creating a new one.** A new helper that operates on `Note` extends `noteops.ts`; create `notetreeops.ts` only when the existing file's domain genuinely splits.
+4. **Aim for ≥ 4 exports per `*ops.ts` file. Rationalise periodically.** A standalone file with one or two exports is usually over-engineered — fold it into a closely-related `*ops.ts` that shares the same noun cluster or consumes/produces the same type. Worked examples from this codebase: a generic `arraysEqual<T>` helper folded into `noteops.ts` because its two consumers were both note-adjacent (with a docstring noting it would lift back out if a non-note caller appeared); a `stateops.ts` holding `VSCodeState` + `migrateSavedState` folded into `vscodeops.ts` because the wrappers there produce and consume the type. **When you finish a refactor that leaves any `*ops.ts` with fewer than 4 exports, do the merge pass in the same session** — small files accumulate fast and the rationalisation cost grows with every new contributor who imports them. The target is guidance, not a hard floor: a 1-export file with a genuinely distinct noun and plausible future growth (e.g. `docops.ts` holding only `pickMostRecentlySentDoc`) can stay if you can name the second function that's coming.
+5. **One domain per file.** A "junk drawer" `utils.ts` is the anti-pattern this convention exists to prevent — when you find one, split it by the noun each export operates on (`crypto.ts` + `getNonce` from `utils.ts` → one `cryptoops.ts`; `abbrevDoc` from `utils.ts` → `docops.ts`).
+6. **Mirrored constants across bundle boundaries are the documented exception.** If two bundles (e.g. extension host + webview) cannot share a module graph, a small set of constants may be byte-identical-duplicated in two `constants.ts` files. Don't `*ops.ts`-ify either side; the duplication is the wire contract. See [Avoid Duplication](#avoid-duplication) below.
+7. **Component-local helpers stay under `components/`**, not under `lib/`. If a pure helper is genuinely only ever used by one component family and lifting to `lib/` would imply general reusability that doesn't exist, leave it co-located with the component. The path is the signal.
+8. **Tests colocated** next to the lib file (`noteops.test.ts` next to `noteops.ts`).
+
+**Why this matters**: file-name-as-domain-label makes it obvious where to look for a function and where to add a new one. The alternative — `utils.ts` / `helpers.ts` / scattered `parse-X.ts` / mixed-purpose modules — defeats grepability and leads to duplication (two files independently growing helpers for the same noun because neither author found the other). `<noun>ops.ts` is the cheap convention that prevents both. The ≥ 4-exports target keeps the opposite failure mode — proliferation of tiny single-helper files — in check.
+
+**When to keep a non-`*ops.ts` name**: a single-function file whose name reads as a sentence (`convertMdastToNoteHierarchy.ts`, `mergeAggregateRoot.ts`, `globMatch.ts`) — the filename mirrors the primary export and lifting to a `*ops.ts` would muddle the "one file = one named operation" signal. These are explicitly permitted and the ≥ 4-exports target does **not** apply to them; do not rename them.
 
 ## Code Quality
 

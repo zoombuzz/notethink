@@ -1,7 +1,8 @@
 import Debug from "debug";
 import * as path from 'path';
+import * as vscode from 'vscode';
 
-const debug = Debug("nodejs:notethink:pathsafe");
+const debug = Debug("nodejs:notethink:pathops");
 
 interface IsPathWithinOptions {
     requireExtension?: string;
@@ -47,4 +48,14 @@ export function isPathWithin(
     }
     debug('target %s not within any root', target_path);
     return false;
+}
+
+/**
+ * workspace-aware variant of isPathWithin: roots come from vscode.workspace.workspaceFolders
+ * at the point of call. The pure isPathWithin helper stays vscode-free and unit-testable;
+ * this wrapper bridges it to the live workspace so callers don't have to repeat the lookup.
+ */
+export function isWithinWorkspace(target_path: string, options?: IsPathWithinOptions): boolean {
+    const root_paths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+    return isPathWithin(target_path, root_paths, options);
 }

@@ -1,5 +1,6 @@
 import Debug from 'debug';
 import { useMemo } from 'react';
+import { deriveNaturalColumnOrder } from '../../../lib/noteops';
 import { kanbanNoteOrder } from '../../../lib/noteops';
 import type { NoteProps, NoteDisplayOptions } from '../../../types/NoteProps';
 
@@ -58,17 +59,15 @@ export function useKanbanColumns(
 /**
  * derive the column descriptors (without note assignment) — pulled out so the hook body stays a short
  * sequence of named steps. Behaviour matches the column-ordering rules documented on `useKanbanColumns`.
+ *
+ * Delegates the base status-value enumeration to `deriveNaturalColumnOrder` (alphabetical + trailing 'untagged');
+ * this helper only layers the optional `custom_order` on top and wraps the result in descriptor objects.
  */
 function deriveColumnOrder(
     notes: Array<NoteProps> | undefined,
     custom_order: Array<string> | undefined,
 ): Array<KanbanColumnDescriptor> {
-    const status_values = new Set<string>();
-    for (const note of (notes || [])) {
-        if (note.linetags?.status?.value) {
-            status_values.add(note.linetags.status.value);
-        }
-    }
+    const natural_order = deriveNaturalColumnOrder(notes || []);
     if (custom_order && custom_order.length > 0) {
         const ordered: KanbanColumnDescriptor[] = custom_order.map((value, index) => ({
             seq: index,
@@ -76,20 +75,16 @@ function deriveColumnOrder(
             type: value === 'untagged' ? 'pseudo' : undefined,
         }));
         const ordered_values = new Set(custom_order);
-        for (const value of Array.from(status_values).sort()) {
-            if (!ordered_values.has(value)) {
-                ordered.push({ seq: ordered.length, value });
-            }
-        }
-        if (!ordered_values.has('untagged')) {
-            ordered.push({ seq: ordered.length, value: 'untagged', type: 'pseudo' });
+        for (const value of natural_order) {
+            if (ordered_values.has(value)) { continue; }
+            const type = value === 'untagged' ? 'pseudo' : undefined;
+            ordered.push({ seq: ordered.length, value, type });
         }
         return ordered;
     }
-    const result: KanbanColumnDescriptor[] = [];
-    Array.from(status_values).sort().forEach((value, index) => {
-        result.push({ seq: index, value });
-    });
-    result.push({ seq: result.length, value: "untagged", type: "pseudo" });
-    return result;
+    return natural_order.map((value, index) => ({
+        seq: index,
+        value,
+        type: value === 'untagged' ? 'pseudo' : undefined,
+    }));
 }

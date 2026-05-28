@@ -4,6 +4,24 @@ import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } 
 const debug = Debug("nodejs:notethink-views:noteops");
 
 /**
+ * generic shallow element-wise equality for two ordered arrays of any primitive
+ * comparable by `===` (string, number, boolean). Returns true when both inputs
+ * are undefined, false when exactly one is, and a length+element-wise comparison
+ * otherwise. Lives in noteops alongside the note-tree comparators because the
+ * codebase's only consumers (MarkdownNote memo compare, kanban columnops) are
+ * note-adjacent; if a second non-note caller appears, lift to its own file
+ */
+export function arraysEqual<T>(a: T[] | undefined, b: T[] | undefined): boolean {
+    if (a === b) { return true; }
+    if (!a || !b) { return false; }
+    if (a.length !== b.length) { return false; }
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) { return false; }
+    }
+    return true;
+}
+
+/**
  * Check if a position is within a note headline or body.
  */
 export function withinNoteHeadlineOrBody(pos: number | undefined, note: NoteProps): boolean {
@@ -34,6 +52,171 @@ export function findDeepestNote(notes: Array<NoteProps>, caret_position: number,
         }
     }
     return undefined;
+}
+
+/**
+ * find the deepest note whose source-file offset range contains caret_pos, among
+ * notes whose origin.doc_path matches active_doc_path. unified matcher used by
+ * the editor-caret → note-focus derivation in both current_file mode (every
+ * visible note's origin.doc_path matches the active doc) and folder mode (per-doc
+ * filter, then match by source_position preserved through mergeAggregateRoot's
+ * re-stamping). notes without an origin or source_position match nothing — the
+ * caller falls back to the in-tree findDeepestNote path
+ */
+export function findDeepestNoteByOriginPosition(notes: Array<NoteProps>, active_doc_path: string, caret_pos: number): NoteProps | undefined {
+    let best: NoteProps | undefined;
+    let best_start = -1;
+    for (const note of notes) {
+        if (note.origin?.doc_path !== active_doc_path) { continue; }
+        const sp = note.origin?.source_position;
+        if (!sp) { continue; }
+        const end_offset = sp.end_body?.offset ?? sp.end.offset;
+        if (caret_pos < sp.start.offset || caret_pos > end_offset) { continue; }
+        // prefer the deepest (most specific) note — the one with the latest start offset, mirroring findDeepestNote's right-to-left walk
+        if (sp.start.offset > best_start) {
+            best = note;
+            best_start = sp.start.offset;
+        }
+    }
+    return best;
+}
+
+/**
+ * find all notes within the active editor's source doc whose source_position is
+ * spanned by the editor's range selection (lo..hi). mirrors
+ * findDeepestNoteByOriginPosition's per-doc + source_position contract for the
+ * selection path. notes without source_position fall back to the in-tree
+ * withinNoteHeadlineOrBody predicate, which is coordinate-coherent only when the
+ * merged tree shares offsets with the editor (single-file case)
+ */
+export function findSelectedNotesByOriginPosition(
+    notes: Array<NoteProps>,
+    active_doc_path: string,
+    head: number,
+    anchor: number,
+): Array<NoteProps> {
+    const lo = Math.min(head, anchor);
+    const hi = Math.max(head, anchor);
+    const same_doc_notes = notes.filter(n => !n.origin || n.origin.doc_path === active_doc_path);
+    return same_doc_notes.filter(n => {
+        const sp = n.origin?.source_position;
+        if (!sp) {
+            return withinNoteHeadlineOrBody(head, n) && withinNoteHeadlineOrBody(anchor, n);
+        }
+        const end = sp.end_body?.offset ?? sp.end.offset;
+        return lo <= sp.start.offset && hi >= end;
+    });
+}
+
+/**
+ * resolve the focused note. latest-click-wins with the editor as tiebreaker —
+ * the editor-derived caret match wins whenever it produces a note (almost all
+ * real editing happens in the editor and the view is a real-time visualisation).
+ * view_focused_seqs is the immediate-feedback source for the brief window between
+ * a view click and the editor's selectionChanged round-trip, and the fallback
+ * when the editor has no opinion (active editor on a doc outside the aggregated
+ * set, or caret outside every matched note)
+ */
+export function resolveFocusedNote(
+    view_focused_seqs: number[] | undefined,
+    notes: Array<NoteProps>,
+    editor_derived_match: NoteProps | undefined,
+): NoteProps | undefined {
+    if (editor_derived_match) { return editor_derived_match; }
+    if (view_focused_seqs?.length) {
+        const deepest_seq = view_focused_seqs[view_focused_seqs.length - 1];
+        const found = notes.find(n => n.seq === deepest_seq);
+        if (found) { return found; }
+    }
+    return undefined;
+}
+
+/**
+ * detect whether the root parent_context is a synthetic aggregate root — one
+ * whose direct children carry note.origin with multiple distinct doc_ids (or a
+ * single origin under an empty synthetic seq-0 root). pure document mode has
+ * either no origins or a single origin under a real headline
+ */
+export function isAggregateRoot(parent_context: NoteProps | undefined): boolean {
+    if (!parent_context) { return false; }
+    const children = parent_context.child_notes || [];
+    const distinct_doc_ids = new Set<string>();
+    for (const c of children) {
+        if (c.origin?.doc_id) { distinct_doc_ids.add(c.origin.doc_id); }
+    }
+    return distinct_doc_ids.size >= 2 || (distinct_doc_ids.size === 1 && parent_context.seq === 0 && parent_context.headline_raw === '');
+}
+
+/**
+ * majority-vote ng_view across the originating files in an aggregate tree. one
+ * vote per file, taken from origin.file_view_type (captured from each file's H1).
+ * ties or no votes return undefined; caller falls back to 'document'
+ */
+export function majorityNgView(notes: NoteProps[] | undefined): string | undefined {
+    if (!notes?.length) { return undefined; }
+    const file_votes = new Map<string, string>();
+    for (const n of notes) {
+        if (!n.origin?.doc_id || !n.origin?.file_view_type) { continue; }
+        if (!file_votes.has(n.origin.doc_id)) {
+            file_votes.set(n.origin.doc_id, n.origin.file_view_type);
+        }
+    }
+    if (file_votes.size === 0) { return undefined; }
+    const tally = new Map<string, number>();
+    for (const v of file_votes.values()) {
+        tally.set(v, (tally.get(v) ?? 0) + 1);
+    }
+    let best_type: string | undefined;
+    let best_count = 0;
+    let tied = false;
+    for (const [type, count] of tally.entries()) {
+        if (count > best_count) { best_type = type; best_count = count; tied = false; }
+        else if (count === best_count) { tied = true; }
+    }
+    return tied ? undefined : best_type;
+}
+
+/**
+ * find the neighbour note (previous/next) of the currently-focused note within
+ * a flat list. direction = -1 walks back, +1 walks forward; the result clamps at
+ * the edges (no wraparound). when the focused seq isn't in the list, treats the
+ * implicit index as -1 so up → first, down → first. used by useViewNavigation's
+ * up/down keyboard handlers — identical computation for both directions
+ */
+export function navigateToNeighbour(notes: Array<NoteProps>, focused_seqs: number[] | undefined, direction: -1 | 1): NoteProps | undefined {
+    if (!notes?.length) { return undefined; }
+    const seqs = focused_seqs || [];
+    const deepest_focused_seq = seqs.length > 0 ? seqs[seqs.length - 1] : -1;
+    const current_index = notes.findIndex(n => n.seq === deepest_focused_seq);
+    let target_index: number;
+    if (direction === -1) {
+        target_index = current_index > 0 ? current_index - 1 : 0;
+    } else {
+        target_index = current_index < notes.length - 1 ? current_index + 1 : current_index;
+    }
+    return notes[target_index];
+}
+
+/**
+ * flatten a NoteProps tree into a flat array (root at index 0, children follow
+ * in seq order). skips items without a positive numeric seq (mdast leaf nodes
+ * that didn't get assigned one). cross-file lib used by both tree composers
+ */
+export function flattenAllNotes(root: NoteProps): NoteProps[] {
+    const result: NoteProps[] = [root];
+    function walk(items: Array<unknown>): void {
+        for (const item of items) {
+            if (item && typeof item === 'object' && 'seq' in item && typeof (item as NoteProps).seq === 'number' && (item as NoteProps).seq > 0) {
+                const note = item as NoteProps;
+                result.push(note);
+                if (note.children_body?.length) {
+                    walk(note.children_body);
+                }
+            }
+        }
+    }
+    if (root.children_body) { walk(root.children_body); }
+    return result;
 }
 
 /**
@@ -93,6 +276,13 @@ export function noteIsVisible(note_element: HTMLElement, view_element: HTMLEleme
  */
 export function resolveCaretPosition(ncp: ClickPositionInfo, note?: NoteProps): number {
     return ncp.from;
+}
+
+/**
+ * Build a focused-chain seq list for a note: every ancestor's seq followed by the note's own seq, in root-to-leaf order. Matches the shape useViewContext produces when deriving focused_seqs from the editor caret, so view-driven writes (click handler, keyboard navigation) and editor-driven derivations agree.
+ */
+export function focusedChainFor(note: NoteProps): number[] {
+    return [...((note.parent_notes || []).map(p => p.seq)), note.seq];
 }
 
 /**
@@ -195,6 +385,20 @@ export function formatColumnLabel(value: string): string {
         .filter(word => word.length > 0)
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
+}
+
+/**
+ * Natural Kanban column order: the distinct status values present in the notes,
+ * sorted alphabetically, with the synthetic 'untagged' column always last.
+ */
+export function deriveNaturalColumnOrder(notes: Array<NoteProps>): string[] {
+    const status_values = new Set<string>();
+    for (const note of (notes || [])) {
+        if (note.linetags?.status?.value) {
+            status_values.add(note.linetags.status.value);
+        }
+    }
+    return [...Array.from(status_values).sort(), 'untagged'];
 }
 
 /**

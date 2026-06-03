@@ -1,4 +1,4 @@
-# Project Board [](?type=board&ng_view=kanban)
+# Project Board [](?type=board&nt_view=kanban)
 
 ## Task A [](?status=backlog)
 

@@ -16,6 +16,11 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 const pkg = require('./package.json');
 const isProduction = process.env.NODE_ENV === 'production';
 const devtool = isProduction ? 'nosources-source-map' : 'source-map';
+// NOTETHINK_DEV gates the on-disk file logger and the webview cache-buster: OFF by default so any
+// shipped build (a `vsce publish` to the marketplace, or a hosted/web build) never litters a user's
+// machine with logs. The `build`/`watch` scripts opt in by exporting SELFINSPECT_ENV=dev (the
+// workspace-standard env marker, not NODE_ENV — see AGENTS.md).
+const isDevBuild = process.env.SELFINSPECT_ENV === 'dev';
 
 /** @type WebpackConfig */
 const clientExtensionConfig = {
@@ -79,7 +84,7 @@ const clientExtensionConfig = {
 			resource.request = resource.request.replace(/^node:/, '');
 		}),
 		new webpack.DefinePlugin({
-			NOTETHINK_DEV: JSON.stringify(!isProduction),
+			NOTETHINK_DEV: JSON.stringify(isDevBuild),
 		}),
 	],
 	externals: {
@@ -163,7 +168,7 @@ const clientWebviewConfig = {
 		}),
 		new webpack.DefinePlugin({
 			NOTETHINK_VERSION: JSON.stringify(pkg.version),
-			NOTETHINK_DEV: JSON.stringify(!isProduction),
+			NOTETHINK_DEV: JSON.stringify(isDevBuild),
 		}),
 		new CopyWebpackPlugin({
 			patterns: [{ from: "public" }],

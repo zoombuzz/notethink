@@ -9,20 +9,32 @@ const output_channel = vscode.window.createOutputChannel('NoteThink', {
     log: true,
 });
 
-// --- dev file log: buffer lines and flush to <notethink>/notethink-extension.log ---
-const LOG_BUFFER_MAX = 500;
+// --- file log: buffer lines and flush to the extension's standard VS Code log dir ---
+const LOG_BUFFER_MAX = 2000;
 const LOG_FLUSH_MS = 1000;
+const LOG_FILE_NAME = 'notethink-extension.log';
 const logBuffer: string[] = [];
 let logFlushTimer: ReturnType<typeof setTimeout> | undefined;
 
+// the extension's standard log directory (vscode.ExtensionContext.logUri), set by initLogDir at activation
+// this is the canonical VS Code-managed place for extension log files — NEVER the user's open workspace folder
+// it resolves under the rotating session logs dir (~/.config/Code/logs/<session>/window<N>/exthost/webWorker/NoteThink.notethink/ on Linux)
+// VS Code guarantees logUri's parent exists but not logUri itself, so we create it once
+let logDir: vscode.Uri | undefined;
+
+/**
+ * pin the file log to the extension's standard log directory. Call once from activate() with
+ * context.logUri. Creates the directory (logUri may not exist yet) so the first flush succeeds.
+ */
+export function initLogDir(log_uri: vscode.Uri): void {
+    logDir = log_uri;
+    vscode.workspace.fs.createDirectory(log_uri).then(undefined, () => {});
+}
+
 function flushLogBuffer(): void {
     logFlushTimer = undefined;
-    if (logBuffer.length === 0) { return; }
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) { return; }
-    // prefer a workspace folder whose path ends in /notethink, fall back to first folder
-    const folder = folders.find(f => /[\/\\]notethink$/.test(f.uri.path)) ?? folders[0];
-    const logUri = vscode.Uri.joinPath(folder.uri, 'notethink-extension.log');
+    if (logBuffer.length === 0 || !logDir) { return; }
+    const logUri = vscode.Uri.joinPath(logDir, LOG_FILE_NAME);
     const content = logBuffer.join('\n') + '\n';
     // fire-and-forget; never block logging on I/O
     vscode.workspace.fs.writeFile(logUri, new TextEncoder().encode(content)).then(

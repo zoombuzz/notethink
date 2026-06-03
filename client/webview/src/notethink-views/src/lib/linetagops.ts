@@ -1,9 +1,30 @@
 import Debug from "debug";
+import { noteOrder } from "./noteops";
 import type {LineTag, NoteProps} from "../types/NoteProps";
 
 const debug = Debug("nodejs:notethink-views:linetagops");
 
 type HashMapOf<S> = { [key: string]: S };
+
+// NoteThink's internal linetag namespace. `nt_` is the prefix we write going
+// forward; `ng_` is the accepted legacy synonym (read-only, forever). Ordered
+// nt_-first so the canonical prefix wins when both forms are present.
+export const NOTETHINK_PREFIXES = ['nt_', 'ng_'] as const;
+
+/** true if key is in NoteThink's internal namespace (any accepted prefix) */
+export function isNamespacedKey(key: string): boolean {
+    return NOTETHINK_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+/** resolve a namespaced linetag by bare name (e.g. 'view'), preferring nt_ then ng_ */
+export function resolveNamespacedTag(linetags: HashMapOf<LineTag> | undefined, name: string): LineTag | undefined {
+    if (!linetags) { return undefined; }
+    for (const prefix of NOTETHINK_PREFIXES) {
+        const tag = linetags[prefix + name];
+        if (tag) { return tag; }
+    }
+    return undefined;
+}
 
 /**
  * @param input
@@ -133,7 +154,7 @@ function columnIsSingleFile(column_children: Array<NoteProps>): boolean {
  *
  * The caller MUST pre-sort `column_children` into the desired user-facing order
  * (e.g. by filtering the dragged note out and splicing it at the drop index).
- * This function decides how to encode that order into `kanban_ordering_weight`
+ * This function decides how to encode that order into `nt_kanban_ordering_weight`
  * values, and partitions the resulting text edits by `origin.doc_path`.
  *
  * Return shape: `Array<OrderingChangeSet>` — one entry per touched doc, with
@@ -154,44 +175,43 @@ export function calculateTextChangesForOrdering(
     if (column_children.length === 0) { return []; }
     if (!column_children[new_child_position]) { return []; }
     if (columnIsSingleFile(column_children)) {
-        return singleFileOrderingChanges(column_children, new_child_position, ordering_weight_key_name);
+        return singleFileOrderingChanges(column_children, ordering_weight_key_name);
     }
     return crossFileOrderingChanges(column_children, new_child_position, ordering_weight_key_name);
 }
 
 /**
- * single-file ordering, byte-identical to the pre-refactor algorithm: weight the
- * inserted note into the gap between its neighbours' weights, falling back to a
- * full incrementing cascade through the rest of the column when no gap exists.
- * The +1/-1 nudges keep the chosen weight consistent with document `seq` order.
+ * single-file ordering with MINIMAL, self-removing weights. Recomputes the whole column's
+ * weighting from the desired order rather than nudging one note: the longest leading run that is
+ * already in implicit (`noteOrder`) order stays UNWEIGHTED, and only the remaining suffix is
+ * weighted 1..k (per `kanbanNoteOrder` the unweighted run sorts first, the weighted suffix floats
+ * below it in weight order). Each note's target weight is diffed against its current weight, so:
+ *
+ *   - a note that should be unweighted but still carries a weight has it REMOVED (the key goal —
+ *     weights live only as long as they are needed to force a non-implicit order);
+ *   - when the desired order already equals implicit order the prefix is the whole column and every
+ *     stale weight is stripped (drag a note out of place then back, and the column ends weight-free);
+ *   - notes whose weight is already correct produce no edit.
  */
 function singleFileOrderingChanges(
     column_children: Array<NoteProps>,
-    new_child_position: number,
     key: string,
 ): Array<OrderingChangeSet> {
-    const new_child = column_children[new_child_position];
-    const doc_path = new_child.origin?.doc_path;
-    const predecessor = column_children[new_child_position - 1];
-    const successor = column_children[new_child_position + 1];
-    const min_weight = predecessor
-        ? (predecessor.linetags?.[key]?.value_numeric || 0) + (predecessor.seq > new_child.seq ? 1 : 0)
-        : 0;
-    const max_weight = successor
-        ? (successor.linetags?.[key]?.value_numeric || 0) - (new_child.seq > successor.seq ? 1 : 0)
-        : min_weight;
-    const new_child_weight = new_child.linetags?.[key]?.value_numeric || 0;
-    // sequence ordering already suffices — no weights needed
-    if (min_weight === 0 && max_weight === 0 && new_child_weight === 0) { return []; }
-    // room to weight only the new_child
-    if (max_weight >= min_weight) {
-        const changes = calculateTextChangesForNewLinetagValue(new_child, key, `${min_weight}`, '0');
-        return changes.length ? [{ doc_path, changes }] : [];
+    const doc_path = column_children[0]?.origin?.doc_path;
+    // the longest leading run that is already in implicit order can stay unweighted
+    let prefix_len = column_children.length === 0 ? 0 : 1;
+    while (prefix_len < column_children.length
+        && noteOrder(column_children[prefix_len - 1], column_children[prefix_len]) < 0) {
+        prefix_len++;
     }
-    // no gap — cascade incrementing weights through the rest of the column
     const changes: Array<OrderingChange> = [];
-    for (let weight = min_weight, i = new_child_position; i < column_children.length; ++weight, ++i) {
-        changes.push(...calculateTextChangesForNewLinetagValue(column_children[i], key, `${weight}`, '0'));
+    for (let i = 0; i < column_children.length; ++i) {
+        const note = column_children[i];
+        const current = note.linetags?.[key]?.value_numeric || 0;
+        // unweighted prefix → 0 (removes any stale weight); weighted suffix → 1, 2, 3, …
+        const target = i < prefix_len ? 0 : (i - prefix_len + 1);
+        if (target === current) { continue; }
+        changes.push(...calculateTextChangesForNewLinetagValue(note, key, `${target}`, '0'));
     }
     return changes.length ? [{ doc_path, changes }] : [];
 }
@@ -313,12 +333,15 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
     const changes: Array<OrderingChange> = [];
     const setting_as_default = (new_value === default_value);
 
-    // if the existing linetag is inherited (from a parent's ng_child_* attribute),
+    // if the existing linetag is inherited (from a parent's nt_child_* attribute),
     // treat it as if the note has no linetag for this key - either generate a new one
     // or skip if setting back to default (inherited value handles it)
     const existing_tag = note.linetags?.[key_name];
     if (existing_tag?.inherited) {
         if (setting_as_default) { return []; }
+        // already carries this exact value via inheritance — materialising it would be a redundant
+        // write (e.g. reordering a card within the column it already inherits status= from)
+        if (existing_tag.value === new_value) { return []; }
         // write a real linetag: if note has other (non-inherited) linetags, append to them;
         // otherwise generate a fresh linetag block
         const has_real_linetags = note.linetags && Object.keys(note.linetags).some(k => !note.linetags![k].inherited);
@@ -350,13 +373,21 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
         });
     }
     else if (note.linetags && !note.linetags[key_name] && !setting_as_default) {
-        // add field to first linetag
-        const first_linetag = note.linetags[Object.keys(note.linetags)[0]];
-        const first_position = (note.linetags_from || 0) + first_linetag.key_offset;
-        changes.push({
-            from: first_position,
-            insert: `${key_name}=${new_value}&`,
-        });
+        // add the field to the first REAL (non-inherited) linetag
+        // guard: when every linetag is inherited (parent nt_child_*) there is no real block — inherited tags carry key_offset 0 and no linetags_from, so appending would land at document offset 0 and corrupt the parent heading; fall back to a fresh linetag block
+        const first_real_key = Object.keys(note.linetags).find(k => !note.linetags![k].inherited);
+        if (first_real_key) {
+            const first_position = (note.linetags_from || 0) + note.linetags[first_real_key].key_offset;
+            changes.push({
+                from: first_position,
+                insert: `${key_name}=${new_value}&`,
+            });
+        } else {
+            changes.push({
+                from: note.position.start.offset + note.headline_raw.length,
+                insert: ` [](?${key_name}=${new_value})`,
+            });
+        }
     }
     // if we're removing an existing linetag key (dragging back to default)
     else if (note.linetags && note.linetags[key_name] && setting_as_default) {

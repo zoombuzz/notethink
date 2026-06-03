@@ -1,9 +1,100 @@
-# Todo [](?ng_view=kanban)
+# Todo [](?nt_view=kanban)
+
+
+### Document-level front matter becomes root-note linetags [](?id=frontmatter-document-attributes)
+
+YAML/TOML front matter at the top of a file should be lifted into the file's **document root** note as linetags, then treated *identically* to linetags authored on a heading — including inheritance to descendants. A key like `nt_view` set in front matter must behave exactly as if it were written on the file's H1. This makes front matter the broadest, document-scoped layer of the existing linetag model rather than a separate metadata channel. Prefix handling (`ng_`/`nt_`) is owned by [[broaden-linetag-prefix-nt]]; this story is namespace-agnostic and inherits whatever that migration settles.
+
++ goal
+  + every `key: value` pair in a file's front matter attaches to that file's document-root NoteProps as a linetag, stored verbatim (no prefix logic here — same as `parseLineTags`)
+  + once attached, the existing render/inherit/interpret machinery treats them like any heading linetag — no special-casing per key
+  + front matter is the *document scope*; it sets defaults that anything below can override
++ decisions (confirmed with the user)
+  + **carrier = the document root, not the first note / H1.** The root is the genuine "file note" that owns every note in the file; "first note" is accidental (whatever lands at `seq=1`). The root NoteProps already exists — `type:'root'`, `seq:0`, `level:0`, owns `child_notes` — created at `convertMdastToNoteHierarchy.ts:372-388`. It just carries no linetags today.
+  + **precedence: lowest / most-specific wins.** Document level is the broadest default; an H1 linetag overrides a front-matter value, an H2 overrides the H1, etc. This is already how inheritance behaves — `applyChildAttributeInheritance` does `if (note.linetags?.[key]) continue;` so a child's own tag beats an inherited one. Front matter simply becomes the top of that chain.
+  + **separate processing from display.** Inheritance is baked per-file at convert time, so it is *mode-independent* and correct in all three render modes. Only the document-level pill strip is mode-dependent.
++ processing (mode-independent — the important half)
+  + make the root participate in the existing inheritance pass as the **top ancestor**, so its `nt_child_*` / `nt_child2y_*` / `nt_childall_*` tags propagate down via the same mechanism that already runs between heading levels
+  + because this happens during each file's `convertMdastToNoteHierarchy` *before* any merge or render, folder mode "just works": each file's front matter affects only that file's stories, exactly mirroring how per-file linetag inheritance is resolved per-file and then merged in `mergeAggregateRoot`
+  + only inheritance-prefixed keys propagate (consistent with today) — a bare `status: done` in front matter stays document-level and does NOT leak to children
++ display (mode-dependent — the only conditional half)
+  + render a **document-level linetag strip** (reuse `GenericNoteAttributes`) at the top of the view, bound to the root's linetags
+  + shown **only in single-file mode**; suppressed in folder mode (many documents, no single document-scope) and in single-note mode (no file context). NB there is no true single-note mode in code today, so that suppression is forward-looking — cheap because processing already happened at convert time
+  + DocumentView already has the natural slot — it renders `GenericNoteAttributes` for `parent_context.linetags` at `DocumentView.tsx:61-63`. KanbanView renders the parent context but has no dedicated attribute strip — add one above the board. AutoView just delegates.
++ the `order` nuance (front-matter vs H1 scope)
+  + `order` under the H1 governs notes added *under the H1*. `order` at front-matter/document level governs insertion relative to the *whole document* — so `newest-at-top` at document scope can insert a new note **above** the H1, whereas at H1 scope it inserts below it.
+  + therefore document-level `order` must stay readable at the **root** independently of the H1, even though for most keys the post-inheritance H1 value is what the existing reader consumes
++ background / current gaps (the change surface)
+  + front matter is already *parsed* into a raw MDAST node — `parseops.ts` enables `frontmatter(['yaml','toml'])` — but the node's `key: value` pairs are never read; it sits in `root.children_body` as a `type:'yaml'`/`'toml'` node with no `seq`
+  + the root has no linetags populated and is never parsed for them
+  + the root is currently **excluded** from inheritance: `applyChildAttributeInheritance` (`convertMdastToNoteHierarchy.ts:293-325`) skips any note with no `parent_notes`, and the root is not in `all_notes` when the pass runs
+  + file-level config (`nt_view`, `order`) is read from the **H1** via `findFileH1` (`mergeAggregateRoot.ts:297,300`) — needs to resolve from the root (front matter) with the H1 as the lower-level override; after root→H1 inheritance runs, the H1 naturally carries the effective value for most keys, but `order` needs the independent root read above
+  + need a small flat front-matter parser (YAML + the existing TOML fence) that turns the node text into `key: value` pairs — a new `lib/frontmatterops.ts` (matches the `<noun>ops.ts` naming rule); deliberately minimal like the parser already living in notegit's `frontmatter.ts` (scalars, quoted strings, inline arrays), NOT a full YAML dep
++ scope of work (when picked up)
+  + [ ] add `lib/frontmatterops.ts` — parse the front-matter node's text into a flat `{key: value}` map (scalars, quoted, inline arrays); unit tests incl. malformed-yields-empty
+  + [ ] in `convertMdastToNoteHierarchy`, read the front-matter node from `children_body` and populate `root.linetags` from it (verbatim keys, via the linetag shape so write-back offsets stay sane)
+  + [ ] make the root the top ancestor of the inheritance pass so `nt_child*` / `nt_childall*` on the root propagate to descendants (include root in the chain / lift the no-`parent_notes` skip for root-children)
+  + [ ] resolve file-level config from the root with H1 override (lowest-wins), and read document-level `order` at the root independently of the H1
+  + [ ] render the document-level linetag strip via `GenericNoteAttributes`, gated to single-file mode (DocumentView slot exists; add the KanbanView strip above the board)
+  + [ ] jest: front matter → root.linetags; root `nt_childall_status` reaches a deep note; H1 linetag overrides a front-matter value; folder mode keeps per-file scoping; document-level pills render in single-file and are absent in folder mode
+  + [ ] playwright: open a file with front-matter `nt_view`/`order` and confirm the resolved view + insertion behaviour; confirm the document pill strip shows in single-file and not in folder mode
+  + [ ] update `AUTHORING_GUIDE.md` — document front matter as the document-scope linetag layer, the lowest-wins precedence, and the `order`-above-H1 nuance
+  + [ ] `pnpm run check` green
++ out of scope
+  + prefix interpretation (`ng_`/`nt_`) — owned by [[broaden-linetag-prefix-nt]]; this rides whatever it settles
+  + a true single-note render mode — does not exist yet; we only design its display-suppression (processing is already mode-independent)
+  + notegit's own server-side front-matter consumer — its `src/lib/frontmatter.ts` reads `title`/`description`/`tags` into the SSR `<head>` and is a separate concern (same `---` block, different reader). Worth a follow-up there: notegit currently parses a `defaultView` front-matter key then drops it; once `nt_view` is the document-scope view selector here, retire notegit's `defaultView` to avoid two names for one idea
++ relationships
+  + builds on the root-as-container idea also referenced by the post-v1 "Convert top-level 'docs' container to RootNote" story
+  + namespace-coupled to [[broaden-linetag-prefix-nt]]
++ files
+  + new `client/webview/src/notethink-views/src/lib/frontmatterops.ts` (+ tests)
+  + `client/webview/src/notethink-views/src/lib/convertMdastToNoteHierarchy.ts` (root linetags + inheritance top-ancestor)
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` (root-first config resolution; document-level `order`)
+  + `client/webview/src/notethink-views/src/components/views/DocumentView.tsx` (document pill strip — slot exists)
+  + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx` (document pill strip above the board)
+  + `client/webview/src/notethink-views/src/components/notes/GenericNoteAttributes.tsx` (reused for the document strip)
+  + `client/extension/src/lib/parseops.ts` (front-matter node already produced — reference only)
+  + `AUTHORING_GUIDE.md` (document-scope front matter)
+
+
+### Detect duplicate stable_ids and surface collisions [](?id=duplicate-stable-id-detection)
+
+when a file or fileset is opened (either integration mode) scan the in-scope notes for duplicate stable_ids — within the same file or across the other files in scope for the current folder — and surface a non-blocking alert if any collide. Duplicate implicit ids (same headline) weaken transient matching and block durable cross-references; the drawer guides the user to disambiguate by pinning a distinct explicit `id=` (the rule-3 promotion in [[selection-stable-identity]] / AUTHORING_GUIDE).
+
++ goal
+  + on open/aggregate (current_file and folder modes) detect notes that resolve to the same stable_id within the in-scope set
+  + show an alert icon next to where the spinner goes (the breadcrumb `(X in Y files)` cluster), only when ≥1 collision exists
+  + clicking the alert opens a drawer that highlights every collision group so the user can locate and disambiguate them
++ background
+  + stable_ids are mostly implicit (headline-derived) so duplicate headlines collide — within one file, or the same headline across sibling files in folder mode
+  + the pending spinner now lives in `BreadcrumbTrail` next to the file-count; the alert icon sits in the same cluster
++ scope
+  + pure detector: group in-scope notes by stable_id, return the collision groups (≥2 notes sharing an id)
+  + alert icon in the breadcrumb cluster, shown only on collision, with an accessible label; click toggles the drawer
+  + collisions drawer: one row per group — the colliding stable_id plus each note (headline + origin file/line) — mirroring the Files/Settings drawer pattern
+  + detect across the aggregated set in folder mode and within the file in current_file mode
++ out of scope
+  + auto-resolving collisions or auto-writing `id=` linetags — the user promotes manually
+  + sub-note (non-story) collision detection unless trivial
++ files (proposed)
+  + new pure detector in `lib` (group notes by stable_id → collision groups) + tests
+  + `BreadcrumbTrail.tsx` (+ scss) — alert icon beside the spinner/count
+  + new collisions drawer component wired through the view toolbar drawer machinery
++ [ ] implement the pure duplicate-stable_id detector with unit tests
++ [ ] render the alert icon in the breadcrumb cluster when collisions exist (hidden otherwise)
++ [ ] build the collisions drawer listing each group (id + notes + origin file/line)
++ [ ] wire click → open/close the drawer
++ [ ] detect within-file (current_file) and across aggregated files (folder)
++ [ ] jest: detector groups duplicates, ignores unique ids, spans files
++ [ ] playwright: alert appears only on collision; drawer lists the groups
++ [ ] `pnpm run check` green
++ manual: open a folder with two same-titled stories, confirm the alert appears and the drawer lists both
 
 
 ### Animated passive transitions in the kanban view [](?id=animated-passive-transitions)
 
-The visible UX payoff. When the kanban view changes layout because of a *passive* update (external file edit from another VS Code window or editor, AI-agent edit, mtime change, anything not driven by the user's own drag) the affected notes and columns animate from old state to new state in a way that mimics manual drag-and-drop. Depends on [[multi-file-ordering-stable-identity]] (stable note identity is the keying contract) and [[folder-mode-dnd]] (so the manual and automatic UX stay consistent in folder mode).
+The visible UX payoff. When the kanban view changes layout because of a *passive* update (external file edit from another VS Code window or editor, AI-agent edit, mtime change, anything not driven by the user's own drag) the affected notes and columns animate from old state to new state in a way that mimics manual drag-and-drop. Depends on [[multi-file-ordering-stable-identity]] (stable note identity is the keying contract) and [[folder-mode-dnd]] (so the manual and automatic UX stay consistent in folder mode) and [[kanban-optimistic-projection]] (the projection seam the FLIP layer decorates; user-initiated drags resolve via the projection, passive updates via FLIP).
 
 + goal
   + a status-tag change made by an AI agent or another editor animates the affected card from its old column position to its new column position, on the same trajectory the user would see if they had picked it up and dragged it
@@ -21,6 +112,7 @@ The visible UX payoff. When the kanban view changes layout because of a *passive
   + custom FLIP helper, no animation library added to the webview bundle
   + only fires on *passive* updates; user-initiated drag-end remains owned by `@hello-pangea/dnd`
   + progressive enhancement / graceful degradation: the layer is a thin overlay that records pre-commit rects (`useLayoutEffect`), lets React render, then plays inverse transforms via the Web Animations API. If the layer throws, the view is already in its final state — there is nothing to clean up. The contract is: *the final DOM is correct without the animation layer; the animation layer only decorates the transition between two correct states*
+  + the passive-update FLIP and the user-drag projection share one reconciliation seam — `passiveUpdateGate` becomes "user-move reconciliations resolve silently (projection already showed the move), passive ones resolve via FLIP"
 + behaviour contract — graceful degradation
   + 350 ms ceiling per individual transition; if a second update arrives mid-animation the in-flight animation is cancelled and the next FLIP measures from the *current live rect*, not the previous "to" rect
   + 800 ms global cap from "update received" to "final state visible" — if FLIP math has not completed by then, `el.getAnimations().forEach(a => a.finish())` snaps to final state
@@ -101,12 +193,12 @@ The visible UX payoff. When the kanban view changes layout because of a *passive
 The view system today has a flat dispatch (`GenericView.tsx:774-776`): `auto` → `document` → `kanban`. Two structural changes in one story:
 
 1. **View hierarchy.** Kanban is one instance of a more general *column-based* view. Other column-based views (group-by-assignee, group-by-type, group-by-any-attribute) should inherit kanban's column primitives without re-implementing them. Introduce a `ColumnBasedView` base.
-2. **Card-type axis.** Orthogonal to view choice. Within any view a note can be rendered as a full card (current default — pill, title, attributes, body) or a compact summary (e.g. a sticky-note). Introduce an `ng_card` linetag alongside `ng_view`, with auto-resolution and a second toolbar selector — "Auto (Card)" alongside the existing "Auto (Kanban)".
+2. **Card-type axis.** Orthogonal to view choice. Within any view a note can be rendered as a full card (current default — pill, title, attributes, body) or a compact summary (e.g. a sticky-note). Introduce an `nt_card` linetag alongside `ng_view`, with auto-resolution and a second toolbar selector — "Auto (Card)" alongside the existing "Auto (Kanban)".
 
 + goal
   + future column-based views can declare a different column-derivation function and reuse all of kanban's column rendering, ordering, drag-and-drop, and (once it lands) animation infrastructure
   + the card rendering used by any view is selectable independently of the view itself; the default per view stays the current full card
-  + `ng_card` overrides apply at the file H1 level just like `ng_view` does today, with the same auto-resolution semantics
+  + `nt_card` overrides apply at the file H1 level just like `ng_view` does today, with the same auto-resolution semantics
 + background
   + view dispatch lives at `GenericView.tsx:33` (`SELECTABLE_VIEWTYPES = ['auto', 'document', 'kanban']`) and `GenericView.tsx:774-776` (hard-coded switch)
   + auto-resolution: `AutoView.tsx:27-49` majority-votes `origin.file_view_type` across files in aggregate mode; `AutoView.tsx:75-77` reads focused-note `ng_view`
@@ -119,7 +211,7 @@ The view system today has a flat dispatch (`GenericView.tsx:774-776`): `auto` �
   + `KanbanView.tsx` becomes a thin wrapper that supplies the status-tag derivation and delegates the rest to `ColumnBasedView`
   + no new column-based view shipped in this story — the proof is the kanban refactor demonstrating no regression
 + scope — card-type axis
-  + new `ng_card` linetag, parsed alongside `ng_view` by `mergeAggregateRoot` and stamped onto `origin.file_card_type`
+  + new `nt_card` linetag, parsed alongside `ng_view` by `mergeAggregateRoot` and stamped onto `origin.file_card_type`
   + new `SELECTABLE_CARDTYPES = ['auto', 'card', 'sticky']` — `auto` + the existing full card + one new compact card to prove the registry
   + new `components/notes/CardRegistry.ts` — registry `{ [card_type]: (note, display_options) => ReactElement }`; entries: `card` → existing `MarkdownNote`, `sticky` → new `StickyNote`
   + new `components/notes/StickyNote.tsx` + `.module.scss` — compact rendering: pill + title only, no attributes, no body, tighter padding
@@ -133,7 +225,7 @@ The view system today has a flat dispatch (`GenericView.tsx:774-776`): `auto` �
 + out of scope
   + shipping a second column-based view (group-by-assignee etc.) — follow-up; this story only sets up inheritance
   + further card types beyond `card` and `sticky` — registry is open, more added later
-  + per-note `ng_card` override (file-level only for now)
+  + per-note `nt_card` override (file-level only for now)
   + animation-layer integration — the work in [[animated-passive-transitions]] keys on `stable_id`, which is orthogonal to card type
 + files
   + new `client/webview/src/notethink-views/src/components/views/ColumnBasedView.tsx`
@@ -144,39 +236,39 @@ The view system today has a flat dispatch (`GenericView.tsx:774-776`): `auto` �
   + `client/webview/src/notethink-views/src/components/views/ViewTypeSelector.tsx` — second select for card type
   + `client/webview/src/notethink-views/src/components/views/GenericView.tsx` — `SELECTABLE_CARDTYPES`, dispatch handlers
   + `client/webview/src/notethink-views/src/components/views/AutoView.tsx` — majority-vote card type alongside view type
-  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` — capture `ng_card` from file H1 → `origin.file_card_type`
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` — capture `nt_card` from file H1 → `origin.file_card_type`
   + `client/webview/src/notethink-views/src/types/NoteProps.ts` — `card_type?: string` on `NoteDisplayOptions`; `file_card_type?: string` on `NoteOrigin`
 + [ ] factor `ColumnBasedView` out of `KanbanView`; verify byte-identical render for existing fixtures
 + [ ] introduce `CardRegistry` with `card` (existing `MarkdownNote`) + `sticky` (new `StickyNote`)
-+ [ ] add `ng_card` linetag parsing in `mergeAggregateRoot`; capture on `origin.file_card_type`
++ [ ] add `nt_card` linetag parsing in `mergeAggregateRoot`; capture on `origin.file_card_type`
 + [ ] add card-type auto-resolution in `AutoView` mirroring the view-type majority vote
 + [ ] add second toolbar selector — "Auto (Card)" / "Card" / "Sticky" — dispatch to `setViewManagedState`
-+ [ ] each view declares its default card type (kanban → `'card'`); auto picks the default when no `ng_card` votes are present
++ [ ] each view declares its default card type (kanban → `'card'`); auto picks the default when no `nt_card` votes are present
 + [ ] jest: `ColumnBasedView` exposes the same column shape under arbitrary `columnDerivation` (kanban-derivation + a fake derivation by another attribute)
 + [ ] jest: kanban refactor renders byte-identical against existing fixtures
 + [ ] jest: `CardRegistry` returns `MarkdownNote` for `'card'`, `StickyNote` for `'sticky'`, falls back to view default for `'auto'`
-+ [ ] jest: `ng_card` on a file H1 is captured into `origin.file_card_type`
++ [ ] jest: `nt_card` on a file H1 is captured into `origin.file_card_type`
 + [ ] jest: `AutoView` majority-votes card type independently of view type
 + [ ] playwright: switch second selector from "Auto" to "Sticky" — note cards collapse to compact form
-+ [ ] playwright: file with `ng_card=sticky` on H1 in folder mode — auto-resolved card type is sticky for that file's notes
++ [ ] playwright: file with `nt_card=sticky` on H1 in folder mode — auto-resolved card type is sticky for that file's notes
 + [ ] playwright: existing kanban specs all green (refactor regression check)
 + [ ] `pnpm run check` green
-+ manual: open a folder with mixed `ng_card` values across files — toolbar shows "Auto (...)" with the majority-voted card type
++ manual: open a folder with mixed `nt_card` values across files — toolbar shows "Auto (...)" with the majority-voted card type
 + manual: explicitly set card type to "Sticky" — all notes render compactly across columns
 + manual: switch back to "Auto" — auto resolution recovers
 + acceptance
   + kanban view works identically after the `ColumnBasedView` refactor (no visible regression)
   + a second selector appears in the toolbar with the same Auto / explicit semantics as the view-type selector
-  + `ng_card` linetag at file H1 cascades into the auto-resolved card type for that file
+  + `nt_card` linetag at file H1 cascades into the auto-resolved card type for that file
   + `StickyNote` renders pill + title only; switching back to `card` restores the full card
   + future column-based views can be added by supplying a different `columnDerivation` without re-implementing column layout or drag-and-drop
 + open questions for the implementing agent
-  + per-note `ng_card` override (currently file-level only) — defer to a follow-up unless trivial
+  + per-note `nt_card` override (currently file-level only) — defer to a follow-up unless trivial
   + whether the two selectors share a single composite control or stay as two siblings — leaning two siblings for symmetry with "Auto (Kanban)"
   + naming of the base — `ColumnBasedView` vs `GroupedView` vs `BoardView`; first is most descriptive
 + commit message draft
   + notethink 0.2.18: kanban becomes a thin specialisation of new `ColumnBasedView` base so future column-based views (group-by-assignee, group-by-type, etc.) can inherit column layout, ordering, and drag-and-drop
-  + introduce `ng_card` linetag and `CardRegistry` — second toolbar selector "Auto (Card)" picks between `card` (full) and `sticky` (compact summary); `ng_card` on file H1 cascades into auto-resolution
+  + introduce `nt_card` linetag and `CardRegistry` — second toolbar selector "Auto (Card)" picks between `card` (full) and `sticky` (compact summary); `nt_card` on file H1 cascades into auto-resolution
   + tests N jest, N playwright
 
 

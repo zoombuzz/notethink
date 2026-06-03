@@ -7,6 +7,7 @@ import {toString} from "mdast-util-to-string";
 import {Fragment, jsx, jsxs} from "react/jsx-runtime";
 import type {ReactElement} from "react";
 import type { MdastNode, MdastNodes, NoteProps } from "../types/NoteProps";
+import { isNamespacedKey } from "./linetagops";
 
 const debug = Debug("nodejs:notethink-views:renderops");
 
@@ -107,7 +108,7 @@ export function renderNodeUnified(node: MdastNode, options_arg: RenderOptions = 
 }
 
 export function isInternalAttribute(key: string): boolean {
-    return (key.length >= 3 && key.substring(0, 3) === 'ng_');
+    return isNamespacedKey(key);
 }
 
 export function isChildNote(child: NoteProps | MdastNode): boolean {

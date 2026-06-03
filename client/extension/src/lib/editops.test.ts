@@ -1,4 +1,4 @@
-import { firstInvalidChange, logEditTextChanges, type TextChange } from './editops';
+import { firstInvalidChange, logEditTextChanges, offsetDeltaBefore, type TextChange } from './editops';
 
 jest.mock('./errorops', () => ({
     writeToLog: jest.fn(),
@@ -62,6 +62,36 @@ describe('editops', () => {
             const first_bad: TextChange = { from: -1, insert: 'a' };
             const second_bad: TextChange = { from: 999, insert: 'b' };
             expect(firstInvalidChange([first_bad, second_bad], 100)).toBe(first_bad);
+        });
+    });
+
+    describe('offsetDeltaBefore', () => {
+        it('returns 0 when every edit is at or after the caret (insertions append after the caret)', () => {
+            // caret at offset 10; a kanban weight insert lands at the dragged note's heading end (offset 40)
+            const changes: TextChange[] = [{ from: 40, insert: ' [](?nt_kanban_ordering_weight=1)' }];
+            expect(offsetDeltaBefore(changes, 10)).toBe(0);
+        });
+
+        it('sums the length delta of pure insertions before the caret', () => {
+            const changes: TextChange[] = [{ from: 2, insert: 'abc' }, { from: 5, insert: 'de' }];
+            expect(offsetDeltaBefore(changes, 10)).toBe(5);
+        });
+
+        it('accounts for replacements (insert length minus removed span) before the caret', () => {
+            // replace 5 chars [2,7) with 2 chars => net -3
+            const changes: TextChange[] = [{ from: 2, to: 7, insert: 'xy' }];
+            expect(offsetDeltaBefore(changes, 20)).toBe(-3);
+        });
+
+        it('treats an edit that ends exactly at the caret as before it', () => {
+            const changes: TextChange[] = [{ from: 0, to: 10, insert: 'abcdefghij_extra' }];
+            expect(offsetDeltaBefore(changes, 10)).toBe(6);
+        });
+
+        it('ignores edits after the caret and a straddling edit', () => {
+            const changes: TextChange[] = [{ from: 5, to: 15, insert: 'replaced' }, { from: 30, insert: 'tail' }];
+            // first edit straddles the caret (5 < 10 < 15) => treated as after; second is after => delta 0
+            expect(offsetDeltaBefore(changes, 10)).toBe(0);
         });
     });
 

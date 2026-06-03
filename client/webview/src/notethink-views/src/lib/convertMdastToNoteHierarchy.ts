@@ -254,7 +254,7 @@ function nestChildNotes(all_notes: NoteProps[], root_level: number): void {
 
 /**
  * Extract inheritable linetags from a note's linetags matching the given prefix.
- * Returns entries with the prefix stripped (e.g. ng_child_status → status).
+ * Returns entries with the prefix stripped (e.g. nt_child_status → status).
  */
 function collectInheritableLinetags(note: NoteProps, prefix: string): Array<[string, LineTag]> {
     if (!note.linetags) { return []; }
@@ -287,7 +287,7 @@ function makeInheritedTag(stripped_key: string, source: LineTag, target_note_seq
 }
 
 /**
- * Propagate ng_child_*, ng_child2y_*, and ng_childall_* linetags from parents to descendants.
+ * Propagate nt_child_*, nt_child2y_*, and nt_childall_* linetags from parents to descendants.
  * Child's own linetags always take precedence over inherited ones.
  */
 export function applyChildAttributeInheritance(all_notes: NoteProps[]): void {
@@ -296,26 +296,26 @@ export function applyChildAttributeInheritance(all_notes: NoteProps[]): void {
 
         const direct_parent = note.parent_notes[note.parent_notes.length - 1];
 
-        // ng_child_ → inherited by direct children only
-        for (const [stripped_key, source_tag] of collectInheritableLinetags(direct_parent, 'ng_child_')) {
+        // nt_child_ → inherited by direct children only
+        for (const [stripped_key, source_tag] of collectInheritableLinetags(direct_parent, 'nt_child_')) {
             if (note.linetags?.[stripped_key]) { continue; }
             if (!note.linetags) { note.linetags = {}; }
             note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
         }
 
-        // ng_child2y_ → inherited by grandchildren only (parent_notes has at least 2 entries)
+        // nt_child2y_ → inherited by grandchildren only (parent_notes has at least 2 entries)
         if (note.parent_notes.length >= 2) {
             const grandparent = note.parent_notes[note.parent_notes.length - 2];
-            for (const [stripped_key, source_tag] of collectInheritableLinetags(grandparent, 'ng_child2y_')) {
+            for (const [stripped_key, source_tag] of collectInheritableLinetags(grandparent, 'nt_child2y_')) {
                 if (note.linetags?.[stripped_key]) { continue; }
                 if (!note.linetags) { note.linetags = {}; }
                 note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
             }
         }
 
-        // ng_childall_ → inherited from every ancestor in the chain
+        // nt_childall_ → inherited from every ancestor in the chain
         for (const ancestor of note.parent_notes) {
-            for (const [stripped_key, source_tag] of collectInheritableLinetags(ancestor, 'ng_childall_')) {
+            for (const [stripped_key, source_tag] of collectInheritableLinetags(ancestor, 'nt_childall_')) {
                 if (note.linetags?.[stripped_key]) { continue; }
                 if (!note.linetags) { note.linetags = {}; }
                 note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
@@ -365,7 +365,7 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         }
     }
 
-    // propagate ng_child_*, ng_child2y_*, ng_childall_* linetags to descendants
+    // propagate nt_child_*, nt_child2y_*, nt_childall_* linetags to descendants
     applyChildAttributeInheritance(all_notes);
 
     // build the root note

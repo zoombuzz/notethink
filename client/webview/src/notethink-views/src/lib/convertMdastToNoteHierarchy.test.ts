@@ -271,9 +271,9 @@ describe('convertMdastToNoteHierarchy', () => {
 
 describe('child attribute inheritance', () => {
 
-    it('ng_child_ attributes are inherited by direct children', () => {
-        // # Parent [](?ng_child_status=backlog)\n## Child\n
-        const text = '# Parent [](?ng_child_status=backlog)\n## Child\n';
+    it('nt_child_ attributes are inherited by direct children', () => {
+        // # Parent [](?nt_child_status=backlog)\n## Child\n
+        const text = '# Parent [](?nt_child_status=backlog)\n## Child\n';
         const mdast: MdastNode = {
             type: 'root',
             position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
@@ -292,9 +292,9 @@ describe('child attribute inheritance', () => {
         expect(child.linetags!['status'].inherited).toBe(true);
     });
 
-    it('ng_child_ attributes are NOT inherited by grandchildren', () => {
-        // # GrandParent [](?ng_child_status=backlog)\n## Parent\n### GrandChild\n
-        const text = '# GrandParent [](?ng_child_status=backlog)\n## Parent\n### GrandChild\n';
+    it('nt_child_ attributes are NOT inherited by grandchildren', () => {
+        // # GrandParent [](?nt_child_status=backlog)\n## Parent\n### GrandChild\n
+        const text = '# GrandParent [](?nt_child_status=backlog)\n## Parent\n### GrandChild\n';
         const mdast: MdastNode = {
             type: 'root',
             position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
@@ -308,12 +308,12 @@ describe('child attribute inheritance', () => {
         const allNotes = flattenNotes(root);
         const grandchild = allNotes.find(n => n.depth === 3);
 
-        // Grandchild should NOT have inherited status from ng_child_
+        // Grandchild should NOT have inherited status from nt_child_
         expect(grandchild.linetags?.['status']).toBeUndefined();
     });
 
-    it('ng_child2y_ attributes are inherited only by grandchildren', () => {
-        const text = '# GrandParent [](?ng_child2y_priority=high)\n## Parent\n### GrandChild\n';
+    it('nt_child2y_ attributes are inherited only by grandchildren', () => {
+        const text = '# GrandParent [](?nt_child2y_priority=high)\n## Parent\n### GrandChild\n';
         const mdast: MdastNode = {
             type: 'root',
             position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
@@ -336,8 +336,8 @@ describe('child attribute inheritance', () => {
         expect(grandchild.linetags!['priority'].inherited).toBe(true);
     });
 
-    it('ng_childall_ attributes are inherited by all descendants', () => {
-        const text = '# Root [](?ng_childall_team=alpha)\n## Child\n### GrandChild\n';
+    it('nt_childall_ attributes are inherited by all descendants', () => {
+        const text = '# Root [](?nt_childall_team=alpha)\n## Child\n### GrandChild\n';
         const mdast: MdastNode = {
             type: 'root',
             position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 4 } },
@@ -359,7 +359,7 @@ describe('child attribute inheritance', () => {
     });
 
     it('child own linetag overrides inherited value', () => {
-        const text = '# Parent [](?ng_child_status=backlog)\n## Child [](?status=doing)\n';
+        const text = '# Parent [](?nt_child_status=backlog)\n## Child [](?status=doing)\n';
         const mdast: MdastNode = {
             type: 'root',
             position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
@@ -377,7 +377,7 @@ describe('child attribute inheritance', () => {
     });
 
     it('inherited linetags have inherited: true flag', () => {
-        const text = '# Parent [](?ng_child_status=backlog)\n## Child\n';
+        const text = '# Parent [](?nt_child_status=backlog)\n## Child\n';
         const mdast: MdastNode = {
             type: 'root',
             position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
@@ -391,16 +391,16 @@ describe('child attribute inheritance', () => {
         const child = allNotes.find(n => n.depth === 2);
 
         expect(child.linetags!['status'].inherited).toBe(true);
-        // Parent should NOT have inherited flag on ng_child_status
+        // Parent should NOT have inherited flag on nt_child_status
         const parent = allNotes.find(n => n.depth === 1);
-        expect(parent.linetags!['ng_child_status'].inherited).toBeUndefined();
+        expect(parent.linetags!['nt_child_status'].inherited).toBeUndefined();
     });
 });
 
 describe('drag-drop on inherited-status notes', () => {
 
     it('dragging a note with inherited status writes a new linetag', () => {
-        const text = '# Parent [](?ng_child_status=backlog)\n## Child\n';
+        const text = '# Parent [](?nt_child_status=backlog)\n## Child\n';
         const mdast: MdastNode = {
             type: 'root',
             position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
@@ -421,7 +421,7 @@ describe('drag-drop on inherited-status notes', () => {
     });
 
     it('setting inherited status back to default produces no changes', () => {
-        const text = '# Parent [](?ng_child_status=backlog)\n## Child\n';
+        const text = '# Parent [](?nt_child_status=backlog)\n## Child\n';
         const mdast: MdastNode = {
             type: 'root',
             position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },

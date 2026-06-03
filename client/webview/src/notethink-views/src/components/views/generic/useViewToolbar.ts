@@ -61,15 +61,15 @@ export function useViewToolbar(
             display_options: {
                 integration_mode: mode,
                 integration_path: folder_path,
-                view_focused_seqs: undefined,
-                view_selected_seqs: undefined,
+                view_focused_ids: undefined,
+                view_selected_ids: undefined,
             },
         }];
         for (const id of (props.view_state_ids ?? [])) {
             if (id === FOLDER_VIEW_STATE_ID) { continue; }
             const non_canonical_display_options: Record<string, unknown> = {
-                view_focused_seqs: undefined,
-                view_selected_seqs: undefined,
+                view_focused_ids: undefined,
+                view_selected_ids: undefined,
             };
             if (clear_stranded_folder_tag) {
                 non_canonical_display_options.integration_mode = undefined;

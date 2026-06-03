@@ -61,6 +61,6 @@ export interface ViewApi {
     doubleClick?: NoteHandlers['click'];
     postMessage?: (message: unknown) => void;
     descendToFolder?: (folder_path: string) => void;
-    setViewInteractionState?: (focused_chain: number[], selected_seqs: number[]) => void;
+    setViewInteractionState?: (focused_ids: string[], selected_ids: string[]) => void;
     onNavigationCommand?: MutableRefObject<((direction: string) => void) | undefined>;
 }

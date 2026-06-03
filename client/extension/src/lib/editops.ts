@@ -31,6 +31,24 @@ export function firstInvalidChange(changes: Array<TextChange>, doc_length: numbe
 }
 
 /**
+ * net change in document length contributed by edits that fall at or before `offset`. Add this to a
+ * pre-edit caret offset to keep the caret on the same character after the edits apply, so a
+ * view-driven edit (a kanban reorder's weight cascade, a checkbox toggle) does not drag the user's
+ * cursor to the last edited line and pull the view's focus onto another note. Edits after the offset
+ * do not shift it; an edit straddling it is treated as after (its insertion lands beyond the caret).
+ */
+export function offsetDeltaBefore(changes: Array<TextChange>, offset: number): number {
+    let delta = 0;
+    for (const change of changes) {
+        const to = change.to ?? change.from;
+        if (to <= offset) {
+            delta += change.insert.length - (to - change.from);
+        }
+    }
+    return delta;
+}
+
+/**
  * audit-log each pending change with ±10 chars of surrounding context before
  * it is applied. Emits one summary line ("N changes on path") plus one line
  * per change. Intended to run after firstInvalidChange has cleared the batch.

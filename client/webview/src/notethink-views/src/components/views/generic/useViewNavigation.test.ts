@@ -37,8 +37,8 @@ describe('useViewNavigation', () => {
 
     it('up navigation writes view interaction state for the previous note so view-driven-wins does not pin focus on the current note', () => {
         const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
-        const note_a = makeNote({ seq: 1, position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } } });
-        const note_b = makeNote({ seq: 2, position: { start: { offset: 20, line: 2 }, end: { offset: 30, line: 2 } } });
+        const note_a = makeNote({ seq: 1, stable_id: 'a', position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } } });
+        const note_b = makeNote({ seq: 2, stable_id: 'b', position: { start: { offset: 20, line: 2 }, end: { offset: 30, line: 2 } } });
         const display_options: NoteDisplayOptions = { focused_seqs: [2], focused_notes: [note_b] };
         const handlers = makeHandlers();
         renderHook(() => useViewNavigation({
@@ -50,14 +50,14 @@ describe('useViewNavigation', () => {
             navigation_command_ref,
         }));
         navigation_command_ref.current!('up');
-        expect(handlers.setViewInteractionState).toHaveBeenCalledWith([1], []);
+        expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['a'], []);
         expect(handlers.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', from: 0 }));
     });
 
     it('down navigation writes view interaction state for the next note', () => {
         const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
-        const note_a = makeNote({ seq: 1, position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } } });
-        const note_b = makeNote({ seq: 2, position: { start: { offset: 20, line: 2 }, end: { offset: 30, line: 2 } } });
+        const note_a = makeNote({ seq: 1, stable_id: 'a', position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } } });
+        const note_b = makeNote({ seq: 2, stable_id: 'b', position: { start: { offset: 20, line: 2 }, end: { offset: 30, line: 2 } } });
         const display_options: NoteDisplayOptions = { focused_seqs: [1], focused_notes: [note_a] };
         const handlers = makeHandlers();
         renderHook(() => useViewNavigation({
@@ -69,14 +69,14 @@ describe('useViewNavigation', () => {
             navigation_command_ref,
         }));
         navigation_command_ref.current!('down');
-        expect(handlers.setViewInteractionState).toHaveBeenCalledWith([2], []);
+        expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['b'], []);
         expect(handlers.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', from: 20 }));
     });
 
-    it('up navigation includes ancestor seqs in the target chain so the deeper focused state is preserved through useViewContext', () => {
+    it('up navigation includes ancestor stable_ids in the target chain so the deeper focused state is preserved through useViewContext', () => {
         const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
-        const parent = makeNote({ seq: 1, position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } } });
-        const child = makeNote({ seq: 2, parent_notes: [parent], position: { start: { offset: 20, line: 2 }, end: { offset: 30, line: 2 } } });
+        const parent = makeNote({ seq: 1, stable_id: 'p', position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } } });
+        const child = makeNote({ seq: 2, stable_id: 'c', parent_notes: [parent], position: { start: { offset: 20, line: 2 }, end: { offset: 30, line: 2 } } });
         const display_options: NoteDisplayOptions = { focused_seqs: [99], focused_notes: [] };
         const handlers = makeHandlers();
         renderHook(() => useViewNavigation({
@@ -89,7 +89,7 @@ describe('useViewNavigation', () => {
         }));
         // current focused seq (99) isn't in the list, so findIndex returns -1; prev_index = 0; target = parent
         navigation_command_ref.current!('up');
-        expect(handlers.setViewInteractionState).toHaveBeenCalledWith([1], []);
+        expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['p'], []);
     });
 
     it('clearFocus routes through getClearHandler', () => {

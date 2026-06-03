@@ -123,6 +123,41 @@ describe('AutoView', () => {
         expect(view).toHaveAttribute('data-level', '3');
     });
 
+    it('derives kanban view type from the nt_view prefix (write-forward synonym)', () => {
+        const focused_note = makeNote({
+            seq: 1,
+            linetags: {
+                'nt_view': { key: 'nt_view', value: 'kanban', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes: [makeNote(), focused_note],
+            display_options: {
+                focused_notes: [focused_note],
+            },
+        });
+        render(<AutoView {...props} />);
+        const view = screen.getByTestId('generic-view');
+        expect(view).toHaveAttribute('data-type', 'kanban');
+    });
+
+    it('derives level from the nt_level prefix (write-forward synonym)', () => {
+        const focused_note = makeNote({
+            seq: 1,
+            linetags: {
+                'nt_level': { key: 'nt_level', value: '3', value_numeric: 3, note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            display_options: {
+                focused_notes: [focused_note],
+            },
+        });
+        render(<AutoView {...props} />);
+        const view = screen.getByTestId('generic-view');
+        expect(view).toHaveAttribute('data-level', '3');
+    });
+
     it('passes auto_resolved_type via nested prop', () => {
         const focused_note = makeNote({
             seq: 1,

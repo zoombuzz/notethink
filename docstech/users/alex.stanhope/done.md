@@ -1,11 +1,11 @@
-# Done [](?ng_view=kanban&ng_child_status=done&order=newest-at-bottom)
+# Done [](?nt_view=kanban&nt_child_status=done&order=newest-at-bottom)
 
 
 ### Child attribute inheritance
 
 + [X] add `inherited?: true` flag to LineTag interface in `notethink-views/src/types/NoteProps.ts`
 + [X] add `applyChildAttributeInheritance(allNotes)` in `convertMdastToNoteHierarchy.ts`
-  + ng_child_ → direct children, ng_child2y_ → grandchildren, ng_childall_ → all descendants
+  + nt_child_ → direct children, nt_child2y_ → grandchildren, nt_childall_ → all descendants
   + child's own linetags always win (no override)
 + [X] guard edit operations against inherited linetags in `linetagops.ts`
   + drag-drop on inherited-status notes writes a real linetag into markdown
@@ -934,7 +934,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 
 + design (locked in 2026-05-14)
   + synthetic root in the webview (not on the extension side): `mergeAggregateRoot(docs, integration_path)` parses every doc via `convertMdastToNoteHierarchy` then surfaces depth-3 headings under a single seq=0 root, renumbering globally
-  + `##` headings are treated as epics: their depth-3 children become stories with `origin.epic = { name, id? }`; the structural epic is overridden by a direct `epic=` linetag (or one propagated via `ng_child_epic=` inheritance — already wired by `applyChildAttributeInheritance`)
+  + `##` headings are treated as epics: their depth-3 children become stories with `origin.epic = { name, id? }`; the structural epic is overridden by a direct `epic=` linetag (or one propagated via `nt_child_epic=` inheritance — already wired by `applyChildAttributeInheritance`)
   + per-file `ng_view` on the H1 is captured as `origin.file_view_type` so `AutoView` can majority-vote view type across files (one vote per file, ties fall back to `document`)
   + breadcrumb in Directory mode segments the aggregation path itself, not any one file
   + edits/clicks attach `docPath: note.origin?.doc_path` so the per-doc routing survives the merge; in single-file mode `note.origin` is undefined and behaviour is unchanged
@@ -1221,11 +1221,11 @@ Formalise an Authoring Guide version so language can evolve across files without
     minor = new backward-compatible features; major = potentially breaking
   + default: every file is interpreted against the latest version; files do
     not record a version yet (may revisit later)
-  + authors can pin with `ng_authoring_version` (`MAJOR` or `MAJOR.MINOR`) on
+  + authors can pin with `nt_authoring_version` (`MAJOR` or `MAJOR.MINOR`) on
     the file root — reserved/documented now, not enforced (only 1.0.0 exists)
 + [X] AUTHORING_GUIDE: version banner + `## Versioning` section (patch/minor/
       major table, default-latest, locking) at `1.0.0`
-+ [X] AUTHORING_GUIDE: `ng_authoring_version` added to the reserved
++ [X] AUTHORING_GUIDE: `nt_authoring_version` added to the reserved
       View-configuration linetag table
 + doc-only change — no parser/behaviour change (version-conditional parsing is
   future work, to land with the first breaking major)
@@ -1528,15 +1528,15 @@ Yesterday's tiebreak surfaces stories from the file currently focused in the edi
 Data-layer prerequisite for [[folder-mode-dnd]] and [[animated-passive-transitions]]. No UX change in this story — pure refactor + tests. Sits at the top of todo.md as the priority because both downstream stories depend on it.
 
 + goal
-  + cross-file `kanban_ordering_weight` participates in the column comparator so notes from multiple files can be interleaved by user-chosen order
+  + cross-file `nt_kanban_ordering_weight` participates in the column comparator so notes from multiple files can be interleaved by user-chosen order
   + every note carries a stable identity that survives re-parse (file additions/removals, global `seq` renumbering, file_rank shuffling) so React keying and FLIP rect-capture both work across updates
 + background
-  + `kanbanNoteOrder()` (`noteops.ts:225-242`) currently considers `kanban_ordering_weight` only when both sides have one; otherwise it falls to `noteOrder()` (`noteops.ts:206-218`) which uses `file_rank` then `file_mtime` then `seq`. Cross-file weight comparison never participates.
+  + `kanbanNoteOrder()` (`noteops.ts:225-242`) currently considers `nt_kanban_ordering_weight` only when both sides have one; otherwise it falls to `noteOrder()` (`noteops.ts:206-218`) which uses `file_rank` then `file_mtime` then `seq`. Cross-file weight comparison never participates.
   + `calculateTextChangesForOrdering()` (`linetagops.ts:88-131`) assumes all neighbours share a single seq-space; the weight-gap arithmetic and the cascade fallback are both undefined when neighbours come from different files.
   + Notes are React-keyed by `note.seq` (`KanbanView.tsx:195`), which is renumbered globally by `mergeAggregateRoot()` on every re-parse (`mergeAggregateRoot.ts:133-327`). Identity drifts when a file is added, removed, or re-parsed with a new sibling story — the same logical note looks like delete+insert to React.
 + scope
   + stable identity: stamp `stable_id` (kebab-case-slug derived from `origin.doc_id + heading character offset`, picked because it is invariant under sibling additions and round-robin merge shuffles) on every note in both single-file (`NoteTreeComposer`) and aggregate (`AggregateTreeComposer` via `mergeAggregateRoot`) paths
-  + cross-file comparator: rework `kanbanNoteOrder()` so `kanban_ordering_weight` is decisive across origins (weight-A vs weight-B always compared even when origins differ); `file_rank → file_mtime → seq` is the tiebreak chain only when neither side carries a weight
+  + cross-file comparator: rework `kanbanNoteOrder()` so `nt_kanban_ordering_weight` is decisive across origins (weight-A vs weight-B always compared even when origins differ); `file_rank → file_mtime → seq` is the tiebreak chain only when neither side carries a weight
   + reorder algorithm: factor `calculateTextChangesForOrdering()` to operate on a generic ordered list with no seq-arithmetic between cross-file neighbours; weight-gap math becomes per-file output (cascade only touches notes in the same file); the cross-file ordering decision is encoded in the *value* of the assigned weight, not in any shared seq space
   + change-set partitioning: the algorithm returns changes grouped by `origin.doc_path` so the extension can apply per-file edits independently (the wire format change ships with [[folder-mode-dnd]] but the data shape lands here)
 + out of scope
@@ -1565,7 +1565,7 @@ Data-layer prerequisite for [[folder-mode-dnd]] and [[animated-passive-transitio
   + single-file kanban output byte-identical to prior behaviour against the existing fixtures
   + `stable_id` present on every note in both modes; derivation documented in the `NoteProps` header
 + commit message draft
-  + notethink 0.2.14: kanban ordering comparator respects `kanban_ordering_weight` across file boundaries
+  + notethink 0.2.14: kanban ordering comparator respects `nt_kanban_ordering_weight` across file boundaries
   + `calculateTextChangesForOrdering` returns per-`origin.doc_path` partitioned change sets so the extension can route per-file edits independently
   + stamp `stable_id` (`origin.doc_id` + heading character offset) on every note in both single-file and aggregate paths so React keying and FLIP rect-capture survive re-parse
   + single-file kanban output byte-identical to prior behaviour
@@ -2464,5 +2464,134 @@ Establish the pattern so future interaction features inherit consistency by cons
 + commit message draft
   + notethink 0.3.4: click-focus and click-select now work in folder mode, not just current_file — per-note interaction state landed on the view (`view_focused_seqs` / `view_selected_seqs` on `display_options`) as the immediate-feedback layer, with editor-derived match as the source of truth (latest-click-wins, editor tiebreaker); click dispatcher (`useViewHandlers`) writes view state and posts `revealRange` / `selectRange` so the editor takes focus via `showTextDocument({ preserveFocus: false })`; `useViewContext` per-doc + per-source-offset matcher uses new `origin.source_position` preserved through `mergeAggregateRoot` re-numbering so editor-caret → note-focus works in folder mode; new `setViewInteractionState` on `ViewApi` so keyboard navigation (up/down) and clear-gesture update view focus instead of just posting `revealRange`; origin pill click is now ADDITIVE — descends the folder view into the project subfolder AND opens the clicked story in the editor (the pill no longer `stopPropagation`s the bubbling headline click); `MarkdownNote` memo compare extended to detect child-focus-state changes so re-renders propagate through; coding-standards entry added so future interaction features start mode-agnostic
   + tests 813 jest, 61 playwright
+
+
+### Accept `nt_` alongside `ng_` as the notethink linetag prefix [](?id=broaden-linetag-prefix-nt)
+
+NoteThink namespaces its internal/directive linetags with the `ng_` prefix (`ng_view`, `ng_level`, `ng_child_*`, …). Broaden the simple read-fallback recognition sites to accept `nt_` as an equal synonym, make `nt_` the prefix NoteThink **writes** going forward, and reclassify view-specific metadata (e.g. `nt_kanban_ordering_weight`) as internal under the same prefix. `[](?ng_view=kanban)` and `[](?nt_view=kanban)` must be understood identically. Parsing already stores any key verbatim — only the downstream *interpretation* is hardcoded to `ng_`. **Decided exception: the child-attribute INHERITANCE directives are `nt_child_*` only — legacy `ng_child_*` inheritance is not supported (the project's own files migrated to `nt_`, and no files author `ng_child_*`).**
+
++ background: the internal vs external attribute model (confirmed with the user)
+  + **external attributes** describe the *content* and apply across **all views** — note-level metadata: `status`, `epic`, `id`, `order`, `time_estimated`, `time_taken`. These render as visible chips/badges and drive views (status→kanban column, epic→badge). No prefix
+  + **internal attributes** are NoteThink's own reference for *rendering* that content, and are hidden from the displayed chips. Two kinds, both prefixed:
+    + render directives — `nt_view` (how to render this story), `nt_level`
+    + view-specific metadata — the `<viewname>_<attribute>` pattern, e.g. ordering weight used only by the kanban view
+  + `isInternalAttribute()` at `lib/renderops.tsx:109` encodes the gate today: a key starting `ng_` is internal, everything else is content
+  + the letters are almost certainly `ng_` = **n**ote**g**it (the sibling/predecessor project — `nextjs/tannyca` plus `notethink-mast`) where this linetag vocabulary originated, and `nt_` = **n**ote**t**hink, this project — an inference from project history, not stated in any doc
++ decision (confirmed): write `nt_` going forward; `isInternalAttribute` accepts both `nt_` and `ng_`; external content attributes stay unprefixed by design
++ key insight: the parser is already generic, so this is not a parsing change
+  + `parseLineTags()` at `lib/linetagops.ts:32` builds the linetags map via `URLSearchParams`; every key is stored as-authored with no prefix logic, so `nt_view` already lands in `note.linetags` as `nt_view`
+  + therefore the change surface is only the interpretation sites below
++ recognition sites to broaden (the exact change surface)
+  + `lib/renderops.tsx:109` `isInternalAttribute()` — the namespace gate; currently `key.substring(0, 3) === 'ng_'`; accept `ng_` OR `nt_`
+    + consumed by the two display filters, so fixing the gate alone hides both correctly: `components/notes/GenericNoteAttributes.tsx:27` and `components/notes/markdown/MarkdownNoteHeadline.tsx:59`
+  + `lib/convertMdastToNoteHierarchy.ts:300,309,318` inheritance — `collectInheritableLinetags(note, 'nt_child_' | 'nt_child2y_' | 'nt_childall_')` is `nt_`-only by decision; legacy `ng_child_*` inheritance is deliberately NOT collected (the inheritance directive is the project's own mechanism, no file authors `ng_child_*`, and the AUTHORING_GUIDE already documents only the `nt_child_*` family). This is the one recognition site that does NOT accept `ng_`
+  + `lib/mergeAggregateRoot.ts:297` — `h1?.linetags?.ng_view?.value` (file-level view for AutoView's majority vote) must fall back to `nt_view`
+  + `components/views/AutoView.tsx:36,44` — `attributes?.ng_view` and `attributes?.ng_level` must fall back to `nt_view` / `nt_level`
+  + `lib/noteops.ts` majority-vote reads `file_view_type` (set from `ng_view` in mergeAggregateRoot), not `ng_view` directly — covered transitively once mergeAggregateRoot is fixed
+  + `nt_authoring_version` is documented in AUTHORING_GUIDE but has **no code consumer yet** — nothing to change in code, only the guide
++ design — two options, recommend the helper
+  + (recommended) add a shared `NOTETHINK_PREFIXES = ['nt_', 'ng_']` constant (`nt_`-first so `resolveNamespacedTag` prefers the going-forward prefix when both are present) plus a `resolveNamespacedTag(linetags, 'view')` resolver (returns the first of `nt_view` / `ng_view` present); `isInternalAttribute` checks both prefixes; keeps the *authored* key intact so write-back offsets stay correct
+  + (rejected) normalise `nt_*`→`ng_*` at parse time in `parseLineTags`: smallest footprint but rewrites the in-memory key, breaking write-back which locates the key by `indexOf(key)` in the original href text at `lib/linetagops.ts:62`
++ permanent-name: `nt_` is the chosen write prefix (CODING_STANDARDS > Permanent name check satisfied — user signed off)
+  + linetag keys are written to user markdown on disk; `nt_` is now the permanent on-write choice. `ng_` and legacy unprefixed forms stay valid on read forever for the simple read keys (view/level/status via the namespace gate + `resolveNamespacedTag`) — the child-inheritance directives are the sole `nt_`-only exception (see the inheritance recognition site above)
+  + template inserts at `inserts/en/103-project-management.ts:46,61` switch `ng_view=kanban` → `nt_view=kanban`
++ reclassify view-specific metadata as internal (`<viewname>_<attr>` → `nt_<viewname>_<attr>`)
+  + `kanban_ordering_weight` → `nt_kanban_ordering_weight`; once prefixed it is caught by `isInternalAttribute` automatically
+  + write/construct sites emit the `nt_` form: `components/views/kanban/kanbanDragEndPayload.ts:49` (passes the key name to `calculateTextChangesForOrdering`), `components/views/kanban/kanbanProjection.ts:24,128` (synthetic projection tags)
+  + read site `lib/noteops.ts:485-486` (`kanbanNoteOrder`) reads `nt_kanban_ordering_weight` — no fallback to the bare legacy key (so rare today it's not worth a back-compat read)
+  + once `nt_kanban_ordering_weight` is internal, drop it from the `HIDDEN_ATTRIBUTES` workaround list at `components/notes/GenericNoteAttributes.tsx:11` — the `nt_` prefix gate now hides it
+  + `progress_unit` / `progress_max` (also in `HIDDEN_ATTRIBUTES`) are *content* sub-fields of the displayed `progress` chip, not view-specific — leave them unprefixed; out of scope for this story
++ scope of work
+  + [X] broaden `isInternalAttribute` to match `ng_` / `nt_` via the shared prefix constant (`isNamespacedKey`, `lib/renderops.tsx`)
+  + [X] inheritance collection is `nt_child_*` only (`convertMdastToNoteHierarchy.ts:300,309,318`) — DECIDED: legacy `ng_child_*` inheritance is not supported (no file authors it; the AUTHORING_GUIDE documents only `nt_child_*`). Not a regression — the deliberate `nt_`-only exception to the otherwise-broaden-both rule
+  + [X] add `nt_view` / `nt_level` read fallback in mergeAggregateRoot + AutoView via one resolver helper (`resolveNamespacedTag`)
+  + [X] switch the write-side prefix to `nt_`: template inserts in `103-project-management.ts`
+  + [X] write view-specific metadata as `nt_kanban_ordering_weight` at the kanban write/construct sites
+  + [X] update the `kanbanNoteOrder` read site to `nt_kanban_ordering_weight`
+  + [X] drop `nt_kanban_ordering_weight` from `HIDDEN_ATTRIBUTES` (now prefix-caught)
+  + [X] tests — `nt_view` / `nt_child_status` / `nt_kanban_ordering_weight` ordering covered; added direct unit tests for `isNamespacedKey` / `resolveNamespacedTag` (incl. `nt_`-preferred-when-both-present) / the `nt_`-first ordering of `NOTETHINK_PREFIXES`. No legacy `ng_child_*` inheritance test — `nt_`-only by decision
+  + [X] AUTHORING_GUIDE inherited-attributes table already documents only the `nt_child_*` family — correct as-is for the `nt_`-only decision, no change needed
+  + [X] update the AUTHORING_GUIDE reserved-keys tables — added a "Linetag prefixes (`nt_`/`ng_`)" subsection (nt_ canonical / ng_ accepted legacy / nt_-wins-when-both / content unprefixed / `nt_child_*`-only inheritance exception); `nt_view`/`nt_level` legacy notes and `nt_kanban_ordering_weight` were already in the tables
++ out of scope
+  + deprecating or migrating existing `ng_` linetags — they stay valid on read indefinitely
+  + back-compat read for the rare legacy bare `nt_kanban_ordering_weight` — unlikely to be encountered, not worth handling
+  + reclassifying `progress_unit` / `progress_max` (content sub-fields, not view-specific)
++ files
+  + `client/webview/src/notethink-views/src/lib/renderops.tsx`
+  + `client/webview/src/notethink-views/src/lib/convertMdastToNoteHierarchy.ts`
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts`
+  + `client/webview/src/notethink-views/src/lib/noteops.ts`
+  + `client/webview/src/notethink-views/src/components/views/AutoView.tsx`
+  + `client/webview/src/notethink-views/src/components/notes/GenericNoteAttributes.tsx`
+  + `client/webview/src/notethink-views/src/components/views/kanban/kanbanDragEndPayload.ts`
+  + `client/webview/src/notethink-views/src/components/views/kanban/kanbanProjection.ts`
+  + `client/webview/src/notethink-views/src/inserts/en/103-project-management.ts`
+  + `AUTHORING_GUIDE.md` (reserved-keys tables)
+
+
+### Optimistic projection core for kanban drag-and-drop [](?id=kanban-optimistic-projection)
+
+a drag-drop currently snaps the card back to its original slot for a beat before the document round-trip lands it in the dropped slot (back-forward-back). Fix it with a short-lived client-owned projection that the board renders from until the live document catches up.
+
++ goal
+  + render the kanban board from a "projection" of the notes, not the raw authoritative prop; projection equals authoritative except during a brief window after a user drag
+  + on drag-end, set the projection to the intended dropped layout immediately so there is no snap-back; keep posting the editText as today
+  + when the authoritative document update arrives and matches the projection, drop the projection silently (re-attach to the live document with no visible change); if it never matches, a safety timeout drops it and the live state wins
+  + the projection is decorative and short-lived: correctness always falls back to the authoritative document; if an unrelated edit lands mid-window a small jump on re-attach is acceptable (no multi-projection transaction model)
++ scope
+  + new pure helper `components/views/kanban/kanbanProjection.ts` — `applyKanbanMove(notes, move)` (reproduces the dropped layout via synthetic nt_kanban_ordering_weight) + `projectionSatisfied(notes, move)` (has the live doc caught up?), keyed on `stable_id`
+  + new hook `components/views/kanban/useProjectedNotes.ts` — holds the projection, reconciles on authoritative change, 1500 ms safety cap (`KANBAN_PROJECTION_MAX_MS`)
+  + wire `KanbanView.tsx`: render `useKanbanColumns(notes_to_render, …)` from the hook; `dragEndHandler` calls `applyOptimisticMove(...)` after posting the payload
+  + reconciliation is scoped to the single moved note (matched by `stable_id`); unrelated churn elsewhere is ignored
++ out of scope
+  + the FLIP animation layer and passive-update animation — that is [[animated-passive-transitions]], which now builds on this seam
+  + multi-file folder-mode reconciliation subtleties beyond "let it jump on re-attach"
++ delivery note: keying the board by `stable_id` was pulled forward from the animation phase — it turned out to be required, not optional: with `seq` keying the projection→live re-attach renumbered seq (folder-mode interleave), remounting the moved card
++ delivery note: the real cause of the "drops correct then slides in from the top" glitch was @hello-pangea/dnd's drop animation fighting the synchronous projection reorder, compounded by a CSS `transition: transform` on `.note` (the draggable element itself). Fixed by skipping the drop animation when `isDropAnimating` (`KanbanBoard.draggableStyleWithoutDropAnimation`) and dropping the transform transition from `.note`
++ follow-up extracted to its own story [[selection-stable-identity]]: after a drag the highlight jumps to the next story because view focus/selection is keyed by `seq`, which renumbers on re-parse
++ files (proposed)
+  + new `client/webview/src/notethink-views/src/components/views/kanban/kanbanProjection.ts` + colocated tests
+  + new `client/webview/src/notethink-views/src/components/views/kanban/useProjectedNotes.ts` + colocated tests
+  + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx`
++ [X] implement kanbanProjection.ts (applyKanbanMove + projectionSatisfied) with unit tests
++ [X] implement useProjectedNotes hook (projection state + reconcile effect + safety timeout) with tests
++ [X] wire the hook into KanbanView: render from notes_to_render, call applyOptimisticMove in dragEndHandler
++ [X] key the board + draggableId by stable_id (shared kanbanDraggableId helper) so the re-attach doesn't remount the moved card
++ [X] keep existing KanbanView + kanban specs green
++ [X] pnpm run check green
++ manual: drag a story to reorder it and confirm it stays in the dropped slot with no back-forward-back flicker
++ manual: drag a story to a different column and confirm it stays put until the document confirms
+
+
+### Highlight stays on the dragged story (was: selection by stable_id, not seq) [](?id=selection-stable-identity)
+
+re-scoped then RESOLVED 2026-06-02. Original premise ("focus is keyed by `seq`, which renumbers on re-parse") proved **stale on investigation**: view focus/selection is already keyed by `stable_id` (`view_focused_ids` / `view_selected_ids` in `useViewContext.ts`, written by `useViewHandlers.ts`), so the seq-renumber theory never applied. The actual symptom — the highlight jumping to the next story after a drag — is an editor-caret bug, fixed under [[caret-stability-view-edits]]. With that fix the dragged story stays highlighted and the caret stays put.
+
++ decision (made during the investigation): keep the **editor-as-tiebreaker** (CODING_STANDARDS "View interaction state"). The editor-derived caret match stays the source of truth; view-driven `stable_id`s fill in only when the editor has no opinion. The hypothesised "make a deliberate view selection win over a coherent caret" precedence flip is **not pursued** — it contradicts the documented design, and the symptom that motivated this story is already fixed by keeping the caret put (caret-stability). The speculative precedence/jest/manual tasks are therefore dropped.
++ [X] confirm the mechanism — view state is already `stable_id`-keyed; the jump was the editor caret, not seq renumbering
++ [X] reconcile code + comment — `resolveFocusedNote` is caret-wins by design; fixed the misleading `useViewContext.ts:110` comment that claimed view-driven precedence (it now states the editor-as-tiebreaker)
++ [X] symptom resolved via [[caret-stability-view-edits]] — dragged story stays highlighted, caret stays put (manually confirmed)
++ dropped (decided unnecessary, not deferred)
+  + precedence flip in `resolveFocusedNote` so a view selection beats a coherent caret — contradicts editor-as-tiebreaker; symptom already fixed
+  + the speculative jest spec + manual check for that flipped behaviour
++ out of scope
+  + the animation layer [[animated-passive-transitions]] — orthogonal, shares the stable-identity theme
+
+
+### Caret stays put on view-driven edits [](?id=caret-stability-view-edits)
+
+discovered 2026-06-02 while investigating the post-drag highlight jump (see [[selection-stable-identity]]). Dragging a story in the kanban moved the editor caret onto a different story, and because `resolveFocusedNote` follows the caret the highlight jumped with it.
+
++ delivery note — actual root cause (confirmed via `notethink-extension.log` caret-probe trace)
+  + the caret did NOT move because of the weight-cascade edit. The instrumented trace showed the editText restore working correctly (`offsetDeltaBefore` keeps the caret on the same character). The real culprit was `KanbanView.dragStartHandler`: on **drag start** it posted a `revealRange` to the dragged note's `position.start.offset`, which moved the editor caret onto that note ~190ms before the edit even applied (logged as `INCOMING revealRange` immediately preceding the editText). Whatever the caret-derived focus was then followed.
+  + fix: removed `dragStartHandler` and its `onDragStart` wiring (KanbanView + KanbanBoard). A drag no longer moves the editor caret at all. Cross-file targeting still works: the drag-end `editText` payload already carries the dragged note's `docPath`, so it never depended on first moving the caret.
+  + kept as a safeguard: the `offsetDeltaBefore` caret restore in `PanelSession.applyEditTextChanges` (legitimately keeps the caret stable when a multi-edit cascade lands before it, e.g. a checkbox toggle).
++ [X] confirm the mechanism via instrumented `caret-probe` / `INCOMING` reveal trace — it was the drag-start reveal, not the cascade restore
++ [X] remove the drag-start `revealRange` (no caret move on drag); keep the `offsetDeltaBefore` restore
++ [X] remove the temporary `caret-probe` / `scroll-probe` / `debugLog` instrumentation
++ [X] jest: KanbanView drag posts no `revealRange`/`selectRange`; no `onDragStart` handler is wired
++ [X] `pnpm run build` + lint green; full jest suite green (995)
++ manual: drag a story to reorder, confirm the dragged story stays highlighted and the editor caret stays on it
++ note: the related [[selection-stable-identity]] "view selection beats a coherent caret" precedence flip was considered and dropped (editor-as-tiebreaker stands); this caret-stability fix is the accepted solution to the highlight-jump symptom
 
 

@@ -86,14 +86,13 @@ test.describe('Folder-mode kanban drag and drop', () => {
         const has_done_insert = observed_changes.some((c) => c.insert === 'done');
         expect(has_done_insert).toBe(true);
 
-        // sanity: the source-of-truth check is also that the dragStartHandler revealed PATH_A, not the active doc — confirms the caret-reveal-in-origin-file behaviour
-        const reveal_msg = messages.find((m: { type?: string }) => m.type === 'revealRange');
-        expect(reveal_msg).toBeDefined();
-        expect((reveal_msg as { docPath?: string }).docPath).toBe(PATH_A);
+        // a drag must NOT move the editor caret, so it posts no revealRange/selectRange; targeting the source file is carried by the editText docPath/changes_by_doc above, not by a caret reveal
+        const reveal_msg = messages.find((m: { type?: string }) => m.type === 'revealRange' || m.type === 'selectRange');
+        expect(reveal_msg).toBeUndefined();
     });
 
     test('multi-file column interleave: user drag emits per-file weight change, and an unrelated parse update preserves interleaved order', async ({ page }) => {
-        // this test asserts two adjacent contracts from the story: (a) dragging in a multi-file column emits an editText whose change-set encodes a kanban_ordering_weight write under the dragged note's origin file (per-file partitioning), not a cross-file seq cascade. (b) once a weighted note is in the merged tree, an unrelated parse update for a third file does not perturb its user-chosen position.
+        // this test asserts two adjacent contracts from the story: (a) dragging in a multi-file column emits an editText whose change-set encodes a nt_kanban_ordering_weight write under the dragged note's origin file (per-file partitioning), not a cross-file seq cascade. (b) once a weighted note is in the merged tree, an unrelated parse update for a third file does not perturb its user-chosen position.
         // we cannot round-trip the editText through the live extension inside this harness, so (a) is verified via the captured message and (b) is verified by directly injecting a fixture whose text already carries the post-drag weight — that's exactly what the extension would deliver after applying the editText and re-emitting sendDoc
 
         await setupFolderKanban(page);
@@ -132,21 +131,21 @@ test.describe('Folder-mode kanban drag and drop', () => {
             for (const [doc_path, arr] of Object.entries(edit_after_drag!.changes_by_doc)) {
                 for (const ch of arr) {
                     all_changes.push(ch);
-                    if (ch.insert.includes('kanban_ordering_weight')) { weight_target_doc = doc_path; }
+                    if (ch.insert.includes('nt_kanban_ordering_weight')) { weight_target_doc = doc_path; }
                 }
             }
         } else if (edit_after_drag!.changes) {
             for (const ch of edit_after_drag!.changes) {
                 all_changes.push(ch);
-                if (ch.insert.includes('kanban_ordering_weight')) { weight_target_doc = edit_after_drag!.docPath; }
+                if (ch.insert.includes('nt_kanban_ordering_weight')) { weight_target_doc = edit_after_drag!.docPath; }
             }
         }
-        const has_weight_change = all_changes.some((c) => c.insert.includes('kanban_ordering_weight'));
+        const has_weight_change = all_changes.some((c) => c.insert.includes('nt_kanban_ordering_weight'));
         expect(has_weight_change).toBe(true);
         expect(weight_target_doc).toBe(PATH_B);
 
         // ---- part (b): inject a fixture with the post-drag weight; assert interleave holds ----
-        // kanban-folder-b-weighted.md is identical to kanban-folder-b.md except Beta Task Two carries kanban_ordering_weight=1. by kanbanNoteOrder's case 2 ("exactly one weighted — weighted sorts AFTER unweighted") beta should sort AFTER alpha, deliberately. capture the baseline order before applying the weight so we can prove the order changed because of the weight (not by accident)
+        // kanban-folder-b-weighted.md is identical to kanban-folder-b.md except Beta Task Two carries nt_kanban_ordering_weight=1. by kanbanNoteOrder's case 2 ("exactly one weighted — weighted sorts AFTER unweighted") beta should sort AFTER alpha, deliberately. capture the baseline order before applying the weight so we can prove the order changed because of the weight (not by accident)
         const baseline_order = await doing.locator('[data-rfd-drag-handle-draggable-id] [data-testid="origin-project-pill"]').evaluateAll(
             (nodes) => nodes.map((n) => n.getAttribute('data-project')),
         );
@@ -156,7 +155,8 @@ test.describe('Folder-mode kanban drag and drop', () => {
             { fixture: 'kanban-folder-a.md', doc_path: PATH_A, relative_path: 'alpha/docstech/board.md' },
             { fixture: 'kanban-folder-b-weighted.md', doc_path: PATH_B, relative_path: 'beta/docstech/board.md' },
         ], { workspace_root: WORKSPACE_ROOT });
-        await page.waitForTimeout(400);
+        // wait out the optimistic projection from part (a)'s drag (KANBAN_PROJECTION_MAX_MS = 1500ms) so the board renders the injected steady-state order rather than the still-active projected layout that would mask the weight-driven order
+        await page.waitForTimeout(1700);
 
         const order_after_weight = await doing.locator('[data-rfd-drag-handle-draggable-id] [data-testid="origin-project-pill"]').evaluateAll(
             (nodes) => nodes.map((n) => n.getAttribute('data-project')),

@@ -107,14 +107,14 @@ export function useViewContext(props: ViewProps): ViewContext {
         props.active_editor_doc_path,
     ]);
 
-    // view-driven state-of-truth: per-view focused_seqs / selected_seqs written by the click dispatcher land on display_options and take precedence over the editor-derived match
-    const view_focused_seqs = display_options.view_focused_seqs;
-    const view_selected_seqs = display_options.view_selected_seqs;
+    // per-view focused/selected stable_ids written by the click dispatcher; the editor-derived match wins when it resolves a note (the documented editor-as-tiebreaker), and these fill in only when it has no opinion — the latest-click-wins immediate-feedback bridge and fallback
+    const view_focused_ids = display_options.view_focused_ids;
+    const view_selected_ids = display_options.view_selected_ids;
 
     deepest.note = useMemo(() => {
-        return resolveFocusedNote(view_focused_seqs, props.notes || [], editor_derived_match) || parent_context;
+        return resolveFocusedNote(view_focused_ids, props.notes || [], editor_derived_match) || parent_context;
     }, [
-        view_focused_seqs,
+        view_focused_ids,
         parent_context,
         props.notes,
         editor_derived_match,
@@ -127,7 +127,7 @@ export function useViewContext(props: ViewProps): ViewContext {
     // pass caret offset so clipped notes can scroll their body to the caret position
     display_options.caret_offset = props.selection?.main.head;
 
-    // find the set of notes within this view that are currently selected; editor-derived range selection wins (per-doc + source_position in folder mode; in-tree in single-file mode); view-driven view_selected_seqs is the immediate-feedback source for the brief window between a view click and the editor's selectionChanged round-trip, and fills in when the editor has no range selection
+    // find the set of notes within this view that are currently selected; editor-derived range selection wins (per-doc + source_position in folder mode; in-tree in single-file mode); view-driven view_selected_ids is the immediate-feedback source for the brief window between a view click and the editor's selectionChanged round-trip, and fills in when the editor has no range selection
     display_options.selected_notes = useMemo(() => {
         const selection = props.selection;
         if (selection) {
@@ -139,12 +139,12 @@ export function useViewContext(props: ViewProps): ViewContext {
                 return findSelectedNotes(props.notes || [], selection);
             }
         }
-        if (view_selected_seqs?.length) {
-            return (props.notes || []).filter(n => view_selected_seqs.includes(n.seq));
+        if (view_selected_ids?.length) {
+            return (props.notes || []).filter(n => n.stable_id !== undefined && view_selected_ids.includes(n.stable_id));
         }
         return [];
     }, [
-        view_selected_seqs,
+        view_selected_ids,
         props.notes,
         props.selection,
         props.active_editor_doc_path,

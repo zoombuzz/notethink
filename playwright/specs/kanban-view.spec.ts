@@ -11,7 +11,7 @@ test.describe('Kanban View', () => {
 
     /**
      * Helper: inject the kanban fixture and simulate a selection inside the
-     * board note so that AutoView picks up the ng_view=kanban linetag.
+     * board note so that AutoView picks up the nt_view=kanban linetag.
      */
     async function setupKanbanView(page: Page): Promise<{ id: string; path: string }> {
         const { id, path: doc_path } = await injectDocsFromFixture(page, 'kanban.md');
@@ -20,7 +20,7 @@ test.describe('Kanban View', () => {
         // simulate a cursor position inside the "# Project Board" heading; the heading starts at offset 0, so cursor at offset 2 is within it
         await simulateSelectionChanged(page, doc_path, 2);
 
-        // wait for AutoView to detect ng_view=kanban and re-render
+        // wait for AutoView to detect nt_view=kanban and re-render
         await page.waitForTimeout(500);
         return { id, path: doc_path };
     }
@@ -28,7 +28,7 @@ test.describe('Kanban View', () => {
     test('renders kanban columns via auto view detecting ng_view linetag', async ({ page }) => {
         await setupKanbanView(page);
 
-        // AutoView should detect ng_view=kanban and render kanban columns
+        // AutoView should detect nt_view=kanban and render kanban columns
         const auto_wrapper = page.locator('[data-auto-selected-viewtype="kanban"]');
         await expect(auto_wrapper).toBeVisible({ timeout: 5000 });
 

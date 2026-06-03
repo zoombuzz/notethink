@@ -59,7 +59,7 @@ describe('useViewHandlers click dispatcher', () => {
         type: 'note_headline',
     };
 
-    it('click on a non-focused, non-selected note writes view_focused_seqs and posts revealRange', () => {
+    it('click on a non-focused, non-selected note writes view_focused_ids and posts revealRange', () => {
         const set_view_managed_state = jest.fn();
         const post_message = jest.fn();
         const props = makeProps({
@@ -70,20 +70,20 @@ describe('useViewHandlers click dispatcher', () => {
                 postMessage: post_message,
             },
         });
-        const note = makeNote({ seq: 5 });
+        const note = makeNote({ seq: 5, stable_id: 'n5' });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         result.current.handlers.click!(mockClickEvent(), note, click_profile);
-        // view-driven state-of-truth: focused = [seq], selected = []
+        // view-driven state-of-truth: focused = [stable_id], selected = []
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_seqs: [5], view_selected_seqs: [] },
+            display_options: { view_focused_ids: ['n5'], view_selected_ids: [] },
         }]);
         // editor reveal still posts so the cursor follows opportunistically
         expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', from: 10 }));
     });
 
-    it('clicking a focused note promotes to selected: writes view_selected_seqs and posts selectRange', () => {
+    it('clicking a focused note promotes to selected: writes view_selected_ids and posts selectRange', () => {
         const set_view_managed_state = jest.fn();
         const post_message = jest.fn();
         const props = makeProps({
@@ -95,18 +95,18 @@ describe('useViewHandlers click dispatcher', () => {
             },
         });
         // note.focused = true simulates the GenericNote enrichment from a prior focus; position.start.offset matches click_profile.from (click on the note's own headline) so the "second-click promotes" rule triggers via the view-state path
-        const note = makeNote({ seq: 5, focused: true, position: { start: { offset: 10, line: 1 }, end: { offset: 20, line: 1 }, end_body: { offset: 50, line: 5 } } });
+        const note = makeNote({ seq: 5, stable_id: 'n5', focused: true, position: { start: { offset: 10, line: 1 }, end: { offset: 20, line: 1 }, end_body: { offset: 50, line: 5 } } });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         result.current.handlers.click!(mockClickEvent(), note, click_profile);
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_seqs: [5], view_selected_seqs: [5] },
+            display_options: { view_focused_ids: ['n5'], view_selected_ids: ['n5'] },
         }]);
         expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'selectRange', from: 10, to: 50 }));
     });
 
-    it('click on a different note replaces focused seqs and drops any selection', () => {
+    it('click on a different note replaces focused ids and drops any selection', () => {
         const set_view_managed_state = jest.fn();
         const props = makeProps({
             handlers: {
@@ -116,14 +116,14 @@ describe('useViewHandlers click dispatcher', () => {
                 postMessage: jest.fn(),
             },
         });
-        const other = makeNote({ seq: 7, focused: false, selected: false });
+        const other = makeNote({ seq: 7, stable_id: 'n7', focused: false, selected: false });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         result.current.handlers.click!(mockClickEvent(), other, click_profile);
-        // new focused note = [7], selected dropped to []
+        // new focused note = ['n7'], selected dropped to []
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_seqs: [7], view_selected_seqs: [] },
+            display_options: { view_focused_ids: ['n7'], view_selected_ids: [] },
         }]);
     });
 
@@ -141,14 +141,14 @@ describe('useViewHandlers click dispatcher', () => {
             },
         });
         const origin_doc_path = '/repo/a/todo.md';
-        const note = makeNote({ seq: 3, origin: { doc_id: 'a', doc_path: origin_doc_path } });
+        const note = makeNote({ seq: 3, stable_id: 'n3', origin: { doc_id: 'a', doc_path: origin_doc_path } });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         result.current.handlers.click!(mockClickEvent(), note, click_profile);
         // state writes go to the canonical folder key
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: FOLDER_VIEW_STATE_ID,
             type: props.type,
-            display_options: { view_focused_seqs: [3], view_selected_seqs: [] },
+            display_options: { view_focused_ids: ['n3'], view_selected_ids: [] },
         }]);
         // editor reveal targets the origin doc
         expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', docPath: origin_doc_path }));
@@ -165,20 +165,20 @@ describe('useViewHandlers click dispatcher', () => {
                 postMessage: post_message,
             },
         });
-        const note = makeNote({ seq: 9 });
+        const note = makeNote({ seq: 9, stable_id: 'n9' });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         result.current.handlers.click!(mockClickEvent({ detail: 2 }), note, click_profile);
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_seqs: [9], view_selected_seqs: [9] },
+            display_options: { view_focused_ids: ['n9'], view_selected_ids: ['n9'] },
         }]);
         expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'selectRange', from: 10, to: 50 }));
     });
 });
 
 describe('useViewHandlers getClearHandler', () => {
-    it('clears view-driven seqs so the view-driven-wins policy in useViewContext does not pin focus after a clear gesture', () => {
+    it('clears view-driven ids so the view-driven-wins policy in useViewContext does not pin focus after a clear gesture', () => {
         const set_view_managed_state = jest.fn();
         const post_message = jest.fn();
         const props = makeProps({
@@ -189,14 +189,14 @@ describe('useViewHandlers getClearHandler', () => {
                 postMessage: post_message,
             },
         });
-        const focused_note = makeNote({ seq: 5, position: { start: { offset: 10, line: 1 }, end: { offset: 20, line: 1 }, end_body: { offset: 50, line: 5 } } });
+        const focused_note = makeNote({ seq: 5, stable_id: 'n5', position: { start: { offset: 10, line: 1 }, end: { offset: 20, line: 1 }, end_body: { offset: 50, line: 5 } } });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         const clear_handler = result.current.handlers.getClearHandler!([focused_note]);
         clear_handler(mockClickEvent());
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_seqs: [], view_selected_seqs: [] },
+            display_options: { view_focused_ids: [], view_selected_ids: [] },
         }]);
     });
 
@@ -220,7 +220,7 @@ describe('useViewHandlers getClearHandler', () => {
 });
 
 describe('useViewHandlers setViewInteractionState', () => {
-    it('writes focused/selected seqs to the canonical key for the integration mode', () => {
+    it('writes focused/selected stable_ids to the canonical key for the integration mode', () => {
         const set_view_managed_state = jest.fn();
         const props = makeProps({
             id: FOLDER_VIEW_STATE_ID,
@@ -233,11 +233,11 @@ describe('useViewHandlers setViewInteractionState', () => {
             },
         });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
-        result.current.handlers.setViewInteractionState!([3, 7], [7]);
+        result.current.handlers.setViewInteractionState!(['a', 'b'], ['b']);
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: FOLDER_VIEW_STATE_ID,
             type: props.type,
-            display_options: { view_focused_seqs: [3, 7], view_selected_seqs: [7] },
+            display_options: { view_focused_ids: ['a', 'b'], view_selected_ids: ['b'] },
         }]);
     });
 });

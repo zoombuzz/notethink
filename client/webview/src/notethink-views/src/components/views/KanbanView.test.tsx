@@ -563,8 +563,8 @@ describe('KanbanView dragEndHandler', () => {
             },
         });
         mock_ordering_override = [
-            { doc_path: '/repo/file-a.md', changes: [{ from: 100, insert: 'kanban_ordering_weight=1&' }] },
-            { doc_path: '/repo/file-b.md', changes: [{ from: 200, insert: 'kanban_ordering_weight=2&' }] },
+            { doc_path: '/repo/file-a.md', changes: [{ from: 100, insert: 'nt_kanban_ordering_weight=1&' }] },
+            { doc_path: '/repo/file-b.md', changes: [{ from: 200, insert: 'nt_kanban_ordering_weight=2&' }] },
         ];
         const post_message = jest.fn();
         const props = makeViewProps({
@@ -612,7 +612,7 @@ describe('KanbanView dragEndHandler', () => {
             origin: origin_a,
             linetags: {
                 'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '5', value_numeric: 5, note_seq: 1, key_offset: 8, value_offset: 30, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '5', value_numeric: 5, note_seq: 1, key_offset: 8, value_offset: 30, linktext_offset: 0 },
             },
         });
         // existing notes in done column with weights that force a cascade
@@ -623,7 +623,7 @@ describe('KanbanView dragEndHandler', () => {
             origin: origin_a,
             linetags: {
                 'status': { key: 'status', value: 'done', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '0', value_numeric: 0, note_seq: 2, key_offset: 8, value_offset: 30, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '0', value_numeric: 0, note_seq: 2, key_offset: 8, value_offset: 30, linktext_offset: 0 },
             },
         });
         const done_b_existing = makeNote({
@@ -633,7 +633,7 @@ describe('KanbanView dragEndHandler', () => {
             origin: origin_b,
             linetags: {
                 'status': { key: 'status', value: 'done', note_seq: 3, key_offset: 0, value_offset: 0, linktext_offset: 0 },
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '0', value_numeric: 0, note_seq: 3, key_offset: 8, value_offset: 30, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '0', value_numeric: 0, note_seq: 3, key_offset: 8, value_offset: 30, linktext_offset: 0 },
             },
         });
         const post_message = jest.fn();
@@ -690,7 +690,7 @@ describe('KanbanView dragEndHandler', () => {
             origin: origin_a,
             linetags: {
                 'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '0', value_numeric: 0, note_seq: 1, key_offset: 8, value_offset: 30, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '0', value_numeric: 0, note_seq: 1, key_offset: 8, value_offset: 30, linktext_offset: 0 },
             },
         });
         const doing_b_high = makeNote({
@@ -700,7 +700,7 @@ describe('KanbanView dragEndHandler', () => {
             origin: origin_b,
             linetags: {
                 'status': { key: 'status', value: 'doing', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '10', value_numeric: 10, note_seq: 2, key_offset: 8, value_offset: 30, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '10', value_numeric: 10, note_seq: 2, key_offset: 8, value_offset: 30, linktext_offset: 0 },
             },
         });
         const doing_b_low = makeNote({
@@ -710,7 +710,7 @@ describe('KanbanView dragEndHandler', () => {
             origin: origin_b,
             linetags: {
                 'status': { key: 'status', value: 'doing', note_seq: 3, key_offset: 0, value_offset: 0, linktext_offset: 0 },
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '5', value_numeric: 5, note_seq: 3, key_offset: 8, value_offset: 30, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '5', value_numeric: 5, note_seq: 3, key_offset: 8, value_offset: 30, linktext_offset: 0 },
             },
         });
         const post_message = jest.fn();
@@ -780,7 +780,7 @@ describe('KanbanView dragEndHandler', () => {
     });
 });
 
-describe('KanbanView dragStartHandler', () => {
+describe('KanbanView drag start does not move the caret', () => {
 
     beforeEach(() => {
         captured_dnd.onDragStart = undefined;
@@ -788,20 +788,14 @@ describe('KanbanView dragStartHandler', () => {
         mock_ordering_override = undefined;
     });
 
-    it('folder mode: posts revealRange with the dragged note origin docPath (not the active file)', () => {
-        const origin_a = makeOrigin({ doc_id: 'doc-a', doc_path: '/repo/file-a.md' });
+    it('onDragStart posts nothing — it only arms the drag guard, never moves the caret', () => {
         const dragged = makeNote({
             seq: 1,
             headline_raw: '## Task A',
             position: { start: { offset: 42, line: 4 }, end: { offset: 70, line: 5 }, end_body: { offset: 100, line: 6 } },
-            origin: origin_a,
-            linetags: {
-                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
-            },
+            origin: makeOrigin({ doc_id: 'doc-a', doc_path: '/repo/file-a.md' }),
         });
         const post_message = jest.fn();
-        const click_handler = jest.fn();
-        // active file is file-B; the click chain would route to file-B but our drag start must override
         const props = makeViewProps({
             doc_path: '/repo/file-b.md',
             notes: notesBySeq([dragged]),
@@ -811,31 +805,32 @@ describe('KanbanView dragStartHandler', () => {
                 deleteViewFromManagedState: jest.fn(),
                 revertAllViewsToDefaultState: jest.fn(),
                 postMessage: post_message,
-                click: click_handler,
             },
         });
         render(<KanbanView {...props} />);
 
+        // a drag-start responder exists (it arms the post-drop click guard) but must post no message —
+        // in particular no revealRange/selectRange that would move the editor caret
+        expect(captured_dnd.onDragStart).toBeDefined();
         captured_dnd.onDragStart!({ draggableId: '1' }, {});
-
-        // option (a): bypass the click chain — click handler must NOT be invoked
-        expect(click_handler).not.toHaveBeenCalled();
-        expect(post_message).toHaveBeenCalledTimes(1);
-        const msg = post_message.mock.calls[0][0];
-        expect(msg.type).toBe('revealRange');
-        expect(msg.docPath).toBe('/repo/file-a.md');
-        expect(msg.docId).toBe('doc-a');
-        expect(msg.from).toBe(42);
+        expect(post_message).not.toHaveBeenCalled();
     });
 
-    it('single-file mode: posts revealRange with docPath undefined (no origin)', () => {
+    it('a completed drag posts editText only — never a revealRange that would move the caret', () => {
+        const origin_a = makeOrigin({ doc_id: 'doc-a', doc_path: '/repo/file-a.md' });
         const dragged = makeNote({
             seq: 1,
-            headline_raw: '## Task',
-            position: { start: { offset: 12, line: 2 }, end: { offset: 30, line: 3 }, end_body: { offset: 60, line: 4 } },
+            headline_raw: '## Task A',
+            stable_id: 'task-a',
+            position: { start: { offset: 42, line: 4 }, end: { offset: 70, line: 5 }, end_body: { offset: 100, line: 6 } },
+            origin: origin_a,
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
         });
         const post_message = jest.fn();
         const props = makeViewProps({
+            doc_path: '/repo/file-b.md',
             notes: notesBySeq([dragged]),
             notes_within_parent_context: [dragged],
             handlers: {
@@ -847,13 +842,11 @@ describe('KanbanView dragStartHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        captured_dnd.onDragStart!({ draggableId: '1' }, {});
+        captured_dnd.onDragEnd!({ draggableId: '1', destination: { droppableId: '0', index: 0 } }, {});
 
-        expect(post_message).toHaveBeenCalledTimes(1);
-        const msg = post_message.mock.calls[0][0];
-        expect(msg.type).toBe('revealRange');
-        expect(msg.docPath).toBeUndefined();
-        expect(msg.docId).toBeUndefined();
-        expect(msg.from).toBe(12);
+        // a drag may post editText (the reorder) but must never post a revealRange/selectRange
+        for (const call of post_message.mock.calls) {
+            expect(['revealRange', 'selectRange']).not.toContain(call[0].type);
+        }
     });
 });

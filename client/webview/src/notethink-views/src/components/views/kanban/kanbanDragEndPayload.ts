@@ -46,7 +46,7 @@ export function buildKanbanDragEndPayload(input: KanbanDragEndPayloadInput): Edi
         .filter((note) => (dragged_note.seq !== note.seq));
     destination_children_with_drop.splice(destination_column_position, 0, dragged_note);
     const ordering_change_sets = calculateTextChangesForOrdering(
-        destination_children_with_drop, destination_column_position, 'kanban_ordering_weight',
+        destination_children_with_drop, destination_column_position, 'nt_kanban_ordering_weight',
     );
 
     // status-tag goes under the dragged file; each ordering change-set under its own doc_path

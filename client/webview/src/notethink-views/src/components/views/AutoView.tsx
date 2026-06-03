@@ -1,6 +1,7 @@
 import Debug from "debug";
 import type { ReactElement } from "react";
 import { aggregateNoteLinetags, isAggregateRoot, majorityNgView } from "../../lib/noteops";
+import { resolveNamespacedTag } from "../../lib/linetagops";
 import type { ViewProps } from "../../types/ViewProps";
 import type { LineTag } from "../../types/NoteProps";
 import GenericView from "./GenericView";
@@ -22,7 +23,7 @@ export default function AutoView(props: ViewProps): ReactElement {
         display_options: {},
     };
 
-    // folder mode: synthetic root has no single ng_view linetag on a top-level note, so apply a majority vote across originating files (one vote per file)
+    // folder mode: synthetic root has no single nt_view linetag on a top-level note, so apply a majority vote across originating files (one vote per file)
     if (isAggregateRoot(props.nested?.parent_context)) {
         const majority = majorityNgView(props.notes);
         if (majority) {
@@ -33,16 +34,18 @@ export default function AutoView(props: ViewProps): ReactElement {
 
     if (props.display_options?.focused_notes?.length) {
         const attributes: { [key: string]: LineTag } = aggregateNoteLinetags(props.display_options?.focused_notes);
-        if (attributes?.ng_view?.value) {
-            derived_attributes.type = attributes.ng_view.value;
-            const view_typing_note = (props.notes || []).at(attributes.ng_view.note_seq);
+        const view_tag = resolveNamespacedTag(attributes, 'view');
+        const level_tag = resolveNamespacedTag(attributes, 'level');
+        if (view_tag?.value) {
+            derived_attributes.type = view_tag.value;
+            const view_typing_note = (props.notes || []).at(view_tag.note_seq);
             if (view_typing_note) {
                 derived_attributes.display_options.parent_context_seq = view_typing_note.seq;
                 replaced_attributes.display_options.parent_context_seq = props.display_options?.parent_context_seq;
             }
         }
-        if (attributes?.ng_level?.value_numeric) {
-            derived_attributes.display_options.level = attributes.ng_level.value_numeric;
+        if (level_tag?.value_numeric) {
+            derived_attributes.display_options.level = level_tag.value_numeric;
             replaced_attributes.display_options.level = props.display_options?.level;
         }
     }

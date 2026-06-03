@@ -109,73 +109,122 @@ describe('useViewContext', () => {
 
     describe('latest-click-wins with editor as tiebreaker (editor-derived wins; view-driven fills in when the editor has no opinion)', () => {
         // root.position.end is the clamping ceiling for the in-tree caret match — set it past every child range so a caret beyond a child's end_body still resolves through the in-tree matcher
-        const root = makeNote({ seq: 0, level: 0, position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });
-        const child = makeNote({ seq: 1, level: 1, position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
-        const other = makeNote({ seq: 2, level: 1, position: { start: { offset: 60, line: 3 }, end: { offset: 80, line: 4 }, end_body: { offset: 95, line: 5 } } });
+        const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });
+        const child = makeNote({ seq: 1, level: 1, stable_id: 'child', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
+        const other = makeNote({ seq: 2, level: 1, stable_id: 'other', position: { start: { offset: 60, line: 3 }, end: { offset: 80, line: 4 }, end_body: { offset: 95, line: 5 } } });
 
-        it('view_focused_seqs is the immediate-feedback source when no editor selection has confirmed yet', () => {
+        it('view_focused_ids is the immediate-feedback source when no editor selection has confirmed yet', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child],
                 // no selection — editor has no opinion
-                display_options: { view_focused_seqs: [child.seq] },
+                display_options: { view_focused_ids: [child.stable_id!] },
             })));
             expect(result.current.deepest.note?.seq).toBe(child.seq);
             expect(result.current.display_options.focused_seqs).toContain(child.seq);
         });
 
-        it('editor-derived match overrides a stale view_focused_seqs (latest click wins, editor priority)', () => {
+        it('editor-derived match overrides a stale view_focused_ids (latest click wins, editor priority)', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child, other],
-                // user clicked `child` in the view (view_focused_seqs = [child]), then moved the editor caret into `other`'s range — editor wins
+                // user clicked `child` in the view (view_focused_ids = [child]), then moved the editor caret into `other`'s range — editor wins
                 selection: { main: { head: 70, anchor: 70 } },
                 active_editor_doc_path: '/repo/a.md',
-                display_options: { view_focused_seqs: [child.seq] },
+                display_options: { view_focused_ids: [child.stable_id!] },
             })));
             expect(result.current.deepest.note?.seq).toBe(other.seq);
         });
 
-        it('view_focused_seqs fills in when the active editor is on a doc that is not in the aggregated set (per-doc matcher returns nothing)', () => {
+        it('view_focused_ids fills in when the active editor is on a doc that is not in the aggregated set (per-doc matcher returns nothing)', () => {
             // give the notes an origin so the per-doc matcher runs; point the active editor at an unrelated doc
             const origin: NoteOrigin = { doc_id: 'a', doc_path: '/repo/a.md', source_position: { start: { offset: 0, line: 1 }, end: { offset: 20, line: 1 } } };
-            const note_with_origin = makeNote({ seq: 1, level: 1, origin, position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
+            const note_with_origin = makeNote({ seq: 1, level: 1, stable_id: 'with-origin', origin, position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, note_with_origin],
                 selection: { main: { head: 25, anchor: 25 } },
                 active_editor_doc_path: '/repo/c.md',
-                display_options: { view_focused_seqs: [note_with_origin.seq] },
+                display_options: { view_focused_ids: [note_with_origin.stable_id!] },
             })));
             // per-doc matcher returns nothing (active doc not in aggregated set); view-driven fills in
             expect(result.current.deepest.note?.seq).toBe(note_with_origin.seq);
         });
 
-        it('falls back to editor-derived match when view_focused_seqs is unset', () => {
+        it('falls back to editor-derived match when view_focused_ids is unset', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child],
                 selection: { main: { head: 20, anchor: 20 } },
-                // no view_focused_seqs
+                // no view_focused_ids
             })));
             // editor caret at 20 lands inside child's position (10-50)
             expect(result.current.deepest.note?.seq).toBe(child.seq);
         });
 
-        it('view_selected_seqs is the immediate-feedback source for selection while no editor range selection is in effect', () => {
+        it('view_selected_ids is the immediate-feedback source for selection while no editor range selection is in effect', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child],
-                display_options: { view_selected_seqs: [child.seq] },
+                display_options: { view_selected_ids: [child.stable_id!] },
             })));
             expect(result.current.display_options.selected_seqs).toContain(child.seq);
         });
 
-        it('editor range selection overrides a stale view_selected_seqs', () => {
+        it('editor range selection overrides a stale view_selected_ids', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child, other],
-                // user clicked `child` (view_selected_seqs = [child]); then dragged a selection in the editor across `other`'s range — editor wins
+                // user clicked `child` (view_selected_ids = [child]); then dragged a selection in the editor across `other`'s range — editor wins
                 selection: { main: { head: 60, anchor: 95 } },
                 active_editor_doc_path: '/repo/a.md',
-                display_options: { view_selected_seqs: [child.seq] },
+                display_options: { view_selected_ids: [child.stable_id!] },
             })));
             expect(result.current.display_options.selected_seqs).toContain(other.seq);
             expect(result.current.display_options.selected_seqs).not.toContain(child.seq);
+        });
+    });
+
+    describe('stable_id survives a re-parse that renumbers seq', () => {
+        const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });
+
+        it('a re-parse that renumbers seq keeps the same note selected', () => {
+            // before re-parse: stable_id 'X' lives at seq 5
+            const before_x = makeNote({ seq: 5, level: 1, stable_id: 'X', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
+            const before_y = makeNote({ seq: 6, level: 1, stable_id: 'Y', position: { start: { offset: 60, line: 3 }, end: { offset: 80, line: 4 }, end_body: { offset: 95, line: 5 } } });
+            const { result, rerender } = renderHook((props: ViewProps) => useViewContext(props), {
+                initialProps: makeViewProps({
+                    notes: [root, before_x, before_y],
+                    display_options: { view_selected_ids: ['X'] },
+                }),
+            });
+            expect(result.current.display_options.selected_seqs).toEqual([5]);
+            // after re-parse: stable_id 'X' is renumbered to seq 9 (a Y-like note inherited seq 5)
+            const after_y = makeNote({ seq: 5, level: 1, stable_id: 'Y', position: { start: { offset: 60, line: 3 }, end: { offset: 80, line: 4 }, end_body: { offset: 95, line: 5 } } });
+            const after_x = makeNote({ seq: 9, level: 1, stable_id: 'X', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
+            rerender(makeViewProps({
+                notes: [root, after_y, after_x],
+                display_options: { view_selected_ids: ['X'] },
+            }));
+            // selection still resolves to the 'X' note, now reflecting its NEW seq
+            expect(result.current.display_options.selected_notes?.map((n) => n.stable_id)).toEqual(['X']);
+            expect(result.current.display_options.selected_seqs).toEqual([9]);
+        });
+
+        it('a re-parse that renumbers seq keeps the same note focused', () => {
+            const before_x = makeNote({ seq: 5, level: 1, stable_id: 'X', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
+            const before_y = makeNote({ seq: 6, level: 1, stable_id: 'Y', position: { start: { offset: 60, line: 3 }, end: { offset: 80, line: 4 }, end_body: { offset: 95, line: 5 } } });
+            const { result, rerender } = renderHook((props: ViewProps) => useViewContext(props), {
+                initialProps: makeViewProps({
+                    notes: [root, before_x, before_y],
+                    display_options: { view_focused_ids: ['X'] },
+                }),
+            });
+            expect(result.current.deepest.note?.stable_id).toBe('X');
+            expect(result.current.display_options.focused_seqs).toContain(5);
+            const after_y = makeNote({ seq: 5, level: 1, stable_id: 'Y', position: { start: { offset: 60, line: 3 }, end: { offset: 80, line: 4 }, end_body: { offset: 95, line: 5 } } });
+            const after_x = makeNote({ seq: 9, level: 1, stable_id: 'X', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
+            rerender(makeViewProps({
+                notes: [root, after_y, after_x],
+                display_options: { view_focused_ids: ['X'] },
+            }));
+            // focus still resolves to the 'X' note, now reflecting its NEW seq
+            expect(result.current.deepest.note?.stable_id).toBe('X');
+            expect(result.current.display_options.focused_seqs).toContain(9);
         });
     });
 });

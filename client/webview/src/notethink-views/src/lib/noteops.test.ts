@@ -19,7 +19,11 @@ import {
     findBodyItemElement,
     calculateTextChangesForCheckbox,
     standardNoteOrder,
+    focusedChainIdsFor,
     kanbanNoteOrder,
+    kanbanColumnValue,
+    notesInKanbanColumn,
+    kanbanDraggableId,
     noteOrder,
     findFirstIncompleteTaskSeq,
     formatColumnLabel,
@@ -194,13 +198,13 @@ describe('kanbanNoteOrder', () => {
         const a = makeNote({
             seq: 1,
             linetags: {
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '2', value_numeric: 2, note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '2', value_numeric: 2, note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
             },
         });
         const b = makeNote({
             seq: 2,
             linetags: {
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '1', value_numeric: 1, note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '1', value_numeric: 1, note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
             },
         });
         expect(kanbanNoteOrder(a, b)).toBeGreaterThan(0);
@@ -234,7 +238,7 @@ describe('kanbanNoteOrder', () => {
         const a = makeNote({
             seq: 1,
             linetags: {
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '1', value_numeric: 1, note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '1', value_numeric: 1, note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
             },
         });
         const b = makeNote({ seq: 2 });
@@ -246,7 +250,7 @@ describe('kanbanNoteOrder', () => {
         const b = makeNote({
             seq: 2,
             linetags: {
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '1', value_numeric: 1, note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '1', value_numeric: 1, note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
             },
         });
         expect(kanbanNoteOrder(a, b)).toBeLessThan(0);
@@ -256,16 +260,76 @@ describe('kanbanNoteOrder', () => {
         const a = makeNote({
             seq: 1,
             linetags: {
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '5', value_numeric: 5, note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '5', value_numeric: 5, note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
             },
         });
         const b = makeNote({
             seq: 2,
             linetags: {
-                'kanban_ordering_weight': { key: 'kanban_ordering_weight', value: '5', value_numeric: 5, note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+                'nt_kanban_ordering_weight': { key: 'nt_kanban_ordering_weight', value: '5', value_numeric: 5, note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
             },
         });
         expect(kanbanNoteOrder(a, b)).toBeLessThan(0);
+    });
+});
+
+describe('kanbanColumnValue', () => {
+    it('returns the status linetag value when present', () => {
+        const note = makeNote({
+            linetags: { 'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 } },
+        });
+        expect(kanbanColumnValue(note)).toBe('doing');
+    });
+
+    it('returns untagged when the note has no status linetag', () => {
+        expect(kanbanColumnValue(makeNote())).toBe('untagged');
+    });
+
+    it('treats an empty status value as untagged', () => {
+        const note = makeNote({
+            linetags: { 'status': { key: 'status', value: '', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 } },
+        });
+        expect(kanbanColumnValue(note)).toBe('untagged');
+    });
+});
+
+describe('notesInKanbanColumn', () => {
+    function statusNote(seq: number, value: string, weight?: number): NoteProps {
+        const linetags: NoteProps['linetags'] = {
+            'status': { key: 'status', value, note_seq: seq, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+        };
+        if (weight !== undefined) {
+            linetags['nt_kanban_ordering_weight'] = { key: 'nt_kanban_ordering_weight', value: String(weight), value_numeric: weight, note_seq: seq, key_offset: 0, value_offset: 0, linktext_offset: 0 };
+        }
+        return makeNote({ seq, linetags });
+    }
+
+    it('selects only notes in the requested column', () => {
+        const notes = [statusNote(1, 'doing'), statusNote(2, 'done'), statusNote(3, 'doing')];
+        const result = notesInKanbanColumn(notes, 'doing');
+        expect(result.map(n => n.seq)).toEqual([1, 3]);
+    });
+
+    it('puts notes with no status into the untagged column', () => {
+        const notes = [makeNote({ seq: 1 }), statusNote(2, 'done')];
+        expect(notesInKanbanColumn(notes, 'untagged').map(n => n.seq)).toEqual([1]);
+    });
+
+    it('orders members by kanbanNoteOrder (weights decisive)', () => {
+        const notes = [statusNote(1, 'done', 2), statusNote(2, 'done', 1)];
+        expect(notesInKanbanColumn(notes, 'done').map(n => n.seq)).toEqual([2, 1]);
+    });
+});
+
+describe('kanbanDraggableId', () => {
+    it('prefers stable_id when present', () => {
+        const note = makeNote({ seq: 7, stable_id: 'doc-1:my-story' });
+        expect(kanbanDraggableId(note)).toBe('doc-1:my-story');
+    });
+
+    it('falls back to the seq string when stable_id is absent', () => {
+        const note = makeNote({ seq: 7 });
+        expect(kanbanDraggableId(note)).toBe('7');
     });
 });
 
@@ -323,8 +387,8 @@ describe('kanbanNoteOrder cross-file', () => {
             position: { start: { offset: seq * 100, line: seq }, end: { offset: seq * 100 + 10, line: seq } },
             origin: { doc_id: doc_path, doc_path, relative_path: doc_path, file_rank, file_mtime },
             linetags: weight === undefined ? undefined : {
-                'kanban_ordering_weight': {
-                    key: 'kanban_ordering_weight', value: `${weight}`, value_numeric: weight,
+                'nt_kanban_ordering_weight': {
+                    key: 'nt_kanban_ordering_weight', value: `${weight}`, value_numeric: weight,
                     note_seq: seq, key_offset: 0, value_offset: 0, linktext_offset: 0,
                 },
             },
@@ -398,8 +462,8 @@ describe('kanbanNoteOrder (relevance + weights)', () => {
             position: { start: { offset: seq * 100, line: seq }, end: { offset: seq * 100 + 10, line: seq } },
             origin: { doc_id: doc_path, doc_path, relative_path: doc_path, file_rank, file_mtime },
             linetags: weight === undefined ? undefined : {
-                'kanban_ordering_weight': {
-                    key: 'kanban_ordering_weight', value: `${weight}`, value_numeric: weight,
+                'nt_kanban_ordering_weight': {
+                    key: 'nt_kanban_ordering_weight', value: `${weight}`, value_numeric: weight,
                     note_seq: seq, key_offset: 0, value_offset: 0, linktext_offset: 0,
                 },
             },
@@ -781,37 +845,58 @@ describe('findSelectedNotesByOriginPosition', () => {
     });
 });
 
-describe('resolveFocusedNote', () => {
-    it('prefers editor-derived match over view-driven seqs', () => {
-        const editor_match = makeNote({ seq: 1 });
-        const other = makeNote({ seq: 2 });
-        const result = resolveFocusedNote([2], [editor_match, other], editor_match);
-        expect(result?.seq).toBe(1);
+describe('focusedChainIdsFor', () => {
+    it('returns parents stable_ids followed by the note own stable_id, root-to-leaf', () => {
+        const grandparent = makeNote({ seq: 1, stable_id: 'doc:gp' });
+        const parent = makeNote({ seq: 2, stable_id: 'doc:p' });
+        const note = makeNote({ seq: 3, stable_id: 'doc:n', parent_notes: [grandparent, parent] });
+        expect(focusedChainIdsFor(note)).toEqual(['doc:gp', 'doc:p', 'doc:n']);
     });
 
-    it('falls back to view-driven seqs when editor has no match', () => {
-        const note_a = makeNote({ seq: 1 });
-        const note_b = makeNote({ seq: 2 });
-        const result = resolveFocusedNote([2], [note_a, note_b], undefined);
-        expect(result?.seq).toBe(2);
+    it('returns just the note stable_id when it has no parents', () => {
+        const note = makeNote({ seq: 1, stable_id: 'doc:solo' });
+        expect(focusedChainIdsFor(note)).toEqual(['doc:solo']);
+    });
+
+    it('drops undefined stable_ids from parents and self', () => {
+        const parent_with_id = makeNote({ seq: 1, stable_id: 'doc:p' });
+        const parent_without_id = makeNote({ seq: 2, stable_id: undefined });
+        const note = makeNote({ seq: 3, stable_id: undefined, parent_notes: [parent_with_id, parent_without_id] });
+        expect(focusedChainIdsFor(note)).toEqual(['doc:p']);
+    });
+});
+
+describe('resolveFocusedNote', () => {
+    it('prefers editor-derived match over view-driven ids', () => {
+        const editor_match = makeNote({ seq: 1, stable_id: 'doc:a' });
+        const other = makeNote({ seq: 2, stable_id: 'doc:b' });
+        const result = resolveFocusedNote(['doc:b'], [editor_match, other], editor_match);
+        expect(result?.stable_id).toBe('doc:a');
+    });
+
+    it('falls back to view-driven ids when editor has no match', () => {
+        const note_a = makeNote({ seq: 1, stable_id: 'doc:a' });
+        const note_b = makeNote({ seq: 2, stable_id: 'doc:b' });
+        const result = resolveFocusedNote(['doc:b'], [note_a, note_b], undefined);
+        expect(result?.stable_id).toBe('doc:b');
     });
 
     it('returns undefined when neither source produces a match', () => {
-        const note = makeNote({ seq: 1 });
+        const note = makeNote({ seq: 1, stable_id: 'doc:a' });
         expect(resolveFocusedNote(undefined, [note], undefined)).toBeUndefined();
         expect(resolveFocusedNote([], [note], undefined)).toBeUndefined();
     });
 
-    it('returns undefined when view_focused_seqs points at a missing seq and the editor has no match', () => {
-        const note = makeNote({ seq: 1 });
-        expect(resolveFocusedNote([99], [note], undefined)).toBeUndefined();
+    it('returns undefined when view_focused_ids points at a missing id and the editor has no match', () => {
+        const note = makeNote({ seq: 1, stable_id: 'doc:a' });
+        expect(resolveFocusedNote(['doc:absent'], [note], undefined)).toBeUndefined();
     });
 
-    it('uses the last seq in the chain as the deepest focused note', () => {
-        const parent = makeNote({ seq: 1 });
-        const child = makeNote({ seq: 2 });
-        const result = resolveFocusedNote([1, 2], [parent, child], undefined);
-        expect(result?.seq).toBe(2);
+    it('uses the last id in the chain as the deepest focused note', () => {
+        const parent = makeNote({ seq: 1, stable_id: 'doc:p' });
+        const child = makeNote({ seq: 2, stable_id: 'doc:c' });
+        const result = resolveFocusedNote(['doc:p', 'doc:c'], [parent, child], undefined);
+        expect(result?.stable_id).toBe('doc:c');
     });
 });
 

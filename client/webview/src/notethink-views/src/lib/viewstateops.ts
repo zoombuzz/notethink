@@ -58,25 +58,26 @@ export function resolveViewStateId(props: ViewProps): string {
 }
 
 /**
- * write per-view focused/selected seqs to the view-managed state. The dispatch target is
+ * write per-view focused/selected stable_ids to the view-managed state. The dispatch target is
  * the canonical FOLDER_VIEW_STATE_ID in folder mode (so the state survives a flip to
  * current_file and back) and the view's own id in current_file mode. The caller is
  * responsible for computing the focused chain (deepest note + ancestors); selected is
- * typically a single-seq list (the clicked note) or empty when transitioning out of
- * selection.
+ * typically a single-id list (the clicked note) or empty when transitioning out of
+ * selection. Stored as stable_ids (invariant across re-parse) so a drag-reorder does not
+ * make the highlight jump to whichever note now holds the reassigned seq.
  */
 export function writeViewInteractionState(
     props: ViewProps,
     handlers: ViewApi,
-    focused_seqs: number[],
-    selected_seqs: number[],
+    focused_ids: string[],
+    selected_ids: string[],
 ): void {
     handlers.setViewManagedState([{
         id: resolveViewStateId(props),
         type: props.type,
         display_options: {
-            view_focused_seqs: focused_seqs,
-            view_selected_seqs: selected_seqs,
+            view_focused_ids: focused_ids,
+            view_selected_ids: selected_ids,
         },
     }]);
 }

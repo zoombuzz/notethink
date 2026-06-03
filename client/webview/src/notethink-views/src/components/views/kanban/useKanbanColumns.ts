@@ -1,7 +1,6 @@
 import Debug from 'debug';
 import { useMemo } from 'react';
-import { deriveNaturalColumnOrder } from '../../../lib/noteops';
-import { kanbanNoteOrder } from '../../../lib/noteops';
+import { deriveNaturalColumnOrder, notesInKanbanColumn } from '../../../lib/noteops';
 import type { NoteProps, NoteDisplayOptions } from '../../../types/NoteProps';
 
 const debug = Debug("nodejs:notethink-views:useKanbanColumns");
@@ -44,12 +43,7 @@ export function useKanbanColumns(
     return useMemo<Array<KanbanColumnDescriptor>>(() => {
         const columns = deriveColumnOrder(notes, custom_order);
         for (const column of columns) {
-            column.child_notes = (notes || [])
-                .filter((note: NoteProps) => (
-                    (note?.linetags?.status && note?.linetags?.status.value === column.value)
-                    || (!note?.linetags?.status && column.value === 'untagged')
-                ))
-                .sort(kanbanNoteOrder);
+            column.child_notes = notesInKanbanColumn(notes || [], column.value);
         }
         debug('built %d columns, total notes=%d', columns.length, (notes || []).length);
         return columns;

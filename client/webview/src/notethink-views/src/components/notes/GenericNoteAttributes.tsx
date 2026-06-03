@@ -8,7 +8,6 @@ const debug = Debug("nodejs:notethink-views:GenericNoteAttributes");
 
 const HIDDEN_ATTRIBUTES = [
     'progress_unit', 'progress_max',
-    'kanban_ordering_weight',
 ];
 
 export default function GenericNoteAttributes(props: NoteProps): React.ReactElement {

@@ -1,6 +1,6 @@
-import { findLineTags, parseLineTags, calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering, flattenOrderingChangeSets } from './linetagops';
+import { findLineTags, parseLineTags, calculateTextChangesForNewLinetagValue, calculateTextChangesForOrdering, flattenOrderingChangeSets, isNamespacedKey, resolveNamespacedTag, NOTETHINK_PREFIXES } from './linetagops';
 import { kanbanNoteOrder } from './noteops';
-import type { NoteProps } from '../types/NoteProps';
+import type { LineTag, NoteProps } from '../types/NoteProps';
 
 describe('findLineTags', () => {
 
@@ -28,9 +28,9 @@ describe('findLineTags', () => {
     });
 
     it('handles linetags with numeric values', () => {
-        const input = '## Task [](?kanban_ordering_weight=3)';
+        const input = '## Task [](?nt_kanban_ordering_weight=3)';
         const result = findLineTags(input);
-        expect(result).toBe('[](?kanban_ordering_weight=3)');
+        expect(result).toBe('[](?nt_kanban_ordering_weight=3)');
     });
 
     it('does not match markdown links as linetags', () => {
@@ -69,10 +69,10 @@ describe('parseLineTags', () => {
     });
 
     it('stores numeric values', () => {
-        const result = parseLineTags('[](?kanban_ordering_weight=3)', 1);
+        const result = parseLineTags('[](?nt_kanban_ordering_weight=3)', 1);
         expect(result).toBeDefined();
-        expect(result!['kanban_ordering_weight'].value).toBe('3');
-        expect(result!['kanban_ordering_weight'].value_numeric).toBe(3);
+        expect(result!['nt_kanban_ordering_weight'].value).toBe('3');
+        expect(result!['nt_kanban_ordering_weight'].value_numeric).toBe(3);
     });
 
     it('stores linktext when it matches value', () => {
@@ -144,6 +144,91 @@ describe('calculateTextChangesForNewLinetagValue', () => {
         const changes = calculateTextChangesForNewLinetagValue(note, 'priority', 'high', 'normal');
         expect(changes).toHaveLength(1);
         expect(changes[0].insert).toContain('priority=high');
+    });
+
+    // regression: reordering a kanban card whose status is inherited from a parent's
+    // nt_child_status= attribute used to insert nt_kanban_ordering_weight= at document offset 0
+    // (inherited tags carry key_offset 0 and the note has no linetags_from), corrupting the
+    // parent heading and wiping the inherited status off every sibling — the whole column vanished
+    it('appends a fresh linetag block instead of writing to offset 0 when the only linetag is inherited', () => {
+        const note = makeNote({
+            linetags: {
+                'status': {
+                    key: 'status',
+                    value: 'done',
+                    note_seq: 1,
+                    key_offset: 0,
+                    value_offset: 0,
+                    linktext_offset: 0,
+                    inherited: true,
+                },
+            },
+        });
+        const changes = calculateTextChangesForNewLinetagValue(note, 'nt_kanban_ordering_weight', '1', '0');
+        expect(changes).toHaveLength(1);
+        // must NOT land at offset 0 — append at the end of the headline instead
+        expect(changes[0].from).toBe(9); // note.position.start.offset + headline_raw.length
+        expect(changes[0].insert).toBe(' [](?nt_kanban_ordering_weight=1)');
+    });
+
+    it('skips the write when the value already matches an inherited tag', () => {
+        // dragging a card within the column it already inherits status= from: no edit needed
+        const note = makeNote({
+            linetags: {
+                'status': {
+                    key: 'status',
+                    value: 'done',
+                    note_seq: 1,
+                    key_offset: 0,
+                    value_offset: 0,
+                    linktext_offset: 0,
+                    inherited: true,
+                },
+            },
+        });
+        const changes = calculateTextChangesForNewLinetagValue(note, 'status', 'done', 'untagged');
+        expect(changes).toHaveLength(0);
+    });
+
+    it('materialises a real linetag when the value differs from an inherited tag', () => {
+        // dragging a card OUT of its inherited column: the inherited value must be overridden explicitly
+        const note = makeNote({
+            linetags: {
+                'status': {
+                    key: 'status',
+                    value: 'done',
+                    note_seq: 1,
+                    key_offset: 0,
+                    value_offset: 0,
+                    linktext_offset: 0,
+                    inherited: true,
+                },
+            },
+        });
+        const changes = calculateTextChangesForNewLinetagValue(note, 'status', 'doing', 'untagged');
+        expect(changes).toHaveLength(1);
+        expect(changes[0].from).toBe(9); // appended at the end of the headline
+        expect(changes[0].insert).toBe(' [](?status=doing)');
+    });
+
+    it('adds the field to the first REAL linetag, skipping an inherited one', () => {
+        const note = makeNote({
+            linetags_from: 10,
+            linetags: {
+                'status': {
+                    key: 'status', value: 'done', note_seq: 1,
+                    key_offset: 0, value_offset: 0, linktext_offset: 0, inherited: true,
+                },
+                'priority': {
+                    key: 'priority', value: 'high', note_seq: 1,
+                    key_offset: 4, value_offset: 13, linktext_offset: 0,
+                },
+            },
+        });
+        const changes = calculateTextChangesForNewLinetagValue(note, 'nt_kanban_ordering_weight', '1', '0');
+        expect(changes).toHaveLength(1);
+        expect(changes[0].from).toBe(14); // linetags_from(10) + priority key_offset(4)
+        expect(changes[0].insert).toBe('nt_kanban_ordering_weight=1&');
     });
 
     it('updates existing linetag value', () => {
@@ -263,26 +348,26 @@ describe('calculateTextChangesForOrdering', () => {
 
     it('returns empty changes when sequence ordering is sufficient', () => {
         const children = [makeNote(1), makeNote(2), makeNote(3)];
-        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(children, 1, 'nt_kanban_ordering_weight');
         expect(result).toHaveLength(0);
     });
 
     it('assigns weight when inserted note breaks sequence order', () => {
         // seq 3 inserted between seq 1 and seq 2 - seq ordering won't work since 3 > 2
         const children = [makeNote(1), makeNote(3), makeNote(2)];
-        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(children, 1, 'nt_kanban_ordering_weight');
         const changes = flattenOrderingChangeSets(result);
         expect(changes.length).toBeGreaterThan(0);
         // should assign a weight to the new child at position 1
-        expect(changes[0].insert).toContain('kanban_ordering_weight');
+        expect(changes[0].insert).toContain('nt_kanban_ordering_weight');
     });
 
     it('applies weight to new child when predecessor has weight', () => {
         const predecessor = makeNote(1, {
             linetags_from: 20,
             linetags: {
-                'kanban_ordering_weight': {
-                    key: 'kanban_ordering_weight', value: '5', value_numeric: 5,
+                'nt_kanban_ordering_weight': {
+                    key: 'nt_kanban_ordering_weight', value: '5', value_numeric: 5,
                     note_seq: 1, key_offset: 4, value_offset: 25, linktext_offset: 0,
                 },
             },
@@ -290,7 +375,7 @@ describe('calculateTextChangesForOrdering', () => {
         const new_child = makeNote(2);
         const successor = makeNote(3);
         const children = [predecessor, new_child, successor];
-        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(children, 1, 'nt_kanban_ordering_weight');
         expect(flattenOrderingChangeSets(result).length).toBeGreaterThan(0);
     });
 
@@ -298,8 +383,8 @@ describe('calculateTextChangesForOrdering', () => {
         const predecessor = makeNote(1, {
             linetags_from: 20,
             linetags: {
-                'kanban_ordering_weight': {
-                    key: 'kanban_ordering_weight', value: '5', value_numeric: 5,
+                'nt_kanban_ordering_weight': {
+                    key: 'nt_kanban_ordering_weight', value: '5', value_numeric: 5,
                     note_seq: 1, key_offset: 4, value_offset: 25, linktext_offset: 0,
                 },
             },
@@ -309,14 +394,14 @@ describe('calculateTextChangesForOrdering', () => {
         const successor = makeNote(2, {
             linetags_from: 60,
             linetags: {
-                'kanban_ordering_weight': {
-                    key: 'kanban_ordering_weight', value: '5', value_numeric: 5,
+                'nt_kanban_ordering_weight': {
+                    key: 'nt_kanban_ordering_weight', value: '5', value_numeric: 5,
                     note_seq: 2, key_offset: 4, value_offset: 25, linktext_offset: 0,
                 },
             },
         });
         const children = [predecessor, new_child, successor];
-        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(children, 1, 'nt_kanban_ordering_weight');
         // should cascade: both new_child and successor get weights
         expect(flattenOrderingChangeSets(result).length).toBeGreaterThanOrEqual(1);
     });
@@ -324,7 +409,7 @@ describe('calculateTextChangesForOrdering', () => {
     it('single-file mode returns at most one bucket with undefined doc_path', () => {
         // both children share no origin → undefined doc_path bucket
         const children = [makeNote(1), makeNote(3), makeNote(2)];
-        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(children, 1, 'nt_kanban_ordering_weight');
         expect(result).toHaveLength(1);
         expect(result[0].doc_path).toBeUndefined();
     });
@@ -334,7 +419,7 @@ describe('calculateTextChangesForOrdering', () => {
      * implicit ordering kanbanNoteOrder now uses). simulate a drop the way
      * KanbanView.dragEndHandler does (filter the dragged note out, splice it
      * into the new index), feed the result to calculateTextChangesForOrdering,
-     * apply the produced kanban_ordering_weight values back onto note copies,
+     * apply the produced nt_kanban_ordering_weight values back onto note copies,
      * re-sort with kanbanNoteOrder, and assert the column holds the dropped
      * order. this is the end-to-end correctness the drag code lacked.
      */
@@ -342,12 +427,12 @@ describe('calculateTextChangesForOrdering', () => {
         const dragged = initial[from_index];
         const column = initial.filter(n => n.seq !== dragged.seq);
         column.splice(to_index, 0, dragged);
-        const changes = flattenOrderingChangeSets(calculateTextChangesForOrdering(column, to_index, 'kanban_ordering_weight'));
+        const changes = flattenOrderingChangeSets(calculateTextChangesForOrdering(column, to_index, 'nt_kanban_ordering_weight'));
         // a brand-new linetag is inserted at note.position.start.offset + headline_raw.length, so map each change back to its note by that offset
         // notes the algorithm assigned weight 0 (the default) get no change and stay unweighted — kanbanNoteOrder ranks them ahead of weighted cards, which is intended
         const weight_by_offset = new Map<number, number>();
         for (const c of changes) {
-            const m = /kanban_ordering_weight=(\d+)/.exec(c.insert);
+            const m = /nt_kanban_ordering_weight=(\d+)/.exec(c.insert);
             if (m) { weight_by_offset.set(c.from, Number(m[1])); }
         }
         const applied = column.map(n => {
@@ -357,8 +442,8 @@ describe('calculateTextChangesForOrdering', () => {
             return {
                 ...n,
                 linetags: {
-                    kanban_ordering_weight: {
-                        key: 'kanban_ordering_weight', value: String(w), value_numeric: w,
+                    nt_kanban_ordering_weight: {
+                        key: 'nt_kanban_ordering_weight', value: String(w), value_numeric: w,
                         note_seq: n.seq, key_offset: 0, value_offset: 0, linktext_offset: 0,
                     },
                 },
@@ -384,48 +469,56 @@ describe('calculateTextChangesForOrdering', () => {
         expect(simulateDrop(column, 2, 1)).toEqual([10, 30, 20, 40]);
     });
 
+    // weighted single-file note fixture: linetag block sits just after the headline
+    function weighted(seq: number, n: number): NoteProps {
+        const linetags_from = seq * 20 + `## Note ${seq}`.length;
+        return makeNote(seq, {
+            linetags_from,
+            linetags: {
+                'nt_kanban_ordering_weight': {
+                    key: 'nt_kanban_ordering_weight', value: String(n), value_numeric: n,
+                    note_seq: seq, key_offset: 0, value_offset: 'nt_kanban_ordering_weight='.length, linktext_offset: 0,
+                },
+            },
+        });
+    }
+
     /*
-     * single-file regression fixture: snapshot the byte-level shape of the
-     * pre-refactor output for a known-good single-file input. if the
-     * partitioned-output rewrite ever stops being byte-identical for
-     * single-file callers this test fails on the literal change list.
+     * minimal + self-removing: weights exist only as long as they are needed to force a
+     * non-implicit order. A note that is back in its implicit slot has its stale weight removed;
+     * the rest are minimised rather than cascaded ever-upward.
      */
-    it('single-file byte-identical regression: cascade output matches pre-refactor', () => {
-        const predecessor = makeNote(1, {
-            linetags_from: 20,
-            linetags: {
-                'kanban_ordering_weight': {
-                    key: 'kanban_ordering_weight', value: '5', value_numeric: 5,
-                    note_seq: 1, key_offset: 4, value_offset: 25, linktext_offset: 0,
-                },
-            },
-        });
+    it('removes a now-unnecessary weight and minimises the rest (no upward cascade)', () => {
+        // desired order [pred(seq1,w5), new_child(seq3), successor(seq2,w5)]: seq1<seq3 is already
+        // implicit, so pred + new_child are the unweighted prefix; only successor needs a weight
+        const predecessor = weighted(1, 5);
         const new_child = makeNote(3);
-        const successor = makeNote(2, {
-            linetags_from: 60,
-            linetags: {
-                'kanban_ordering_weight': {
-                    key: 'kanban_ordering_weight', value: '5', value_numeric: 5,
-                    note_seq: 2, key_offset: 4, value_offset: 25, linktext_offset: 0,
-                },
-            },
-        });
-        const children = [predecessor, new_child, successor];
-        const result = calculateTextChangesForOrdering(children, 1, 'kanban_ordering_weight');
-        // exactly one bucket, single-file, doc_path undefined
+        const successor = weighted(2, 5);
+        const result = calculateTextChangesForOrdering([predecessor, new_child, successor], 1, 'nt_kanban_ordering_weight');
         expect(result).toHaveLength(1);
         expect(result[0].doc_path).toBeUndefined();
         const flat = flattenOrderingChangeSets(result);
-        // predecessor.seq=1, new_child.seq=3 → predecessor.seq > new_child.seq is false → +0
-        // so min_weight = predecessor_weight (5) + 0 = 5
-        // new_child.seq=3 > successor.seq=2 → max_weight = successor_weight (5) - 1 = 4
-        // 4 < 5 → cascade: new_child gets 5, successor gets 6
-        // new_child has no linetags → a fresh ` [](?kanban_ordering_weight=5)` is inserted after its headline
-        // successor updates the existing value 5 → 6
-        const new_child_insert = flat.find(c => c.from === new_child.position.start.offset + new_child.headline_raw.length);
-        expect(new_child_insert?.insert).toBe(' [](?kanban_ordering_weight=5)');
-        const successor_update = flat.find(c => c.from === (successor.linetags_from || 0) + successor.linetags!['kanban_ordering_weight'].value_offset);
-        expect(successor_update?.insert).toBe('6');
+        // predecessor's weight is no longer needed → removed (empty insert)
+        expect(flat.some(c => c.insert === '')).toBe(true);
+        // successor is minimised down to 1 (value update), NOT cascaded up to 6
+        expect(flat.some(c => c.insert === '1')).toBe(true);
+        // new_child stays unweighted — no fresh weight tag is inserted for it
+        expect(flat.some(c => c.insert.includes('nt_kanban_ordering_weight='))).toBe(false);
+    });
+
+    /*
+     * the acceptance test for "weights are minimal": drag a card out of its implicit slot
+     * (which mints weights), then drag it back — the column returns to implicit order and EVERY
+     * nt_kanban_ordering_weight is stripped, leaving the file weight-free.
+     */
+    it('drag a card out of place then back to implicit order strips every weight', () => {
+        // state after dragging seq40 to the top: 10→w1, 20→w2, 30→w3 (40 unweighted)
+        // now drag seq40 back to the bottom → desired order is the implicit [10,20,30,40]
+        const desired = [weighted(10, 1), weighted(20, 2), weighted(30, 3), makeNote(40)];
+        const flat = flattenOrderingChangeSets(calculateTextChangesForOrdering(desired, 3, 'nt_kanban_ordering_weight'));
+        // three weights to strip, and every emitted change is a removal — none re-applies a weight
+        expect(flat.length).toBeGreaterThan(0);
+        expect(flat.every(c => c.insert === '')).toBe(true);
     });
 });
 
@@ -453,8 +546,8 @@ describe('calculateTextChangesForOrdering cross-file', () => {
             ...note,
             linetags_from: note.position.start.offset + note.headline_raw.length - 25,
             linetags: {
-                kanban_ordering_weight: {
-                    key: 'kanban_ordering_weight', value: `${weight}`, value_numeric: weight,
+                nt_kanban_ordering_weight: {
+                    key: 'nt_kanban_ordering_weight', value: `${weight}`, value_numeric: weight,
                     note_seq: note.seq, key_offset: 4, value_offset: 25, linktext_offset: 0,
                 },
             },
@@ -467,14 +560,14 @@ describe('calculateTextChangesForOrdering cross-file', () => {
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const a_succ = weighted(makeNoteWithOrigin(3, 'a.md'), 20);
         const column = [a_pred, new_child, a_succ];
-        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(column, 1, 'nt_kanban_ordering_weight');
         // exactly one bucket — only b.md got an edit
         expect(result).toHaveLength(1);
         expect(result[0].doc_path).toBe('b.md');
         // new_child weight is 15 (midpoint between 10 and 20)
         const flat = flattenOrderingChangeSets(result);
-        const insert = flat.find(c => /kanban_ordering_weight=/.test(c.insert));
-        expect(insert?.insert).toContain('kanban_ordering_weight=15');
+        const insert = flat.find(c => /nt_kanban_ordering_weight=/.test(c.insert));
+        expect(insert?.insert).toContain('nt_kanban_ordering_weight=15');
     });
 
     it('cascade is bounded to the inserted note\'s doc_path when gap insertion fails', () => {
@@ -483,7 +576,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const a_succ = weighted(makeNoteWithOrigin(3, 'a.md'), 6);
         const column = [a_pred, new_child, a_succ];
-        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(column, 1, 'nt_kanban_ordering_weight');
         // all touched docs must be b.md (file-A weights stay untouched)
         for (const set of result) {
             expect(set.doc_path).toBe('b.md');
@@ -499,7 +592,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
         const a_mid = weighted(makeNoteWithOrigin(3, 'a.md'), 2);
         const b2 = weighted(makeNoteWithOrigin(4, 'b.md'), 3);
         const column = [b1, new_child, a_mid, b2];
-        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(column, 1, 'nt_kanban_ordering_weight');
         // every emitted bucket is b.md — a.md never receives a rewrite
         for (const set of result) {
             expect(set.doc_path).toBe('b.md');
@@ -512,7 +605,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const a_succ = makeNoteWithOrigin(3, 'a.md');
         const column = [a_pred, new_child, a_succ];
-        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(column, 1, 'nt_kanban_ordering_weight');
         for (const set of result) {
             expect(set.doc_path).toBe('b.md');
         }
@@ -523,7 +616,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const a_succ = weighted(makeNoteWithOrigin(3, 'a.md'), 20);
         const column = [a_pred, new_child, a_succ];
-        const result = calculateTextChangesForOrdering(column, 1, 'kanban_ordering_weight');
+        const result = calculateTextChangesForOrdering(column, 1, 'nt_kanban_ordering_weight');
         // each set must have its doc_path stamped
         for (const set of result) {
             expect(set).toHaveProperty('doc_path');
@@ -533,5 +626,62 @@ describe('calculateTextChangesForOrdering cross-file', () => {
         // and no two sets share a doc_path
         const doc_paths = result.map(s => s.doc_path);
         expect(new Set(doc_paths).size).toBe(doc_paths.length);
+    });
+});
+
+describe('NOTETHINK_PREFIXES', () => {
+    it('lists nt_ before ng_ so the going-forward prefix wins when both are present', () => {
+        expect(NOTETHINK_PREFIXES).toEqual(['nt_', 'ng_']);
+    });
+});
+
+describe('isNamespacedKey', () => {
+    it('matches the going-forward nt_ prefix', () => {
+        expect(isNamespacedKey('nt_view')).toBe(true);
+        expect(isNamespacedKey('nt_child_status')).toBe(true);
+        expect(isNamespacedKey('nt_kanban_ordering_weight')).toBe(true);
+    });
+
+    it('matches the legacy ng_ prefix', () => {
+        expect(isNamespacedKey('ng_view')).toBe(true);
+        expect(isNamespacedKey('ng_level')).toBe(true);
+    });
+
+    it('rejects unprefixed content attributes', () => {
+        expect(isNamespacedKey('status')).toBe(false);
+        expect(isNamespacedKey('epic')).toBe(false);
+        expect(isNamespacedKey('progress_unit')).toBe(false);
+    });
+});
+
+describe('resolveNamespacedTag', () => {
+    const tag = (key: string): LineTag => ({
+        key,
+        key_offset: 0,
+        value: key,
+        value_offset: 0,
+        linktext_offset: 0,
+        note_seq: 0,
+    });
+
+    it('resolves the nt_ form when only it is present', () => {
+        expect(resolveNamespacedTag({ nt_view: tag('nt_view') }, 'view')?.key).toBe('nt_view');
+    });
+
+    it('falls back to the legacy ng_ form when only it is present', () => {
+        expect(resolveNamespacedTag({ ng_view: tag('ng_view') }, 'view')?.key).toBe('ng_view');
+    });
+
+    it('prefers nt_ over ng_ when both are present (nt_-first ordering)', () => {
+        const resolved = resolveNamespacedTag({ ng_view: tag('ng_view'), nt_view: tag('nt_view') }, 'view');
+        expect(resolved?.key).toBe('nt_view');
+    });
+
+    it('returns undefined when neither prefix is present', () => {
+        expect(resolveNamespacedTag({ status: tag('status') }, 'view')).toBeUndefined();
+    });
+
+    it('returns undefined when linetags is undefined', () => {
+        expect(resolveNamespacedTag(undefined, 'view')).toBeUndefined();
     });
 });

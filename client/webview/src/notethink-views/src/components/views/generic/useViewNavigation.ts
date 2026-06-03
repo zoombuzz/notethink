@@ -1,7 +1,7 @@
 import Debug from "debug";
 import { useCallback, useEffect } from "react";
 import type { MouseEvent, MutableRefObject } from "react";
-import { focusedChainFor, navigateToNeighbour } from "../../../lib/noteops";
+import { focusedChainIdsFor, navigateToNeighbour } from "../../../lib/noteops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { ViewApi } from "../../../types/ViewProps";
 
@@ -48,8 +48,8 @@ export function useViewNavigation(input: ViewNavigationInput): void {
                 const step: -1 | 1 = direction === 'up' ? -1 : 1;
                 const target_note = navigateToNeighbour(notes_within_parent_context, focused_seqs, step);
                 if (target_note) {
-                    // write view-driven seqs so view focus moves under view-driven-wins policy; postMessage drives the editor in parallel and attaches origin doc path for folder mode
-                    const target_chain = focusedChainFor(target_note);
+                    // write view-driven stable_ids so view focus moves under view-driven-wins policy; postMessage drives the editor in parallel and attaches origin doc path for folder mode
+                    const target_chain = focusedChainIdsFor(target_note);
                     handlers.setViewInteractionState?.(target_chain, []);
                     handlers.postMessage?.({
                         type: 'revealRange',

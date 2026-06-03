@@ -38,9 +38,9 @@ export interface NoteDisplayOptions {
     selected_notes?: NoteProps[];
     cropped_focused_seqs?: number[];
     cropped_selected_seqs?: number[];
-    // --- per-view interaction state (view-driven, persisted on display_options) ---
-    view_focused_seqs?: number[];
-    view_selected_seqs?: number[];
+    // --- per-view interaction state (view-driven, persisted on display_options); these hold note stable_ids (invariant across re-parse), unlike the per-render focused_seqs/selected_seqs above which stay seq-based ---
+    view_focused_ids?: string[];
+    view_selected_ids?: string[];
     integration_mode?: string;
     integration_path?: string;
     includeFilter?: string;
@@ -149,7 +149,7 @@ export interface NoteProps {
  * NoteOrigin: folder mode metadata stamped on every story and its
  * descendants by mergeAggregateRoot; lets callers route edits back to the
  * source file and drives implicit cross-file ordering.
- * - file_view_type: the ng_view value declared on the originating file's H1, if any; used by AutoView to majority-vote view type across the merged tree (one vote per file)
+ * - file_view_type: the nt_view (legacy ng_view) value declared on the originating file's H1, if any; used by AutoView to majority-vote view type across the merged tree (one vote per file)
  * - file_rank: 0-based index of this story within its source file's selected story list (after the per-file cap + `order` reversal); the implicit ordering weight — equal across files means equal priority, which relevance ordering then breaks by file_mtime (newer first)
  * - file_mtime: on-disk mtime (epoch ms) of the source file at parse time; within a file_rank band, stories from more recently modified files sort first — background edits by another tool (or a save of the file currently open) naturally surface to the top without any explicit "active file" signal
  * - project_hue: pre-computed hue (0-359) for the project pill colour; stamped by mergeAggregateRoot using the project's index in the sorted enumeration of all distinct project names visible in the aggregate, fed through hueForProjectIndex (golden-angle spread) — bypasses the djb2-hash fallback in OriginPill, which can collide for some real-world name pairs
@@ -195,7 +195,7 @@ export type MdastNode = {
  * LineTag, thing at the end of a line used to encode metadata. Changes to
  * LineTag types need to be parsed in `parseLineTag`.
  * - note_seq: attachment flag binding this tag to its owning note
- * - inherited: true when this linetag was propagated from a parent's ng_child_* attribute
+ * - inherited: true when this linetag was propagated from a parent's nt_child_* attribute
  * - updated / updated_by_view: change flags
  * - handlers: added at the React render stage
  */

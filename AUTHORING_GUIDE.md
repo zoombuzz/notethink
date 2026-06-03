@@ -41,10 +41,10 @@ When a future **major** version introduces a breaking change, an author can
 keep a file on the old behaviour by pinning it on the file root (`#`):
 
 ```markdown
-# Todo [](?ng_view=kanban&ng_authoring_version=1)
+# Todo [](?nt_view=kanban&nt_authoring_version=1)
 ```
 
-`ng_authoring_version` accepts `MAJOR` or `MAJOR.MINOR` (e.g. `1` or `1.2`).
+`nt_authoring_version` accepts `MAJOR` or `MAJOR.MINOR` (e.g. `1` or `1.2`).
 It is **reserved and documented now for forward-compatibility** — only version
 `1.0.0` exists today, so the flag currently has no effect. It exists so that
 files authored today keep working unchanged the day a `2.0.0` ships.
@@ -57,7 +57,7 @@ different versions and each is interpreted independently.
 ## TL;DR
 
 ```markdown
-# Todo [](?ng_view=kanban)
+# Todo [](?nt_view=kanban)
 
 
 ## New Relic integration [](?id=nr)
@@ -254,6 +254,26 @@ visible markdown source on GitHub instead of an invisible empty link. Using
 These keys have special meaning in NoteThink. Avoid using them for your own
 metadata.
 
+### Linetag prefixes (`nt_` and `ng_`)
+
+NoteThink's internal/directive keys carry a namespace prefix so they stay
+distinct from your content attributes:
+
+- **`nt_`** is the canonical prefix (short for **n**ote**t**hink). It is what
+  NoteThink **writes** going forward, and the form you should author —
+  `nt_view`, `nt_level`, `nt_child_status`, `nt_kanban_ordering_weight`.
+- **`ng_`** is the legacy prefix inherited from the predecessor project. It is
+  still **accepted on read** as an equal synonym for the directive keys
+  (`ng_view` ≡ `nt_view`, `ng_level` ≡ `nt_level`, …) so older files keep
+  working. When both forms are present on the same heading, `nt_` wins.
+- **Content attributes are unprefixed** — `status`, `epic`, `id`, `order`,
+  `time_estimated`, `time_taken`. They describe your content and render as
+  visible chips; they take no prefix.
+
+**One exception:** the child-attribute *inheritance* directives are `nt_` only
+— `nt_child_<key>`, `nt_child2y_<key>`, `nt_childall_<key>`. Legacy
+`ng_child_*` is **not** inherited; author inheritance with the `nt_` form.
+
 ### View configuration
 
 Set on the file root (`#`) or any heading to override how that subtree
@@ -261,10 +281,10 @@ renders.
 
 | Key | Effect |
 |---|---|
-| `ng_view` | View type for this subtree: `auto`, `document`, `kanban` |
-| `ng_level` | Render level (advanced; usually leave unset) |
+| `nt_view` | View type for this subtree: `auto`, `document`, `kanban`. Legacy `ng_view` is still accepted on read |
+| `nt_level` | Render level (advanced; usually leave unset). Legacy `ng_level` is still accepted on read |
 | `order` | Which end of the file holds the **newest** stories: `newest-at-top` (default) or `newest-at-bottom`. Read off the file root (`#`) only. Tells Folder mode which end to keep when the per-file note cap truncates the file — see [Per-file note cap](#per-file-note-cap-and-the-order-linetag) |
-| `ng_authoring_version` | Pin this file to an older Authoring Guide version (`MAJOR` or `MAJOR.MINOR`, e.g. `1` or `1.2`) instead of the latest. Set on the file root (`#`). Reserved for forward-compatibility — only `1.0.0` exists today, so it has no effect yet. See [Versioning](#versioning) |
+| `nt_authoring_version` | Pin this file to an older Authoring Guide version (`MAJOR` or `MAJOR.MINOR`, e.g. `1` or `1.2`) instead of the latest. Set on the file root (`#`). Reserved for forward-compatibility — only `1.0.0` exists today, so it has no effect yet. See [Versioning](#versioning) |
 
 ### Story status
 
@@ -284,11 +304,11 @@ down to descendants.
 
 | Key | Inherits to |
 |---|---|
-| `ng_child_<key>` | direct children only |
-| `ng_child2y_<key>` | grandchildren only |
-| `ng_childall_<key>` | all descendants |
+| `nt_child_<key>` | direct children only |
+| `nt_child2y_<key>` | grandchildren only |
+| `nt_childall_<key>` | all descendants |
 
-For example, `[](?ng_child_status=done)` on a `# Done [](?ng_child_status=done)`
+For example, `[](?nt_child_status=done)` on a `# Done [](?nt_child_status=done)`
 heading marks every direct child story as `status=done` without each story
 having to repeat the linetag.
 
@@ -301,6 +321,7 @@ You should never write these by hand. NoteThink computes them.
 | Key | Purpose |
 |---|---|
 | `id` | Optional stable identifier for an epic (`##` heading) — see below |
+| `nt_kanban_ordering_weight` | Per-card position weight written by the Kanban view when you drag cards to reorder them. Internal — never write it by hand |
 
 `id` is the one exception: you set it on `##` epic headings to enable stable
 references.
@@ -323,7 +344,7 @@ A story can declare which epic it belongs to in three ways. NoteThink
 evaluates them **most-specific first** and stops at the first hit:
 
 1. **Direct linetag on the story** — `[](?epic=X)`
-2. **Inherited linetag from an ancestor** — `[](?ng_child_epic=X)` on a parent
+2. **Inherited linetag from an ancestor** — `[](?nt_child_epic=X)` on a parent
 3. **Structural** — the story sits under a `##` heading; that heading is the
    epic
 
@@ -366,6 +387,47 @@ stays put.
 
 Both work. You can mix them.
 
+### Stable ids: implicit vs explicit
+
+Every note carries a `stable_id` at runtime. It has two **provenances**:
+
+- **Implicit id** — derived automatically from the headline (lowercased, punctuation stripped, spaces hyphenated). It is present on every note at parse time and is **never written to the file**. Because it tracks the title, it changes whenever the story is renamed. Safe for in-session use only.
+- **Explicit id** — the `[](?id=slug)` linetag you author. It is **frozen once written** and survives title edits and reloads. The only form safe to reference across sessions.
+
+The resolved `stable_id` is the explicit id when an `id=` linetag is present; otherwise it is the implicit derived id.
+
+**Promoting an id from implicit to explicit** is a deliberate write. Because the explicit value is pre-populated from the same derivation as the implicit one, the resolved id is continuous at the moment you write it — it doesn't jump. Once written, the explicit id is frozen and may legitimately diverge from what the headline would now derive. That divergence is the whole point: it is what makes the reference durable.
+
+#### When should you write an explicit `id=`?
+
+Write an explicit `id=` **only when a durable artifact will reference the note across sessions or renames.** The test to apply: "would this reference need to survive a title edit, or a reload next week?"
+
+**Write an explicit id when:**
+
+1. **The note becomes the target of a `[[…]]` cross-reference.** Pin the target's `id=` and write the reference together — they travel as a pair.
+2. **You author one directly** (e.g. to keep a short reference slug on a long epic name — the `id=nr` pattern from the example above).
+3. **Disambiguation** — two notes share the same headline and one of them is being referenced. Give the target a distinct authored id.
+
+**Leave it implicit (write nothing) when:**
+
+- Drag keying or Kanban column projection — these are in-session operations.
+- Holding the selected note across a re-parse for a few seconds.
+- Ordering, sorting, or any intra-session matching.
+
+**Principle: persistent ⇒ explicit; transitory ⇒ implicit.**
+
+#### Duplicate headlines
+
+Two notes with identical headlines produce colliding implicit ids. This is fine for transient use (React keys, in-session selection). If you need to reference one of them across sessions, that is a promotion trigger: author a distinct `id=` on the target to disambiguate.
+
+```markdown
+## Authentication [](?id=auth-phase1)
+
+## Authentication [](?id=auth-phase2)
+
+### Wire login [](?epic=auth-phase1)
+```
+
 ### Cross-project epic references
 
 In Folder mode (and the upcoming cross-project Kanban), an epic id is
@@ -396,7 +458,7 @@ In Folder mode, NoteThink:
      stamped with the epic
 3. Merges all stories into one synthetic root.
 4. Picks one view type (`auto`, `document`, `kanban`) by majority vote across
-   the files' top-level `ng_view` linetags.
+   the files' top-level `nt_view` linetags (legacy `ng_view` still counts).
 5. Renders one view, one toolbar, one breadcrumb.
 
 Each story shows a small **origin pill** with the source file (and epic, if
@@ -431,7 +493,7 @@ Which end of the file the kept stories come from depends on the file root's
 | `newest-at-bottom` | The newest stories are appended at the **bottom** of the file (e.g. `done.md`: the most recently completed work is last) | the **last** N stories |
 
 ```markdown
-# Done [](?ng_view=kanban&ng_child_status=done&order=newest-at-bottom)
+# Done [](?nt_view=kanban&nt_child_status=done&order=newest-at-bottom)
 ```
 
 Notes:
@@ -457,7 +519,7 @@ Notes:
   status would propagate to every story via inheritance and override your
   per-story values.
 - **Don't repeat epic linetags** that you can inherit. If every story under a
-  `##` heading has the same status, set `ng_child_status=...` on the heading
+  `##` heading has the same status, set `nt_child_status=...` on the heading
   once instead.
 
 ---
@@ -481,7 +543,7 @@ Before pushing changes to a `todo.md` / `done.md`:
 ## Quick reference card
 
 ```markdown
-# File title [](?ng_view=kanban)
+# File title [](?nt_view=kanban)
 
 
 ## Epic name [](?id=epic-id)

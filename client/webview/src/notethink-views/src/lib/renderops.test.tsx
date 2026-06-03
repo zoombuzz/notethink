@@ -1,4 +1,4 @@
-import { renderMarkdownNoteHeadline, renderNodeUnified } from './renderops';
+import { isInternalAttribute, renderMarkdownNoteHeadline, renderNodeUnified } from './renderops';
 import type { NoteProps, MdastNode } from '../types/NoteProps';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -204,5 +204,25 @@ describe('renderMarkdownNoteHeadline', () => {
             expect(html).toBe('');
             expect(html).not.toContain('Root');
         });
+    });
+});
+
+describe('isInternalAttribute', () => {
+
+    it('treats nt_-prefixed keys as internal (the write-forward prefix)', () => {
+        expect(isInternalAttribute('nt_view')).toBe(true);
+        expect(isInternalAttribute('nt_level')).toBe(true);
+        expect(isInternalAttribute('nt_kanban_ordering_weight')).toBe(true);
+    });
+
+    it('still treats legacy ng_-prefixed keys as internal', () => {
+        expect(isInternalAttribute('ng_view')).toBe(true);
+        expect(isInternalAttribute('ng_level')).toBe(true);
+    });
+
+    it('treats unprefixed content keys as external (visible)', () => {
+        expect(isInternalAttribute('status')).toBe(false);
+        expect(isInternalAttribute('epic')).toBe(false);
+        expect(isInternalAttribute('progress')).toBe(false);
     });
 });

@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from '../constants';
 import { generateIdentifier } from '../lib/cryptoops';
-import { type TextChange, firstInvalidChange, logEditTextChanges } from '../lib/editops';
+import { type TextChange, firstInvalidChange, logEditTextChanges, offsetDeltaBefore } from '../lib/editops';
 import { debug, writeToLog, writeToErrorLog } from '../lib/errorops';
 import { globMatches } from '../lib/globMatch';
 import { parse } from '../lib/parseops';
@@ -23,6 +23,10 @@ async function applyEditTextChanges(document: vscode.TextDocument, uri: vscode.U
 	const sorted_changes = [...changes].sort((a, b) => b.from - a.from);
 	const existing = vscode.window.visibleTextEditors.find(ed => ed.document.uri.path === uri.path);
 	if (existing) {
+		// capture the caret before the edit: VS Code drops the cursor at the last edited range, so a multi-edit (a kanban reorder's weight cascade) would yank it onto another note and the view's editor-derived focus would follow
+		// restore it afterwards, shifted only by edits that landed before it, so a view-driven edit leaves the caret put
+		const anchor_offset = document.offsetAt(existing.selection.anchor);
+		const active_offset = document.offsetAt(existing.selection.active);
 		await existing.edit(editBuilder => {
 			for (const change of sorted_changes) {
 				const from = document.positionAt(change.from);
@@ -31,6 +35,9 @@ async function applyEditTextChanges(document: vscode.TextDocument, uri: vscode.U
 				else { editBuilder.insert(from, change.insert); }
 			}
 		});
+		const restored_anchor = document.positionAt(anchor_offset + offsetDeltaBefore(changes, anchor_offset));
+		const restored_active = document.positionAt(active_offset + offsetDeltaBefore(changes, active_offset));
+		existing.selection = new vscode.Selection(restored_anchor, restored_active);
 		return;
 	}
 	const ws_edit = new vscode.WorkspaceEdit();

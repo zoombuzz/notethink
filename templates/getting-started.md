@@ -1,4 +1,4 @@
-# Welcome to Dulcet
+# Welcome to NoteThink
 
 Start typing to edit this document. Your changes are saved in your browser until you save to GitHub.
 
@@ -25,4 +25,4 @@ Start typing to edit this document. Your changes are saved in your browser until
 
 ### Completed [](?status=done)
 
-+ opened Dulcet for the first time
++ opened NoteThink for the first time

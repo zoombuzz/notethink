@@ -5,7 +5,9 @@ import * as l10n from "@vscode/l10n";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import { stripHeadlineLinetags } from "../../lib/noteops";
 import { segmentPathBelowWorkspace, splitPathSegments } from "../../lib/pathops";
+import { usePendingWorkContext } from "../../hooks/PendingWorkContext";
 import type { NoteProps } from "../../types/NoteProps";
+import Spinner from "../Spinner";
 import styles from "./BreadcrumbTrail.module.scss";
 
 const debug = Debug("nodejs:notethink-views:BreadcrumbTrail");
@@ -73,6 +75,8 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactEleme
 
     const has_path = path_segments.length > 0;
     const has_notes = memoized_notes.length > 0;
+    // the pending-work spinner lives here (not out in the toolbar) so it sits immediately to the right of the "(X in Y files)" count — the slow path is far more often file discovery/loading than the view-type selector it used to neighbour
+    const { pending } = usePendingWorkContext();
 
     return (
         <nav className={styles.breadcrumbTrail} role="navigation" aria-label={l10n.t('Breadcrumb')}>
@@ -103,6 +107,7 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactEleme
                     {file_count_label}
                 </button>
             )}
+            {pending && <Spinner positionClass="InlineLoader" ariaLabel={l10n.t('Working')} />}
             {has_path && has_notes && <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>}
             {memoized_notes.map((item: NoteProps, index: number) => {
                 return <Fragment key={`breadcrumb-${item.seq}-${index}`}>

@@ -1,6 +1,7 @@
 import Debug from "debug";
 import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNoteHierarchy";
 import { stripHeadlineLinetags } from "./noteops";
+import { resolveNamespacedTag } from "./linetagops";
 import { FOLDER_VIEW_STATE_ID } from "./viewstateops";
 import { buildProjectLabels, hueForProjectIndex, projectNameFromRelativePath } from "./originops";
 import { INTEGRATION_MODE_FOLDER } from "../types/IntegrationMode";
@@ -47,18 +48,24 @@ interface PerFileParse {
     h1: NoteProps | undefined;
 }
 
+// lowercase kebab-case: trim, replace every run of non-alphanumeric chars with a single hyphen, strip leading/trailing hyphens
+export function slugify(text: string): string {
+    return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 /**
  * derive the story-level stable_id slug from its raw headline + linetags. Prefers
  * the explicit `[](?id=...)` linetag (canonical, author-controlled) and falls back
- * to the stripped headline text. The caller is responsible for namespacing with
- * `doc_id` and disambiguating duplicates across the file. See the NoteProps
- * header comment for the full derivation rationale.
+ * to slugify() of the stripped headline text so implicit and future explicit ids
+ * coincide. The caller is responsible for namespacing with `doc_id` and
+ * disambiguating duplicates across the file. See the NoteProps header comment for
+ * the full derivation rationale.
  */
 function storyStableIdSlug(story: NoteProps): string {
     const id_value = story.linetags?.id?.value;
     if (id_value) { return id_value; }
     const stripped = stripHeadlineLinetags(story.headline_raw ?? '');
-    return stripped || `headline:${story.position?.start?.line ?? 0}`;
+    return slugify(stripped) || `headline-${story.position?.start?.line ?? 0}`;
 }
 
 /**
@@ -205,7 +212,7 @@ function walkStorySubtree(
  * Walks each doc's H1 (or document root if no H1) and collects depth-3 headings as stories.
  * Depth-2 headings are treated as epics: their depth-3 children become stories with
  * structural origin.epic. Direct `epic=` linetags (including those propagated from
- * `ng_child_epic=` ancestors via applyChildAttributeInheritance) override structural.
+ * `nt_child_epic=` ancestors via applyChildAttributeInheritance) override structural.
  *
  * Renumbers seqs globally and rewrites parent_notes so the merged tree has a single root.
  *
@@ -287,8 +294,8 @@ export function mergeAggregateRoot(
             }
         }
 
-        // capture file-level ng_view from the H1 linetags (used by AutoView's majority vote)
-        const file_view_type = h1?.linetags?.ng_view?.value;
+        // capture file-level view type from the H1 linetags (nt_view, legacy ng_view; used by AutoView's majority vote)
+        const file_view_type = resolveNamespacedTag(h1?.linetags, 'view')?.value;
 
         // file H1 `order` linetag decides which end the per-file cap keeps
         const file_order = h1?.linetags?.order?.value;
@@ -353,7 +360,7 @@ export function mergeAggregateRoot(
     }
 
     // 3. resolve epic linetags on each story (direct > inherited > structural)
-    // the applyChildAttributeInheritance pass during convertMdastToNoteHierarchy has already collapsed inherited ng_child_epic= onto stories as a regular `epic` linetag (with inherited: true); direct linetags overwrite inherited (child's own wins), so this step covers both direct and inherited uniformly
+    // the applyChildAttributeInheritance pass during convertMdastToNoteHierarchy has already collapsed inherited nt_child_epic= onto stories as a regular `epic` linetag (with inherited: true); direct linetags overwrite inherited (child's own wins), so this step covers both direct and inherited uniformly
     for (const c of collected) {
         const epic_linetag: LineTag | undefined = c.story.linetags?.epic;
         if (epic_linetag?.value) {

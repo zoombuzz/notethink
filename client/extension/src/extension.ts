@@ -1,10 +1,14 @@
 import * as vscode from 'vscode';
-import { writeToErrorLog } from './lib/errorops';
+import { initLogDir, writeToErrorLog } from './lib/errorops';
 import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 
 const PANEL_VIEWTYPE = 'notethink';
 
 export function activate(context: vscode.ExtensionContext): void {
+
+	// write the file log to the extension's standard VS Code log dir (context.logUri), never the
+	// user's open workspace folder
+	initLogDir(context.logUri);
 
 	// register our custom editor for "Open With..." right-click
 	const provider = new NotethinkEditorProvider(context);

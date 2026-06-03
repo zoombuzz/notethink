@@ -109,23 +109,23 @@ export function findSelectedNotesByOriginPosition(
 }
 
 /**
- * resolve the focused note. latest-click-wins with the editor as tiebreaker —
- * the editor-derived caret match wins whenever it produces a note (almost all
- * real editing happens in the editor and the view is a real-time visualisation).
- * view_focused_seqs is the immediate-feedback source for the brief window between
- * a view click and the editor's selectionChanged round-trip, and the fallback
- * when the editor has no opinion (active editor on a doc outside the aggregated
- * set, or caret outside every matched note)
+ * resolve the focused note by stable_id. latest-click-wins with the editor as
+ * tiebreaker — the editor-derived caret match wins whenever it produces a note
+ * (almost all real editing happens in the editor and the view is a real-time
+ * visualisation). view_focused_ids is the immediate-feedback source for the brief
+ * window between a view click and the editor's selectionChanged round-trip, and
+ * the fallback when the editor has no opinion (active editor on a doc outside the
+ * aggregated set, or caret outside every matched note)
  */
 export function resolveFocusedNote(
-    view_focused_seqs: number[] | undefined,
+    view_focused_ids: string[] | undefined,
     notes: Array<NoteProps>,
     editor_derived_match: NoteProps | undefined,
 ): NoteProps | undefined {
     if (editor_derived_match) { return editor_derived_match; }
-    if (view_focused_seqs?.length) {
-        const deepest_seq = view_focused_seqs[view_focused_seqs.length - 1];
-        const found = notes.find(n => n.seq === deepest_seq);
+    const last_id = view_focused_ids?.[view_focused_ids.length - 1];
+    if (last_id) {
+        const found = notes.find(n => n.stable_id === last_id);
         if (found) { return found; }
     }
     return undefined;
@@ -148,7 +148,7 @@ export function isAggregateRoot(parent_context: NoteProps | undefined): boolean 
 }
 
 /**
- * majority-vote ng_view across the originating files in an aggregate tree. one
+ * majority-vote nt_view across the originating files in an aggregate tree. one
  * vote per file, taken from origin.file_view_type (captured from each file's H1).
  * ties or no votes return undefined; caller falls back to 'document'
  */
@@ -286,6 +286,13 @@ export function focusedChainFor(note: NoteProps): number[] {
 }
 
 /**
+ * Build a focused-chain stable_id list for a note: every ancestor's stable_id followed by the note's own, in root-to-leaf order, dropping any undefined. The stable_id mirror of focusedChainFor, used for the view-driven interaction state that must survive re-parse.
+ */
+export function focusedChainIdsFor(note: NoteProps): string[] {
+    return [...(note.parent_notes || []).map(p => p.stable_id), note.stable_id].filter((id): id is string => id !== undefined);
+}
+
+/**
  * Within a note DOM element, find the body item (paragraph, list, etc.) whose
  * data-offset-start/data-offset-end range contains the given caret offset.
  * Returns the matching element, or undefined if the caret is in the headline.
@@ -394,11 +401,28 @@ export function formatColumnLabel(value: string): string {
 export function deriveNaturalColumnOrder(notes: Array<NoteProps>): string[] {
     const status_values = new Set<string>();
     for (const note of (notes || [])) {
-        if (note.linetags?.status?.value) {
-            status_values.add(note.linetags.status.value);
-        }
+        const value = kanbanColumnValue(note);
+        if (value !== 'untagged') { status_values.add(value); }
     }
     return [...Array.from(status_values).sort(), 'untagged'];
+}
+
+/**
+ * the kanban column a note belongs to: its `status` linetag value, or 'untagged' when it has no
+ * status linetag (an empty value also falls through to 'untagged'). Single source of truth for the
+ * note→column rule, shared by the column builder, the drag projection, and the natural column order.
+ */
+export function kanbanColumnValue(note: NoteProps): string {
+    return note.linetags?.status?.value || 'untagged';
+}
+
+/**
+ * the notes belonging to one kanban column, in display order — selected by `kanbanColumnValue` and
+ * sorted by `kanbanNoteOrder`. Shared so the column builder and the drag projection derive a
+ * column's membership and ordering identically rather than each reimplementing the filter+sort.
+ */
+export function notesInKanbanColumn(notes: Array<NoteProps>, column_value: string): Array<NoteProps> {
+    return notes.filter(note => kanbanColumnValue(note) === column_value).sort(kanbanNoteOrder);
 }
 
 /**
@@ -438,7 +462,7 @@ export function noteOrder(a: NoteProps, b: NoteProps): number {
 }
 
 /**
- * Kanban ordering: explicit `kanban_ordering_weight` linetag is decisive,
+ * Kanban ordering: explicit `nt_kanban_ordering_weight` linetag is decisive,
  * including across files. The weight's *value* is what carries the user-chosen
  * cross-file order, so the comparator never consults `file_rank` / `file_mtime`
  * when either side carries a weight — that would let relevance shove a
@@ -458,8 +482,8 @@ export function noteOrder(a: NoteProps, b: NoteProps): number {
  * which keeps single-file behaviour byte-identical.
  */
 export function kanbanNoteOrder(a: NoteProps, b: NoteProps): number {
-    const weight_a = a?.linetags?.kanban_ordering_weight?.value_numeric;
-    const weight_b = b?.linetags?.kanban_ordering_weight?.value_numeric;
+    const weight_a = a?.linetags?.nt_kanban_ordering_weight?.value_numeric;
+    const weight_b = b?.linetags?.nt_kanban_ordering_weight?.value_numeric;
     const has_a = weight_a !== undefined && weight_a !== 0;
     const has_b = weight_b !== undefined && weight_b !== 0;
     // case 1: both weighted — pure numeric compare, seq tiebreak only
@@ -474,4 +498,13 @@ export function kanbanNoteOrder(a: NoteProps, b: NoteProps): number {
     if (has_b) { return -1; }
     // case 3: neither weighted — implicit relevance order
     return noteOrder(a, b);
+}
+
+/**
+ * identity string for a note in column views, used as both the @hello-pangea/dnd draggableId and
+ * the React key. Prefers stable_id (invariant across re-parse) so a card keeps its DOM node when
+ * the document round-trips and the projection re-attaches; falls back to seq when stable_id is absent.
+ */
+export function kanbanDraggableId(note: NoteProps): string {
+    return note.stable_id ?? `${note.seq}`;
 }

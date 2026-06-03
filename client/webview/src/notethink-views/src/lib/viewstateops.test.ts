@@ -78,14 +78,14 @@ describe('resolveViewStateId', () => {
 });
 
 describe('writeViewInteractionState', () => {
-    it('dispatches to the view id in current_file mode with both seq lists', () => {
+    it('dispatches to the view id in current_file mode with both id lists', () => {
         const props = makeProps({ id: 'view-cf' });
         const { handlers, set_view_managed_state } = makeHandlers();
-        writeViewInteractionState(props, handlers, [3, 5], [5]);
+        writeViewInteractionState(props, handlers, ['doc:p', 'doc:c'], ['doc:c']);
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: 'view-cf',
             type: props.type,
-            display_options: { view_focused_seqs: [3, 5], view_selected_seqs: [5] },
+            display_options: { view_focused_ids: ['doc:p', 'doc:c'], view_selected_ids: ['doc:c'] },
         }]);
     });
 
@@ -95,11 +95,11 @@ describe('writeViewInteractionState', () => {
             display_options: { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo' },
         });
         const { handlers, set_view_managed_state } = makeHandlers();
-        writeViewInteractionState(props, handlers, [7], []);
+        writeViewInteractionState(props, handlers, ['doc:x'], []);
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: FOLDER_VIEW_STATE_ID,
             type: props.type,
-            display_options: { view_focused_seqs: [7], view_selected_seqs: [] },
+            display_options: { view_focused_ids: ['doc:x'], view_selected_ids: [] },
         }]);
     });
 });

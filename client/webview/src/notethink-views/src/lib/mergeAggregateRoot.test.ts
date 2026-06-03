@@ -703,10 +703,10 @@ describe('mergeAggregateRoot', () => {
 
     });
 
-    it('file_view_type from H1 ng_view linetag is captured on every story of that file', () => {
-        // # Todo [](?ng_view=kanban)
+    it('file_view_type from H1 nt_view linetag is captured on every story of that file', () => {
+        // # Todo [](?nt_view=kanban)
         // ### Story
-        const h1_text = '# Todo [](?ng_view=kanban)';
+        const h1_text = '# Todo [](?nt_view=kanban)';
         const text = `${h1_text}\n### Story\n`;
         const h1_end = h1_text.length;
         const h3_start = h1_end + 1;
@@ -717,6 +717,21 @@ describe('mergeAggregateRoot', () => {
         ];
         const doc = makeDoc('id-kan', 'a/todo.md', text, children);
         const { root } = mergeAggregateRoot({ 'id-kan': doc }, '/repo');
+        expect(root.child_notes![0].origin?.file_view_type).toBe('kanban');
+    });
+
+    it('file_view_type still resolves from a legacy ng_view H1 linetag', () => {
+        const h1_text = '# Todo [](?ng_view=kanban)';
+        const text = `${h1_text}\n### Story\n`;
+        const h1_end = h1_text.length;
+        const h3_start = h1_end + 1;
+        const h3_end = h3_start + '### Story'.length;
+        const children: MdastNode[] = [
+            mdastNode('heading', 0, h1_end, { depth: 1 }),
+            mdastNode('heading', h3_start, h3_end, { depth: 3 }),
+        ];
+        const doc = makeDoc('id-leg', 'a/todo.md', text, children);
+        const { root } = mergeAggregateRoot({ 'id-leg': doc }, '/repo');
         expect(root.child_notes![0].origin?.file_view_type).toBe('kanban');
     });
 
@@ -989,8 +1004,8 @@ describe('stampSingleFileStableIds', () => {
         const id_a = findStoryByHeadline(root_a, '### Same')!.stable_id;
         const id_b = findStoryByHeadline(root_b, '### Same')!.stable_id;
         expect(id_a).not.toBe(id_b);
-        expect(id_a).toBe('doc-a:Same');
-        expect(id_b).toBe('doc-b:Same');
+        expect(id_a).toBe('doc-a:same');
+        expect(id_b).toBe('doc-b:same');
     });
 
 });

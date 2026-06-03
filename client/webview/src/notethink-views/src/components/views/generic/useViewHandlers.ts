@@ -2,7 +2,7 @@ import Debug from "debug";
 import { useCallback } from "react";
 import type { MouseEvent } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
-import { calculateTextChangesForCheckbox, focusedChainFor, resolveCaretPosition } from "../../../lib/noteops";
+import { calculateTextChangesForCheckbox, focusedChainIdsFor, resolveCaretPosition } from "../../../lib/noteops";
 import { isAlreadyFocusedClick } from "../../../lib/noteui";
 import { FOLDER_VIEW_STATE_ID, writeViewInteractionState } from "../../../lib/viewstateops";
 import { INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
@@ -49,8 +49,8 @@ export function useViewHandlers(
             }]);
         },
 
-        setViewInteractionState: (focused_chain: number[], selected_seqs: number[]) => {
-            writeViewInteractionState(props, handlers, focused_chain, selected_seqs);
+        setViewInteractionState: (focused_ids: string[], selected_ids: string[]) => {
+            writeViewInteractionState(props, handlers, focused_ids, selected_ids);
         },
 
         click: (event: MouseEvent<HTMLElement>, note: NoteProps, click_profile: ClickPositionInfo) => {
@@ -86,11 +86,12 @@ export function useViewHandlers(
                 const caret_pos = resolveCaretPosition(click_profile, note);
                 const current_head = selection_ref.current?.main.head;
                 const origin_doc_path = note.origin?.doc_path;
-                const focused_chain = focusedChainFor(note);
+                const focused_chain = focusedChainIdsFor(note);
+                const note_selected_ids = note.stable_id ? [note.stable_id] : [];
                 const is_already_focused = isAlreadyFocusedClick(note, caret_pos, current_head);
                 if (event.detail === 2) {
                     // double-click selects the note immediately; per-view state-of-truth, plus the editor reveal so the cursor follows opportunistically
-                    writeViewInteractionState(props, handlers, focused_chain, [note.seq]);
+                    writeViewInteractionState(props, handlers, focused_chain, note_selected_ids);
                     props.handlers?.postMessage?.({
                         type: 'selectRange',
                         from: click_profile.selection_from ?? click_profile.from,
@@ -107,7 +108,7 @@ export function useViewHandlers(
                     });
                 } else if (is_already_focused) {
                     // click on a focused note promotes it to selected
-                    writeViewInteractionState(props, handlers, focused_chain, [note.seq]);
+                    writeViewInteractionState(props, handlers, focused_chain, note_selected_ids);
                     props.handlers?.postMessage?.({
                         type: 'selectRange',
                         from: click_profile.selection_from ?? click_profile.from,

@@ -1,6 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import BreadcrumbTrail from './BreadcrumbTrail';
+import { PendingWorkProvider } from '../../hooks/PendingWorkContext';
+import type { UsePendingWorkApi } from '../../hooks/usePendingWork';
 import type { NoteProps } from '../../types/NoteProps';
 
 // mock renderops to avoid ESM dependencies in test
@@ -498,5 +500,50 @@ describe('BreadcrumbTrail', () => {
         // single-file mode (no integration_path): the count is meaningless and omitted
         expect(screen.queryByText('(42)')).not.toBeInTheDocument();
         expect(container.textContent).not.toMatch(/\(\d/);
+    });
+
+    describe('pending-work spinner', () => {
+        function withPending(pending: boolean, ui: React.ReactElement): React.ReactElement {
+            const api: UsePendingWorkApi = {
+                pending,
+                markPending: jest.fn(),
+                clearPending: jest.fn(),
+                clearAll: jest.fn(),
+            };
+            return <PendingWorkProvider api={api}>{ui}</PendingWorkProvider>;
+        }
+
+        function folderModeTrail(): React.ReactElement {
+            const workspace_root = '/home/alex/github.com/active_development';
+            return <BreadcrumbTrail {...makeNote({ seq: 0 })}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+                file_count={17}
+                note_count={214}
+            />;
+        }
+
+        it('renders the spinner when context reports pending=true', () => {
+            render(withPending(true, folderModeTrail()));
+            expect(screen.getByTestId('pending-work-spinner')).toBeInTheDocument();
+        });
+
+        it('does not render the spinner when context reports pending=false', () => {
+            render(withPending(false, folderModeTrail()));
+            expect(screen.queryByTestId('pending-work-spinner')).not.toBeInTheDocument();
+        });
+
+        it('does not render the spinner with no provider mounted', () => {
+            render(folderModeTrail());
+            expect(screen.queryByTestId('pending-work-spinner')).not.toBeInTheDocument();
+        });
+
+        it('places the spinner immediately to the right of the file count', () => {
+            render(withPending(true, folderModeTrail()));
+            const count = screen.getByTestId('breadcrumb-file-count');
+            const spinner = screen.getByTestId('pending-work-spinner');
+            // the spinner is the count button's immediate next sibling in the breadcrumb
+            expect(count.nextElementSibling).toBe(spinner);
+        });
     });
 });

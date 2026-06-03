@@ -519,8 +519,9 @@ body.disableAddressBarHidingOnScroll {
   z-index: 10;
   display: flex;
   align-items: center;
-  height: 22px;
-  padding: 4px 8px 0 8px;
+  // don't think we need to set an explicit height on this
+  // height: 22px;
+  padding: 2px 0 0 0;
   font-size: 13px;
   overflow: hidden;
   white-space: nowrap;
@@ -1013,7 +1014,7 @@ body.disableAddressBarHidingOnScroll {
 //
 
 .viewDocument {
-  padding: 8px 0.8em 1.2em 0.8em;
+  padding: 8px 0 1.2em 0;
   color: var(--vscode-editor-foreground);
 
   // support indenting on wide screens
@@ -1027,7 +1028,7 @@ body.disableAddressBarHidingOnScroll {
   }
 
   .centredPane {
-    margin-left: 0.8em;
+    margin-left: -0.8em;
     text-align: left;
 
     // indenting on wide screens
@@ -1071,7 +1072,7 @@ body.disableAddressBarHidingOnScroll {
 }
 
 .viewKanban {
-  padding: 8px 0.8em 0 0.8em;
+  padding: 8px 0 0 0;
   color: var(--vscode-editor-foreground);
 
   .contextBar {
@@ -1122,7 +1123,8 @@ body.disableAddressBarHidingOnScroll {
         // no overflow: hidden on the card itself — lineno badges use margin-left: -2.2em to extend leftward outside the card by design, and a card-level clip would crop those circular badges. Body content is independently clipped by `.body { overflow: hidden }` below (where the real risk lives — non-reflowable images / diagrams). Selection/focus rings use outline + outline-offset and box-shadow is painted by the element itself, so neither needs the safety net
         user-select: none;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-        transition: box-shadow 200ms ease, transform 150ms ease;
+        // no transform transition — @hello-pangea/dnd owns this draggable's transform and a CSS transition on it fights the drop animation
+        transition: box-shadow 200ms ease;
 
         &:hover {
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);

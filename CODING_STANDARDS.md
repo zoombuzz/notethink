@@ -110,6 +110,15 @@ Before introducing or renaming anything in those categories, surface the candida
 
 **Why this rule exists.** The `notethink.folderView.*` workspace-config namespace was originally introduced when the only place those settings lived was the folder view; the scope later grew to cover all view-type settings but the namespace name didn't, forcing a rename pass (and would have required a user-facing migration if there had been external users). A 30-second naming check at the moment of introduction would have prevented the whole episode. When in doubt, default to asking — the question is cheap, the rename is expensive.
 
+### `stable_id` field: implicit vs explicit provenance
+
+Every note has a `stable_id` field (the field name is fixed). Its value has two grades:
+
+- **Implicit (transient)** — derived from the headline via `storyStableIdSlug`; present at parse time, never written to the file. Tracks the title, so it changes on rename. Use for React keys, kanban drag projections, and any intra-session matching.
+- **Explicit (persistent)** — the authored `[](?id=slug)` linetag; frozen once written, survives renames and reloads. The only grade safe for durable cross-session references.
+
+**Implementer rule:** transient code uses the implicit derived id and writes nothing to the file. Write an explicit `id=` linetag only when a durable artifact (a `[[…]]` cross-reference, a user-authored link) needs to survive across sessions or renames. See [AUTHORING_GUIDE.md — Stable ids: implicit vs explicit](./AUTHORING_GUIDE.md#stable-ids-implicit-vs-explicit) for the full decision rules.
+
 ## Import Organization
 
 ### Import Placement
@@ -517,34 +526,39 @@ try {
 
 ### Reading VS Code logs
 
-NoteThink runs as a **web worker extension** (not Node), so its logs are under `exthost/webWorker/` not `exthost/`. Log sessions rotate — a new session dir is created each time VS Code starts. Reading these files needs `dangerouslyDisableSandbox: true` (they're under `~/.config/`).
+**The primary, CLI-friendly log is `notethink-extension.log`, written to the extension's standard VS Code log directory** — `vscode.ExtensionContext.logUri`, the canonical per-extension log location. **Never** the user's open workspace folder (a shipped extension must not litter the user's project with log files). Every `writeToLog` / `writeToErrorLog` call (and `logEditTextChanges`) is mirrored there by the file logger in `errorops.ts` (`initLogDir(context.logUri)` in `activate()`).
+
+`logUri` resolves under the rotating per-session logs dir. NoteThink is a **web-worker** extension (publisher `NoteThink.notethink`), so on Linux it is:
 
 ```
-~/.config/Code/logs/<session-timestamp>/
-  main.log                            # VS Code main process
-  window1/
-    renderer.log                      # renderer (webview crashes, perf warnings)
-    exthost/
-      exthost.log                     # Node extension host (other extensions)
-      webWorker/
-        workerexthost.log             # web-worker extension host (activation errors)
-        ZoomBuzz.notethink/
-          NoteThink.log               # NoteThink OutputChannel (winston via LogOutputChannelTransport)
+~/.config/Code/logs/<session-timestamp>/window<N>/exthost/webWorker/NoteThink.notethink/notethink-extension.log
 ```
+
+(macOS: `~/Library/Application Support/Code/logs/...`; the OS-standard logs root differs but the `…/exthost/webWorker/NoteThink.notethink/` tail is the same.) Reading these needs `dangerouslyDisableSandbox: true` (under `~/.config`/`~/Library`). Find and tail the live one:
 
 ```bash
-# find the latest session
-ls -t ~/.config/Code/logs/ | head -1
-
-# read the NoteThink extension log (captures writeToLog / writeToErrorLog)
-cat ~/.config/Code/logs/<latest>/window1/exthost/webWorker/ZoomBuzz.notethink/NoteThink.log
-
-# read renderer errors
-tail -50 ~/.config/Code/logs/<latest>/window1/renderer.log
-
-# read web-worker extension-host log
-cat ~/.config/Code/logs/<latest>/window1/exthost/webWorker/workerexthost.log
+# resolve the latest session + window that actually has our log, then tail it
+LOG=$(ls -t ~/.config/Code/logs/*/window*/exthost/webWorker/NoteThink.notethink/notethink-extension.log 2>/dev/null | head -1)
+echo "$LOG"; tail -f "$LOG"
+grep -E "editText|caret-probe" "$LOG"
 ```
+
+- **Dev-only, off by default.** Gated by the `NOTETHINK_DEV` webpack define, which is `process.env.SELFINSPECT_ENV === 'dev'` (the workspace-standard env marker — never `NODE_ENV`). The `build` / `watch` scripts export `SELFINSPECT_ENV=dev` to opt in; every other build (the marketplace `package` build, and any hosted/web build) leaves it unset, so the file logger is stripped (`if (true) { return; }` → dead-code-eliminated). Off-by-default is deliberate: a shipped extension must never silently fill a user's disk with logs. The Output-panel channel below still works in production.
+- **Rolling buffer.** Last 500 lines, flushed ~1s after a write, written wholesale (overwritten each flush, not appended).
+- If missing/empty: production build (no `NOTETHINK_DEV`), the window wasn't reloaded after a rebuild (so `activate`/`initLogDir` didn't re-run), or nothing has logged yet. A **new session dir is created each time VS Code starts**, so always re-resolve the latest with the `ls -t` one-liner — don't cache the path.
+- **Spurious in-repo copies.** `**/notethink-extension.log` is gitignored ("ignore spurious logs"). The `logUri` path above is the *only* authoritative runtime log — if you find a `notethink-extension.log` in the repo root or a parent dir, it's stale leftover litter, not the live log; don't read it, delete it.
+- **Desktop-only path.** The file logger writes via `vscode.workspace.fs.writeFile(logUri, …)`, so the tailable on-disk `notethink-extension.log` exists only in **desktop** VS Code. In a **web host** (any vscode-web build serving the extension) `workspace.fs` writes to browser/virtual storage with no terminal-readable file — there, read runtime/webview logs from the **browser devtools console** instead.
+
+**Two log streams, two homes — don't conflate them.** The `notethink-extension.log` above is the **runtime / behaviour** log (what the running extension did). It is distinct from the **build / watch** log (webpack compile output: did the bundle compile, with what errors):
+
+| Stream | Home | How to read |
+|--------|------|-------------|
+| Runtime / behaviour | `logUri` (the `…/NoteThink.notethink/notethink-extension.log` above) | `ls -t` one-liner, `dangerouslyDisableSandbox` |
+| Build / watch (webpack) | **`test-results/dev.log`** in the repo (gitignored) | `tail -f test-results/dev.log` |
+
+`test-results/dev.log` is where `/open-dev` redirects the `pnpm run watch` (`webpack --watch`) output, matching the cross-project `test-results/dev.log` convention. Use it to confirm a clean compile after edits; use the `logUri` log for runtime behaviour. Never route build output to `/tmp` — it's ephemeral and breaks the "one documented place per stream" narrative.
+
+**Interactive alternative — the Output panel.** `writeToLog` also feeds the "NoteThink" `LogOutputChannel` (winston via `LogOutputChannelTransport`), visible under *View → Output → NoteThink*. VS Code persists that channel to `NoteThink.log` in the **same** `logUri` directory as above (subject to the channel's selected log level, so it is sometimes empty — prefer `notethink-extension.log` for CLI reads).
 
 The `debug` library (webview only — `const debug = Debug("nodejs:...")`) is **not** captured to any file. Enable it via `localStorage.debug = 'nodejs:*'` in the webview Developer Tools console. Webview `console.error()` / `console.warn()` is also not file-captured — only visible in "Developer: Open Webview Developer Tools".
 
@@ -680,6 +694,8 @@ Always rebuild the extension after each code change so the developer can preview
 3. **Confirm the edit landed in the bundle**: `grep client/webview/dist/index.js` for a token from your edit.
 4. The user must **reload the VS Code window** for an already-open webview to pick up the new bundle.
 5. Never report a UI change as done from a source edit alone — verify the bundle and ask the user to reload.
+
+**Webview bundle caching (dev):** webview resources are cached by URL. Historically a rebuilt `index.js` could be served **stale** across reloads (the bundle URL never changed), so a webview fix appeared not to take effect. `getHtmlForWebview` now appends a per-load `?v=<timestamp>` cache-buster **when `NOTETHINK_DEV`**, so a dev reload always fetches the fresh bundle (production keeps the cacheable URL). If a webview change still seems not to apply, confirm the running build via the file log and that the window was actually reloaded — don't assume the bundle is fresh.
 
 ### Individual commands
 

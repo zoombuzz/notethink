@@ -43,7 +43,7 @@ export const pm_kanban = {
     group: 'Project management',
     content: `
 
-# Project name [](?ng_view=kanban)
+# Project name [](?nt_view=kanban)
 Project description
 
 ## Ticket 1 [](?status=done)
@@ -58,7 +58,7 @@ Ticket description
     insert_point: 'endOfLine',
     example_content: `
 
-# Example project [](?ng_view=kanban)
+# Example project [](?nt_view=kanban)
 
 This a very generalised example of what a project might look like.  It illustrates a small team of collaborators working on a handful of epics.  Please feel free to edit it.
 

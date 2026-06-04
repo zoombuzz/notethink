@@ -1,6 +1,39 @@
 # Todo [](?nt_view=kanban)
 
 
+### Settings/Files drawers show a redundant second "Applying..." spinner [](?id=drawer-spinner-dedupe)
+
+A settings/files apply shows **two** spinners at once: the breadcrumb pending spinner (correct) **and** a second "⟳ Applying..." line inside the open drawer (redundant). One indicator is enough — keep the breadcrumb one, drop the in-drawer copies. Most visible in slow-round-trip hosts (e.g. the browser web-worker extension host, where a global-setting echo takes longer), but the duplication is host-agnostic dead weight — the in-drawer spinner adds nothing the breadcrumb spinner doesn't already convey.
+
++ root cause (verified in source)
+  + the breadcrumb spinner and every in-drawer spinner read the **same** `pending` flag from `usePendingWorkContext()`, so they all render together whenever an apply is in flight
+  + keeper — `components/views/BreadcrumbTrail.tsx:110`: `{pending && <Spinner positionClass="InlineLoader" .../>}`, deliberately positioned next to the "(X in Y files)" count. This stays as the single pending indicator.
+  + duplicate #1 — `components/views/SettingsCommonControls.tsx:37-42`: `{pending && (<p data-testid="settings-drawer-spinner"><Spinner .../><span> Applying...</span></p>)}`. This component is shared by **both** `SettingsDocumentDrawer` and `SettingsKanbanDrawer`, so the duplicate appears in the Document *and* Kanban settings drawers.
+  + duplicate #2 — `components/views/FilesDrawer.tsx:113-118`: the same `{pending && …Applying…}` block (`data-testid="files-drawer-spinner"`), a third copy in the Files drawer.
++ scope
+  + delete the `{pending && …Applying…}` block from `SettingsCommonControls.tsx`; drop the now-unused `usePendingWorkContext` + `Spinner` imports and the `const { pending } = usePendingWorkContext();` line (keep the `Debug` import/const per coding standards; `l10n` stays — still used by the labels)
+  + delete the same block from `FilesDrawer.tsx`; drop its now-unused `pending`/`Spinner` usages (verify `usePendingWorkContext`/`Spinner` aren't referenced elsewhere in the file before removing the imports; keep the unmount cleanup-timer logic which is unrelated)
+  + leave `BreadcrumbTrail.tsx` untouched
++ out of scope
+  + the pending/echo round-trip mechanism itself (markPending → echo-clears-pending) — unchanged; only the redundant *rendering* of `pending` is removed
+  + the breadcrumb spinner's position or styling
++ files
+  + `client/webview/src/notethink-views/src/components/views/SettingsCommonControls.tsx` (+ `SettingsCommonControls.test.tsx` — drop the `settings-drawer-spinner` assertion)
+  + `client/webview/src/notethink-views/src/components/views/FilesDrawer.tsx` (+ `FilesDrawer.test.tsx` — drop the `files-drawer-spinner` assertion)
++ [ ] remove the in-drawer spinner from `SettingsCommonControls.tsx`; tidy unused imports; update its test
++ [ ] remove the in-drawer spinner from `FilesDrawer.tsx`; tidy unused imports; update its test
++ [ ] confirm `BreadcrumbTrail.tsx` remains the sole pending spinner (its test already asserts it)
++ [ ] `pnpm run check` green
++ manual: open the Settings drawer (Document and Kanban) and toggle a setting — exactly one spinner shows, in the breadcrumb; no "Applying..." line inside the drawer
++ manual: open the Files drawer and change a filter — one breadcrumb spinner, no in-drawer "Applying..." line
++ acceptance
+  + during any settings/files apply there is exactly one spinner (breadcrumb), in every drawer
+  + no behavioural change to when/how long the pending state lasts — only the duplicate render is gone
++ commit message draft
+  + notethink x.y.z: drop the redundant in-drawer "Applying..." spinner from the settings + files drawers — the breadcrumb pending spinner is the single indicator
+  + tests N jest
+
+
 ### Document-level front matter becomes root-note linetags [](?id=frontmatter-document-attributes)
 
 YAML/TOML front matter at the top of a file should be lifted into the file's **document root** note as linetags, then treated *identically* to linetags authored on a heading — including inheritance to descendants. A key like `nt_view` set in front matter must behave exactly as if it were written on the file's H1. This makes front matter the broadest, document-scoped layer of the existing linetag model rather than a separate metadata channel. Prefix handling (`ng_`/`nt_`) is owned by [[broaden-linetag-prefix-nt]]; this story is namespace-agnostic and inherits whatever that migration settles.

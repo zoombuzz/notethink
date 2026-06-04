@@ -615,8 +615,18 @@ body.disableAddressBarHidingOnScroll {
   &.focused {
     outline: dashed 2px var(--vscode-focusBorder);
 
+    // an inner focused note sits just inside its parent's ring (the parent's
+    // symmetric body padding keeps this inner ring equally spaced on both sides)
     .note.focused {
       outline-offset: 8px;
+    }
+
+    // when this note contains another focused note it becomes the outer context
+    // ring: keep its position unchanged (no offset bump, so the ring doesn't jump
+    // as the caret moves into a child) and only fade it so the inner note reads
+    // as the real focus target
+    &:has(.note.focused) {
+      outline-color: color-mix(in srgb, var(--vscode-focusBorder), transparent 70%);
     }
   }
 
@@ -625,6 +635,10 @@ body.disableAddressBarHidingOnScroll {
 
     .note.selected {
       outline-offset: 8px;
+    }
+
+    &:has(.note.selected) {
+      outline-color: color-mix(in srgb, var(--vscode-focusBorder), transparent 70%);
     }
   }
 
@@ -697,7 +711,12 @@ body.disableAddressBarHidingOnScroll {
   }
 
   .body {
-    padding-left: 0.4em;
+    // symmetric horizontal padding plus a matching bottom inset so a nested note
+    // card (and therefore its selection ring) is inset on both sides and below,
+    // not just the left — without this the last child's ring pokes past the
+    // parent's bottom edge. top stays flush since the headline already spaces it.
+    // the synthetic root container is exempted below (it has no card of its own)
+    padding: 0 0.4em 0.4em;
 
     table, p {
       margin-top: 0.3em;
@@ -890,6 +909,16 @@ body.disableAddressBarHidingOnScroll {
 
 }
 
+// the synthetic root container has no headline, border, or card of its own, so its body
+// must not inset the top-level note — otherwise the focus ring jumps 0.4em as the caret
+// crosses from the document frontmatter (root focused) into the first note. zero all sides:
+// the bottom inset would otherwise make the root ring 0.4em taller than the top-level
+// note's ring. nested notes keep the .body inset above so their rings stay clear of the
+// parent's. the `> div >` hop is the position:relative wrapper MarkdownNoteBody renders
+[data-mdast-type='root'] > div > .body {
+  padding: 0;
+}
+
 :global(body.vscode-dark) .view,
 :global(body.vscode-high-contrast) .view {
   .note, .leafNote {
@@ -1028,7 +1057,6 @@ body.disableAddressBarHidingOnScroll {
   }
 
   .centredPane {
-    margin-left: -0.8em;
     text-align: left;
 
     // indenting on wide screens

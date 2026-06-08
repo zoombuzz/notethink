@@ -1,6 +1,6 @@
 import Debug from "debug";
 import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNoteHierarchy";
-import { stripHeadlineLinetags } from "./noteops";
+import { stripHeadlineLinetags, storyStableIdSlug } from "./noteops";
 import { resolveNamespacedTag } from "./linetagops";
 import { FOLDER_VIEW_STATE_ID } from "./viewstateops";
 import { buildProjectLabels, hueForProjectIndex, projectNameFromRelativePath } from "./originops";
@@ -46,26 +46,6 @@ interface PerFileParse {
     doc: AggregatedDocInput;
     root: NoteProps;
     h1: NoteProps | undefined;
-}
-
-// lowercase kebab-case: trim, replace every run of non-alphanumeric chars with a single hyphen, strip leading/trailing hyphens
-export function slugify(text: string): string {
-    return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
-/**
- * derive the story-level stable_id slug from its raw headline + linetags. Prefers
- * the explicit `[](?id=...)` linetag (canonical, author-controlled) and falls back
- * to slugify() of the stripped headline text so implicit and future explicit ids
- * coincide. The caller is responsible for namespacing with `doc_id` and
- * disambiguating duplicates across the file. See the NoteProps header comment for
- * the full derivation rationale.
- */
-function storyStableIdSlug(story: NoteProps): string {
-    const id_value = story.linetags?.id?.value;
-    if (id_value) { return id_value; }
-    const stripped = stripHeadlineLinetags(story.headline_raw ?? '');
-    return slugify(stripped) || `headline-${story.position?.start?.line ?? 0}`;
 }
 
 /**

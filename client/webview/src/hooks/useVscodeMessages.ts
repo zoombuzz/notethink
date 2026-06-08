@@ -4,7 +4,7 @@ import { anyViewInFolderMode } from '../notethink-views/src/lib/viewstateops';
 import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { TextSelection } from '../notethink-views/src/types/NoteProps';
-import type { GlobalSettingsPayload, SettingsCascadePayload } from '../notethink-views/src/types/Messages';
+import type { GlobalSettingsPayload, SettingsCascadePayload, JumpTargetsMessage } from '../notethink-views/src/types/Messages';
 import type { ViewState } from './usePersistedViewStates';
 
 const debug = Debug("nodejs:notethink:useVscodeMessages");
@@ -25,6 +25,7 @@ interface VscodeMessagesDeps {
     navigation_callback_ref: React.MutableRefObject<((direction: string) => void) | undefined>;
     markPending: (key: string) => void;
     clearPending: (key: string) => void;
+    setJumpTargets: (response: JumpTargetsMessage) => void;
 }
 
 /**
@@ -86,6 +87,12 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
             return false;
         }
     }
+    if (message.type === 'jumpTargets') {
+        if (typeof message.mode !== 'string' || typeof message.path !== 'string' || !Array.isArray(message.entries)) {
+            debug('discarding jumpTargets message with invalid mode/path/entries %O', message);
+            return false;
+        }
+    }
     return true;
 }
 
@@ -128,10 +135,10 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial
 }
 
 // own the core doc/selection/workspace state, the host message listener, and the dispatch
-// the message-type string literals ('update', 'selectionChanged', 'command', 'globalSettings', 'settingsCascade') are the on-the-wire contract and must stay exactly as-is
+// the message-type string literals ('update', 'selectionChanged', 'command', 'globalSettings', 'settingsCascade', 'jumpTargets') are the on-the-wire contract and must stay exactly as-is
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState {
-    const { postMessage, markConnected, setGlobalSettings, setSettingsCascade, updateAllViewStates, view_states_ref, navigation_callback_ref, saved_view_states, markPending, clearPending } = deps;
+    const { postMessage, markConnected, setGlobalSettings, setSettingsCascade, updateAllViewStates, view_states_ref, navigation_callback_ref, saved_view_states, markPending, clearPending, setJumpTargets } = deps;
     const [docs_state, setDocsState] = useState<{ docs?: HashMapOf<Doc> }>({ docs: deps.initial_docs || {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [active_editor_doc_path, setActiveEditorDocPath] = useState<string | undefined>(undefined);
@@ -278,11 +285,15 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                     clearPending(message.key as string);
                 }
                 return;
+            case 'jumpTargets':
+                debug('received jumpTargets mode=%s path=%s', message.mode, message.path);
+                setJumpTargets(message as JumpTargetsMessage);
+                return;
             case 'command':
                 handleCommand(message);
                 return;
         }
-    }, [markConnected, setGlobalSettings, setSettingsCascade, handleCommand, markPending, clearPending]);
+    }, [markConnected, setGlobalSettings, setSettingsCascade, handleCommand, markPending, clearPending, setJumpTargets]);
 
     // listen for messages sent from the extension to the webview
     useEffect(() => {

@@ -19,6 +19,9 @@ const debug = Debug("nodejs:notethink-views:BreadcrumbTrail");
  * after the path (or "(X in Y of M files)" when the discovery cap truncated the set), never in single-file mode.
  * X = note_count (top-level stories), Y = file_count (source files loaded), M = aggregate_total_discovered (files found before the cap).
  * onFileCountClick: clicking the count opens the Files drawer, receiving the count element so the drawer can scroll-anchor to it.
+ * has_collisions: when true, render the alert glyph next to the count/spinner cluster; clicking it opens the Collisions drawer.
+ * onCollisionsClick: clicking the alert opens the Collisions drawer, receiving the alert element so the drawer can scroll-anchor to it.
+ * onLeafClick: clicking the terminal (rightmost) path segment opens the Jump drawer (sibling files / child subfolders) instead of re-narrowing the aggregation; receives the leaf path and the clicked element so the drawer can scroll-anchor to it.
  */
 export interface BreadcrumbTrailProps extends NoteProps {
     doc_path?: string;
@@ -30,6 +33,9 @@ export interface BreadcrumbTrailProps extends NoteProps {
     aggregate_total_discovered?: number;
     onFolderClick?: (folder_path: string) => void;
     onFileCountClick?: (anchor: HTMLElement) => void;
+    has_collisions?: boolean;
+    onCollisionsClick?: (anchor: HTMLElement) => void;
+    onLeafClick?: (leaf_path: string, anchor: HTMLElement) => void;
 }
 
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
@@ -81,18 +87,36 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactEleme
     return (
         <nav className={styles.breadcrumbTrail} role="navigation" aria-label={l10n.t('Breadcrumb')}>
             {path_segments.map((segment, index) => {
+                // the terminal leaf opens the Jump drawer (sibling files / child subfolders); non-terminal segments re-narrow the aggregation via onFolderClick
+                const is_leaf = index === path_segments.length - 1;
                 return <Fragment key={`path-${index}`}>
                     {index > 0 && <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>}
-                    <button className={styles.breadcrumbItem + ' ' + styles.pathSegment}
-                          aria-label={segment.label}
-                          data-path={segment.path}
-                          onClick={(event: MouseEvent<HTMLElement>) => {
-                              event.stopPropagation();
-                              props.onFolderClick?.(segment.path);
-                          }}
-                    >
-                        {segment.label}
-                    </button>
+                    {is_leaf ? (
+                        <button className={styles.breadcrumbItem + ' ' + styles.pathSegment}
+                              data-testid="breadcrumb-leaf"
+                              data-path={segment.path}
+                              aria-haspopup="menu"
+                              aria-label={l10n.t('Jump to…')}
+                              title={l10n.t('Jump to another folder or file')}
+                              onClick={(event: MouseEvent<HTMLElement>) => {
+                                  event.stopPropagation();
+                                  props.onLeafClick?.(segment.path, event.currentTarget as HTMLElement);
+                              }}
+                        >
+                            {segment.label}
+                        </button>
+                    ) : (
+                        <button className={styles.breadcrumbItem + ' ' + styles.pathSegment}
+                              aria-label={segment.label}
+                              data-path={segment.path}
+                              onClick={(event: MouseEvent<HTMLElement>) => {
+                                  event.stopPropagation();
+                                  props.onFolderClick?.(segment.path);
+                              }}
+                        >
+                            {segment.label}
+                        </button>
+                    )}
                 </Fragment>;
             })}
             {file_count_label && (
@@ -108,6 +132,19 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactEleme
                 </button>
             )}
             {pending && <Spinner positionClass="InlineLoader" ariaLabel={l10n.t('Working')} />}
+            {props.has_collisions && (
+                <button className={styles.collisionAlert}
+                      data-testid="breadcrumb-collision-alert"
+                      aria-label={l10n.t('Duplicate note IDs detected — open the Collisions panel')}
+                      title={l10n.t('Duplicate note IDs detected — open the Collisions panel')}
+                      onClick={(event: MouseEvent<HTMLElement>) => {
+                          event.stopPropagation();
+                          props.onCollisionsClick?.(event.currentTarget as HTMLElement);
+                      }}
+                >
+                    &#9888;
+                </button>
+            )}
             {has_path && has_notes && <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>}
             {memoized_notes.map((item: NoteProps, index: number) => {
                 return <Fragment key={`breadcrumb-${item.seq}-${index}`}>

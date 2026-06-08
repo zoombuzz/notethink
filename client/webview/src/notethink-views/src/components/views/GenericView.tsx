@@ -1,16 +1,11 @@
 import Debug from "debug";
-import React, { lazy } from "react";
+import React, { lazy, useState } from "react";
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps } from "../../types/NoteProps";
 import InsertModal from "../InsertModal";
 import GenericViewBreadcrumb from "./generic/GenericViewBreadcrumb";
 import GenericViewToolbar from "./generic/GenericViewToolbar";
-import { useInsertModal } from "./generic/useInsertModal";
-import { useToolbarDrawers } from "./generic/useToolbarDrawers";
-import { useViewContext } from "./generic/useViewContext";
-import { useViewHandlers } from "./generic/useViewHandlers";
-import { useViewNavigation } from "./generic/useViewNavigation";
-import { useViewToolbar } from "./generic/useViewToolbar";
+import { useGenericView } from "./generic/useGenericView";
 
 const debug = Debug("nodejs:notethink-views:GenericView");
 
@@ -22,66 +17,36 @@ const KanbanView = lazy(() => import('./KanbanView'));
 export const SELECTABLE_VIEWTYPES = ['auto', 'document', 'kanban'];
 
 export default function GenericView(props: ViewProps): React.ReactElement {
-    // view context: cascaded display_options, parent context, visible notes, focus/selection
-    const view_context = useViewContext(props);
-    const { display_options, parent_context, parent_context_seq, notes_within_parent_context, deepest } = view_context;
-
-    // view-level ViewApi + the folder/file dispatchers wired through it
-    const { handlers, handle_folder_click, handle_apply_filters } = useViewHandlers(props, view_context.selection_ref);
-
-    // at-most-one-open toolbar drawer (settings | files) with scroll-anchor / Escape / outside-click behaviour
-    const { active_drawer, gear_button_ref, toggle_settings, toggle_files } = useToolbarDrawers(props.id);
-
-    // keyboard navigation handler, registered on the parent-provided ref
-    useViewNavigation({
-        display_options,
-        notes_within_parent_context,
-        parent_context,
-        parent_context_seq,
-        handlers,
-        navigation_command_ref: props.handlers?.onNavigationCommand,
-    });
-
-    // toolbar state: integration mode, natural column order, settings / column-order / cascade dispatchers
-    const toolbar = useViewToolbar(props, handlers, display_options, notes_within_parent_context);
-
-    // insert modal open state + insertion-point resolver
-    const insert = useInsertModal(props, handlers);
-
-    // determine the auto-resolved type label for the view selector
-    const auto_resolved_type = props.nested?.auto_resolved_type;
-
-    // create standard breadcrumb component for display in views
+    const { view_context, handlers, handle_folder_click, handle_apply_filters, handle_jump_request, handle_file_jump, drawers, collisions, toolbar, insert, auto_resolved_type } = useGenericView(props);
+    const { display_options, parent_context, deepest, notes_within_parent_context } = view_context;
+    // the leaf path the jump drawer is showing targets for; set when the terminal breadcrumb segment is clicked so JumpDrawer can match the extension reply to this request
+    const [requested_jump_path, setRequestedJumpPath] = useState<string | undefined>(undefined);
     const breadcrumb_trail = (
         <GenericViewBreadcrumb
             props={props}
             parentContext={parent_context}
             handlers={handlers}
             onFolderClick={handle_folder_click}
-            onFileCountClick={toggle_files}
+            onFileCountClick={drawers.toggle_files}
+            has_collisions={collisions.length > 0}
+            onCollisionsClick={drawers.toggle_collisions}
+            onLeafClick={(leaf_path, anchor) => {
+                setRequestedJumpPath(leaf_path);
+                drawers.toggle_jump(anchor);
+                handle_jump_request(leaf_path);
+            }}
         />
     );
-
-    // render toolbar and settings drawer at the leaf level only - when type is 'auto', AutoView will delegate to a concrete type which renders GenericView again with the toolbar
+    // render the toolbar at the leaf level only — when type is 'auto', AutoView delegates to a concrete type that renders GenericView again with the toolbar
     const show_toolbar = props.type !== 'auto';
-
     const enriched_props: ViewProps = {
         ...props,
-        display_options: {
-            ...display_options,
-            deepest: deepest,
-        },
+        display_options: { ...display_options, deepest },
         notes: props.notes as Array<NoteProps>,
         notes_within_parent_context,
-        nested: {
-            ...props.nested,
-            parent_context,
-            breadcrumb_trail,
-            auto_resolved_type,
-        },
+        nested: { ...props.nested, parent_context, breadcrumb_trail, auto_resolved_type },
         handlers,
     };
-
     return (
         <>
             {show_toolbar && (
@@ -93,9 +58,14 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     autoResolvedType={auto_resolved_type}
                     integrationMode={toolbar.integration_mode}
                     naturalColumnOrder={toolbar.natural_column_order}
-                    activeDrawer={active_drawer}
-                    gearButtonRef={gear_button_ref}
-                    onSettingsToggle={toggle_settings}
+                    collisions={collisions}
+                    activeDrawer={drawers.active_drawer}
+                    requestedJumpPath={requested_jump_path}
+                    onFolderJump={handle_folder_click}
+                    onFileJump={handle_file_jump}
+                    gearButtonRef={drawers.gear_button_ref}
+                    onCloseDrawer={drawers.close_drawer}
+                    onSettingsToggle={drawers.toggle_settings}
                     onInsertOpen={insert.open_insert_modal}
                     onIntegrationChange={toolbar.handle_integration_change}
                     onSettingChange={toolbar.handle_setting_change}

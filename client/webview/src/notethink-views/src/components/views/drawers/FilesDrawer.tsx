@@ -2,11 +2,11 @@ import Debug from "debug";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
-import styles from "../ViewRenderer.module.scss";
-import { usePendingWorkContext } from "../../hooks/PendingWorkContext";
-import { globMatches } from "../../lib/globMatch";
-import SettingsCascadeButtons from "./SettingsCascadeButtons";
-import Spinner from "../Spinner";
+import styles from "../../ViewRenderer.module.scss";
+import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
+import { globMatches } from "../../../lib/globMatch";
+import SettingsCascadeButtons from "../SettingsCascadeButtons";
+import Spinner from "../../Spinner";
 
 const debug = Debug("nodejs:notethink-views:FilesDrawer");
 
@@ -23,9 +23,17 @@ interface FilesDrawerProps {
     noteCount: number;
     files: Array<string>;
     onApplyFilters: (include: string, exclude: string, maxNotesPerFile: number) => void;
+    onFileClick?: (file_path: string) => void;
+    workspaceRoot?: string;
     onMakeDefault?: () => void;
     onResetToDefault?: () => void;
     canResetToDefault?: boolean;
+}
+
+// resolve a Files-drawer entry to the absolute path the openFile message needs (aggregate_loaded_files are workspace-relative where known)
+function absolutizeFilePath(file_path: string, workspace_root?: string): string {
+    if (file_path.startsWith('/')) { return file_path; }
+    return workspace_root ? `${workspace_root}/${file_path}` : file_path;
 }
 
 /**
@@ -107,9 +115,9 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
     );
 
     return (
-        <div className={styles.settingsDrawerBody} data-testid="files-drawer">
-            <div className={styles.settingsDrawerGroups}>
-                <section className={styles.settingsDrawerGroup}>
+        <div className={styles.drawerBody} data-testid="files-drawer">
+            <div className={styles.drawerGroups}>
+                <section className={styles.drawerGroup}>
                     {pending && (
                         <p data-testid="files-drawer-spinner">
                             <Spinner positionClass="InlineLoader" ariaLabel={l10n.t('Working')} />
@@ -160,18 +168,28 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
                     <p className={styles.filesDrawerCount} data-testid="files-drawer-count">
                         {l10n.t('{0} in {1} files', String(props.noteCount), String(props.fileCount))}
                     </p>
-                    <ul className={styles.filesDrawerList} data-testid="files-drawer-list">
+                    <ul className={`${styles.drawerList} ${styles.filesDrawerList}`} data-testid="files-drawer-list">
                         {visible_files.length === 0 && (
-                            <li className={styles.filesDrawerEmpty}>{l10n.t('No files match the current filters')}</li>
+                            <li className={styles.drawerEmpty}>{l10n.t('No files match the current filters')}</li>
                         )}
                         {visible_files.map(f => (
-                            <li key={f} title={f}>{f}</li>
+                            <li key={f}>
+                                <button
+                                    type="button"
+                                    className={styles.drawerLink}
+                                    data-testid="files-drawer-file"
+                                    title={f}
+                                    onClick={() => props.onFileClick?.(absolutizeFilePath(f, props.workspaceRoot))}
+                                >
+                                    {f}
+                                </button>
+                            </li>
                         ))}
                     </ul>
                 </section>
             </div>
 
-            <aside className={styles.settingsDrawerMeta}>
+            <aside className={styles.drawerMeta}>
                 <h3>{l10n.t('File settings')}</h3>
                 {props.onMakeDefault && props.onResetToDefault && (
                     <SettingsCascadeButtons

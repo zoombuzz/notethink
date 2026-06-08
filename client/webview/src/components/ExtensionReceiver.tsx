@@ -9,6 +9,7 @@ import { useLinkInterceptor } from '../hooks/useLinkInterceptor';
 import { useConnectionTimeout } from '../hooks/useConnectionTimeout';
 import { getVscodeApi, migrateSavedState, postMessageToExtension, persistVscodeState } from '../lib/vscodeops';
 import type { UsePendingWorkApi } from '../notethink-views/src/hooks/usePendingWork';
+import type { UseJumpTargetsApi } from '../notethink-views/src/hooks/useJumpTargets';
 import type { ViewState } from '../hooks/usePersistedViewStates';
 import NoteRenderer from './NoteRenderer';
 
@@ -21,6 +22,7 @@ const saved_state = migrateSavedState(getVscodeApi().getState());
 
 interface ExtensionReceiverProps {
     pendingWorkApi: UsePendingWorkApi;
+    jumpTargetsApi: UseJumpTargetsApi;
 }
 
 export default function ExtensionReceiver(props: ExtensionReceiverProps): React.ReactElement {
@@ -58,6 +60,7 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         navigation_callback_ref,
         markPending: props.pendingWorkApi.markPending,
         clearPending: props.pendingWorkApi.clearPending,
+        setJumpTargets: props.jumpTargetsApi.setJumpTargets,
     });
 
     // effects

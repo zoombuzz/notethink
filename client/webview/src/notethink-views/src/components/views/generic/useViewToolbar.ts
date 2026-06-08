@@ -14,7 +14,7 @@ const debug = Debug("nodejs:notethink-views:useViewToolbar");
 export interface ViewToolbar {
     integration_mode: IntegrationMode;
     natural_column_order: string[];
-    handle_integration_change: (mode: IntegrationMode) => void;
+    handle_integration_change: (mode: IntegrationMode, target_file_path?: string) => void;
     handle_setting_change: (key: CommonSettingKey, value: boolean) => void;
     handle_global_setting_change: (key: GlobalSettingKey, value: boolean) => void;
     handle_column_order_change: (next_order: string[]) => void;
@@ -51,7 +51,7 @@ export function useViewToolbar(
      * on doc-path keys (legacy pre-fix dispatch wrote the tag there) so the fallback scans
      * in anyViewInFolderMode / firstIntegrationPath no longer pin folder mode.
      */
-    const handle_integration_change = useCallback((mode: IntegrationMode): void => {
+    const handle_integration_change = useCallback((mode: IntegrationMode, target_file_path?: string): void => {
         const folder_path = mode === INTEGRATION_MODE_FOLDER && props.doc_path
             ? props.doc_path.replace(/\/[^/]+$/, '')
             : undefined;
@@ -85,10 +85,11 @@ export function useViewToolbar(
                 path: folder_path,
             });
         } else if (mode === INTEGRATION_MODE_CURRENT_FILE) {
-            // notify the extension so it disposes the folder watcher and re-sends just the active doc; without this the stale folder docs keep rendering as stacked single-file views
+            // notify the extension so it disposes the folder watcher and re-sends just the active doc; without this the stale folder docs keep rendering as stacked single-file views. target_file_path (a Files-drawer click) makes the extension open + show that file instead of whatever was active
             handlers.postMessage?.({
                 type: 'setIntegration',
                 mode: INTEGRATION_MODE_CURRENT_FILE,
+                path: target_file_path,
             });
         }
     }, [handlers, props.doc_path, props.view_state_ids]);

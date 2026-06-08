@@ -5,7 +5,7 @@ import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { calculateTextChangesForCheckbox, focusedChainIdsFor, resolveCaretPosition } from "../../../lib/noteops";
 import { isAlreadyFocusedClick } from "../../../lib/noteui";
 import { FOLDER_VIEW_STATE_ID, writeViewInteractionState } from "../../../lib/viewstateops";
-import { INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
+import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { ClickPositionInfo, NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 
@@ -15,6 +15,8 @@ export interface ViewHandlers {
     handlers: ViewApi;
     handle_folder_click: (folder_path: string) => void;
     handle_apply_filters: (next_include: string, next_exclude: string, next_max_notes_per_file: number) => void;
+    handle_jump_request: (leaf_path: string) => void;
+    handle_file_jump: (file_path: string) => void;
 }
 
 /**
@@ -152,6 +154,15 @@ export function useViewHandlers(
             });
         },
 
+        // jump the editor to a note's source: folder mode uses the origin source offset + doc_path; single-file mode falls back to the in-tree position and the view's own doc_path (the extension no-ops a revealRange with no docPath, so single-file collisions must supply it)
+        revealNote: (note: NoteProps) => {
+            props.handlers?.postMessage?.({
+                type: 'revealRange',
+                from: note.origin?.source_position?.start.offset ?? note.position?.start?.offset ?? 0,
+                docPath: note.origin?.doc_path ?? props.doc_path,
+            });
+        },
+
         postMessage: props.handlers?.postMessage,
 
     }, props.handlers);
@@ -214,5 +225,18 @@ export function useViewHandlers(
         }
     }, [handlers, props.id, props.display_options?.integration_path, props.display_options?.integration_mode, markPending]);
 
-    return { handlers, handle_folder_click, handle_apply_filters };
+    // request the list of jump targets reachable from the terminal breadcrumb leaf; mode is folder when aggregating a folder, else current-file (sibling .md files)
+    const handle_jump_request = useCallback((leaf_path: string): void => {
+        const mode = props.display_options?.integration_mode === INTEGRATION_MODE_FOLDER
+            ? INTEGRATION_MODE_FOLDER
+            : INTEGRATION_MODE_CURRENT_FILE;
+        handlers.postMessage?.({ type: 'requestJumpTargets', mode, path: leaf_path });
+    }, [handlers, props.display_options?.integration_mode]);
+
+    // open a chosen file jump target in the editor
+    const handle_file_jump = useCallback((file_path: string): void => {
+        handlers.postMessage?.({ type: 'openFile', path: file_path });
+    }, [handlers]);
+
+    return { handlers, handle_folder_click, handle_apply_filters, handle_jump_request, handle_file_jump };
 }

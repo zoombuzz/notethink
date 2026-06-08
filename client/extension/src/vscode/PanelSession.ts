@@ -381,6 +381,8 @@ export class PanelSession {
 				case 'revealRange':
 				case 'selectRange': return this.handleRevealRange(e);
 				case 'setIntegration': return this.handleSetIntegration(e);
+				case 'requestJumpTargets': return this.handleRequestJumpTargets(e);
+				case 'openFile': return this.handleOpenFile(e);
 				case 'editText': return this.handleEditText(e);
 				case 'openExternal': return this.handleOpenExternal(e);
 				case 'renderError':
@@ -576,7 +578,8 @@ export class PanelSession {
 			}
 			await this.enterFolderMode(folder_path, e);
 		} else if (mode === INTEGRATION_MODE_CURRENT_FILE) {
-			await this.enterCurrentFileMode();
+			// optional path targets a specific file (Files-drawer click); undefined keeps the active editor
+			await this.enterCurrentFileMode(typeof e.path === 'string' ? e.path : undefined);
 		}
 		// folder mode: integration_path is now set so this disposes any active-file watcher; current_file mode: it arms one if the active file has no visible editor
 		this.syncActiveFileWatcher();
@@ -818,7 +821,7 @@ export class PanelSession {
 		}
 	}
 
-	private async enterCurrentFileMode(): Promise<void> {
+	private async enterCurrentFileMode(target_path?: string): Promise<void> {
 		// switching back to single-file mode — tear down any active watcher
 		if (this.integration_watcher) {
 			this.integration_watcher.dispose();
@@ -830,6 +833,10 @@ export class PanelSession {
 		for (const key of Object.keys(this.integration_docs)) { delete this.integration_docs[key]; }
 		// re-resolve the active editor (it may have changed while in folder mode) and re-send just that file; integration_path is now unset so sendDoc replaces, pruning stale folder docs
 		try {
+			// a Files-drawer file click targets a specific file: open + focus it first so it becomes the active editor this mode renders (doing it here, in one handler, avoids the race a separate openFile message would have)
+			if (target_path && isWithinWorkspace(target_path, { requireExtension: '.md' })) {
+				await this.revealByOpening(target_path, 0, 0);
+			}
 			const current_editor = vscode.window.activeTextEditor;
 			if (current_editor?.document.uri.path.endsWith('.md') && current_editor.document.uri.path !== this.active_path) {
 				this.active_doc = await this.buildDoc(current_editor.document);
@@ -841,6 +848,82 @@ export class PanelSession {
 			}
 		} catch (err) {
 			writeToErrorLog('setIntegration current_file failed', '', err);
+		}
+	}
+
+	// --- breadcrumb jump drawer ---
+
+	/**
+	 * list jump targets for the breadcrumb's terminal segment: child folders in folder
+	 * mode, sibling .md files in current_file mode. Validates the untrusted path before
+	 * touching the filesystem, then posts the sorted entries back to the webview.
+	 */
+	private async handleRequestJumpTargets(e: Record<string, unknown>): Promise<void> {
+		const mode = e.mode as string;
+		const jump_path = e.path as string;
+		try {
+			if (mode === INTEGRATION_MODE_FOLDER) {
+				if (!isWithinWorkspace(jump_path)) {
+					writeToErrorLog('requestJumpTargets: folder outside workspace, refusing', jump_path);
+					return;
+				}
+				const entries = await this.listChildFolders(jump_path);
+				this.webviewPanel.webview.postMessage({ type: 'jumpTargets', mode, path: jump_path, entries });
+			} else if (mode === INTEGRATION_MODE_CURRENT_FILE) {
+				if (!isWithinWorkspace(jump_path, { requireExtension: '.md' })) {
+					writeToErrorLog('requestJumpTargets: file outside workspace, refusing', jump_path);
+					return;
+				}
+				const entries = await this.listSiblingMdFiles(jump_path);
+				this.webviewPanel.webview.postMessage({ type: 'jumpTargets', mode, path: jump_path, entries });
+			}
+		} catch (err) {
+			writeToErrorLog('requestJumpTargets failed', jump_path, err);
+		}
+	}
+
+	// enumerate immediate child folders of base_path, dropping exclude-filtered ones with the same recipe computeWorkspaceProjects uses, sorted by label
+	private async listChildFolders(base_path: string): Promise<Array<{ label: string; path: string; kind: 'folder' }>> {
+		const dir_entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(base_path));
+		const dir_names = dir_entries
+			.filter(([, type]) => type === vscode.FileType.Directory)
+			.map(([name]) => name);
+		const filtered = this.integration_exclude.trim() === ''
+			? dir_names
+			: dir_names.filter(name => globMatches(`${name}/dummy.md`, '', this.integration_exclude));
+		return filtered
+			.sort()
+			.map(name => ({ label: name, path: path.join(base_path, name), kind: 'folder' as const }));
+	}
+
+	// enumerate sibling .md files of file_path (excluding the file itself), sorted by label
+	private async listSiblingMdFiles(file_path: string): Promise<Array<{ label: string; path: string; kind: 'file' }>> {
+		const dir = path.dirname(file_path);
+		const self_name = path.basename(file_path);
+		const dir_entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(dir));
+		const file_names = dir_entries
+			.filter(([name, type]) => type === vscode.FileType.File && name.endsWith('.md') && name !== self_name)
+			.map(([name]) => name);
+		return file_names
+			.sort()
+			.map(name => ({ label: name, path: path.join(dir, name), kind: 'file' as const }));
+	}
+
+	/**
+	 * open a sibling .md file picked from the jump drawer. Routes through revealByOpening
+	 * (not handleRevealRange, which stays silent in current_file mode) so the file opens in
+	 * a column beside the panel and takes focus.
+	 */
+	private async handleOpenFile(e: Record<string, unknown>): Promise<void> {
+		const file_path = e.path as string;
+		try {
+			if (!isWithinWorkspace(file_path, { requireExtension: '.md' })) {
+				writeToErrorLog('openFile: path outside workspace, refusing', file_path);
+				return;
+			}
+			await this.revealByOpening(file_path, 0, 0);
+		} catch (err) {
+			writeToErrorLog('openFile failed', file_path, err);
 		}
 	}
 

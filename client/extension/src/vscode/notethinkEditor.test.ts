@@ -928,6 +928,119 @@ describe('NotethinkEditorProvider', () => {
 		});
 	});
 
+	// ---- requestJumpTargets / openFile (breadcrumb jump drawer) -------------
+
+	describe('requestJumpTargets message', () => {
+		type JumpTargetsMessage = MessageRecord & {
+			type: 'jumpTargets';
+			mode: string;
+			path: string;
+			entries: Array<{ label: string; path: string; kind: string }>;
+		};
+		const dir = (vscode.FileType as unknown as { Directory: number }).Directory;
+		const file = (vscode.FileType as unknown as { File: number }).File;
+
+		beforeEach(() => setWorkspaceRoots(['/workspace']));
+		afterEach(() => {
+			setWorkspaceRoots(undefined);
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		});
+
+		it('folder mode returns child-folder entries, exclude-filtered', async () => {
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([
+				['users', dir],
+				['projects', dir],
+				['node_modules', dir],
+				['readme.md', file],
+			]);
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({ type: 'requestJumpTargets', mode: 'folder', path: '/workspace/notes' });
+
+			const reply = findByType(panelHelper.postedMessages, 'jumpTargets') as JumpTargetsMessage;
+			expect(reply).toBeDefined();
+			expect(reply.mode).toBe('folder');
+			expect(reply.path).toBe('/workspace/notes');
+			// node_modules is dropped by the default exclude; the .md file is not a folder; entries are sorted by label
+			expect(reply.entries).toEqual([
+				{ label: 'projects', path: '/workspace/notes/projects', kind: 'folder' },
+				{ label: 'users', path: '/workspace/notes/users', kind: 'folder' },
+			]);
+		});
+
+		it('current_file mode returns sibling .md entries minus the current file', async () => {
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([
+				['alpha.md', file],
+				['beta.md', file],
+				['self.md', file],
+				['notes.txt', file],
+				['subdir', dir],
+			]);
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({ type: 'requestJumpTargets', mode: 'current_file', path: '/workspace/docs/self.md' });
+
+			const reply = findByType(panelHelper.postedMessages, 'jumpTargets') as JumpTargetsMessage;
+			expect(reply).toBeDefined();
+			expect(reply.mode).toBe('current_file');
+			expect(reply.path).toBe('/workspace/docs/self.md');
+			// self.md is dropped, non-.md and folders excluded, sorted by label
+			expect(reply.entries).toEqual([
+				{ label: 'alpha.md', path: '/workspace/docs/alpha.md', kind: 'file' },
+				{ label: 'beta.md', path: '/workspace/docs/beta.md', kind: 'file' },
+			]);
+		});
+
+		it('refuses a folder path outside the workspace (no reply)', async () => {
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({ type: 'requestJumpTargets', mode: 'folder', path: '/etc' });
+
+			expect(vscode.workspace.fs.readDirectory).not.toHaveBeenCalled();
+			expect(findByType(panelHelper.postedMessages, 'jumpTargets')).toBeUndefined();
+		});
+
+		it('refuses a current_file path outside the workspace (no reply)', async () => {
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({ type: 'requestJumpTargets', mode: 'current_file', path: '/etc/passwd.md' });
+
+			expect(vscode.workspace.fs.readDirectory).not.toHaveBeenCalled();
+			expect(findByType(panelHelper.postedMessages, 'jumpTargets')).toBeUndefined();
+		});
+	});
+
+	describe('openFile message', () => {
+		beforeEach(() => setWorkspaceRoots(['/workspace']));
+		afterEach(() => setWorkspaceRoots(undefined));
+
+		it('opens a valid in-workspace .md file via the reveal path', async () => {
+			const docPath = '/workspace/docs/target.md';
+			const doc = mockTextDocument('# Target', docPath);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
+			(vscode.window.showTextDocument as jest.Mock).mockResolvedValue(mockTextEditor(doc));
+
+			await panelHelper.simulateMessage({ type: 'openFile', path: docPath });
+
+			expect(vscode.workspace.openTextDocument).toHaveBeenCalledTimes(1);
+			expect(vscode.window.showTextDocument).toHaveBeenCalledTimes(1);
+		});
+
+		it('refuses an out-of-workspace path', async () => {
+			await panelHelper.simulateMessage({ type: 'openFile', path: '/etc/shadow.md' });
+
+			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
+		});
+
+		it('refuses an in-workspace non-markdown path', async () => {
+			await panelHelper.simulateMessage({ type: 'openFile', path: '/workspace/docs/secrets.txt' });
+
+			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
+		});
+	});
+
 	// ---- requestInitialState ------------------------------------------------
 
 	describe('requestInitialState message', () => {

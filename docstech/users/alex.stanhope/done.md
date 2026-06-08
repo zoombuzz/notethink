@@ -2595,3 +2595,125 @@ discovered 2026-06-02 while investigating the post-drag highlight jump (see [[se
 + note: the related [[selection-stable-identity]] "view selection beats a coherent caret" precedence flip was considered and dropped (editor-as-tiebreaker stands); this caret-stability fix is the accepted solution to the highlight-jump symptom
 
 
+### Terminal breadcrumb leaf opens a jump drawer [](?id=breadcrumb-leaf-jump-drawer)
+
+Every breadcrumb **folder** segment re-narrows the folder view (works well) — except the **terminal leaf** (the rightmost segment), which represents the *current* folder (folder mode) or the *current file* (current-file mode) and has no useful purpose: it re-narrows to the same folder (no-op) or, in current-file mode, calls `onFolderClick(doc_path)` on a file path (broken). This turns that leaf into a navigation affordance — clicking it opens a drawer of jump targets.
+
++ goal
+  + folder mode → drawer lists the **child subfolders** of the current folder; clicking one descends the folder view into it (existing `handle_folder_click` pipeline)
+  + current-file mode → drawer lists the **sibling `.md` files** in the current file's directory; clicking one opens that file in the editor (the current-file view follows the active editor and re-renders)
+  + the list reflects the **real directory on disk** (the extension reads the folder), not just already-loaded notes
++ decisions (confirmed with the user)
+  + folder targets = **children only** (drill down); going up/sideways stays on the ancestor segments
+  + data source = **real directory listing via the extension** (small request/response round-trip), not client-derived from loaded files
+  + **both modes** implemented now
++ design — wire contract (transient internal/wire names; permanent-name check N/A)
+  + webview→ext request `requestJumpTargets { mode, path }`; ext→webview response `jumpTargets { mode, path, entries: [{ label, path, kind: 'folder'|'file' }] }`; webview→ext `openFile { path }` for the current-file jump
+  + response surfaced to the deep drawer via a new context mirroring `PendingWorkContext` (App.tsx owns the hook, feeds the message reducer in `ExtensionReceiver` + a Provider for the tree) — avoids prop-drilling through the composers
++ extension — `client/extension/src/vscode/PanelSession.ts`
+  + `handleRequestJumpTargets`: validate `isWithinWorkspace(path)` (folder) / `{requireExtension:'.md'}` (current_file); folder → `fs.readDirectory`, keep dirs, drop excluded via `globMatches(\`${name}/dummy.md\`, '', this.integration_exclude)` (the `computeWorkspaceProjects` recipe); current_file → readDirectory of `dirname(path)`, keep `.md` files minus the current; sort by label; post `jumpTargets`
+  + `handleOpenFile`: validate `.md` within workspace, then reuse the private `revealByOpening(path, 0, 0)` (opens beside the panel, focuses it). Deliberately NOT via `handleRevealRange` (which stays silent in current-file mode to avoid stray-click editors)
+  + reuse `globMatches`, `isWithinWorkspace`/`isPathWithin`, `node:path`
++ webview wire types — `client/webview/src/notethink-views/src/types/Messages.ts`
+  + add `JumpTarget`, `RequestJumpTargetsMessage`, `OpenFileMessage` (→ `WebviewToExtensionMessage`), `JumpTargetsMessage` (incoming)
++ response plumbing (mirror `PendingWorkContext`)
+  + new `hooks/useJumpTargets.ts` (holds latest `jumpTargets` + setter) + `hooks/JumpTargetsContext.tsx` (`JumpTargetsProvider`/`useJumpTargetsContext`)
+  + `components/base/App.tsx` creates the instance, passes to `ExtensionReceiver` + wraps the tree in the provider
+  + `hooks/useVscodeMessages.ts` validates + dispatches incoming `jumpTargets` → calls the injected setter; `components/ExtensionReceiver.tsx` threads the setter in
++ terminal-leaf trigger + drawer
+  + `BreadcrumbTrail.tsx` — for the **last** path segment only, call new `onLeafClick(segment.path, anchor)` instead of `onFolderClick`; add `data-testid="breadcrumb-leaf"` + jump aria-label; thread `onLeafClick` through `GenericViewBreadcrumb`
+  + `generic/useToolbarDrawers.ts` — add `'jump'` drawer kind + `toggle_jump(anchor)` (escape/outside-click already generic via the drawer id)
+  + `generic/useViewHandlers.ts` — `handle_jump_request(leaf_path)` posts `requestJumpTargets` (mode from `display_options.integration_mode`); `handle_file_jump(path)` posts `openFile`; folder rows reuse `handle_folder_click`
+  + `generic/useGenericView.ts` exposes the handlers + toggle; `GenericView.tsx` wires `onLeafClick` (toggle + request) and passes handlers to the toolbar
+  + new `views/JumpDrawer.tsx` — consumes `useJumpTargetsContext`, renders entries matching the requested leaf path (loading/empty states), folder rows → `onFolderJump`, file rows → `onFileJump`; reuse shared `.drawer*` styles
+  + `generic/GenericViewToolbar.tsx` — render the `jump` drawer via the shared `ToolbarDrawer`; widen the `activeDrawer` union
++ l10n — add UI strings (Jump to…, No subfolders, No other files here, loading, aria labels) to `l10n/bundle.l10n.json` + de/es/fr/it
++ out of scope
+  + sibling/parent folder targets (children only); descending into a folder from current-file mode; any redesign of the discovery/merge pipeline
++ files
+  + `client/extension/src/vscode/PanelSession.ts` (+ extension-host test near `notethinkEditor.test.ts`)
+  + `client/webview/src/notethink-views/src/types/Messages.ts`
+  + new `client/webview/src/notethink-views/src/hooks/useJumpTargets.ts`, `client/webview/src/notethink-views/src/hooks/JumpTargetsContext.tsx`
+  + `client/webview/src/components/base/App.tsx`, `client/webview/src/components/ExtensionReceiver.tsx`, `client/webview/src/hooks/useVscodeMessages.ts`
+  + `client/webview/src/notethink-views/src/components/views/BreadcrumbTrail.tsx` (+ test), `generic/GenericViewBreadcrumb.tsx`, `generic/useToolbarDrawers.ts`, `generic/useViewHandlers.ts`, `generic/useGenericView.ts`, `GenericView.tsx`, `generic/GenericViewToolbar.tsx`
+  + new `client/webview/src/notethink-views/src/components/views/JumpDrawer.tsx` (+ test)
+  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss`
+  + `l10n/bundle.l10n*.json`
+  + new `playwright/specs/breadcrumb-jump.spec.ts` (+ fixtures if needed)
++ [X] extension: `handleRequestJumpTargets` + `handleOpenFile` (folder children / current-file siblings; reuse `revealByOpening`); extension-host test
+  + delivered: handlers + `listChildFolders`/`listSiblingMdFiles` helpers in `PanelSession.ts`; 7 jest tests in `notethinkEditor.test.ts`; `__mocks__/vscode.ts` got `fs.readDirectory`
++ [X] webview wire types in `Messages.ts` (`JumpTarget`, request/response/openFile)
++ [X] response plumbing: `useJumpTargets` + `JumpTargetsContext`, wired through `App.tsx` / `ExtensionReceiver` / `useVscodeMessages`
+  + delivered: `UseJumpTargetsApi { jump_targets, setJumpTargets, clearJumpTargets }`; context mirrors `PendingWorkContext`; reducer dispatches incoming `jumpTargets`
++ [X] terminal-leaf trigger in `BreadcrumbTrail` (last segment → `onLeafClick`); thread through `GenericViewBreadcrumb`; update `BreadcrumbTrail.test.tsx`
++ [X] `'jump'` drawer kind in `useToolbarDrawers`; `handle_jump_request`/`handle_file_jump` in `useViewHandlers`; expose via `useGenericView`
++ [X] `JumpDrawer` component + render it via `GenericViewToolbar`/`GenericView`; scss
+  + delivered: `JumpDrawer` matches `jump_targets.path === requestedPath` (loading until the reply for this leaf lands), folder rows → `handle_folder_click`, file rows → `openFile`
++ [X] l10n strings in all 5 bundles (`Jump to…`, `Jump to another folder or file`, `Jump to`, `Loading…`, `No subfolders`, `No other files here`)
++ [X] jest: `JumpDrawer.test.tsx` (folder/file rows fire correct handler; loading/empty states)
++ [X] playwright: `breadcrumb-jump.spec.ts` (folder mode opens drawer + descends; current-file row posts `openFile`; folder empty-state)
++ [X] `pnpm run check` green
+  + delivered: `pnpm run check` green (lint + webpack + rollup + jest 1052); full playwright 68; new tokens confirmed in both built bundles
++ delivered (drawer consistency pass)
+  + jump drawer now renders as a folder tree — root = the clicked breadcrumb folder name, child subfolders/files indented with an Explorer-style indent guide (`jump-drawer-root` + tree scss), not a flat list
+  + every drawer (settings/files/collisions/jump) gains a top-right `×` close button via the shared `ToolbarDrawer` shell (`useToolbarDrawers.close_drawer`); drawer fonts unified to 13px; one shared `.drawerLink` Explorer-row link style (theme foreground + hover highlight) replaces the blue text-link look across collisions + jump + files
+  + Files-drawer rows are now links that open the file in current-file mode (`onFileClick` → `openFile`, relative paths absolutized against `workspace_root`)
+  + `revealNote` now supplies the view `doc_path` as a fallback so a collision-row click reveals in current_file mode (the extension no-ops a `revealRange` with no `docPath`)
++ manual: open each drawer and confirm a top-right `×` closes it; fonts/link styling look consistent across all drawers
++ manual: in the Files drawer click a listed file — it opens in current-file mode
++ manual: open the jump drawer and confirm the tree root matches the breadcrumb folder you clicked, with subfolders/files indented like the Explorer
++ manual: folder mode — click the terminal breadcrumb leaf, confirm the drawer lists child subfolders and clicking one descends the folder view
++ manual: current-file mode — click the terminal leaf, confirm the drawer lists sibling `.md` files and clicking one opens that file (view follows the editor)
++ manual: a leaf with no children/siblings shows the empty-state row; Escape / outside-click closes the drawer
++ acceptance
+  + the terminal breadcrumb leaf opens a jump drawer in both modes; non-terminal segments are unchanged
+  + folder rows descend the folder view; file rows open the sibling file in the editor
+  + the list reflects the real on-disk directory (exclude-filtered), not just loaded notes
++ commit message draft
+  + notethink x.y.z: terminal breadcrumb leaf opens a jump drawer — folder mode lists child subfolders (descend), current-file mode lists sibling .md files (open in editor); new requestJumpTargets/jumpTargets/openFile round-trip surfaced via a PendingWork-style context
+  + tests N jest, N playwright
+
+
+### Detect duplicate stable_ids and surface collisions [](?id=duplicate-stable-id-detection)
+
+when a file or fileset is opened (either integration mode) scan the in-scope notes for duplicate stable_ids — within the same file or across the other files in scope for the current folder — and surface a non-blocking alert if any collide. Duplicate implicit ids (same headline) weaken transient matching and block durable cross-references; the drawer guides the user to disambiguate by pinning a distinct explicit `id=` (the rule-3 promotion in [[selection-stable-identity]] / AUTHORING_GUIDE).
+
++ goal
+  + on open/aggregate (current_file and folder modes) detect notes that resolve to the same stable_id within the in-scope set
+  + show an alert icon next to where the spinner goes (the breadcrumb `(X in Y files)` cluster), only when ≥1 collision exists
+  + clicking the alert opens a drawer that highlights every collision group so the user can locate and disambiguate them
++ background
+  + stable_ids are mostly implicit (headline-derived) so duplicate headlines collide — within one file, or the same headline across sibling files in folder mode
+  + the pending spinner now lives in `BreadcrumbTrail` next to the file-count; the alert icon sits in the same cluster
++ scope
+  + pure detector: group in-scope notes by stable_id, return the collision groups (≥2 notes sharing an id)
+  + alert icon in the breadcrumb cluster, shown only on collision, with an accessible label; click toggles the drawer
+  + collisions drawer: one row per group — the colliding stable_id plus each note (headline + origin file/line) — mirroring the Files/Settings drawer pattern
+  + detect across the aggregated set in folder mode and within the file in current_file mode
++ out of scope
+  + auto-resolving collisions or auto-writing `id=` linetags — the user promotes manually
+  + sub-note (non-story) collision detection unless trivial
++ files (proposed)
+  + new pure detector in `lib` (group notes by stable_id → collision groups) + tests
+  + `BreadcrumbTrail.tsx` (+ scss) — alert icon beside the spinner/count
+  + new collisions drawer component wired through the view toolbar drawer machinery
++ delivered
+  + detector groups by the implicit `storyStableIdSlug` (final stable_ids are unique-by-construction via `doc_id:` prefix + `#N` suffix, so grouping the literal id finds nothing); story-level heading predicate mirrors the merge stamping
+  + `findStableIdCollisions` / `collisionNoteLocation` + `slugify` / `storyStableIdSlug` live in `noteops.ts` (folded from a standalone `collisionops.ts` per the ≥4-export rule; slug derivation moved out of `mergeAggregateRoot` to keep the dependency one-way)
+  + alert glyph (`⚠`) sits in the breadcrumb cluster next to the file-count/spinner, shown only on collision; `collisions` drawer kind added to `useToolbarDrawers`, rendered via the shared `ToolbarDrawer`
++ [X] implement the pure duplicate-stable_id detector with unit tests
++ [X] render the alert icon in the breadcrumb cluster when collisions exist (hidden otherwise)
++ [X] build the collisions drawer listing each group (id + notes + origin file/line)
++ [X] wire click → open/close the drawer
++ [X] detect within-file (current_file) and across aggregated files (folder)
++ [X] jest: detector groups duplicates, ignores unique ids, spans files
++ [X] playwright: alert appears only on collision; drawer lists the groups
++ [X] make each colliding title a link that jumps to its story in the editor (`ViewApi.revealNote`), ordered by source line, line number hidden
++ [X] `pnpm run check` green
++ delivered (code-review iteration)
+  + collision titles are links: `ViewApi.revealNote` posts `revealRange` (source offset + origin doc_path; falls back to in-tree position in single-file); notes pre-ordered by source line so the links walk the file top-to-bottom, line number not displayed
+  + drawer CSS de-duplicated into a shared `.drawer*` shell (`.drawerBody` / `.drawerGroups` / `.drawerGroup` / `.drawerMeta` + `.drawerList` / `.drawerEmpty`); each drawer keeps only its `.settingsDrawer*` / `.filesDrawer*` / `.collisionsDrawer*` specialisations
+  + `GenericView` decomposed into a `useGenericView` hook (the collision wiring pushed the component past the `max-lines-per-function` cap)
+  + collision row restyled to the shared Explorer-row `.drawerLink` look (whole row clickable, headline + dimmed origin, theme foreground + hover) — see the [[breadcrumb-leaf-jump-drawer]] drawer-consistency pass
++ manual: open a folder with two same-titled stories, confirm the alert appears and the drawer lists both
++ manual: click a colliding title and confirm the editor jumps to that story; with two dupes in one file, the first link lands higher and the second lower

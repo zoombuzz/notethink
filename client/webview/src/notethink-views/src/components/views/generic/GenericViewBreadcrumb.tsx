@@ -13,6 +13,9 @@ interface GenericViewBreadcrumbProps {
     handlers: ViewApi;
     onFolderClick: (folder_path: string) => void;
     onFileCountClick: (anchor: HTMLElement) => void;
+    has_collisions?: boolean;
+    onCollisionsClick?: (anchor: HTMLElement) => void;
+    onLeafClick?: (leaf_path: string, anchor: HTMLElement) => void;
 }
 
 // empty parent-context fallback so BreadcrumbTrail always receives a valid NoteProps shape
@@ -31,7 +34,7 @@ const EMPTY_PARENT_CONTEXT = {
  * fallback) plus the folder/file-count document context derived from the view props.
  */
 export default function GenericViewBreadcrumb(component_props: GenericViewBreadcrumbProps): React.ReactElement {
-    const { props, parentContext, handlers, onFolderClick, onFileCountClick } = component_props;
+    const { props, parentContext, handlers, onFolderClick, onFileCountClick, has_collisions, onCollisionsClick, onLeafClick } = component_props;
     return (
         <BreadcrumbTrail
             {...(parentContext || EMPTY_PARENT_CONTEXT)}
@@ -44,6 +47,9 @@ export default function GenericViewBreadcrumb(component_props: GenericViewBreadc
             aggregate_total_discovered={props.aggregate_total_discovered}
             onFolderClick={onFolderClick}
             onFileCountClick={onFileCountClick}
+            has_collisions={has_collisions}
+            onCollisionsClick={onCollisionsClick}
+            onLeafClick={onLeafClick}
             handlers={{
                 setParentContextSeq: handlers?.setParentContextSeq
             }}

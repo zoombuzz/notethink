@@ -70,7 +70,7 @@ jest.mock('./ViewIntegrationSelector', () => ({
 // mock FilesDrawer - capture the seeded props + onApplyFilters for folder-filter testing
 let capturedFilesDrawerProps: { include: string; exclude: string; maxNotesPerFile: number } | undefined;
 let capturedOnApplyFilters: ((include: string, exclude: string, maxNotesPerFile: number) => void) | undefined;
-jest.mock('./FilesDrawer', () => ({
+jest.mock('./drawers/FilesDrawer', () => ({
     __esModule: true,
     default: (props: {
         include: string;

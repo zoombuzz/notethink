@@ -3,6 +3,17 @@ import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } 
 
 const debug = Debug("nodejs:notethink-views:noteops");
 
+export interface StableIdCollision {
+    slug: string;
+    notes: NoteProps[];
+}
+
+export interface CollisionNoteLocation {
+    headline: string;
+    relative_path: string;
+    line: number;
+}
+
 /**
  * generic shallow element-wise equality for two ordered arrays of any primitive
  * comparable by `===` (string, number, boolean). Returns true when both inputs
@@ -507,4 +518,81 @@ export function kanbanNoteOrder(a: NoteProps, b: NoteProps): number {
  */
 export function kanbanDraggableId(note: NoteProps): string {
     return note.stable_id ?? `${note.seq}`;
+}
+
+// lowercase kebab-case: trim, replace every run of non-alphanumeric chars with a single hyphen, strip leading/trailing hyphens
+export function slugify(text: string): string {
+    return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * derive the story-level stable_id slug from its raw headline + linetags. Prefers
+ * the explicit `[](?id=...)` linetag (canonical, author-controlled) and falls back
+ * to slugify() of the stripped headline text so implicit and future explicit ids
+ * coincide. The caller is responsible for namespacing with `doc_id` and
+ * disambiguating duplicates across the file. See the NoteProps header comment for
+ * the full derivation rationale.
+ */
+export function storyStableIdSlug(story: NoteProps): string {
+    const id_value = story.linetags?.id?.value;
+    if (id_value) { return id_value; }
+    const stripped = stripHeadlineLinetags(story.headline_raw ?? '');
+    return slugify(stripped) || `headline-${story.position?.start?.line ?? 0}`;
+}
+
+/**
+ * a note participates in slug-based stable_id stamping when it is a real story-level
+ * heading: a heading note with a positive seq (excludes the synthetic seq-0/level-0/type-'root'
+ * root) and a non-empty stripped headline. offset-keyed descendants never reach here because
+ * they are not headings with their own slug; mirrors the set mergeAggregateRoot stamps as
+ * `${doc_id}:${slug}`.
+ */
+function isStoryLevelNote(note: NoteProps): boolean {
+    if (note.type !== 'heading') { return false; }
+    if (!(note.seq > 0)) { return false; }
+    return stripHeadlineLinetags(note.headline_raw ?? '') !== '';
+}
+
+// 1-based source line of a note: folder-mode origin source line, else the in-tree position line
+function collisionNoteLine(note: NoteProps): number {
+    return note.origin?.source_position?.start.line ?? note.position?.start?.line ?? 0;
+}
+
+/**
+ * group the in-scope flat note list by the slug each story-level heading would receive
+ * (storyStableIdSlug — explicit `[](?id=...)` linetag, else slugified stripped headline,
+ * else `headline-<line>` fallback). returns one group per slug shared by >=2 story-level
+ * notes; the `headline-<line>` fallback is kept on equal footing so two genuinely
+ * blank-slug notes still surface. notes within a group are ordered by source line (so the
+ * drawer links walk the file top-to-bottom; seq breaks ties), and groups by their first
+ * note's seq, so the result is deterministic. empty when nothing collides.
+ */
+export function findStableIdCollisions(notes: NoteProps[]): StableIdCollision[] {
+    const by_slug = new Map<string, NoteProps[]>();
+    for (const note of notes) {
+        if (!isStoryLevelNote(note)) { continue; }
+        const slug = storyStableIdSlug(note);
+        const group = by_slug.get(slug);
+        if (group) { group.push(note); } else { by_slug.set(slug, [note]); }
+    }
+    const collisions: StableIdCollision[] = [];
+    for (const [slug, group] of by_slug) {
+        if (group.length < 2) { continue; }
+        const ordered = [...group].sort((a, b) => collisionNoteLine(a) - collisionNoteLine(b) || a.seq - b.seq);
+        collisions.push({ slug, notes: ordered });
+    }
+    collisions.sort((a, b) => a.notes[0].seq - b.notes[0].seq);
+    debug("found %d stable_id collision group(s)", collisions.length);
+    return collisions;
+}
+
+/**
+ * extract the display origin for a colliding note: the stripped headline plus the source
+ * file + 1-based line. prefers folder-mode `origin.source_position`/`relative_path` and
+ * falls back to the in-tree `position` + `doc_path` (empty path in single-file mode).
+ */
+export function collisionNoteLocation(note: NoteProps): CollisionNoteLocation {
+    const headline = stripHeadlineLinetags(note.headline_raw ?? '');
+    const relative_path = note.origin?.relative_path ?? note.origin?.doc_path ?? '';
+    return { headline, relative_path, line: collisionNoteLine(note) };
 }

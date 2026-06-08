@@ -241,3 +241,46 @@ describe('useViewHandlers setViewInteractionState', () => {
         }]);
     });
 });
+
+describe('useViewHandlers revealNote', () => {
+    it('folder mode: reveals the origin source offset and origin doc_path', () => {
+        const post_message = jest.fn();
+        const props = makeProps({
+            id: FOLDER_VIEW_STATE_ID,
+            display_options: { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo' },
+            handlers: {
+                setViewManagedState: jest.fn(),
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: post_message,
+            },
+        });
+        // the in-tree position is a synthetic merged offset (999); revealNote must use the pre-merge source_position offset (42) instead
+        const note = makeNote({
+            seq: 3,
+            position: { start: { offset: 999, line: 1 }, end: { offset: 1000, line: 1 } },
+            origin: { doc_id: 'a', doc_path: '/repo/a/todo.md', source_position: { start: { offset: 42, line: 4 }, end: { offset: 60, line: 4 } } },
+        });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.revealNote!(note);
+        expect(post_message).toHaveBeenCalledWith({ type: 'revealRange', from: 42, docPath: '/repo/a/todo.md' });
+    });
+
+    it('single-file mode: falls back to the in-tree position offset and the view doc_path', () => {
+        const post_message = jest.fn();
+        const props = makeProps({
+            doc_path: '/ws/open.md',
+            handlers: {
+                setViewManagedState: jest.fn(),
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: post_message,
+            },
+        });
+        // no origin in single-file mode: reveal must supply the view's own doc_path so the extension doesn't no-op
+        const note = makeNote({ seq: 2, position: { start: { offset: 17, line: 3 }, end: { offset: 30, line: 3 } } });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.revealNote!(note);
+        expect(post_message).toHaveBeenCalledWith({ type: 'revealRange', from: 17, docPath: '/ws/open.md' });
+    });
+});

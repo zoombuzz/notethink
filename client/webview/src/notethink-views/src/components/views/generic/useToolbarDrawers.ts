@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 const debug = Debug("nodejs:notethink-views:useToolbarDrawers");
 
-type DrawerKind = 'settings' | 'files';
+type DrawerKind = 'settings' | 'files' | 'collisions' | 'jump';
 type ActiveDrawer = 'none' | DrawerKind;
 
 export interface ToolbarDrawers {
@@ -11,6 +11,9 @@ export interface ToolbarDrawers {
     gear_button_ref: React.RefObject<HTMLButtonElement | null>;
     toggle_settings: () => void;
     toggle_files: (anchor: HTMLElement) => void;
+    toggle_collisions: (anchor: HTMLElement) => void;
+    toggle_jump: (anchor: HTMLElement) => void;
+    close_drawer: () => void;
 }
 
 /**
@@ -19,6 +22,7 @@ export interface ToolbarDrawers {
  * viewport position is captured on toggle so the scroll-anchor effect keeps it
  * stable across the 150ms open/close animation; Escape restores focus to it.
  */
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useToolbarDrawers(view_id: string): ToolbarDrawers {
     const [active_drawer, setActiveDrawer] = useState<ActiveDrawer>('none');
     const gear_button_ref = useRef<HTMLButtonElement>(null);
@@ -42,6 +46,21 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
     const toggle_files = useCallback((anchor: HTMLElement): void => {
         toggleDrawer('files', anchor);
     }, [toggleDrawer]);
+
+    const toggle_collisions = useCallback((anchor: HTMLElement): void => {
+        toggleDrawer('collisions', anchor);
+    }, [toggleDrawer]);
+
+    const toggle_jump = useCallback((anchor: HTMLElement): void => {
+        toggleDrawer('jump', anchor);
+    }, [toggleDrawer]);
+
+    // close whichever drawer is open (the in-drawer X button); hold the trigger's viewport position stable across the close animation, mirroring Escape
+    const close_drawer = useCallback((): void => {
+        const anchor = anchor_el_ref.current;
+        if (anchor) { anchor_top_ref.current = anchor.getBoundingClientRect().top; }
+        setActiveDrawer('none');
+    }, []);
 
     // scroll-anchor the trigger element across the open/close animation so the content the user was looking at stays visible
     useLayoutEffect(() => {
@@ -103,5 +122,5 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
         return () => document.removeEventListener('pointerdown', onPointerDown);
     }, [active_drawer, view_id]);
 
-    return { active_drawer, gear_button_ref, toggle_settings, toggle_files };
+    return { active_drawer, gear_button_ref, toggle_settings, toggle_files, toggle_collisions, toggle_jump, close_drawer };
 }

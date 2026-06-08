@@ -6,11 +6,14 @@ import type { NoteDisplayOptions } from "../../../types/NoteProps";
 import type { GlobalSettingKey } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import type { CommonSettingKey } from "../SettingsCommonControls";
-import { INTEGRATION_MODE_FOLDER, type IntegrationMode } from "../../../types/IntegrationMode";
-import FilesDrawer from "../FilesDrawer";
-import SettingsDocumentDrawer from "../SettingsDocumentDrawer";
-import SettingsKanbanDrawer from "../SettingsKanbanDrawer";
-import ToolbarDrawer from "../ToolbarDrawer";
+import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type IntegrationMode } from "../../../types/IntegrationMode";
+import type { StableIdCollision } from "../../../lib/noteops";
+import CollisionsDrawer from "../drawers/CollisionsDrawer";
+import FilesDrawer from "../drawers/FilesDrawer";
+import JumpDrawer from "../drawers/JumpDrawer";
+import SettingsDocumentDrawer from "../drawers/SettingsDocumentDrawer";
+import SettingsKanbanDrawer from "../drawers/SettingsKanbanDrawer";
+import ToolbarDrawer from "../drawers/ToolbarDrawer";
 import ViewIntegrationSelector from "../ViewIntegrationSelector";
 import ViewTypeSelector from "../ViewTypeSelector";
 import master_view_styles from "../../ViewRenderer.module.scss";
@@ -25,11 +28,16 @@ interface GenericViewToolbarProps {
     autoResolvedType: string | undefined;
     integrationMode: IntegrationMode;
     naturalColumnOrder: string[];
-    activeDrawer: 'none' | 'settings' | 'files';
+    collisions: StableIdCollision[];
+    activeDrawer: 'none' | 'settings' | 'files' | 'collisions' | 'jump';
+    requestedJumpPath: string | undefined;
+    onFolderJump: (folder_path: string) => void;
+    onFileJump: (file_path: string) => void;
     gearButtonRef: React.RefObject<HTMLButtonElement | null>;
+    onCloseDrawer: () => void;
     onSettingsToggle: () => void;
     onInsertOpen: () => void;
-    onIntegrationChange: (mode: IntegrationMode) => void;
+    onIntegrationChange: (mode: IntegrationMode, target_file_path?: string) => void;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
     onColumnOrderChange: (next_order: string[]) => void;
@@ -66,8 +74,13 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         autoResolvedType,
         integrationMode,
         naturalColumnOrder,
+        collisions,
         activeDrawer,
+        requestedJumpPath,
+        onFolderJump,
+        onFileJump,
         gearButtonRef,
+        onCloseDrawer,
         onSettingsToggle,
         onInsertOpen,
         onIntegrationChange,
@@ -124,6 +137,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                 id={`v${props.id}-settings-drawer`}
                 testId="settings-drawer-grid"
                 ariaLabel={l10n.t('Settings')}
+                onClose={onCloseDrawer}
             >
                 {props.type === 'document' && (
                     <SettingsDocumentDrawer
@@ -167,6 +181,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                     id={`v${props.id}-files-drawer`}
                     testId="files-drawer-grid"
                     ariaLabel={l10n.t('File settings')}
+                    onClose={onCloseDrawer}
                 >
                     <FilesDrawer
                         include={props.includeFilter ?? ''}
@@ -176,12 +191,36 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         noteCount={props.note_count ?? 0}
                         files={props.aggregate_loaded_files ?? []}
                         onApplyFilters={onApplyFilters}
+                        onFileClick={(file_path) => {
+                            // a Files-drawer file click switches the viewer into current_file mode showing that file, then dismisses the drawer
+                            onIntegrationChange(INTEGRATION_MODE_CURRENT_FILE, file_path);
+                            onCloseDrawer();
+                        }}
+                        workspaceRoot={props.workspace_root}
                         onMakeDefault={onMakeDefault}
                         onResetToDefault={onResetToDefault}
                         canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
                     />
                 </ToolbarDrawer>
             )}
+            <ToolbarDrawer
+                open={activeDrawer === 'collisions'}
+                id={`v${props.id}-collisions-drawer`}
+                testId="collisions-drawer-grid"
+                ariaLabel={l10n.t('Collisions')}
+                onClose={onCloseDrawer}
+            >
+                <CollisionsDrawer collisions={collisions} onRevealNote={handlers.revealNote} />
+            </ToolbarDrawer>
+            <ToolbarDrawer
+                open={activeDrawer === 'jump'}
+                id={`v${props.id}-jump-drawer`}
+                testId="jump-drawer-grid"
+                ariaLabel={l10n.t('Jump to')}
+                onClose={onCloseDrawer}
+            >
+                <JumpDrawer requestedPath={requestedJumpPath} onFolderJump={onFolderJump} onFileJump={onFileJump} onReturn={onCloseDrawer} />
+            </ToolbarDrawer>
         </>
     );
 }

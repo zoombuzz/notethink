@@ -49,7 +49,7 @@ jest.mock('@hello-pangea/dnd', () => ({
 }));
 
 // mock KanbanColumn to expose children and count
-jest.mock('./KanbanColumn', () => ({
+jest.mock('./kanban/KanbanColumn', () => ({
     __esModule: true,
     default: (props: { seq: number; value: string; type?: string; count?: number; children?: React.ReactNode }) => (
         <div data-testid={`column-${props.value}`} role="region" aria-label={props.value}>

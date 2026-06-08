@@ -27,8 +27,10 @@ import {
     noteOrder,
     findFirstIncompleteTaskSeq,
     formatColumnLabel,
+    findStableIdCollisions,
+    collisionNoteLocation,
 } from './noteops';
-import type { NoteProps, NoteOrigin, TextSelection } from '../types/NoteProps';
+import type { NoteProps, NoteOrigin, TextSelection, LineTag } from '../types/NoteProps';
 
 function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
     return {
@@ -1146,5 +1148,144 @@ describe('deriveNaturalColumnOrder', () => {
             makeStatusNote(2, 'alpha'),
         ];
         expect(deriveNaturalColumnOrder(notes)).toEqual(['alpha', 'zeta', 'untagged']);
+    });
+});
+
+function makeStoryNote(overrides: Partial<NoteProps> = {}): NoteProps {
+    return {
+        seq: 1,
+        level: 3,
+        type: 'heading',
+        depth: 3,
+        children_body: [],
+        position: {
+            start: { offset: 0, line: 1 },
+            end: { offset: 10, line: 1 },
+            end_body: { offset: 50, line: 5 },
+        },
+        children: [],
+        headline_raw: '### Test',
+        body_raw: 'body text',
+        ...overrides,
+    };
+}
+
+function idLinetag(value: string): { [key: string]: LineTag } {
+    return {
+        id: {
+            key: 'id',
+            key_offset: 0,
+            value,
+            value_offset: 0,
+            linktext_offset: 0,
+            note_seq: 0,
+        },
+    };
+}
+
+function originFor(doc_path: string, relative_path: string | undefined, line: number): NoteOrigin {
+    return {
+        doc_id: doc_path,
+        doc_path,
+        relative_path,
+        source_position: {
+            start: { offset: 0, line },
+            end: { offset: 10, line },
+        },
+    };
+}
+
+describe('findStableIdCollisions', () => {
+    it('groups two notes with the same headline in the same file', () => {
+        const a = makeStoryNote({ seq: 1, headline_raw: '### Login flow' });
+        const b = makeStoryNote({ seq: 2, headline_raw: '### Login flow' });
+        const collisions = findStableIdCollisions([a, b]);
+        expect(collisions).toHaveLength(1);
+        expect(collisions[0].slug).toBe('login-flow');
+        expect(collisions[0].notes).toEqual([a, b]);
+    });
+
+    it('returns empty when all headlines are unique', () => {
+        const a = makeStoryNote({ seq: 1, headline_raw: '### Alpha' });
+        const b = makeStoryNote({ seq: 2, headline_raw: '### Beta' });
+        expect(findStableIdCollisions([a, b])).toEqual([]);
+    });
+
+    it('groups the same headline across two different files', () => {
+        const a = makeStoryNote({ seq: 1, headline_raw: '### Setup', origin: originFor('one.md', 'one.md', 3) });
+        const b = makeStoryNote({ seq: 2, headline_raw: '### Setup', origin: originFor('two.md', 'two.md', 7) });
+        const collisions = findStableIdCollisions([a, b]);
+        expect(collisions).toHaveLength(1);
+        expect(collisions[0].slug).toBe('setup');
+        expect(collisions[0].notes).toEqual([a, b]);
+    });
+
+    it('groups two notes carrying the same explicit id linetag', () => {
+        const a = makeStoryNote({ seq: 1, headline_raw: '### One title', linetags: idLinetag('foo') });
+        const b = makeStoryNote({ seq: 2, headline_raw: '### Another title', linetags: idLinetag('foo') });
+        const collisions = findStableIdCollisions([a, b]);
+        expect(collisions).toHaveLength(1);
+        expect(collisions[0].slug).toBe('foo');
+        expect(collisions[0].notes).toEqual([a, b]);
+    });
+
+    it('groups an explicit id against a sibling whose headline derives the same slug', () => {
+        const explicit = makeStoryNote({ seq: 1, headline_raw: '### Anything', linetags: idLinetag('shared-thing') });
+        const derived = makeStoryNote({ seq: 2, headline_raw: '### Shared thing' });
+        const collisions = findStableIdCollisions([explicit, derived]);
+        expect(collisions).toHaveLength(1);
+        expect(collisions[0].slug).toBe('shared-thing');
+        expect(collisions[0].notes).toEqual([explicit, derived]);
+    });
+
+    it('excludes the synthetic root and non-heading notes', () => {
+        const root = makeStoryNote({ seq: 0, level: 0, type: 'root', headline_raw: '' });
+        const list_item = makeStoryNote({ seq: 1, type: 'listItem', headline_raw: 'Repeated body', depth: undefined });
+        const list_item_dup = makeStoryNote({ seq: 2, type: 'listItem', headline_raw: 'Repeated body', depth: undefined });
+        expect(findStableIdCollisions([root, list_item, list_item_dup])).toEqual([]);
+    });
+
+    it('orders groups by first-occurrence seq; notes within a group fall back to seq when source lines tie', () => {
+        const later_a = makeStoryNote({ seq: 10, headline_raw: '### Later' });
+        const earlier_b = makeStoryNote({ seq: 2, headline_raw: '### Earlier' });
+        const earlier_a = makeStoryNote({ seq: 1, headline_raw: '### Earlier' });
+        const later_b = makeStoryNote({ seq: 5, headline_raw: '### Later' });
+        const collisions = findStableIdCollisions([later_a, earlier_b, earlier_a, later_b]);
+        expect(collisions.map(c => c.slug)).toEqual(['earlier', 'later']);
+        expect(collisions[0].notes).toEqual([earlier_a, earlier_b]);
+        expect(collisions[1].notes).toEqual([later_b, later_a]);
+    });
+
+    it('orders notes within a group by source line even when merged seq diverges', () => {
+        // folder-mode: a has the earlier merged seq but sits lower in its source file; b is later seq but higher in the file
+        const a_lower = makeStoryNote({ seq: 1, headline_raw: '### Dup', origin: originFor('f.md', 'f.md', 50) });
+        const b_higher = makeStoryNote({ seq: 2, headline_raw: '### Dup', origin: originFor('f.md', 'f.md', 10) });
+        const collisions = findStableIdCollisions([a_lower, b_higher]);
+        expect(collisions).toHaveLength(1);
+        // ascending source line → line 10 (b) before line 50 (a), regardless of seq
+        expect(collisions[0].notes).toEqual([b_higher, a_lower]);
+    });
+});
+
+describe('collisionNoteLocation', () => {
+    it('uses folder-mode source_position line and relative_path when origin present', () => {
+        const note = makeStoryNote({ headline_raw: '### Build [](?id=build)', origin: originFor('proj/done.md', 'proj/done.md', 42) });
+        expect(collisionNoteLocation(note)).toEqual({
+            headline: 'Build',
+            relative_path: 'proj/done.md',
+            line: 42,
+        });
+    });
+
+    it('falls back to position line and empty path in single-file mode', () => {
+        const note = makeStoryNote({
+            headline_raw: '### Single file note',
+            position: { start: { offset: 0, line: 9 }, end: { offset: 10, line: 9 } },
+        });
+        expect(collisionNoteLocation(note)).toEqual({
+            headline: 'Single file note',
+            relative_path: '',
+            line: 9,
+        });
     });
 });

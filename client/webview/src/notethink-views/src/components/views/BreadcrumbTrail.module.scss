@@ -47,4 +47,11 @@
     opacity: 0.6;
     font-size: inherit;
   }
+
+  .collisionAlert {
+    margin-left: 0.4em;
+    opacity: 0.8;
+    font-size: inherit;
+    color: var(--vscode-editorWarning-foreground, var(--vscode-foreground, inherit));
+  }
 }

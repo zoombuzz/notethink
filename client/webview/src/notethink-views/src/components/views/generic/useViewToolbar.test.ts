@@ -45,6 +45,17 @@ describe('useViewToolbar.handle_integration_change', () => {
         expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file' });
     });
 
+    it('flipping to current_file with a target file posts that path so the extension opens it', () => {
+        const { handlers, post_message } = makeHandlers();
+        const display_options: NoteDisplayOptions = { integration_mode: 'folder' };
+        const notes: NoteProps[] = [];
+        const { result } = renderHook(() =>
+            useViewToolbar(makeProps({ view_state_ids: [FOLDER_VIEW_STATE_ID] }), handlers, display_options, notes),
+        );
+        act(() => { result.current.handle_integration_change('current_file', '/ws/oma/docstech/done.md'); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file', path: '/ws/oma/docstech/done.md' });
+    });
+
     it('flipping integration mode clears per-view focused/selected interaction state on every persisted view key', () => {
         const { handlers, set_view_managed_state } = makeHandlers();
         const display_options: NoteDisplayOptions = { integration_mode: 'folder' };

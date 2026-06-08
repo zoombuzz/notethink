@@ -1,8 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent, act, type RenderResult } from '@testing-library/react';
 import FilesDrawer from './FilesDrawer';
-import { PendingWorkProvider } from '../../hooks/PendingWorkContext';
-import type { UsePendingWorkApi } from '../../hooks/usePendingWork';
+import { PendingWorkProvider } from '../../../hooks/PendingWorkContext';
+import type { UsePendingWorkApi } from '../../../hooks/usePendingWork';
 
 // library-side test fixture: a realistic exclude glob to feed the drawer prop. intentionally not coupled to the app's DEFAULT_EXCLUDE_FILTER (extension/webview own those) — this test exercises FilesDrawer rendering, not the app default
 const DERIVED_DIR_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**';
@@ -123,6 +123,25 @@ describe('FilesDrawer', () => {
     it('shows the empty-state when no files match', () => {
         renderDrawer({ include: '**/*.nope' });
         expect(screen.getByTestId('files-drawer-list')).toHaveTextContent('No files match the current filters');
+    });
+
+    it('clicking a file row calls onFileClick with the workspace-absolutized path', () => {
+        const onFileClick = jest.fn();
+        renderDrawer({ onFileClick, workspaceRoot: '/ws' });
+        const rows = screen.getAllByTestId('files-drawer-file');
+        const relative_row = rows.find(r => r.textContent === 'docs/a.md');
+        fireEvent.click(relative_row as HTMLElement);
+        expect(onFileClick).toHaveBeenCalledTimes(1);
+        expect(onFileClick).toHaveBeenCalledWith('/ws/docs/a.md');
+    });
+
+    it('passes an already-absolute file path through unchanged', () => {
+        const onFileClick = jest.fn();
+        renderDrawer({ onFileClick, workspaceRoot: '/ws', files: ['/abs/docs/a.md'] });
+        const rows = screen.getAllByTestId('files-drawer-file');
+        fireEvent.click(rows[0]);
+        expect(onFileClick).toHaveBeenCalledTimes(1);
+        expect(onFileClick).toHaveBeenCalledWith('/abs/docs/a.md');
     });
 
     describe('pending-work spinner', () => {

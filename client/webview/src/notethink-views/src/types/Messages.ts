@@ -5,6 +5,8 @@
  * selectionChanged replaces notegit's EditorSelection in ViewContext.
  */
 
+import type { IntegrationMode } from './IntegrationMode';
+
 // Webview -> Extension messages
 
 export interface RevealRangeMessage {
@@ -81,6 +83,23 @@ export interface ResetSettingsToDefaultMessage {
     type: 'resetSettingsToDefault';
 }
 
+/**
+ * webview -> extension request for the list of jump targets (folders/files) reachable from the breadcrumb terminal leaf. The extension replies asynchronously with a JumpTargetsMessage carrying the same mode/path so the webview can correlate the response.
+ */
+export interface RequestJumpTargetsMessage {
+    type: 'requestJumpTargets';
+    mode: IntegrationMode;
+    path: string;
+}
+
+/**
+ * webview -> extension request to open a file in the editor (e.g. a chosen jump target of kind 'file').
+ */
+export interface OpenFileMessage {
+    type: 'openFile';
+    path: string;
+}
+
 export type WebviewToExtensionMessage =
     | RevealRangeMessage
     | SelectRangeMessage
@@ -89,7 +108,9 @@ export type WebviewToExtensionMessage =
     | UpdateGlobalSettingMessage
     | UpdateSettingMessage
     | PromoteSettingsToUserMessage
-    | ResetSettingsToDefaultMessage;
+    | ResetSettingsToDefaultMessage
+    | RequestJumpTargetsMessage
+    | OpenFileMessage;
 
 // Extension -> Webview messages
 
@@ -162,10 +183,31 @@ export interface PendingChangeMessage {
     on: boolean;
 }
 
+/**
+ * one reachable jump target from the breadcrumb terminal leaf.
+ * - kind discriminates a directory ('folder') from a leaf file ('file'); the webview opens a file target via OpenFileMessage and descends a folder target via setIntegration
+ */
+export interface JumpTarget {
+    label: string;
+    path: string;
+    kind: 'folder' | 'file';
+}
+
+/**
+ * extension -> webview async reply to RequestJumpTargetsMessage. Carries the originating mode/path back so the webview can match the response to the request that triggered it.
+ */
+export interface JumpTargetsMessage {
+    type: 'jumpTargets';
+    mode: IntegrationMode;
+    path: string;
+    entries: JumpTarget[];
+}
+
 export type ExtensionToWebviewMessage =
     | UpdateMessage
     | SelectionChangedMessage
     | CommandMessage
     | GlobalSettingsMessage
     | SettingsCascadeMessage
-    | PendingChangeMessage;
+    | PendingChangeMessage
+    | JumpTargetsMessage;

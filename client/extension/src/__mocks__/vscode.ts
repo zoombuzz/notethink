@@ -240,6 +240,7 @@ export const workspace = {
 		readFile: jest.fn(async () => new Uint8Array()),
 		writeFile: jest.fn(async () => {}),
 		stat: jest.fn(async () => ({ type: 1, ctime: 0, mtime: 0, size: 0 })),
+		readDirectory: jest.fn(async (): Promise<Array<[string, FileType]>> => []),
 	},
 };
 

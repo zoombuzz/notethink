@@ -312,10 +312,13 @@ body.disableAddressBarHidingOnScroll {
 
 
 //
-// Settings drawer (top-anchored, full-width, push-down)
+// Drawer shell — shared by the settings, files, and collisions drawers. each drawer
+// composes these base classes (.drawerBody / .drawerGroups / .drawerGroup / .drawerMeta,
+// plus .drawerList / .drawerEmpty for the scrollable lists) and adds only its own
+// .settingsDrawer* / .filesDrawer* / .collisionsDrawer* specialisations below.
 //
 
-.settingsDrawerGrid {
+.drawerGrid {
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 150ms cubic-bezier(0.2, 0, 0.38, 0.9);
@@ -332,12 +335,13 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
-.settingsDrawer {
+.drawer {
+  position: relative; // anchors the top-right close button
   overflow: hidden; // required for the 0fr→1fr grid trick
   min-height: 0;    // required for the 0fr→1fr grid trick
 }
 
-.settingsDrawerBody {
+.drawerBody {
   display: flex;
   align-items: stretch;
   gap: 24px;
@@ -363,7 +367,8 @@ body.disableAddressBarHidingOnScroll {
     @include themed-checkbox;
   }
 
-  button {
+  // the generic secondary-button look is for action buttons (reset / make-default / column arrows); link rows (.drawerLink) opt out so they read as borderless Explorer rows
+  button:not(.drawerLink) {
     background: var(--vscode-button-secondaryBackground, #3a3d41);
     color: var(--vscode-button-secondaryForeground, #fff);
     border: 1px solid var(--vscode-button-border, transparent);
@@ -386,6 +391,112 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
+.drawerGroups {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  min-width: 0;
+}
+
+.drawerGroup {
+  flex: 0 1 auto;
+  min-width: 0;
+
+  > p:first-child {
+    margin-top: 0;
+  }
+}
+
+.drawerMeta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  text-align: right;
+  min-width: 140px;
+  // reserve room in the top-right corner so the title clears the shell close button
+  padding-right: 1.4em;
+
+  h3 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+}
+
+// shared scrollable, monospace list used by the files + collisions drawers
+// font-family/size intentionally omitted so every drawer list inherits the shell's 13px sans (consistent across all drawers, matching the VS Code UI font)
+.drawerList {
+  list-style: none;
+  margin: 0.2em 0 0;
+  padding: 0;
+  max-height: 36vh;
+  overflow-y: auto;
+}
+
+// shared empty-state row for the drawer lists
+.drawerEmpty {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+// shared clickable row, styled like a VS Code Explorer / Open-Editors list row (theme foreground + hover highlight) rather than a blue text link, so every drawer link looks the same. used by the files, collisions, and jump drawers
+.drawerLink {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font: inherit;
+  color: var(--vscode-foreground, inherit);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: -1px;
+  }
+}
+
+// shell close button: an X anchored to the top-right corner of every drawer, beside the drawer title
+.drawerClose {
+  position: absolute;
+  // top matches the drawer body's top padding + line-height matches the title so the X sits level with it
+  top: 12px;
+  right: 8px;
+  z-index: 1;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  color: var(--vscode-foreground, inherit);
+  opacity: 0.6;
+
+  &:hover {
+    opacity: 1;
+    background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1)));
+  }
+}
+
+
+//
+// Settings drawer — specialises the shared drawer shell
+//
+
 // keep the column-order arrow buttons compact — they're icon glyphs, not text actions
 .settingsDrawerColumnOrder li button {
   padding: 1px 6px;
@@ -398,39 +509,6 @@ body.disableAddressBarHidingOnScroll {
   border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.25)));
   display: flex;
   gap: 0.75em;
-}
-
-.settingsDrawerGroups {
-  flex: 1;
-  display: flex;
-  align-items: flex-start;
-  gap: 32px;
-  min-width: 0;
-}
-
-.settingsDrawerGroup {
-  flex: 0 1 auto;
-  min-width: 0;
-
-  > p:first-child {
-    margin-top: 0;
-  }
-}
-
-.settingsDrawerMeta {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
-  text-align: right;
-  min-width: 140px;
-
-  h3 {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 600;
-  }
 }
 
 .settingsDrawerColumnOrder {
@@ -457,7 +535,7 @@ body.disableAddressBarHidingOnScroll {
 
 
 //
-// Files drawer (reuses the settings drawer shell; adds editable globs + file list)
+// Files drawer — specialises the shared drawer shell (editable globs + file list)
 //
 
 .filesDrawerInput {
@@ -467,7 +545,7 @@ body.disableAddressBarHidingOnScroll {
   margin-top: 0.2em;
   padding: 2px 6px;
   font-family: var(--vscode-editor-font-family, monospace);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--vscode-input-foreground, var(--vscode-foreground));
   background: var(--vscode-input-background, var(--vscode-editor-background));
   border: 1px solid var(--vscode-input-border, var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.35)));
@@ -481,31 +559,115 @@ body.disableAddressBarHidingOnScroll {
 
 .filesDrawerCount {
   margin: 0.6em 0 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   opacity: 0.7;
 }
 
-.filesDrawerList {
-  list-style: none;
-  margin: 0.2em 0 0;
-  padding: 0;
-  max-height: 36vh;
-  overflow-y: auto;
-  font-family: var(--vscode-editor-font-family, monospace);
-  font-size: 12px;
-
-  li {
-    padding: 1px 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+// the file list truncates each path to one line; composes with the shared .drawerList
+.filesDrawerList li {
+  padding: 1px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.filesDrawerEmpty {
+
+//
+// Collisions drawer — specialises the shared drawer shell (one group per colliding slug)
+//
+
+.collisionsDrawerGroup {
+  padding: 2px 0 6px;
+}
+
+.collisionsDrawerSlug {
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+.collisionsDrawerNotes {
+  list-style: none;
+  margin: 0.2em 0 0;
+  padding: 0 0 0 1em;
+}
+
+// the whole colliding-note row is one shared .drawerLink: the headline plus a dimmed origin path, click jumps to that story in the editor to rename it
+.collisionsDrawerNote {
+  display: flex;
+  gap: 0.5em;
+  align-items: baseline;
+}
+
+.collisionsDrawerHeadline {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collisionsDrawerOrigin {
+  flex: none;
   opacity: 0.6;
-  font-style: italic;
+  white-space: nowrap;
+}
+
+
+//
+// Jump drawer — a compact folder tree consistent with the VS Code Explorer: a root folder
+// row (the breadcrumb folder that opened the drawer) with its child subfolders / sibling
+// files indented beneath, drawn with a tree indent-guide.
+//
+
+.jumpTree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+// root folder row: the breadcrumb folder name, shown expanded as a non-interactive header
+.jumpTreeRoot {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 2px 6px;
+  font-weight: 600;
+}
+
+// leading glyph slot — an outline chevron (›) on the root + child folders, a blank spacer on files — so labels align, matching the VS Code Explorer twisties
+.jumpTreeGlyph {
+  flex: none;
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  opacity: 0.7;
+}
+
+// the expanded root's chevron points down (rotate the same › glyph so its weight matches the collapsed child chevrons)
+.jumpTreeGlyphOpen {
+  transform: rotate(90deg);
+}
+
+// children indented under the root with an Explorer-style indent guide
+.jumpTreeChildren {
+  list-style: none;
+  margin: 0 0 0 0.9em;
+  padding: 0 0 0 0.4em;
+  border-left: 1px solid var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, rgba(128, 128, 128, 0.25)));
+}
+
+// a child row (shared .drawerLink) lays out as glyph + label
+.jumpTreeEntry {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.jumpTreeLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 

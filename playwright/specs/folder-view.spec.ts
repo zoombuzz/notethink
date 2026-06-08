@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
 import { sendCommand } from '../helpers/send-command';
+import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 
 const WORKSPACE_ROOT = '/mnt/workspace/active_development';
 
@@ -161,6 +162,31 @@ test.describe('Aggregate (Folder) view', () => {
         // Escape closes the drawer
         await page.keyboard.press('Escape');
         await expect(drawer).toHaveAttribute('data-open', 'false');
+    });
+
+    test('clicking a file in the Files drawer switches to current_file mode for that file and closes the drawer', async ({ page }) => {
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+        ], { workspace_root: WORKSPACE_ROOT });
+
+        await selectFolderMode(page);
+        await page.waitForSelector('[data-folder-mode="true"]');
+
+        const drawer = page.locator('[data-testid="files-drawer-grid"]');
+        await page.getByTestId('breadcrumb-file-count').click();
+        await expect(drawer).toHaveAttribute('data-open', 'true');
+
+        await clearCapturedMessages(page);
+        await page.getByTestId('files-drawer-file').first().click();
+
+        // posts a setIntegration that switches to current_file mode targeting the clicked file (absolutized path)
+        const messages = await getCapturedMessages(page);
+        const set_integration = messages.find(m => m.type === 'setIntegration' && m.mode === 'current_file');
+        expect(set_integration).toBeTruthy();
+        expect(set_integration?.path as string).toContain('docstech/todo.md');
+        // switching out of folder mode unmounts the folder-only Files drawer entirely, so it is dismissed
+        await expect(drawer).toHaveCount(0);
     });
 
     test('outside-click dismisses the toolbar drawer; clicks inside or on the trigger do not double-toggle', async ({ page }) => {

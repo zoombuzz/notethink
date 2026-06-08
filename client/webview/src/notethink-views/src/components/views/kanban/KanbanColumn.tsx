@@ -1,8 +1,8 @@
 import Debug from "debug";
 import type { ReactElement, ReactNode } from "react";
-import { formatColumnLabel } from "../../lib/noteops";
-import type { NoteDisplayOptions } from "../../types/NoteProps";
-import view_specific_styles from "../ViewRenderer.module.scss";
+import { formatColumnLabel } from "../../../lib/noteops";
+import type { NoteDisplayOptions } from "../../../types/NoteProps";
+import view_specific_styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:KanbanColumn");
 

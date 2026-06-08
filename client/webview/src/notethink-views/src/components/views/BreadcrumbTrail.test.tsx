@@ -259,6 +259,42 @@ describe('BreadcrumbTrail', () => {
         expect(path_items[5]).toHaveAttribute('data-path', workspace_root + '/notethink/docstech/users/alex.stanhope/todo.md');
     });
 
+    it('calls onLeafClick (not onFolderClick) when the terminal segment is clicked', () => {
+        const on_folder_click = jest.fn();
+        const on_leaf_click = jest.fn();
+        const current = makeNote({ seq: 0 });
+        render(<BreadcrumbTrail {...current} doc_path="/workspace/docs/todo.md" onFolderClick={on_folder_click} onLeafClick={on_leaf_click} />);
+        const leaf = screen.getByTestId('breadcrumb-leaf');
+        leaf.click();
+        expect(on_leaf_click).toHaveBeenCalledTimes(1);
+        expect(on_leaf_click.mock.calls[0][0]).toBe('/workspace/docs/todo.md');
+        expect(on_leaf_click.mock.calls[0][1]).toBe(leaf);
+        expect(on_folder_click).not.toHaveBeenCalled();
+    });
+
+    it('still calls onFolderClick for a non-terminal segment while the leaf calls onLeafClick', () => {
+        const on_folder_click = jest.fn();
+        const on_leaf_click = jest.fn();
+        const current = makeNote({ seq: 0 });
+        render(<BreadcrumbTrail {...current} doc_path="/workspace/docs/todo.md" onFolderClick={on_folder_click} onLeafClick={on_leaf_click} />);
+        // 'docs' is a non-terminal segment, 'todo.md' is the terminal leaf
+        fireEvent.click(screen.getByText('docs'));
+        expect(on_folder_click).toHaveBeenCalledWith('/workspace/docs');
+        expect(on_leaf_click).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByText('todo.md'));
+        expect(on_leaf_click).toHaveBeenCalledTimes(1);
+        expect(on_leaf_click.mock.calls[0][0]).toBe('/workspace/docs/todo.md');
+    });
+
+    it('renders the terminal segment with the jump-leaf testid and aria-haspopup', () => {
+        const current = makeNote({ seq: 0 });
+        render(<BreadcrumbTrail {...current} doc_path="/workspace/docs/todo.md" />);
+        const leaf = screen.getByTestId('breadcrumb-leaf');
+        expect(leaf).toHaveTextContent('todo.md');
+        expect(leaf).toHaveAttribute('aria-haspopup', 'menu');
+        expect(leaf).toHaveAttribute('data-path', '/workspace/docs/todo.md');
+    });
+
     it('calls onFolderClick with full path when workspace_root is set', () => {
         const on_folder_click = jest.fn();
         const current = makeNote({ seq: 0 });
@@ -544,6 +580,33 @@ describe('BreadcrumbTrail', () => {
             const spinner = screen.getByTestId('pending-work-spinner');
             // the spinner is the count button's immediate next sibling in the breadcrumb
             expect(count.nextElementSibling).toBe(spinner);
+        });
+    });
+
+    describe('collision alert', () => {
+
+        it('renders the alert when has_collisions is true', () => {
+            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} has_collisions={true} />);
+            expect(screen.getByTestId('breadcrumb-collision-alert')).toBeInTheDocument();
+        });
+
+        it('does not render the alert when has_collisions is false', () => {
+            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} has_collisions={false} />);
+            expect(screen.queryByTestId('breadcrumb-collision-alert')).not.toBeInTheDocument();
+        });
+
+        it('does not render the alert when has_collisions is undefined', () => {
+            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} />);
+            expect(screen.queryByTestId('breadcrumb-collision-alert')).not.toBeInTheDocument();
+        });
+
+        it('calls onCollisionsClick with the alert element when clicked', () => {
+            const onCollisionsClick = jest.fn();
+            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} has_collisions={true} onCollisionsClick={onCollisionsClick} />);
+            const alert = screen.getByTestId('breadcrumb-collision-alert');
+            alert.click();
+            expect(onCollisionsClick).toHaveBeenCalledTimes(1);
+            expect(onCollisionsClick.mock.calls[0][0]).toBe(alert);
         });
     });
 });

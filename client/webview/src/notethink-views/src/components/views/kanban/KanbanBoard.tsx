@@ -14,7 +14,7 @@ import { buildChildNoteDisplayOptions } from "../../../lib/noteui";
 import { kanbanDraggableId } from "../../../lib/noteops";
 import type { ViewProps } from "../../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
-import KanbanColumn from "../KanbanColumn";
+import KanbanColumn from "./KanbanColumn";
 import GenericNote from "../../notes/GenericNote";
 import type { KanbanColumnDescriptor } from "./useKanbanColumns";
 import view_specific_styles from "../../ViewRenderer.module.scss";

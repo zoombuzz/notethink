@@ -10,8 +10,12 @@ const NOOP_PENDING_WORK_API = {
     clearPending: jest.fn(),
     clearAll: jest.fn(),
 };
+const NOOP_JUMP_TARGETS_API = {
+    jump_targets: undefined,
+    setJumpTargets: jest.fn(),
+};
 function ExtensionReceiver(): React.ReactElement {
-    return <ExtensionReceiverImpl pendingWorkApi={NOOP_PENDING_WORK_API} />;
+    return <ExtensionReceiverImpl pendingWorkApi={NOOP_PENDING_WORK_API} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />;
 }
 
 // mock the debug library so message-validation logging can be asserted (validation logs via the debug
@@ -261,7 +265,7 @@ describe('ExtensionReceiver', () => {
     describe('pendingChange message', () => {
         it('routes pendingChange { on: true } to markPending and { on: false } to clearPending', () => {
             const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
-            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+            render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
 
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {
@@ -280,7 +284,7 @@ describe('ExtensionReceiver', () => {
 
         it('discards a pendingChange message with non-string key', () => {
             const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
-            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+            render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
 
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {
@@ -293,7 +297,7 @@ describe('ExtensionReceiver', () => {
 
         it('discards a pendingChange message with non-boolean on', () => {
             const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
-            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+            render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
 
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {
@@ -306,7 +310,7 @@ describe('ExtensionReceiver', () => {
 
         it('a settingsCascade echo clears every cascade setting key', () => {
             const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
-            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+            render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
 
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {
@@ -330,7 +334,7 @@ describe('ExtensionReceiver', () => {
 
         it('a globalSettings echo clears every global setting key', () => {
             const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
-            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+            render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
 
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {
@@ -346,7 +350,7 @@ describe('ExtensionReceiver', () => {
 
         it('a bulk-replace aggregate update clears the integrationFilters sentinel', () => {
             const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
-            render(<ExtensionReceiverImpl pendingWorkApi={api} />);
+            render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
 
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {

@@ -3,8 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import * as l10n from '@vscode/l10n';
 import { render, screen } from '@testing-library/react';
-import SettingsDocumentDrawer from './views/SettingsDocumentDrawer';
-import SettingsKanbanDrawer from './views/SettingsKanbanDrawer';
+import SettingsDocumentDrawer from './views/drawers/SettingsDocumentDrawer';
+import SettingsKanbanDrawer from './views/drawers/SettingsKanbanDrawer';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
 

@@ -1,10 +1,10 @@
 import Debug from "debug";
 import React from "react";
 import * as l10n from "@vscode/l10n";
-import styles from "../ViewRenderer.module.scss";
-import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } from "./SettingsCommonControls";
-import SettingsCascadeButtons from "./SettingsCascadeButtons";
-import type { GlobalSettingKey } from "../../types/Messages";
+import styles from "../../ViewRenderer.module.scss";
+import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } from "../SettingsCommonControls";
+import SettingsCascadeButtons from "../SettingsCascadeButtons";
+import type { GlobalSettingKey } from "../../../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:SettingsDocumentDrawer");
 
@@ -25,9 +25,9 @@ interface SettingsDocumentDrawerProps {
 
 function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps): React.ReactElement {
     return (
-        <div className={styles.settingsDrawerBody} data-testid="settings-drawer-document">
-            <div className={styles.settingsDrawerGroups}>
-                <section className={styles.settingsDrawerGroup}>
+        <div className={styles.drawerBody} data-testid="settings-drawer-document">
+            <div className={styles.drawerGroups}>
+                <section className={styles.drawerGroup}>
                     <SettingsCommonControls
                         settings={props.settings}
                         showLineNumbers={props.showLineNumbers}
@@ -38,7 +38,7 @@ function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps): React.React
                 </section>
             </div>
 
-            <aside className={styles.settingsDrawerMeta}>
+            <aside className={styles.drawerMeta}>
                 <h3>{l10n.t('Document Settings')}</h3>
                 <p className={styles.settingsDrawerVersion} data-testid="version-label">
                     NoteThink v{typeof NOTETHINK_VERSION !== 'undefined' ? NOTETHINK_VERSION : 'dev'}

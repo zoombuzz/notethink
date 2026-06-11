@@ -10,8 +10,7 @@ export type MdastInput = MdastNode | MdastRoot;
 /**
  * Convert an MDAST tree + raw text into a NoteProps hierarchy suitable for DocumentView.
  *
- * Ports logic from notegit's Note class and fireNoteHierarchyUpdate,
- * replacing CodeMirror dependencies with text-based equivalents.
+ * Derives the hierarchy from text offsets rather than editor state, so it runs outside any editor.
  */
 
 interface SeqCounter {

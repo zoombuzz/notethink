@@ -2717,3 +2717,145 @@ when a file or fileset is opened (either integration mode) scan the in-scope not
   + collision row restyled to the shared Explorer-row `.drawerLink` look (whole row clickable, headline + dimmed origin, theme foreground + hover) — see the [[breadcrumb-leaf-jump-drawer]] drawer-consistency pass
 + manual: open a folder with two same-titled stories, confirm the alert appears and the drawer lists both
 + manual: click a colliding title and confirm the editor jumps to that story; with two dupes in one file, the first link lands higher and the second lower
+
+
+### Folder-mode origin pills flash from one colour to another on first load [](?id=folder-pill-hue-flash-on-load)
+
+When a folder integration view first loads, every origin pill paints in one colour and then changes to a second colour a moment later. It reads as a glitch — there is no logical reason for a project's pill to be two different colours, and the change is distracting. **Decision (chosen): option A — make the pill hue identity-based (a pure function of the project name) instead of index-based (the project's position in an ordered universe), so the colour cannot change as the universe fills in.**
+
++ root cause (verified in source)
+  + pill hue is **index-based, not identity-based**. `OriginPill.tsx:44` uses `origin.project_hue` when present (`pillColourForHue(origin.project_hue, theme)`); `project_hue` is stamped in `mergeAggregateRoot.ts:290` as the project's **position in an ordered universe of project names**, spread around the hue wheel by the golden angle (`hueForProjectIndex`, `originops.ts:35`). A project's colour therefore depends on *where it sorts in the universe*, not on the project name.
+  + that universe is seeded from `workspace_projects` (the workspace's top-level subfolders, computed once per `enterFolderMode`, sent on every payload), then any visible project not already in it is appended in **file-arrival order** (`mergeAggregateRoot.ts:233-250`).
+  + the webview's `workspace_projects` React state **initialises to `[]`** (`useVscodeMessages.ts:146`) and is **not persisted** — saved state is only `{docs, viewStates}` (`usePersistedViewStates.ts:21`), restored as `initial_docs` in `ExtensionReceiver.tsx:52`.
+  + so there is at least one folder-mode paint where `workspace_projects` is still `[]`:
+    + **reload / reopen with a folder view active** — persisted `docs` repaint immediately, but the universe is empty until the first live discovery message lands;
+    + **manual current_file → folder switch** — pills render against the empty universe before the extension streams the folder payload.
+  + with an empty universe the seed loop is skipped and hues come purely from the **visible-file append order**. When the real `workspace_projects` arrives, the merge re-runs and hues are re-derived from the **sorted full-universe** ordering — a different golden-angle index per project — so every pill recolours. Colour 1 = arrival-order hue; colour 2 = sorted-universe hue.
++ why option A (over B/C)
+  + the flash exists *because* hue is a function of the universe ordering, and the universe is empty on the first paint. As long as hue depends on the universe at all, the empty→present transition recolours — so the only structural fix is to make hue independent of the universe. That is option A. (B persists/gates the universe; C hides the view until it lands — both keep the universe-dependent hue and are heavier.)
+  + identity-based hue also removes the entire **"index shifts when the set changes"** bug-class for colour: folder descents, watcher-driven adds, and the `MAX_AGGREGATE_FILES` truncation can all change the universe membership/order mid-session; today each of those can recolour pills, after this change none can.
+  + accepted trade-off: hashing a name to a hue loses the golden-angle guarantee that the *adjacent* projects in a set get maximally-separated hues — two unrelated projects can hash close. This is inherent: "well-spread across the actual set" requires knowing the set; "stable regardless of the set" forbids using it. We take stability. (The single-file fallback `originPillColour` already accepts exactly this trade-off via `djb2(name)%360` — this story makes folder mode use the same identity rule, so single-file and folder now agree on a project's colour.)
++ design
+  + **hue becomes a pure function of the project name.** Add `hueForProjectName(name)` to `originops.ts` (`djb2(name) % 360`, the existing fallback hash, now named and shared). `originPillColour` is rewritten to route through it (`pillColourForHue(hueForProjectName(name), theme)`) — functionally identical to today's fallback, just deduplicated.
+  + **`mergeAggregateRoot` stamps `origin.project_hue = hueForProjectName(project_name)`** instead of an index into `project_hue_by_name`. The `project_hue_by_name` map is deleted.
+  + **labels stay universe-driven.** The universe seed (`workspace_projects` then visible-set append) is kept, but now only feeds `distinct_project_names → buildProjectLabels`. Labels genuinely need the set (NG-vs-NT divergence), and the existing "labels stable across descents" behaviour + tests are unchanged. `mergeAggregateRoot`'s signature and the `workspace_projects` wire field are untouched.
+  + **`hueForProjectIndex` is removed** — after the stamp site stops calling it, the only remaining references are its own unit test. Confirm no out-of-repo importer of `@zoombuzz/notethink-views` consumes it before deleting (internal-only per grep today); it is not a persisted/config name, so the permanent-name check is satisfied by that grep.
+  + **`OriginPill` is unchanged in behaviour** — it keeps preferring `origin.project_hue` and falling back to `originPillColour`, but the two now yield the *same* colour for a given project, so the previously-throwaway empty-universe paint already shows the final colour.
++ net effect on the flash
+  + on the empty-universe first paint, `project_hue` is now derived from the name → identical to the value after the universe arrives → the re-merge produces the same colour → no recolour. Pills paint their final colour immediately.
+  + residual (out of scope here): the two-letter **label** is still universe-driven, so it *can* still momentarily shift (e.g. `NT`→`NO`) on the empty-universe paint. That is far less perceptible than a colour change and is the part the user flagged as fine; left as a possible follow-up (would need option-B-style universe persistence/gating to fully fix).
++ scope
+  + `originops.ts` — add `hueForProjectName`; rewrite `originPillColour` to call it; delete `hueForProjectIndex`; refresh the `djb2`/`project_hue` doc-comments that reference the index assignment
+  + `mergeAggregateRoot.ts` — stamp `project_hue` from `hueForProjectName(project_name)`; drop `project_hue_by_name`; keep the universe seed feeding `buildProjectLabels` only; update the import
+  + `types/NoteProps.ts` — update the `project_hue` field doc-comment (no longer "index in the sorted enumeration … golden-angle"; now "identity hash of the project name, set-independent")
++ out of scope
+  + the label flash (universe-driven `project_label`) — possible follow-up; the colour is the reported problem
+  + persisting `workspace_projects` / gating the first paint (options B and C) — not needed once hue is identity-based
+  + any change to `pillColourForHue` saturation/lightness, theme handling, the epic pill, or the focus ring
++ files
+  + `client/webview/src/notethink-views/src/lib/originops.ts` (+ `originops.test.ts`)
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` (+ `mergeAggregateRoot.test.ts`)
+  + `client/webview/src/notethink-views/src/types/NoteProps.ts`
+  + `client/webview/src/notethink-views/src/components/notes/OriginPill.test.tsx` (assertion only — see below)
++ [X] add `hueForProjectName(name)` to `originops.ts`; rewrite `originPillColour` to route through it; delete `hueForProjectIndex`; fix the two doc-comments that name the index assignment
++ [X] stamp `origin.project_hue = hueForProjectName(project_name)` in `mergeAggregateRoot.ts`; remove `project_hue_by_name`; keep the universe seed for labels only; swap the import (`hueForProjectIndex` → `hueForProjectName`)
++ [X] update the `project_hue` doc-comment in `types/NoteProps.ts`
++ [X] jest (`originops.test.ts`): replace the `hueForProjectIndex` block with `hueForProjectName` — deterministic, in `[0,359]`, **set-/order-independent** (same name → same hue with no context), and equal to the hue embedded in `originPillColour(name)`
++ [X] jest (`mergeAggregateRoot.test.ts`): a project's stamped `project_hue` is **identical whether `workspace_projects` is provided, empty `[]`, or omitted** (the regression lock for flash-freedom); the existing label-stability tests still pass unchanged
++ [X] jest (`OriginPill.test.tsx`): with `project_hue` undefined, the rendered `backgroundColor` equals `pillColourForHue(hueForProjectName(project_name), theme)` (single-file ↔ folder agree); keep the existing "uses `project_hue` when present" test
++ [X] `pnpm run check` green (lint + webpack + rollup + jest) — 1261 jest; fixed the lockfile's missing rollup native dep (`pnpm update rollup`, 4.60.1 → 4.61.1)
++ [X] rebuild the webview bundle and confirm the edit landed (`grep client/webview/dist/index.js` for `hueForProjectName`); window reload needed to preview
++ manual: reload the VS Code window with a folder view active — every origin pill paints its final colour immediately, no one-colour-then-another flash
++ manual: switch a current-file view to folder mode — pills appear in their stable colours with no recolour as files stream in
++ manual: descend via a project pill / breadcrumb into a sub-folder and back — a given project keeps the same colour throughout (no descent recolour)
++ manual: the same project shows the **same** colour in single-file mode and in folder mode
++ acceptance
+  + a project's pill colour is a pure function of its name — identical across empty/partial/full universe, descents, watcher adds, and truncation; the first-load colour flash is gone
+  + folder-mode and single-file-mode pills agree on a project's colour
+  + labels remain universe-disambiguated (NG/NT) and their existing stability tests are unchanged
++ commit message draft
+  + notethink 0.3.11: make origin-pill hue identity-based (hash of the project name) instead of an index into the project universe, so pills no longer flash from one colour to another on first folder-view load (empty-universe paint now shows the final colour); `hueForProjectName` replaces `hueForProjectIndex`, single-file and folder modes now agree on a project's colour, labels stay universe-driven
+  + tests 1261 jest
+
+
+### Make NoteThink scheme-agnostic on non-`file:` workspaces — folder-mode discovery + relative-link open (drop hardcoded `vscode.Uri.file`) [](?id=workspace-scheme-agnostic)
+
+Folder mode assumes the workspace lives on the `file:` scheme. It builds discovery/watch URIs with `vscode.Uri.file(folder_path)` and matches excludes against `uri.fsPath`. On desktop VS Code the workspace *is* `file:`, so it works — but in **VS Code Web with a custom `FileSystemProvider`** (a non-`file:` workspace scheme — e.g. `vscode-vfs:` like github.dev, or any host that mounts content under its own scheme) discovery searches the wrong scheme: `findFiles` returns nothing, the breadcrumb shows **"0 in 0 files"**, and the folder watcher throws `No file system handle registered (file:///…)`. Net effect: **folder mode is unusable on any web host whose workspace isn't `file:`** — current-file mode is unaffected (it uses the active document's own URI).
+
+**Second symptom — same root cause (new):** clicking a **relative `.md` link** in the rendered view (e.g. `[project-board.md](project-board.md)` or `[web-store.md](portfolio/web-store.md)`) does nothing. `useLinkInterceptor` only intercepts `http(s)`/`mailto`; relative links fall through to a dead webview-iframe navigation. Even if forwarded, the host's open-file path (`handleOpenFile` → `revealByOpening`) re-wraps the path as `vscode.Uri.file` — the **same scheme-discarding bug** — so on a `notegit:` (dulcet virtual repo) / `vscode-vfs:` workspace it would open nothing. **Desired behaviour:** clicking such a link opens the target file in an editor column beside the panel; the viewer auto-follows the new active editor (`onDidChangeActiveTextEditor`, ~`:317`), so it "pops" to display that note — no new viewer command needed. This unlocks the dulcet welcome tour, where `intro.md` links to every demo file (paired content change below).
+
++ symptom (reproducible on a custom-scheme web workspace)
+  + open a file in a `<scheme>:`-mounted folder, switch View integration → **Folder**: breadcrumb scopes correctly but reports "0 in 0 files", Files drawer says "No files match the current filters"
+  + console: `[File Watcher ('FileSystemObserver')] Error: ... No file system handle registered (/…) (file:///…/<folder>)` — note the URI is `file:` even though the workspace scheme is not
+  + the Explorer lists the same folder fine — only folder-mode discovery is broken, which proves the provider's `readDirectory`/`stat` are scheme-correct and the bug is local to folder discovery
++ root cause (`client/extension/src/vscode/PanelSession.ts`)
+  + `enterFolderMode` (~`:600`): `new vscode.RelativePattern(vscode.Uri.file(folder_path), this.integration_include)` → `discoverFolderDocs` → `vscode.workspace.findFiles(pattern, …)` (~`:672`) searches the `file:` scheme
+  + `computeWorkspaceProjects` (~`:642`): `vscode.workspace.fs.readDirectory(vscode.Uri.file(this.workspace_root))` — same wrong scheme
+  + `armFolderWatcher` / the active-file watcher (~`:235`): build `vscode.Uri.file(...)` patterns too → the watcher error above
+  + `isExcludedByIntegrationFilter` (~`:631`): `path.relative(folder_path, uri.fsPath)` — `uri.fsPath` is `file:`-centric and lossy for non-`file:` URIs, so even if discovery were fixed the exclude match would drift
+  + underlying assumption: the webview sends a plain path **string** (`e.path`); the host re-wraps it as `Uri.file`, discarding the real workspace scheme
++ fix
+  + derive the workspace base URI from the real workspace folder (`vscode.workspace.getWorkspaceFolder(active_uri)`, else `vscode.workspace.workspaceFolders?.[0]?.uri`) and rebuild every folder-mode URI with `base_uri.with({ path: folder_path })` so the scheme (`file:`, `vscode-vfs:`, any custom provider scheme) is preserved end-to-end: `RelativePattern`, `findFiles`, `computeWorkspaceProjects`, and the watcher
+  + replace `uri.fsPath`-based relative-path math in `isExcludedByIntegrationFilter` with scheme-safe `uri.path` arithmetic (compute the path relative to the integration folder's `uri.path`, not `fsPath`)
+  + verify `vscode.workspace.findFiles` honours a custom-scheme `RelativePattern` in VS Code Web; if it does not for read-only/custom providers, fall back to a recursive `vscode.workspace.fs.readDirectory` walk (the provider already supports it — that's why the Explorer works) gated to the integration folder, then apply the existing `globMatches` filter
+  + `armFolderWatcher` must not throw when the provider's `watch()` is a no-op (static content) — guard it so a watcher failure can't abort folder entry
+  + **relative-link open (new)** — make a relative `.md` link click open the target file, scheme-preserving:
+    + webview `useLinkInterceptor` (`client/webview/src/hooks/useLinkInterceptor.ts`): besides `http(s)`/`mailto`, also intercept links whose href is a **relative path** — i.e. not `http(s):`/`mailto:`, not a `?`-prefixed linetag (those are handled by `linetagops`), and not a bare `#fragment`. `preventDefault`/`stopPropagation` and `postMessage({ type: 'openRelative', href })`. Leave absolute-URL and linetag handling exactly as-is.
+    + new message `OpenRelativeMessage { type: 'openRelative'; href: string }` in `Messages.ts`, added to the `WebviewToExtensionMessage` union; dispatch `case 'openRelative'` in `PanelSession.onDidReceiveMessage` (~`:385`)
+    + host handler resolves the href against the **active document URI** (not a workspace-root path string): `const base = vscode.Uri.joinPath(active_uri, '..'); const target = vscode.Uri.joinPath(base, href)` — preserves scheme/authority for `file:`, `notegit:`, `vscode-vfs:` alike. Decode/strip any `#fragment`/`?query` from the href before joining. Validate the resolved target is within the workspace (scheme-safe `uri.path` containment, not `fsPath`) and ends in `.md`, then open beside the panel
+    + **generalise `revealByOpening`/`handleOpenFile` to take a `vscode.Uri` (or resolve via the active doc's base URI) instead of `vscode.Uri.file(doc_path)`** — this is the same hardcoded-`file:` defect as folder mode, so fix it once and route both the jump drawer and relative-link open through the scheme-preserving opener
++ scope
+  + `client/extension/src/vscode/PanelSession.ts` — scheme-preserving URI construction in `enterFolderMode`, `discoverFolderDocs`, `computeWorkspaceProjects`, `armFolderWatcher`, `isExcludedByIntegrationFilter`, **and `revealByOpening`/`handleOpenFile`**
+  + `client/webview/src/hooks/useLinkInterceptor.ts` + `Messages.ts` — relative-link interception + new `openRelative` message
+  + **dulcet repo (paired content change):** `nodejs/dulcet/content/notegit/welcome/main/intro.md` — convert the example references from backtick code spans to relative markdown links, **link text = the filename** (decision: `[project-board.md](project-board.md)`, `[web-store.md](portfolio/web-store.md)`, etc.). Do this only when the NoteThink side lands so the live demo never ships dead-looking links.
+  + keep current-file mode untouched (already uses the active document URI)
++ out of scope
+  + any redesign of the discovery/merge pipeline — this is purely making the existing pipeline scheme-agnostic
+  + the file watcher's incremental-update semantics beyond not throwing on a no-op `watch()`
++ files
+  + `client/extension/src/vscode/PanelSession.ts`
+  + `client/extension/src/vscode/PanelSession.test.ts` (or the nearest covering test) — add a folder-mode test whose workspace is a **non-`file:` scheme** and assert discovery resolves files + the watcher doesn't throw
+  + `client/extension/src/__mocks__/vscode.ts` — `findFiles`/`readDirectory`/`RelativePattern` mocks need to capture the URI scheme so the test can assert it
+  + `client/webview/src/hooks/useLinkInterceptor.ts` — relative-link interception (+ its test, if present)
+  + `client/webview/src/notethink-views/src/types/Messages.ts` — `OpenRelativeMessage` + union member
+  + **dulcet repo:** `nodejs/dulcet/content/notegit/welcome/main/intro.md` — references → relative links (filename link text); the dulcet `welcome-content.test.ts` / `route.test.ts` may need updating if they assert the prose
++ [X] rebuild folder-mode URIs on the active workspace folder's scheme (preserve scheme via `base_uri.with({ path })`); drop all `vscode.Uri.file(folder_path)` in the folder-mode path
++ [X] make `isExcludedByIntegrationFilter` use scheme-safe `uri.path` relative math instead of `uri.fsPath`
++ [X] confirm `findFiles` works for a custom-scheme `RelativePattern` in web; if not, add the `readDirectory`-walk fallback — scheme-branched: `file:` uses `findFiles`, any other scheme uses a recursive `readDirectory` walk (`discoverViaReadDirectoryWalk`) with probe-based dir pruning, bounded by `MAX_WALK_ENTRIES`; jest covers walk discovery + node_modules prune on a `vscode-vfs:` workspace
++ [X] guard `armFolderWatcher` against a no-op/throwing `watch()` so folder entry can't abort
++ [X] generalise `revealByOpening`/`handleOpenFile` off `vscode.Uri.file` to a scheme-preserving opener (shared by the jump drawer and relative-link open)
++ [X] webview: intercept relative `.md` link clicks (exclude `http(s)`/`mailto`/`?`-linetags/`#`-fragments) → post `openRelative`
++ [X] host: dispatch `openRelative`, resolve href against the active doc URI (`Uri.joinPath`), validate within-workspace + `.md`, open beside the panel; viewer auto-follows
++ [ ] dulcet: convert `intro.md` references to relative links (filename link text); update any prose-asserting dulcet tests — deferred to the paired dulcet change (separate repo), land only after this notethink side ships
++ [X] jest (notethink): folder discovery with a `vscode-vfs:`-style (non-`file:`) workspace resolves the expected files and exclude-filters correctly; watcher arm does not throw
++ [X] jest (notethink): relative-link click on a non-`file:` active doc resolves to the scheme-preserved sibling/sub-path URI and opens it (and a `..`-escape / non-`.md` href is refused)
++ [X] `pnpm run check` green — 1261 jest; fixed the lockfile's missing rollup native dep (`pnpm update rollup`, 4.60.1 → 4.61.1)
++ manual: on a custom-scheme web workspace, open a file in a subfolder and switch to Folder mode — the merged board shows every file in the folder with origin pills and cross-file epics resolved (no "0 in 0 files", no `file://` watcher error)
++ manual (relative-link open): in dulcet (`notegit:` scheme), open the welcome `intro.md`, click an example link (e.g. `project-board.md`, `portfolio/web-store.md`) — the file opens in the editor column beside the viewer and the NoteThink viewer switches to render it; verify a nested `portfolio/*.md` link resolves correctly and an external `http(s)` link still opens in the system browser
++ acceptance
+  + folder mode discovers and aggregates files on any workspace scheme, not just `file:`
+  + no `file://`-scheme watcher error is emitted for a non-`file:` workspace
+  + desktop (`file:`) folder mode is unchanged
+  + clicking a relative `.md` link in the rendered view opens that file beside the panel on the workspace's own scheme; the viewer follows to display it; external links and `?`-linetags behave exactly as before
++ commit message draft
+  + notethink 0.3.11: make NoteThink scheme-agnostic on non-`file:` workspaces — preserve the workspace/active-doc URI scheme through folder discovery, exclude-matching, the watcher, and the open-file path instead of hardcoding `vscode.Uri.file`; add relative-link interception so a relative `.md` link in the rendered view opens its target on the workspace's own scheme (folder aggregation previously found 0 files; relative links did nothing) in VS Code Web with a custom FileSystemProvider
+  + tests 1261 jest
+  + (paired) dulcet x.y.z: welcome intro.md links each example file as a relative markdown link so the NoteThink tour opens demos on click
+
+
+### Dragging a card into an all-unweighted kanban column sinks it to the bottom [](?id=kanban-unweighted-drop-restraint)
+
+Dropping a card at the top (or middle) of a column whose cards are all unweighted moves it visually, but the persisted result puts it at the **bottom**. Root cause: `crossFileOrderingChanges` minted an `nt_kanban_ordering_weight` for the dragged card, and by `kanbanNoteOrder` case 2 a single weighted card sorts *after* every unweighted one — the exact opposite of the requested placement. The only way a weight could honour a top-drop into an unweighted neighbourhood is to weight *every other* card, which contradicts the minimal, self-removing weights design.
+
++ fix
+  + add a restraint guard to `crossFileOrderingChanges`: when both the drop's predecessor and successor are unweighted, mint nothing (`return []`) and let implicit relevance order govern — the just-saved file's bumped mtime already floats it up. Weights are reserved for drops where a weighted neighbour makes a gap-insert genuinely expressive.
++ scope
+  + `client/webview/src/notethink-views/src/lib/linetagops.ts` — the guard in `crossFileOrderingChanges`
++ [X] add the restraint guard (`successor_unweighted && predecessor_unweighted` → `return []`)
++ [X] jest (`linetagops.test.ts`): top drop into all-unweighted column mints nothing; mid drop between two unweighted notes mints nothing; a top drop above a weighted successor still weights (guard does not over-suppress)
++ [X] playwright (`folder-kanban-drag.spec.ts`): updated the multi-file interleave test — a drag into an all-unweighted column emits no weight write (placement carried by mtime); the weighted-fixture interleave assertion is unchanged
++ acceptance
+  + a top/mid drop into an all-unweighted column does not mint a weight; the card is not sunk to the bottom
+  + a drop adjacent to a weighted card still mints an expressive weight
++ commit message draft
+  + notethink 0.3.11: kanban drop-into-unweighted-column restraint guard — `crossFileOrderingChanges` mints no weight when both drop neighbours are unweighted (a lone weight sorts after all unweighted cards, sinking a top-drop to the bottom), letting mtime order govern instead

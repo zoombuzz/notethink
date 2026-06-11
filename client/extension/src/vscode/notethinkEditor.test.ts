@@ -1503,4 +1503,184 @@ describe('NotethinkEditorProvider', () => {
 			expect(first_watcher.dispose).toHaveBeenCalledTimes(1);
 		});
 	});
+
+	// ---- non-file: scheme folder mode (VS Code Web / custom FileSystemProvider) ----
+	// shared vscode-vfs: fixtures for the non-file: scheme folder-mode + openRelative blocks below
+	const VFS_AUTHORITY = 'github';
+	const VFS_ROOT = '/zoombuzz/notethink';
+	const vfsUri = (p: string): Uri => Uri.parse(`vscode-vfs://${VFS_AUTHORITY}${p}`);
+
+	describe('folder mode on a non-file: workspace scheme', () => {
+		const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+		// stand up a fresh panel whose workspace folder + active doc both live on a vscode-vfs: scheme, so base_uri carries that scheme end-to-end
+		async function setupVfsPanel(): Promise<ReturnType<typeof createMockWebviewPanel>> {
+			const folder_uri = vfsUri(VFS_ROOT);
+			(vscode.workspace as unknown as WorkspaceMutable).workspaceFolders = [{ uri: folder_uri, name: 'notethink', index: 0 }];
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({ uri: folder_uri, name: 'notethink', index: 0 });
+			const doc_uri = vfsUri(`${VFS_ROOT}/welcome/intro.md`);
+			const doc = { uri: doc_uri, getText: jest.fn(() => '# Intro'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) };
+			const editor = mockTextEditor(doc as unknown as MockTextDocument);
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
+			const local_provider = new NotethinkEditorProvider(mockExtensionContext());
+			const local_panel = createMockWebviewPanel();
+			await (local_provider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(local_panel.panel, doc);
+			await local_panel.simulateMessage({ type: 'requestInitialState' });
+			return local_panel;
+		}
+
+		// mock the provider's readDirectory as a path→entries tree so the walk can traverse it
+		function mockVfsTree(tree: Record<string, Array<[string, vscode.FileType]>>): void {
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: Uri) => tree[uri.path] ?? []);
+		}
+
+		afterEach(() => {
+			(vscode.workspace as unknown as WorkspaceMutable).workspaceFolders = undefined;
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue(undefined);
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockImplementation(() => ({
+				onDidCreate: jest.fn(), onDidChange: jest.fn(), onDidDelete: jest.fn(), dispose: jest.fn(),
+			}));
+		});
+
+		it('discovers folder docs via the provider readDirectory walk on a non-file: scheme (findFiles bypassed)', async () => {
+			mockVfsTree({
+				[VFS_ROOT]: [['welcome', vscode.FileType.Directory]],
+				[`${VFS_ROOT}/welcome`]: [['main', vscode.FileType.Directory]],
+				[`${VFS_ROOT}/welcome/main`]: [['intro.md', vscode.FileType.File]],
+			});
+			// findFiles returns nothing on this scheme — discovery must come from the walk, not findFiles
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(
+				{ uri: vfsUri(`${VFS_ROOT}/welcome/main/intro.md`), getText: jest.fn(() => '# Intro'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) },
+			);
+
+			const panel = await setupVfsPanel();
+			panel.postedMessages.length = 0;
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: `${VFS_ROOT}/welcome` });
+			while (getUpdates(panel.postedMessages).length < 1) { await flush(); }
+
+			// the walk read the integration folder with the vscode-vfs scheme preserved
+			const read_uris = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(c => c[0] as Uri);
+			expect(read_uris.some(u => u.scheme === 'vscode-vfs' && u.path === `${VFS_ROOT}/welcome`)).toBe(true);
+			// the nested file the walk found made it into an update payload
+			const paths = getUpdates(panel.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+			expect(paths).toContain(`${VFS_ROOT}/welcome/main/intro.md`);
+		});
+
+		it('prunes an excluded directory during the walk and post-filters its files', async () => {
+			mockVfsTree({
+				[VFS_ROOT]: [['welcome', vscode.FileType.Directory]],
+				[`${VFS_ROOT}/welcome`]: [['keep.md', vscode.FileType.File], ['node_modules', vscode.FileType.Directory]],
+				[`${VFS_ROOT}/welcome/node_modules`]: [['dep.md', vscode.FileType.File]],
+			});
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) =>
+				({ uri: u, getText: jest.fn(() => '# x'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) }),
+			);
+
+			const panel = await setupVfsPanel();
+			panel.postedMessages.length = 0;
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: `${VFS_ROOT}/welcome` });
+			while (getUpdates(panel.postedMessages).length < 1) { await flush(); }
+
+			// the walk never descends into node_modules (probe-prune), so its readDirectory is never called
+			const read_paths = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(c => (c[0] as Uri).path);
+			expect(read_paths).not.toContain(`${VFS_ROOT}/welcome/node_modules`);
+			const paths = getUpdates(panel.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+			expect(paths).toContain(`${VFS_ROOT}/welcome/keep.md`);
+			expect(paths).not.toContain(`${VFS_ROOT}/welcome/node_modules/dep.md`);
+		});
+
+		it('does NOT throw when the provider watcher creation fails (static content)', async () => {
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
+			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockImplementation(() => {
+				throw new Error('watch() unsupported on this provider');
+			});
+
+			const panel = await setupVfsPanel();
+			// folder entry must complete despite the throwing watcher; an update still ships
+			await expect(panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: `${VFS_ROOT}/welcome` })).resolves.toBeUndefined();
+			await flush();
+		});
+	});
+
+	// ---- relative-link open (openRelative) ----------------------------------
+
+	describe('openRelative message', () => {
+		async function setupVfsActiveDoc(active_path: string): Promise<ReturnType<typeof createMockWebviewPanel>> {
+			const folder_uri = vfsUri(VFS_ROOT);
+			(vscode.workspace as unknown as WorkspaceMutable).workspaceFolders = [{ uri: folder_uri, name: 'notethink', index: 0 }];
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({ uri: folder_uri, name: 'notethink', index: 0 });
+			const doc_uri = vfsUri(active_path);
+			const doc = { uri: doc_uri, getText: jest.fn(() => '# Active'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) };
+			const editor = mockTextEditor(doc as unknown as MockTextDocument);
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
+			const local_provider = new NotethinkEditorProvider(mockExtensionContext());
+			const local_panel = createMockWebviewPanel();
+			await (local_provider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(local_panel.panel, doc);
+			await local_panel.simulateMessage({ type: 'requestInitialState' });
+			return local_panel;
+		}
+
+		afterEach(() => {
+			(vscode.workspace as unknown as WorkspaceMutable).workspaceFolders = undefined;
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue(undefined);
+		});
+
+		it('resolves a sibling .md href against the active doc URI, preserving the scheme, and opens it', async () => {
+			const panel = await setupVfsActiveDoc(`${VFS_ROOT}/welcome/intro.md`);
+			const opened: Uri[] = [];
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => {
+				opened.push(u);
+				return { uri: u, getText: jest.fn(() => '# Sib'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) };
+			});
+			(vscode.window.showTextDocument as jest.Mock).mockResolvedValue(mockTextEditor(mockTextDocument('# Sib', '/x')));
+
+			await panel.simulateMessage({ type: 'openRelative', href: 'sibling.md' });
+
+			expect(opened.length).toBe(1);
+			expect(opened[0].scheme).toBe('vscode-vfs');
+			expect(opened[0].authority).toBe(VFS_AUTHORITY);
+			expect(opened[0].path).toBe(`${VFS_ROOT}/welcome/sibling.md`);
+		});
+
+		it('resolves a sub-path href against the active doc URI', async () => {
+			const panel = await setupVfsActiveDoc(`${VFS_ROOT}/welcome/intro.md`);
+			const opened: Uri[] = [];
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => {
+				opened.push(u);
+				return { uri: u, getText: jest.fn(() => '# Sub'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) };
+			});
+			(vscode.window.showTextDocument as jest.Mock).mockResolvedValue(mockTextEditor(mockTextDocument('# Sub', '/x')));
+
+			await panel.simulateMessage({ type: 'openRelative', href: 'main/intro.md#section?q=1' });
+
+			expect(opened.length).toBe(1);
+			// the #fragment and ?query are stripped before joining
+			expect(opened[0].path).toBe(`${VFS_ROOT}/welcome/main/intro.md`);
+		});
+
+		it('refuses a `..`-escape href that climbs out of the workspace', async () => {
+			const panel = await setupVfsActiveDoc(`${VFS_ROOT}/welcome/intro.md`);
+			(vscode.workspace.openTextDocument as jest.Mock).mockClear();
+
+			await panel.simulateMessage({ type: 'openRelative', href: '../../../../../../etc/passwd.md' });
+
+			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+		});
+
+		it('refuses a non-.md href', async () => {
+			const panel = await setupVfsActiveDoc(`${VFS_ROOT}/welcome/intro.md`);
+			(vscode.workspace.openTextDocument as jest.Mock).mockClear();
+
+			await panel.simulateMessage({ type: 'openRelative', href: 'evil.sh' });
+
+			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+		});
+	});
 });

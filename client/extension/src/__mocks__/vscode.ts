@@ -31,12 +31,36 @@ export class Uri {
 	}
 
 	static joinPath(base: Uri, ...pathSegments: string[]): Uri {
-		return new Uri(base.scheme, base.authority, [base.path, ...pathSegments].join('/'), '', '');
+		const joined = [base.path, ...pathSegments].join('/');
+		return new Uri(base.scheme, base.authority, normalizePosixPath(joined), '', '');
+	}
+
+	// scheme-preserving override: rebuilds the URI changing only the supplied components, mirroring vscode.Uri.with so folder-mode discovery keeps the workspace scheme
+	with(change: { scheme?: string; authority?: string; path?: string; query?: string; fragment?: string }): Uri {
+		return new Uri(
+			change.scheme ?? this.scheme,
+			change.authority ?? this.authority,
+			change.path ?? this.path,
+			change.query ?? this.query,
+			change.fragment ?? this.fragment,
+		);
 	}
 
 	toString(): string {
 		return `${this.scheme}://${this.authority}${this.path}`;
 	}
+}
+
+// collapse `.`/`..` segments in a POSIX path so the mock's joinPath matches vscode.Uri.joinPath normalization (so a `..`-escape resolves out of the base just like the real API)
+function normalizePosixPath(input: string): string {
+	const is_absolute = input.startsWith('/');
+	const out: string[] = [];
+	for (const segment of input.split('/')) {
+		if (segment === '' || segment === '.') { continue; }
+		if (segment === '..') { out.pop(); continue; }
+		out.push(segment);
+	}
+	return (is_absolute ? '/' : '') + out.join('/');
 }
 
 export class RelativePattern {

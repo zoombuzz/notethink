@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import OriginPill from './OriginPill';
+import { hueForProjectName, pillColourForHue } from '../../lib/originops';
 import type { NoteOrigin } from '../../types/NoteProps';
 
 describe('OriginPill rendering', () => {
@@ -54,11 +55,21 @@ describe('OriginPill rendering', () => {
         expect(screen.getByTestId('origin-project-pill')).toHaveTextContent('?');
     });
 
-    it('uses origin.project_hue when present, ignoring the djb2 hash', () => {
-        // pick a hue that djb2 of "oma" would not produce so we can prove which path ran
+    it('uses origin.project_hue directly when present, overriding the hueForProjectName fallback', () => {
+        // pick a hue that hueForProjectName('oma') would not produce so we can prove which path ran
         const explicit_hue = 200;
         render(<OriginPill origin={makeOrigin({ project_hue: explicit_hue })} />);
         const pill = screen.getByTestId('origin-project-pill');
         expect(pill).toHaveStyle({ backgroundColor: `hsl(${explicit_hue} 65% 32%)` });
+    });
+
+    it('with project_hue undefined, backgroundColor equals pillColourForHue(hueForProjectName(project_name), theme)', () => {
+        // single-file and folder mode must agree: when project_hue is absent, the colour derives from hueForProjectName
+        const origin = makeOrigin({ project_hue: undefined });
+        render(<OriginPill origin={origin} />);
+        const pill = screen.getByTestId('origin-project-pill');
+        const project_name = 'oma';
+        const expected_colour = pillColourForHue(hueForProjectName(project_name), 'dark');
+        expect(pill).toHaveStyle({ backgroundColor: expected_colour });
     });
 });

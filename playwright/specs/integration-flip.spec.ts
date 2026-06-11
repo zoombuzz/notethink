@@ -18,7 +18,7 @@ test.describe('Integration flip (folder ↔ current-file)', () => {
     test('folder → current_file flips the selector value and drops the folder breadcrumb file-count in one render', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);
@@ -35,7 +35,7 @@ test.describe('Integration flip (folder ↔ current-file)', () => {
     test('round-trip folder → current_file → folder → current_file leaves no stale toolbar state', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         const selector = page.locator('[data-testid="view-integration-selector"]').first();

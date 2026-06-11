@@ -235,6 +235,18 @@ function crossFileOrderingChanges(
     const predecessor_weight = predecessor?.linetags?.[key]?.value_numeric;
     const successor_weight = successor?.linetags?.[key]?.value_numeric;
     const new_child_weight = new_child.linetags?.[key]?.value_numeric;
+    // restraint guard: a drop into an unweighted neighbourhood cannot be honoured by
+    // weighting the dragged card. Per kanbanNoteOrder case 2 a weighted card always
+    // sorts AFTER every unweighted one, so minting a weight here would sink the card
+    // below its unweighted successor — the opposite of the requested placement (the
+    // top-drop-goes-to-bottom bug). Forcing the order would instead require weighting
+    // every OTHER card, which contradicts the minimal, self-removing weights design.
+    // Implicit relevance order already expresses this region — the just-saved file's
+    // bumped mtime floats it up — so mint nothing and let noteOrder govern. Weights
+    // are reserved for drops a weighted neighbour makes genuinely expressive.
+    const successor_unweighted = successor !== undefined && successor_weight === undefined;
+    const predecessor_unweighted = predecessor === undefined || predecessor_weight === undefined;
+    if (successor_unweighted && predecessor_unweighted) { return []; }
     const blocks_gap = (predecessor !== undefined && predecessor_weight === undefined)
         || (successor !== undefined && successor_weight === undefined);
     if (!blocks_gap) {

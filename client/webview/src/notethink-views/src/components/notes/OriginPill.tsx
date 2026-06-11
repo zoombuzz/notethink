@@ -18,7 +18,7 @@ interface OriginPillProps {
  * first path segment) followed by an optional epic pill (epic.name) when origin.epic
  * is set. The first letter is always the project name's initial; the second is the
  * earliest character that disambiguates this project from every other one visible in
- * the folder view (e.g. notegit→`NG`, notethink→`NT`, countingsheet→`CO`). Project pill
+ * the folder view (e.g. `notethink`→`NT`, `notebook`→`NB`, countingsheet→`CO`). Project pill
  * colour is deterministic per project name; theme-adaptive for dark/light.
  *
  * Pure helpers (label derivation, hue assignment, theme detection) live in
@@ -40,7 +40,7 @@ export default function OriginPill({ origin, onClick }: OriginPillProps): React.
     const project_name = projectNameFromRelativePath(origin.relative_path);
     // folder mode stamps origin.project_label using the global divergence rule (see buildProjectLabels); single-file / legacy origins fall back to the project name's first+second characters
     const label = origin.project_label ?? projectAbbreviation(project_name);
-    // folder mode stamps origin.project_hue from the sorted-index assignment in mergeAggregateRoot; fall back to the hash-based colour for legacy origins or single-file mode where no global enumeration exists
+    // origin.project_hue is the djb2 identity hash stamped by mergeAggregateRoot; when absent (single-file or legacy origins) originPillColour derives the same hash from the project name, so both paths converge on one colour
     const colour = typeof origin.project_hue === 'number'
         ? pillColourForHue(origin.project_hue, theme)
         : originPillColour(project_name || origin.doc_path, theme);

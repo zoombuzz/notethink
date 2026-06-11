@@ -3,7 +3,7 @@ import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNo
 import { stripHeadlineLinetags, storyStableIdSlug } from "./noteops";
 import { resolveNamespacedTag } from "./linetagops";
 import { FOLDER_VIEW_STATE_ID } from "./viewstateops";
-import { buildProjectLabels, hueForProjectIndex, projectNameFromRelativePath } from "./originops";
+import { buildProjectLabels, hueForProjectName, projectNameFromRelativePath } from "./originops";
 import { INTEGRATION_MODE_FOLDER } from "../types/IntegrationMode";
 import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NoteProps";
 
@@ -230,25 +230,25 @@ export function mergeAggregateRoot(
         return ar < br ? -1 : ar > br ? 1 : 0;
     });
 
-    // seed the project hue + label universe from workspace_projects when provided, then append any visible-set project not already in it. The workspace-driven seed is what keeps labels/hues stable across folder descents
-    const project_hue_by_name = new Map<string, number>();
+    // seed the label universe from workspace_projects when provided, then append any visible-set project not already in it. The workspace-driven seed keeps labels stable across folder descents. Hue is an identity hash of the project name (hueForProjectName) so it needs no universe — it is set-independent
+    const seen_project_names = new Set<string>();
     const distinct_project_names: string[] = [];
     if (workspace_projects && workspace_projects.length > 0) {
         for (const name of workspace_projects) {
-            if (!project_hue_by_name.has(name)) {
-                project_hue_by_name.set(name, hueForProjectIndex(project_hue_by_name.size));
+            if (!seen_project_names.has(name)) {
+                seen_project_names.add(name);
                 distinct_project_names.push(name);
             }
         }
     }
     for (const file of parsed) {
         const project_name = projectNameFromRelativePath(file.doc.relative_path);
-        if (project_name && !project_hue_by_name.has(project_name)) {
-            project_hue_by_name.set(project_name, hueForProjectIndex(project_hue_by_name.size));
+        if (project_name && !seen_project_names.has(project_name)) {
+            seen_project_names.add(project_name);
             distinct_project_names.push(project_name);
         }
     }
-    // 2-character pill label per project — first letter + earliest character that differentiates this project from any other in the universe (notegit→NG, notethink→NT). Driven by the workspace universe when available so labels are stable across descents
+    // 2-character pill label per project — first letter + earliest character that differentiates this project from any other in the universe (notethink→NT, notebook→NB). Driven by the workspace universe when available so labels are stable across descents
     const project_label_by_name = buildProjectLabels(distinct_project_names);
 
     // 2. for each file, build epic registries and collect stories
@@ -287,7 +287,7 @@ export function mergeAggregateRoot(
             relative_path: doc.relative_path,
             file_view_type,
             file_mtime: doc.mtime,
-            project_hue: project_name ? project_hue_by_name.get(project_name) : undefined,
+            project_hue: project_name ? hueForProjectName(project_name) : undefined,
             project_label: project_name ? project_label_by_name.get(project_name) : undefined,
         };
 

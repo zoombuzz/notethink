@@ -39,7 +39,7 @@ test.describe('Pending-work spinner', () => {
     test('a slow folder-discovery (pendingChange on) shows the toolbar spinner; clearing it hides the spinner after min-visibility', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
         await selectFolderMode(page);
         await page.waitForSelector('[data-folder-mode="true"]');
@@ -68,7 +68,7 @@ test.describe('Pending-work spinner', () => {
     test('the spinner renders inside the drawer when the Files drawer is open', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);

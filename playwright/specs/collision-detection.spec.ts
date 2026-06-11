@@ -44,7 +44,7 @@ test.describe('Duplicate stable_id collision detection', () => {
         // 'Shared milestone' appears in both files; 'Plan release' is duplicated within collision-a
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'collision-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);
@@ -57,13 +57,13 @@ test.describe('Duplicate stable_id collision detection', () => {
         const list = page.getByTestId('collisions-drawer-list');
         await expect(list).toContainText('shared-milestone');
         await expect(list).toContainText('oma/docstech/todo.md');
-        await expect(list).toContainText('notegit/docstech/todo.md');
+        await expect(list).toContainText('notebook/docstech/todo.md');
     });
 
     test('clicking a colliding title posts a revealRange so the editor jumps to that story', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'collision-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
-            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/notegit/docstech/todo.md`, relative_path: 'notegit/docstech/todo.md' },
+            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);

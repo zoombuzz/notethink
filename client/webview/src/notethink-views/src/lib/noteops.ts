@@ -232,7 +232,7 @@ export function flattenAllNotes(root: NoteProps): NoteProps[] {
 
 /**
  * Based on a text selection, find the set of notes that it comprehensively spans.
- * Replaces notegit's EditorSelection-based version with TextSelection.
+ * Operates on a text-offset TextSelection rather than an editor-bound selection.
  */
 export function findSelectedNotes(notes: Array<NoteProps>, selection: TextSelection): Array<NoteProps> {
     return notes

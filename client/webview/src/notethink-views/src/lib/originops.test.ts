@@ -1,4 +1,4 @@
-import { buildProjectLabels, hueForProjectIndex, originPillColour, pillColourForHue, projectAbbreviation, projectFolderFromOrigin, projectNameFromRelativePath } from './originops';
+import { buildProjectLabels, hueForProjectName, originPillColour, pillColourForHue, projectAbbreviation, projectFolderFromOrigin, projectNameFromRelativePath } from './originops';
 import type { NoteOrigin } from '../types/NoteProps';
 
 describe('originPillColour', () => {
@@ -32,30 +32,36 @@ describe('originPillColour', () => {
     });
 });
 
-describe('hueForProjectIndex', () => {
-    it('returns a value in [0, 360)', () => {
-        for (const i of [0, 1, 5, 100]) {
-            const hue = hueForProjectIndex(i);
+describe('hueForProjectName', () => {
+    it('returns a value in [0, 359]', () => {
+        for (const name of ['mira', 'lunagate', 'carina', 'x', '']) {
+            const hue = hueForProjectName(name);
             expect(hue).toBeGreaterThanOrEqual(0);
             expect(hue).toBeLessThan(360);
         }
     });
 
-    it('is deterministic per index', () => {
-        expect(hueForProjectIndex(3)).toBe(hueForProjectIndex(3));
+    it('is deterministic — same name always produces the same hue', () => {
+        expect(hueForProjectName('lunagate')).toBe(hueForProjectName('lunagate'));
+        expect(hueForProjectName('notethink')).toBe(hueForProjectName('notethink'));
     });
 
-    it('produces well-spread hues for the workspace project list (all gaps ≥ 30°)', () => {
-        // simulates the real-world case the user hit: alphabetical sort of every project in the workspace
-        const sorted_names = ['carina', 'cygnus', 'fornax', 'izar', 'lunagate', 'lunatide', 'mira', 'sculptor'];
-        const hues = sorted_names.map((_, i) => hueForProjectIndex(i)).sort((a, b) => a - b);
-        for (let i = 0; i < hues.length - 1; i++) {
-            const gap = hues[i + 1] - hues[i];
-            expect(gap).toBeGreaterThanOrEqual(30);
-        }
-        // wrap-around gap between last and first too
-        const wrap_gap = 360 - hues[hues.length - 1] + hues[0];
-        expect(wrap_gap).toBeGreaterThanOrEqual(30);
+    it('is set-independent — result does not depend on which other projects are present', () => {
+        // calling with no context vs calling after building a universe for other projects must give the same hue
+        const hue_alone = hueForProjectName('notethink');
+        // simulate "other projects have been processed first" by calling hueForProjectName for them
+        hueForProjectName('countingsheet');
+        hueForProjectName('notebook');
+        const hue_after = hueForProjectName('notethink');
+        expect(hue_alone).toBe(hue_after);
+    });
+
+    it('hue embedded in originPillColour matches direct hueForProjectName call', () => {
+        const name = 'sculptor';
+        const expected_hue = hueForProjectName(name);
+        const colour = originPillColour(name, 'dark');
+        const hue_from_colour = Number(colour.match(/hsl\((\d+)/)![1]);
+        expect(hue_from_colour).toBe(expected_hue);
     });
 });
 

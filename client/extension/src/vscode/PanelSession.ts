@@ -13,6 +13,8 @@ import type { HashMapOf, Doc } from '../types/general';
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
+// upper bound on directories visited by the non-file: scheme readDirectory walk, so a symlink cycle or pathological provider can't loop forever
+const MAX_WALK_ENTRIES = 5000;
 
 /**
  * apply changes to a document end-to-start so earlier offsets stay valid. Prefers an
@@ -78,6 +80,8 @@ export class PanelSession {
 	private change_timer: ReturnType<typeof setTimeout> | undefined;
 	private selection_timer: ReturnType<typeof setTimeout> | undefined;
 	private readonly workspace_root: string;
+	// scheme+authority carrier for every folder-mode and open-by-path URI; preserves the real workspace scheme (file:, vscode-vfs:, notegit:, …) so discovery and opens work on non-file: hosts
+	private readonly base_uri: vscode.Uri;
 	private readonly extension_version: string;
 
 	constructor(
@@ -92,7 +96,14 @@ export class PanelSession {
 		const workspace_folder = vscode.workspace.getWorkspaceFolder(initialDocument.uri)
 			|| vscode.workspace.workspaceFolders?.[0];
 		this.workspace_root = workspace_folder?.uri.path || '';
+		// prefer the workspace folder's URI as the scheme carrier; fall back to the active doc's URI when no folder is open (single loose file)
+		this.base_uri = workspace_folder?.uri ?? initialDocument.uri;
 		this.extension_version = this.context.extension.packageJSON.version as string || '';
+	}
+
+	// rebuild an absolute-path string into a URI that carries the workspace scheme + authority, so folder-mode discovery and opens never assume file:
+	private resolveWorkspaceUri(absolute_path: string): vscode.Uri {
+		return this.base_uri.with({ path: absolute_path });
 	}
 
 	/**
@@ -230,9 +241,10 @@ export class PanelSession {
 
 	private armActiveFileWatcher(): void {
 		try {
-			const folder = path.dirname(this.active_path!);
-			const filename = path.basename(this.active_path!);
-			const pattern = new vscode.RelativePattern(vscode.Uri.file(folder), filename);
+			// active_path is a uri.path (always POSIX); use path.posix so the watcher folder/filename split stays scheme-safe on non-file: hosts
+			const folder = path.posix.dirname(this.active_path!);
+			const filename = path.posix.basename(this.active_path!);
+			const pattern = new vscode.RelativePattern(this.resolveWorkspaceUri(folder), filename);
 			this.active_file_watcher = vscode.workspace.createFileSystemWatcher(pattern);
 			const onChange = async (changed_uri: vscode.Uri): Promise<void> => {
 				if (changed_uri.path !== this.active_path) { return; }
@@ -385,6 +397,7 @@ export class PanelSession {
 				case 'openFile': return this.handleOpenFile(e);
 				case 'editText': return this.handleEditText(e);
 				case 'openExternal': return this.handleOpenExternal(e);
+				case 'openRelative': return this.handleOpenRelative(e);
 				case 'renderError':
 					writeToErrorLog('webview render error', e.message as string, e.stack as string);
 					return;
@@ -529,15 +542,15 @@ export class PanelSession {
 		return true;
 	}
 
-	// open the doc in a column that isn't this NoteThink panel's, preferring a group that already has it open
-	private async revealByOpening(doc_path: string, from: number, to: number): Promise<void> {
-		let target_column = this.findColumnWithDoc(doc_path);
+	// open the doc in a column that isn't this NoteThink panel's, preferring a group that already has it open. Accepts a resolved URI (scheme-preserving) or an absolute path (rebuilt via the workspace scheme carrier)
+	private async revealByOpening(target: string | vscode.Uri, from: number, to: number): Promise<void> {
+		const uri = typeof target === 'string' ? this.resolveWorkspaceUri(target) : target;
+		let target_column = this.findColumnWithDoc(uri.path);
 		if (target_column === undefined) {
 			const notethink_column = this.webviewPanel.viewColumn;
 			const other_group = vscode.window.tabGroups?.all?.find(g => g.viewColumn !== notethink_column);
 			target_column = other_group?.viewColumn ?? vscode.ViewColumn.Beside;
 		}
-		const uri = vscode.Uri.file(doc_path);
 		const document = await vscode.workspace.openTextDocument(uri);
 		const start_pos = document.positionAt(from);
 		const end_pos = document.positionAt(to);
@@ -600,7 +613,7 @@ export class PanelSession {
 			this.adoptFolderFilters(e);
 			// recompute the workspace project universe AFTER filters are resolved so the exclude pattern is current; webview uses this list to stabilise pill labels + hues across folder descents
 			await this.computeWorkspaceProjects();
-			const pattern = new vscode.RelativePattern(vscode.Uri.file(folder_path), this.integration_include);
+			const pattern = new vscode.RelativePattern(this.resolveWorkspaceUri(folder_path), this.integration_include);
 			await this.discoverFolderDocs(pattern, folder_path, previous_docs);
 			this.armFolderWatcher(pattern);
 		} catch (err) {
@@ -631,18 +644,19 @@ export class PanelSession {
 	// check whether a discovered or watcher-delivered URI is excluded by the current integration_exclude. Matches against the path relative to the integration folder, which is the same convention the user writes excludes in (e.g. **/{...,vendored}/**). Empty exclude => never excluded
 	private isExcludedByIntegrationFilter(uri: vscode.Uri, folder_path: string): boolean {
 		if (this.integration_exclude.trim() === '') { return false; }
-		const relative_path = path.relative(folder_path, uri.fsPath).split(path.sep).join('/');
+		// scheme-safe: compute the path relative to the integration folder's uri.path (always POSIX), never fsPath which assumes file: + the OS separator
+		const relative_path = path.posix.relative(folder_path, uri.path);
 		return !globMatches(relative_path, '', this.integration_exclude);
 	}
 
-	// enumerate top-level subfolders of the VS Code workspace root, filter by exclude, sort alphabetically. The webview uses this set as the stable universe for pill labels + hues so descending into a sub-project doesn't re-derive the disambiguation against a smaller visible set (e.g. notethink "NT" suddenly becoming "NO" because notegit fell out of view)
+	// enumerate top-level subfolders of the VS Code workspace root, filter by exclude, sort alphabetically. The webview uses this set as the stable universe for pill labels + hues so descending into a sub-project doesn't re-derive the disambiguation against a smaller visible set (e.g. notethink's label staying "NT" instead of collapsing to "NO" when a same-initial sibling project drops out of the visible set)
 	private async computeWorkspaceProjects(): Promise<void> {
 		if (!this.workspace_root) {
 			this.workspace_projects = [];
 			return;
 		}
 		try {
-			const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(this.workspace_root));
+			const entries = await vscode.workspace.fs.readDirectory(this.resolveWorkspaceUri(this.workspace_root));
 			const dir_names = entries
 				.filter(([, type]) => type === vscode.FileType.Directory)
 				.map(([name]) => name);
@@ -655,6 +669,45 @@ export class PanelSession {
 			writeToErrorLog('computeWorkspaceProjects failed', this.workspace_root, err);
 			this.workspace_projects = [];
 		}
+	}
+
+	// scheme: file — VS Code's native findFiles honours the RelativePattern and its glob exclude
+	private async discoverViaFindFiles(pattern: vscode.RelativePattern): Promise<Array<vscode.Uri>> {
+		// an empty exclude becomes null so findFiles applies no exclusions at all; the default skips derived/dependency dirs and overrides files.exclude/search.exclude
+		const find_exclude = this.integration_exclude.trim() === '' ? null : this.integration_exclude;
+		return vscode.workspace.findFiles(pattern, find_exclude);
+	}
+
+	// non-file: scheme — findFiles ignores a custom-scheme RelativePattern, so recursively walk the folder with the provider's own readDirectory (the API the Explorer uses) and apply the include glob ourselves. Excluded directories are pruned so the walk never descends into node_modules/.git/etc; the surviving file list still passes through the shared exclude post-filter in discoverFolderDocs
+	private async discoverViaReadDirectoryWalk(base_uri: vscode.Uri, folder_path: string): Promise<Array<vscode.Uri>> {
+		const results: Array<vscode.Uri> = [];
+		const stack: Array<vscode.Uri> = [base_uri];
+		let visited = 0;
+		while (stack.length > 0 && visited < MAX_WALK_ENTRIES) {
+			visited++;
+			const dir = stack.pop()!;
+			let entries: Array<[string, vscode.FileType]>;
+			try {
+				entries = await vscode.workspace.fs.readDirectory(dir);
+			} catch (err) {
+				writeToErrorLog('folder walk: readDirectory failed', dir.path, err);
+				continue;
+			}
+			for (const [name, type] of entries) {
+				const child = vscode.Uri.joinPath(dir, name);
+				const child_rel = path.posix.relative(folder_path, child.path);
+				if (type === vscode.FileType.Directory) {
+					// prune dirs whose contents the exclude would drop (probe a representative child, mirroring computeWorkspaceProjects) so the walk never descends into node_modules/.git/etc
+					if (globMatches(`${child_rel}/__probe__.md`, '', this.integration_exclude)) { stack.push(child); }
+				} else if (type === vscode.FileType.File && globMatches(child_rel, this.integration_include, '')) {
+					results.push(child);
+				}
+			}
+		}
+		if (visited >= MAX_WALK_ENTRIES) {
+			writeToLog('folder walk cap hit', `stopped after ${MAX_WALK_ENTRIES} directories under ${folder_path}`);
+		}
+		return results;
 	}
 
 	/**
@@ -670,9 +723,11 @@ export class PanelSession {
 	 * re-runs its merge with the cached docs.
 	 */
 	private async discoverFolderDocs(pattern: vscode.RelativePattern, folder_path: string, previous_docs: HashMapOf<Doc>): Promise<void> {
-		// an empty exclude becomes null so findFiles applies no exclusions at all; the default skips derived/dependency dirs and overrides files.exclude/search.exclude
-		const find_exclude = this.integration_exclude.trim() === '' ? null : this.integration_exclude;
-		const discovered = await vscode.workspace.findFiles(pattern, find_exclude);
+		// findFiles only honours a RelativePattern on the file: scheme; a custom FileSystemProvider (vscode-vfs:, notegit:, …) returns nothing for it, so on any other scheme fall back to a scheme-native readDirectory walk the provider does support (it's how the Explorer renders the same tree)
+		const base_uri = this.resolveWorkspaceUri(folder_path);
+		const discovered = base_uri.scheme === 'file'
+			? await this.discoverViaFindFiles(pattern)
+			: await this.discoverViaReadDirectoryWalk(base_uri, folder_path);
 		// defense in depth: post-filter against the same exclude using the host-side globMatches helper. findFiles' brace-expanded exclude has had edge cases bite us in practice (a "vendored" segment leaking through despite **/{...,vendored}/**), and the file-system watcher armed below has no exclude at all — applying the filter here AND in loadFolderDoc gives both paths one deterministic gate
 		const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri, folder_path));
 		// deterministic order so the capped subset is stable across reloads
@@ -755,7 +810,7 @@ export class PanelSession {
 	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean } = {}): Promise<void> {
 		try {
 			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them — when the user descends folders (e.g. pill click from active_development → calfam), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the relative-path-based isExcludedByIntegrationFilter check below misses sibling paths (their relative_path starts with `..` which doesn't match `**/{...}/**` excludes)
-			if (!this.isWithinIntegrationPath(uri.fsPath)) {
+			if (!this.isWithinIntegrationPath(uri.path)) {
 				return;
 			}
 			// the file system watcher armed in armFolderWatcher takes only an include pattern — createFileSystemWatcher has no exclude argument — so a vendored or otherwise-excluded path inside integration_path can fire onDidCreate/onDidChange and reach this loader. gate every entry here against integration_exclude so the watcher cannot leak excluded files into integration_docs. The `!` is sound here because isWithinIntegrationPath above returns false (and we returned) whenever integration_path is undefined
@@ -778,7 +833,7 @@ export class PanelSession {
 				doc = await this.buildDoc(document);
 			}
 			// re-check the integration-path containment AFTER the async load — between the guard at the top and now, the awaits above gave other handlers a chance to run, and a concurrent enterFolderMode (e.g. pill click descending into a sub-project) can clear integration_docs and switch integration_path. Without this re-check, a watcher event for a sibling project that started loading under the old integration_path can land in the new integration_path's integration_docs after the switch, surfacing as "stories from another project mysteriously appearing after an update" (clears on window reload because reload re-enters folder mode and re-runs discovery)
-			if (!this.isWithinIntegrationPath(uri.fsPath)) {
+			if (!this.isWithinIntegrationPath(uri.path)) {
 				return;
 			}
 			this.integration_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
@@ -799,13 +854,18 @@ export class PanelSession {
 		}
 	}
 
-	// phase 2: watch the folder for incremental adds/edits/deletes
+	// phase 2: watch the folder for incremental adds/edits/deletes. A custom FileSystemProvider may make watch() a no-op or throw (static/read-only content on a web host); a watcher failure must not abort folder entry — discovery already ran, so the view is populated, it just won't see live edits
 	private armFolderWatcher(pattern: vscode.RelativePattern): void {
-		this.integration_watcher = vscode.workspace.createFileSystemWatcher(pattern);
-		// fromDisk: true bypasses openTextDocument's stale cache (the entire reason the watcher exists)
-		this.integration_watcher.onDidCreate(uri => this.loadFolderDoc(uri, { fromDisk: true }));
-		this.integration_watcher.onDidChange(uri => this.loadFolderDoc(uri, { fromDisk: true }));
-		this.integration_watcher.onDidDelete(uri => this.handleFolderDocDeleted(uri));
+		try {
+			this.integration_watcher = vscode.workspace.createFileSystemWatcher(pattern);
+			// fromDisk: true bypasses openTextDocument's stale cache (the entire reason the watcher exists)
+			this.integration_watcher.onDidCreate(uri => this.loadFolderDoc(uri, { fromDisk: true }));
+			this.integration_watcher.onDidChange(uri => this.loadFolderDoc(uri, { fromDisk: true }));
+			this.integration_watcher.onDidDelete(uri => this.handleFolderDocDeleted(uri));
+		} catch (err) {
+			this.integration_watcher = undefined;
+			writeToErrorLog('armFolderWatcher: watcher unavailable (static provider?), continuing without live updates', pattern.pattern, err);
+		}
 	}
 
 	private async handleFolderDocDeleted(uri: vscode.Uri): Promise<void> {
@@ -884,7 +944,7 @@ export class PanelSession {
 
 	// enumerate immediate child folders of base_path, dropping exclude-filtered ones with the same recipe computeWorkspaceProjects uses, sorted by label
 	private async listChildFolders(base_path: string): Promise<Array<{ label: string; path: string; kind: 'folder' }>> {
-		const dir_entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(base_path));
+		const dir_entries = await vscode.workspace.fs.readDirectory(this.resolveWorkspaceUri(base_path));
 		const dir_names = dir_entries
 			.filter(([, type]) => type === vscode.FileType.Directory)
 			.map(([name]) => name);
@@ -893,20 +953,20 @@ export class PanelSession {
 			: dir_names.filter(name => globMatches(`${name}/dummy.md`, '', this.integration_exclude));
 		return filtered
 			.sort()
-			.map(name => ({ label: name, path: path.join(base_path, name), kind: 'folder' as const }));
+			.map(name => ({ label: name, path: path.posix.join(base_path, name), kind: 'folder' as const }));
 	}
 
 	// enumerate sibling .md files of file_path (excluding the file itself), sorted by label
 	private async listSiblingMdFiles(file_path: string): Promise<Array<{ label: string; path: string; kind: 'file' }>> {
-		const dir = path.dirname(file_path);
-		const self_name = path.basename(file_path);
-		const dir_entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(dir));
+		const dir = path.posix.dirname(file_path);
+		const self_name = path.posix.basename(file_path);
+		const dir_entries = await vscode.workspace.fs.readDirectory(this.resolveWorkspaceUri(dir));
 		const file_names = dir_entries
 			.filter(([name, type]) => type === vscode.FileType.File && name.endsWith('.md') && name !== self_name)
 			.map(([name]) => name);
 		return file_names
 			.sort()
-			.map(name => ({ label: name, path: path.join(dir, name), kind: 'file' as const }));
+			.map(name => ({ label: name, path: path.posix.join(dir, name), kind: 'file' as const }));
 	}
 
 	/**
@@ -958,7 +1018,7 @@ export class PanelSession {
 				writeToErrorLog('editText: no changes supplied for doc, skipping', doc_path);
 				return;
 			}
-			const uri = vscode.Uri.file(doc_path);
+			const uri = this.resolveWorkspaceUri(doc_path);
 			const document = await vscode.workspace.openTextDocument(uri);
 			const invalid = firstInvalidChange(changes, document.getText().length);
 			if (invalid) {
@@ -996,5 +1056,40 @@ export class PanelSession {
 		} catch (err) {
 			writeToErrorLog('openExternal failed', url, err);
 		}
+	}
+
+	/**
+	 * open a relative .md link clicked in the rendered view, resolved against the ACTIVE
+	 * document's URI so the workspace scheme/authority is preserved (works on non-file:
+	 * hosts). The fragment/query is stripped before joining; the resolved target must stay
+	 * within the workspace (scheme-safe uri.path containment) and end in .md — `..`-escape
+	 * and non-.md links are refused. The viewer auto-follows via onDidChangeActiveTextEditor.
+	 */
+	private async handleOpenRelative(e: Record<string, unknown>): Promise<void> {
+		const href = e.href as string;
+		try {
+			if (!href || !this.active_path || !this.workspace_root) { return; }
+			const target = this.resolveRelativeTarget(href);
+			if (!target) { return; }
+			if (!isPathWithin(target.path, [this.workspace_root], { requireExtension: '.md' })) {
+				writeToErrorLog('openRelative: target outside workspace or not .md, refusing', target.path);
+				return;
+			}
+			await this.revealByOpening(target, 0, 0);
+		} catch (err) {
+			writeToErrorLog('openRelative failed', href, err);
+		}
+	}
+
+	/**
+	 * resolve href against the active doc's URI, preserving scheme/authority. Strips any #fragment / ?query before joining so the on-disk path is clean. Returns undefined when there is no active doc to anchor against
+	 */
+	private resolveRelativeTarget(href: string): vscode.Uri | undefined {
+		if (!this.active_path) { return undefined; }
+		const clean_href = decodeURIComponent(href.split('#')[0].split('?')[0]);
+		if (clean_href === '') { return undefined; }
+		const active_uri = this.resolveWorkspaceUri(this.active_path);
+		const base = vscode.Uri.joinPath(active_uri, '..');
+		return vscode.Uri.joinPath(base, clean_href);
 	}
 }

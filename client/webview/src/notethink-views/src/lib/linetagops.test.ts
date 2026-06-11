@@ -611,6 +611,41 @@ describe('calculateTextChangesForOrdering cross-file', () => {
         }
     });
 
+    it('mints no weight for a top drop into an all-unweighted column (status change alone places it)', () => {
+        // the reported bug: dragging a file into the top of a column whose cards are all
+        // unweighted must NOT weight the dragged card — a weight would sort it AFTER the
+        // unweighted successors (kanbanNoteOrder case 2) and sink it to the bottom. Implicit
+        // mtime order floats the just-saved file up, so the correct ordering edit set is empty.
+        const new_child = makeNoteWithOrigin(2, 'b.md');
+        const succ1 = makeNoteWithOrigin(1, 'a.md');
+        const succ2 = makeNoteWithOrigin(3, 'c.md');
+        const column = [new_child, succ1, succ2];
+        const result = calculateTextChangesForOrdering(column, 0, 'nt_kanban_ordering_weight');
+        expect(result).toHaveLength(0);
+    });
+
+    it('mints no weight for a mid drop between two unweighted notes (weight cannot express it)', () => {
+        // both neighbours unweighted → any weight on the dragged card jumps it below both;
+        // the placement is only expressible by implicit order, so emit nothing
+        const pred = makeNoteWithOrigin(1, 'a.md');
+        const new_child = makeNoteWithOrigin(2, 'b.md');
+        const succ = makeNoteWithOrigin(3, 'c.md');
+        const column = [pred, new_child, succ];
+        const result = calculateTextChangesForOrdering(column, 1, 'nt_kanban_ordering_weight');
+        expect(result).toHaveLength(0);
+    });
+
+    it('still weights a top drop above a weighted successor (genuinely expressive)', () => {
+        // successor carries a weight, so a gap insert below it is meaningful — the guard must
+        // not suppress this. new_child should receive a weight strictly below the successor's.
+        const new_child = makeNoteWithOrigin(1, 'b.md');
+        const succ = weighted(makeNoteWithOrigin(2, 'a.md'), 5);
+        const column = [new_child, succ];
+        const result = calculateTextChangesForOrdering(column, 0, 'nt_kanban_ordering_weight');
+        expect(flattenOrderingChangeSets(result).length).toBeGreaterThan(0);
+        expect(result.every(s => s.doc_path === 'b.md')).toBe(true);
+    });
+
     it('returns partitioned shape with one entry per touched doc_path', () => {
         const a_pred = weighted(makeNoteWithOrigin(1, 'a.md'), 10);
         const new_child = makeNoteWithOrigin(2, 'b.md');

@@ -11,15 +11,12 @@ const debug = Debug("nodejs:notethink-views:originops");
  *
  * Covers: project name extraction, project-folder derivation, label/abbreviation
  * derivation across a set of project names, and theme-aware pill colour
- * computation (golden-angle sorted-index assignment, with a djb2 hash fallback
- * for single-file mode where no global enumeration exists).
+ * computation (identity-hash based on project name, set-independent).
  */
 
-// golden angle (≈ 360 - 360/φ). Used to spread sorted-index inputs around the hue wheel so adjacent indices land ~137° apart, far from each other on the colour wheel
-const GOLDEN_ANGLE_DEG = 137.50776405003785;
-
 /**
- * djb2-style hash of a string to a 32-bit integer (sign-collapsed). Used as a fallback only — see hueForProjectIndex for the primary assignment.
+ * djb2-style hash of a string to a 32-bit integer (sign-collapsed). Primary hue
+ * assignment: produces a deterministic, set-independent hue for any project name.
  */
 function djb2(str: string): number {
     let hash = 5381;
@@ -30,12 +27,13 @@ function djb2(str: string): number {
 }
 
 /**
- * Deterministic hue (0-359) for a project given its 0-based index in a stable sorted enumeration of all distinct project names visible in the folder view. Using a golden-angle multiplier instead of a hash-mod ensures any number of projects get visually-distinct hues — hash%360 happens to collide for our real-world names (calfam/shopify-uncomplicated, notegit/countingsheet).
+ * Deterministic hue (0-359) for a project from its name alone — set-independent
+ * so the colour cannot change as the workspace universe fills in on first paint.
+ * Same name always produces the same hue regardless of which other projects are
+ * visible.
  */
-export function hueForProjectIndex(index: number): number {
-    // floor + non-negative modulo so negative indices don't break the result
-    const v = (index * GOLDEN_ANGLE_DEG) % 360;
-    return Math.floor(v < 0 ? v + 360 : v);
+export function hueForProjectName(name: string): number {
+    return djb2(name) % 360;
 }
 
 /**
@@ -47,10 +45,13 @@ export function pillColourForHue(hue: number, theme: 'dark' | 'light'): string {
 }
 
 /**
- * Deterministic colour for a project pill from the project name only — fallback when the merged origin doesn't carry a precomputed hue (single-file mode, legacy origins, tests). Uses djb2(name)%360 which can collide for some name pairs; folder-mode callers should use hueForProjectIndex via origin.project_hue instead.
+ * Deterministic colour for a project pill from the project name only. Uses
+ * hueForProjectName (djb2 identity hash) so the colour is set-independent —
+ * single-file mode, folder mode, and legacy origins all converge on the same
+ * value for a given project name.
  */
 export function originPillColour(project_name: string, theme: 'dark' | 'light'): string {
-    return pillColourForHue(djb2(project_name) % 360, theme);
+    return pillColourForHue(hueForProjectName(project_name), theme);
 }
 
 /**
@@ -105,8 +106,8 @@ export function projectAbbreviation(project_name: string | undefined): string {
  * character is always the project name's initial. The second character is taken
  * from the smallest index i >= 1 at which no other name in the set shares the
  * prefix `name.slice(0, i + 1)` — i.e. the earliest character that
- * differentiates this project from any other (so notegit vs notethink emit
- * `NG` and `NT` rather than two `N`s). If a name is a strict prefix of another
+ * differentiates this project from any other (so `notebook` vs `notethink` emit
+ * `NB` and `NT` rather than two `N`s). If a name is a strict prefix of another
  * (no divergence found), we fall back to the second character of the name
  * itself. Names shorter than 2 chars produce single-letter labels.
  */

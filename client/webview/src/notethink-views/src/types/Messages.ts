@@ -1,8 +1,7 @@
 /**
  * Message types for extension <-> webview communication.
  *
- * postMessage replaces notegit's sync_view.dispatch().
- * selectionChanged replaces notegit's EditorSelection in ViewContext.
+ * postMessage carries view→host dispatches; selectionChanged carries the host's editor selection into ViewContext.
  */
 
 import type { IntegrationMode } from './IntegrationMode';
@@ -51,6 +50,14 @@ export interface EditTextMessage {
 export interface OpenExternalMessage {
     type: 'openExternal';
     url: string;
+}
+
+/**
+ * webview -> extension request to open a relative .md link clicked in the rendered view. The extension resolves `href` against the active document's URI (scheme-preserving), validates workspace containment + the .md extension, and opens the target beside the panel.
+ */
+export interface OpenRelativeMessage {
+    type: 'openRelative';
+    href: string;
 }
 
 export interface UpdateGlobalSettingMessage {
@@ -105,6 +112,7 @@ export type WebviewToExtensionMessage =
     | SelectRangeMessage
     | EditTextMessage
     | OpenExternalMessage
+    | OpenRelativeMessage
     | UpdateGlobalSettingMessage
     | UpdateSettingMessage
     | PromoteSettingsToUserMessage

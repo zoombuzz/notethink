@@ -91,13 +91,13 @@ test.describe('Folder-mode kanban drag and drop', () => {
         expect(reveal_msg).toBeUndefined();
     });
 
-    test('multi-file column interleave: user drag emits per-file weight change, and an unrelated parse update preserves interleaved order', async ({ page }) => {
-        // this test asserts two adjacent contracts from the story: (a) dragging in a multi-file column emits an editText whose change-set encodes a nt_kanban_ordering_weight write under the dragged note's origin file (per-file partitioning), not a cross-file seq cascade. (b) once a weighted note is in the merged tree, an unrelated parse update for a third file does not perturb its user-chosen position.
-        // we cannot round-trip the editText through the live extension inside this harness, so (a) is verified via the captured message and (b) is verified by directly injecting a fixture whose text already carries the post-drag weight — that's exactly what the extension would deliver after applying the editText and re-emitting sendDoc
+    test('multi-file column interleave: a drag into an all-unweighted column mints no weight, and an unrelated parse update preserves interleaved order', async ({ page }) => {
+        // this test asserts two adjacent contracts: (a) dragging within a multi-file column whose cards are all unweighted mints NO nt_kanban_ordering_weight — the restraint guard in crossFileOrderingChanges suppresses it because a lone weight would sink the card below the unweighted cards (kanbanNoteOrder case 2), so the placement is carried by implicit mtime order. (b) once a weighted note is in the merged tree, an unrelated parse update for a third file does not perturb its user-chosen position.
+        // we cannot round-trip the editText through the live extension inside this harness, so (a) is verified via the captured message and (b) is verified by directly injecting a fixture whose text already carries the weight — that's exactly what the extension would deliver after applying an editText and re-emitting sendDoc
 
         await setupFolderKanban(page);
 
-        // ---- part (a): drag emits the right shape under the dragged note's origin ----
+        // ---- part (a): a drag into an all-unweighted column mints no weight ----
         const doing = page.locator('[role="region"][aria-label="doing"]');
         await expect(doing.locator('[data-rfd-drag-handle-draggable-id]').first()).toBeVisible({ timeout: 5000 });
         const initial_order = await doing.locator('[data-rfd-drag-handle-draggable-id] [data-testid="origin-project-pill"]').evaluateAll(
@@ -122,27 +122,19 @@ test.describe('Folder-mode kanban drag and drop', () => {
         const edit_after_drag = after_drag_messages.find((m: { type?: string }) => m.type === 'editText') as
             | { changes_by_doc?: Record<string, Array<{ from: number; to?: number; insert: string }>>; changes?: Array<{ from: number; to?: number; insert: string }>; docPath?: string }
             | undefined;
-        expect(edit_after_drag).toBeDefined();
 
-        // the weight write must target only the dragged note's origin (PATH_B) — that's the per-file partitioning contract from [[multi-file-ordering-stable-identity]]
+        // collect whatever changes the drag emitted (if any) — an all-unweighted reorder may emit no editText at all, since the only candidate write would be a weight and the guard suppresses it
         const all_changes: Array<{ from: number; to?: number; insert: string }> = [];
-        let weight_target_doc: string | undefined;
-        if (edit_after_drag!.changes_by_doc) {
-            for (const [doc_path, arr] of Object.entries(edit_after_drag!.changes_by_doc)) {
-                for (const ch of arr) {
-                    all_changes.push(ch);
-                    if (ch.insert.includes('nt_kanban_ordering_weight')) { weight_target_doc = doc_path; }
-                }
+        if (edit_after_drag?.changes_by_doc) {
+            for (const arr of Object.values(edit_after_drag.changes_by_doc)) {
+                for (const ch of arr) { all_changes.push(ch); }
             }
-        } else if (edit_after_drag!.changes) {
-            for (const ch of edit_after_drag!.changes) {
-                all_changes.push(ch);
-                if (ch.insert.includes('nt_kanban_ordering_weight')) { weight_target_doc = edit_after_drag!.docPath; }
-            }
+        } else if (edit_after_drag?.changes) {
+            for (const ch of edit_after_drag.changes) { all_changes.push(ch); }
         }
+        // no weight is minted — placement in an all-unweighted column is governed by implicit mtime order, not a persisted nt_kanban_ordering_weight
         const has_weight_change = all_changes.some((c) => c.insert.includes('nt_kanban_ordering_weight'));
-        expect(has_weight_change).toBe(true);
-        expect(weight_target_doc).toBe(PATH_B);
+        expect(has_weight_change).toBe(false);
 
         // ---- part (b): inject a fixture with the post-drag weight; assert interleave holds ----
         // kanban-folder-b-weighted.md is identical to kanban-folder-b.md except Beta Task Two carries nt_kanban_ordering_weight=1. by kanbanNoteOrder's case 2 ("exactly one weighted — weighted sorts AFTER unweighted") beta should sort AFTER alpha, deliberately. capture the baseline order before applying the weight so we can prove the order changed because of the weight (not by accident)

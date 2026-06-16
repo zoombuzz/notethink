@@ -2859,3 +2859,12 @@ Dropping a card at the top (or middle) of a column whose cards are all unweighte
   + a drop adjacent to a weighted card still mints an expressive weight
 + commit message draft
   + notethink 0.3.11: kanban drop-into-unweighted-column restraint guard — `crossFileOrderingChanges` mints no weight when both drop neighbours are unweighted (a lone weight sorts after all unweighted cards, sinking a top-drop to the bottom), letting mtime order govern instead
+
+
+### Upgrade NPM packages (Wave 1 minor/patch) in all parts of the app/extension [](?time_taken=0)
+
++ [X] run npm-check-updates
++ [X] install
++ [X] verify lint passes
++ [X] verify jest tests pass
+

@@ -2,11 +2,9 @@ import Debug from "debug";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
-import styles from "../../ViewRenderer.module.scss";
-import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { globMatches } from "../../../lib/globMatch";
 import SettingsCascadeButtons from "../SettingsCascadeButtons";
-import Spinner from "../../Spinner";
+import styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:FilesDrawer");
 
@@ -46,7 +44,6 @@ function absolutizeFilePath(file_path: string, workspace_root?: string): string 
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 function FilesDrawer(props: FilesDrawerProps): ReactElement {
-    const { pending } = usePendingWorkContext();
     // controlled input state, seeded from the effective globs/cap
     const [include_value, setIncludeValue] = useState(props.include);
     const [exclude_value, setExcludeValue] = useState(props.exclude);
@@ -118,12 +115,6 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
         <div className={styles.drawerBody} data-testid="files-drawer">
             <div className={styles.drawerGroups}>
                 <section className={styles.drawerGroup}>
-                    {pending && (
-                        <p data-testid="files-drawer-spinner">
-                            <Spinner positionClass="InlineLoader" ariaLabel={l10n.t('Working')} />
-                            <span>{' '}{l10n.t('Applying...')}</span>
-                        </p>
-                    )}
                     <p>
                         <label htmlFor="notethink-files-include">{l10n.t('Include filter')}</label>
                         <input

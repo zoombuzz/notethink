@@ -274,11 +274,12 @@ export function mergeAggregateRoot(
             }
         }
 
-        // capture file-level view type from the H1 linetags (nt_view, legacy ng_view; used by AutoView's majority vote)
-        const file_view_type = resolveNamespacedTag(h1?.linetags, 'view')?.value;
+        // file-level view type: an H1 nt_view overrides the front-matter value (most-specific wins)
+        const file_view_type = resolveNamespacedTag(h1?.linetags, 'view')?.value
+            ?? resolveNamespacedTag(root.linetags, 'view')?.value;
 
-        // file H1 `order` linetag decides which end the per-file cap keeps
-        const file_order = h1?.linetags?.order?.value;
+        // `order` for the per-file cap: an H1 value overrides the document-root (front-matter) value
+        const file_order = h1?.linetags?.order?.value ?? root.linetags?.order?.value;
 
         const project_name = projectNameFromRelativePath(doc.relative_path);
         const base_origin: Omit<NoteOrigin, 'epic'> = {

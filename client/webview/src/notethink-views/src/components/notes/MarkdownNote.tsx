@@ -91,7 +91,8 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     return (
         <MarkdownNoteContainer note={note} set_refs={set_refs}>
             <MarkdownNoteHeadline note={note} />
-            { note.linetags && <GenericNoteAttributes {...note} /> }
+            {/* the synthetic root's front-matter linetags surface as the view's document-level strip, not inline here */}
+            { note.type !== 'root' && note.linetags && <GenericNoteAttributes {...note} /> }
             <MarkdownNoteBody
                 note={note}
                 body_ref={body_ref}

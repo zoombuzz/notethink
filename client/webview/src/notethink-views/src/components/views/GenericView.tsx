@@ -1,7 +1,9 @@
 import Debug from "debug";
 import React, { lazy, useState } from "react";
+import { documentRootForStrip } from "../../lib/noteops";
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps } from "../../types/NoteProps";
+import GenericNoteAttributes from "../notes/GenericNoteAttributes";
 import InsertModal from "../InsertModal";
 import GenericViewBreadcrumb from "./generic/GenericViewBreadcrumb";
 import GenericViewToolbar from "./generic/GenericViewToolbar";
@@ -19,6 +21,10 @@ export const SELECTABLE_VIEWTYPES = ['auto', 'document', 'kanban'];
 export default function GenericView(props: ViewProps): React.ReactElement {
     const { view_context, handlers, handle_folder_click, handle_apply_filters, handle_jump_request, handle_file_jump, drawers, collisions, toolbar, insert, auto_resolved_type } = useGenericView(props);
     const { display_options, parent_context, deepest, notes_within_parent_context } = view_context;
+    // document-level front-matter strip: bound to the document root (notes[0]), single-file mode only
+    // built once here and handed to whichever leaf view renders it, so the views don't each re-derive it
+    const document_root = documentRootForStrip(props.notes, display_options.integration_mode);
+    const document_strip = document_root ? <GenericNoteAttributes {...document_root} /> : undefined;
     // the leaf path the jump drawer is showing targets for; set when the terminal breadcrumb segment is clicked so JumpDrawer can match the extension reply to this request
     const [requested_jump_path, setRequestedJumpPath] = useState<string | undefined>(undefined);
     const breadcrumb_trail = (
@@ -44,7 +50,7 @@ export default function GenericView(props: ViewProps): React.ReactElement {
         display_options: { ...display_options, deepest },
         notes: props.notes as Array<NoteProps>,
         notes_within_parent_context,
-        nested: { ...props.nested, parent_context, breadcrumb_trail, auto_resolved_type },
+        nested: { ...props.nested, parent_context, breadcrumb_trail, auto_resolved_type, document_strip, document_root },
         handlers,
     };
     return (

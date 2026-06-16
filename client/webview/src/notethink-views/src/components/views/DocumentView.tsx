@@ -58,7 +58,9 @@ export default React.memo(function DocumentView(props: ViewProps) {
              data-parent-content-seq={display_options.parent_context_seq}
         >
             <div className={view_specific_styles.centredPane}>
-                {props.nested?.parent_context?.linetags && <GenericNoteAttributes
+                {props.nested?.document_strip}
+                {/* skipped when parent_context is the document root — document_strip already shows those pills */}
+                {props.nested?.parent_context?.seq !== props.nested?.document_root?.seq && props.nested?.parent_context?.linetags && <GenericNoteAttributes
                     {...props.nested?.parent_context}
                 />}
                 {props.nested?.parent_context && renderNote(props.nested?.parent_context, 0)}

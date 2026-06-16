@@ -328,6 +328,59 @@ references.
 
 ---
 
+## Front matter (document scope)
+
+A YAML or TOML **front matter** block at the very top of a file — fenced by
+`---` (YAML) or `+++` (TOML) — is lifted into the file's **document root**, and
+each `key: value` pair becomes a linetag on that root, treated *identically* to a
+linetag authored on a heading. Front matter is therefore the **broadest,
+document-scoped layer** of the linetag model, not a separate metadata channel.
+
+```
+---
+nt_view: kanban
+status: active
+nt_childall_owner: alex
+---
+
+# Project board
+
+### First story [](?status=doing)
+```
+
+- **Same keys, same meaning.** Author the keys you already know — `nt_view`,
+  `order`, `status`, `nt_child_<key>`, etc. A front-matter `nt_view: kanban`
+  behaves exactly as if it were written on the file's `#` H1.
+- **Precedence — most-specific wins.** Front matter sets document-wide defaults
+  that anything below can override: an H1 linetag beats a front-matter value, an
+  H2 beats the H1, and a story's own linetag beats everything inherited. This is
+  the same "a child's own real linetag wins" rule from
+  [Inherited attributes](#inherited-attributes) — front matter is simply the top
+  of that chain.
+- **Only inheritance directives propagate.** As on a heading, just the
+  `nt_child_<key>` / `nt_child2y_<key>` / `nt_childall_<key>` forms flow down to
+  descendants — front-matter `nt_childall_owner: alex` reaches every note, while a
+  bare `status: active` stays on the document root and does **not** leak to
+  children.
+- **Display.** In Current-file mode the unprefixed front-matter keys render as a
+  document-level chip strip at the top of the view (prefixed directive keys such
+  as `nt_view` stay invisible, exactly like on a heading). Folder mode aggregates
+  many files, so there is no single document scope and the strip is suppressed —
+  but each file's front-matter inheritance is still resolved per file before the
+  merge, so `nt_childall_*` and friends keep working in both modes.
+
+### Document-level `order` vs H1 `order`
+
+`order` is scope-sensitive. On the `#` H1 it governs where new stories are
+inserted *under the H1*. In **front matter** it governs insertion relative to the
+*whole document* — so `newest-at-top` at document scope can place a new note
+**above** the H1, whereas at H1 scope the new note lands below it. Document-level
+`order` is read off the root independently; an H1 `order` overrides it for the
+per-file cap (see
+[Per-file note cap](#per-file-note-cap-and-the-order-linetag)).
+
+---
+
 ## Epics and stories
 
 ### Epics are optional

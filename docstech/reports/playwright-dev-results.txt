@@ -1,9 +1,11 @@
 # Playwright Test Results
-# Version: 0.3.11
-# Date: 2026-06-11T11:04:21Z
+# Version: 0.3.13
+# Date: 2026-06-16
 # Command: npx playwright test
 # ---
-69 passed (13.1s)
+Running 70 tests using 10 workers
+  70 passed (13.2s)
 
-# All Playwright specs green after fixing folder-kanban-drag.spec.ts part (a) to assert
-# the new restraint-guard contract (a drag into an all-unweighted column mints no weight).
+All Playwright specs green, including the new playwright/specs/frontmatter-document-strip.spec.ts
+(single-file front-matter pill shows once, hidden in folder mode) and the corrected
+pending-work-spinner.spec.ts (breadcrumb spinner is the single indicator; no in-drawer spinner).

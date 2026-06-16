@@ -1,7 +1,17 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import DocumentView from './DocumentView';
+import GenericNoteAttributes from '../notes/GenericNoteAttributes';
 import type { ViewProps } from '../../types/ViewProps';
+import type { NoteProps } from '../../types/NoteProps';
+
+// mock GenericNote so the document-strip tests render with a parent_context without pulling in the lazy MarkdownNote/CodeNote renderers; GenericNoteAttributes stays real (under test)
+jest.mock('../notes/GenericNote', () => ({
+    __esModule: true,
+    default: (props: NoteProps) => (
+        <div data-testid={`note-${props.seq}`} role="row" data-seq={props.seq}>{props.headline_raw}</div>
+    ),
+}));
 
 // mock IntersectionObserver
 beforeEach(() => {
@@ -171,5 +181,97 @@ describe('DocumentView caret indicator', () => {
             display_options={{}}
         />);
         expect(body_item_1.className).not.toMatch(/caretTarget/);
+    });
+});
+
+describe('DocumentView document-level linetag strip', () => {
+    const status_tag = { key: 'status', value: 'active', note_seq: 0, key_offset: 0, value_offset: 8, linktext_offset: 0 };
+    const internal_tag = { key: 'nt_view', value: 'kanban', note_seq: 0, key_offset: 0, value_offset: 9, linktext_offset: 0 };
+    const owner_tag = { key: 'owner', value: 'bob', note_seq: 3, key_offset: 0, value_offset: 7, linktext_offset: 0 };
+
+    function makeRoot(linetags: NoteProps['linetags']): NoteProps {
+        return {
+            seq: 0,
+            level: 0,
+            type: 'root',
+            children: [],
+            children_body: [],
+            position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 20 } },
+            headline_raw: '',
+            body_raw: '',
+            linetags,
+            linetags_from: 0,
+        };
+    }
+
+    function makeDescended(linetags: NoteProps['linetags']): NoteProps {
+        return {
+            seq: 3,
+            level: 2,
+            type: 'markdown',
+            children: [],
+            children_body: [],
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+            headline_raw: '## Descended',
+            body_raw: '',
+            linetags,
+            linetags_from: 60,
+        };
+    }
+
+    // mirror what GenericView hands down in single-file mode with front matter: the document root + its prebuilt strip element
+    function docStrip(root: NoteProps): { document_strip: React.ReactElement; document_root: NoteProps } {
+        return { document_strip: <GenericNoteAttributes {...root} />, document_root: root };
+    }
+
+    it('renders the document_strip handed down by GenericView at the single-file top level', () => {
+        const root = makeRoot({ status: status_tag });
+        render(<DocumentView id="test-doc" type="document" nested={{ parent_context: root, ...docStrip(root) }} />);
+        expect(screen.getByText('active')).toBeInTheDocument();
+        expect(screen.getByText('Status:')).toBeInTheDocument();
+    });
+
+    it('renders the front-matter pill exactly once at the top level (descended-context strip suppressed)', () => {
+        const root = makeRoot({ status: status_tag });
+        render(<DocumentView id="test-doc" type="document" nested={{ parent_context: root, ...docStrip(root) }} />);
+        expect(screen.getAllByText('active')).toHaveLength(1);
+        expect(screen.getAllByRole('list')).toHaveLength(1);
+    });
+
+    it('dedups by seq when parent_context is a CLONE of the root (the pipeline hands the view a clone)', () => {
+        // useViewContext spreads notes[0] into parent_context, so the descended-strip dedup gates on seq (the root is seq 0), not object identity — otherwise the pills double
+        const root = makeRoot({ status: status_tag });
+        render(<DocumentView id="test-doc" type="document" nested={{ parent_context: { ...root }, ...docStrip(root) }} />);
+        expect(screen.getAllByText('active')).toHaveLength(1);
+        expect(screen.getAllByRole('list')).toHaveLength(1);
+    });
+
+    it('does not render an nt_-prefixed root linetag as a pill (internal-attribute hiding)', () => {
+        const root = makeRoot({ status: status_tag, nt_view: internal_tag });
+        render(<DocumentView id="test-doc" type="document" nested={{ parent_context: root, ...docStrip(root) }} />);
+        expect(screen.getByText('active')).toBeInTheDocument();
+        expect(screen.queryByText('kanban')).not.toBeInTheDocument();
+    });
+
+    it('keeps the document-scope pill and the descended note attribute when the user descends below the root', () => {
+        const root = makeRoot({ status: status_tag });
+        const descended = makeDescended({ owner: owner_tag });
+        render(<DocumentView id="test-doc" type="document" nested={{ parent_context: descended, ...docStrip(root) }} />);
+        expect(screen.getByText('active')).toBeInTheDocument();
+        expect(screen.getByText('bob')).toBeInTheDocument();
+        expect(screen.getAllByText('active')).toHaveLength(1);
+    });
+
+    it('renders only the descended note attribute when GenericView hands down no document_strip (folder mode)', () => {
+        const descended = makeDescended({ owner: owner_tag });
+        render(<DocumentView id="test-doc" type="document" nested={{ parent_context: descended }} />);
+        expect(screen.queryByText('active')).not.toBeInTheDocument();
+        expect(screen.getByText('bob')).toBeInTheDocument();
+    });
+
+    it('renders no strip when there is no document_strip and the context note has no linetags', () => {
+        const root = makeRoot(undefined);
+        render(<DocumentView id="test-doc" type="document" nested={{ parent_context: root }} />);
+        expect(screen.queryByRole('list')).not.toBeInTheDocument();
     });
 });

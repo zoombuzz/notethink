@@ -968,3 +968,118 @@ describe('link rendering in list items', () => {
         expect(all[0].linetags!['status'].value).toBe('doing');
     });
 });
+
+describe('front matter → root linetags + inheritance', () => {
+
+    /**
+     * Build a fixture with a leading yaml front-matter block followed by headings.
+     * Offsets mirror the real mdast shape: the yaml node spans the `---…---` block
+     * (position.end right after the closing fence), headings follow line by line.
+     */
+    function buildFrontmatterMdast(
+        fm_lines: string[],
+        heading_lines: Array<{ text: string; depth: number }>,
+    ): { text: string; mdast: MdastNode } {
+        const fm_inner = fm_lines.join('\n');
+        const fm_block = `---\n${fm_inner}\n---\n`;
+        // yaml node ends right after the closing fence, before its trailing newline
+        const children: MdastNode[] = [
+            mdastNode('yaml', 0, fm_block.length - 1, { value: fm_inner } as Partial<MdastNode>),
+        ];
+        let text = fm_block;
+        let offset = fm_block.length;
+        for (const heading of heading_lines) {
+            const line = `${'#'.repeat(heading.depth)} ${heading.text}`;
+            children.push(mdastNode('heading', offset, offset + line.length, { depth: heading.depth }));
+            text += `${line}\n`;
+            offset += line.length + 1;
+        }
+        const mdast = mdastNode('root', 0, text.length, { children });
+        return { text, mdast };
+    }
+
+    it('(a) front-matter key: value populates root.linetags', () => {
+        const { text, mdast } = buildFrontmatterMdast(['title: hello'], [{ text: 'Doc', depth: 1 }]);
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        expect(root.linetags).toBeDefined();
+        expect(root.linetags!['title'].value).toBe('hello');
+        expect(root.linetags_from).toBe(0);
+    });
+
+    it('(b) root nt_childall_status reaches a depth-3 note as inherited status', () => {
+        const { text, mdast } = buildFrontmatterMdast(
+            ['nt_childall_status: doing'],
+            [{ text: 'Epic', depth: 1 }, { text: 'Story', depth: 2 }, { text: 'Task', depth: 3 }],
+        );
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const all_notes = flattenNotes(root);
+        const deep = all_notes.find(n => n.depth === 3)!;
+        expect(deep.linetags!['status'].value).toBe('doing');
+        expect(deep.linetags!['status'].inherited).toBe(true);
+        // root itself keeps the prefixed key verbatim
+        expect(root.linetags!['nt_childall_status'].value).toBe('doing');
+    });
+
+    it('(c) root nt_child_status reaches a depth-1 note but not a depth-2 note', () => {
+        const { text, mdast } = buildFrontmatterMdast(
+            ['nt_child_status: todo'],
+            [{ text: 'Epic', depth: 1 }, { text: 'Story', depth: 2 }],
+        );
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const all_notes = flattenNotes(root);
+        const depth1 = all_notes.find(n => n.depth === 1)!;
+        const depth2 = all_notes.find(n => n.depth === 2)!;
+        expect(depth1.linetags!['status'].value).toBe('todo');
+        expect(depth1.linetags!['status'].inherited).toBe(true);
+        expect(depth2.linetags?.['status']).toBeUndefined();
+    });
+
+    it('(d) a note own status is not overwritten by front-matter nt_childall_status', () => {
+        const { text, mdast } = buildFrontmatterMdast(
+            ['nt_childall_status: doing'],
+            [{ text: 'Task [](?status=done)', depth: 1 }],
+        );
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        const all_notes = flattenNotes(root);
+        const note = all_notes[0];
+        expect(note.linetags!['status'].value).toBe('done');
+        expect(note.linetags!['status'].inherited).toBeUndefined();
+    });
+
+    it('(e) a bare front-matter key stays on the root and does not leak to children', () => {
+        const { text, mdast } = buildFrontmatterMdast(
+            ['status: done'],
+            [{ text: 'Epic', depth: 1 }, { text: 'Story', depth: 2 }],
+        );
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        expect(root.linetags!['status'].value).toBe('done');
+        const all_notes = flattenNotes(root);
+        for (const note of all_notes) {
+            expect(note.linetags?.['status']).toBeUndefined();
+        }
+    });
+
+    it('(f) absent front matter leaves root.linetags undefined and does not throw', () => {
+        const text = '# Title\n## Sub\n';
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 3 } },
+            children: [
+                mdastNode('heading', 0, 7, { depth: 1 }),
+                mdastNode('heading', 8, 14, { depth: 2 }),
+            ],
+        };
+        expect(() => convertMdastToNoteHierarchy(mdast, text)).not.toThrow();
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        expect(root.linetags).toBeUndefined();
+        expect(root.linetags_from).toBeUndefined();
+    });
+
+    it('(g) malformed front matter (no parseable keys) leaves root.linetags undefined', () => {
+        const { text, mdast } = buildFrontmatterMdast(['garbage-without-separator'], [{ text: 'Doc', depth: 1 }]);
+        expect(() => convertMdastToNoteHierarchy(mdast, text)).not.toThrow();
+        const root = convertMdastToNoteHierarchy(mdast, text);
+        expect(root.linetags).toBeUndefined();
+        expect(root.linetags_from).toBeUndefined();
+    });
+});

@@ -2868,3 +2868,97 @@ Dropping a card at the top (or middle) of a column whose cards are all unweighte
 + [X] verify lint passes
 + [X] verify jest tests pass
 
+
+### Settings/Files drawers show a redundant second "Applying..." spinner [](?id=drawer-spinner-dedupe)
+
+A settings/files apply shows **two** spinners at once: the breadcrumb pending spinner (correct) **and** a second "⟳ Applying..." line inside the open drawer (redundant). One indicator is enough — keep the breadcrumb one, drop the in-drawer copies. Most visible in slow-round-trip hosts (e.g. the browser web-worker extension host, where a global-setting echo takes longer), but the duplication is host-agnostic dead weight — the in-drawer spinner adds nothing the breadcrumb spinner doesn't already convey.
+
++ root cause (verified in source)
+  + the breadcrumb spinner and every in-drawer spinner read the **same** `pending` flag from `usePendingWorkContext()`, so they all render together whenever an apply is in flight
+  + keeper — `components/views/BreadcrumbTrail.tsx:110`: `{pending && <Spinner positionClass="InlineLoader" .../>}`, deliberately positioned next to the "(X in Y files)" count. This stays as the single pending indicator.
+  + duplicate #1 — `components/views/SettingsCommonControls.tsx:37-42`: `{pending && (<p data-testid="settings-drawer-spinner"><Spinner .../><span> Applying...</span></p>)}`. This component is shared by **both** `SettingsDocumentDrawer` and `SettingsKanbanDrawer`, so the duplicate appears in the Document *and* Kanban settings drawers.
+  + duplicate #2 — `components/views/FilesDrawer.tsx:113-118`: the same `{pending && …Applying…}` block (`data-testid="files-drawer-spinner"`), a third copy in the Files drawer.
++ scope
+  + delete the `{pending && …Applying…}` block from `SettingsCommonControls.tsx`; drop the now-unused `usePendingWorkContext` + `Spinner` imports and the `const { pending } = usePendingWorkContext();` line (keep the `Debug` import/const per coding standards; `l10n` stays — still used by the labels)
+  + delete the same block from `FilesDrawer.tsx`; drop its now-unused `pending`/`Spinner` usages (verify `usePendingWorkContext`/`Spinner` aren't referenced elsewhere in the file before removing the imports; keep the unmount cleanup-timer logic which is unrelated)
+  + leave `BreadcrumbTrail.tsx` untouched
++ out of scope
+  + the pending/echo round-trip mechanism itself (markPending → echo-clears-pending) — unchanged; only the redundant *rendering* of `pending` is removed
+  + the breadcrumb spinner's position or styling
++ files
+  + `client/webview/src/notethink-views/src/components/views/SettingsCommonControls.tsx` (+ `SettingsCommonControls.test.tsx` — drop the `settings-drawer-spinner` assertion)
+  + `client/webview/src/notethink-views/src/components/views/FilesDrawer.tsx` (+ `FilesDrawer.test.tsx` — drop the `files-drawer-spinner` assertion)
++ [X] remove the in-drawer spinner from `SettingsCommonControls.tsx`; tidy unused imports; update its test
++ [X] remove the in-drawer spinner from `FilesDrawer.tsx`; tidy unused imports; update its test
++ [X] confirm `BreadcrumbTrail.tsx` remains the sole pending spinner (its test already asserts it)
++ [X] `pnpm run check` green
++ manual: open the Settings drawer (Document and Kanban) and toggle a setting — exactly one spinner shows, in the breadcrumb; no "Applying..." line inside the drawer
++ manual: open the Files drawer and change a filter — one breadcrumb spinner, no in-drawer "Applying..." line
++ acceptance
+  + during any settings/files apply there is exactly one spinner (breadcrumb), in every drawer
+  + no behavioural change to when/how long the pending state lasts — only the duplicate render is gone
++ delivered: removed the in-drawer spinner block + now-unused imports from `SettingsCommonControls.tsx` and `drawers/FilesDrawer.tsx`; updated both jest tests; corrected `pending-work-spinner.spec.ts` (it had asserted the removed in-drawer spinner — now verifies the breadcrumb spinner is the single indicator)
++ commit message draft
+  + notethink x.y.z: drop the redundant in-drawer "Applying..." spinner from the settings + files drawers — the breadcrumb pending spinner is the single indicator
+  + tests N jest
+
+
+### Document-level front matter becomes root-note linetags [](?id=frontmatter-document-attributes)
+
+YAML/TOML front matter at the top of a file should be lifted into the file's **document root** note as linetags, then treated *identically* to linetags authored on a heading — including inheritance to descendants. A key like `nt_view` set in front matter must behave exactly as if it were written on the file's H1. This makes front matter the broadest, document-scoped layer of the existing linetag model rather than a separate metadata channel. Prefix handling (`ng_`/`nt_`) is owned by [[broaden-linetag-prefix-nt]]; this story is namespace-agnostic and inherits whatever that migration settles.
+
++ goal
+  + every `key: value` pair in a file's front matter attaches to that file's document-root NoteProps as a linetag, stored verbatim (no prefix logic here — same as `parseLineTags`)
+  + once attached, the existing render/inherit/interpret machinery treats them like any heading linetag — no special-casing per key
+  + front matter is the *document scope*; it sets defaults that anything below can override
++ decisions (confirmed with the user)
+  + **carrier = the document root, not the first note / H1.** The root is the genuine "file note" that owns every note in the file; "first note" is accidental (whatever lands at `seq=1`). The root NoteProps already exists — `type:'root'`, `seq:0`, `level:0`, owns `child_notes` — created at `convertMdastToNoteHierarchy.ts:372-388`. It just carries no linetags today.
+  + **precedence: lowest / most-specific wins.** Document level is the broadest default; an H1 linetag overrides a front-matter value, an H2 overrides the H1, etc. This is already how inheritance behaves — `applyChildAttributeInheritance` does `if (note.linetags?.[key]) continue;` so a child's own tag beats an inherited one. Front matter simply becomes the top of that chain.
+  + **separate processing from display.** Inheritance is baked per-file at convert time, so it is *mode-independent* and correct in all three render modes. Only the document-level pill strip is mode-dependent.
++ processing (mode-independent — the important half)
+  + make the root participate in the existing inheritance pass as the **top ancestor**, so its `nt_child_*` / `nt_child2y_*` / `nt_childall_*` tags propagate down via the same mechanism that already runs between heading levels
+  + because this happens during each file's `convertMdastToNoteHierarchy` *before* any merge or render, folder mode "just works": each file's front matter affects only that file's stories, exactly mirroring how per-file linetag inheritance is resolved per-file and then merged in `mergeAggregateRoot`
+  + only inheritance-prefixed keys propagate (consistent with today) — a bare `status: done` in front matter stays document-level and does NOT leak to children
++ display (mode-dependent — the only conditional half)
+  + render a **document-level linetag strip** (reuse `GenericNoteAttributes`) at the top of the view, bound to the root's linetags
+  + shown **only in single-file mode**; suppressed in folder mode (many documents, no single document-scope) and in single-note mode (no file context). NB there is no true single-note mode in code today, so that suppression is forward-looking — cheap because processing already happened at convert time
+  + DocumentView already has the natural slot — it renders `GenericNoteAttributes` for `parent_context.linetags` at `DocumentView.tsx:61-63`. KanbanView renders the parent context but has no dedicated attribute strip — add one above the board. AutoView just delegates.
++ the `order` nuance (front-matter vs H1 scope)
+  + `order` under the H1 governs notes added *under the H1*. `order` at front-matter/document level governs insertion relative to the *whole document* — so `newest-at-top` at document scope can insert a new note **above** the H1, whereas at H1 scope it inserts below it.
+  + therefore document-level `order` must stay readable at the **root** independently of the H1, even though for most keys the post-inheritance H1 value is what the existing reader consumes
++ background / current gaps (the change surface)
+  + front matter is already *parsed* into a raw MDAST node — `parseops.ts` enables `frontmatter(['yaml','toml'])` — but the node's `key: value` pairs are never read; it sits in `root.children_body` as a `type:'yaml'`/`'toml'` node with no `seq`
+  + the root has no linetags populated and is never parsed for them
+  + the root is currently **excluded** from inheritance: `applyChildAttributeInheritance` (`convertMdastToNoteHierarchy.ts:293-325`) skips any note with no `parent_notes`, and the root is not in `all_notes` when the pass runs
+  + file-level config (`nt_view`, `order`) is read from the **H1** via `findFileH1` (`mergeAggregateRoot.ts:297,300`) — needs to resolve from the root (front matter) with the H1 as the lower-level override; after root→H1 inheritance runs, the H1 naturally carries the effective value for most keys, but `order` needs the independent root read above
+  + need a small flat front-matter parser (YAML + the existing TOML fence) that turns the node text into `key: value` pairs — a new `lib/frontmatterops.ts` (matches the `<noun>ops.ts` naming rule); deliberately minimal like the parser already living in notegit's `frontmatter.ts` (scalars, quoted strings, inline arrays), NOT a full YAML dep
++ scope of work (when picked up)
+  + [X] add `lib/frontmatterops.ts` — parse the front-matter node's text into a flat `{key: value}` map (scalars, quoted, inline arrays); unit tests incl. malformed-yields-empty
+  + [X] in `convertMdastToNoteHierarchy`, read the front-matter node from `children_body` and populate `root.linetags` from it (verbatim keys, via the linetag shape so write-back offsets stay sane)
+  + [X] make the root the top ancestor of the inheritance pass so `nt_child*` / `nt_childall*` on the root propagate to descendants (include root in the chain / lift the no-`parent_notes` skip for root-children)
+  + [X] resolve file-level config from the root with H1 override (lowest-wins), and read document-level `order` at the root independently of the H1
+  + [X] render the document-level linetag strip via `GenericNoteAttributes`, gated to single-file mode (DocumentView slot exists; add the KanbanView strip above the board)
+  + [X] jest: front matter → root.linetags; root `nt_childall_status` reaches a deep note; H1 linetag overrides a front-matter value; folder mode keeps per-file scoping; document-level pills render in single-file and are absent in folder mode
+  + [ ] playwright: open a file with front-matter `nt_view`/`order` and confirm the resolved view + insertion behaviour; confirm the document pill strip shows in single-file and not in folder mode
+  + [X] update `AUTHORING_GUIDE.md` — document front matter as the document-scope linetag layer, the lowest-wins precedence, and the `order`-above-H1 nuance
+  + [X] `pnpm run check` green
+  + delivered: parser kept as `frontmatterops.ts` (3 exports — distinct noun, story-mandated name); inheritance via a depth-mapped root ancestor (broadest, lowest-priority); H1-then-front-matter config resolution; pill strip gated by `seq` (clone-safe), suppressed in folder mode; Document+Kanban wired (Kanban needs no dedup guard — no second strip); synthetic root no longer renders its front-matter pills inline (`MarkdownNote` skips `type:'root'`) so they show once via the document-level strip
+  + delivered: the document-level strip derivation was lifted into `GenericView` (built once, handed to leaf views via `nested.document_strip`/`document_root`) so DocumentView/KanbanView no longer each re-derive it; strip tests moved up to `GenericView.test`
+  + delivered: Playwright pill-strip spec passing (single-file pill renders once, hidden in folder mode); the `nt_view`/`order` resolved-view + `order`-above-H1 *insertion* E2E remain unwritten (shipped with this gap accepted)
++ out of scope
+  + prefix interpretation (`ng_`/`nt_`) — owned by [[broaden-linetag-prefix-nt]]; this rides whatever it settles
+  + a true single-note render mode — does not exist yet; we only design its display-suppression (processing is already mode-independent)
+  + notegit's own server-side front-matter consumer — its `src/lib/frontmatter.ts` reads `title`/`description`/`tags` into the SSR `<head>` and is a separate concern (same `---` block, different reader). Worth a follow-up there: notegit currently parses a `defaultView` front-matter key then drops it; once `nt_view` is the document-scope view selector here, retire notegit's `defaultView` to avoid two names for one idea
++ relationships
+  + builds on the root-as-container idea also referenced by the post-v1 "Convert top-level 'docs' container to RootNote" story
+  + namespace-coupled to [[broaden-linetag-prefix-nt]]
++ files
+  + new `client/webview/src/notethink-views/src/lib/frontmatterops.ts` (+ tests)
+  + `client/webview/src/notethink-views/src/lib/convertMdastToNoteHierarchy.ts` (root linetags + inheritance top-ancestor)
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` (root-first config resolution; document-level `order`)
+  + `client/webview/src/notethink-views/src/components/views/DocumentView.tsx` (document pill strip — slot exists)
+  + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx` (document pill strip above the board)
+  + `client/webview/src/notethink-views/src/components/notes/GenericNoteAttributes.tsx` (reused for the document strip)
+  + `client/extension/src/lib/parseops.ts` (front-matter node already produced — reference only)
+  + `AUTHORING_GUIDE.md` (document-scope front matter)
+

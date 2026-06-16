@@ -65,7 +65,7 @@ test.describe('Pending-work spinner', () => {
         await expect(page.locator('[data-testid="pending-work-spinner"]')).toHaveCount(0);
     });
 
-    test('the spinner renders inside the drawer when the Files drawer is open', async ({ page }) => {
+    test('with the Files drawer open during an apply, only the breadcrumb spinner shows (no redundant in-drawer spinner)', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
@@ -78,9 +78,11 @@ test.describe('Pending-work spinner', () => {
         await expect(page.locator('[data-testid="files-drawer-grid"]')).toHaveAttribute('data-open', 'true');
 
         await emitPendingChange(page, 'integrationFilters', true);
-        await expect(page.getByTestId('files-drawer-spinner')).toBeVisible({ timeout: 2000 });
+        // the breadcrumb (toolbar) spinner is the single pending indicator; the redundant in-drawer copy was removed
+        await expect(page.getByTestId('view-toolbar').getByTestId('pending-work-spinner')).toBeVisible({ timeout: 2000 });
+        await expect(page.getByTestId('files-drawer-spinner')).toHaveCount(0);
         await emitPendingChange(page, 'integrationFilters', false);
-        await expect(page.getByTestId('files-drawer-spinner')).toHaveCount(0, { timeout: 2000 });
+        await expect(page.getByTestId('view-toolbar').getByTestId('pending-work-spinner')).toHaveCount(0, { timeout: 2000 });
     });
 
     test('prefers-reduced-motion: spinner SVG is in the DOM but the rotation keyframe is not animating', async ({ browser }) => {

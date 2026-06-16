@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import KanbanView from './KanbanView';
+import GenericNoteAttributes from '../notes/GenericNoteAttributes';
 import type { ViewProps } from '../../types/ViewProps';
 import type { NoteProps, NoteOrigin } from '../../types/NoteProps';
 import type { OrderingChangeSet } from '../../lib/linetagops';
@@ -848,5 +849,44 @@ describe('KanbanView drag start does not move the caret', () => {
         for (const call of post_message.mock.calls) {
             expect(['revealRange', 'selectRange']).not.toContain(call[0].type);
         }
+    });
+});
+
+describe('KanbanView document-level linetag strip', () => {
+    const status_tag = { key: 'status', value: 'active', note_seq: 0, key_offset: 0, value_offset: 8, linktext_offset: 0 };
+    const internal_tag = { key: 'nt_view', value: 'kanban', note_seq: 0, key_offset: 0, value_offset: 9, linktext_offset: 0 };
+
+    function makeRoot(linetags: NoteProps['linetags']): NoteProps {
+        return makeNote({ seq: 0, level: 0, type: 'root', headline_raw: '', linetags, linetags_from: 0 });
+    }
+
+    it('renders the document-level strip handed down via nested.document_strip', () => {
+        const root = makeRoot({ status: status_tag });
+        const props = makeViewProps({ notes: [root], nested: { document_strip: <GenericNoteAttributes {...root} /> } });
+        render(<KanbanView {...props} />);
+        expect(screen.getByText('active')).toBeInTheDocument();
+        expect(screen.getByText('Status:')).toBeInTheDocument();
+    });
+
+    it('does not render an nt_-prefixed root linetag as a pill (internal-attribute hiding)', () => {
+        const root = makeRoot({ status: status_tag, nt_view: internal_tag });
+        const props = makeViewProps({ notes: [root], nested: { document_strip: <GenericNoteAttributes {...root} /> } });
+        render(<KanbanView {...props} />);
+        expect(screen.getByText('active')).toBeInTheDocument();
+        expect(screen.queryByText('kanban')).not.toBeInTheDocument();
+    });
+
+    it('renders the front-matter pill exactly once (kanban has no other attribute strip)', () => {
+        const root = makeRoot({ status: status_tag });
+        const props = makeViewProps({ notes: [root], nested: { document_strip: <GenericNoteAttributes {...root} /> } });
+        render(<KanbanView {...props} />);
+        expect(screen.getAllByText('active')).toHaveLength(1);
+    });
+
+    it('renders no strip when GenericView hands down no document_strip (folder mode / no front matter)', () => {
+        const root = makeRoot({ status: status_tag });
+        const props = makeViewProps({ notes: [root], nested: {} });
+        render(<KanbanView {...props} />);
+        expect(screen.queryByText('active')).not.toBeInTheDocument();
     });
 });

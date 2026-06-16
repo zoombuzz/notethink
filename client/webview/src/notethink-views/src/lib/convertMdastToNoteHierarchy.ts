@@ -1,6 +1,7 @@
 import Debug from "debug";
 import type { Root as MdastRoot } from "mdast";
 import { findLineTags, parseLineTags } from "./linetagops";
+import { findFrontmatterNode, parseFrontmatterLinetags } from "./frontmatterops";
 import type { LineTag, MdastNode, NoteProps, TextPosition } from "../types/NoteProps";
 
 const debug = Debug("nodejs:notethink-views:convertMdastToNoteHierarchy");
@@ -252,17 +253,19 @@ function nestChildNotes(all_notes: NoteProps[], root_level: number): void {
 }
 
 /**
- * Extract inheritable linetags from a note's linetags matching the given prefix.
- * Returns entries with the prefix stripped (e.g. nt_child_status → status).
+ * Extract inheritable linetags from an ancestor's linetags matching the given prefix.
+ * Returns entries with the prefix stripped (e.g. nt_child_status → status). The
+ * ancestor only needs a `linetags` field, so the document root (front matter) can be
+ * wrapped in a minimal holder and treated as the broadest ancestor.
  */
-function collectInheritableLinetags(note: NoteProps, prefix: string): Array<[string, LineTag]> {
-    if (!note.linetags) { return []; }
+function collectInheritableLinetags(ancestor: Pick<NoteProps, 'linetags'>, prefix: string): Array<[string, LineTag]> {
+    if (!ancestor.linetags) { return []; }
     const result: Array<[string, LineTag]> = [];
-    for (const key of Object.keys(note.linetags)) {
+    for (const key of Object.keys(ancestor.linetags)) {
         if (key.startsWith(prefix)) {
             const stripped = key.slice(prefix.length);
             if (stripped) {
-                result.push([stripped, note.linetags[key]]);
+                result.push([stripped, ancestor.linetags[key]]);
             }
         }
     }
@@ -286,39 +289,73 @@ function makeInheritedTag(stripped_key: string, source: LineTag, target_note_seq
 }
 
 /**
- * Propagate nt_child_*, nt_child2y_*, and nt_childall_* linetags from parents to descendants.
- * Child's own linetags always take precedence over inherited ones.
+ * Apply an ancestor's inheritable linetags (already prefix-stripped) onto a note,
+ * minting inherited copies. The note's own / a closer ancestor's tag always wins,
+ * so an already-present key is left untouched (the broadest source only fills gaps).
  */
-export function applyChildAttributeInheritance(all_notes: NoteProps[]): void {
+function applyInheritedTags(note: NoteProps, ancestor: Pick<NoteProps, 'linetags'>, prefix: string): void {
+    for (const [stripped_key, source_tag] of collectInheritableLinetags(ancestor, prefix)) {
+        if (note.linetags?.[stripped_key]) { continue; }
+        if (!note.linetags) { note.linetags = {}; }
+        note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
+    }
+}
+
+/**
+ * In-tree inheritance: propagate nt_child_*, nt_child2y_*, and nt_childall_*
+ * linetags from a note's ancestors. nt_childall_ is applied root-most first so a
+ * higher ancestor's value wins when several declare the same key.
+ */
+function applyInTreeInheritance(note: NoteProps): void {
+    if (!note.parent_notes?.length) { return; }
+    const direct_parent = note.parent_notes[note.parent_notes.length - 1];
+    // nt_child_ → inherited by direct children only
+    applyInheritedTags(note, direct_parent, 'nt_child_');
+    // nt_child2y_ → inherited by grandchildren only (parent_notes has at least 2 entries)
+    if (note.parent_notes.length >= 2) {
+        const grandparent = note.parent_notes[note.parent_notes.length - 2];
+        applyInheritedTags(note, grandparent, 'nt_child2y_');
+    }
+    // nt_childall_ → inherited from every ancestor in the chain
+    for (const ancestor of note.parent_notes) {
+        applyInheritedTags(note, ancestor, 'nt_childall_');
+    }
+}
+
+/**
+ * Root (front-matter) inheritance: the document root is the broadest ancestor.
+ * Its depth-relative prefixes mirror the in-tree ones — nt_child_ reaches the
+ * root's direct children, nt_child2y_ its grandchildren, nt_childall_ every note.
+ * Runs AFTER in-tree inheritance, so any closer ancestor's tag already won.
+ */
+function applyRootInheritance(note: NoteProps, root_ancestor: Pick<NoteProps, 'linetags'>): void {
+    const depth = note.parent_notes?.length ?? 0;
+    if (depth === 0) {
+        applyInheritedTags(note, root_ancestor, 'nt_child_');
+    }
+    if (depth === 1) {
+        applyInheritedTags(note, root_ancestor, 'nt_child2y_');
+    }
+    applyInheritedTags(note, root_ancestor, 'nt_childall_');
+}
+
+/**
+ * Propagate nt_child_*, nt_child2y_*, and nt_childall_* linetags from ancestors to
+ * descendants. Child's own linetags always take precedence over inherited ones.
+ *
+ * `root_linetags` (optional) are the document root's front-matter linetags, treated
+ * as the broadest, lowest-priority ancestor above the whole tree. When undefined the
+ * pass behaves exactly as the in-tree-only inheritance did.
+ */
+export function applyChildAttributeInheritance(
+    all_notes: NoteProps[],
+    root_linetags?: { [key: string]: LineTag },
+): void {
+    const root_ancestor = root_linetags ? ({ linetags: root_linetags } as Pick<NoteProps, 'linetags'>) : undefined;
     for (const note of all_notes) {
-        if (!note.parent_notes?.length) { continue; }
-
-        const direct_parent = note.parent_notes[note.parent_notes.length - 1];
-
-        // nt_child_ → inherited by direct children only
-        for (const [stripped_key, source_tag] of collectInheritableLinetags(direct_parent, 'nt_child_')) {
-            if (note.linetags?.[stripped_key]) { continue; }
-            if (!note.linetags) { note.linetags = {}; }
-            note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
-        }
-
-        // nt_child2y_ → inherited by grandchildren only (parent_notes has at least 2 entries)
-        if (note.parent_notes.length >= 2) {
-            const grandparent = note.parent_notes[note.parent_notes.length - 2];
-            for (const [stripped_key, source_tag] of collectInheritableLinetags(grandparent, 'nt_child2y_')) {
-                if (note.linetags?.[stripped_key]) { continue; }
-                if (!note.linetags) { note.linetags = {}; }
-                note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
-            }
-        }
-
-        // nt_childall_ → inherited from every ancestor in the chain
-        for (const ancestor of note.parent_notes) {
-            for (const [stripped_key, source_tag] of collectInheritableLinetags(ancestor, 'nt_childall_')) {
-                if (note.linetags?.[stripped_key]) { continue; }
-                if (!note.linetags) { note.linetags = {}; }
-                note.linetags[stripped_key] = makeInheritedTag(stripped_key, source_tag, note.seq);
-            }
+        applyInTreeInheritance(note);
+        if (root_ancestor) {
+            applyRootInheritance(note, root_ancestor);
         }
     }
 }
@@ -364,8 +401,15 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         }
     }
 
-    // propagate nt_child_*, nt_child2y_*, nt_childall_* linetags to descendants
-    applyChildAttributeInheritance(all_notes);
+    // lift front matter into the document root as linetags — the broadest, document-scoped layer
+    // computed before the inheritance pass so the root can act as the top ancestor; absent front matter leaves both fields undefined
+    const frontmatter_node = findFrontmatterNode(mdast_children);
+    const root_frontmatter = frontmatter_node
+        ? parseFrontmatterLinetags(frontmatter_node, text, 0)
+        : {};
+
+    // propagate nt_child_*, nt_child2y_*, nt_childall_* linetags to descendants, with the root front matter as the broadest ancestor above the whole tree
+    applyChildAttributeInheritance(all_notes, root_frontmatter.linetags);
 
     // build the root note
     const root: NoteProps = {
@@ -379,6 +423,8 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         children: mdast_children,
         children_body: root_children_body,
         child_notes: all_notes.filter(n => !n.parent_notes?.length),
+        linetags: root_frontmatter.linetags,
+        linetags_from: root_frontmatter.linetags_from,
         headline_raw: '',
         body_raw: text,
     };

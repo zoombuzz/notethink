@@ -113,6 +113,17 @@ describe('MarkdownNote', () => {
         expect(body!.contains(linetags)).toBe(false);
     });
 
+    it('does not render an inline attribute strip for the synthetic root note', () => {
+        // the root's front-matter linetags surface as the view's document-level strip, not inline in the note body
+        const root = makeNote({
+            type: 'root',
+            headline_raw: '',
+            linetags: { status: { key: 'status', key_offset: 0, value: 'active', value_offset: 0, linktext_offset: 0, note_seq: 0 } },
+        });
+        render(<MarkdownNote {...root} />);
+        expect(screen.queryByTestId('linetags')).not.toBeInTheDocument();
+    });
+
     it('does not clip when body does not overflow', () => {
         const note = makeNote({
             children_body: [makeList(2, [makeListItem(3, false)])],

@@ -750,6 +750,83 @@ describe('mergeAggregateRoot', () => {
         expect(root.child_notes![0].origin?.file_view_type).toBe('kanban');
     });
 
+    it('file_view_type falls back to a front-matter nt_view when the H1 has none', () => {
+        // ---\nnt_view: kanban\n--- then # Todo (no view linetag) then ### Story
+        const fm = '---\nnt_view: kanban\n---';
+        const h1_text = '# Todo';
+        const story_text = '### Story';
+        const text = `${fm}\n${h1_text}\n${story_text}\n`;
+        const h1_start = fm.length + 1;
+        const h1_end = h1_start + h1_text.length;
+        const story_start = h1_end + 1;
+        const children: MdastNode[] = [
+            mdastNode('yaml', 0, fm.length, { value: 'nt_view: kanban' }),
+            mdastNode('heading', h1_start, h1_end, { depth: 1 }),
+            mdastNode('heading', story_start, story_start + story_text.length, { depth: 3 }),
+        ];
+        const doc = makeDoc('id-fm-view', 'a/todo.md', text, children);
+        const { root } = mergeAggregateRoot({ 'id-fm-view': doc }, '/repo');
+        expect(root.child_notes![0].origin?.file_view_type).toBe('kanban');
+    });
+
+    it('an H1 nt_view overrides the front-matter nt_view (most-specific wins)', () => {
+        const fm = '---\nnt_view: kanban\n---';
+        const h1_text = '# Todo [](?nt_view=document)';
+        const story_text = '### Story';
+        const text = `${fm}\n${h1_text}\n${story_text}\n`;
+        const h1_start = fm.length + 1;
+        const h1_end = h1_start + h1_text.length;
+        const story_start = h1_end + 1;
+        const children: MdastNode[] = [
+            mdastNode('yaml', 0, fm.length, { value: 'nt_view: kanban' }),
+            mdastNode('heading', h1_start, h1_end, { depth: 1 }),
+            mdastNode('heading', story_start, story_start + story_text.length, { depth: 3 }),
+        ];
+        const doc = makeDoc('id-fm-override', 'a/todo.md', text, children);
+        const { root } = mergeAggregateRoot({ 'id-fm-override': doc }, '/repo');
+        expect(root.child_notes![0].origin?.file_view_type).toBe('document');
+    });
+
+    it('file_order falls back to a front-matter `order` (newest-at-bottom reverses the per-file stories)', () => {
+        const fm = '---\norder: newest-at-bottom\n---';
+        const h1_text = '# Done';
+        const story_a = '### Story A';
+        const story_b = '### Story B';
+        const text = `${fm}\n${h1_text}\n${story_a}\n${story_b}\n`;
+        let offset = fm.length + 1;
+        const h1_n = mdastNode('heading', offset, offset + h1_text.length, { depth: 1 });
+        offset += h1_text.length + 1;
+        const a_n = mdastNode('heading', offset, offset + story_a.length, { depth: 3 });
+        offset += story_a.length + 1;
+        const b_n = mdastNode('heading', offset, offset + story_b.length, { depth: 3 });
+        const fm_n = mdastNode('yaml', 0, fm.length, { value: 'order: newest-at-bottom' });
+        const doc = makeDoc('id-fm-order', 'a/done.md', text, [fm_n, h1_n, a_n, b_n]);
+        const { root } = mergeAggregateRoot({ 'id-fm-order': doc }, '/repo');
+        // newest-at-bottom reverses, so the document-last story (B) sorts to the top of its column
+        expect(root.child_notes![0].headline_raw).toContain('Story B');
+        expect(root.child_notes![1].headline_raw).toContain('Story A');
+    });
+
+    it('an H1 `order` overrides the front-matter `order` (no reversal when H1 says newest-at-top)', () => {
+        const fm = '---\norder: newest-at-bottom\n---';
+        const h1_text = '# Done [](?order=newest-at-top)';
+        const story_a = '### Story A';
+        const story_b = '### Story B';
+        const text = `${fm}\n${h1_text}\n${story_a}\n${story_b}\n`;
+        let offset = fm.length + 1;
+        const h1_n = mdastNode('heading', offset, offset + h1_text.length, { depth: 1 });
+        offset += h1_text.length + 1;
+        const a_n = mdastNode('heading', offset, offset + story_a.length, { depth: 3 });
+        offset += story_a.length + 1;
+        const b_n = mdastNode('heading', offset, offset + story_b.length, { depth: 3 });
+        const fm_n = mdastNode('yaml', 0, fm.length, { value: 'order: newest-at-bottom' });
+        const doc = makeDoc('id-fm-order-override', 'a/done.md', text, [fm_n, h1_n, a_n, b_n]);
+        const { root } = mergeAggregateRoot({ 'id-fm-order-override': doc }, '/repo');
+        // H1 newest-at-top wins, so document order is preserved (A first)
+        expect(root.child_notes![0].headline_raw).toContain('Story A');
+        expect(root.child_notes![1].headline_raw).toContain('Story B');
+    });
+
     describe('stable_id', () => {
 
         it('stamps stable_id on every note in the merged tree', () => {

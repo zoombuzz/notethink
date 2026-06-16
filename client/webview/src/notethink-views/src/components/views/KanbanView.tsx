@@ -140,6 +140,7 @@ export default function KanbanView(props: ViewProps): ReactElement {
         <div className={container_styles.join(' ')} id={`v${props.id}-inner`}
              onClick={containerClickHandler}
              data-level={display_options.level} data-parent-content-seq={display_options.parent_context_seq}>
+            {props.nested?.document_strip}
             {props.nested?.parent_context && renderTopLevelNoteWithoutChildren(props.nested?.parent_context, props, display_options)}
             <KanbanBoard
                 visible_columns={visible_columns}

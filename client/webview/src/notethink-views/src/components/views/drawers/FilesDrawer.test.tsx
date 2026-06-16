@@ -1,8 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, act, type RenderResult } from '@testing-library/react';
 import FilesDrawer from './FilesDrawer';
-import { PendingWorkProvider } from '../../../hooks/PendingWorkContext';
-import type { UsePendingWorkApi } from '../../../hooks/usePendingWork';
 
 // library-side test fixture: a realistic exclude glob to feed the drawer prop. intentionally not coupled to the app's DEFAULT_EXCLUDE_FILTER (extension/webview own those) — this test exercises FilesDrawer rendering, not the app default
 const DERIVED_DIR_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**';
@@ -142,35 +140,5 @@ describe('FilesDrawer', () => {
         fireEvent.click(rows[0]);
         expect(onFileClick).toHaveBeenCalledTimes(1);
         expect(onFileClick).toHaveBeenCalledWith('/abs/docs/a.md');
-    });
-
-    describe('pending-work spinner', () => {
-        function makeApi(pending: boolean): UsePendingWorkApi {
-            return { pending, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
-        }
-
-        it('renders the spinner when the context reports pending=true', () => {
-            render(
-                <PendingWorkProvider api={makeApi(true)}>
-                    <FilesDrawer {...default_props} />
-                </PendingWorkProvider>
-            );
-            expect(screen.getByTestId('files-drawer-spinner')).toBeInTheDocument();
-            expect(screen.getByTestId('pending-work-spinner')).toBeInTheDocument();
-        });
-
-        it('hides the spinner when the context reports pending=false', () => {
-            render(
-                <PendingWorkProvider api={makeApi(false)}>
-                    <FilesDrawer {...default_props} />
-                </PendingWorkProvider>
-            );
-            expect(screen.queryByTestId('files-drawer-spinner')).not.toBeInTheDocument();
-        });
-
-        it('hides the spinner with no provider mounted (defaults to no-op api)', () => {
-            renderDrawer();
-            expect(screen.queryByTestId('files-drawer-spinner')).not.toBeInTheDocument();
-        });
     });
 });

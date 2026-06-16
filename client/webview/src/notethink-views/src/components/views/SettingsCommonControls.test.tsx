@@ -1,8 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, type RenderResult } from '@testing-library/react';
 import SettingsCommonControls from './SettingsCommonControls';
-import { PendingWorkProvider } from '../../hooks/PendingWorkContext';
-import type { UsePendingWorkApi } from '../../hooks/usePendingWork';
 
 const default_props = {
     settings: {},
@@ -69,33 +67,5 @@ describe('SettingsCommonControls', () => {
         expect(on_change).not.toHaveBeenCalled();
         expect(on_global).toHaveBeenCalledTimes(1);
         expect(on_global).toHaveBeenCalledWith('watchUnopenedFilesInViewer', false);
-    });
-
-    describe('pending-work spinner', () => {
-        function withProvider(pending: boolean, ui: React.ReactElement): React.ReactElement {
-            const api: UsePendingWorkApi = {
-                pending,
-                markPending: jest.fn(),
-                clearPending: jest.fn(),
-                clearAll: jest.fn(),
-            };
-            return <PendingWorkProvider api={api}>{ui}</PendingWorkProvider>;
-        }
-
-        it('renders the spinner when the context reports pending=true', () => {
-            render(withProvider(true, <SettingsCommonControls {...default_props} />));
-            expect(screen.getByTestId('settings-drawer-spinner')).toBeInTheDocument();
-            expect(screen.getByTestId('pending-work-spinner')).toBeInTheDocument();
-        });
-
-        it('hides the spinner when the context reports pending=false', () => {
-            render(withProvider(false, <SettingsCommonControls {...default_props} />));
-            expect(screen.queryByTestId('settings-drawer-spinner')).not.toBeInTheDocument();
-        });
-
-        it('hides the spinner with no provider mounted (defaults to no-op api)', () => {
-            renderControls();
-            expect(screen.queryByTestId('settings-drawer-spinner')).not.toBeInTheDocument();
-        });
     });
 });

@@ -1256,3 +1256,62 @@ describe('GenericView folder files drawer', () => {
         expect(set_integration_call![0]).not.toHaveProperty('maxNotesPerFile');
     });
 });
+
+describe('GenericView document-level strip', () => {
+    const status_tag = { key: 'status', value: 'active', note_seq: 0, key_offset: 0, value_offset: 8, linktext_offset: 0 };
+
+    function rootWithFrontMatter(): NoteProps {
+        return makeNote({ seq: 0, level: 0, type: 'root', headline_raw: '', linetags: { status: status_tag } });
+    }
+
+    function lastDocNested(): ViewProps['nested'] {
+        return mockDocViewRender.mock.calls[mockDocViewRender.mock.calls.length - 1][0].nested;
+    }
+
+    it('builds document_strip + document_root and hands them to the document view in single-file mode', async () => {
+        const root = rootWithFrontMatter();
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({ type: 'document', notes: [root], display_options: { integration_mode: 'current_file' } })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
+        expect(lastDocNested()?.document_strip).toBeDefined();
+        expect(lastDocNested()?.document_root).toBe(root);
+    });
+
+    it('hands the document_strip to the kanban view too', async () => {
+        const root = rootWithFrontMatter();
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({ type: 'kanban', notes: [root], display_options: { integration_mode: 'current_file' } })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
+        const nested = mockKanbanViewRender.mock.calls[mockKanbanViewRender.mock.calls.length - 1][0].nested;
+        expect(nested?.document_strip).toBeDefined();
+    });
+
+    it('does not build a document_strip in folder mode', async () => {
+        const root = rootWithFrontMatter();
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({ type: 'document', notes: [root], display_options: { integration_mode: 'folder' } })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
+        expect(lastDocNested()?.document_strip).toBeUndefined();
+        expect(lastDocNested()?.document_root).toBeUndefined();
+    });
+
+    it('does not build a document_strip when the root carries no front-matter linetags', async () => {
+        const root = makeNote({ seq: 0, level: 0, type: 'root', headline_raw: '' });
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({ type: 'document', notes: [root], display_options: { integration_mode: 'current_file' } })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
+        expect(lastDocNested()?.document_strip).toBeUndefined();
+    });
+});

@@ -1,25 +1,19 @@
 # Jest Test Results
-# Version: 0.3.11
-# Date: 2026-06-11T11:04:21Z
-# Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
+# Version: 0.3.13
+# Date: 2026-06-16
+# Command: pnpm run test-jest
 # ---
-Test Suites: 8 passed, 8 total  (extension)
-Tests:       209 passed, 209 total
+Test Suites: 62 passed, 62 total
+Tests:       1297 passed, 0 failed, 1297 total
 
-Test Suites: 8 passed, 8 total  (webview)
-Tests:       84 passed, 84 total
+┌──────────────────┬───────┬────────┬────────┐
+│ Suite            │ Files │ Passed │ Failed │
+├──────────────────┼───────┼────────┼────────┤
+│ extension        │     9 │    209 │      0 │
+│ webview          │     8 │     84 │      0 │
+│ notethink-views  │    45 │   1004 │      0 │
+├──────────────────┼───────┼────────┼────────┤
+│ TOTAL            │    62 │   1297 │      0 │
+└──────────────────┴───────┴────────┴────────┘
 
-Test Suites: 44 passed, 44 total  (notethink-views)
-Tests:       971 passed, 971 total
-
-┌──────────────────┬───────┬────────┬────────┬─────────┐
-│ Suite            │ Files │ Passed │ Failed │ Time    │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     9 │    209 │      0 │ 2.658 s │
-│ webview          │     8 │     84 │      0 │ 0.779 s │
-│ notethink-views  │    44 │    971 │      0 │ 3.654 s │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    61 │   1264 │      0 │         │
-└──────────────────┴───────┴────────┴────────┴─────────┘
-
-All tests passed: 1264/1264 across 61 suites.
+All suites green.

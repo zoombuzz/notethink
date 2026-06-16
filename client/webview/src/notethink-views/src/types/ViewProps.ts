@@ -27,6 +27,8 @@ export interface ViewProps {
         menus?: Record<string, unknown>;
         parent_context?: NoteProps;
         breadcrumb_trail?: ReactElement;
+        document_strip?: ReactElement;
+        document_root?: NoteProps;
         replaced_attributes?: Record<string, unknown>;
         auto_resolved_type?: string;
     }

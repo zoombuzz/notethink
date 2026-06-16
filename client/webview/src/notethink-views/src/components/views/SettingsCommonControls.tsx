@@ -1,8 +1,6 @@
 import Debug from "debug";
 import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
-import { usePendingWorkContext } from "../../hooks/PendingWorkContext";
-import Spinner from "../Spinner";
 import type { GlobalSettingKey } from "../../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:SettingsCommonControls");
@@ -30,16 +28,9 @@ export default function SettingsCommonControls(props: SettingsCommonControlsProp
     const line_numbers = props.showLineNumbers ?? false;
     // default true matches the extension-side default (notethink.watchUnopenedFilesInViewer)
     const watch_unopened = props.watchUnopenedFilesInViewer ?? true;
-    const { pending } = usePendingWorkContext();
 
     return (
         <>
-            {pending && (
-                <p data-testid="settings-drawer-spinner">
-                    <Spinner positionClass="InlineLoader" ariaLabel={l10n.t('Working')} />
-                    <span>{' '}{l10n.t('Applying...')}</span>
-                </p>
-            )}
             <p>
                 <label>
                     <input

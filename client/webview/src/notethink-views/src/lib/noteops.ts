@@ -1,5 +1,6 @@
 import Debug from "debug";
 import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } from "../types/NoteProps";
+import { INTEGRATION_MODE_CURRENT_FILE } from "../types/IntegrationMode";
 
 const debug = Debug("nodejs:notethink-views:noteops");
 
@@ -228,6 +229,21 @@ export function flattenAllNotes(root: NoteProps): NoteProps[] {
     }
     if (root.children_body) { walk(root.children_body); }
     return result;
+}
+
+/**
+ * The document root note (notes[0], type 'root') when it should drive a
+ * document-level front-matter strip: single-file mode only — the merged folder
+ * root carries no front matter — and only when the root actually has linetags.
+ * Returns undefined otherwise so callers can render `{root && <strip/>}` without a
+ * second guard. Shared by DocumentView and KanbanView so the gate and root
+ * selection stay identical across both views.
+ */
+export function documentRootForStrip(notes: Array<NoteProps> | undefined, integration_mode: string | undefined): NoteProps | undefined {
+    if (integration_mode !== INTEGRATION_MODE_CURRENT_FILE) { return undefined; }
+    const root = notes?.[0];
+    if (!root || root.type !== 'root' || !root.linetags) { return undefined; }
+    return root;
 }
 
 /**

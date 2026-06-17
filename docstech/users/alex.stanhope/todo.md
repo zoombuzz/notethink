@@ -1,6 +1,140 @@
 # Todo [](?nt_view=kanban)
 
 
+### Auto-open the right breadcrumb view via H1 linetags [](?id=auto-open-breadcrumb-view)
+
+Two new file-root linetags let a document declare the view it should open into, so users land on the intended breadcrumb-scoped view without knowing they can change the breadcrumb themselves. Set on the file `#` H1 (or front matter) — the same place `nt_view` lives. `nt_integration_mode=folder` opens the file in folder (aggregate) mode; `nt_breadcrumb_last=<label>` scopes the breadcrumb to a named segment on first open. Together (`nt_integration_mode=folder` + `nt_breadcrumb_last=portfolio`) they jump straight to the aggregated, portfolio-scoped board.
+
++ background
+  + `nt_view` is read off the H1 via `resolveNamespacedTag(h1?.linetags, 'view')` with a front-matter root fallback, stamped onto `origin.file_view_type` (`mergeAggregateRoot.ts:278`); AutoView resolves the active view type from it
+  + view type already models this cleanly: `auto` is a first-class value (`SELECTABLE_VIEWTYPES = ['auto','document','kanban']`, `GenericView.tsx:19`), the default, shown as "Auto (Kanban)" (`ViewTypeSelector.tsx`); picking a concrete type leaves auto and `nt_view` stops driving it
+  + integration mode lives in `display_options.integration_mode` / `integration_path` (`NoteProps.ts`) with NO `auto` value today, toggled by `ViewIntegrationSelector` → `useViewToolbar` `handle_integration_change` → `setViewManagedState`, replayed to the extension as a `setIntegration` message
+  + the extension (`PanelSession.handleSetIntegration` → `enterFolderMode`, `PanelSession.ts:583`) owns folder aggregation; on reload the webview sends `setIntegration` first, so persisted view-managed state is the source of truth for mode
+  + note-hierarchy breadcrumb depth is `display_options.parent_context_seq` (`useViewContext.ts:64`), set by breadcrumb clicks via `setParentContextSeq` (`useViewHandlers.ts:43`); folder-path breadcrumb segments narrow aggregation via `onFolderClick` → a new `integration_path`
+  + there is no existing `nt_integration_mode` or `nt_breadcrumb_last` linetag
+  + the design extends the existing view-type `auto` pattern to the integration axis, rather than inventing a hidden one-shot seed marker
+
++ goal
+  + integration mode becomes auto-by-default, mirroring view type — in auto, the file's `nt_integration_mode` / `nt_breadcrumb_last` linetags drive the mode and the initial breadcrumb scope
+  + opening a file whose H1 declares `nt_integration_mode=folder` resolves (while auto) to folder mode with no manual toolbar switch
+  + opening a file whose H1 declares `nt_breadcrumb_last=portfolio` scopes the breadcrumb to the named segment — folder segment → `integration_path`, epic/story segment → `parent_context_seq`
+  + navigation is congruence-seeking — it keeps or returns to auto when the destination matches the file's declared mode, and pins a concrete mode only when navigation diverges from the file; re-selecting "Auto" fully resets to the file
+  + an unrecognised value degrades gracefully — auto resolves to the normal default with a `debug` line, never an error
+
++ naming — permanent-name check (CODING_STANDARDS.md "Permanent name check")
+  + `nt_integration_mode` and `nt_breadcrumb_last` are linetag keys written into users' markdown — externally-persisted names, frozen once shipped; operator has chosen these exact keys (sign-off recorded here)
+  + author as `nt_` only — `ng_` is legacy-read for predecessor keys; new keys are `nt_`-only per AUTHORING_GUIDE
+  + the authored value vocabulary for `nt_integration_mode` stays `current_file` / `folder`; `auto` is NOT an authored linetag value, only a webview view-state value
+  + `auto` joins `INTEGRATION_MODES` as a persisted view-state value (`vscode.setState` shape) — a permanent-name-check item; treat undefined `integration_mode` as `auto` so existing persisted states need no migration; the extension constants mirror does NOT gain `auto` (the extension only ever receives resolved `current_file` / `folder` via `setIntegration`)
+  + `nt_breadcrumb_last` value is a free-form segment label matched at runtime — no persisted enum
+
++ design — capture
+  + read both keys off the opened document's H1 then front-matter root via the existing `resolveNamespacedTag(h1?.linetags, 'integration_mode')` / `(…, 'breadcrumb_last')`, mirroring `nt_view`
+  + these are per-opened-file directives, NOT majority-voted across the folder like `nt_view` — read only from the file the user opened
+  + validate authored `nt_integration_mode` against `current_file` / `folder`; ignore (debug-log) anything else
+
++ design — auto integration mode (mirror AutoView, no hidden marker)
+  + add `auto` to `INTEGRATION_MODES` / the `IntegrationMode` type and make it the default; treat undefined `integration_mode` as `auto` (back-compat — untouched views become auto and resolve to current_file when the file declares nothing; the new linetag is the only thing that flips them, so existing files are unaffected)
+  + auto governs the *mode* (folder vs current_file): while `integration_mode === 'auto'` the displayed mode re-resolves live from `nt_integration_mode`, the same "auto follows the file" contract AutoView gives view type
+    + `nt_integration_mode=folder` → resolves folder; dispatch `setIntegration` so the extension aggregates
+    + no `nt_integration_mode` → resolves current_file (today's default)
+  + the breadcrumb *scope* (`integration_path` / `parent_context_seq`) is seeded once from `nt_breadcrumb_last` at first resolve, then is the user's navigated position — auto re-resolves the mode but never re-snaps a path the user has navigated
+  + navigation is congruence-seeking, not auto-breaking — after a breadcrumb / folder / note click, set `integration_mode = auto` when the resulting mode matches what the file declares, else pin the concrete resulting mode (look for every chance to return to auto)
+    + Auto (Folder) + navigate within folder → resulting folder == file's folder → stay Auto (Folder), selector unchanged
+    + Auto (Current file) + click a folder segment → resulting folder ≠ file's current_file → pin concrete Folder
+    + concrete Current file on a file whose linetag declares folder + click a breadcrumb → resulting folder == file's folder → jump to Auto (Folder)
+  + explicitly re-selecting "Auto" in the selector is a full reset — re-resolve both mode and scope from the file linetags
+  + factor the congruence decision into a pure `viewstateops.ts` helper (`resulting_mode` + `file_declared_mode` → `'auto' | <concrete>`) so it is unit-testable in isolation
+  + no hidden `auto_view_seeded` marker — the visible `auto` ⇄ concrete state IS the "still automatic?" signal, self-documenting as "Auto (Folder)" vs "Folder" in the toolbar, exactly like "Auto (Kanban)" vs "Kanban"
+
++ design — first-resolve seam
+  + fire the first `setIntegration` at the App layer in `ExtensionReceiver` on doc-arrival, NOT in a view-render effect — when a doc message lands and `view_states[doc_id]` has no concrete `integration_mode`, resolve from its H1 linetags and dispatch before first render
+  + dispatching at doc-arrival fires once per open and keeps resolution out of React render timing; only dispatch when the auto-resolved target actually changes, so re-renders don't re-aggregate
+  + confirm the doc-arrival handler has the H1 root note `.linetags` available (the extension sends parsed notes)
+
++ design — resolve `nt_breadcrumb_last`
+  + add a pure resolver: given the label + the active file's breadcrumb trail, return `{kind:'folder', path}` | `{kind:'note', seq}` | undefined
+  + match folder-path segments by label against the file's path trail (`segmentPathBelowWorkspace` output); deepest match wins on duplicate labels
+  + match note/epic segments by stripped headline against the merged-tree breadcrumb notes
+  + a folder-segment match implies folder mode — if `nt_breadcrumb_last` names a folder but `nt_integration_mode` is absent, auto resolution switches to folder mode (a folder breadcrumb segment only exists in folder mode)
+  + prefer extending `pathops.ts` (segment match) + `noteops.ts` (seq lookup) over a new tiny `*ops.ts` (≥4-exports rule); add `breadcrumbops.ts` only if it will hold ≥4 exports
+
++ scope
+  + add `auto` as the default `integration_mode`, resolved live from the file linetags while auto
+  + parse + validate the two new linetags from the opened doc H1 / front matter
+  + resolve `nt_breadcrumb_last` to a folder path or a note seq
+  + drive first resolution at doc-arrival in `ExtensionReceiver`; reconcile the mode after each navigation (auto when congruent with the file, concrete when divergent); reuse the existing `setIntegration` / `setParentContextSeq` dispatch — no new extension message types
+  + show the auto-resolved mode in `ViewIntegrationSelector` ("Auto (Folder)" / "Auto (Current file)")
+  + document both keys in AUTHORING_GUIDE.md and bump the guide to 1.1.0 (new backward-compatible linetag ⇒ minor)
+
++ out of scope
+  + authoring the values on the notegit demo files — a follow-up in notegit once this ships (see note below)
+  + majority-vote of `nt_integration_mode` across a folder — it is a per-opened-file directive, not voted
+  + a UI to write these linetags — authored by hand like `nt_view`
+  + animating the open-time jump — it just lands on the target view
+
++ files
+  + `client/webview/src/notethink-views/src/types/IntegrationMode.ts` — add `auto` to `INTEGRATION_MODES` / `IntegrationMode`, make it the default; note in a comment why the extension constants mirror intentionally omits it
+  + `client/webview/src/notethink-views/src/components/views/ViewIntegrationSelector.tsx` — `auto` option + "Auto (…)" label reflecting the resolved mode
+  + `client/webview/src/components/ExtensionReceiver.tsx` — resolve auto from H1 linetags on doc-arrival; dispatch `setIntegration` when the resolved target changes
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewContext.ts` — treat undefined `integration_mode` as `auto`; expose the resolved mode/path
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts` — `handle_integration_change` writes a concrete mode (leaves auto)
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewHandlers.ts` — breadcrumb/folder/note handlers reconcile `integration_mode` via the congruence helper + write the navigated scope
+  + `client/webview/src/notethink-views/src/lib/viewstateops.ts` — `reconcileAutoIntegrationMode(resulting_mode, file_declared_mode)` pure helper + tests
+  + `client/webview/src/notethink-views/src/lib/pathops.ts` — `resolveBreadcrumbFolderSegment(label, …)` + tests
+  + `client/webview/src/notethink-views/src/lib/noteops.ts` — `breadcrumbSeqForLabel(label, notes)` + tests
+  + `client/webview/src/notethink-views/src/lib/linetagops.ts` — confirm `integration_mode` / `breadcrumb_last` resolve through `resolveNamespacedTag` (likely no change)
+  + `AUTHORING_GUIDE.md` — View configuration table + version bump to 1.1.0
+  + `package.json` — version bump 0.3.13 → 0.3.14
+
++ AUTHORING_GUIDE wording — draft to paste into the "View configuration" table on implementation (the guide is the grammar doc, so the actual edit + 1.0.0 → 1.1.0 bump lands with the code, not now)
+  + `| nt_integration_mode | The integration mode this file opens into while the view is in **auto**: current_file or folder. In auto the view follows it; changing the mode or navigating away from the file's intent pins your own choice. nt_-only — no ng_ form |`
+  + `| nt_breadcrumb_last | The breadcrumb segment this file opens scoped to while in **auto** — a folder name (narrows folder-mode aggregation to that subfolder, implying folder mode) or an epic/story headline (scopes the note hierarchy). Seeds the initial position; navigate away freely. nt_-only |`
+  + bump the guide header from 1.0.0 to 1.1.0 (minor — two new optional, backward-compatible linetags)
+
++ [ ] add `auto` to `IntegrationMode` / `INTEGRATION_MODES`, make it the default, treat undefined as auto
++ [ ] read + validate authored `nt_integration_mode` (`current_file` / `folder`) and `nt_breadcrumb_last` off the opened doc H1 / front matter
++ [ ] add `resolveBreadcrumbFolderSegment` to `pathops.ts` — deepest-label match over the file's path trail
++ [ ] add `breadcrumbSeqForLabel` to `noteops.ts` — match epic/story headline → seq
++ [ ] resolve auto on doc-arrival in `ExtensionReceiver`; dispatch `setIntegration` / `setParentContextSeq` only when the resolved target changes
++ [ ] add `reconcileAutoIntegrationMode` to `viewstateops.ts` — resulting mode == file-declared → auto, else concrete
++ [ ] reconcile `integration_mode` after every navigation via the helper; explicit "Auto" selection re-resolves mode + scope from the file
++ [ ] show the auto-resolved mode in `ViewIntegrationSelector` ("Auto (Folder)" / "Auto (Current file)")
++ [ ] debug-log + no-op on an unrecognised `nt_integration_mode` value or an unmatched `nt_breadcrumb_last` label
++ [ ] document both keys in the AUTHORING_GUIDE.md View-configuration table; bump the guide 1.0.0 → 1.1.0
++ [ ] bump notethink to 0.3.14
++ [ ] jest: undefined `integration_mode` resolves as auto; `nt_integration_mode=folder` resolves to folder; an invalid value falls back to current_file
++ [ ] jest: a `nt_breadcrumb_last` folder label resolves to the right `integration_path`; deepest match wins on duplicate labels
++ [ ] jest: a `nt_breadcrumb_last` epic label resolves to the right `parent_context_seq`
++ [ ] jest: a concrete persisted `integration_mode` (user choice) is NOT overridden by the file linetag — auto no longer applies
++ [ ] jest: navigation congruence — Auto(Folder) stays auto within folder; Auto(Current file)+folder-click pins concrete Folder; concrete Current file on a folder-declaring file + click → Auto(Folder)
++ [ ] jest: an unmatched `nt_breadcrumb_last` resolves to the default scope with no throw
++ [ ] `pnpm run check` green
++ manual: open a file with `nt_integration_mode=folder&nt_breadcrumb_last=portfolio` cold — lands on the portfolio-scoped aggregate board, toolbar shows "Auto (Folder)"
++ manual: Auto (Folder), navigate to a sub/sibling folder — toolbar stays "Auto (Folder)"; reload keeps the navigated folder
++ manual: Auto (Current file), click a folder breadcrumb segment — toolbar switches to concrete "Folder"
++ manual: open a current_file-resolved file whose linetag declares folder, click a breadcrumb — toolbar jumps to "Auto (Folder)" (congruent with the file)
++ manual: pick "Auto" again after pinning concrete — the file linetags drive mode + scope once more
++ manual: open a file with a bogus `nt_breadcrumb_last` — opens normally, no error
++ note — downstream authoring (notegit, separate repo)
+  + once shipped, set `nt_integration_mode=folder&nt_breadcrumb_last=portfolio` on the Atlas Mobile App H1 in the notegit demo content
+  + this is a notegit content change, not part of this notethink story
+
++ acceptance
+  + integration mode is auto-by-default and, while auto, follows the file's `nt_integration_mode` / `nt_breadcrumb_last`
+  + a cold-opened file with `nt_integration_mode=folder` lands in folder mode unprompted, scoped by `nt_breadcrumb_last`
+  + navigation is congruence-seeking — it keeps/returns to auto when the destination matches the file's declared mode, and pins a concrete mode only when it diverges; the result persists across reloads
+  + explicit "Auto" re-selection fully resets mode + scope to the file
+  + unrecognised values resolve to the normal default with a debug line, never an error
+  + both keys are documented in AUTHORING_GUIDE.md and the guide is bumped to 1.1.0
+
++ commit message draft
+  + notethink 0.3.14: integration mode gains an `auto` default (mirrors view-type auto) driven by new `nt_integration_mode` / `nt_breadcrumb_last` H1 linetags
+  + in auto, a file declares folder mode plus the breadcrumb segment to scope to, so users land on the intended aggregate view; navigation is congruence-seeking — it returns to auto when congruent with the file and pins a concrete mode only when it diverges
+  + resolved at doc-arrival with no hidden seeded-marker; graceful no-op on unrecognised values; AUTHORING_GUIDE bumped to 1.1.0
+  + tests N jest
+
+
 ### Animated passive transitions in the kanban view [](?id=animated-passive-transitions)
 
 The visible UX payoff. When the kanban view changes layout because of a *passive* update (external file edit from another VS Code window or editor, AI-agent edit, mtime change, anything not driven by the user's own drag) the affected notes and columns animate from old state to new state in a way that mimics manual drag-and-drop. Depends on [[multi-file-ordering-stable-identity]] (stable note identity is the keying contract) and [[folder-mode-dnd]] (so the manual and automatic UX stay consistent in folder mode) and [[kanban-optimistic-projection]] (the projection seam the FLIP layer decorates; user-initiated drags resolve via the projection, passive updates via FLIP).

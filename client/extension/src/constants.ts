@@ -1,5 +1,7 @@
-// hard cap on files loaded+parsed into a single folder view
-// without it, selecting a large root (~600+ .md files) fans out one openTextDocument+parse+postMessage per file and re-runs mergeAggregateRoot on every message, saturating IPC and pinning the renderer ("window not responding")
+/*
+ * hard cap on files loaded+parsed into a single folder view
+ * without it, selecting a large root (~600+ .md files) fans out one openTextDocument+parse+postMessage per file and re-runs mergeAggregateRoot on every message, saturating IPC and pinning the renderer ("window not responding")
+ */
 export const MAX_AGGREGATE_FILES = 200;
 
 // default folder-mode filters; overridable per-view from the Files drawer (setIntegration include/exclude)

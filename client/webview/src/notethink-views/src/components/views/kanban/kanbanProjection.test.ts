@@ -176,8 +176,7 @@ describe('projectionSatisfied', () => {
     });
 
     it('returns false when the dragged note is in the right column but at the wrong index', () => {
-        // note_A has status 'done', note_D also has status 'done'; A should be at index 1 (after D)
-        // but we assert destination_index=0
+        // note_A has status 'done', note_D also has status 'done'; A should be at index 1 (after D) but we assert destination_index=0
         const done_A = withWeight(
             { ...NOTE_A, linetags: { status: { key: 'status', value: 'done', key_offset: 0, value_offset: 0, linktext_offset: 0, note_seq: NOTE_A.seq } } },
             2,

@@ -1,9 +1,7 @@
 import inserts from './en';
 import type { Insert } from './types';
 
-// the insert points InsertModal/useInsertModal know how to resolve; any template
-// declaring an insert_point outside this set would silently fall through to the
-// currentCaret default and land text in the wrong place.
+// the insert points InsertModal/useInsertModal know how to resolve; any template declaring an insert_point outside this set would silently fall through to the currentCaret default and land text in the wrong place.
 const VALID_INSERT_POINTS = ['currentCaret', 'startOfLine', 'endOfLine', 'endOfNote'];
 
 const ENTRIES = Object.entries(inserts);
@@ -43,8 +41,7 @@ describe('inserts registry (en)', () => {
         });
 
         it('has insertable content', () => {
-            // content must exist and carry something to insert (whitespace-only
-            // templates like Paragraph are intentional, so we only forbid empty).
+            // content must exist and carry something to insert (whitespace-only templates like Paragraph are intentional, so we only forbid empty).
             expect(typeof insert.content).toBe('string');
             expect(insert.content.length).toBeGreaterThan(0);
         });
@@ -67,8 +64,7 @@ describe('inserts registry (en)', () => {
         });
 
         it('balances fenced code blocks in content and example_content', () => {
-            // every ``` opener needs a closer; an odd count means a template would
-            // bleed a half-open code fence into the document.
+            // every ``` opener needs a closer; an odd count means a template would bleed a half-open code fence into the document.
             for (const body of [insert.content, insert.example_content]) {
                 if (!body) { continue; }
                 const fences = (body.match(/```/g) || []).length;
@@ -106,8 +102,7 @@ describe('inserts registry (en)', () => {
         });
 
         it.each(mermaid)('"%s" wraps its diagram in a ```mermaid fence', (_key, insert: Insert) => {
-            // the kanban board is the one project-management template that is plain
-            // markdown rather than a mermaid diagram, so it is exempt.
+            // the kanban board is the one project-management template that is plain markdown rather than a mermaid diagram, so it is exempt.
             if (insert.value === 'pm_kanban') {
                 expect(insert.content).toContain('?nt_view=kanban');
                 return;

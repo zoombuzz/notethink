@@ -24,8 +24,7 @@ test.describe('Document-level front-matter strip', () => {
         // force the document view so the strip renders at the top of the centred pane
         await sendCommand(page, 'setViewType', { viewType: 'document' });
 
-        // single-file (current_file) mode: the document root carries the front matter, so `status: inflight`
-        // shows as a document-level pill
+        // single-file (current_file) mode: the document root carries the front matter, so `status: inflight` shows as a document-level pill
         const status_pill = page.locator('[role="listitem"][aria-label="status"]');
         await expect(status_pill).toBeVisible({ timeout: 5000 });
         await expect(status_pill).toContainText('inflight');

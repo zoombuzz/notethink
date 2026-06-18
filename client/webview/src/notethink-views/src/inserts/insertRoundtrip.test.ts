@@ -29,8 +29,7 @@ function toNotes(markdown: string): NoteProps {
 
 const ENTRIES = Object.entries(inserts);
 
-// every distinct body an Insert can place into the document — both the bare
-// template and (where present) its worked example.
+// every distinct body an Insert can place into the document — both the bare template and (where present) its worked example.
 const BODIES: Array<[string, string]> = ENTRIES.flatMap(([key, insert]) => {
     const bodies: Array<[string, string]> = [[`${key} (content)`, insert.content]];
     if (insert.example_content) {

@@ -239,9 +239,7 @@ describe('kanbanNoteOrder', () => {
     });
 
     it('falls back to merged seq (not document offset) when no weights', () => {
-        // a has the LARGER document offset but the SMALLER merged seq — e.g. a
-        // newest-at-bottom done.md story that mergeAggregateRoot reversed to the
-        // top. seq must win so the newest story sorts first in its column.
+        // a has the LARGER document offset but the SMALLER merged seq — e.g. a newest-at-bottom done.md story that mergeAggregateRoot reversed to the top. seq must win so the newest story sorts first in its column.
         const a = makeNote({ seq: 1, position: { start: { offset: 900, line: 90 }, end: { offset: 920, line: 91 } } });
         const b = makeNote({ seq: 2, position: { start: { offset: 5, line: 1 }, end: { offset: 15, line: 2 } } });
         expect(kanbanNoteOrder(a, b)).toBeLessThan(0);

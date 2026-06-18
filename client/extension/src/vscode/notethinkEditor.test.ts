@@ -631,8 +631,10 @@ describe('NotethinkEditorProvider', () => {
 				to: 8,
 			});
 
-			// when from !== to, Selection(end_pos, start_pos) is used
-			// anchor = end_pos (8), active = start_pos (2)
+			/*
+			 * when from !== to, Selection(end_pos, start_pos) is used
+			 * anchor = end_pos (8), active = start_pos (2)
+			 */
 			expect(editor.selection.anchor.character).toBe(8);
 			expect(editor.selection.active.character).toBe(2);
 			expect(editor.revealRange).toHaveBeenCalledTimes(1);
@@ -1352,8 +1354,10 @@ describe('NotethinkEditorProvider', () => {
 
 		it('does NOT arm a watcher when the active file is already visible in a text editor', async () => {
 			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockClear();
-			// the outer beforeEach already configured visibleTextEditors = [initialEditor] for defaultDocPath
-			// since the default panelHelper's active path is visible, no watcher should be armed
+			/*
+			 * the outer beforeEach already configured visibleTextEditors = [initialEditor] for defaultDocPath
+			 * since the default panelHelper's active path is visible, no watcher should be armed
+			 */
 			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(0);
 		});
 
@@ -1504,8 +1508,10 @@ describe('NotethinkEditorProvider', () => {
 		});
 	});
 
-	// ---- non-file: scheme folder mode (VS Code Web / custom FileSystemProvider) ----
-	// shared vscode-vfs: fixtures for the non-file: scheme folder-mode + openRelative blocks below
+	/*
+	 * ---- non-file: scheme folder mode (VS Code Web / custom FileSystemProvider) ----
+	 * shared vscode-vfs: fixtures for the non-file: scheme folder-mode + openRelative blocks below
+	 */
 	const VFS_AUTHORITY = 'github';
 	const VFS_ROOT = '/zoombuzz/notethink';
 	const vfsUri = (p: string): Uri => Uri.parse(`vscode-vfs://${VFS_AUTHORITY}${p}`);

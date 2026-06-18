@@ -25,8 +25,10 @@ async function applyEditTextChanges(document: vscode.TextDocument, uri: vscode.U
 	const sorted_changes = [...changes].sort((a, b) => b.from - a.from);
 	const existing = vscode.window.visibleTextEditors.find(ed => ed.document.uri.path === uri.path);
 	if (existing) {
-		// capture the caret before the edit: VS Code drops the cursor at the last edited range, so a multi-edit (a kanban reorder's weight cascade) would yank it onto another note and the view's editor-derived focus would follow
-		// restore it afterwards, shifted only by edits that landed before it, so a view-driven edit leaves the caret put
+		/*
+		 * capture the caret before the edit: VS Code drops the cursor at the last edited range, so a multi-edit (a kanban reorder's weight cascade) would yank it onto another note and the view's editor-derived focus would follow
+		 * restore it afterwards, shifted only by edits that landed before it, so a view-driven edit leaves the caret put
+		 */
 		const anchor_offset = document.offsetAt(existing.selection.anchor);
 		const active_offset = document.offsetAt(existing.selection.active);
 		await existing.edit(editBuilder => {
@@ -604,8 +606,10 @@ export class PanelSession {
 				this.integration_watcher.dispose();
 				this.integration_watcher = undefined;
 			}
-			// snapshot the previous integration_docs so the fast-path detection in discoverFolderDocs can compare against it
-			// clearing the live cache up front would break that check — preserve the entries until discoverFolderDocs decides whether to keep or replace them
+			/*
+			 * snapshot the previous integration_docs so the fast-path detection in discoverFolderDocs can compare against it
+			 * clearing the live cache up front would break that check — preserve the entries until discoverFolderDocs decides whether to keep or replace them
+			 */
 			const previous_docs = { ...this.integration_docs };
 			for (const key of Object.keys(this.integration_docs)) { delete this.integration_docs[key]; }
 			this.integration_path = folder_path;

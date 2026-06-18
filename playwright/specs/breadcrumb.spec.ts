@@ -40,9 +40,11 @@ test.describe('Breadcrumb workspace root stripping', () => {
     });
 
     test('uses relative_path for breadcrumb (symlink-safe), keeping the opened folder as root', async ({ page }) => {
-        // Simulate symlink mismatch: workspace opened via /home/alex/github.com/active_development
-        // but doc path resolves via /mnt/secure/home/alex/git/github.com/active_development
-        // workspace_root won't match doc_path, but relative_path from asRelativePath handles it
+        /*
+         * simulate symlink mismatch: workspace opened via /home/alex/github.com/active_development
+         * but doc path resolves via /mnt/secure/home/alex/git/github.com/active_development
+         * workspace_root won't match doc_path, but relative_path from asRelativePath handles it
+         */
         const doc_path = '/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs/todo.md';
         await injectDocsFromFixture(page, 'basic.md', doc_path, {
             workspace_root: '/home/alex/github.com/active_development',

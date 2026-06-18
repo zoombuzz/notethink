@@ -93,8 +93,10 @@ export function useViewContext(props: ViewProps): ViewContext {
             const by_origin = findDeepestNoteByOriginPosition(props.notes || [], props.active_editor_doc_path, caret_pos);
             if (by_origin) { return by_origin; }
         }
-        // fallback: in-tree position match (current_file mode where offsets are coherent across the rendered tree)
-        // clamp caret to the rendered root's end so a selection that arrived before the MDAST re-parse still resolves to a note rather than nothing
+        /*
+         * fallback: in-tree position match (current_file mode where offsets are coherent across the rendered tree)
+         * clamp caret to the rendered root's end so a selection that arrived before the MDAST re-parse still resolves to a note rather than nothing
+         */
         let clamped = caret_pos;
         const root_end = props.notes?.[0]?.position?.end?.offset;
         if (root_end !== undefined && clamped > root_end) {

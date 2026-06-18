@@ -64,10 +64,12 @@ describe('useInsertModal', () => {
     });
 
     describe('insert point → offset resolution', () => {
-        // doc layout (offsets):  "alpha\nbeta\ngamma"
-        //   alpha  0..5   (newline at 5)
-        //   beta   6..10  (newline at 10)
-        //   gamma  11..16
+        /*
+         * doc layout (offsets):  "alpha\nbeta\ngamma"
+         *   alpha  0..5   (newline at 5)
+         *   beta   6..10  (newline at 10)
+         *   gamma  11..16
+         */
         const DOC = 'alpha\nbeta\ngamma';
 
         it('currentCaret inserts at the caret head', () => {

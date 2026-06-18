@@ -629,8 +629,7 @@ describe('GenericView click state machine', () => {
         wrapper.appendChild(checkbox);
         wrapper.appendChild(text);
 
-        // calling the handler with the PARAGRAPH note (empty body_raw) should still work
-        // because createNoteClickHandler passes selectable_note (the heading) to the handler
+        // calling the handler with the PARAGRAPH note (empty body_raw) should still work because createNoteClickHandler passes selectable_note (the heading) to the handler
         const click_profile: ClickPositionInfo = {
             from: 18, to: 30,
             selection_from: 18, selection_to: 30,
@@ -1113,8 +1112,10 @@ describe('GenericView navigation callback', () => {
                 },
             });
             fireEvent.click(await screen.findByTestId('view-settings-button'));
-            // natural order is ['doing', 'done', 'untagged']; clicking move-up on 'done' produces ['done', 'doing', 'untagged']
-            // labels are formatted (title-cased) — the raw slug is still what's stored
+            /*
+             * natural order is ['doing', 'done', 'untagged']; clicking move-up on 'done' produces ['done', 'doing', 'untagged']
+             * labels are formatted (title-cased) — the raw slug is still what's stored
+             */
             fireEvent.click(screen.getByLabelText('Move Done up'));
             expect(set_state).toHaveBeenCalledTimes(1);
             const reorder_update = set_state.mock.calls[0][0][0];

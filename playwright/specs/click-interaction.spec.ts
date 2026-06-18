@@ -35,8 +35,7 @@ test.describe('Click Interaction', () => {
         await headline.click();
         await page.waitForTimeout(200);
 
-        // The click sends a revealRange to the extension, which would normally
-        // send back a selectionChanged event. In the harness, we simulate that:
+        // the click sends a revealRange to the extension, which would normally send back a selectionChanged event; in the harness, we simulate that
         const reveal_msg = await findRevealMessage(page);
 
         if (reveal_msg) {

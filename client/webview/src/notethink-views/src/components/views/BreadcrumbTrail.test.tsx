@@ -305,9 +305,11 @@ describe('BreadcrumbTrail', () => {
 
     it('uses doc_relative_path when provided (handles symlinks)', () => {
         const current = makeNote({ seq: 0 });
-        // Simulate: workspace opened via symlink /home/alex/github.com/active_development
-        // but doc path resolves via /mnt/secure/home/alex/git/github.com/active_development
-        // The extension computes relative_path via asRelativePath which handles this correctly
+        /*
+         * Simulate: workspace opened via symlink /home/alex/github.com/active_development
+         * but doc path resolves via /mnt/secure/home/alex/git/github.com/active_development
+         * The extension computes relative_path via asRelativePath which handles this correctly
+         */
         render(<BreadcrumbTrail {...current}
             doc_path="/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs/todo.md"
             doc_relative_path="countingsheet/docs/todo.md"

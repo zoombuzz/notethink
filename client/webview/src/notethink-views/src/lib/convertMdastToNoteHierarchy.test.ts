@@ -80,8 +80,10 @@ describe('convertMdastToNoteHierarchy', () => {
     });
 
     it('multiple headings get incrementing seq numbers', () => {
-        // "# A\n## B\n## C\n"
-        //  0123 45678 9...
+        /*
+         * "# A\n## B\n## C\n"
+         *  0123 45678 9...
+         */
         const text = '# A\n## B\n## C\n';
         const mdast: MdastNode = {
             type: 'root',
@@ -100,8 +102,10 @@ describe('convertMdastToNoteHierarchy', () => {
     });
 
     it('nested headings get correct levels (h1=1, h2 under h1=2)', () => {
-        // "# Title\n## Sub\nSome text\n"
-        //  01234567 89...14 15...
+        /*
+         * "# Title\n## Sub\nSome text\n"
+         *  01234567 89...14 15...
+         */
         const text = '# Title\n## Sub\nSome text\n';
         const mdast: MdastNode = {
             type: 'root',
@@ -459,9 +463,11 @@ describe('makePosition line computation (binary search)', () => {
     });
 
     it('computes correct line numbers for multi-line text', () => {
-        // line 1: "# A\n"  offsets 0-3, newline at 3
-        // line 2: "body\n"  offsets 4-8, newline at 8
-        // line 3: "# B\n"  offsets 9-12, newline at 12
+        /*
+         * line 1: "# A\n"  offsets 0-3, newline at 3
+         * line 2: "body\n"  offsets 4-8, newline at 8
+         * line 3: "# B\n"  offsets 9-12, newline at 12
+         */
         const text = '# A\nbody\n# B\n';
         const mdast: MdastNode = {
             type: 'root',

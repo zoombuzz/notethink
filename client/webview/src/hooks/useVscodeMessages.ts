@@ -96,8 +96,10 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
     return true;
 }
 
-// merge an incoming update payload into the current doc map; returns the previous map unchanged when no hashes differ
-// merge_strategy 'merge' upserts incoming docs (folder-mode incremental updates); anything else replaces the map entirely (single-file view, or folder-mode initial bulk load)
+/*
+ * merge an incoming update payload into the current doc map; returns the previous map unchanged when no hashes differ
+ * merge_strategy 'merge' upserts incoming docs (folder-mode incremental updates); anything else replaces the map entirely (single-file view, or folder-mode initial bulk load)
+ */
 function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial: { docs?: HashMapOf<Doc> }; merge_strategy?: string }): { docs?: HashMapOf<Doc> } {
     const incoming_docs = message.partial.docs || {};
     const current_docs = current.docs || {};
@@ -134,8 +136,10 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial
     return { ...current, docs: incoming_docs };
 }
 
-// own the core doc/selection/workspace state, the host message listener, and the dispatch
-// the message-type string literals ('update', 'selectionChanged', 'command', 'globalSettings', 'settingsCascade', 'jumpTargets') are the on-the-wire contract and must stay exactly as-is
+/*
+ * own the core doc/selection/workspace state, the host message listener, and the dispatch
+ * the message-type string literals ('update', 'selectionChanged', 'command', 'globalSettings', 'settingsCascade', 'jumpTargets') are the on-the-wire contract and must stay exactly as-is
+ */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState {
     const { postMessage, markConnected, setGlobalSettings, setSettingsCascade, updateAllViewStates, view_states_ref, navigation_callback_ref, saved_view_states, markPending, clearPending, setJumpTargets } = deps;
@@ -299,16 +303,20 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     useEffect(() => {
         window.addEventListener('message', onMessage);
         debug('added message event listener');
-        // if saved state shows we were in folder mode, re-establish the integration first
-        // sending setIntegration before requestInitialState lets the extension synchronously set integration_path before the async findFiles - so when the requestInitialState handler runs sendDoc it uses merge_strategy='merge' and upserts into the saved folder docs map instead of replacing it
+        /*
+         * if saved state shows we were in folder mode, re-establish the integration first
+         * sending setIntegration before requestInitialState lets the extension synchronously set integration_path before the async findFiles - so when the requestInitialState handler runs sendDoc it uses merge_strategy='merge' and upserts into the saved folder docs map instead of replacing it
+         */
         if (saved_view_states) {
             for (const id of Object.keys(saved_view_states)) {
                 const vs = saved_view_states[id];
                 // restore folder for a concrete folder pin AND for an `auto` view whose path was seeded by auto-resolution (resolveIntegrationMode treats auto + a path as folder), so an auto-folder file re-aggregates on reload without a flash through current_file
                 if (resolveIntegrationMode(vs?.display_options) === INTEGRATION_MODE_FOLDER && vs?.display_options?.integration_path) {
                     debug('restoring folder integration on reload: %s', vs.display_options.integration_path);
-                    // host re-validates this path against the workspace before acting — persisted webview state is untrusted (defense-in-depth)
-                    // do NOT replay the persisted includeFilter / excludeFilter here: the workspace cascade (notethink.settings.files.*) is the source of truth, and replaying a snapshot from an earlier session masks any later edit the user made in settings.json. handle_apply_filters writes user-applied filters through to the cascade, so the cascade is always up to date with the user's intent after a fresh Apply
+                    /*
+                     * host re-validates this path against the workspace before acting — persisted webview state is untrusted (defense-in-depth)
+                     * do NOT replay the persisted includeFilter / excludeFilter here: the workspace cascade (notethink.settings.files.*) is the source of truth, and replaying a snapshot from an earlier session masks any later edit the user made in settings.json. handle_apply_filters writes user-applied filters through to the cascade, so the cascade is always up to date with the user's intent after a fresh Apply
+                     */
                     postMessage({
                         type: 'setIntegration',
                         mode: INTEGRATION_MODE_FOLDER,
@@ -318,8 +326,10 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 }
             }
         }
-        // request initial state - this is what triggers the extension to send the active doc (and selection + global settings)
-        // sent after setIntegration so the extension has integration_path set by the time it runs sendDoc here
+        /*
+         * request initial state - this is what triggers the extension to send the active doc (and selection + global settings)
+         * sent after setIntegration so the extension has integration_path set by the time it runs sendDoc here
+         */
         postMessage({
             type: 'requestInitialState',
         });

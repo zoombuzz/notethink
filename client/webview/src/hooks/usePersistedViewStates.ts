@@ -65,9 +65,11 @@ export function usePersistedViewStates(
     return { view_states, view_states_ref, setViewStates, updateAllViewStates, handleSetViewManagedState };
 }
 
-// persist docs+viewStates so the webview can restore instantly if VS Code recreates it
-// skip empty docs to prevent blank-panel-on-restore when VS Code restarts before the extension sends the first document
-// the persisted object keeps the camelCase key `viewStates` (the on-the-wire/persisted key read back by migrateSavedState / saved_state.viewStates), even though the local hook value is snake_case view_states
+/*
+ * persist docs+viewStates so the webview can restore instantly if VS Code recreates it
+ * skip empty docs to prevent blank-panel-on-restore when VS Code restarts before the extension sends the first document
+ * the persisted object keeps the camelCase key `viewStates` (the on-the-wire/persisted key read back by migrateSavedState / saved_state.viewStates), even though the local hook value is snake_case view_states
+ */
 export function useVscodeStatePersistence(
     docs: HashMapOf<Doc> | undefined,
     view_states: Record<string, ViewState>,

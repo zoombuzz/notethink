@@ -104,8 +104,10 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [active_drawer]);
 
-    // outside-click closes whichever drawer is open; the trigger and the drawer body are excluded so the trigger's own onClick toggles cleanly and clicks inside the drawer don't dismiss
-    // pointerdown (not click) fires before any onClick on the click target, so the drawer is gone by the time the clicked control runs its handler; no focus restore here — focus follows the pointer
+    /*
+     * outside-click closes whichever drawer is open; the trigger and the drawer body are excluded so the trigger's own onClick toggles cleanly and clicks inside the drawer don't dismiss
+     * pointerdown (not click) fires before any onClick on the click target, so the drawer is gone by the time the clicked control runs its handler; no focus restore here — focus follows the pointer
+     */
     useEffect(() => {
         if (active_drawer === 'none') { return; }
         const drawer_id = `v${view_id}-${active_drawer}-drawer`;

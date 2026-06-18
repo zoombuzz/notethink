@@ -18,9 +18,10 @@ function ExtensionReceiver(): React.ReactElement {
     return <ExtensionReceiverImpl pendingWorkApi={NOOP_PENDING_WORK_API} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />;
 }
 
-// mock the debug library so message-validation logging can be asserted (validation logs via the debug
-// instance, not console). the spy is created inside the factory so it exists when the hooks' module-load
-// `Debug(namespace)` calls run; every namespace returns the same shared spy
+/*
+ * mock the debug library so message-validation logging can be asserted (validation logs via the debug instance, not console)
+ * the spy is created inside the factory so it exists when the hooks' module-load `Debug(namespace)` calls run; every namespace returns the same shared spy
+ */
 jest.mock('debug', () => {
     const mock_log = jest.fn();
     return { __esModule: true, default: () => mock_log };

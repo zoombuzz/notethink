@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { DEFAULT_COLUMN_ORDER, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER } from '../constants';
 
-// settings module. One canonical place to read, write, and inspect every notethink setting.
-//
-// Each entry binds: the TS identifier (camelCase, used in code as a SettingKey AND as the wire setting ID AND as the payload field name), the dotted config path under `notethink.settings.*` (matches package.json contributes), the built-in default, and whether the setting is part of the cascade subset (true) or a global toggle (false). Settings identifiers are camelCase end-to-end — this is a deliberate, scoped exception to the project-wide snake_case-for-wire-data-fields convention; settings have a unique cross-boundary identity (TS code, wire IDs, payload field names, VS Code config keys), and bridging conventions would mean every setting carries two names.
-//
-// Adding a setting = one entry here. The read/write helpers stay one-liners; the cascade payload, the workspace-overrides flag, and the promote/reset handlers all iterate this map.
+/*
+ * settings module. One canonical place to read, write, and inspect every notethink setting.
+ *
+ * Each entry binds: the TS identifier (camelCase, used in code as a SettingKey AND as the wire setting ID AND as the payload field name), the dotted config path under `notethink.settings.*` (matches package.json contributes), the built-in default, and whether the setting is part of the cascade subset (true) or a global toggle (false). Settings identifiers are camelCase end-to-end — this is a deliberate, scoped exception to the project-wide snake_case-for-wire-data-fields convention; settings have a unique cross-boundary identity (TS code, wire IDs, payload field names, VS Code config keys), and bridging conventions would mean every setting carries two names.
+ *
+ * Adding a setting = one entry here. The read/write helpers stay one-liners; the cascade payload, the workspace-overrides flag, and the promote/reset handlers all iterate this map.
+ */
 
 export interface SettingDef<T> {
     path: string;

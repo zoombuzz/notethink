@@ -130,9 +130,7 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('newest-at-bottom interleaves each project\'s newest-first across projects', () => {
-        // two done.md-style files: newest is the last story; cap 2 keeps the last
-        // two reversed (newest first), then interleave so the column shows each
-        // project's most-recent completion first
+        // two done.md-style files: newest is the last story; cap 2 keeps the last two reversed (newest first), then interleave so the column shows each project's most-recent completion first
         const docA = orderedFile('id-a', 'a/done.md', 'A', 'newest-at-bottom', ['A1', 'A2', 'A3']);
         const docB = orderedFile('id-b', 'b/done.md', 'B', 'newest-at-bottom', ['B1', 'B2', 'B3']);
         const { root } = mergeAggregateRoot({ 'id-b': docB, 'id-a': docA }, '/repo/', 2);
@@ -202,10 +200,12 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('## epic wrapping ### stories: epic name carried as structural origin.epic on each story', () => {
-        // # Todo
-        // ## Phase 3
-        // ### Build feature
-        // ### Test feature
+        /*
+         * # Todo
+         * ## Phase 3
+         * ### Build feature
+         * ### Test feature
+         */
         const text = '# Todo\n## Phase 3\n### Build feature\n### Test feature\n';
         const children: MdastNode[] = [
             mdastNode('heading', 0, 6, { depth: 1 }),
@@ -224,9 +224,11 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('## epic with id linetag: origin.epic carries id', () => {
-        // # Todo
-        // ## New Relic [](?id=nr)
-        // ### Wire alerts
+        /*
+         * # Todo
+         * ## New Relic [](?id=nr)
+         * ### Wire alerts
+         */
         const headline2 = '## New Relic [](?id=nr)';
         const text = `# Todo\n${headline2}\n### Wire alerts\n`;
         const h1_end = 6;
@@ -248,9 +250,11 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('direct epic= linetag overrides structural ## parent', () => {
-        // # Todo
-        // ## Structural Epic
-        // ### Story [](?epic=Other)
+        /*
+         * # Todo
+         * ## Structural Epic
+         * ### Story [](?epic=Other)
+         */
         const story_headline = '### Story [](?epic=Other)';
         const text = `# Todo\n## Structural Epic\n${story_headline}\n`;
         const h1_end = 6;
@@ -273,9 +277,11 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('epic= linetag resolves by exact-name match within the same file', () => {
-        // # Todo
-        // ## Foo Bar
-        // ### Story [](?epic=Foo+Bar)
+        /*
+         * # Todo
+         * ## Foo Bar
+         * ### Story [](?epic=Foo+Bar)
+         */
         const story_headline = '### Story [](?epic=Foo+Bar)';
         const text = `# Todo\n## Foo Bar\n${story_headline}\n`;
         const h1_end = 6;
@@ -383,10 +389,12 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('origin stamped on descendants of a story (not just the story itself)', () => {
-        // story with a sub-bullet child
-        // # Todo
-        // ### Story A
-        // + sub bullet
+        /*
+         * story with a sub-bullet child
+         * # Todo
+         * ### Story A
+         * + sub bullet
+         */
         const text = '# Todo\n### Story A\n+ sub bullet\n';
         const h1_end = 6;
         const h3_start = h1_end + 1;
@@ -650,8 +658,7 @@ describe('mergeAggregateRoot', () => {
             const docA = orderedFile('id-a', 'a/todo.md', 'A', 'newest-at-top', ['A1', 'A2', 'A3', 'A4']);
             const docB = orderedFile('id-b', 'b/todo.md', 'B', 'newest-at-bottom', ['B1', 'B2', 'B3', 'B4']);
             const { root, all_notes } = mergeAggregateRoot({ 'id-b': docB, 'id-a': docA }, '/repo/', 2);
-            // a kept [A1,A2] (first 2), b kept [B4,B3] (last 2 reversed newest-first);
-            // round-robin in stable file order a/ then b/ → A1,B4,A2,B3
+            // a kept [A1,A2] (first 2), b kept [B4,B3] (last 2 reversed newest-first); round-robin in stable file order a/ then b/ → A1,B4,A2,B3
             expect(root.child_notes!.map(n => n.headline_raw)).toEqual(
                 ['### A1', '### B4', '### A2', '### B3'],
             );
@@ -659,12 +666,14 @@ describe('mergeAggregateRoot', () => {
         });
 
         it('epic-nested stories are counted in the per-file cap', () => {
-            // # Todo
-            // ### S1            (direct)
-            // ## Epic
-            // ### S2            (epic-nested)
-            // ### S3            (epic-nested)
-            // ### S4            (epic-nested)
+            /*
+             * # Todo
+             * ### S1            (direct)
+             * ## Epic
+             * ### S2            (epic-nested)
+             * ### S3            (epic-nested)
+             * ### S4            (epic-nested)
+             */
             const h1 = '# Todo';
             const s1 = '### S1';
             const epic = '## Epic';
@@ -719,8 +728,10 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('file_view_type from H1 nt_view linetag is captured on every story of that file', () => {
-        // # Todo [](?nt_view=kanban)
-        // ### Story
+        /*
+         * # Todo [](?nt_view=kanban)
+         * ### Story
+         */
         const h1_text = '# Todo [](?nt_view=kanban)';
         const text = `${h1_text}\n### Story\n`;
         const h1_end = h1_text.length;

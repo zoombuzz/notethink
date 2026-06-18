@@ -66,8 +66,10 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		const client_dist_directory = 'client/webview/dist';
 		const script_uri = webview.asWebviewUri(vscode.Uri.joinPath(
 			this.context.extensionUri, client_dist_directory, 'index.js'));
-		// dev cache-buster: webview resources are cached by URL, so a rebuilt bundle can be served stale across reloads (the source of "my webview fix didn't take effect")
-		// in dev a per-load query param forces a fresh fetch; production keeps the cacheable URL
+		/*
+		 * dev cache-buster: webview resources are cached by URL, so a rebuilt bundle can be served stale across reloads (the source of "my webview fix didn't take effect")
+		 * in dev a per-load query param forces a fresh fetch; production keeps the cacheable URL
+		 */
 		const cache_bust = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV) ? `?v=${Date.now()}` : '';
 
 		const nonce = getNonce();

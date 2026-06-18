@@ -265,8 +265,10 @@ describe('AutoView', () => {
         });
 
         it('multiple stories from same file vote only once', () => {
-            // file 'a' has 3 stories, all carrying file_view_type=kanban; file 'b' has 1 story with document
-            // single-vote per file → 1 kanban vs 1 document → tie → falls back to document
+            /*
+             * file 'a' has 3 stories, all carrying file_view_type=kanban; file 'b' has 1 story with document
+             * single-vote per file → 1 kanban vs 1 document → tie → falls back to document
+             */
             const root = makeAggregateRoot();
             const stories = [
                 makeStory(1, 'a', 'kanban'),

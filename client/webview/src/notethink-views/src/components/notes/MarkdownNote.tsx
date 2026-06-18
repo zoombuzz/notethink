@@ -49,8 +49,10 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         setManuallyExpanded(false);
     }, [props.body_raw]);
 
-    // clip logic: auto-expand ON → expand on focus; OFF → respect manually_expanded;
-    // lock clip state during drag to prevent flash on drop
+    /*
+     * clip logic: auto-expand ON → expand on focus; OFF → respect manually_expanded;
+     * lock clip state during drag to prevent flash on drop
+     */
     const should_clip_base = is_top_level && overflow_state.overflows && (
         auto_expand
             ? !props.focused
@@ -69,9 +71,11 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         caret_offset: props.display_options?.caret_offset as number | undefined,
     });
 
-    // parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
-    // always strip linetag link nodes from MDAST - they render as invisible empty <a> elements;
-    // visible linetag badges are appended separately when showLinetagsInHeadlines is enabled
+    /*
+     * parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
+     * always strip linetag link nodes from MDAST - they render as invisible empty <a> elements;
+     * visible linetag badges are appended separately when showLinetagsInHeadlines is enabled
+     */
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(props, {
             render: 'strip_linetags',

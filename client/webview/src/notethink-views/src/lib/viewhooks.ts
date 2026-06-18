@@ -7,8 +7,10 @@ const debug = Debug("nodejs:notethink-views:viewhooks");
 
 // small extra so the story sits clear of the sticky header rather than flush against it
 const SCROLL_OCCLUDER_BUFFER_PX = 8;
-// the focused/selected story draws a dashed/solid outline ring (offset 6px + 2px width, 8px when nested) that getBoundingClientRect excludes
-// reserve this much clearance on every edge so the ring is never clipped against a scroll container's edge
+/*
+ * the focused/selected story draws a dashed/solid outline ring (offset 6px + 2px width, 8px when nested) that getBoundingClientRect excludes
+ * reserve this much clearance on every edge so the ring is never clipped against a scroll container's edge
+ */
 const SCROLL_FOCUS_RING_PX = 12;
 
 /**
@@ -135,8 +137,10 @@ export function useScrollToCaret(
             const dy = frameDelta(rect.top - ring, rect.bottom + ring, Math.max(v_rect.top, occluder_top), v_rect.bottom);
             if (dy !== 0) { v.scrollBy({ top: dy, behavior: 'smooth' }); }
 
-            // horizontal (kanban board): reserve the ring left/right so the halo isn't clipped against the board edge, anchor the left when too wide
-            // a document view has no horizontal scroller, so dx resolves to 0 (no-op)
+            /*
+             * horizontal (kanban board): reserve the ring left/right so the halo isn't clipped against the board edge, anchor the left when too wide
+             * a document view has no horizontal scroller, so dx resolves to 0 (no-op)
+             */
             const h = findScrollParent(story, 'x');
             const h_rect = h.getBoundingClientRect();
             const dx = frameDelta(rect.left - ring, rect.right + ring, h_rect.left, h_rect.right);
@@ -169,9 +173,7 @@ export function useCaretIndicator(
         const resolved = resolveCaretTarget(display_options.focused_seqs, view_id, selection?.main.head);
         if (!resolved) { return; }
 
-        // only flash when the caret is within a specific content element (headline
-        // or body item with data-offset-start/end); gaps between notes have no
-        // rendered content so nothing should flash
+        // only flash when the caret is within a specific content element (headline or body item with data-offset-start/end); gaps between notes have no rendered content so nothing should flash
         const target = resolved.body_item;
         if (!target) { return; }
 
@@ -195,8 +197,7 @@ export function useCaretIndicator(
         const apply = (): void => { target.classList.add(caret_class); };
         const on_scrollend = (): void => { clearTimeout(timer); timer = setTimeout(apply, 150); };
         document.addEventListener('scrollend', on_scrollend, { once: true });
-        // fallback if no scroll happens (scrollend never fires);
-        // 1000ms allows for long smooth scrolls in case scrollend is missed
+        // fallback if no scroll happens (scrollend never fires); 1000ms allows for long smooth scrolls in case scrollend is missed
         timer = setTimeout(() => {
             document.removeEventListener('scrollend', on_scrollend);
             apply();

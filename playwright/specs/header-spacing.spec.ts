@@ -13,8 +13,10 @@ test.describe('Header bar breathing room and root label suppression', () => {
         const container = page.locator(`[data-testid="document-${id}-inner"]`);
         await expect(container).toBeVisible({ timeout: 5000 });
 
-        // the synthetic root container (note.type === 'root') previously rendered <span>Root</span>;
-        // assert no rowheader contains exactly "Root"
+        /*
+         * the synthetic root container (note.type === 'root') previously rendered <span>Root</span>
+         * assert no rowheader contains exactly "Root"
+         */
         const headlines = page.locator('[role="rowheader"]');
         const headline_texts = await headlines.allTextContents();
         expect(headline_texts.some(t => t.trim() === 'Root')).toBe(false);

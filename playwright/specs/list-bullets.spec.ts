@@ -12,9 +12,7 @@ test.describe('List bullets', () => {
         await injectDocsFromFixture(page, 'list-bullets.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
 
-        // collect { text, listStyleType } for each listItem by walking from the headline up
-        // to its nearest <li>, so the pairing is unambiguous (hasText on <li> filters by the
-        // entire subtree's text content, which matches ancestors of the intended node)
+        // collect { text, listStyleType } for each listItem by walking from the headline up to its nearest <li>, so the pairing is unambiguous (hasText on <li> filters by the entire subtree's text content, which matches ancestors of the intended node)
         const rows = await page.evaluate(() => {
             const headlines = Array.from(document.querySelectorAll('[role="rowheader"]')) as HTMLElement[];
             const out: Array<{ text: string; listStyleType: string }> = [];

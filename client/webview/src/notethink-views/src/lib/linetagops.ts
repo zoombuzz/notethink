@@ -6,9 +6,7 @@ const debug = Debug("nodejs:notethink-views:linetagops");
 
 type HashMapOf<S> = { [key: string]: S };
 
-// NoteThink's internal linetag namespace. `nt_` is the prefix we write going
-// forward; `ng_` is the accepted legacy synonym (read-only, forever). Ordered
-// nt_-first so the canonical prefix wins when both forms are present.
+// NoteThink's internal linetag namespace. `nt_` is the prefix we write going forward; `ng_` is the accepted legacy synonym (read-only, forever). Ordered nt_-first so the canonical prefix wins when both forms are present.
 export const NOTETHINK_PREFIXES = ['nt_', 'ng_'] as const;
 
 /** true if key is in NoteThink's internal namespace (any accepted prefix) */
@@ -235,15 +233,17 @@ function crossFileOrderingChanges(
     const predecessor_weight = predecessor?.linetags?.[key]?.value_numeric;
     const successor_weight = successor?.linetags?.[key]?.value_numeric;
     const new_child_weight = new_child.linetags?.[key]?.value_numeric;
-    // restraint guard: a drop into an unweighted neighbourhood cannot be honoured by
-    // weighting the dragged card. Per kanbanNoteOrder case 2 a weighted card always
-    // sorts AFTER every unweighted one, so minting a weight here would sink the card
-    // below its unweighted successor — the opposite of the requested placement (the
-    // top-drop-goes-to-bottom bug). Forcing the order would instead require weighting
-    // every OTHER card, which contradicts the minimal, self-removing weights design.
-    // Implicit relevance order already expresses this region — the just-saved file's
-    // bumped mtime floats it up — so mint nothing and let noteOrder govern. Weights
-    // are reserved for drops a weighted neighbour makes genuinely expressive.
+    /*
+     * restraint guard: a drop into an unweighted neighbourhood cannot be honoured by
+     * weighting the dragged card. Per kanbanNoteOrder case 2 a weighted card always
+     * sorts AFTER every unweighted one, so minting a weight here would sink the card
+     * below its unweighted successor — the opposite of the requested placement (the
+     * top-drop-goes-to-bottom bug). Forcing the order would instead require weighting
+     * every OTHER card, which contradicts the minimal, self-removing weights design.
+     * Implicit relevance order already expresses this region — the just-saved file's
+     * bumped mtime floats it up — so mint nothing and let noteOrder govern. Weights
+     * are reserved for drops a weighted neighbour makes genuinely expressive.
+     */
     const successor_unweighted = successor !== undefined && successor_weight === undefined;
     const predecessor_unweighted = predecessor === undefined || predecessor_weight === undefined;
     if (successor_unweighted && predecessor_unweighted) { return []; }
@@ -345,17 +345,13 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
     const changes: Array<OrderingChange> = [];
     const setting_as_default = (new_value === default_value);
 
-    // if the existing linetag is inherited (from a parent's nt_child_* attribute),
-    // treat it as if the note has no linetag for this key - either generate a new one
-    // or skip if setting back to default (inherited value handles it)
+    // if the existing linetag is inherited (from a parent's nt_child_* attribute), treat it as if the note has no linetag for this key - either generate a new one or skip if setting back to default (inherited value handles it)
     const existing_tag = note.linetags?.[key_name];
     if (existing_tag?.inherited) {
         if (setting_as_default) { return []; }
-        // already carries this exact value via inheritance — materialising it would be a redundant
-        // write (e.g. reordering a card within the column it already inherits status= from)
+        // already carries this exact value via inheritance — materialising it would be a redundant write (e.g. reordering a card within the column it already inherits status= from)
         if (existing_tag.value === new_value) { return []; }
-        // write a real linetag: if note has other (non-inherited) linetags, append to them;
-        // otherwise generate a fresh linetag block
+        // write a real linetag: if note has other (non-inherited) linetags, append to them; otherwise generate a fresh linetag block
         const has_real_linetags = note.linetags && Object.keys(note.linetags).some(k => !note.linetags![k].inherited);
         if (has_real_linetags) {
             const first_real_key = Object.keys(note.linetags!).find(k => !note.linetags![k].inherited)!;
@@ -385,8 +381,10 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
         });
     }
     else if (note.linetags && !note.linetags[key_name] && !setting_as_default) {
-        // add the field to the first REAL (non-inherited) linetag
-        // guard: when every linetag is inherited (parent nt_child_*) there is no real block — inherited tags carry key_offset 0 and no linetags_from, so appending would land at document offset 0 and corrupt the parent heading; fall back to a fresh linetag block
+        /*
+         * add the field to the first REAL (non-inherited) linetag
+         * guard: when every linetag is inherited (parent nt_child_*) there is no real block — inherited tags carry key_offset 0 and no linetags_from, so appending would land at document offset 0 and corrupt the parent heading; fall back to a fresh linetag block
+         */
         const first_real_key = Object.keys(note.linetags).find(k => !note.linetags![k].inherited);
         if (first_real_key) {
             const first_position = (note.linetags_from || 0) + note.linetags[first_real_key].key_offset;
@@ -406,8 +404,10 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
         const linetags_base = note.linetags_from || 0;
         const linetag_keys = Object.keys(note.linetags);
         if (linetag_keys.length === 1 && linetag_keys[0] === key_name) {
-            // sole key - remove the entire linetag including the leading space
-            // headline_raw ends at start.offset + headline_raw.length; the linetag string starts at linetags_from
+            /*
+             * sole key - remove the entire linetag including the leading space
+             * headline_raw ends at start.offset + headline_raw.length; the linetag string starts at linetags_from
+             */
             const linetag_start = linetags_base;
             const headline_end = note.position.start.offset + note.headline_raw.length;
             // include the leading space before the linetag if present

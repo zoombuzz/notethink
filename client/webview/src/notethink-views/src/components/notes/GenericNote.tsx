@@ -32,8 +32,7 @@ export default React.memo(function GenericNote(props: NoteProps) {
             .map((selected_note: NoteProps) => selected_note.seq);
     }
 
-    // enrich selectable_note with selected/focused flags so click handlers
-    // can read the correct state (the original note ref lacks these flags)
+    // enrich selectable_note with selected/focused flags so click handlers can read the correct state (the original note ref lacks these flags)
     const enriched_selectable: NoteProps = {
         ...deepest_selectable_note,
         selected: !!(cropped_selected_seqs?.length && cropped_selected_seqs.includes(deepest_selectable_note.seq)),

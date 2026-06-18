@@ -401,8 +401,10 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         }
     }
 
-    // lift front matter into the document root as linetags — the broadest, document-scoped layer
-    // computed before the inheritance pass so the root can act as the top ancestor; absent front matter leaves both fields undefined
+    /*
+     * lift front matter into the document root as linetags — the broadest, document-scoped layer
+     * computed before the inheritance pass so the root can act as the top ancestor; absent front matter leaves both fields undefined
+     */
     const frontmatter_node = findFrontmatterNode(mdast_children);
     const root_frontmatter = frontmatter_node
         ? parseFrontmatterLinetags(frontmatter_node, text, 0)

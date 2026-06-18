@@ -253,8 +253,10 @@ export function mergeAggregateRoot(
     // 2-character pill label per project — first letter + earliest character that differentiates this project from any other in the universe (notethink→NT, notebook→NB). Driven by the workspace universe when available so labels are stable across descents
     const project_label_by_name = buildProjectLabels(distinct_project_names);
 
-    // 2. for each file, build epic registries and collect stories
-    // each file's selected stories, kept in stable file order (parsed is sorted by relative_path)
+    /*
+     * 2. for each file, build epic registries and collect stories
+     * each file's selected stories, kept in stable file order (parsed is sorted by relative_path)
+     */
     const per_file_lists: CollectedStory[][] = [];
 
     for (const file of parsed) {
@@ -342,8 +344,10 @@ export function mergeAggregateRoot(
         }
     }
 
-    // 3. resolve epic linetags on each story (direct > inherited > structural)
-    // the applyChildAttributeInheritance pass during convertMdastToNoteHierarchy has already collapsed inherited nt_child_epic= onto stories as a regular `epic` linetag (with inherited: true); direct linetags overwrite inherited (child's own wins), so this step covers both direct and inherited uniformly
+    /*
+     * 3. resolve epic linetags on each story (direct > inherited > structural)
+     * the applyChildAttributeInheritance pass during convertMdastToNoteHierarchy has already collapsed inherited nt_child_epic= onto stories as a regular `epic` linetag (with inherited: true); direct linetags overwrite inherited (child's own wins), so this step covers both direct and inherited uniformly
+     */
     for (const c of collected) {
         const epic_linetag: LineTag | undefined = c.story.linetags?.epic;
         if (epic_linetag?.value) {

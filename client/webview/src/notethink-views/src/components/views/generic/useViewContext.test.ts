@@ -33,8 +33,7 @@ function makeViewProps(overrides: Partial<ViewProps> = {}): ViewProps {
 describe('useViewContext', () => {
 
     describe('per-doc + source_position matcher (folder mode editor → view direction)', () => {
-        // simulate a folder-mode merged tree: notes from two files, with origin.source_position
-        // carrying each note's source-file offsets (not the merged-tree offsets in `position`)
+        // simulate a folder-mode merged tree: notes from two files, with origin.source_position carrying each note's source-file offsets (not the merged-tree offsets in `position`)
         const origin_a: NoteOrigin = { doc_id: 'a', doc_path: '/repo/a.md', source_position: { start: { offset: 10, line: 2 }, end: { offset: 30, line: 3 }, end_body: { offset: 50, line: 5 } } };
         const origin_b: NoteOrigin = { doc_id: 'b', doc_path: '/repo/b.md', source_position: { start: { offset: 100, line: 2 }, end: { offset: 130, line: 3 }, end_body: { offset: 200, line: 6 } } };
 

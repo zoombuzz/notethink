@@ -59,8 +59,10 @@ export default function KanbanView(props: ViewProps): ReactElement {
         },
     };
 
-    // optimistic projection: hold the dropped layout client-side until the document round-trip lands, so there is no drop→snap-back→re-land flash
-    // safe to render the projected order during the drop animation because KanbanBoard collapses the drop tween via transitionDuration, not the old transition:'none' hack that broke dnd's transitionend and left cards stuck
+    /*
+     * optimistic projection: hold the dropped layout client-side until the document round-trip lands, so there is no drop→snap-back→re-land flash
+     * safe to render the projected order during the drop animation because KanbanBoard collapses the drop tween via transitionDuration, not the old transition:'none' hack that broke dnd's transitionend and left cards stuck
+     */
     const { notes_to_render, applyOptimisticMove } = useProjectedNotes(props.notes_within_parent_context);
     const columns = useKanbanColumns(notes_to_render, display_options.settings?.columnOrder);
 
@@ -95,8 +97,10 @@ export default function KanbanView(props: ViewProps): ReactElement {
         if (!dragged_note) { return; }
         if (dragged_note.locked) { return; }
         if (!props.handlers?.postMessage) { return; }
-        // compute the reorder from AUTHORITATIVE notes on the SAME basis the projection uses (notesInKanbanColumn over the real notes), keeping the edit and the projection in lockstep so projectionSatisfied reconciles
-        // the projected child_notes carry synthetic inherited weights (which defeat weight removal) and a possibly-stale order, so using them would diverge the written doc order from what was projected and leave the card stuck
+        /*
+         * compute the reorder from AUTHORITATIVE notes on the SAME basis the projection uses (notesInKanbanColumn over the real notes), keeping the edit and the projection in lockstep so projectionSatisfied reconciles
+         * the projected child_notes carry synthetic inherited weights (which defeat weight removal) and a possibly-stale order, so using them would diverge the written doc order from what was projected and leave the card stuck
+         */
         const real_destination_children = notesInKanbanColumn(props.notes_within_parent_context || [], destination_column.value);
         const payload = buildKanbanDragEndPayload({
             dragged_note,
@@ -121,8 +125,10 @@ export default function KanbanView(props: ViewProps): ReactElement {
     // virtual caret indicator: pulse-highlight the body item containing the editor caret
     useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
 
-    // only render columns that contain stories (a stale columnOrder can list statuses no note currently uses)
-    // fall back to all columns when nothing has stories so an empty board is never blank
+    /*
+     * only render columns that contain stories (a stale columnOrder can list statuses no note currently uses)
+     * fall back to all columns when nothing has stories so an empty board is never blank
+     */
     const populated_columns = columns.filter(col => (col.child_notes?.length ?? 0) > 0);
     const visible_columns = populated_columns.length > 0 ? populated_columns : columns;
 

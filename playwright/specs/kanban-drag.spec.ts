@@ -141,8 +141,10 @@ test.describe('Kanban Drag and Drop', () => {
         const backlog_column = page.locator('[role="region"][aria-label="backlog"]');
         await expect(backlog_column.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 3000 });
 
-        // simulate extension responding with updated doc (Task A moved to doing)
-        // re-inject the doc with modified fixture using the same path/id
+        /*
+         * simulate extension responding with updated doc (Task A moved to doing)
+         * re-inject the doc with modified fixture using the same path/id
+         */
         await injectDocsFromFixture(page, 'kanban-moved.md', doc_path);
 
         await page.waitForTimeout(300);

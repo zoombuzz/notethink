@@ -93,8 +93,10 @@ test.describe('Aggregate (Folder) view', () => {
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
-        // start aggregation at workspace root via a direct setViewManagedState route through GenericView
-        // we trigger folder mode and let the selector fire setIntegration on its default dir
+        /*
+         * start aggregation at workspace root via a direct setViewManagedState route through GenericView
+         * we trigger folder mode and let the selector fire setIntegration on its default dir
+         */
         await selectFolderMode(page);
         await page.waitForSelector('[data-folder-mode="true"]');
 

@@ -62,8 +62,10 @@ describe('l10n rendering with German bundle', () => {
 
     it('renders interpolated German aria-labels for column reorder buttons', () => {
         render(<SettingsKanbanDrawer {...KANBAN_DRAWER_PROPS} />);
-        // German: "{0} nach oben verschieben" - placeholder moves to start
-        // the {0} substitution is the formatted column label (title-case), not the raw slug
+        /*
+         * German: "{0} nach oben verschieben" - placeholder moves to start
+         * the {0} substitution is the formatted column label (title-case), not the raw slug
+         */
         expect(screen.getByLabelText('Backlog nach oben verschieben')).toBeInTheDocument();
         expect(screen.getByLabelText('Doing nach unten verschieben')).toBeInTheDocument();
     });

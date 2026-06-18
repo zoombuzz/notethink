@@ -16,10 +16,12 @@ const LOG_FILE_NAME = 'notethink-extension.log';
 const logBuffer: string[] = [];
 let logFlushTimer: ReturnType<typeof setTimeout> | undefined;
 
-// the extension's standard log directory (vscode.ExtensionContext.logUri), set by initLogDir at activation
-// this is the canonical VS Code-managed place for extension log files — NEVER the user's open workspace folder
-// it resolves under the rotating session logs dir (~/.config/Code/logs/<session>/window<N>/exthost/webWorker/NoteThink.notethink/ on Linux)
-// VS Code guarantees logUri's parent exists but not logUri itself, so we create it once
+/*
+ * the extension's standard log directory (vscode.ExtensionContext.logUri), set by initLogDir at activation
+ * this is the canonical VS Code-managed place for extension log files — NEVER the user's open workspace folder
+ * it resolves under the rotating session logs dir (~/.config/Code/logs/<session>/window<N>/exthost/webWorker/NoteThink.notethink/ on Linux)
+ * VS Code guarantees logUri's parent exists but not logUri itself, so we create it once
+ */
 let logDir: vscode.Uri | undefined;
 
 /**

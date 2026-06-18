@@ -271,8 +271,7 @@ export function buildChildNoteDisplayOptions(
         deepest: {
             ...view.display_options?.deepest,
             ...note?.display_options?.deepest,
-            // preserve the view-level selectable_level so only top-level notes
-            // are selectable; subnotes delegate clicks to their selectable parent
+            // preserve the view-level selectable_level so only top-level notes are selectable; subnotes delegate clicks to their selectable parent
             selectable_level: view.display_options?.deepest?.selectable_level ?? note.level,
         },
     };

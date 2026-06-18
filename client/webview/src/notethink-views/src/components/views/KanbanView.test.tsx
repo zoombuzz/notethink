@@ -482,8 +482,10 @@ describe('KanbanView dragEndHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        // columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) — 'doing' < 'done' lexicographically
-        // drag note seq=1 (status=doing) onto done column at index 0
+        /*
+         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) — 'doing' < 'done' lexicographically
+         * drag note seq=1 (status=doing) onto done column at index 0
+         */
         captured_dnd.onDragEnd!({
             draggableId: '1',
             destination: { droppableId: '1', index: 0 },
@@ -536,8 +538,10 @@ describe('KanbanView dragEndHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        // columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2)
-        // drag note seq=1 (status=doing) onto done column at index 0
+        /*
+         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2)
+         * drag note seq=1 (status=doing) onto done column at index 0
+         */
         captured_dnd.onDragEnd!({
             draggableId: '1',
             destination: { droppableId: '1', index: 0 },
@@ -650,8 +654,10 @@ describe('KanbanView dragEndHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        // columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) — 'doing' < 'done'
-        // drag doing_a onto done at index 0 (above the existing done notes)
+        /*
+         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) — 'doing' < 'done'
+         * drag doing_a onto done at index 0 (above the existing done notes)
+         */
         captured_dnd.onDragEnd!({
             draggableId: '1',
             destination: { droppableId: '1', index: 0 },
@@ -673,9 +679,7 @@ describe('KanbanView dragEndHandler', () => {
             const file_b_changes = msg.changes_by_doc['/repo/file-b.md'];
             expect(file_b_changes.length).toBeGreaterThan(0);
         } else {
-            // if the cascade did not actually touch file-B (no weight rewrite needed), the
-            // legacy single-doc shape is acceptable as long as it routes to file-A — status
-            // tag MUST land on file-A
+            // if the cascade did not actually touch file-B (no weight rewrite needed), the legacy single-doc shape is acceptable as long as it routes to file-A — status tag MUST land on file-A
             expect(msg.docPath).toBe('/repo/file-a.md');
             expect(Array.isArray(msg.changes)).toBe(true);
         }
@@ -727,8 +731,10 @@ describe('KanbanView dragEndHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        // doing column is the only populated named column → its seq is 0 from kanbanNoteOrder when alphabetical
-        // single status value 'doing' → seq=0 for doing; drag dragged_a (seq=1) to position 1 within doing
+        /*
+         * doing column is the only populated named column → its seq is 0 from kanbanNoteOrder when alphabetical
+         * single status value 'doing' → seq=0 for doing; drag dragged_a (seq=1) to position 1 within doing
+         */
         captured_dnd.onDragEnd!({
             draggableId: '1',
             destination: { droppableId: '0', index: 1 },
@@ -810,8 +816,7 @@ describe('KanbanView drag start does not move the caret', () => {
         });
         render(<KanbanView {...props} />);
 
-        // a drag-start responder exists (it arms the post-drop click guard) but must post no message —
-        // in particular no revealRange/selectRange that would move the editor caret
+        // a drag-start responder exists (it arms the post-drop click guard) but must post no message — in particular no revealRange/selectRange that would move the editor caret
         expect(captured_dnd.onDragStart).toBeDefined();
         captured_dnd.onDragStart!({ draggableId: '1' }, {});
         expect(post_message).not.toHaveBeenCalled();

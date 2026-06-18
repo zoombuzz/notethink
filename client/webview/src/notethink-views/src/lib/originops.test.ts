@@ -128,9 +128,7 @@ describe('buildProjectLabels', () => {
     it('produces correct labels for the real workspace project list', () => {
         const names = ['carina', 'cygnus', 'fornax', 'izar', 'lunagate', 'lunatide', 'mira', 'sculptor'];
         const labels = buildProjectLabels(names);
-        // lunagate/lunatide share the 'luna' prefix, so they diverge at the first differentiating
-        // character (LG/LT); every other name's first two characters are already unique, so its
-        // label is just first + second char
+        // lunagate/lunatide share the 'luna' prefix, so they diverge at the first differentiating character (LG/LT); every other name's first two characters are already unique, so its label is just first + second char
         expect(labels.get('carina')).toBe('CA');
         expect(labels.get('cygnus')).toBe('CY');
         expect(labels.get('fornax')).toBe('FO');

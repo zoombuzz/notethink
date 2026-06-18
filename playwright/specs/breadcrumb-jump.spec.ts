@@ -5,8 +5,7 @@ import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-m
 
 const WORKSPACE_ROOT = '/mnt/workspace/active_development';
 
-// the harness has no real extension, so echo a jumpTargets response back to the webview for the
-// exact path the leaf-click requested — that path-match is what the drawer waits for before rendering
+// the harness has no real extension, so echo a jumpTargets response back to the webview for the exact path the leaf-click requested — that path-match is what the drawer waits for before rendering
 async function injectJumpTargets(
     page: Page,
     mode: string,

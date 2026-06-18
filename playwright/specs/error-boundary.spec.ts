@@ -32,8 +32,7 @@ test.describe('Error Boundary', () => {
                                         type: 'heading',
                                         depth: 1,
                                         children: [{ type: 'text', value: 'Test' }],
-                                        // null position causes TypeError in convertMdastToNoteHierarchy
-                                        // when it accesses child.position.start.offset
+                                        // null position causes TypeError in convertMdastToNoteHierarchy when it accesses child.position.start.offset
                                         position: null,
                                     }],
                                 },

@@ -1,4 +1,43 @@
-import { segmentPathBelowWorkspace, splitPathSegments, workspaceRootFromDocAndRelative } from './pathops';
+import { resolveBreadcrumbFolderSegment, segmentPathBelowWorkspace, splitPathSegments, workspaceRootFromDocAndRelative } from './pathops';
+
+describe('resolveBreadcrumbFolderSegment', () => {
+    it('resolves a folder label to its absolute path on the file trail', () => {
+        expect(resolveBreadcrumbFolderSegment(
+            'portfolio',
+            '/repo/portfolio/atlas.md',
+            '/repo',
+        )).toBe('/repo/portfolio');
+    });
+
+    it('returns the deepest match when a label appears more than once', () => {
+        expect(resolveBreadcrumbFolderSegment(
+            'work',
+            '/repo/work/clients/work/atlas.md',
+            '/repo',
+        )).toBe('/repo/work/clients/work');
+    });
+
+    it('never matches the terminal file segment', () => {
+        expect(resolveBreadcrumbFolderSegment(
+            'atlas.md',
+            '/repo/portfolio/atlas.md',
+            '/repo',
+        )).toBeUndefined();
+    });
+
+    it('returns undefined when no folder segment matches', () => {
+        expect(resolveBreadcrumbFolderSegment(
+            'missing',
+            '/repo/portfolio/atlas.md',
+            '/repo',
+        )).toBeUndefined();
+    });
+
+    it('returns undefined for an empty label or missing doc_path', () => {
+        expect(resolveBreadcrumbFolderSegment('', '/repo/portfolio/atlas.md', '/repo')).toBeUndefined();
+        expect(resolveBreadcrumbFolderSegment('portfolio', undefined, '/repo')).toBeUndefined();
+    });
+});
 
 describe('workspaceRootFromDocAndRelative', () => {
     it('strips the relative_path suffix and any trailing slash', () => {

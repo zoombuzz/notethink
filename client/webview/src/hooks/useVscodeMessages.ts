@@ -1,6 +1,6 @@
 import Debug from 'debug';
 import { useCallback, useEffect, useState } from 'react';
-import { anyViewInFolderMode } from '../notethink-views/src/lib/viewstateops';
+import { anyViewInFolderMode, resolveIntegrationMode } from '../notethink-views/src/lib/viewstateops';
 import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { TextSelection } from '../notethink-views/src/types/NoteProps';
@@ -304,7 +304,8 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         if (saved_view_states) {
             for (const id of Object.keys(saved_view_states)) {
                 const vs = saved_view_states[id];
-                if (vs?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER && vs?.display_options?.integration_path) {
+                // restore folder for a concrete folder pin AND for an `auto` view whose path was seeded by auto-resolution (resolveIntegrationMode treats auto + a path as folder), so an auto-folder file re-aggregates on reload without a flash through current_file
+                if (resolveIntegrationMode(vs?.display_options) === INTEGRATION_MODE_FOLDER && vs?.display_options?.integration_path) {
                     debug('restoring folder integration on reload: %s', vs.display_options.integration_path);
                     // host re-validates this path against the workspace before acting — persisted webview state is untrusted (defense-in-depth)
                     // do NOT replay the persisted includeFilter / excludeFilter here: the workspace cascade (notethink.settings.files.*) is the source of truth, and replaying a snapshot from an earlier session masks any later edit the user made in settings.json. handle_apply_filters writes user-applied filters through to the cascade, so the cascade is always up to date with the user's intent after a fresh Apply

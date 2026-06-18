@@ -2,7 +2,7 @@ import Debug from "debug";
 import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNoteHierarchy";
 import { stripHeadlineLinetags, storyStableIdSlug } from "./noteops";
 import { resolveNamespacedTag } from "./linetagops";
-import { FOLDER_VIEW_STATE_ID } from "./viewstateops";
+import { FOLDER_VIEW_STATE_ID, resolveIntegrationMode } from "./viewstateops";
 import { buildProjectLabels, hueForProjectName, projectNameFromRelativePath } from "./originops";
 import { INTEGRATION_MODE_FOLDER } from "../types/IntegrationMode";
 import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NoteProps";
@@ -117,9 +117,11 @@ function safeStripHeadline(headline_raw: string | undefined): string {
 
 /**
  * Identify the file H1 (a single depth-1 note among the doc root's direct children).
- * If multiple or none, returns undefined.
+ * If multiple or none, returns undefined. Exported so the App-layer auto-integration
+ * resolver can read the opened file's H1 linetags (nt_integration_mode / nt_breadcrumb_last)
+ * the same way file_view_type is read here.
  */
-function findFileH1(root: NoteProps): NoteProps | undefined {
+export function findFileH1(root: NoteProps): NoteProps | undefined {
     const h1s = (root.child_notes || []).filter(n => n.depth === 1);
     if (h1s.length === 1) { return h1s[0]; }
     return undefined;
@@ -390,20 +392,23 @@ export function mergeAggregateRoot(
 }
 
 /**
- * Reads the integration_path from the folder viewState. Checks the canonical key first, then falls back to the first legacy entry tagged integration_mode='folder' for state stranded under a doc-path key by the pre-fix dispatch bug (legacy rescue).
+ * Reads the integration_path from the folder viewState. Checks the canonical key first, then
+ * falls back to the first legacy entry that resolves to folder mode for state stranded under a
+ * doc-path key by the pre-fix dispatch bug (legacy rescue). An `auto` view state whose path was
+ * seeded by auto-resolution resolves folder via resolveIntegrationMode, so it is picked up here.
  */
 export function firstIntegrationPath(
     view_states: Record<string, { display_options?: { integration_mode?: string; integration_path?: string } }> | undefined,
 ): string | undefined {
     if (!view_states) { return undefined; }
     const canonical = view_states[FOLDER_VIEW_STATE_ID];
-    if (canonical?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER && typeof canonical.display_options.integration_path === 'string') {
+    if (canonical && resolveIntegrationMode(canonical.display_options) === INTEGRATION_MODE_FOLDER && typeof canonical.display_options?.integration_path === 'string') {
         return canonical.display_options.integration_path;
     }
     for (const id of Object.keys(view_states)) {
         if (id === FOLDER_VIEW_STATE_ID) { continue; }
         const v = view_states[id];
-        if (v?.display_options?.integration_mode === INTEGRATION_MODE_FOLDER && typeof v.display_options.integration_path === 'string') {
+        if (v && resolveIntegrationMode(v.display_options) === INTEGRATION_MODE_FOLDER && typeof v.display_options?.integration_path === 'string') {
             return v.display_options.integration_path;
         }
     }

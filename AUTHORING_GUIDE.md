@@ -9,7 +9,7 @@ For coding standards (TypeScript, React, file naming), see
 [CODING_STANDARDS.md](./CODING_STANDARDS.md). For agent-facing project
 guidance, see [AGENTS.md](./AGENTS.md).
 
-**This guide is versioned. Current version: `1.0.0`.** See
+**This guide is versioned. Current version: `1.1.0`.** See
 [Versioning](#versioning) for what patch / minor / major changes mean and how a
 file can pin itself to an older version.
 
@@ -19,7 +19,10 @@ file can pin itself to an older version.
 
 The grammar this guide describes is versioned with [semantic
 versioning](https://semver.org/) — `MAJOR.MINOR.PATCH`. The current version is
-**`1.0.0`** (the first formally versioned baseline of the existing grammar).
+**`1.1.0`**. `1.1.0` added the optional `nt_integration_mode` and
+`nt_breadcrumb_last` view-configuration linetags (backward-compatible — files
+that don't use them are unaffected); `1.0.0` was the first formally versioned
+baseline of the existing grammar.
 
 What each kind of change means for your files:
 
@@ -45,9 +48,10 @@ keep a file on the old behaviour by pinning it on the file root (`#`):
 ```
 
 `nt_authoring_version` accepts `MAJOR` or `MAJOR.MINOR` (e.g. `1` or `1.2`).
-It is **reserved and documented now for forward-compatibility** — only version
-`1.0.0` exists today, so the flag currently has no effect. It exists so that
-files authored today keep working unchanged the day a `2.0.0` ships.
+It is **reserved and documented now for forward-compatibility** — only versions
+`1.0.0` and `1.1.0` exist today (no major bump yet), so the flag currently has
+no effect. It exists so that files authored today keep working unchanged the day
+a `2.0.0` ships.
 
 Mixed-version workspaces are supported: in Folder mode, different files may pin
 different versions and each is interpreted independently.
@@ -282,9 +286,11 @@ renders.
 | Key | Effect |
 |---|---|
 | `nt_view` | View type for this subtree: `auto`, `document`, `kanban`. Legacy `ng_view` is still accepted on read |
+| `nt_integration_mode` | The integration mode this file opens into while the view is in **auto**: `current_file` or `folder`. In auto the view follows it; changing the mode or navigating away from the file's intent pins your own choice. Set on the file root (`#`). `nt_`-only — no `ng_` form |
+| `nt_breadcrumb_last` | The breadcrumb segment this file opens scoped to while in **auto** — a folder name (narrows folder-mode aggregation to that subfolder, implying folder mode) or an epic/story headline (scopes the note hierarchy). Seeds the initial position; navigate away freely. Set on the file root (`#`). `nt_`-only |
 | `nt_level` | Render level (advanced; usually leave unset). Legacy `ng_level` is still accepted on read |
 | `order` | Which end of the file holds the **newest** stories: `newest-at-top` (default) or `newest-at-bottom`. Read off the file root (`#`) only. Tells Folder mode which end to keep when the per-file note cap truncates the file — see [Per-file note cap](#per-file-note-cap-and-the-order-linetag) |
-| `nt_authoring_version` | Pin this file to an older Authoring Guide version (`MAJOR` or `MAJOR.MINOR`, e.g. `1` or `1.2`) instead of the latest. Set on the file root (`#`). Reserved for forward-compatibility — only `1.0.0` exists today, so it has no effect yet. See [Versioning](#versioning) |
+| `nt_authoring_version` | Pin this file to an older Authoring Guide version (`MAJOR` or `MAJOR.MINOR`, e.g. `1` or `1.2`) instead of the latest. Set on the file root (`#`). Reserved for forward-compatibility — only `1.0.0` and `1.1.0` exist today (no major bump), so it has no effect yet. See [Versioning](#versioning) |
 
 ### Story status
 

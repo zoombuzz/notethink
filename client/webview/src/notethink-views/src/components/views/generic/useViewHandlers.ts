@@ -4,7 +4,7 @@ import type { MouseEvent } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { calculateTextChangesForCheckbox, focusedChainIdsFor, resolveCaretPosition } from "../../../lib/noteops";
 import { isAlreadyFocusedClick } from "../../../lib/noteui";
-import { FOLDER_VIEW_STATE_ID, writeViewInteractionState } from "../../../lib/viewstateops";
+import { FOLDER_VIEW_STATE_ID, reconcileAutoIntegrationMode, writeViewInteractionState } from "../../../lib/viewstateops";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { ClickPositionInfo, NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
@@ -167,13 +167,20 @@ export function useViewHandlers(
 
     }, props.handlers);
 
-    // handle breadcrumb folder click - switch to (or narrow within) folder integration mode
-    // dispatch targets FOLDER_VIEW_STATE_ID so the integration_mode tag never lands on a doc-path key in single-file mode
+    /*
+     * handle breadcrumb folder click — switch to (or narrow within) folder integration mode. Dispatch
+     * targets FOLDER_VIEW_STATE_ID so the integration_mode tag never lands on a doc-path key in
+     * single-file mode. Congruence-seeking: the destination is always folder mode, so persist 'auto'
+     * when the opened file also declares folder (the view keeps following the file), and the concrete
+     * 'folder' pin only when the navigation diverges from a file that declares current_file — both
+     * resolve to folder for rendering.
+     */
     const handle_folder_click = useCallback((folder_path: string): void => {
+        const next_mode = reconcileAutoIntegrationMode(INTEGRATION_MODE_FOLDER, props.file_declared_integration?.mode);
         handlers.setViewManagedState([{
             id: FOLDER_VIEW_STATE_ID,
             display_options: {
-                integration_mode: INTEGRATION_MODE_FOLDER,
+                integration_mode: next_mode,
                 integration_path: folder_path,
             },
         }]);
@@ -182,7 +189,7 @@ export function useViewHandlers(
             mode: INTEGRATION_MODE_FOLDER,
             path: folder_path,
         });
-    }, [handlers]);
+    }, [handlers, props.file_declared_integration]);
 
     // expose the same folder-descent gesture on the ViewApi so the origin pill (which only sees note-level handlers) can descend into its project subfolder via the same pipeline the breadcrumb uses
     handlers.descendToFolder = handle_folder_click;

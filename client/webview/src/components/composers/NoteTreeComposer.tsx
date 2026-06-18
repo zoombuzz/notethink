@@ -45,22 +45,28 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
     const view_state_ids = props.viewStates ? Object.keys(props.viewStates) : undefined;
 
     const view_props: ViewProps = {
+        // --- identity + opened-doc location ---
         id: note_id,
         type: viewType,
         doc_path: note.path,
         doc_relative_path: note.relative_path,
         doc_text: note.text,
         workspace_root: props.workspace_root,
+        // --- settings-cascade mirror: camelCase (not snake_case) because these carry VS Code config values whose keys (notethink.settings.*) are camelCase end-to-end, unlike the snake_case note-tree wire data ---
         settingsCascadeHasWorkspaceOverrides: cascade?.hasWorkspaceOverrides,
+        // --- view state + the opened file's declared integration intent ---
         view_state_ids,
+        file_declared_integration: props.fileDeclaredIntegration,
         display_options: view_display_options,
+        // --- note tree ---
         nested: {
             parent_context: root_note,
         },
         notes: all_notes,
+        // --- editor-derived inputs: in current_file mode this view's doc IS the active doc, so useViewContext's per-doc caret matcher works uniformly across both modes ---
         selection,
-        // in current_file mode this view's doc IS the active doc; passing it makes useViewContext's per-doc matcher work uniformly across both modes
         active_editor_doc_path: note.path,
+        // --- handler functions (view→host dispatch) ---
         handlers: {
             setViewManagedState: props.setViewManagedState || (() => {}),
             deleteViewFromManagedState: () => {},
@@ -69,8 +75,7 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
             postMessage: props.postMessage ? (message: unknown) => {
                 if (message && typeof message === 'object' && 'type' in message) {
                     const m = message as Record<string, unknown>;
-                    // respect docId/docPath already on the message — in folder mode the click handler attaches the origin doc's path from note.origin
-                    // in single-file mode the per-note origin is undefined, so we stamp the view's own docId/docPath as before
+                    // respect docId/docPath already on the message: folder mode attaches the origin doc's path from note.origin, single-file mode has no per-note origin so we stamp the view's own docId/docPath
                     props.postMessage!({
                         ...m,
                         docId: m.docId ?? note_id,

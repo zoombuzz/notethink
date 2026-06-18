@@ -92,30 +92,32 @@ Two new file-root linetags let a document declare the view it should open into, 
   + `| nt_breadcrumb_last | The breadcrumb segment this file opens scoped to while in **auto** — a folder name (narrows folder-mode aggregation to that subfolder, implying folder mode) or an epic/story headline (scopes the note hierarchy). Seeds the initial position; navigate away freely. nt_-only |`
   + bump the guide header from 1.0.0 to 1.1.0 (minor — two new optional, backward-compatible linetags)
 
-+ [ ] add `auto` to `IntegrationMode` / `INTEGRATION_MODES`, make it the default, treat undefined as auto
-+ [ ] read + validate authored `nt_integration_mode` (`current_file` / `folder`) and `nt_breadcrumb_last` off the opened doc H1 / front matter
-+ [ ] add `resolveBreadcrumbFolderSegment` to `pathops.ts` — deepest-label match over the file's path trail
-+ [ ] add `breadcrumbSeqForLabel` to `noteops.ts` — match epic/story headline → seq
-+ [ ] resolve auto on doc-arrival in `ExtensionReceiver`; dispatch `setIntegration` / `setParentContextSeq` only when the resolved target changes
-+ [ ] add `reconcileAutoIntegrationMode` to `viewstateops.ts` — resulting mode == file-declared → auto, else concrete
-+ [ ] reconcile `integration_mode` after every navigation via the helper; explicit "Auto" selection re-resolves mode + scope from the file
-+ [ ] show the auto-resolved mode in `ViewIntegrationSelector` ("Auto (Folder)" / "Auto (Current file)")
-+ [ ] debug-log + no-op on an unrecognised `nt_integration_mode` value or an unmatched `nt_breadcrumb_last` label
-+ [ ] document both keys in the AUTHORING_GUIDE.md View-configuration table; bump the guide 1.0.0 → 1.1.0
-+ [ ] bump notethink to 0.3.14
-+ [ ] jest: undefined `integration_mode` resolves as auto; `nt_integration_mode=folder` resolves to folder; an invalid value falls back to current_file
-+ [ ] jest: a `nt_breadcrumb_last` folder label resolves to the right `integration_path`; deepest match wins on duplicate labels
-+ [ ] jest: a `nt_breadcrumb_last` epic label resolves to the right `parent_context_seq`
-+ [ ] jest: a concrete persisted `integration_mode` (user choice) is NOT overridden by the file linetag — auto no longer applies
-+ [ ] jest: navigation congruence — Auto(Folder) stays auto within folder; Auto(Current file)+folder-click pins concrete Folder; concrete Current file on a folder-declaring file + click → Auto(Folder)
-+ [ ] jest: an unmatched `nt_breadcrumb_last` resolves to the default scope with no throw
-+ [ ] `pnpm run check` green
-+ manual: open a file with `nt_integration_mode=folder&nt_breadcrumb_last=portfolio` cold — lands on the portfolio-scoped aggregate board, toolbar shows "Auto (Folder)"
-+ manual: Auto (Folder), navigate to a sub/sibling folder — toolbar stays "Auto (Folder)"; reload keeps the navigated folder
-+ manual: Auto (Current file), click a folder breadcrumb segment — toolbar switches to concrete "Folder"
-+ manual: open a current_file-resolved file whose linetag declares folder, click a breadcrumb — toolbar jumps to "Auto (Folder)" (congruent with the file)
-+ manual: pick "Auto" again after pinning concrete — the file linetags drive mode + scope once more
-+ manual: open a file with a bogus `nt_breadcrumb_last` — opens normally, no error
++ [x] add `auto` to `IntegrationMode` / `INTEGRATION_MODES`, make it the default, treat undefined as auto
++ [x] read + validate authored `nt_integration_mode` (`current_file` / `folder`) and `nt_breadcrumb_last` off the opened doc H1 / front matter
++ [x] add `resolveBreadcrumbFolderSegment` to `pathops.ts` — deepest-label match over the file's path trail
++ [x] add `breadcrumbSeqForLabel` to `noteops.ts` — match epic/story headline → seq
++ [x] resolve auto on doc-arrival in `ExtensionReceiver`; dispatch `setIntegration` / `setParentContextSeq` only when the resolved target changes
++ [x] add `reconcileAutoIntegrationMode` to `viewstateops.ts` — resulting mode == file-declared → auto, else concrete
++ [x] reconcile `integration_mode` after every navigation via the helper; explicit "Auto" selection re-resolves mode + scope from the file
++ [x] show the auto-resolved mode in `ViewIntegrationSelector` ("Auto (Folder)" / "Auto (Current file)")
++ [x] debug-log + no-op on an unrecognised `nt_integration_mode` value or an unmatched `nt_breadcrumb_last` label
++ [x] document both keys in the AUTHORING_GUIDE.md View-configuration table; bump the guide 1.0.0 → 1.1.0
++ [x] bump notethink to 0.3.14
++ [x] jest: undefined `integration_mode` resolves as auto; `nt_integration_mode=folder` resolves to folder; an invalid value falls back to current_file
++ [x] jest: a `nt_breadcrumb_last` folder label resolves to the right `integration_path`; deepest match wins on duplicate labels
++ [x] jest: a `nt_breadcrumb_last` epic label resolves to the right `parent_context_seq`
++ [x] jest: a concrete persisted `integration_mode` (user choice) is NOT overridden by the file linetag — auto no longer applies
++ [x] jest: navigation congruence — Auto(Folder) stays auto within folder; Auto(Current file)+folder-click pins concrete Folder; concrete Current file on a folder-declaring file + click → Auto(Folder)
++ [x] jest: an unmatched `nt_breadcrumb_last` resolves to the default scope with no throw
++ [x] `pnpm run check` green (lint + build + rollup + 1344 jest) + 77 playwright (70 existing + 7 new auto-integration E2E)
++ note — all six former manual checks are now automated Playwright E2E (`playwright/specs/auto-integration.spec.ts`). The harness has no real extension, so the folder aggregation is simulated by the webview's own setIntegration round-trip: each test asserts the outbound setIntegration message (the webview→host contract) plus the folder board the webview renders. Harness gained sessionStorage-backed webview state (`playwright/harness/index.html`) so reload-resilience is testable. The only residual "manual" is optional visual confirmation in a real VS Code host — NOT a pipeline blocker.
++ [x] playwright: cold-open `nt_integration_mode=folder&nt_breadcrumb_last=portfolio` — posts setIntegration scoped to portfolio, renders the folder board, selector reads "Auto (Folder)", breadcrumb scoped to portfolio
++ [x] playwright: Auto (Folder), click an ancestor folder breadcrumb — stays "Auto (Folder)", re-aggregates at the new folder
++ [x] playwright: a navigated Auto (Folder) position survives a reload (sessionStorage-backed harness; refresh-resilience test)
++ [x] playwright: Auto (Current file) + folder breadcrumb click — pins concrete "Folder"
++ [x] playwright: a folder-declaring file pinned to current_file + breadcrumb click — jumps to "Auto (Folder)" (congruent)
++ [x] playwright: pick "Auto" again after pinning concrete — re-resolves mode + scope from the file
++ [x] playwright: bogus `nt_breadcrumb_last` — opens normally in current_file, no setIntegration, no error
 + note — downstream authoring (notegit, separate repo)
   + once shipped, set `nt_integration_mode=folder&nt_breadcrumb_last=portfolio` on the Atlas Mobile App H1 in the notegit demo content
   + this is a notegit content change, not part of this notethink story

@@ -1,26 +1,31 @@
 import Debug from "debug";
 import { useCallback, useMemo } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
-import { FOLDER_VIEW_STATE_ID } from "../../../lib/viewstateops";
+import { FOLDER_VIEW_STATE_ID, resolveIntegrationMode } from "../../../lib/viewstateops";
 import { arraysEqual, deriveNaturalColumnOrder } from "../../../lib/noteops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { GlobalSettingKey } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import type { CommonSettingKey } from "../SettingsCommonControls";
-import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type IntegrationMode } from "../../../types/IntegrationMode";
+import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 
 const debug = Debug("nodejs:notethink-views:useViewToolbar");
 
 export interface ViewToolbar {
-    integration_mode: IntegrationMode;
-    natural_column_order: string[];
+    // integration-mode dropdown: persisted selection (may be auto), resolved concrete mode, change handler
+    integration_selection: IntegrationMode;
+    integration_mode: ConcreteIntegrationMode;
     handle_integration_change: (mode: IntegrationMode, target_file_path?: string) => void;
+    // view-type dropdown: same shape — persisted selection (may be auto), auto-resolved concrete type, change handler
+    view_type_selection: string;
+    auto_resolved_type: string | undefined;
+    handle_view_type_change: (view_type: string) => void;
+    natural_column_order: string[];
     handle_setting_change: (key: CommonSettingKey, value: boolean) => void;
     handle_global_setting_change: (key: GlobalSettingKey, value: boolean) => void;
     handle_column_order_change: (next_order: string[]) => void;
     handle_make_default: () => void;
     handle_reset_to_default: () => void;
-    cascade_write_setting: (setting: string, value: unknown) => void;
 }
 
 /**
@@ -38,33 +43,43 @@ export function useViewToolbar(
     notes_within_parent_context: Array<NoteProps>,
 ): ViewToolbar {
     const { markPending } = usePendingWorkContext();
-    // integration mode (current_file vs folder)
-    const integration_mode: IntegrationMode = (props.display_options?.integration_mode as IntegrationMode) || INTEGRATION_MODE_CURRENT_FILE;
+    // integration-mode dropdown state — selection (persisted, may be auto) + resolved concrete mode, mirroring the view-type dropdown below
+    const integration_selection: IntegrationMode = (props.display_options?.integration_mode_selection as IntegrationMode) || INTEGRATION_MODE_AUTO;
+    const integration_mode: ConcreteIntegrationMode = resolveIntegrationMode(props.display_options);
+    // view-type dropdown state — selection (persisted, may be auto) + the type AutoView resolved auto to; same selection/resolved split as integration mode
+    const view_type_selection: string = (props.nested?.replaced_attributes?.type as string) || props.type;
+    const auto_resolved_type: string | undefined = props.nested?.auto_resolved_type;
 
     /*
-     * handle_integration_change — flip the view between current_file and folder modes.
-     * The integration_mode tag is always dispatched to the canonical FOLDER_VIEW_STATE_ID
-     * (not props.id) so the folder viewState's other settings (columnOrder, filters, etc.)
-     * survive a flip and a flip-back. Per-view click-driven focused/selected state is
-     * transient interaction state and cleared on every mode flip. On flip to current_file
-     * the per-state-id loop additionally clears stranded `integration_mode='folder'` tags
-     * on doc-path keys (legacy pre-fix dispatch wrote the tag there) so the fallback scans
-     * in anyViewInFolderMode / firstIntegrationPath no longer pin folder mode.
+     * handle_integration_change — change the view's integration selection.
+     *  - 'auto' (explicit re-select) is a full reset: re-resolve mode + scope from the opened file's
+     *    declaration so the view follows the file again, exactly like picking "Auto" for view type.
+     *  - 'folder' / 'current_file' pin the user's explicit choice, overriding the file declaration.
+     * The integration tag is always dispatched to the canonical FOLDER_VIEW_STATE_ID (not props.id) so
+     * the folder viewState's other settings (columnOrder, filters, etc.) survive a flip and a flip-back.
+     * Per-view click-driven focused/selected state is transient and cleared on every change. On a
+     * resolve-to-current_file the per-state-id loop additionally clears stranded folder tags on
+     * doc-path keys (legacy pre-fix dispatch wrote them there) so the fallback scans no longer pin folder.
      */
     const handle_integration_change = useCallback((mode: IntegrationMode, target_file_path?: string): void => {
-        const folder_path = mode === INTEGRATION_MODE_FOLDER && props.doc_path
-            ? props.doc_path.replace(/\/[^/]+$/, '')
+        // the auto reset re-resolves from the file; a concrete pin uses the file's own folder (folder pin) or none
+        const decl = props.file_declared_integration;
+        const is_auto_reset = mode === INTEGRATION_MODE_AUTO;
+        const resolved_mode: ConcreteIntegrationMode = is_auto_reset
+            ? (decl?.mode ?? INTEGRATION_MODE_CURRENT_FILE)
+            : (mode as ConcreteIntegrationMode);
+        const folder_path = resolved_mode === INTEGRATION_MODE_FOLDER
+            ? (is_auto_reset ? decl?.integration_path : (props.doc_path ? props.doc_path.replace(/\/[^/]+$/, '') : undefined))
             : undefined;
-        const clear_stranded_folder_tag = mode === INTEGRATION_MODE_CURRENT_FILE;
-        const updates: Array<Record<string, unknown>> = [{
-            id: FOLDER_VIEW_STATE_ID,
-            display_options: {
-                integration_mode: mode,
-                integration_path: folder_path,
-                view_focused_ids: undefined,
-                view_selected_ids: undefined,
-            },
-        }];
+        const clear_stranded_folder_tag = resolved_mode === INTEGRATION_MODE_CURRENT_FILE;
+        const canonical_display_options: Record<string, unknown> = {
+            // persist 'auto' on reset (the view keeps following the file) and the concrete mode on a pin
+            integration_mode: is_auto_reset ? INTEGRATION_MODE_AUTO : resolved_mode,
+            integration_path: folder_path,
+            view_focused_ids: undefined,
+            view_selected_ids: undefined,
+        };
+        const updates: Array<Record<string, unknown>> = [{ id: FOLDER_VIEW_STATE_ID, display_options: canonical_display_options }];
         for (const id of (props.view_state_ids ?? [])) {
             if (id === FOLDER_VIEW_STATE_ID) { continue; }
             const non_canonical_display_options: Record<string, unknown> = {
@@ -77,14 +92,18 @@ export function useViewToolbar(
             }
             updates.push({ id, display_options: non_canonical_display_options });
         }
+        // auto reset to a current_file file that declares an epic/story scope: re-seed parent_context_seq on the doc view
+        if (is_auto_reset && resolved_mode === INTEGRATION_MODE_CURRENT_FILE && decl?.parent_context_seq !== undefined && props.id !== FOLDER_VIEW_STATE_ID) {
+            updates.push({ id: props.id, display_options: { parent_context_seq: decl.parent_context_seq } });
+        }
         handlers.setViewManagedState(updates);
-        if (mode === INTEGRATION_MODE_FOLDER && folder_path) {
+        if (resolved_mode === INTEGRATION_MODE_FOLDER && folder_path) {
             handlers.postMessage?.({
                 type: 'setIntegration',
                 mode: INTEGRATION_MODE_FOLDER,
                 path: folder_path,
             });
-        } else if (mode === INTEGRATION_MODE_CURRENT_FILE) {
+        } else if (resolved_mode === INTEGRATION_MODE_CURRENT_FILE) {
             // notify the extension so it disposes the folder watcher and re-sends just the active doc; without this the stale folder docs keep rendering as stacked single-file views. target_file_path (a Files-drawer click) makes the extension open + show that file instead of whatever was active
             handlers.postMessage?.({
                 type: 'setIntegration',
@@ -92,7 +111,7 @@ export function useViewToolbar(
                 path: target_file_path,
             });
         }
-    }, [handlers, props.doc_path, props.view_state_ids]);
+    }, [handlers, props.doc_path, props.view_state_ids, props.id, props.file_declared_integration]);
 
     // natural column order for the Kanban drawer (alphabetical + 'untagged' last)
     const natural_column_order = useMemo<string[]>(() => {
@@ -118,6 +137,17 @@ export function useViewToolbar(
             value,
         });
     }, [handlers, markPending]);
+
+    /*
+     * handle_view_type_change — change the view type (auto / document / kanban). Mirrors
+     * handle_integration_change: dispatch the selection to this view's id, then cascade-write
+     * 'viewType' so the choice persists across integration modes (viewType is a view-type setting,
+     * not integration-specific — a type picked in current_file mode also applies in folder mode).
+     */
+    const handle_view_type_change = useCallback((view_type: string): void => {
+        handlers.setViewManagedState([{ id: props.id, type: view_type }]);
+        cascade_write_setting('viewType', view_type);
+    }, [handlers, props.id, cascade_write_setting]);
 
     const handle_make_default = useCallback((): void => {
         handlers.postMessage?.({ type: 'promoteSettingsToUser' });
@@ -181,14 +211,17 @@ export function useViewToolbar(
     }, [handlers, props.id, display_options.settings, natural_column_order, cascade_write_setting]);
 
     return {
+        integration_selection,
         integration_mode,
-        natural_column_order,
         handle_integration_change,
+        view_type_selection,
+        auto_resolved_type,
+        handle_view_type_change,
+        natural_column_order,
         handle_setting_change,
         handle_global_setting_change,
         handle_column_order_change,
         handle_make_default,
         handle_reset_to_default,
-        cascade_write_setting,
     };
 }

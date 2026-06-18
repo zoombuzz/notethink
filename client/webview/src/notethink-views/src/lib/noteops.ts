@@ -394,6 +394,22 @@ export function findFirstIncompleteTaskSeq(items: Array<NoteProps | MdastNode>):
 }
 
 /**
+ * Resolve an `nt_breadcrumb_last` epic/story label against a flat note list: return the seq of
+ * the first heading note whose stripped headline equals `label`, for seeding
+ * `parent_context_seq` so the view opens scoped to that note's subtree. Only heading notes are
+ * considered (epics / stories are headings); the synthetic seq-0 root and body items are
+ * skipped. Returns undefined when nothing matches (caller leaves the scope at the default).
+ */
+export function breadcrumbSeqForLabel(label: string, notes: Array<NoteProps> | undefined): number | undefined {
+    if (!label || !notes?.length) { return undefined; }
+    for (const note of notes) {
+        if (note.type !== 'heading') { continue; }
+        if (stripHeadlineLinetags(note.headline_raw ?? '') === label) { return note.seq; }
+    }
+    return undefined;
+}
+
+/**
  * Strip the heading prefix (`#+\s*`) and any trailing linetag blocks
  * (`\s*\[[^\]]*\]\(\?[^)]*\)\s*$`, repeated) from a raw headline string.
  * Used to derive epic names from `##` headings and breadcrumb labels.

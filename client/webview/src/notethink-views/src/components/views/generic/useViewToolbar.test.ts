@@ -107,6 +107,42 @@ describe('useViewToolbar.handle_integration_change', () => {
         }
     });
 
+    it('explicit "auto" re-select resets to the file: persists auto + the declared folder scope and re-aggregates', () => {
+        const { handlers, set_view_managed_state, post_message } = makeHandlers();
+        const display_options: NoteDisplayOptions = { integration_mode: 'current_file' };
+        const notes: NoteProps[] = [];
+        const { result } = renderHook(() =>
+            useViewToolbar(makeProps({
+                view_state_ids: [FOLDER_VIEW_STATE_ID],
+                file_declared_integration: { mode: 'folder', integration_path: '/repo/portfolio' },
+            }), handlers, display_options, notes),
+        );
+        act(() => { result.current.handle_integration_change('auto'); });
+        const updates = set_view_managed_state.mock.calls[0][0] as Array<Record<string, unknown>>;
+        const canonical = updates.find((u) => u.id === FOLDER_VIEW_STATE_ID);
+        expect((canonical!.display_options as NoteDisplayOptions).integration_mode).toBe('auto');
+        expect((canonical!.display_options as NoteDisplayOptions).integration_path).toBe('/repo/portfolio');
+        expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'folder', path: '/repo/portfolio' });
+    });
+
+    it('explicit "auto" re-select on a file that declares current_file resets to auto with no folder scope', () => {
+        const { handlers, set_view_managed_state, post_message } = makeHandlers();
+        const display_options: NoteDisplayOptions = { integration_mode: 'folder' };
+        const notes: NoteProps[] = [];
+        const { result } = renderHook(() =>
+            useViewToolbar(makeProps({
+                view_state_ids: [FOLDER_VIEW_STATE_ID],
+                file_declared_integration: { mode: 'current_file' },
+            }), handlers, display_options, notes),
+        );
+        act(() => { result.current.handle_integration_change('auto'); });
+        const updates = set_view_managed_state.mock.calls[0][0] as Array<Record<string, unknown>>;
+        const canonical = updates.find((u) => u.id === FOLDER_VIEW_STATE_ID);
+        expect((canonical!.display_options as NoteDisplayOptions).integration_mode).toBe('auto');
+        expect((canonical!.display_options as NoteDisplayOptions).integration_path).toBeUndefined();
+        expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file' });
+    });
+
     it('flipping to folder dispatches the canonical-key integration update plus per-view interaction-state clears (no integration-mode tag sweep)', () => {
         const { handlers, set_view_managed_state, post_message } = makeHandlers();
         const display_options: NoteDisplayOptions = { integration_mode: 'current_file' };
@@ -133,6 +169,69 @@ describe('useViewToolbar.handle_integration_change', () => {
         expect(non_canonical_dopts.view_focused_ids).toBeUndefined();
         expect(non_canonical_dopts.view_selected_ids).toBeUndefined();
         expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'folder', path: '/repo/sub' });
+    });
+
+});
+
+describe('useViewToolbar integration_mode / integration_selection', () => {
+
+    it('exposes the resolved concrete mode and the persisted selection separately (auto folder)', () => {
+        const { handlers } = makeHandlers();
+        const display_options: NoteDisplayOptions = { integration_mode: 'folder', integration_mode_selection: 'auto', integration_path: '/repo/portfolio' };
+        const { result } = renderHook(() =>
+            useViewToolbar(makeProps({ display_options }), handlers, display_options, []),
+        );
+        expect(result.current.integration_mode).toBe('folder');
+        expect(result.current.integration_selection).toBe('auto');
+    });
+
+    it('defaults the selection to auto and resolves current_file when nothing is stamped', () => {
+        const { handlers } = makeHandlers();
+        const display_options: NoteDisplayOptions = {};
+        const { result } = renderHook(() =>
+            useViewToolbar(makeProps({ display_options }), handlers, display_options, []),
+        );
+        expect(result.current.integration_mode).toBe('current_file');
+        expect(result.current.integration_selection).toBe('auto');
+    });
+
+    it('reflects a concrete pin in both the resolved mode and the selection', () => {
+        const { handlers } = makeHandlers();
+        const display_options: NoteDisplayOptions = { integration_mode: 'folder', integration_mode_selection: 'folder', integration_path: '/repo' };
+        const { result } = renderHook(() =>
+            useViewToolbar(makeProps({ display_options }), handlers, display_options, []),
+        );
+        expect(result.current.integration_mode).toBe('folder');
+        expect(result.current.integration_selection).toBe('folder');
+    });
+
+});
+
+describe('useViewToolbar view-type dropdown (parity with the integration-mode dropdown)', () => {
+
+    it('exposes the persisted selection and the auto-resolved type, mirroring integration selection/mode', () => {
+        const { handlers } = makeHandlers();
+        const props = makeProps({ type: 'kanban', nested: { replaced_attributes: { type: 'auto' }, auto_resolved_type: 'kanban' } });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
+        expect(result.current.view_type_selection).toBe('auto');
+        expect(result.current.auto_resolved_type).toBe('kanban');
+    });
+
+    it('falls back to props.type as the selection when nested carries no replaced type', () => {
+        const { handlers } = makeHandlers();
+        const props = makeProps({ type: 'document' });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
+        expect(result.current.view_type_selection).toBe('document');
+        expect(result.current.auto_resolved_type).toBeUndefined();
+    });
+
+    it('handle_view_type_change dispatches the type to the view id and cascade-writes viewType (mirrors handle_integration_change)', () => {
+        const { handlers, set_view_managed_state, post_message } = makeHandlers();
+        const props = makeProps({ id: 'doc-id-1' });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
+        act(() => { result.current.handle_view_type_change('kanban'); });
+        expect(set_view_managed_state).toHaveBeenCalledWith([{ id: 'doc-id-1', type: 'kanban' }]);
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'viewType', value: 'kanban' });
     });
 
 });

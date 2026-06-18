@@ -28,11 +28,25 @@
     <script>
         // Mock VS Code API
         window.__captured_messages = [];
-        window.__vsCodeState = { docs: {} };
+        // back the webview persisted state with sessionStorage so getState/setState survive a
+        // page reload — mirrors the real VS Code webview, which restores getState() across reloads.
+        // Honour a value an addInitScript already set (test pre-seed), else restore from sessionStorage,
+        // else start empty. sessionStorage is per-context, so each isolated test still boots clean.
+        function loadPersistedState() {
+            try {
+                var raw = sessionStorage.getItem('__vsCodeState');
+                if (raw) { return JSON.parse(raw); }
+            } catch (e) {}
+            return { docs: {} };
+        }
+        window.__vsCodeState = window.__vsCodeState || loadPersistedState();
         window.acquireVsCodeApi = function() {
             return {
                 getState: function() { return window.__vsCodeState; },
-                setState: function(s) { window.__vsCodeState = s; },
+                setState: function(s) {
+                    window.__vsCodeState = s;
+                    try { sessionStorage.setItem('__vsCodeState', JSON.stringify(s)); } catch (e) {}
+                },
                 postMessage: function(msg) { window.__captured_messages.push(msg); },
             };
         };

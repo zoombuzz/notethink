@@ -29,6 +29,7 @@ import {
     formatColumnLabel,
     findStableIdCollisions,
     collisionNoteLocation,
+    breadcrumbSeqForLabel,
 } from './noteops';
 import type { NoteProps, NoteOrigin, TextSelection, LineTag } from '../types/NoteProps';
 
@@ -48,6 +49,31 @@ function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
         ...overrides,
     };
 }
+
+describe('breadcrumbSeqForLabel', () => {
+    // the matching paragraph (seq 1) precedes the matching heading (seq 2) so the heading-only guard is load-bearing: without it, first-match iteration would return the paragraph's seq 1 instead of 2
+    const notes: NoteProps[] = [
+        makeNote({ seq: 0, type: 'root', headline_raw: '' }),
+        makeNote({ seq: 1, type: 'paragraph', headline_raw: 'Backend' }),
+        makeNote({ seq: 2, type: 'heading', headline_raw: '## Backend [](?id=be)' }),
+        makeNote({ seq: 3, type: 'heading', headline_raw: '### Wire alerts' }),
+    ];
+
+    it('returns the seq of the heading whose stripped headline matches the label', () => {
+        expect(breadcrumbSeqForLabel('Backend', notes)).toBe(2);
+        expect(breadcrumbSeqForLabel('Wire alerts', notes)).toBe(3);
+    });
+
+    it('ignores non-heading notes that happen to match (heading at seq 2 wins over paragraph at seq 1)', () => {
+        expect(breadcrumbSeqForLabel('Backend', notes)).toBe(2);
+    });
+
+    it('returns undefined for an unmatched label, empty label, or empty list', () => {
+        expect(breadcrumbSeqForLabel('Missing', notes)).toBeUndefined();
+        expect(breadcrumbSeqForLabel('', notes)).toBeUndefined();
+        expect(breadcrumbSeqForLabel('Backend', undefined)).toBeUndefined();
+    });
+});
 
 describe('withinNoteHeadlineOrBody', () => {
     it('returns true for position within note', () => {

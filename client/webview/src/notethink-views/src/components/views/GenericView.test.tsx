@@ -46,9 +46,9 @@ jest.mock('./BreadcrumbTrail', () => ({
 // mock ViewTypeSelector
 jest.mock('./ViewTypeSelector', () => ({
     __esModule: true,
-    default: (props: { currentType: string; autoResolvedType?: string }) => (
-        <select data-testid="view-type-selector" data-auto-resolved={props.autoResolvedType || ''}>
-            <option value={props.currentType}>{props.currentType}</option>
+    default: (props: { currentSelection: string; resolvedType?: string }) => (
+        <select data-testid="view-type-selector" data-auto-resolved={props.resolvedType || ''}>
+            <option value={props.currentSelection}>{props.currentSelection}</option>
         </select>
     ),
 }));

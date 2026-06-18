@@ -1013,6 +1013,20 @@ describe('firstIntegrationPath', () => {
         };
         expect(firstIntegrationPath(view_states)).toBeUndefined();
     });
+
+    it('returns the path for an auto canonical entry whose folder scope was seeded by auto-resolution', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'auto', integration_path: '/repo/portfolio' } },
+        };
+        expect(firstIntegrationPath(view_states)).toBe('/repo/portfolio');
+    });
+
+    it('ignores an auto canonical entry with no seeded path', () => {
+        const view_states = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'auto' } },
+        };
+        expect(firstIntegrationPath(view_states)).toBeUndefined();
+    });
 });
 
 describe('stampSingleFileStableIds', () => {

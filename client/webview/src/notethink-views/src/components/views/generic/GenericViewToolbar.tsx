@@ -6,7 +6,7 @@ import type { NoteDisplayOptions } from "../../../types/NoteProps";
 import type { GlobalSettingKey } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import type { CommonSettingKey } from "../SettingsCommonControls";
-import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type IntegrationMode } from "../../../types/IntegrationMode";
+import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 import type { StableIdCollision } from "../../../lib/noteops";
 import CollisionsDrawer from "../drawers/CollisionsDrawer";
 import FilesDrawer from "../drawers/FilesDrawer";
@@ -25,8 +25,14 @@ interface GenericViewToolbarProps {
     handlers: ViewApi;
     displayOptions: NoteDisplayOptions;
     breadcrumbTrail: ReactElement;
+    // integration-mode dropdown: selection (may be auto), resolved concrete mode, change handler
+    integrationSelection: IntegrationMode;
+    integrationMode: ConcreteIntegrationMode;
+    onIntegrationChange: (mode: IntegrationMode, target_file_path?: string) => void;
+    // view-type dropdown: same shape — selection (may be auto), auto-resolved concrete type, change handler
+    viewTypeSelection: string;
     autoResolvedType: string | undefined;
-    integrationMode: IntegrationMode;
+    onViewTypeChange: (view_type: string) => void;
     naturalColumnOrder: string[];
     collisions: StableIdCollision[];
     activeDrawer: 'none' | 'settings' | 'files' | 'collisions' | 'jump';
@@ -37,14 +43,12 @@ interface GenericViewToolbarProps {
     onCloseDrawer: () => void;
     onSettingsToggle: () => void;
     onInsertOpen: () => void;
-    onIntegrationChange: (mode: IntegrationMode, target_file_path?: string) => void;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
     onColumnOrderChange: (next_order: string[]) => void;
     onMakeDefault: () => void;
     onResetToDefault: () => void;
     onApplyFilters: (next_include: string, next_exclude: string, next_max_notes_per_file: number) => void;
-    onCascadeWrite: (setting: string, value: unknown) => void;
 }
 
 // shared inline style for the toolbar's icon buttons (insert, settings gear)
@@ -71,8 +75,10 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         handlers,
         displayOptions,
         breadcrumbTrail,
-        autoResolvedType,
+        integrationSelection,
         integrationMode,
+        viewTypeSelection,
+        autoResolvedType,
         naturalColumnOrder,
         collisions,
         activeDrawer,
@@ -90,25 +96,23 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         onMakeDefault,
         onResetToDefault,
         onApplyFilters,
-        onCascadeWrite,
+        onViewTypeChange,
     } = component_props;
     return (
         <>
             <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
                 <ViewIntegrationSelector
-                    currentMode={integrationMode}
+                    currentSelection={integrationSelection}
+                    resolvedMode={integrationMode}
                     onChange={onIntegrationChange}
                 />
                 <div className={master_view_styles.viewToolbarBreadcrumb}>
                     {breadcrumbTrail}
                 </div>
                 <ViewTypeSelector
-                    currentType={(props.nested?.replaced_attributes?.type as string) || props.type}
-                    autoResolvedType={autoResolvedType}
-                    handlers={handlers}
-                    id={props.id}
-                    // viewType is a view-type setting (not integration-specific): cascade-write in any integration mode so picking Kanban here also persists for folder mode and vice versa
-                    onCascadeWrite={(viewType) => onCascadeWrite('viewType', viewType)}
+                    currentSelection={viewTypeSelection}
+                    resolvedType={autoResolvedType}
+                    onChange={onViewTypeChange}
                 />
                 <button
                     data-testid="view-insert-button"

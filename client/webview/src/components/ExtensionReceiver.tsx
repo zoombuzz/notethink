@@ -2,6 +2,7 @@ import Debug from 'debug';
 import React, { useRef } from 'react';
 import * as l10n from '@vscode/l10n';
 import { useVscodeMessages } from '../hooks/useVscodeMessages';
+import { useAutoIntegration } from '../hooks/useAutoIntegration';
 import { usePersistedViewStates, useVscodeStatePersistence } from '../hooks/usePersistedViewStates';
 import { useGlobalSettings } from '../hooks/useGlobalSettings';
 import { useSettingsCascade } from '../hooks/useSettingsCascade';
@@ -66,6 +67,15 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
     // effects
     useLinkInterceptor(postMessageToExtension);
     useVscodeStatePersistence(docs, view_states, persistVscodeState);
+    // integration-mode auto-resolution: resolve the opened file's nt_integration_mode / nt_breadcrumb_last and seed the first folder/scope dispatch while the view is automatic; the returned declaration is threaded into the view so the navigation handlers can reconcile congruence with the file
+    const file_declared_integration = useAutoIntegration({
+        docs,
+        active_editor_doc_path,
+        workspace_root,
+        view_states_ref,
+        postMessage: postMessageToExtension,
+        setViewManagedState: handleSetViewManagedState,
+    });
 
     // early returns
     const has_docs = docs && Object.keys(docs).length > 0;
@@ -94,5 +104,6 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         excludeFilter={excludeFilter}
         globalSettings={global_settings}
         settingsCascade={settings_cascade}
+        fileDeclaredIntegration={file_declared_integration}
     />;
 }

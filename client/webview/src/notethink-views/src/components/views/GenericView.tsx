@@ -61,8 +61,12 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     handlers={handlers}
                     displayOptions={display_options}
                     breadcrumbTrail={breadcrumb_trail}
-                    autoResolvedType={auto_resolved_type}
+                    integrationSelection={toolbar.integration_selection}
                     integrationMode={toolbar.integration_mode}
+                    onIntegrationChange={toolbar.handle_integration_change}
+                    viewTypeSelection={toolbar.view_type_selection}
+                    autoResolvedType={toolbar.auto_resolved_type}
+                    onViewTypeChange={toolbar.handle_view_type_change}
                     naturalColumnOrder={toolbar.natural_column_order}
                     collisions={collisions}
                     activeDrawer={drawers.active_drawer}
@@ -73,14 +77,12 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     onCloseDrawer={drawers.close_drawer}
                     onSettingsToggle={drawers.toggle_settings}
                     onInsertOpen={insert.open_insert_modal}
-                    onIntegrationChange={toolbar.handle_integration_change}
                     onSettingChange={toolbar.handle_setting_change}
                     onGlobalSettingChange={toolbar.handle_global_setting_change}
                     onColumnOrderChange={toolbar.handle_column_order_change}
                     onMakeDefault={toolbar.handle_make_default}
                     onResetToDefault={toolbar.handle_reset_to_default}
                     onApplyFilters={handle_apply_filters}
-                    onCascadeWrite={toolbar.cascade_write_setting}
                 />
             )}
             {props.type === 'auto' && <AutoView {...enriched_props} />}

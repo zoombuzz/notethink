@@ -95,33 +95,39 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
     const active_selection: TextSelection | undefined = active_editor_doc_path ? props.selections?.[active_editor_doc_path] : undefined;
 
     const view_props: ViewProps = {
+        // --- identity (doc_path/doc_relative_path/doc_text intentionally undefined for the merged view) ---
         id: view_state_id,
         type: viewType,
-        // doc_path/doc_relative_path/doc_text intentionally undefined for the merged view
         workspace_root: props.workspace_root,
+        // --- folder aggregate metadata ---
         file_count,
         aggregate_total_discovered: props.aggregate_total_discovered,
         note_count,
+        aggregate_loaded_files,
+        // --- settings-cascade mirror: camelCase (not snake_case) because these carry VS Code config values whose keys (notethink.settings.*) are camelCase end-to-end, unlike the snake_case note-tree wire data ---
         includeFilter,
         excludeFilter,
-        aggregate_loaded_files,
         settingsCascadeHasWorkspaceOverrides: cascade?.hasWorkspaceOverrides,
+        // --- view state + the opened file's declared integration intent ---
         view_state_ids,
+        file_declared_integration: props.fileDeclaredIntegration,
         display_options: view_display_options,
+        // --- note tree ---
         nested: {
             parent_context: merged_root,
         },
         notes: all_notes,
+        // --- editor-derived inputs: the active editor's doc + its selection drive useViewContext's per-doc caret matcher ---
         selection: active_selection,
         active_editor_doc_path,
+        // --- handler functions (view→host dispatch) ---
         handlers: {
             setViewManagedState: props.setViewManagedState || (() => {}),
             deleteViewFromManagedState: () => {},
             revertAllViewsToDefaultState: () => {},
             onNavigationCommand: props.onNavigationCommand,
             postMessage: props.postMessage ? (message: unknown) => {
-                // in folder mode the click handlers attach docPath from note.origin
-                // we don't stamp a synthetic doc here — messages without origin context are passed through and the extension drops anything it can't route
+                // folder mode click handlers attach docPath from note.origin; we don't stamp a synthetic doc here, so messages without origin context pass through and the extension drops anything it can't route
                 props.postMessage!(message);
             } : undefined,
         },

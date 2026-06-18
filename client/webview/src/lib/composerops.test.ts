@@ -1,4 +1,5 @@
 import { buildViewDisplayOptions } from "./composerops";
+import { FOLDER_VIEW_STATE_ID } from "../notethink-views/src/lib/viewstateops";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../notethink-views/src/types/IntegrationMode";
 import type { NoteRendererProps } from "../components/NoteRenderer";
 import type { ViewState } from "../hooks/usePersistedViewStates";
@@ -150,6 +151,46 @@ describe('composerops.buildViewDisplayOptions', () => {
             const result = buildViewDisplayOptions(buildProps(), undefined, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.view_display_options.settings?.showLineNumbers).toBe(false);
             expect(result.view_display_options.settings?.watchUnopenedFilesInViewer).toBe(true);
+        });
+
+    });
+
+    describe('integration_mode_selection (persisted choice, always read from the canonical folder key)', () => {
+
+        it('stamps integration_mode_selection=auto when no canonical folder state exists', () => {
+            const result = buildViewDisplayOptions(buildProps(), undefined, INTEGRATION_MODE_CURRENT_FILE);
+            expect(result.view_display_options.integration_mode_selection).toBe('auto');
+        });
+
+        it('carries an auto persisted selection alongside the resolved concrete integration_mode (folder)', () => {
+            const props = buildProps({
+                viewStates: { [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'auto', integration_path: '/repo/portfolio' } } },
+            });
+            const view_state: ViewState = { display_options: { integration_mode: 'auto', integration_path: '/repo/portfolio' } };
+            const result = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_FOLDER, '/repo/portfolio');
+            // the selector shows "Auto (Folder)": selection stays auto, the resolved concrete mode is folder
+            expect(result.view_display_options.integration_mode_selection).toBe('auto');
+            expect(result.view_display_options.integration_mode).toBe('folder');
+        });
+
+        it('carries a concrete folder pin from the canonical key', () => {
+            const props = buildProps({
+                viewStates: { [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'folder', integration_path: '/repo' } } },
+            });
+            const view_state: ViewState = { display_options: { integration_mode: 'folder', integration_path: '/repo' } };
+            const result = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_FOLDER, '/repo');
+            expect(result.view_display_options.integration_mode_selection).toBe('folder');
+        });
+
+        it('reads a current_file pin from the canonical key even though the current_file composer renders the doc-keyed view_state', () => {
+            // the pin lives on FOLDER_VIEW_STATE_ID; the per-doc view_state NoteTreeComposer renders against has its mode explicitly cleared, so the selection must come from the canonical key (else the selector would mislabel a pinned "Current file" as "Auto (Current file)")
+            const props = buildProps({
+                viewStates: { [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'current_file' } } },
+            });
+            const doc_keyed_view_state: ViewState = { display_options: { integration_mode: undefined } };
+            const result = buildViewDisplayOptions(props, doc_keyed_view_state, INTEGRATION_MODE_CURRENT_FILE);
+            expect(result.view_display_options.integration_mode).toBe('current_file');
+            expect(result.view_display_options.integration_mode_selection).toBe('current_file');
         });
 
     });

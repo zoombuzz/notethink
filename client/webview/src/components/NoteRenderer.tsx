@@ -11,6 +11,7 @@ import type { Nodes as MdastNodesType } from "mdast";
 import type { HashMapOf, Doc } from "../types/general";
 import type { TextSelection } from "../notethink-views/src/types/NoteProps";
 import type { GlobalSettingsPayload, SettingsCascadePayload } from "../notethink-views/src/types/Messages";
+import type { FileIntegrationDeclaration } from "../lib/docops";
 import type { ViewState } from './ExtensionReceiver';
 import NoteTreeComposer from './composers/NoteTreeComposer';
 import FolderTreeComposer from './composers/FolderTreeComposer';
@@ -49,6 +50,8 @@ export interface NoteRendererProps {
     excludeFilter?: string;
     globalSettings?: GlobalSettingsPayload;
     settingsCascade?: SettingsCascadePayload;
+    // the opened file's declared integration intent (folder/current_file + scope), resolved at the App layer; threaded into the view so the navigation handlers can reconcile auto congruence
+    fileDeclaredIntegration?: FileIntegrationDeclaration;
 }
 
 /**

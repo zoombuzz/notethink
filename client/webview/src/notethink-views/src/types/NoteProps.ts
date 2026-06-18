@@ -11,6 +11,10 @@ export interface ClickPositionInfo {
 
 export type NoteClickHandler = (event: MouseEvent<HTMLElement>, note: NoteProps | undefined, position: ClickPositionInfo) => void;
 
+/**
+ * NoteDisplayOptions, per-view display state threaded onto each note's display_options.
+ * - integration_mode_selection: the persisted integration-mode choice (auto / current_file / folder), carried alongside the composer-resolved concrete integration_mode so the toolbar selector can render "Auto (…)" vs the concrete label; never persisted itself — the composer re-stamps it from the canonical folder view-state each render
+ */
 export interface NoteDisplayOptions {
     id?: string;
     view_id?: string;
@@ -42,6 +46,7 @@ export interface NoteDisplayOptions {
     view_focused_ids?: string[];
     view_selected_ids?: string[];
     integration_mode?: string;
+    integration_mode_selection?: string;
     integration_path?: string;
     includeFilter?: string;
     excludeFilter?: string;

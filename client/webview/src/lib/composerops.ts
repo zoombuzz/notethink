@@ -1,6 +1,7 @@
 import Debug from "debug";
+import { FOLDER_VIEW_STATE_ID } from "../notethink-views/src/lib/viewstateops";
+import { INTEGRATION_MODE_AUTO, type IntegrationMode } from "../notethink-views/src/types/IntegrationMode";
 import type { ViewState } from "../hooks/usePersistedViewStates";
-import type { IntegrationMode } from "../notethink-views/src/types/IntegrationMode";
 import type { NoteDisplayOptions } from "../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../components/NoteRenderer";
 
@@ -29,6 +30,14 @@ export interface BuildViewDisplayOptionsResult {
  * of truth for the toolbar selector + breadcrumb; without it a stale stranded tag on
  * the viewState's display_options could still register as folder. In current_file mode
  * integration_path is explicitly stamped undefined for the same reason.
+ *
+ * `mode` is the concrete mode the renderer already resolved (folder/current_file) and is
+ * stamped as integration_mode for the view internals; the persisted selection (which may be
+ * 'auto') is captured separately as integration_mode_selection so the toolbar selector can
+ * render "Auto (Folder)" / "Auto (Current file)" vs the concrete labels. The selection is read
+ * from the canonical FOLDER_VIEW_STATE_ID — where handle_integration_change always writes the
+ * pin — not from the per-doc view_state the current_file composer renders against, which never
+ * carries the pin (and is explicitly cleared on a flip to current_file).
  */
 export function buildViewDisplayOptions(
     props: NoteRendererProps,
@@ -47,9 +56,11 @@ export function buildViewDisplayOptions(
         showContextBars: cascade?.showContextBars ?? true,
     };
     if (cascade_column_order) { cascade_settings.columnOrder = cascade_column_order; }
+    const persisted_selection = props.viewStates?.[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode;
     const view_display_options: NoteDisplayOptions = {
         ...view_state?.display_options,
         integration_mode: mode,
+        integration_mode_selection: persisted_selection ?? INTEGRATION_MODE_AUTO,
         integration_path,
         settings: {
             ...cascade_settings,

@@ -74,6 +74,35 @@ export function segmentPathBelowWorkspace(absolute_path: string, workspace_root?
 }
 
 /**
+ * Resolve an `nt_breadcrumb_last` folder label against the opened file's path trail.
+ * Segments `doc_path` below the workspace root (the same trail the breadcrumb renders) and
+ * returns the absolute path of the DEEPEST segment whose label matches `label`. Deepest wins
+ * so a duplicate label (e.g. a `portfolio/portfolio` nesting) scopes to the lower folder,
+ * matching "click the rightmost matching breadcrumb segment".
+ *
+ * The match is exact and case-sensitive on the segment label. The terminal segment (the file
+ * itself) is excluded — a breadcrumb folder scope only ever names a folder, never the open
+ * file. Returns undefined when no folder segment matches (caller falls back to the note-seq
+ * resolver, then to the default scope).
+ */
+export function resolveBreadcrumbFolderSegment(
+    label: string,
+    doc_path: string | undefined,
+    workspace_root?: string,
+    doc_relative_path?: string,
+): string | undefined {
+    if (!label || !doc_path) { return undefined; }
+    const segments = splitPathSegments(doc_path, workspace_root, doc_relative_path);
+    // exclude the terminal segment (the file) — breadcrumb_last names a folder, not the open file
+    const folder_segments = segments.slice(0, -1);
+    let match: string | undefined;
+    for (const segment of folder_segments) {
+        if (segment.label === label) { match = segment.path; }
+    }
+    return match;
+}
+
+/**
  * Single-file breadcrumb segmentation. Prefers `doc_relative_path` (computed by
  * the extension via VS Code's `asRelativePath`, which handles symlinks
  * correctly); falls back to stripping `workspace_root` off `doc_path` manually;

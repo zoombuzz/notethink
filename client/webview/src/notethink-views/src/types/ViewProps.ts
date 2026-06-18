@@ -1,9 +1,11 @@
 import type {MouseEvent, MutableRefObject, ReactElement} from "react";
 import type {NoteProps, NoteDisplayOptions, NoteHandlers, TextSelection} from "../types/NoteProps";
+import type {ConcreteIntegrationMode} from "./IntegrationMode";
 
 /**
  * ViewProps is the props shape every view consumes; one instance per rendered view (a kanban board, a document view, the synthetic folder root, etc.) built by the composers and threaded through GenericView.
  * - active_editor_doc_path: path of the doc whose editor selection backs `selection`; the per-doc matcher in useViewContext uses this to filter aggregated notes by origin.doc_path before locating the caret in source-file offsets
+ * - file_declared_integration: the opened file's declared integration intent (from nt_integration_mode / nt_breadcrumb_last) resolved at the App layer; the congruence-seeking navigation handlers compare a gesture's resulting mode against this to decide whether to keep auto or pin a concrete mode
  */
 export interface ViewProps {
     id: string;
@@ -22,6 +24,11 @@ export interface ViewProps {
     aggregate_loaded_files?: Array<string>;
     settingsCascadeHasWorkspaceOverrides?: boolean;
     view_state_ids?: readonly string[];
+    file_declared_integration?: {
+        mode: ConcreteIntegrationMode;
+        integration_path?: string;
+        parent_context_seq?: number;
+    };
     display_options?: NoteDisplayOptions;
     nested?: {
         menus?: Record<string, unknown>;

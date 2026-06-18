@@ -242,6 +242,51 @@ describe('useViewHandlers setViewInteractionState', () => {
     });
 });
 
+describe('useViewHandlers handle_folder_click congruence', () => {
+    function folderClick(file_declared_integration: ViewProps['file_declared_integration']): { set_view_managed_state: jest.Mock; post_message: jest.Mock } {
+        const set_view_managed_state = jest.fn();
+        const post_message = jest.fn();
+        const props = makeProps({
+            file_declared_integration,
+            handlers: {
+                setViewManagedState: set_view_managed_state,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: post_message,
+            },
+        });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handle_folder_click('/repo/portfolio');
+        return { set_view_managed_state, post_message };
+    }
+
+    it('stays auto when the destination folder is congruent with a folder-declaring file', () => {
+        const { set_view_managed_state, post_message } = folderClick({ mode: INTEGRATION_MODE_FOLDER });
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: FOLDER_VIEW_STATE_ID,
+            display_options: { integration_mode: 'auto', integration_path: '/repo/portfolio' },
+        }]);
+        // the extension always receives the concrete folder mode
+        expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: INTEGRATION_MODE_FOLDER, path: '/repo/portfolio' });
+    });
+
+    it('pins concrete folder when the file declares current_file (navigation diverges)', () => {
+        const { set_view_managed_state } = folderClick({ mode: INTEGRATION_MODE_CURRENT_FILE });
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: FOLDER_VIEW_STATE_ID,
+            display_options: { integration_mode: 'folder', integration_path: '/repo/portfolio' },
+        }]);
+    });
+
+    it('pins concrete folder when the file declares nothing (treated as current_file)', () => {
+        const { set_view_managed_state } = folderClick(undefined);
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: FOLDER_VIEW_STATE_ID,
+            display_options: { integration_mode: 'folder', integration_path: '/repo/portfolio' },
+        }]);
+    });
+});
+
 describe('useViewHandlers revealNote', () => {
     it('folder mode: reveals the origin source offset and origin doc_path', () => {
         const post_message = jest.fn();

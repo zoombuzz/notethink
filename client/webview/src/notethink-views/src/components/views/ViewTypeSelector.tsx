@@ -2,7 +2,6 @@ import Debug from "debug";
 import type { ChangeEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import { SELECTABLE_VIEWTYPES } from "./GenericView";
-import type { ViewProps } from "../../types/ViewProps";
 
 const debug = Debug("nodejs:notethink-views:ViewTypeSelector");
 
@@ -10,31 +9,23 @@ function capitalize(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/**
- * - onCascadeWrite: called after `setViewManagedState` so the parent can round-trip the change to VS Code config under notethink.settings.*. Fires in any integration mode — viewType is a view-type setting, not folder-specific
- */
 interface ViewTypeSelectorProps {
-    currentType: string;
-    autoResolvedType?: string;
-    handlers?: ViewProps['handlers'];
-    id: string;
-    onCascadeWrite?: (viewType: string) => void;
+    // the persisted selection: drives the <select> value (auto / document / kanban)
+    currentSelection: string;
+    // the concrete type auto resolved to, shown in parentheses for the auto option ("Auto (Kanban)")
+    resolvedType?: string;
+    onChange: (view_type: string) => void;
 }
 
 export default function ViewTypeSelector(props: ViewTypeSelectorProps): ReactElement {
     const handleChange = (e: ChangeEvent<HTMLSelectElement>): void => {
-        const viewType = e.target.value;
-        props.handlers?.setViewManagedState?.([{
-            id: props.id,
-            type: viewType,
-        }]);
-        props.onCascadeWrite?.(viewType);
+        props.onChange(e.target.value);
     };
 
     return (
         <select
             data-testid="view-type-selector"
-            value={props.currentType}
+            value={props.currentSelection}
             onChange={handleChange}
             aria-label={l10n.t('View type')}
             style={{
@@ -49,8 +40,8 @@ export default function ViewTypeSelector(props: ViewTypeSelectorProps): ReactEle
         >
             {SELECTABLE_VIEWTYPES.map((vt) => (
                 <option key={vt} value={vt}>
-                    {vt === 'auto' && props.autoResolvedType
-                        ? l10n.t('Auto ({0})', capitalize(props.autoResolvedType))
+                    {vt === 'auto' && props.resolvedType
+                        ? l10n.t('Auto ({0})', capitalize(props.resolvedType))
                         : capitalize(vt)}
                 </option>
             ))}

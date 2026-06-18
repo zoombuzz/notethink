@@ -1,12 +1,14 @@
 import {
     FOLDER_VIEW_STATE_ID,
     anyViewInFolderMode,
+    reconcileAutoIntegrationMode,
+    resolveIntegrationMode,
     resolveViewStateId,
     writeViewInteractionState,
     findFolderViewState,
     type ViewStateLike,
 } from './viewstateops';
-import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from '../types/IntegrationMode';
+import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from '../types/IntegrationMode';
 import type { ViewApi, ViewProps } from '../types/ViewProps';
 
 function makeProps(overrides: Partial<ViewProps> = {}): ViewProps {
@@ -28,6 +30,44 @@ function makeHandlers(): { handlers: ViewApi; set_view_managed_state: jest.Mock 
     return { handlers, set_view_managed_state };
 }
 
+describe('resolveIntegrationMode', () => {
+    it('treats undefined display_options / mode as current_file (back-compat, no migration)', () => {
+        expect(resolveIntegrationMode(undefined)).toBe(INTEGRATION_MODE_CURRENT_FILE);
+        expect(resolveIntegrationMode({})).toBe(INTEGRATION_MODE_CURRENT_FILE);
+    });
+
+    it('passes concrete folder / current_file through unchanged', () => {
+        expect(resolveIntegrationMode({ integration_mode: 'folder', integration_path: '/repo' })).toBe(INTEGRATION_MODE_FOLDER);
+        expect(resolveIntegrationMode({ integration_mode: 'current_file' })).toBe(INTEGRATION_MODE_CURRENT_FILE);
+    });
+
+    it('resolves auto to folder when an integration_path was seeded, else current_file', () => {
+        expect(resolveIntegrationMode({ integration_mode: 'auto', integration_path: '/repo/portfolio' })).toBe(INTEGRATION_MODE_FOLDER);
+        expect(resolveIntegrationMode({ integration_mode: 'auto' })).toBe(INTEGRATION_MODE_CURRENT_FILE);
+    });
+
+    it('treats an absent mode with a stray path as folder (auto default + path)', () => {
+        expect(resolveIntegrationMode({ integration_path: '/repo' })).toBe(INTEGRATION_MODE_FOLDER);
+    });
+});
+
+describe('reconcileAutoIntegrationMode', () => {
+    it('returns auto when the navigation lands on the file-declared mode (congruent)', () => {
+        expect(reconcileAutoIntegrationMode(INTEGRATION_MODE_FOLDER, INTEGRATION_MODE_FOLDER)).toBe(INTEGRATION_MODE_AUTO);
+        expect(reconcileAutoIntegrationMode(INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_CURRENT_FILE)).toBe(INTEGRATION_MODE_AUTO);
+    });
+
+    it('pins the concrete resulting mode when navigation diverges from the file', () => {
+        expect(reconcileAutoIntegrationMode(INTEGRATION_MODE_FOLDER, INTEGRATION_MODE_CURRENT_FILE)).toBe(INTEGRATION_MODE_FOLDER);
+        expect(reconcileAutoIntegrationMode(INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER)).toBe(INTEGRATION_MODE_CURRENT_FILE);
+    });
+
+    it('treats an undeclared file as current_file, so only current_file navigation returns auto', () => {
+        expect(reconcileAutoIntegrationMode(INTEGRATION_MODE_CURRENT_FILE, undefined)).toBe(INTEGRATION_MODE_AUTO);
+        expect(reconcileAutoIntegrationMode(INTEGRATION_MODE_FOLDER, undefined)).toBe(INTEGRATION_MODE_FOLDER);
+    });
+});
+
 describe('anyViewInFolderMode', () => {
     it('returns false for undefined or empty view states', () => {
         expect(anyViewInFolderMode(undefined)).toBe(false);
@@ -39,6 +79,20 @@ describe('anyViewInFolderMode', () => {
             [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'folder' } },
         };
         expect(anyViewInFolderMode(view_states)).toBe(true);
+    });
+
+    it('returns true when the canonical key is auto with a seeded folder path', () => {
+        const view_states: Record<string, ViewStateLike> = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'auto', integration_path: '/repo/portfolio' } },
+        };
+        expect(anyViewInFolderMode(view_states)).toBe(true);
+    });
+
+    it('returns false when the canonical key is auto with no seeded path', () => {
+        const view_states: Record<string, ViewStateLike> = {
+            [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'auto' } },
+        };
+        expect(anyViewInFolderMode(view_states)).toBe(false);
     });
 
     it('returns true via legacy fallback when only a doc-path key is tagged folder', () => {

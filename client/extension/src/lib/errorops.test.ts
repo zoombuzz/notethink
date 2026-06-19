@@ -25,6 +25,63 @@ describe('errorops', () => {
 		});
 	});
 
+	describe('writeToErrorLog() client-error forwarding', () => {
+		// the worker-hook registers at module load; the define stays unset at import time, so the listeners are never added here
+		let fetch_mock: jest.Mock;
+		const HREF = 'https://example.test/viewer';
+
+		beforeEach(() => {
+			// sendClientError never reads the response, so a minimal stub avoids the Response-constructor's status validation
+			fetch_mock = jest.fn().mockResolvedValue({ ok: true, status: 204 });
+			(globalThis as { fetch?: unknown }).fetch = fetch_mock;
+			(globalThis as { location?: unknown }).location = { href: HREF };
+		});
+
+		afterEach(() => {
+			delete (globalThis as { NOTETHINK_CLIENT_ERROR_REPORTING?: boolean }).NOTETHINK_CLIENT_ERROR_REPORTING;
+			delete (globalThis as { fetch?: unknown }).fetch;
+			delete (globalThis as { location?: unknown }).location;
+		});
+
+		it('issues NO fetch when the define is unset', () => {
+			writeToErrorLog('source', 'boom');
+			expect(fetch_mock).not.toHaveBeenCalled();
+		});
+
+		it('issues NO fetch when the define is false', () => {
+			(globalThis as { NOTETHINK_CLIENT_ERROR_REPORTING?: boolean }).NOTETHINK_CLIENT_ERROR_REPORTING = false;
+			writeToErrorLog('source', 'boom');
+			expect(fetch_mock).not.toHaveBeenCalled();
+		});
+
+		it('issues exactly one POST to the receiver when the define is true', () => {
+			(globalThis as { NOTETHINK_CLIENT_ERROR_REPORTING?: boolean }).NOTETHINK_CLIENT_ERROR_REPORTING = true;
+			writeToErrorLog('source', 'boom');
+			expect(fetch_mock).toHaveBeenCalledTimes(1);
+			const [url, init] = fetch_mock.mock.calls[0];
+			expect(url).toBe('/api/client-error');
+			expect(init.method).toBe('POST');
+			expect(init.keepalive).toBe(true);
+			const body = JSON.parse(init.body);
+			expect(body.kind).toBe('notethink.writeToErrorLog');
+			expect(body.message).toContain('boom');
+			expect(body.href).toBe(HREF);
+		});
+
+		it('does not throw when fetch rejects', () => {
+			(globalThis as { NOTETHINK_CLIENT_ERROR_REPORTING?: boolean }).NOTETHINK_CLIENT_ERROR_REPORTING = true;
+			fetch_mock.mockRejectedValue(new Error('network down'));
+			expect(() => writeToErrorLog('source', 'boom')).not.toThrow();
+		});
+
+		it('includes the stack in the body when passed an Error', () => {
+			(globalThis as { NOTETHINK_CLIENT_ERROR_REPORTING?: boolean }).NOTETHINK_CLIENT_ERROR_REPORTING = true;
+			writeToErrorLog('source', new Error('exploded'));
+			const body = JSON.parse(fetch_mock.mock.calls[0][1].body);
+			expect(body.stack).toContain('exploded');
+		});
+	});
+
 	describe('writeToLogAtLevel()', () => {
 		it('does not throw for info level', () => {
 			expect(() => writeToLogAtLevel('info', 'source', 'msg')).not.toThrow();

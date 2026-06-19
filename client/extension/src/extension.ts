@@ -52,7 +52,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		const panel = vscode.window.createWebviewPanel(
 			PANEL_VIEWTYPE,
 			'NoteThink',
-			vscode.ViewColumn.Two,
+			// open beside without stealing the caret — the read-only viewer can't use focus (mirrors VS Code's "Open Preview to the Side")
+			{ viewColumn: vscode.ViewColumn.Two, preserveFocus: true },
 			{ enableScripts: true, retainContextWhenHidden: true },
 		);
 		await provider.myWebviewPanel(panel, active_editor.document);

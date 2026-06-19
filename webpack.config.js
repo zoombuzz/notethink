@@ -85,6 +85,7 @@ const clientExtensionConfig = {
 		}),
 		new webpack.DefinePlugin({
 			NOTETHINK_DEV: JSON.stringify(isDevBuild),
+			NOTETHINK_CLIENT_ERROR_REPORTING: JSON.stringify(process.env.NOTETHINK_CLIENT_ERROR_REPORTING === '1'),
 		}),
 	],
 	externals: {
@@ -169,6 +170,7 @@ const clientWebviewConfig = {
 		new webpack.DefinePlugin({
 			NOTETHINK_VERSION: JSON.stringify(pkg.version),
 			NOTETHINK_DEV: JSON.stringify(isDevBuild),
+			NOTETHINK_CLIENT_ERROR_REPORTING: JSON.stringify(process.env.NOTETHINK_CLIENT_ERROR_REPORTING === '1'),
 		}),
 		new CopyWebpackPlugin({
 			patterns: [{ from: "public" }],

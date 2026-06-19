@@ -29,6 +29,9 @@ declare module 'assert' {
 // injected by webpack DefinePlugin - true for dev builds, false for production
 declare const NOTETHINK_DEV: boolean;
 
+// injected by webpack DefinePlugin - true only for builds that opt in to forwarding client errors to the host receiver
+declare const NOTETHINK_CLIENT_ERROR_REPORTING: boolean;
+
 // `global` object available at runtime via webpack's node polyfills
 declare var global: typeof globalThis & {
     setImmediate: ((callback: (...args: unknown[]) => void, ...args: unknown[]) => number) | undefined;

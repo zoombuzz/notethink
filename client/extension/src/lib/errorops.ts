@@ -5,6 +5,10 @@ import * as winston from "winston";
 import { LogOutputChannelTransport } from 'winston-transport-vscode';
 
 const LOG_SOURCE_MAX_LEN = 24;
+// the host's client-error receiver; relative so a hosted build POSTs same-origin with no URL config
+const CLIENT_ERROR_ENDPOINT = '/api/client-error';
+// per-field cap matching the receiver so the POST body stays well under its size limit
+const CLIENT_ERROR_FIELD_MAX = 4000;
 const output_channel = vscode.window.createOutputChannel('NoteThink', {
     log: true,
 });
@@ -173,6 +177,58 @@ export function writeToLog(...data: Array<unknown>): void {
 
 export function writeToErrorLog(...data: Array<unknown>): void {
     writeToLogAtLevel('error', ...data);
+    try {
+        const message = data.map(d => d instanceof Error ? d.message : (typeof d === 'string' ? d : JSON.stringify(d))).join(' ');
+        const stack = (data.find(d => d instanceof Error) as Error | undefined)?.stack ?? '';
+        sendClientError('notethink.writeToErrorLog', message, stack);
+    } catch {
+        // never let report-prep disturb logging
+    }
+}
+
+/**
+ * gated, fire-and-forget POST of a caught/logged error to the host's client-error receiver.
+ * no-ops unless the build opted in via the NOTETHINK_CLIENT_ERROR_REPORTING define (guarded with
+ * typeof so the absent symbol — e.g. under jest — is safe), and swallows every failure so reporting
+ * can never disturb the logging path.
+ */
+function sendClientError(kind: string, message: string, stack: string): void {
+    if (typeof NOTETHINK_CLIENT_ERROR_REPORTING === 'undefined' || !NOTETHINK_CLIENT_ERROR_REPORTING) { return; }
+    try {
+        const href = (globalThis as { location?: { href?: string } }).location?.href ?? '';
+        const payload = JSON.stringify({
+            kind,
+            message: String(message || '(no message)').slice(0, CLIENT_ERROR_FIELD_MAX),
+            stack: stack ? String(stack).slice(0, CLIENT_ERROR_FIELD_MAX) : '',
+            href,
+        });
+        void fetch(CLIENT_ERROR_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true,
+        }).catch(() => {});
+    } catch {
+        // reporting must never disturb the logging path
+    }
+}
+
+/*
+ * uncaught extension-host (webworker) errors never reach the host window, so hook the worker's own
+ * global error / unhandledrejection handlers and forward them to the receiver with distinct kinds
+ */
+if (typeof NOTETHINK_CLIENT_ERROR_REPORTING !== 'undefined' && NOTETHINK_CLIENT_ERROR_REPORTING) {
+    const worker_scope = globalThis as typeof globalThis & { addEventListener?: (type: string, listener: (event: unknown) => void) => void };
+    if (typeof worker_scope.addEventListener === 'function') {
+        worker_scope.addEventListener('error', (event: unknown) => {
+            const e = event as { message?: string; error?: { stack?: string }; filename?: string; lineno?: number; colno?: number };
+            sendClientError('notethink.self.onerror', e?.message ?? 'uncaught error', e?.error?.stack ?? `${e?.filename ?? ''}:${e?.lineno ?? ''}:${e?.colno ?? ''}`);
+        });
+        worker_scope.addEventListener('unhandledrejection', (event: unknown) => {
+            const reason = (event as { reason?: { message?: string; stack?: string } })?.reason ?? {};
+            sendClientError('notethink.unhandledrejection', reason.message ?? String(reason), reason.stack ?? '');
+        });
+    }
 }
 
 export function debug(...args: unknown[]): void {

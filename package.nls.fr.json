@@ -20,6 +20,7 @@
   "config.settings.view.generic.watchUnopenedFilesInViewer.description": "Surveiller les modifications sur disque du fichier affiché lorsqu'il n'est pas ouvert dans un éditeur de texte (rafraîchit la visionneuse lorsqu'un autre outil le modifie).",
   "config.settings.view.generic.showContextBars.description": "Afficher les barres de contexte au-dessus des notes.",
   "config.settings.view.specific.kanban.columnOrder.description": "Ordre des colonnes Kanban (slugs de statut bruts comme 'doing', 'done'). Les colonnes absentes apparaissent ensuite, triées alphabétiquement, avec 'untagged' à la fin.",
+  "config.settings.view.specific.kanban.animateTransitions.description": "Animer les transitions passives du Kanban (cartes qui se déplacent lorsqu'un autre outil ou l'éditeur change leur statut) avec un bref glissement.",
   "config.settings.files.includeFilter.description": "Modèle de fichiers à inclure en mode dossier.",
   "config.settings.files.excludeFilter.description": "Modèle de fichiers à exclure en mode dossier.",
   "config.settings.files.maxNotesPerFile.description": "Limite du nombre de notes de niveau supérieur prises dans chaque fichier source lors de la fusion de l'agrégat de dossier."

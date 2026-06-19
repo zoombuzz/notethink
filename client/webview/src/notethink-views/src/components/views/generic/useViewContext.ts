@@ -50,6 +50,7 @@ export function useViewContext(props: ViewProps): ViewContext {
         settings: {
             showLineNumbers: false,
             watchUnopenedFilesInViewer: true,
+            kanbanAnimateTransitions: true,
             showContextBars: true,
             scrollTextIntoView: true,
             scrollNoteIntoView: true,

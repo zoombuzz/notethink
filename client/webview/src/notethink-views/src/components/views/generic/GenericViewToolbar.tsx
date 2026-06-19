@@ -170,6 +170,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         naturalColumnOrder={naturalColumnOrder}
                         showLineNumbers={displayOptions.settings?.showLineNumbers}
                         watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}
+                        kanbanAnimateTransitions={displayOptions.settings?.kanbanAnimateTransitions}
                         onSettingChange={onSettingChange}
                         onGlobalSettingChange={onGlobalSettingChange}
                         onColumnOrderChange={onColumnOrderChange}

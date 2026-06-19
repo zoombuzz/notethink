@@ -3099,3 +3099,112 @@ Two new file-root linetags let a document declare the view it should open into, 
   + tests N jest
 
 
+### Animated passive transitions in the kanban view [](?id=animated-passive-transitions)
+
+The visible UX payoff. When the kanban view changes layout because of a *passive* update (external file edit from another VS Code window or editor, AI-agent edit, mtime change, anything not driven by the user's own drag) the affected notes and columns animate from old state to new state in a way that mimics manual drag-and-drop. Depends on [[multi-file-ordering-stable-identity]] (stable note identity is the keying contract) and [[folder-mode-dnd]] (so the manual and automatic UX stay consistent in folder mode) and [[kanban-optimistic-projection]] (the projection seam the FLIP layer decorates; user-initiated drags resolve via the projection, passive updates via FLIP).
+
++ goal
+  + a status-tag change made by an AI agent or another editor animates the affected card from its old column position to its new column position, on the same trajectory the user would see if they had picked it up and dragged it
+  + a within-column reorder triggered by mtime, line/sequence, or weight change slides the card to its new vertical slot as if dragged
+  + new notes fade in; new columns slide in; column-then-note choreography
+  + the animation layer is decorative — the final DOM is correct regardless of whether the animation runs, fails partway, or is interrupted by the next update
++ visual specification — must mimic existing drag-and-drop (`ViewRenderer.module.scss:1103-1115`)
+  + in-flight card style: `box-shadow: 0 8px 24px rgba(0,0,0,0.16)`, `transform: rotate(2deg) scale(1.02)`, applied while the FLIP plays and removed at the end
+  + cross-column move: card lifts (apply in-flight style), translates from origin rect to destination rect, lands (remove in-flight style), 350 ms ceiling
+  + in-column reorder: same lift-and-translate, vertical only
+  + new note: fade-in (opacity 0 → 1) with subtle scale (0.96 → 1), 200 ms
+  + new column: horizontal slide-in (translateX(-20px) → 0) with fade, 250 ms; notes destined for it begin their cross-column move on the next animation frame after the column lands
+  + column disappearance: notes have already left via cross-column moves; column collapses horizontally over 200 ms
++ architectural approach
+  + custom FLIP helper, no animation library added to the webview bundle
+  + only fires on *passive* updates; user-initiated drag-end remains owned by `@hello-pangea/dnd`
+  + progressive enhancement / graceful degradation: the layer is a thin overlay that records pre-commit rects (`useLayoutEffect`), lets React render, then plays inverse transforms via the Web Animations API. If the layer throws, the view is already in its final state — there is nothing to clean up. The contract is: *the final DOM is correct without the animation layer; the animation layer only decorates the transition between two correct states*
+  + the passive-update FLIP and the user-drag projection share one reconciliation seam — `passiveUpdateGate` becomes "user-move reconciliations resolve silently (projection already showed the move), passive ones resolve via FLIP"
++ behaviour contract — graceful degradation
+  + 350 ms ceiling per individual transition; if a second update arrives mid-animation the in-flight animation is cancelled and the next FLIP measures from the *current live rect*, not the previous "to" rect
+  + 800 ms global cap from "update received" to "final state visible" — if FLIP math has not completed by then, `el.getAnimations().forEach(a => a.finish())` snaps to final state
+  + respects `prefers-reduced-motion: reduce` (existing precedent at `ViewRenderer.module.scss:330`) — animation layer no-ops, final state appears immediately
+  + if a note's `stable_id` is absent from the previous registry, treat as new (fade-in); if absent from the next, treat as removed (fade-out)
+  + if rect math throws or returns NaN, swallow and snap
++ scope
+  + new `lib/animation/flipMath.ts` — pure functions (inverse transform, keyframe spec) — unit-testable without DOM
+  + new `lib/animation/useFlipTransition.ts` — hook: registry of (`stable_id` → element ref), `useLayoutEffect` to capture pre-commit rects, `useEffect` to play inverse transforms
+  + new `lib/animation/passiveUpdateGate.ts` — flag set by `KanbanView.dragEndHandler` for a short window (~250 ms) after user drag so the layer skips that re-render and does not double-animate
+  + wire the hook around the note list in `KanbanView.tsx` with `key={note.stable_id}` (replacing `key={note.seq}`)
+  + wire column enter/exit in `KanbanColumn.tsx` using CSS keyframes (FLIP requires a prior rect — columns appearing for the first time have none)
+  + add settings drawer toggle `kanban_animate_transitions` (Global scope, default true) so users can disable the layer
+  + ship a test-only probe `KanbanAnimationProbe` (gated by a debug flag, not in default bundle path) that emits an event stream the test harness can subscribe to — replaces relying on pixel-diffing in jest
++ out of scope
+  + animating non-kanban views (document/mermaid) — possible follow-up
+  + animating origin-pill colour changes or focus-ring transitions
+  + per-card origin-pill flash during the move — possible v2 polish
++ files (proposed)
+  + new `client/webview/src/notethink-views/src/lib/animation/flipMath.ts`
+  + new `client/webview/src/notethink-views/src/lib/animation/useFlipTransition.ts`
+  + new `client/webview/src/notethink-views/src/lib/animation/passiveUpdateGate.ts`
+  + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx` — wire hook around column list and note list; key by `stable_id`
+  + `client/webview/src/notethink-views/src/components/views/KanbanColumn.tsx` — column enter/exit
+  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` — column slide-in/out keyframes
+  + `client/{extension,webview}/src/constants.ts` — `KANBAN_ANIMATION_TRANSITION_MAX_MS = 350`, `KANBAN_ANIMATION_GLOBAL_CAP_MS = 800`, `KANBAN_ANIMATION_DRAG_GATE_MS = 250`
+  + settings drawer + extension contributes a `notethink.kanbanAnimateTransitions` boolean (Global target), wired through `ExtensionReceiver`
++ design decisions (manager, resolved before fan-out)
+  + setting is **camelCase end-to-end** `kanbanAnimateTransitions` (not snake_case) per the `Messages.ts` settings-identity rule; Global-target boolean default true; config path `notethink.settings.view.specific.kanban.animateTransitions`; checkbox lives in `SettingsKanbanDrawer` (kanban-specific), not `SettingsCommonControls`
+  + timing constants live **module-local in `flipMath.ts`** (exported), mirroring the existing `KANBAN_PROJECTION_MAX_MS` precedent in `useProjectedNotes.ts` — NOT in the cross-bundle `constants.ts` (they are webview-internal, not a wire contract, so the mirrored-constants exception does not apply)
+  + FLIP registry seam is `data-flip-id={note.stable_id}` spread onto the card root via `KanbanBoard`'s existing `draggableProps` object (lands on `MarkdownNoteContainer` root); columns carry `data-flip-column-id={column.value}`; the hook holds a ref to `KanbanView`'s content container and queries within it — no ref threading through `@hello-pangea/dnd`
+  + the FLIP seam decorates the `useProjectedNotes` reconciliation: a passive update mutates `notes_within_parent_context` with no active projection → `notes_to_render` flips to the new layout → hook animates; a user drag arms `passiveUpdateGate` so the projection-commit re-render is skipped (no double-animate over dnd's drop)
+  + card moves + note fade-in via Web Animations API (dynamic per-card deltas); column enter/exit via CSS keyframes (FLIP needs a prior rect, a first-appearance column has none) — class names resolved from the SCSS module imported into the hook
+  + easing `cubic-bezier(0.2, 0, 0.0, 1.0)` (resolves the open easing question — the "thrown" proposal); no explicit 50 ms event coalescing (the cancel-and-remeasure-from-live-rect contract + React batching already cover bursts); origin-pill flash stays v2 (out of scope)
+  + exit animations (note fade-out, column collapse) are best-effort: `flipMath` classifies entering/moving/exiting as pure unit-tested functions, enter+move are fully DOM-animated, but true exit-on-unmount tombstoning is out of v1 scope (no acceptance/playwright check requires it); the jest "absent in next → fade-out path" asserts the classifier, not a DOM tombstone
++ [X] implement `flipMath.ts` with unit-testable pure functions (inverse transform, keyframe spec)
++ [X] implement `useFlipTransition` hook — registry + `useLayoutEffect` rect capture + Web Animations API playback
++ [X] implement `passiveUpdateGate` — flag set by `KanbanView.dragEndHandler`, hook skips animation while the flag is hot
++ [X] wire hook around the kanban note list (cards already key by `kanbanDraggableId` = `stable_id`; added `data-flip-id` registry attribute via the existing `draggableProps` spread)
++ [X] wire CSS-keyframe column enter/exit in `KanbanColumn.tsx`
++ [X] choreograph new-column case: column enter completes (or starts ~50 ms ahead) before inbound notes begin their FLIP
++ [X] respect `prefers-reduced-motion` (hook no-ops, no Web Animations calls)
++ [X] add `notethink.kanbanAnimateTransitions` setting (Global target, default true) + drawer checkbox with locale strings in all 5 locales
++ [X] jest: `flipMath` unit tests (no DOM, pure functions)
++ [X] jest: `useFlipTransition` with jsdom + mocked `getBoundingClientRect` — verifies the right transforms get scheduled
++ [X] jest: `passiveUpdateGate` suppresses the hook within 250 ms after `dragEnd`
++ [X] jest: stable_id absent in previous render → fade-in path fires; absent in next → fade-out path fires
++ [X] jest: `prefers-reduced-motion` makes the hook no-op
++ [X] jest: 800 ms global cap snaps to final state
++ [X] playwright: cross-column animated transition (fire an external file edit changing a status tag; assert intermediate transform present at ~150 ms; assert final DOM matches the new state regardless of animation playback)
++ [X] playwright: in-column animated reorder (mutate mtime via the harness; assert vertical slide; assert final order)
++ [X] playwright: new column appearance choreography (introduce a status value that has no column; assert column enter completes before notes arrive)
++ [X] playwright: user-initiated drag is NOT double-animated (drag a note; assert the FLIP layer event stream is empty for that re-render)
++ [X] playwright: rapid-burst (fire 5 status changes within 200 ms; final state correct, no stuck or orphaned animations after 1 s)
++ [X] playwright: `prefers-reduced-motion` (emulate via Playwright; assert no transform keyframes, final state instant)
++ [X] `pnpm run check` green
++ [X] FIX (found in testing): manual pointer-drag re-animated the just-dropped card on its own authoritative echo — FLIP wrongly treated the user's own move's round-trip update as a passive update
+  + root cause: the 250 ms `passiveUpdateGate` timer is outlasted by the real drag→editText→file-write→watcher(debounce)→reparse→echo round-trip, so the projection→authoritative reconcile ran gate-cold and FLIP slid the dropped card across the board; a mouse-up→async-`onDragEnd` race and long-drag gate-cooling widened the hole
+  + fix: tie FLIP suppression to the optimistic-projection LIFECYCLE, not a timer — `passiveUpdateGate` gains `hold()`/`release()`; new `useFlipGate` holds the gate for the whole (unbounded) projection and releases into a short tail that still covers the reconcile-commit render (layout effect runs before the release passive effect); drag-start holds, drag-end releases
+  + gap exposed: only KEYBOARD drag was tested before (a different `@hello-pangea/dnd` sensor than a real mouse drag), so the pointer path was uncovered
++ [X] add real pointer-drag coverage (`kanban-pointer-drag.spec.ts`): mouse drag completes, card lands in the destination, no card left under a residual transform
++ [X] add drag round-trip regression guard (`kanban-drag-roundtrip.spec.ts`): the dropped card's own authoritative echo never re-animates (realistic + adversarial timing) + positive control that a genuine passive update still animates
++ manual: pointer-drag a card between columns in real VS Code; confirm it lands cleanly with no post-drop slide/jump of it or its neighbours once the file round-trips — ✓ verified (operator, 2026-06-19)
++ manual: open a folder, have an AI session edit a status tag in one of the files, confirm the card animates from old column to new column on the same path a drag would follow
++ manual: external edit (e.g. via another VS Code window) reorders a note within a column, confirm vertical slide
++ manual: prefers-reduced-motion enabled in OS settings, confirm no animation, view still consistent
++ manual: toggle `kanban_animate_transitions` off, confirm everything snaps without animation and stays correct
++ test plan
+  + visual correctness checked structurally (DOM in final state, computed transform sequence sane) rather than pixel-diffing
+  + the `KanbanAnimationProbe` test-only component reads the animation layer's internal event stream and exposes it to the harness so jest can assert *what was scheduled* without needing a real `requestAnimationFrame` loop
+  + playwright tests assert final state after the animation should have settled, plus optional intermediate checks at 50 ms / 200 ms via `page.evaluate(() => element.getAnimations())`
++ acceptance
+  + externally-driven status changes animate the card on a path visually consistent with a drag-and-drop of that card
+  + externally-driven reordering inside a column animates the card on a vertical slide
+  + new notes fade in; new columns slide in; column-then-note choreography holds
+  + user-initiated drags do not double-animate
+  + `prefers-reduced-motion` users see instant transitions
+  + an exception in the animation layer cannot leave the view in an inconsistent state — final DOM is always correct within the existing re-render budget
+  + setting `notethink.kanbanAnimateTransitions = false` disables the layer entirely with no visible regression in correctness
++ open questions for the implementing agent
+  + whether to coalesce two file events arriving within ~50 ms into a single FLIP cycle (vs animating both)
+  + whether to flash the origin pill on the moving card during the animation (probably v2)
+  + the exact easing curve — proposal: `cubic-bezier(0.2, 0, 0.0, 1.0)` to match a "thrown" feel, consistent with the existing settings-drawer easing at `ViewRenderer.module.scss:321`
++ commit message draft
+  + notethink 0.3.16: kanban passive transitions animate via in-house FLIP helper (`lib/animation/`) for external file edits, AI-driven status changes and mtime reorders; user-initiated drags stay owned by `@hello-pangea/dnd` and are gated out via `passiveUpdateGate`
+  + new notes fade in; new columns slide in (CSS keyframes) with inbound notes choreographed afterwards; the layer is decorative — final DOM is correct regardless of playback (350 ms per-transition + 800 ms global ceiling, `prefers-reduced-motion` respected, Global `notethink.kanbanAnimateTransitions` setting + drawer toggle to disable)
+  + FLIP suppression is tied to the projection lifecycle (`useFlipGate` hold/release), not a fixed timer, so a user drag is never re-animated by its own document round-trip; real pointer-drag + round-trip regression specs added
+  + tests 1405 jest, 89 playwright

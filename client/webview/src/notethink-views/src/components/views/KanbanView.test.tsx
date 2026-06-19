@@ -395,6 +395,26 @@ describe('KanbanView', () => {
         expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
     });
 
+    it('renders columns and cards without crashing when the FLIP transition hook is active', () => {
+        // smoke test: the useFlipTransition hook runs on every render; assert the board still renders normally
+        const doing_note = makeNote({
+            seq: 1,
+            stable_id: 'doc:task-a',
+            headline_raw: '## Task A',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [doing_note],
+        });
+        const { container } = render(<KanbanView {...props} />);
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        expect(within(screen.getByTestId('column-doing-notes')).getByTestId('note-1')).toBeInTheDocument();
+        // the content container carries its id (the node useFlipTransition measures within)
+        expect(container.querySelector('#vtest-kanban-inner')).toBeInTheDocument();
+    });
+
     it('passes correct count to each column', () => {
         const note1 = makeNote({
             seq: 1,

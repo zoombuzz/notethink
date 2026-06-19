@@ -12,6 +12,7 @@ interface GlobalSettingsState {
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsPayload = {
     showLineNumbers: false,
     watchUnopenedFilesInViewer: true,
+    kanbanAnimateTransitions: true,
 };
 
 // hold the host-pushed global settings (line numbers, unopened-file watching)

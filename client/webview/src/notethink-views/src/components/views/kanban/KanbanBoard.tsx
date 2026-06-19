@@ -102,6 +102,8 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                                                             draggableProps: {
                                                                 ...provided_drag.draggableProps,
                                                                 style: draggableStyleWithoutDropAnimation(provided_drag.draggableProps.style, snapshot_drag),
+                                                                // FLIP registry key for useFlipTransition; omit entirely when absent so we never emit data-flip-id="undefined"
+                                                                ...(note.stable_id !== undefined ? { 'data-flip-id': note.stable_id } : {}),
                                                             },
                                                             dragHandleProps: provided_drag.dragHandleProps ? { ...provided_drag.dragHandleProps } : undefined,
                                                             innerRef: provided_drag.innerRef,

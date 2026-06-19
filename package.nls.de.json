@@ -20,6 +20,7 @@
   "config.settings.view.generic.watchUnopenedFilesInViewer.description": "Die aktiv angezeigte Datei auf Änderungen auf der Festplatte überwachen, wenn sie nicht in einem Text-Editor geöffnet ist (aktualisiert die Ansicht, wenn ein anderes Werkzeug sie bearbeitet).",
   "config.settings.view.generic.showContextBars.description": "Kontextleisten über den Stories anzeigen.",
   "config.settings.view.specific.kanban.columnOrder.description": "Spaltenreihenfolge für Kanban (rohe Status-Slugs wie 'doing', 'done'). Nicht aufgeführte Spalten erscheinen danach, alphabetisch sortiert mit 'untagged' am Ende.",
+  "config.settings.view.specific.kanban.animateTransitions.description": "Passive Kanban-Übergänge animieren (Karten, die sich bewegen, wenn ein anderes Werkzeug oder der Editor ihren Status ändert) mit einem kurzen Gleiten.",
   "config.settings.files.includeFilter.description": "Glob der Dateien, die im Ordner-Modus eingeschlossen werden.",
   "config.settings.files.excludeFilter.description": "Glob der Dateien, die im Ordner-Modus ausgeschlossen werden.",
   "config.settings.files.maxNotesPerFile.description": "Obergrenze für die Anzahl der obersten Stories, die beim Zusammenführen des Ordner-Aggregats aus jeder Quelldatei genommen werden."

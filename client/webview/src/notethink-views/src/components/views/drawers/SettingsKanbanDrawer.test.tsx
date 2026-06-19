@@ -106,6 +106,34 @@ describe('SettingsKanbanDrawer', () => {
         expect(on_global).toHaveBeenCalledWith('showLineNumbers', true);
     });
 
+    it('renders the animate-passive-transitions checkbox checked by default', () => {
+        renderDrawer();
+        const animate_cb = screen.getAllByRole('checkbox').find(
+            cb => cb.closest('label')?.textContent?.includes('Animate passive transitions')
+        ) as HTMLInputElement | undefined;
+        expect(animate_cb).toBeInTheDocument();
+        expect(animate_cb!.checked).toBe(true);
+    });
+
+    it('reflects the kanbanAnimateTransitions prop when false', () => {
+        renderDrawer({ kanbanAnimateTransitions: false });
+        const animate_cb = screen.getAllByRole('checkbox').find(
+            cb => cb.closest('label')?.textContent?.includes('Animate passive transitions')
+        ) as HTMLInputElement | undefined;
+        expect(animate_cb!.checked).toBe(false);
+    });
+
+    it('toggling the animate-passive-transitions checkbox dispatches onGlobalSettingChange', () => {
+        const on_global = jest.fn();
+        renderDrawer({ kanbanAnimateTransitions: true, onGlobalSettingChange: on_global });
+        const animate_cb = screen.getAllByRole('checkbox').find(
+            cb => cb.closest('label')?.textContent?.includes('Animate passive transitions')
+        )!;
+        fireEvent.click(animate_cb);
+        expect(on_global).toHaveBeenCalledTimes(1);
+        expect(on_global).toHaveBeenCalledWith('kanbanAnimateTransitions', false);
+    });
+
     it('has no Save or Cancel button', () => {
         renderDrawer();
         expect(screen.queryByText('Save')).not.toBeInTheDocument();

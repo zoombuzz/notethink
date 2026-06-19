@@ -270,10 +270,11 @@ export class PanelSession {
 
 	// --- settings ---
 
-	private readGlobalSettings(): { showLineNumbers: boolean; watchUnopenedFilesInViewer: boolean } {
+	private readGlobalSettings(): { showLineNumbers: boolean; watchUnopenedFilesInViewer: boolean; kanbanAnimateTransitions: boolean } {
 		return {
 			showLineNumbers: readSetting('showLineNumbers'),
 			watchUnopenedFilesInViewer: readSetting('watchUnopenedFilesInViewer'),
+			kanbanAnimateTransitions: readSetting('kanbanAnimateTransitions'),
 		};
 	}
 
@@ -350,6 +351,9 @@ export class PanelSession {
 		if (e.affectsConfiguration('notethink.settings.view.generic.watchUnopenedFilesInViewer')) {
 			this.sendGlobalSettings();
 			this.syncActiveFileWatcher();
+		}
+		if (e.affectsConfiguration('notethink.settings.view.specific.kanban.animateTransitions')) {
+			this.sendGlobalSettings();
 		}
 		// catch-all for any cascade setting change (covers the two above and the cascade keys)
 		if (e.affectsConfiguration('notethink.settings')) {
@@ -433,6 +437,7 @@ export class PanelSession {
 	private readonly GLOBAL_SETTING_TARGETS: Partial<Record<SettingKey, vscode.ConfigurationTarget>> = {
 		showLineNumbers: vscode.ConfigurationTarget.Workspace,
 		watchUnopenedFilesInViewer: vscode.ConfigurationTarget.Global,
+		kanbanAnimateTransitions: vscode.ConfigurationTarget.Global,
 	};
 
 	private async handleUpdateGlobalSetting(e: Record<string, unknown>): Promise<void> {

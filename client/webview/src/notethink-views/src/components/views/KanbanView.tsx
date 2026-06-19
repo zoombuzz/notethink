@@ -14,12 +14,26 @@ import GenericNote from "../notes/GenericNote";
 import { useKanbanColumns } from "./kanban/useKanbanColumns";
 import { buildKanbanDragEndPayload } from "./kanban/kanbanDragEndPayload";
 import { useProjectedNotes } from "./kanban/useProjectedNotes";
+import { useFlipGate } from "../../lib/animation/useFlipGate";
+import { useFlipTransition } from "../../lib/animation/useFlipTransition";
 import KanbanBoard from "./kanban/KanbanBoard";
 import master_view_styles from "../ViewRenderer.module.scss";
 import view_specific_styles from "../ViewRenderer.module.scss";
 
 declare const NOTETHINK_DEV: boolean | undefined;
 const debug = Debug("nodejs:notethink-views:KanbanView");
+
+/*
+ * stable reference for the FLIP hook's class_names option. The SCSS-module class strings are
+ * import-constant, so hoisting this out of the render keeps the useFlipTransition effect's dep array
+ * stable — without it a fresh object literal every render would re-fire the layout effect (and its
+ * getBoundingClientRect reflow) on every KanbanView re-render, not only on real layout changes.
+ */
+const FLIP_CLASS_NAMES = {
+    flipping: view_specific_styles.flipping,
+    columnEntering: view_specific_styles.columnEntering,
+    columnExiting: view_specific_styles.columnExiting,
+};
 
 const onProfilerRender = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV)
     ? (id: string, phase: string, actualDuration: number) => {
@@ -63,11 +77,23 @@ export default function KanbanView(props: ViewProps): ReactElement {
      * optimistic projection: hold the dropped layout client-side until the document round-trip lands, so there is no drop→snap-back→re-land flash
      * safe to render the projected order during the drop animation because KanbanBoard collapses the drop tween via transitionDuration, not the old transition:'none' hack that broke dnd's transitionend and left cards stuck
      */
-    const { notes_to_render, applyOptimisticMove } = useProjectedNotes(props.notes_within_parent_context);
+    const { notes_to_render, applyOptimisticMove, is_projecting } = useProjectedNotes(props.notes_within_parent_context);
     const columns = useKanbanColumns(notes_to_render, display_options.settings?.columnOrder);
 
     // true from drag-start until just after drag-end; gates the container clear handler against the post-drop click
     const drag_active = useRef(false);
+
+    // the kanban content node useFlipTransition measures within (scope for the [data-flip-id] queries)
+    const content_ref = useRef<HTMLDivElement>(null);
+
+    /*
+     * the FLIP gate marks when a layout change is the user's own move (drag → optimistic projection →
+     * authoritative echo) rather than a passive external edit. useFlipGate holds it open for the whole
+     * projection lifetime — the round-trip is unbounded and outlasts any fixed timer — so the dropped
+     * card is never re-animated on its own echo. The handlers below drive the drag edges.
+     */
+    const flip_gate = useFlipGate(is_projecting);
+
     /**
      * arm the post-drop click guard. The browser fires a `click` after the drop's mouseup; with the
      * projection re-rendering the board, dnd's own click-suppression is defeated and that click bubbles
@@ -77,6 +103,8 @@ export default function KanbanView(props: ViewProps): ReactElement {
      */
     const dragStartHandler = (_start: DragStart, _provided: ResponderProvided): void => {
         drag_active.current = true;
+        // hold the FLIP gate for the whole drag (any duration) so an update arriving mid-drag — or in the race before @hello-pangea/dnd's async drag-end fires — is never animated; drag-end releases it (projection hold then takes over)
+        flip_gate.hold();
     };
 
     /**
@@ -86,6 +114,8 @@ export default function KanbanView(props: ViewProps): ReactElement {
      * vs multi-doc routing) to the pure helper and posts whatever it returns.
      */
     const dragEndHandler = (result: DropResult, provided: ResponderProvided): void => {
+        // release the drag-start hold and start the tail; if applyOptimisticMove fires below, the projection hold re-takes the gate, so the whole user-move lifecycle stays un-animated
+        flip_gate.release();
         // release the drag guard on the next macrotask, after the post-drop click has fired and been swallowed
         setTimeout(() => { drag_active.current = false; }, 0);
         if (!result.destination?.droppableId) { return; }
@@ -132,6 +162,24 @@ export default function KanbanView(props: ViewProps): ReactElement {
     const populated_columns = columns.filter(col => (col.child_notes?.length ?? 0) > 0);
     const visible_columns = populated_columns.length > 0 ? populated_columns : columns;
 
+    /*
+     * FLIP passive-transition layer: animate the board when an external/AI edit re-lays the cards.
+     * flip_ids is every card's stable_id (the data-flip-id registry key) in render order; column_ids
+     * is the visible column values. The hook is called UNCONDITIONALLY (above the Profiler branch) so
+     * the rule-of-hooks holds; the gate suppresses animation on the post-drag projection-commit render.
+     */
+    const flip_ids = visible_columns.flatMap(c => (c.child_notes || []).map(n => kanbanDraggableId(n)));
+    const column_ids = visible_columns.map(c => c.value);
+    const animate_enabled = display_options.settings?.kanbanAnimateTransitions ?? true;
+    useFlipTransition({
+        container_ref: content_ref,
+        flip_ids,
+        column_ids,
+        enabled: animate_enabled,
+        gate: flip_gate,
+        class_names: FLIP_CLASS_NAMES,
+    });
+
     const container_styles: Array<string> = [view_specific_styles.viewKanban, master_view_styles.content];
 
     // clear focus on a background click, but ignore the post-drop click (drag_active) that would otherwise jump the caret to the next story via the clear handler
@@ -144,6 +192,7 @@ export default function KanbanView(props: ViewProps): ReactElement {
 
     const content = (
         <div className={container_styles.join(' ')} id={`v${props.id}-inner`}
+             ref={content_ref}
              onClick={containerClickHandler}
              data-level={display_options.level} data-parent-content-seq={display_options.parent_context_seq}>
             {props.nested?.document_strip}

@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -202,6 +202,12 @@
             "items": { "type": "string" },
             "default": ["untagged", "doing", "code-review", "testing", "done"],
             "description": "%config.settings.view.specific.kanban.columnOrder.description%"
+          },
+          "notethink.settings.view.specific.kanban.animateTransitions": {
+            "type": "boolean",
+            "scope": "window",
+            "default": true,
+            "description": "%config.settings.view.specific.kanban.animateTransitions.description%"
           },
           "notethink.settings.files.includeFilter": {
             "type": "string",

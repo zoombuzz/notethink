@@ -20,6 +20,7 @@
   "config.settings.view.generic.watchUnopenedFilesInViewer.description": "Vigilar los cambios en disco del archivo visualizado activo cuando no esté abierto en un editor de texto (actualiza el visor cuando otra herramienta lo modifica).",
   "config.settings.view.generic.showContextBars.description": "Mostrar barras de contexto encima de las historias.",
   "config.settings.view.specific.kanban.columnOrder.description": "Orden de columnas Kanban (slugs de estado en bruto como 'doing', 'done'). Las columnas no listadas aparecen después, ordenadas alfabéticamente, con 'untagged' al final.",
+  "config.settings.view.specific.kanban.animateTransitions.description": "Animar las transiciones pasivas del Kanban (tarjetas que se mueven cuando otra herramienta o el editor cambia su estado) con un breve deslizamiento.",
   "config.settings.files.includeFilter.description": "Patrón global de archivos a incluir en modo carpeta.",
   "config.settings.files.excludeFilter.description": "Patrón global de archivos a excluir en modo carpeta.",
   "config.settings.files.maxNotesPerFile.description": "Límite del número de historias de nivel superior tomadas de cada archivo al fusionar el agregado de carpeta."

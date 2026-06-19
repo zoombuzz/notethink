@@ -164,7 +164,7 @@ export function useViewToolbar(
      * owns them via vscode workspace config.
      */
     const handle_setting_change = useCallback((key: CommonSettingKey, value: boolean): void => {
-        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, ...per_view_settings } = display_options.settings || {};
+        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, kanbanAnimateTransitions: _kat, ...per_view_settings } = display_options.settings || {};
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
@@ -194,7 +194,7 @@ export function useViewToolbar(
      * carries an explicit array, with empty == natural.
      */
     const handle_column_order_change = useCallback((next_order: string[]): void => {
-        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, ...per_view_settings } = display_options.settings || {};
+        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, kanbanAnimateTransitions: _kat, ...per_view_settings } = display_options.settings || {};
         const matches_natural = arraysEqual(next_order, natural_column_order);
         const persisted_order = matches_natural ? undefined : next_order;
         handlers.setViewManagedState([{

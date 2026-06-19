@@ -150,6 +150,7 @@ export interface CommandMessage {
 export interface GlobalSettingsPayload {
     showLineNumbers: boolean;
     watchUnopenedFilesInViewer: boolean;
+    kanbanAnimateTransitions: boolean;
 }
 
 export type GlobalSettingKey = keyof GlobalSettingsPayload;

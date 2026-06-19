@@ -17,6 +17,7 @@ interface ProjectionState {
 export interface UseProjectedNotesApi {
     notes_to_render: Array<NoteProps>;
     applyOptimisticMove: (move: KanbanMove) => void;
+    is_projecting: boolean;
 }
 
 /**
@@ -68,5 +69,5 @@ export function useProjectedNotes(authoritative_notes: Array<NoteProps> | undefi
     }, [cancelTimeout]);
 
     const notes_to_render = projection ? projection.projected_notes : (authoritative_notes ?? []);
-    return { notes_to_render, applyOptimisticMove };
+    return { notes_to_render, applyOptimisticMove, is_projecting: projection !== null };
 }

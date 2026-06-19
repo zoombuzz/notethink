@@ -25,6 +25,7 @@ export interface NoteDisplayOptions {
         showLinetagsInHeadlines?: boolean;
         showLineNumbers?: boolean;
         watchUnopenedFilesInViewer?: boolean;
+        kanbanAnimateTransitions?: boolean;
         scrollTextIntoView?: boolean;
         scrollNoteIntoView?: boolean;
         autoExpandFocusedNote?: boolean;

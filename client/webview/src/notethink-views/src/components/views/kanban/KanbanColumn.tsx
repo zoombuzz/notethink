@@ -25,6 +25,7 @@ export default function KanbanColumn(props: KanbanColumnProps): ReactElement {
     return (
         <div className={note_styles.join(' ')}
              role={'region'} aria-label={props.value}
+             data-flip-column-id={props.value}
              style={{ width: `calc(${percentage_width}% - 0.5em)` }}
              {...props.display_options?.provided?.droppableProps}
              ref={props.display_options?.provided?.innerRef}

@@ -28,6 +28,7 @@
   "Auto-expand focused note": "Développer automatiquement la note active",
   "Show line numbers": "Afficher les numéros de ligne",
   "Watch unopened files in viewer": "Surveiller les fichiers non ouverts dans la visionneuse",
+  "Animate passive transitions": "Animer les transitions passives",
   "Save": "Enregistrer",
   "Document Settings": "Paramètres du document",
   "Settings": "Paramètres",

@@ -24,6 +24,7 @@ export const SETTINGS = {
     maxNotesPerFile:            { path: 'files.maxNotesPerFile',                    default: 10 as number,                             inCascade: true  },
     showLineNumbers:            { path: 'view.generic.showLineNumbers',             default: false,                                    inCascade: false },
     watchUnopenedFilesInViewer: { path: 'view.generic.watchUnopenedFilesInViewer',  default: true,                                     inCascade: false },
+    kanbanAnimateTransitions:   { path: 'view.specific.kanban.animateTransitions',  default: true,                                     inCascade: false },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

@@ -73,6 +73,19 @@ describe('useProjectedNotes', () => {
         expect(result.current.notes_to_render).toBe(SENTINEL_NOTES);
     });
 
+    it('reports is_projecting across the projection lifecycle (the FLIP gate signal)', () => {
+        const authoritative = [makeNote(1)];
+        const { result } = renderHook(() => useProjectedNotes(authoritative));
+        expect(result.current.is_projecting).toBe(false);
+
+        act(() => { result.current.applyOptimisticMove(SAMPLE_MOVE); });
+        expect(result.current.is_projecting).toBe(true);
+
+        // the safety timeout clears the projection → no longer projecting
+        act(() => { jest.advanceTimersByTime(1500); });
+        expect(result.current.is_projecting).toBe(false);
+    });
+
     it('reverts to authoritative notes after safety timeout elapses', () => {
         const authoritative = [makeNote(1)];
         const { result } = renderHook(() => useProjectedNotes(authoritative));

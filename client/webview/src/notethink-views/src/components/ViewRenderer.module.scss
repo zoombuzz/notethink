@@ -1108,6 +1108,11 @@ body.disableAddressBarHidingOnScroll {
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     }
 
+    // dark-mode FLIP lift (matches the dark .dragging shadow)
+    &.flipping {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
     > .headline {
       border-bottom-color: var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
     }
@@ -1306,6 +1311,15 @@ body.disableAddressBarHidingOnScroll {
       &.draglight {
       }
 
+      // useFlipTransition adds these to a column root for the duration of its slide-in / collapse
+      &.columnEntering {
+        animation: ntColumnSlideIn 250ms cubic-bezier(0.2, 0, 0.0, 1.0) both;
+      }
+
+      &.columnExiting {
+        animation: ntColumnCollapse 200ms cubic-bezier(0.2, 0, 0.0, 1.0) both;
+      }
+
       > div > .note {
         background: var(--vscode-editor-background);
         border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
@@ -1326,6 +1340,11 @@ body.disableAddressBarHidingOnScroll {
         &.dragging {
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
           transform: rotate(2deg) scale(1.02);
+        }
+
+        // useFlipTransition lifts a card while its passive-move animation plays; mimics the in-flight drag lift (the card already has transition: box-shadow 200ms ease above)
+        &.flipping {
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
         }
 
         // only the first level
@@ -1426,5 +1445,25 @@ body.disableAddressBarHidingOnScroll {
         padding: 0 0 0 1.3em;
       }
     }
+  }
+}
+
+// FLIP passive-transition column animations (driven by useFlipTransition via .columnEntering / .columnExiting)
+
+@keyframes ntColumnSlideIn {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ntColumnCollapse {
+  from { opacity: 1; transform: scaleX(1); }
+  to { opacity: 0; transform: scaleX(0); }
+}
+
+// honour the user's reduced-motion preference: suppress the column slide/collapse entirely (mirrors the .drawerGrid precedent above)
+@media (prefers-reduced-motion: reduce) {
+  .columnEntering,
+  .columnExiting {
+    animation: none;
   }
 }

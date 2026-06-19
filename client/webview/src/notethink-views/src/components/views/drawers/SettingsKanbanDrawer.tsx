@@ -20,6 +20,7 @@ interface SettingsKanbanDrawerProps {
     naturalColumnOrder: string[];
     showLineNumbers?: boolean;
     watchUnopenedFilesInViewer?: boolean;
+    kanbanAnimateTransitions?: boolean;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
     onColumnOrderChange: (next_order: string[]) => void;
@@ -95,6 +96,16 @@ function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps): React.ReactElem
                         onSettingChange={props.onSettingChange}
                         onGlobalSettingChange={props.onGlobalSettingChange}
                     />
+                    <p>
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={props.kanbanAnimateTransitions ?? true}
+                                onChange={(e) => props.onGlobalSettingChange('kanbanAnimateTransitions', e.target.checked)}
+                            />
+                            {' '}{l10n.t('Animate passive transitions')}
+                        </label>
+                    </p>
                 </section>
             </div>
 

@@ -1,100 +1,99 @@
 # Todo [](?nt_view=kanban)
 
 
-### Animated passive transitions in the kanban view [](?id=animated-passive-transitions)
+### Auto integration mode follows live edits like nt_view [](?id=auto-integration-follows-content)
 
-The visible UX payoff. When the kanban view changes layout because of a *passive* update (external file edit from another VS Code window or editor, AI-agent edit, mtime change, anything not driven by the user's own drag) the affected notes and columns animate from old state to new state in a way that mimics manual drag-and-drop. Depends on [[multi-file-ordering-stable-identity]] (stable note identity is the keying contract) and [[folder-mode-dnd]] (so the manual and automatic UX stay consistent in folder mode) and [[kanban-optimistic-projection]] (the projection seam the FLIP layer decorates; user-initiated drags resolve via the projection, passive updates via FLIP).
+`nt_integration_mode` and `nt_breadcrumb_last` must auto-resolve the **same reactive way** `nt_view` does. Editing the `nt_view` linetag in the editor updates the rendered view live; editing `nt_integration_mode` / `nt_breadcrumb_last` — or switching the active editor to a file with a different declaration — must update the viewer's integration mode the same way. Today it does not: once the viewer auto-enters folder mode it is sticky, so switching from a folder-declaring file back to a plain document file leaves the Kanban aggregate on screen instead of dropping to the document render.
 
-+ goal
-  + a status-tag change made by an AI agent or another editor animates the affected card from its old column position to its new column position, on the same trajectory the user would see if they had picked it up and dragged it
-  + a within-column reorder triggered by mtime, line/sequence, or weight change slides the card to its new vertical slot as if dragged
-  + new notes fade in; new columns slide in; column-then-note choreography
-  + the animation layer is decorative — the final DOM is correct regardless of whether the animation runs, fails partway, or is interrupted by the next update
-+ visual specification — must mimic existing drag-and-drop (`ViewRenderer.module.scss:1103-1115`)
-  + in-flight card style: `box-shadow: 0 8px 24px rgba(0,0,0,0.16)`, `transform: rotate(2deg) scale(1.02)`, applied while the FLIP plays and removed at the end
-  + cross-column move: card lifts (apply in-flight style), translates from origin rect to destination rect, lands (remove in-flight style), 350 ms ceiling
-  + in-column reorder: same lift-and-translate, vertical only
-  + new note: fade-in (opacity 0 → 1) with subtle scale (0.96 → 1), 200 ms
-  + new column: horizontal slide-in (translateX(-20px) → 0) with fade, 250 ms; notes destined for it begin their cross-column move on the next animation frame after the column lands
-  + column disappearance: notes have already left via cross-column moves; column collapses horizontally over 200 ms
-+ architectural approach
-  + custom FLIP helper, no animation library added to the webview bundle
-  + only fires on *passive* updates; user-initiated drag-end remains owned by `@hello-pangea/dnd`
-  + progressive enhancement / graceful degradation: the layer is a thin overlay that records pre-commit rects (`useLayoutEffect`), lets React render, then plays inverse transforms via the Web Animations API. If the layer throws, the view is already in its final state — there is nothing to clean up. The contract is: *the final DOM is correct without the animation layer; the animation layer only decorates the transition between two correct states*
-  + the passive-update FLIP and the user-drag projection share one reconciliation seam — `passiveUpdateGate` becomes "user-move reconciliations resolve silently (projection already showed the move), passive ones resolve via FLIP"
-+ behaviour contract — graceful degradation
-  + 350 ms ceiling per individual transition; if a second update arrives mid-animation the in-flight animation is cancelled and the next FLIP measures from the *current live rect*, not the previous "to" rect
-  + 800 ms global cap from "update received" to "final state visible" — if FLIP math has not completed by then, `el.getAnimations().forEach(a => a.finish())` snaps to final state
-  + respects `prefers-reduced-motion: reduce` (existing precedent at `ViewRenderer.module.scss:330`) — animation layer no-ops, final state appears immediately
-  + if a note's `stable_id` is absent from the previous registry, treat as new (fade-in); if absent from the next, treat as removed (fade-out)
-  + if rect math throws or returns NaN, swallow and snap
-+ scope
-  + new `lib/animation/flipMath.ts` — pure functions (inverse transform, keyframe spec) — unit-testable without DOM
-  + new `lib/animation/useFlipTransition.ts` — hook: registry of (`stable_id` → element ref), `useLayoutEffect` to capture pre-commit rects, `useEffect` to play inverse transforms
-  + new `lib/animation/passiveUpdateGate.ts` — flag set by `KanbanView.dragEndHandler` for a short window (~250 ms) after user drag so the layer skips that re-render and does not double-animate
-  + wire the hook around the note list in `KanbanView.tsx` with `key={note.stable_id}` (replacing `key={note.seq}`)
-  + wire column enter/exit in `KanbanColumn.tsx` using CSS keyframes (FLIP requires a prior rect — columns appearing for the first time have none)
-  + add settings drawer toggle `kanban_animate_transitions` (Global scope, default true) so users can disable the layer
-  + ship a test-only probe `KanbanAnimationProbe` (gated by a debug flag, not in default bundle path) that emits an event stream the test harness can subscribe to — replaces relying on pixel-diffing in jest
-+ out of scope
-  + animating non-kanban views (document/mermaid) — possible follow-up
-  + animating origin-pill colour changes or focus-ring transitions
-  + per-card origin-pill flash during the move — possible v2 polish
-+ files (proposed)
-  + new `client/webview/src/notethink-views/src/lib/animation/flipMath.ts`
-  + new `client/webview/src/notethink-views/src/lib/animation/useFlipTransition.ts`
-  + new `client/webview/src/notethink-views/src/lib/animation/passiveUpdateGate.ts`
-  + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx` — wire hook around column list and note list; key by `stable_id`
-  + `client/webview/src/notethink-views/src/components/views/KanbanColumn.tsx` — column enter/exit
-  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` — column slide-in/out keyframes
-  + `client/{extension,webview}/src/constants.ts` — `KANBAN_ANIMATION_TRANSITION_MAX_MS = 350`, `KANBAN_ANIMATION_GLOBAL_CAP_MS = 800`, `KANBAN_ANIMATION_DRAG_GATE_MS = 250`
-  + settings drawer + extension contributes a `notethink.kanbanAnimateTransitions` boolean (Global target), wired through `ExtensionReceiver`
-+ [ ] implement `flipMath.ts` with unit-testable pure functions (inverse transform, keyframe spec)
-+ [ ] implement `useFlipTransition` hook — registry + `useLayoutEffect` rect capture + Web Animations API playback
-+ [ ] implement `passiveUpdateGate` — flag set by `KanbanView.dragEndHandler`, hook skips animation while the flag is hot
-+ [ ] wire hook around the kanban note list; replace `key={note.seq}` with `key={note.stable_id}`
-+ [ ] wire CSS-keyframe column enter/exit in `KanbanColumn.tsx`
-+ [ ] choreograph new-column case: column enter completes (or starts ~50 ms ahead) before inbound notes begin their FLIP
-+ [ ] respect `prefers-reduced-motion` (hook no-ops, no Web Animations calls)
-+ [ ] add `notethink.kanbanAnimateTransitions` setting (Global target, default true) + drawer checkbox with locale strings in all 5 locales
-+ [ ] jest: `flipMath` unit tests (no DOM, pure functions)
-+ [ ] jest: `useFlipTransition` with jsdom + mocked `getBoundingClientRect` — verifies the right transforms get scheduled
-+ [ ] jest: `passiveUpdateGate` suppresses the hook within 250 ms after `dragEnd`
-+ [ ] jest: stable_id absent in previous render → fade-in path fires; absent in next → fade-out path fires
-+ [ ] jest: `prefers-reduced-motion` makes the hook no-op
-+ [ ] jest: 800 ms global cap snaps to final state
-+ [ ] playwright: cross-column animated transition (fire an external file edit changing a status tag; assert intermediate transform present at ~150 ms; assert final DOM matches the new state regardless of animation playback)
-+ [ ] playwright: in-column animated reorder (mutate mtime via the harness; assert vertical slide; assert final order)
-+ [ ] playwright: new column appearance choreography (introduce a status value that has no column; assert column enter completes before notes arrive)
-+ [ ] playwright: user-initiated drag is NOT double-animated (drag a note; assert the FLIP layer event stream is empty for that re-render)
-+ [ ] playwright: rapid-burst (fire 5 status changes within 200 ms; final state correct, no stuck or orphaned animations after 1 s)
-+ [ ] playwright: `prefers-reduced-motion` (emulate via Playwright; assert no transform keyframes, final state instant)
-+ [ ] `pnpm run check` green
-+ manual: open a folder, have an AI session edit a status tag in one of the files, confirm the card animates from old column to new column on the same path a drag would follow
-+ manual: external edit (e.g. via another VS Code window) reorders a note within a column, confirm vertical slide
-+ manual: prefers-reduced-motion enabled in OS settings, confirm no animation, view still consistent
-+ manual: toggle `kanban_animate_transitions` off, confirm everything snaps without animation and stays correct
-+ test plan
-  + visual correctness checked structurally (DOM in final state, computed transform sequence sane) rather than pixel-diffing
-  + the `KanbanAnimationProbe` test-only component reads the animation layer's internal event stream and exposes it to the harness so jest can assert *what was scheduled* without needing a real `requestAnimationFrame` loop
-  + playwright tests assert final state after the animation should have settled, plus optional intermediate checks at 50 ms / 200 ms via `page.evaluate(() => element.getAnimations())`
-+ acceptance
-  + externally-driven status changes animate the card on a path visually consistent with a drag-and-drop of that card
-  + externally-driven reordering inside a column animates the card on a vertical slide
-  + new notes fade in; new columns slide in; column-then-note choreography holds
-  + user-initiated drags do not double-animate
-  + `prefers-reduced-motion` users see instant transitions
-  + an exception in the animation layer cannot leave the view in an inconsistent state — final DOM is always correct within the existing re-render budget
-  + setting `notethink.kanbanAnimateTransitions = false` disables the layer entirely with no visible regression in correctness
-+ open questions for the implementing agent
-  + whether to coalesce two file events arriving within ~50 ms into a single FLIP cycle (vs animating both)
-  + whether to flash the origin pill on the moving card during the animation (probably v2)
-  + the exact easing curve — proposal: `cubic-bezier(0.2, 0, 0.0, 1.0)` to match a "thrown" feel, consistent with the existing settings-drawer easing at `ViewRenderer.module.scss:321`
-+ commit message draft
-  + notethink 0.2.16: kanban transitions animate via in-house FLIP helper for passive updates (external file edits, AI-driven status changes, mtime reorders)
-  + new notes fade in; new columns slide in with notes choreographed in afterwards; user-initiated drags untouched
-  + animation layer is decorative — final DOM is correct regardless of playback (350 ms per-transition + 800 ms global ceiling, `prefers-reduced-motion` respected, `notethink.kanbanAnimateTransitions` setting to disable)
-  + tests N jest, N playwright
++ motivating repro (notegit welcome content)
+  + open `portfolio/mobile-app.md` (H1 `?nt_integration_mode=folder&nt_breadcrumb_last=portfolio`) → viewer correctly auto-enters folder mode, 3-column board aggregated across `portfolio/`
+  + switch the active editor back to `intro.md` (bare `# Welcome to NoteGit`, declares current_file) → viewer SHOULD drop to the document render of intro.md; instead it stays stuck on the portfolio board (the reported bug — screenshot 2026-06-19)
+  + same failure for `project-board.md` (`?nt_view=kanban`, no integration tag → current_file) and any other non-portfolio file
++ reference architecture — how auto VIEW TYPE works (the model to copy)
+  + `AutoView.tsx` is a **pure render-time derivation**: when the selection is `auto`, it reads the file's `nt_view` from the CURRENT content every render (`resolveNamespacedTag(attributes,'view')` / `majorityNgView(props.notes)`) and delegates to `GenericView` with the derived concrete type — no persisted state, no dispatch, no once-per-doc guard
+  + reactivity is free: edit `nt_view` → extension re-parses + re-sends the doc → webview `docs` state updates → React re-renders → `AutoView` re-derives → new type. The same chain fires on an active-file switch (new doc becomes most-recent / active)
+  + selection/resolved split: persisted selection (may be `auto`) drives the dropdown value (`ViewTypeSelector`, "Auto (Kanban)"); the resolved concrete type is what renders (`replaced_attributes` = selection, `derived_attributes` = resolved). A concrete pick pins; `auto` keeps following the file
+  + file-level read primitive: `mergeAggregateRoot.ts:281-293` reads `file_view_type` (H1 `nt_view` over front-matter, most-specific wins)
++ root cause — how auto INTEGRATION MODE diverges from that model
+  + `useAutoIntegration.ts` is an **imperative one-shot effect**, not a derivation: behind a once-per-doc-identity guard (`resolved_for_ref`, keyed `id:hash`) it DISPATCHES `setIntegration` and WRITES persisted `integration_path` into `FOLDER_VIEW_STATE_ID`
+  + it is **one-directional**: the only branches ENTER folder mode (`decl.mode === folder`) or seed `parent_context_seq`. There is no branch that exits folder mode when the opened file resolves to current_file (`useAutoIntegration.ts:57-96`)
+  + the renderer reads the concrete mode from **persisted view-state**, not live content: `NoteRenderer.tsx:78` → `anyViewInFolderMode(props.viewStates)` → `resolveIntegrationMode` (`auto` + a seeded `integration_path` resolves folder, `viewstateops.ts:45`). So the board stays until something rewrites that persisted state
+  + net: editing the linetag away / switching files re-runs the effect (hash or active path changed) but it has nothing to do in the exit direction — the opposite of `AutoView`, which simply re-derives
++ the one necessary asymmetry (call out, don't ignore)
+  + auto view type is a pure webview rendering choice over the SAME data; integration mode changes WHAT DATA the extension loads — folder discovery + watchers + the aggregated docs map, via the `setIntegration` round-trip (`PanelSession.handleSetIntegration` → `enterFolderMode` / `enterCurrentFileMode`)
+  + so it cannot be a purely render-time function; the faithful port is two layers:
+    + (1) **derive** the target mode + path reactively from the active file's current declaration when the selection is `auto` (mirrors `AutoView` reading `nt_view` every render) — `resolveFileIntegrationDeclaration` is the existing derivation primitive
+    + (2) an **idempotent reconcile effect** that fires `setIntegration` and syncs the persisted `integration_path` only when the derived target diverges from what the extension currently has — keyed on the derived target (mode+path), NOT a once-per-doc guard
++ the existing manual equivalent already does the right thing — reuse it
+  + `handle_integration_change('auto')` (`useViewToolbar.ts:64-114`) IS the operation we want fired automatically: re-resolves mode+scope from `file_declared_integration`, on a current_file resolve it clears `integration_path`, clears stranded folder tags + focused/selected, re-seeds `parent_context_seq`, and posts `setIntegration current_file`
+  + factor the "auto reset → view-state updates + setIntegration payload" builder out of `useViewToolbar` so the toolbar path and the reactive editor-follow path share one implementation and can't drift (`reconcileAutoIntegrationMode` + a new shared builder in `viewstateops.ts`)
++ cases the reactive resolver must cover (bidirectional)
+  + folder-declaring file active, cold → enter folder at declared path (already works)
+  + in auto-folder, active editor switches to a current_file file OUTSIDE the current `integration_path` → exit to current_file (the bug)
+  + in auto-folder, user edits the active file to remove/blank `nt_integration_mode` + `nt_breadcrumb_last` → exit to current_file (reactive, like editing `nt_view`)
+  + in current_file, user edits the active file to ADD `nt_integration_mode=folder` or a folder-resolving `nt_breadcrumb_last` → enter folder (reactive)
+  + concrete `integration_mode_selection` pin (folder / current_file) → never auto-changed (preserve `useAutoIntegration.test.ts:59,69`)
+  + focus landing on a member file INSIDE the current `integration_path` (e.g. clicking a card reveals its source) → STAY folder; gate the exit on "opened file is outside `integration_path`" so card clicks never kick the user off the board
++ open design decisions (resolve in-story before coding)
+  + folderA → folderB re-snap: today auto deliberately never re-snaps a navigated folder (`useAutoIntegration.ts:72` comment). Decide whether switching the active editor to a file declaring a DIFFERENT folder re-snaps the scope (the reactive model implies yes; the current model says no)
+  + breadcrumb navigation within auto-folder: if the resolver re-derives the path from the file on every change, a user descent via breadcrumb would snap back. Decide whether a diverging breadcrumb descent pins concrete folder, or the persisted navigated path is honoured over the file declaration on re-derive
++ where (files)
+  + `client/webview/src/hooks/useAutoIntegration.ts` — re-architect: reactive derive + idempotent reconcile; drop the once-per-doc-only-enter guard
+  + `client/webview/src/notethink-views/src/lib/viewstateops.ts` — extract the shared auto-reset builder; keep `resolveIntegrationMode` / `reconcileAutoIntegrationMode` as the selection/resolved split
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts` — route `handle_integration_change('auto')` through the shared builder
+  + `client/webview/src/lib/docops.ts` — `resolveFileIntegrationDeclaration` stays the derivation primitive (already mirrors `mergeAggregateRoot`'s `file_view_type` read)
+  + `client/webview/src/components/NoteRenderer.tsx` — confirm the render decision tracks the reactively-derived mode (no stale persisted-only read)
+  + `client/extension/src/vscode/PanelSession.ts` — confirm no change needed (the `setIntegration current_file` teardown + folder re-discovery already exist)
++ [ ] resolve the two open design decisions and record them here
++ [ ] extract the shared auto-reset builder; route the toolbar `handle_integration_change('auto')` through it
++ [ ] re-architect `useAutoIntegration` to derive-then-reconcile (bidirectional, keyed on derived target, gated on outside-integration_path for the exit)
++ [ ] preserve concrete-pin immunity (no auto change when selection is folder / current_file)
++ [ ] jest: editor switch folder→current_file exits; linetag removal exits; linetag add enters; member-file-inside-path stays folder; concrete pins untouched
++ [ ] jest: folderA→folderB behaviour per the decision above
++ [ ] playwright (welcome front door): open mobile-app.md → board; switch to intro.md → document render; live-edit a linetag flips the mode
++ relationship — independent of [[single-file-kanban-story-descent]] (that story is WHAT renders inside single-file kanban; this is WHEN the integration mode flips); both touch the same portfolio demo files
+
+
+### Single-file kanban descends to ### stories under ## epics [](?id=single-file-kanban-story-descent)
+
+In current_file (single-file) mode the kanban renders the *direct children of the scope heading* as cards. For a nested doc (`#` → `##` epics → `###` stories) those children are the `##` epics, so the board shows epic cards (e.g. "Storefront", "Design system") sitting in one untagged column instead of the `###` stories partitioned by status. The `###`-as-card / `##`-as-epic transform exists only in folder mode (`mergeAggregateRoot.ts`); single-file mode never had it. Bring that transform to current_file mode so a nested file opened on its own renders its stories as cards, each tagged with its epic.
+
++ background — root cause
+  + `useViewContext.ts:74` sets `notes_within_parent_context = parent_context.child_notes`, and `KanbanView` renders those as cards, so the card level is always exactly one below the scope heading
+  + AutoView scopes to the `nt_view`-declaring note (the `#` H1), so a nested file's cards come out as its `##` epics
+  + the depth-3-stories / `##`-epics flatten lives only in `mergeAggregateRoot.ts` (folder mode), added in `bf25cc2` (0.1.59)
+  + the single-file composer (`NoteTreeComposer`) only runs `convertMdastToNoteHierarchy` + `stampSingleFileStableIds` — the latter stamps `stable_id`s but does not restructure the tree
+  + not a refactor regression — `KanbanView` rendered `notes_within_parent_context` both before and after the `cd4fcb4` decomposition; single-file descent was never implemented
+  + `parent_context_seq` (seeded by `nt_breadcrumb_last`) only scopes into ONE subtree, so it cannot gather `###` stories across multiple `##` epics
+  + `AUTHORING_GUIDE.md` documents `###` as "the unit that becomes a Kanban card" universally, so the guide's own nested example mis-renders in single-file mode today
++ demonstrating files (notegit welcome content)
+  + `web-store.md`, `platform-infra.md`, `project-board.md` — nested, no folder trigger, so they show `##` epics as cards
+  + `mobile-app.md` — same shape but carries `nt_breadcrumb_last=portfolio`, which resolves to a folder segment and flips it into folder mode, so it renders correctly; this contrast is what makes the bug look like a regression
+  + a notegit-side content stopgap (out of scope for this story) is to add `nt_breadcrumb_last=portfolio` to the other portfolio files, but that shows the merged 3-file board, not the opened file's own stories, and does not fix standalone nested files
++ desired behaviour
+  + a nested single file in kanban view shows its `###` stories as cards, partitioned into status columns
+  + each card is tagged with its `##` epic (structural), with explicit `epic=` linetags overriding (direct > inherited > structural), matching folder mode
+  + flat files (`##` stories directly under `#`, no epic layer) keep rendering `##` as cards unchanged
+  + mixed shapes (some `###` directly under `#`, some under `##`) collect both, mirroring `mergeAggregateRoot`'s `walk_children` pass
++ approach
+  + give current_file mode the same transform folder mode has: when the scope heading's children are `##` epics containing `###` stories, descend and present the `###` stories as the rendered note set
+  + reuse the folder-mode machinery over a single doc where possible — the epic registry (`file_epic_by_id` / `file_epic_by_name`), structural `origin.epic`, and `walkStorySubtree` already exist in `mergeAggregateRoot.ts`
+  + stamp a minimal `origin.epic` (epic chip only; single-file notes carry no project, so `OriginPill` should render the epic without a project pill)
++ open questions / decisions
+  + where to run the transform (single-file composer vs a gated branch in `useViewContext`) so folder mode is never double-flattened
+  + whether descent is automatic (detect an epic layer) or opt-in — automatic preserves the documented `###`-is-a-card contract with no authoring change
+  + how drag-drop status + ordering rewrites route back to the one doc when cards are `###` under `##` (folder mode partitions by docPath; single-file has one doc, so the existing single-file editText path should apply — verify offsets)
+  + interaction with `parent_context_seq` / `nt_breadcrumb_last` scoping into a single epic (should still work, narrowing to that epic's stories)
++ [ ] reproduce: open a nested single file (e.g. `project-board.md`) in kanban, confirm `##` epics render as cards
++ [ ] decide and document the transform seam (composer vs `useViewContext`)
++ [ ] implement single-file `###`-story flatten with structural `##`-epic tagging, reusing `mergeAggregateRoot` machinery
++ [ ] resolve explicit `epic=` overrides (direct > inherited > structural) in single-file mode
++ [ ] render the epic chip via `OriginPill` without a project pill in single-file mode
++ [ ] preserve flat-file behaviour (no epic layer → `##` cards unchanged)
++ [ ] verify drag-drop status + ordering rewrites land correctly for `###` cards in a single doc
++ [ ] jest: nested single-file tree yields `###` cards in status columns with epic tag present; flat file unchanged
++ [ ] playwright: nested single file renders story cards (not epic cards) end-to-end
++ [ ] revisit `AUTHORING_GUIDE.md` once the descent rule lands (it already claims `###` = card universally)
 
 
 ### View hierarchy and per-view card-type axis [](?id=view-hierarchy-and-card-types)

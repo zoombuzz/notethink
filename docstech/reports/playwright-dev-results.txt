@@ -1,32 +1,27 @@
 # Playwright Test Results
-# Version: 0.3.15
-# Date: 2026-06-19T10:03:37+01:00
-# Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-playwright
+# Version: 0.3.16
+# Date: 2026-06-19T13:42:54+01:00
+# Command: npx playwright test (harness auto-started on :9123 by playwright.config.ts webServer)
 # ---
-Running 77 tests using 10 workers
 
-All 77 tests passed (14.1s). 0 failed, 0 skipped.
+Running 89 tests using 10 workers
 
-Suites exercised (count per file):
-  auto-integration.spec.ts            10
-  breadcrumb-jump.spec.ts              3
-  breadcrumb.spec.ts                   5
-  click-interaction.spec.ts            4
-  collision-detection.spec.ts          4
-  document-view.spec.ts                4
-  error-boundary.spec.ts               4
-  folder-click-focus.spec.ts           5
-  folder-kanban-drag.spec.ts           3
-  folder-view.spec.ts                  9
-  frontmatter-document-strip.spec.ts   1
-  header-spacing.spec.ts               2
-  integration-flip.spec.ts             2
-  kanban-drag.spec.ts                  4
-  kanban-view.spec.ts                  4
-  keyboard-navigation.spec.ts          4
-  list-bullets.spec.ts                 1
-  pending-work-spinner.spec.ts         5
-  settings-toggle.spec.ts              3
-  view-switching.spec.ts               3
+89 passed (17.7s)
 
-  77 passed (14.1s)
+0 failed, 0 flaky, 0 skipped.
+
+Specs exercised (23 files):
+  auto-integration, breadcrumb, breadcrumb-jump, click-interaction, collision-detection,
+  document-view, error-boundary, folder-click-focus, folder-kanban-drag, folder-view,
+  frontmatter-document-strip, header-spacing, integration-flip,
+  kanban-animation, kanban-drag, kanban-drag-roundtrip, kanban-pointer-drag, kanban-view,
+  keyboard-navigation, list-bullets, pending-work-spinner, settings-toggle, view-switching
+
+New this story (FLIP passive transitions + drag-regression fix):
+  - kanban-animation.spec.ts ......... 7 passed (cross-column move, in-column reorder, new-column
+                                       choreography, no-double-animate, rapid burst, reduced-motion,
+                                       setting=false disables)
+  - kanban-pointer-drag.spec.ts ...... 2 passed (real mouse drag completes + no residual transform)
+  - kanban-drag-roundtrip.spec.ts .... 3 passed (dropped card's own authoritative echo never
+                                       re-animates — realistic + adversarial timing; positive control
+                                       that a genuine passive update still animates)

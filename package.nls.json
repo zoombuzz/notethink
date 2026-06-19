@@ -20,6 +20,7 @@
   "config.settings.view.generic.watchUnopenedFilesInViewer.description": "Watch the active viewed file for on-disk changes when it isn't open in a text editor (refreshes the viewer when another tool edits it).",
   "config.settings.view.generic.showContextBars.description": "Show context bars above stories.",
   "config.settings.view.specific.kanban.columnOrder.description": "Kanban column order (raw status slugs like 'code-review' or 'done'). Columns not in the list appear after, sorted alphabetically with 'untagged' last.",
+  "config.settings.view.specific.kanban.animateTransitions.description": "Animate passive kanban transitions (cards moving as another tool or the editor changes their status) with a brief slide.",
   "config.settings.files.includeFilter.description": "Glob of files to include in folder mode.",
   "config.settings.files.excludeFilter.description": "Glob of files to exclude in folder mode.",
   "config.settings.files.maxNotesPerFile.description": "Cap on stories taken from each source file when merging the folder aggregate."

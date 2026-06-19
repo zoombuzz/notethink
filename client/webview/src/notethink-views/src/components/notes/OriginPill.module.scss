@@ -1,7 +1,7 @@
 /*
  * All sizes are em-relative so the pill scales with whatever heading depth (h1..h6)
  * rendered the surrounding headline. Each pill's outer height resolves to ~1.2em of
- * the heading font, which closely matches typical heading line-heights — so the
+ * the heading font, which closely matches typical heading line-heights - so the
  * floated pill occupies exactly one line and the wrapped title text sits neatly
  * beneath without a vertical gap.
  */

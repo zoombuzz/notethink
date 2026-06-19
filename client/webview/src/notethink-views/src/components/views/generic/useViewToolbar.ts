@@ -16,7 +16,7 @@ export interface ViewToolbar {
     integration_selection: IntegrationMode;
     integration_mode: ConcreteIntegrationMode;
     handle_integration_change: (mode: IntegrationMode, target_file_path?: string) => void;
-    // view-type dropdown: same shape — persisted selection (may be auto), auto-resolved concrete type, change handler
+    // view-type dropdown: same shape - persisted selection (may be auto), auto-resolved concrete type, change handler
     view_type_selection: string;
     auto_resolved_type: string | undefined;
     handle_view_type_change: (view_type: string) => void;
@@ -43,15 +43,15 @@ export function useViewToolbar(
     notes_within_parent_context: Array<NoteProps>,
 ): ViewToolbar {
     const { markPending } = usePendingWorkContext();
-    // integration-mode dropdown state — selection (persisted, may be auto) + resolved concrete mode, mirroring the view-type dropdown below
+    // integration-mode dropdown state - selection (persisted, may be auto) + resolved concrete mode, mirroring the view-type dropdown below
     const integration_selection: IntegrationMode = (props.display_options?.integration_mode_selection as IntegrationMode) || INTEGRATION_MODE_AUTO;
     const integration_mode: ConcreteIntegrationMode = resolveIntegrationMode(props.display_options);
-    // view-type dropdown state — selection (persisted, may be auto) + the type AutoView resolved auto to; same selection/resolved split as integration mode
+    // view-type dropdown state - selection (persisted, may be auto) + the type AutoView resolved auto to; same selection/resolved split as integration mode
     const view_type_selection: string = (props.nested?.replaced_attributes?.type as string) || props.type;
     const auto_resolved_type: string | undefined = props.nested?.auto_resolved_type;
 
     /*
-     * handle_integration_change — change the view's integration selection.
+     * handle_integration_change - change the view's integration selection.
      *  - 'auto' (explicit re-select) is a full reset: re-resolve mode + scope from the opened file's
      *    declaration so the view follows the file again, exactly like picking "Auto" for view type.
      *  - 'folder' / 'current_file' pin the user's explicit choice, overriding the file declaration.
@@ -120,7 +120,7 @@ export function useViewToolbar(
     }, [props.type, notes_within_parent_context]);
 
     /*
-     * cascade_write_setting — write a view-type setting to VS Code config (Workspace
+     * cascade_write_setting - write a view-type setting to VS Code config (Workspace
      * scope on the extension side) under notethink.settings.*. View-type members
      * (columnOrder, viewType, showLinetagsInHeadlines, scrollNoteIntoView,
      * autoExpandFocusedNote, showContextBars) cascade-write in any integration mode so a
@@ -139,10 +139,10 @@ export function useViewToolbar(
     }, [handlers, markPending]);
 
     /*
-     * handle_view_type_change — change the view type (auto / document / kanban). Mirrors
+     * handle_view_type_change - change the view type (auto / document / kanban). Mirrors
      * handle_integration_change: dispatch the selection to this view's id, then cascade-write
      * 'viewType' so the choice persists across integration modes (viewType is a view-type setting,
-     * not integration-specific — a type picked in current_file mode also applies in folder mode).
+     * not integration-specific - a type picked in current_file mode also applies in folder mode).
      */
     const handle_view_type_change = useCallback((view_type: string): void => {
         handlers.setViewManagedState([{ id: props.id, type: view_type }]);
@@ -158,9 +158,9 @@ export function useViewToolbar(
     }, [handlers]);
 
     /*
-     * handle_setting_change — real-time apply for a per-view (display_options-owned)
+     * handle_setting_change - real-time apply for a per-view (display_options-owned)
      * setting. Dispatches setViewManagedState immediately. Global keys are stripped from
-     * the persisted shape so they don't get baked into per-view state — the extension
+     * the persisted shape so they don't get baked into per-view state - the extension
      * owns them via vscode workspace config.
      */
     const handle_setting_change = useCallback((key: CommonSettingKey, value: boolean): void => {
@@ -177,7 +177,7 @@ export function useViewToolbar(
     }, [handlers, props.id, display_options.settings]);
 
     /*
-     * handle_global_setting_change — real-time apply for a global (vscode-owned) setting.
+     * handle_global_setting_change - real-time apply for a global (vscode-owned) setting.
      * The extension writes it to vscode workspace/user config and echoes back via
      * globalSettings. Marks the setting key as pending; the echo reducer clears it when
      * globalSettings arrives.
@@ -188,7 +188,7 @@ export function useViewToolbar(
     }, [handlers, markPending]);
 
     /*
-     * handle_column_order_change — real-time apply for the Kanban column order. Normalises
+     * handle_column_order_change - real-time apply for the Kanban column order. Normalises
      * the persisted shape: if next_order matches the natural order, store undefined
      * locally (so future natural-order changes propagate); the cascade payload always
      * carries an explicit array, with empty == natural.

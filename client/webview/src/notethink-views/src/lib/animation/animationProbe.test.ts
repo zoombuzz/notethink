@@ -26,7 +26,7 @@ describe('animationProbe', () => {
         probeGlobal().__notethinkAnimationEvents = [];
     });
 
-    it('is disabled by default — emit is a no-op', () => {
+    it('is disabled by default - emit is a no-op', () => {
         expect(isAnimationProbeEnabled()).toBe(false);
         emitAnimationEvent({ kind: 'move', id: 'a', dx: 5, dy: 6 });
         expect(getAnimationProbeEvents()).toHaveLength(0);

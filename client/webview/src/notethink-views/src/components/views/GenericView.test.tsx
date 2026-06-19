@@ -1114,7 +1114,7 @@ describe('GenericView navigation callback', () => {
             fireEvent.click(await screen.findByTestId('view-settings-button'));
             /*
              * natural order is ['doing', 'done', 'untagged']; clicking move-up on 'done' produces ['done', 'doing', 'untagged']
-             * labels are formatted (title-cased) — the raw slug is still what's stored
+             * labels are formatted (title-cased) - the raw slug is still what's stored
              */
             fireEvent.click(screen.getByLabelText('Move Done up'));
             expect(set_state).toHaveBeenCalledTimes(1);
@@ -1146,7 +1146,7 @@ describe('GenericView navigation callback', () => {
             fireEvent.click(gear);
             const grid = await screen.findByTestId('settings-drawer-grid');
             expect(grid).toHaveAttribute('data-open', 'true');
-            // dispatch on document.body — outside both the trigger and the drawer
+            // dispatch on document.body - outside both the trigger and the drawer
             act(() => {
                 document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
             });

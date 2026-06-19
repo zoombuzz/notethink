@@ -1,6 +1,6 @@
 # NoteThink Authoring Guide
 
-How to structure your markdown files so NoteThink renders them well — as
+How to structure your markdown files so NoteThink renders them well - as
 documents, as Kanban boards, and (in Folder mode) as cross-file aggregate
 views.
 
@@ -18,9 +18,9 @@ file can pin itself to an older version.
 ## Versioning
 
 The grammar this guide describes is versioned with [semantic
-versioning](https://semver.org/) — `MAJOR.MINOR.PATCH`. The current version is
+versioning](https://semver.org/) - `MAJOR.MINOR.PATCH`. The current version is
 **`1.1.0`**. `1.1.0` added the optional `nt_integration_mode` and
-`nt_breadcrumb_last` view-configuration linetags (backward-compatible — files
+`nt_breadcrumb_last` view-configuration linetags (backward-compatible - files
 that don't use them are unaffected); `1.0.0` was the first formally versioned
 baseline of the existing grammar.
 
@@ -28,9 +28,9 @@ What each kind of change means for your files:
 
 | Bump | What changes | Effect on existing files |
 |---|---|---|
-| **patch** (`1.0.x`) | Editorial fixes, clarifications, examples — the grammar itself is unchanged | None. Every file renders exactly as before |
+| **patch** (`1.0.x`) | Editorial fixes, clarifications, examples - the grammar itself is unchanged | None. Every file renders exactly as before |
 | **minor** (`1.x.0`) | New, backward-compatible features (a new optional linetag, key, or behaviour) | None. Files that don't use the new feature render exactly as before |
-| **major** (`x.0.0`) | Changes that could alter or remove how an existing construct is interpreted | A file written for an older major version *may* render differently — see locking below |
+| **major** (`x.0.0`) | Changes that could alter or remove how an existing construct is interpreted | A file written for an older major version *may* render differently - see locking below |
 
 ### The default: latest
 
@@ -48,7 +48,7 @@ keep a file on the old behaviour by pinning it on the file root (`#`):
 ```
 
 `nt_authoring_version` accepts `MAJOR` or `MAJOR.MINOR` (e.g. `1` or `1.2`).
-It is **reserved and documented now for forward-compatibility** — only versions
+It is **reserved and documented now for forward-compatibility** - only versions
 `1.0.0` and `1.1.0` exist today (no major bump yet), so the flag currently has
 no effect. It exists so that files authored today keep working unchanged the day
 a `2.0.0` ships.
@@ -95,12 +95,12 @@ That's enough to get going. The rest of this document explains the rules in deta
 
 | Level | Meaning | Example |
 |---|---|---|
-| `#` | File title — exactly one per file | `# Todo`, `# Done` |
-| `##` | Epic — an optional grouping above stories | `## New Relic integration` |
-| `###` | Story — the unit that becomes a Kanban card | `### Add APM agent` |
+| `#` | File title - exactly one per file | `# Todo`, `# Done` |
+| `##` | Epic - an optional grouping above stories | `## New Relic integration` |
+| `###` | Story - the unit that becomes a Kanban card | `### Add APM agent` |
 | `####`+ | Sub-sections inside a story | `#### Manual steps` |
 
-You may skip `##` entirely — most projects don't use epics.
+You may skip `##` entirely - most projects don't use epics.
 
 You may **not** use `##` for anything other than an epic. NoteThink's aggregate
 view treats every `##` heading as an epic and every `###` heading as a story,
@@ -120,7 +120,7 @@ break inside a story. Tools that update `todo.md` / `done.md` rely on it.
 Each developer keeps their work in two files at
 `docstech/users/<username>/todo.md` and `docstech/users/<username>/done.md`.
 
-- Stories in `todo.md` are read **top-to-bottom** — the next story to work on
+- Stories in `todo.md` are read **top-to-bottom** - the next story to work on
   is always the one at the top.
 - When all tasks in a story are checked off, move the whole story from
   `todo.md` to the **end** of `done.md` (preserve the two-blank-line spacing).
@@ -146,7 +146,7 @@ A markdown link with empty link text and no visible characters renders as
 nothing on github.com. NoteThink's parser ignores the empty `[]` but reads the
 URL. So linetags carry data without polluting the rendered prose.
 
-You can also write linetags with link text — `[Done](?status=done)` — in which
+You can also write linetags with link text - `[Done](?status=done)` - in which
 case GitHub renders "Done" as a clickable link and NoteThink uses the same
 metadata. Most authors use the empty form.
 
@@ -172,7 +172,7 @@ Separate keys with `&`, just like a URL query string:
 ### Some story [](?status=doing&epic=phase3&time_estimated=180)
 ```
 
-Order is irrelevant. Keys are unique within a single linetag — if you write
+Order is irrelevant. Keys are unique within a single linetag - if you write
 the same key twice, the last value wins.
 
 ### Multiple linetags on one line
@@ -193,7 +193,7 @@ Equivalent to:
 The merged form is preferred unless you have a reason to split (e.g. one
 linetag is auto-generated and another is hand-written).
 
-### Encoding rules — what to type when your value contains a special character
+### Encoding rules - what to type when your value contains a special character
 
 NoteThink linetag values are URL-form-encoded. The full set of rules:
 
@@ -202,7 +202,7 @@ NoteThink linetag values are URL-form-encoded. The full set of rules:
 | space | `+` | CommonMark forbids spaces in unbracketed link destinations; `+` is the form-encoding standard for space and decodes back automatically |
 | literal `+` | `%2B` | because `+` now means space |
 | literal `&` | `%26` | because `&` separates linetag keys |
-| literal `)` | avoid | it terminates the link destination — pick another character |
+| literal `)` | avoid | it terminates the link destination - pick another character |
 | literal `=` | (no escape needed) | NoteThink uses the *first* `=` as the key/value separator, so subsequent `=` characters pass through unchanged |
 | every other character | as-is | including `.`, `:`, `-`, `_`, `/`, accented letters, emoji |
 
@@ -211,28 +211,28 @@ edge cases.
 
 #### Example
 
-You want to set the epic to `Phase 3 — New Relic & APM`.
+You want to set the epic to `Phase 3 - New Relic & APM`.
 
 Wrong:
 
 ```markdown
-### Some story [](?epic=Phase 3 — New Relic & APM)
+### Some story [](?epic=Phase 3 - New Relic & APM)
 ```
 
 This breaks GitHub rendering (spaces aren't allowed in CommonMark link
-destinations) and also splits at the `&` into two keys (`epic=Phase 3 — New
+destinations) and also splits at the `&` into two keys (`epic=Phase 3 - New
 Relic ` and `APM=`).
 
 Right:
 
 ```markdown
-### Some story [](?epic=Phase+3+—+New+Relic+%26+APM)
+### Some story [](?epic=Phase+3+-+New+Relic+%26+APM)
 ```
 
-Or — better — use a stable id (see [Epic references](#epic-references) below):
+Or - better - use a stable id (see [Epic references](#epic-references) below):
 
 ```markdown
-## Phase 3 — New Relic & APM [](?id=phase3)
+## Phase 3 - New Relic & APM [](?id=phase3)
 
 ### Some story [](?epic=phase3)
 ```
@@ -264,18 +264,18 @@ NoteThink's internal/directive keys carry a namespace prefix so they stay
 distinct from your content attributes:
 
 - **`nt_`** is the canonical prefix (short for **n**ote**t**hink). It is what
-  NoteThink **writes** going forward, and the form you should author —
+  NoteThink **writes** going forward, and the form you should author -
   `nt_view`, `nt_level`, `nt_child_status`, `nt_kanban_ordering_weight`.
 - **`ng_`** is the legacy prefix inherited from the predecessor project. It is
   still **accepted on read** as an equal synonym for the directive keys
   (`ng_view` ≡ `nt_view`, `ng_level` ≡ `nt_level`, …) so older files keep
   working. When both forms are present on the same heading, `nt_` wins.
-- **Content attributes are unprefixed** — `status`, `epic`, `id`, `order`,
+- **Content attributes are unprefixed** - `status`, `epic`, `id`, `order`,
   `time_estimated`, `time_taken`. They describe your content and render as
   visible chips; they take no prefix.
 
 **One exception:** the child-attribute *inheritance* directives are `nt_` only
-— `nt_child_<key>`, `nt_child2y_<key>`, `nt_childall_<key>`. Legacy
+- `nt_child_<key>`, `nt_child2y_<key>`, `nt_childall_<key>`. Legacy
 `ng_child_*` is **not** inherited; author inheritance with the `nt_` form.
 
 ### View configuration
@@ -286,11 +286,11 @@ renders.
 | Key | Effect |
 |---|---|
 | `nt_view` | View type for this subtree: `auto`, `document`, `kanban`. Legacy `ng_view` is still accepted on read |
-| `nt_integration_mode` | The integration mode this file opens into while the view is in **auto**: `current_file` or `folder`. In auto the view follows it; changing the mode or navigating away from the file's intent pins your own choice. Set on the file root (`#`). `nt_`-only — no `ng_` form |
-| `nt_breadcrumb_last` | The breadcrumb segment this file opens scoped to while in **auto** — a folder name (narrows folder-mode aggregation to that subfolder, implying folder mode) or an epic/story headline (scopes the note hierarchy). Seeds the initial position; navigate away freely. Set on the file root (`#`). `nt_`-only |
+| `nt_integration_mode` | The integration mode this file opens into while the view is in **auto**: `current_file` or `folder`. In auto the view follows it; changing the mode or navigating away from the file's intent pins your own choice. Set on the file root (`#`). `nt_`-only - no `ng_` form |
+| `nt_breadcrumb_last` | The breadcrumb segment this file opens scoped to while in **auto** - a folder name (narrows folder-mode aggregation to that subfolder, implying folder mode) or an epic/story headline (scopes the note hierarchy). Seeds the initial position; navigate away freely. Set on the file root (`#`). `nt_`-only |
 | `nt_level` | Render level (advanced; usually leave unset). Legacy `ng_level` is still accepted on read |
-| `order` | Which end of the file holds the **newest** stories: `newest-at-top` (default) or `newest-at-bottom`. Read off the file root (`#`) only. Tells Folder mode which end to keep when the per-file note cap truncates the file — see [Per-file note cap](#per-file-note-cap-and-the-order-linetag) |
-| `nt_authoring_version` | Pin this file to an older Authoring Guide version (`MAJOR` or `MAJOR.MINOR`, e.g. `1` or `1.2`) instead of the latest. Set on the file root (`#`). Reserved for forward-compatibility — only `1.0.0` and `1.1.0` exist today (no major bump), so it has no effect yet. See [Versioning](#versioning) |
+| `order` | Which end of the file holds the **newest** stories: `newest-at-top` (default) or `newest-at-bottom`. Read off the file root (`#`) only. Tells Folder mode which end to keep when the per-file note cap truncates the file - see [Per-file note cap](#per-file-note-cap-and-the-order-linetag) |
+| `nt_authoring_version` | Pin this file to an older Authoring Guide version (`MAJOR` or `MAJOR.MINOR`, e.g. `1` or `1.2`) instead of the latest. Set on the file root (`#`). Reserved for forward-compatibility - only `1.0.0` and `1.1.0` exist today (no major bump), so it has no effect yet. See [Versioning](#versioning) |
 
 ### Story status
 
@@ -299,9 +299,9 @@ Set on a story (`###`) heading.
 | Key | Effect |
 |---|---|
 | `status` | Story status: `todo`, `doing`, `blocked`, `done`, etc. Maps to Kanban columns |
-| `time_estimated` | Forward-looking forecast in minutes (forecast only — never put actual time here) |
-| `time_taken` | **Actual** time worked, in minutes. Non-zero by definition. Never write an estimate here — these values may feed billing |
-| `epic` | Reference to a parent epic — see below |
+| `time_estimated` | Forward-looking forecast in minutes (forecast only - never put actual time here) |
+| `time_taken` | **Actual** time worked, in minutes. Non-zero by definition. Never write an estimate here - these values may feed billing |
+| `epic` | Reference to a parent epic - see below |
 
 ### Inherited attributes
 
@@ -326,8 +326,8 @@ You should never write these by hand. NoteThink computes them.
 
 | Key | Purpose |
 |---|---|
-| `id` | Optional stable identifier for an epic (`##` heading) — see below |
-| `nt_kanban_ordering_weight` | Per-card position weight written by the Kanban view when you drag cards to reorder them. Internal — never write it by hand |
+| `id` | Optional stable identifier for an epic (`##` heading) - see below |
+| `nt_kanban_ordering_weight` | Per-card position weight written by the Kanban view when you drag cards to reorder them. Internal - never write it by hand |
 
 `id` is the one exception: you set it on `##` epic headings to enable stable
 references.
@@ -336,8 +336,8 @@ references.
 
 ## Front matter (document scope)
 
-A YAML or TOML **front matter** block at the very top of a file — fenced by
-`---` (YAML) or `+++` (TOML) — is lifted into the file's **document root**, and
+A YAML or TOML **front matter** block at the very top of a file - fenced by
+`---` (YAML) or `+++` (TOML) - is lifted into the file's **document root**, and
 each `key: value` pair becomes a linetag on that root, treated *identically* to a
 linetag authored on a heading. Front matter is therefore the **broadest,
 document-scoped layer** of the linetag model, not a separate metadata channel.
@@ -354,24 +354,24 @@ nt_childall_owner: alex
 ### First story [](?status=doing)
 ```
 
-- **Same keys, same meaning.** Author the keys you already know — `nt_view`,
+- **Same keys, same meaning.** Author the keys you already know - `nt_view`,
   `order`, `status`, `nt_child_<key>`, etc. A front-matter `nt_view: kanban`
   behaves exactly as if it were written on the file's `#` H1.
-- **Precedence — most-specific wins.** Front matter sets document-wide defaults
+- **Precedence - most-specific wins.** Front matter sets document-wide defaults
   that anything below can override: an H1 linetag beats a front-matter value, an
   H2 beats the H1, and a story's own linetag beats everything inherited. This is
   the same "a child's own real linetag wins" rule from
-  [Inherited attributes](#inherited-attributes) — front matter is simply the top
+  [Inherited attributes](#inherited-attributes) - front matter is simply the top
   of that chain.
 - **Only inheritance directives propagate.** As on a heading, just the
   `nt_child_<key>` / `nt_child2y_<key>` / `nt_childall_<key>` forms flow down to
-  descendants — front-matter `nt_childall_owner: alex` reaches every note, while a
+  descendants - front-matter `nt_childall_owner: alex` reaches every note, while a
   bare `status: active` stays on the document root and does **not** leak to
   children.
 - **Display.** In Current-file mode the unprefixed front-matter keys render as a
   document-level chip strip at the top of the view (prefixed directive keys such
   as `nt_view` stay invisible, exactly like on a heading). Folder mode aggregates
-  many files, so there is no single document scope and the strip is suppressed —
+  many files, so there is no single document scope and the strip is suppressed -
   but each file's front-matter inheritance is still resolved per file before the
   merge, so `nt_childall_*` and friends keep working in both modes.
 
@@ -379,7 +379,7 @@ nt_childall_owner: alex
 
 `order` is scope-sensitive. On the `#` H1 it governs where new stories are
 inserted *under the H1*. In **front matter** it governs insertion relative to the
-*whole document* — so `newest-at-top` at document scope can place a new note
+*whole document* - so `newest-at-top` at document scope can place a new note
 **above** the H1, whereas at H1 scope the new note lands below it. Document-level
 `order` is read off the root independently; an H1 `order` overrides it for the
 per-file cap (see
@@ -402,9 +402,9 @@ epic. In a Kanban view, epic membership shows as a small badge on each card.
 A story can declare which epic it belongs to in three ways. NoteThink
 evaluates them **most-specific first** and stops at the first hit:
 
-1. **Direct linetag on the story** — `[](?epic=X)`
-2. **Inherited linetag from an ancestor** — `[](?nt_child_epic=X)` on a parent
-3. **Structural** — the story sits under a `##` heading; that heading is the
+1. **Direct linetag on the story** - `[](?epic=X)`
+2. **Inherited linetag from an ancestor** - `[](?nt_child_epic=X)` on a parent
+3. **Structural** - the story sits under a `##` heading; that heading is the
    epic
 
 For methods 1 and 2, the value `X` is resolved against all loaded epics:
@@ -450,12 +450,12 @@ Both work. You can mix them.
 
 Every note carries a `stable_id` at runtime. It has two **provenances**:
 
-- **Implicit id** — derived automatically from the headline (lowercased, punctuation stripped, spaces hyphenated). It is present on every note at parse time and is **never written to the file**. Because it tracks the title, it changes whenever the story is renamed. Safe for in-session use only.
-- **Explicit id** — the `[](?id=slug)` linetag you author. It is **frozen once written** and survives title edits and reloads. The only form safe to reference across sessions.
+- **Implicit id** - derived automatically from the headline (lowercased, punctuation stripped, spaces hyphenated). It is present on every note at parse time and is **never written to the file**. Because it tracks the title, it changes whenever the story is renamed. Safe for in-session use only.
+- **Explicit id** - the `[](?id=slug)` linetag you author. It is **frozen once written** and survives title edits and reloads. The only form safe to reference across sessions.
 
 The resolved `stable_id` is the explicit id when an `id=` linetag is present; otherwise it is the implicit derived id.
 
-**Promoting an id from implicit to explicit** is a deliberate write. Because the explicit value is pre-populated from the same derivation as the implicit one, the resolved id is continuous at the moment you write it — it doesn't jump. Once written, the explicit id is frozen and may legitimately diverge from what the headline would now derive. That divergence is the whole point: it is what makes the reference durable.
+**Promoting an id from implicit to explicit** is a deliberate write. Because the explicit value is pre-populated from the same derivation as the implicit one, the resolved id is continuous at the moment you write it - it doesn't jump. Once written, the explicit id is frozen and may legitimately diverge from what the headline would now derive. That divergence is the whole point: it is what makes the reference durable.
 
 #### When should you write an explicit `id=`?
 
@@ -463,13 +463,13 @@ Write an explicit `id=` **only when a durable artifact will reference the note a
 
 **Write an explicit id when:**
 
-1. **The note becomes the target of a `[[…]]` cross-reference.** Pin the target's `id=` and write the reference together — they travel as a pair.
-2. **You author one directly** (e.g. to keep a short reference slug on a long epic name — the `id=nr` pattern from the example above).
-3. **Disambiguation** — two notes share the same headline and one of them is being referenced. Give the target a distinct authored id.
+1. **The note becomes the target of a `[[…]]` cross-reference.** Pin the target's `id=` and write the reference together - they travel as a pair.
+2. **You author one directly** (e.g. to keep a short reference slug on a long epic name - the `id=nr` pattern from the example above).
+3. **Disambiguation** - two notes share the same headline and one of them is being referenced. Give the target a distinct authored id.
 
 **Leave it implicit (write nothing) when:**
 
-- Drag keying or Kanban column projection — these are in-session operations.
+- Drag keying or Kanban column projection - these are in-session operations.
 - Holding the selected note across a re-parse for a few seconds.
 - Ordering, sorting, or any intra-session matching.
 
@@ -524,7 +524,7 @@ Each story shows a small **origin pill** with the source file (and epic, if
 any). Clicking it opens the source file at the story's location.
 
 Editing a checkbox or status in Folder mode writes to the correct origin
-file — the merged view is just a presentation layer.
+file - the merged view is just a presentation layer.
 
 ### Breadcrumb in Folder mode
 
@@ -532,14 +532,14 @@ The breadcrumb's path segments represent the **aggregated folder**, not
 any single file. Clicking a path segment narrows the aggregation to that
 subfolder.
 
-The note-hierarchy segments after the path operate on the merged tree —
+The note-hierarchy segments after the path operate on the merged tree -
 clicking an epic name in the breadcrumb scopes the view to that epic's
 stories.
 
 ### Per-file note cap and the `order` linetag
 
 Folder mode caps how many top-level stories it takes **from each source
-file** (default **10**, adjustable in the Files drawer — see below). Without
+file** (default **10**, adjustable in the Files drawer - see below). Without
 this, a long `done.md` with hundreds of completed stories would swamp the
 merged view with mostly-irrelevant history.
 
@@ -548,7 +548,7 @@ Which end of the file the kept stories come from depends on the file root's
 
 | `order` value | Meaning | Cap keeps |
 |---|---|---|
-| `newest-at-top` *(default — also used when `order` is absent or unrecognised)* | The newest stories are written at the **top** of the file (e.g. `todo.md`: the next thing to do is first) | the **first** N stories |
+| `newest-at-top` *(default - also used when `order` is absent or unrecognised)* | The newest stories are written at the **top** of the file (e.g. `todo.md`: the next thing to do is first) | the **first** N stories |
 | `newest-at-bottom` | The newest stories are appended at the **bottom** of the file (e.g. `done.md`: the most recently completed work is last) | the **last** N stories |
 
 ```markdown
@@ -571,10 +571,10 @@ Notes:
 
 ### Best practices for files that will be aggregated
 
-- **Stick to the heading levels** — `#` for the title, `##` for an optional
+- **Stick to the heading levels** - `#` for the title, `##` for an optional
   epic, `###` for stories. Don't use `##` for sub-sections inside a story.
 - **Give long-named epics an `id`** to keep references readable.
-- **Keep status linetags on stories**, not on the file root — the file root's
+- **Keep status linetags on stories**, not on the file root - the file root's
   status would propagate to every story via inheritance and override your
   per-story values.
 - **Don't repeat epic linetags** that you can inherit. If every story under a
@@ -594,7 +594,7 @@ Before pushing changes to a `todo.md` / `done.md`:
    likely have a heading-level mismatch (e.g. a `##` where you meant `###`).
 3. Open the file on github.com. The empty linetags should be invisible. If
    you see `[](?...)` text leaking into the rendered output, you've used a
-   character that needs encoding (most often a literal space — replace with
+   character that needs encoding (most often a literal space - replace with
    `+`).
 
 ---

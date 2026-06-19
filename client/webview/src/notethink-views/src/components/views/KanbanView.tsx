@@ -26,7 +26,7 @@ const debug = Debug("nodejs:notethink-views:KanbanView");
 /*
  * stable reference for the FLIP hook's class_names option. The SCSS-module class strings are
  * import-constant, so hoisting this out of the render keeps the useFlipTransition effect's dep array
- * stable — without it a fresh object literal every render would re-fire the layout effect (and its
+ * stable - without it a fresh object literal every render would re-fire the layout effect (and its
  * getBoundingClientRect reflow) on every KanbanView re-render, not only on real layout changes.
  */
 const FLIP_CLASS_NAMES = {
@@ -89,7 +89,7 @@ export default function KanbanView(props: ViewProps): ReactElement {
     /*
      * the FLIP gate marks when a layout change is the user's own move (drag → optimistic projection →
      * authoritative echo) rather than a passive external edit. useFlipGate holds it open for the whole
-     * projection lifetime — the round-trip is unbounded and outlasts any fixed timer — so the dropped
+     * projection lifetime - the round-trip is unbounded and outlasts any fixed timer - so the dropped
      * card is never re-animated on its own echo. The handlers below drive the drag edges.
      */
     const flip_gate = useFlipGate(is_projecting);
@@ -99,11 +99,11 @@ export default function KanbanView(props: ViewProps): ReactElement {
      * projection re-rendering the board, dnd's own click-suppression is defeated and that click bubbles
      * to the container's clear handler, which reveals the focused note's end+1 (the next story's header)
      * and jumps the editor caret onto it. The guarded container onClick swallows it. This handler must
-     * only set the flag — it must NOT move the caret (a drag-start reveal was the original jump bug).
+     * only set the flag - it must NOT move the caret (a drag-start reveal was the original jump bug).
      */
     const dragStartHandler = (_start: DragStart, _provided: ResponderProvided): void => {
         drag_active.current = true;
-        // hold the FLIP gate for the whole drag (any duration) so an update arriving mid-drag — or in the race before @hello-pangea/dnd's async drag-end fires — is never animated; drag-end releases it (projection hold then takes over)
+        // hold the FLIP gate for the whole drag (any duration) so an update arriving mid-drag - or in the race before @hello-pangea/dnd's async drag-end fires - is never animated; drag-end releases it (projection hold then takes over)
         flip_gate.hold();
     };
 

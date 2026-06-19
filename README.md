@@ -40,8 +40,8 @@ code --install-extension notethink-<version>.vsix
 2. Use the command palette (`Ctrl+Shift+P`) and run "NoteThink: Open Viewer"
 3. Or right-click on a markdown file and select "Open With..." → "NoteThink"
 
-For the conventions your markdown should follow — heading levels, story
-structure, linetag syntax, epics, Folder mode — see
+For the conventions your markdown should follow - heading levels, story
+structure, linetag syntax, epics, Folder mode - see
 [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md).
 
 ## Development
@@ -79,7 +79,7 @@ The NoteThink view runs in a webview iframe. To inspect it:
 - In the dev host: **Help > Toggle Developer Tools** (`Shift+Ctrl+I`)
 - Enable debug logging in the console: `localStorage.debug = 'nodejs:*'`
 
-For a fuller walkthrough — where host vs webview logs land, how the dev-only `notethink-extension.log` file works, and what to capture when filing a bug — see [docstech/bug-reports.md](docstech/bug-reports.md).
+For a fuller walkthrough - where host vs webview logs land, how the dev-only `notethink-extension.log` file works, and what to capture when filing a bug - see [docstech/bug-reports.md](docstech/bug-reports.md).
 
 ### Commands
 

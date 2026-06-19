@@ -33,7 +33,7 @@ export interface UseMarkdownNoteBodyScrollArgs {
  * the fade overlays render against.
  *
  * Owns scrolled_top and at_bottom useState pairs. The applyBodyScroll callback
- * is private — every scroll write goes through it so both pieces of state stay
+ * is private - every scroll write goes through it so both pieces of state stay
  * in sync with the DOM. The hook runs two layout effects:
  *
  * 1. Task-aware default scroll. When clipped, scroll so the first incomplete

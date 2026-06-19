@@ -16,7 +16,7 @@ export interface TextChange {
 /**
  * find the first change whose offsets fall outside [0, doc_length] or have
  * from > to. Returns the offending change for logging, or null when every
- * change is valid. Use to validate a batch of changes before applying — any
+ * change is valid. Use to validate a batch of changes before applying - any
  * non-null return means the whole batch should be rejected (partial application
  * would leave the document in a half-edited state).
  */

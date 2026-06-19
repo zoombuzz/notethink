@@ -23,7 +23,7 @@ interface MarkdownNoteBodyProps {
  *
  * State-less: every measurement and scroll value is passed in (overflow / scroll
  * state lives in useMarkdownNoteOverflow and useMarkdownNoteBodyScroll). The
- * onExpand callback is invoked when either fade bar's "Show more" is clicked —
+ * onExpand callback is invoked when either fade bar's "Show more" is clicked -
  * the parent owns the manually_expanded toggle.
  *
  * Renders nothing when the note has no body children, mirroring the original

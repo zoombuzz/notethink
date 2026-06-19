@@ -56,7 +56,7 @@ test.describe('Kanban Passive Transition Animations', () => {
     }
 
     /**
-     * keyboard-based drag with @hello-pangea/dnd (replicated from kanban-drag.spec.ts —
+     * keyboard-based drag with @hello-pangea/dnd (replicated from kanban-drag.spec.ts -
      * the helper there is local, not exported). focus the draggable, Space to lift, arrows
      * to move between droppables, Space to drop.
      */
@@ -198,7 +198,7 @@ test.describe('Kanban Passive Transition Animations', () => {
         await keyboardDrag(page, task_b_draggable, 'right', 1);
         await page.waitForTimeout(400);
 
-        // the gate suppressed FLIP — no move/enter were scheduled for the projection-commit re-render
+        // the gate suppressed FLIP - no move/enter were scheduled for the projection-commit re-render
         const events = await getAnimationEvents(page);
         expect(events.filter(e => e.kind === 'move')).toHaveLength(0);
         expect(events.filter(e => e.kind === 'enter')).toHaveLength(0);
@@ -234,7 +234,7 @@ test.describe('Kanban Passive Transition Animations', () => {
         const task_a_in_backlog = await backlog_column.getByRole('heading', { name: 'Task A' }).count();
         expect(task_a_in_backlog).toBe(0);
 
-        // no stuck animations: every card cleared its inline transform and no WAAPI animation is still playing (a `finished` animation with fill:'both' legitimately lingers in getAnimations — that is the settled state, not a stuck one)
+        // no stuck animations: every card cleared its inline transform and no WAAPI animation is still playing (a `finished` animation with fill:'both' legitimately lingers in getAnimations - that is the settled state, not a stuck one)
         const clean = await page.evaluate(() => {
             const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-flip-id]'));
             return cards.every((el) => {

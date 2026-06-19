@@ -28,7 +28,7 @@ const debug = Debug("nodejs:notethink-views:KanbanBoard");
  * transition DURATION rather than removing the transition: dnd detects drop completion via the
  * `transitionend` event, so `transition: 'none'` suppressed that event and left the card stuck with
  * a leftover transform (the overlap bug). A tiny non-zero duration still fires transitionend, so the
- * drop completes and the transform clears — just without a visible slide. The live drag is untouched.
+ * drop completes and the transform clears - just without a visible slide. The live drag is untouched.
  */
 function draggableStyleWithoutDropAnimation(
     style: DraggableProvidedDraggableProps['style'],
@@ -61,7 +61,7 @@ export interface KanbanBoardProps {
 /**
  * render the kanban board: a `<DragDropContext>` wrapping one `<Droppable>` per visible
  * column, each column rendering its `child_notes` as `<Draggable>`-wrapped `<GenericNote>`.
- * Sequenced as the eventual `ColumnBasedView` substitution target — keep the prop shape
+ * Sequenced as the eventual `ColumnBasedView` substitution target - keep the prop shape
  * focused on what `ColumnBasedView` would also need: visible_columns plus the drag wiring.
  */
 export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement {

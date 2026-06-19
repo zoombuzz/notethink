@@ -43,7 +43,7 @@ describe('createPassiveUpdateGate', () => {
         jest.advanceTimersByTime(80);
         gate.arm();
         jest.advanceTimersByTime(80);
-        // 160ms since first arm but only 80ms since re-arm — still within the window
+        // 160ms since first arm but only 80ms since re-arm - still within the window
         expect(gate.isHot()).toBe(true);
         jest.advanceTimersByTime(21);
         expect(gate.isHot()).toBe(false);
@@ -63,7 +63,7 @@ describe('createPassiveUpdateGate', () => {
         const gate = createPassiveUpdateGate(100);
         gate.hold();
         expect(gate.isHot()).toBe(true);
-        // far past any timer window — a hold has no expiry
+        // far past any timer window - a hold has no expiry
         jest.advanceTimersByTime(10_000);
         expect(gate.isHot()).toBe(true);
     });

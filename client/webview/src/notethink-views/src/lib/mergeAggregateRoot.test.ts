@@ -103,7 +103,7 @@ describe('mergeAggregateRoot', () => {
     it('multiple files: stories interleave round-robin by per-file rank (uneven lengths)', () => {
         const docA = simpleFile('id-a', 'a/todo.md', 'A', ['A1', 'A2']);
         const docB = simpleFile('id-b', 'b/todo.md', 'B', ['B1']);
-        // pass in reverse-insertion order — file order is still a/ then b/ (relative_path sort)
+        // pass in reverse-insertion order - file order is still a/ then b/ (relative_path sort)
         const { root, all_notes } = mergeAggregateRoot({ 'id-b': docB, 'id-a': docA }, '/repo/');
 
         expect(root.child_notes).toHaveLength(3);
@@ -450,23 +450,23 @@ describe('mergeAggregateRoot', () => {
         expect(story_a?.origin?.source_position?.start.offset).toBe(7);
     });
 
-    it('source_position survives the global seq renumbering — it carries source-file offsets, not merged-tree offsets', () => {
+    it('source_position survives the global seq renumbering - it carries source-file offsets, not merged-tree offsets', () => {
         const docA = simpleFile('id-a', 'a/todo.md', 'A', ['A1']);
         const docB = simpleFile('id-b', 'b/todo.md', 'B', ['B1']);
-        // round-robin interleaves stories — A1 first (file a sorts ahead), then B1
+        // round-robin interleaves stories - A1 first (file a sorts ahead), then B1
         const { all_notes } = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB }, '/repo/');
         const a1 = all_notes.find(n => n.headline_raw === '### A1')!;
         const b1 = all_notes.find(n => n.headline_raw === '### B1')!;
         // both stories carry their own pre-merge offsets (which happen to coincide because both files have the same H1 length); the seqs are globally renumbered but source_position is not
         expect(a1.origin?.source_position?.start.offset).toBe(a1.position.start.offset);
         expect(b1.origin?.source_position?.start.offset).toBe(b1.position.start.offset);
-        // global seq renumbering puts a1 at seq=1, b1 at seq=2 — source_position is unaffected
+        // global seq renumbering puts a1 at seq=1, b1 at seq=2 - source_position is unaffected
         expect(a1.seq).toBe(1);
         expect(b1.seq).toBe(2);
     });
 
     it('source_position is preserved per-note on descendants too', () => {
-        // story with a sub-bullet child — both story root and the descendant need source_position
+        // story with a sub-bullet child - both story root and the descendant need source_position
         const text = '# Todo\n### Story A\n+ sub bullet\n';
         const h1_end = 6;
         const h3_start = h1_end + 1;
@@ -522,7 +522,7 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('keeps pill hues stable across folder descents when workspace_projects is provided', () => {
-        // hue is an identity hash of the project name, so it is always stable — with or without workspace_projects
+        // hue is an identity hash of the project name, so it is always stable - with or without workspace_projects
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
         const workspace_universe = ['countingsheet', 'notebook', 'notethink'];
         const root_alone = mergeAggregateRoot({ 'id-nt': docNt }, '/repo/notethink', undefined, workspace_universe).root;
@@ -536,7 +536,7 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('project_hue is identical regardless of workspace_projects being provided, empty, or omitted (regression lock)', () => {
-        // hue is now a pure identity hash of the project name — the workspace universe must not affect it
+        // hue is now a pure identity hash of the project name - the workspace universe must not affect it
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
         const workspace_universe = ['countingsheet', 'notebook', 'notethink'];
         const hue_with_universe = mergeAggregateRoot({ 'id-nt': docNt }, '/repo/notethink', undefined, workspace_universe)
@@ -554,7 +554,7 @@ describe('mergeAggregateRoot', () => {
         // legacy callers (no workspace_projects argument) should see the original behaviour: labels derive from the visible set only
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
         const { root } = mergeAggregateRoot({ 'id-nt': docNt }, '/repo/notethink');
-        // with only notethink visible and no universe, divergence collapses and we get the second char of the project name (NO) — preserving the old behaviour
+        // with only notethink visible and no universe, divergence collapses and we get the second char of the project name (NO) - preserving the old behaviour
         expect(root.child_notes![0].origin?.project_label).toBe('NO');
     });
 
@@ -903,18 +903,18 @@ describe('mergeAggregateRoot', () => {
             const before_doc = simpleFile('id-a', 'a/todo.md', 'A', ['Existing']);
             const before = mergeAggregateRoot({ 'id-a': before_doc }, '/repo/');
             const before_existing = before.root.child_notes!.find(n => n.headline_raw === '### Existing')!;
-            // file after: # A / ### Inserted Before / ### Existing — the new sibling sits earlier in the file, so `Existing` has a higher offset than it did before
+            // file after: # A / ### Inserted Before / ### Existing - the new sibling sits earlier in the file, so `Existing` has a higher offset than it did before
             const after_doc = simpleFile('id-a', 'a/todo.md', 'A', ['Inserted Before', 'Existing']);
             const after = mergeAggregateRoot({ 'id-a': after_doc }, '/repo/');
             const after_existing = after.root.child_notes!.find(n => n.headline_raw === '### Existing')!;
             // sanity check: the new sibling really did shift the offsets, so the fixture still exercises the case
             expect(after_existing.position.start.offset).toBeGreaterThan(before_existing.position.start.offset);
-            // the stable_id must survive the shift — this is the case that rules out offset-based derivation
+            // the stable_id must survive the shift - this is the case that rules out offset-based derivation
             expect(after_existing.stable_id).toBe(before_existing.stable_id);
         });
 
         it('duplicate same-headline stories within a file are disambiguated', () => {
-            // two stories share the stripped headline "Dup" — the second must get a `#1` suffix so stable_ids remain unique within the file
+            // two stories share the stripped headline "Dup" - the second must get a `#1` suffix so stable_ids remain unique within the file
             const doc = simpleFile('id-a', 'a/todo.md', 'A', ['Dup', 'Dup']);
             const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/');
             const ids = root.child_notes!.map(n => n.stable_id);
@@ -1101,7 +1101,7 @@ describe('stampSingleFileStableIds', () => {
         expect(after_existing.stable_id).toBe(before_existing.stable_id);
     });
 
-    it('is idempotent — calling twice produces the same stable_ids', () => {
+    it('is idempotent - calling twice produces the same stable_ids', () => {
         const { root } = buildSingleFile(['Alpha', 'Beta']);
         stampSingleFileStableIds(root, 'doc-1');
         const first_a = findStoryByHeadline(root, '### Alpha')!.stable_id;

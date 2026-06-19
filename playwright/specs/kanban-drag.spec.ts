@@ -109,7 +109,7 @@ test.describe('Kanban Drag and Drop', () => {
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 
-        // drag Task B (doing) → done — a real cross-column move under the cascade-default ordering, so the drag actually completes rather than being a no-op
+        // drag Task B (doing) → done - a real cross-column move under the cascade-default ordering, so the drag actually completes rather than being a no-op
         const doing_column = page.locator('[role="region"][aria-label="doing"]');
         const task_b_draggable = doing_column.locator('[data-rfd-drag-handle-draggable-id]').first();
         const has_draggable = await task_b_draggable.count() > 0;

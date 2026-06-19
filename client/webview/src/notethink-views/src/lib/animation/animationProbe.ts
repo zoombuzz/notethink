@@ -1,8 +1,8 @@
 /*
- * test-only probe for the kanban FLIP layer. OFF by default — every export is a no-op until the
+ * test-only probe for the kanban FLIP layer. OFF by default - every export is a no-op until the
  * probe is explicitly enabled, so there is zero overhead in production (no buffering, no globals).
  *
- * the FLIP hook (useFlipTransition) calls emitAnimationEvent for every animation it SCHEDULES —
+ * the FLIP hook (useFlipTransition) calls emitAnimationEvent for every animation it SCHEDULES -
  * a move/enter/exit classification, a column slide, a gate/reduced-motion skip, or the global cap.
  * jest enables the probe with enableAnimationProbe() and asserts what WOULD animate by reading
  * getAnimationProbeEvents(), with no real requestAnimationFrame / Web Animations loop. Playwright
@@ -18,7 +18,7 @@ const debug = Debug("nodejs:notethink-views:animationProbe");
 /**
  * AnimationProbeEvent: one scheduled animation, as the FLIP hook planned it (independent of whether
  * a real WAAPI animation runs).
- * - kind: which path fired — a card 'move'/'enter'/'exit', a 'column-enter'/'column-exit', the
+ * - kind: which path fired - a card 'move'/'enter'/'exit', a 'column-enter'/'column-exit', the
  *   global 'cap' that force-finishes in-flight animations, or a 'skip' (gate/first-run/disabled/reduced).
  * - id: the card stable_id (move/enter/exit) or column value (column-enter/column-exit)
  * - dx / dy: the inverse-transform delta for a move

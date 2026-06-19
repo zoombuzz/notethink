@@ -312,7 +312,7 @@ body.disableAddressBarHidingOnScroll {
 
 
 //
-// Drawer shell — shared by the settings, files, and collisions drawers. each drawer
+// Drawer shell - shared by the settings, files, and collisions drawers. each drawer
 // composes these base classes (.drawerBody / .drawerGroups / .drawerGroup / .drawerMeta,
 // plus .drawerList / .drawerEmpty for the scrollable lists) and adds only its own
 // .settingsDrawer* / .filesDrawer* / .collisionsDrawer* specialisations below.
@@ -494,10 +494,10 @@ body.disableAddressBarHidingOnScroll {
 
 
 //
-// Settings drawer — specialises the shared drawer shell
+// Settings drawer - specialises the shared drawer shell
 //
 
-// keep the column-order arrow buttons compact — they're icon glyphs, not text actions
+// keep the column-order arrow buttons compact - they're icon glyphs, not text actions
 .settingsDrawerColumnOrder li button {
   padding: 1px 6px;
 }
@@ -535,7 +535,7 @@ body.disableAddressBarHidingOnScroll {
 
 
 //
-// Files drawer — specialises the shared drawer shell (editable globs + file list)
+// Files drawer - specialises the shared drawer shell (editable globs + file list)
 //
 
 .filesDrawerInput {
@@ -574,7 +574,7 @@ body.disableAddressBarHidingOnScroll {
 
 
 //
-// Collisions drawer — specialises the shared drawer shell (one group per colliding slug)
+// Collisions drawer - specialises the shared drawer shell (one group per colliding slug)
 //
 
 .collisionsDrawerGroup {
@@ -615,7 +615,7 @@ body.disableAddressBarHidingOnScroll {
 
 
 //
-// Jump drawer — a compact folder tree consistent with the VS Code Explorer: a root folder
+// Jump drawer - a compact folder tree consistent with the VS Code Explorer: a root folder
 // row (the breadcrumb folder that opened the drawer) with its child subfolders / sibling
 // files indented beneath, drawn with a tree indent-guide.
 //
@@ -635,7 +635,7 @@ body.disableAddressBarHidingOnScroll {
   font-weight: 600;
 }
 
-// leading glyph slot — an outline chevron (›) on the root + child folders, a blank spacer on files — so labels align, matching the VS Code Explorer twisties
+// leading glyph slot - an outline chevron (›) on the root + child folders, a blank spacer on files - so labels align, matching the VS Code Explorer twisties
 .jumpTreeGlyph {
   flex: none;
   display: inline-block;
@@ -858,7 +858,7 @@ body.disableAddressBarHidingOnScroll {
   }
 
   .headline, .body {
-    // allow long unbreakable tokens (URLs, paths, slug-with-dashes, flag=value identifiers) to wrap inside the card instead of punching past the right edge — applies to raw text, inline code, linetag pills, every inline child
+    // allow long unbreakable tokens (URLs, paths, slug-with-dashes, flag=value identifiers) to wrap inside the card instead of punching past the right edge - applies to raw text, inline code, linetag pills, every inline child
     overflow-wrap: anywhere;
 
     // inline code spans (not inside pre/code blocks)
@@ -875,7 +875,7 @@ body.disableAddressBarHidingOnScroll {
   .body {
     // symmetric horizontal padding plus a matching bottom inset so a nested note
     // card (and therefore its selection ring) is inset on both sides and below,
-    // not just the left — without this the last child's ring pokes past the
+    // not just the left - without this the last child's ring pokes past the
     // parent's bottom edge. top stays flush since the headline already spaces it.
     // the synthetic root container is exempted below (it has no card of its own)
     padding: 0 0.4em 0.4em;
@@ -1072,7 +1072,7 @@ body.disableAddressBarHidingOnScroll {
 }
 
 // the synthetic root container has no headline, border, or card of its own, so its body
-// must not inset the top-level note — otherwise the focus ring jumps 0.4em as the caret
+// must not inset the top-level note - otherwise the focus ring jumps 0.4em as the caret
 // crosses from the document frontmatter (root focused) into the first note. zero all sides:
 // the bottom inset would otherwise make the root ring 0.4em taller than the top-level
 // note's ring. nested notes keep the .body inset above so their rings stay clear of the
@@ -1324,10 +1324,10 @@ body.disableAddressBarHidingOnScroll {
         background: var(--vscode-editor-background);
         border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
         border-radius: 8px;
-        // no overflow: hidden on the card itself — lineno badges use margin-left: -2.2em to extend leftward outside the card by design, and a card-level clip would crop those circular badges. Body content is independently clipped by `.body { overflow: hidden }` below (where the real risk lives — non-reflowable images / diagrams). Selection/focus rings use outline + outline-offset and box-shadow is painted by the element itself, so neither needs the safety net
+        // no overflow: hidden on the card itself - lineno badges use margin-left: -2.2em to extend leftward outside the card by design, and a card-level clip would crop those circular badges. Body content is independently clipped by `.body { overflow: hidden }` below (where the real risk lives - non-reflowable images / diagrams). Selection/focus rings use outline + outline-offset and box-shadow is painted by the element itself, so neither needs the safety net
         user-select: none;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-        // no transform transition — @hello-pangea/dnd owns this draggable's transform and a CSS transition on it fights the drop animation
+        // no transform transition - @hello-pangea/dnd owns this draggable's transform and a CSS transition on it fights the drop animation
         transition: box-shadow 200ms ease;
 
         &:hover {

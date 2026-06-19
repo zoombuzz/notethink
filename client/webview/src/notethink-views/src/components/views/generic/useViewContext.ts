@@ -39,7 +39,7 @@ export interface ViewContext {
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useViewContext(props: ViewProps): ViewContext {
-    // ref for current selection — the click handler reads this to avoid stale closures when MarkdownNote's memo prevents re-render after a selection-only change
+    // ref for current selection - the click handler reads this to avoid stale closures when MarkdownNote's memo prevents re-render after a selection-only change
     const selection_ref = useRef(props.selection);
     selection_ref.current = props.selection;
 
@@ -89,7 +89,7 @@ export function useViewContext(props: ViewProps): ViewContext {
         if (props.selection === undefined) { return undefined; }
         const caret_pos = props.selection?.main.head;
         if (caret_pos === undefined) { return undefined; }
-        // per-doc + source_position matcher: works when the visible tree carries origin.doc_path + origin.source_position (folder mode stamps both during mergeAggregateRoot). Coordinate-coherent: caret_pos is in the source file's offset space, so the same value used here is what was emitted by the editor — no clamping against the merged-tree root needed
+        // per-doc + source_position matcher: works when the visible tree carries origin.doc_path + origin.source_position (folder mode stamps both during mergeAggregateRoot). Coordinate-coherent: caret_pos is in the source file's offset space, so the same value used here is what was emitted by the editor - no clamping against the merged-tree root needed
         if (props.active_editor_doc_path) {
             const by_origin = findDeepestNoteByOriginPosition(props.notes || [], props.active_editor_doc_path, caret_pos);
             if (by_origin) { return by_origin; }
@@ -110,7 +110,7 @@ export function useViewContext(props: ViewProps): ViewContext {
         props.active_editor_doc_path,
     ]);
 
-    // per-view focused/selected stable_ids written by the click dispatcher; the editor-derived match wins when it resolves a note (the documented editor-as-tiebreaker), and these fill in only when it has no opinion — the latest-click-wins immediate-feedback bridge and fallback
+    // per-view focused/selected stable_ids written by the click dispatcher; the editor-derived match wins when it resolves a note (the documented editor-as-tiebreaker), and these fill in only when it has no opinion - the latest-click-wins immediate-feedback bridge and fallback
     const view_focused_ids = display_options.view_focused_ids;
     const view_selected_ids = display_options.view_selected_ids;
 

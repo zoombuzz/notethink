@@ -29,7 +29,7 @@
         // Mock VS Code API
         window.__captured_messages = [];
         // back the webview persisted state with sessionStorage so getState/setState survive a
-        // page reload — mirrors the real VS Code webview, which restores getState() across reloads.
+        // page reload - mirrors the real VS Code webview, which restores getState() across reloads.
         // Honour a value an addInitScript already set (test pre-seed), else restore from sessionStorage,
         // else start empty. sessionStorage is per-context, so each isolated test still boots clean.
         function loadPersistedState() {

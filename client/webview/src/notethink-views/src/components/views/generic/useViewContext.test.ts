@@ -107,7 +107,7 @@ describe('useViewContext', () => {
     });
 
     describe('latest-click-wins with editor as tiebreaker (editor-derived wins; view-driven fills in when the editor has no opinion)', () => {
-        // root.position.end is the clamping ceiling for the in-tree caret match — set it past every child range so a caret beyond a child's end_body still resolves through the in-tree matcher
+        // root.position.end is the clamping ceiling for the in-tree caret match - set it past every child range so a caret beyond a child's end_body still resolves through the in-tree matcher
         const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });
         const child = makeNote({ seq: 1, level: 1, stable_id: 'child', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
         const other = makeNote({ seq: 2, level: 1, stable_id: 'other', position: { start: { offset: 60, line: 3 }, end: { offset: 80, line: 4 }, end_body: { offset: 95, line: 5 } } });
@@ -115,7 +115,7 @@ describe('useViewContext', () => {
         it('view_focused_ids is the immediate-feedback source when no editor selection has confirmed yet', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child],
-                // no selection — editor has no opinion
+                // no selection - editor has no opinion
                 display_options: { view_focused_ids: [child.stable_id!] },
             })));
             expect(result.current.deepest.note?.seq).toBe(child.seq);
@@ -125,7 +125,7 @@ describe('useViewContext', () => {
         it('editor-derived match overrides a stale view_focused_ids (latest click wins, editor priority)', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child, other],
-                // user clicked `child` in the view (view_focused_ids = [child]), then moved the editor caret into `other`'s range — editor wins
+                // user clicked `child` in the view (view_focused_ids = [child]), then moved the editor caret into `other`'s range - editor wins
                 selection: { main: { head: 70, anchor: 70 } },
                 active_editor_doc_path: '/repo/a.md',
                 display_options: { view_focused_ids: [child.stable_id!] },
@@ -168,7 +168,7 @@ describe('useViewContext', () => {
         it('editor range selection overrides a stale view_selected_ids', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child, other],
-                // user clicked `child` (view_selected_ids = [child]); then dragged a selection in the editor across `other`'s range — editor wins
+                // user clicked `child` (view_selected_ids = [child]); then dragged a selection in the editor across `other`'s range - editor wins
                 selection: { main: { head: 60, anchor: 95 } },
                 active_editor_doc_path: '/repo/a.md',
                 display_options: { view_selected_ids: [child.stable_id!] },

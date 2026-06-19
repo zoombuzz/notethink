@@ -61,7 +61,7 @@ interface ButtonProps {
 }
 ```
 
-**Exception — snake_case data fields and the parameters that carry them.** This codebase follows a deliberate *snake_case for data, camelCase for behaviour* split. Fields on the note/view data shapes and message payloads (`NoteProps`, `ViewProps`, `NoteOrigin`, the `*Message` types) use `snake_case` — e.g. `doc_path`, `relative_path`, `workspace_root`, `aggregate_total_discovered`, `include_filter` — because they mirror the serialized extension↔webview wire format, which is snake_case end-to-end. Renaming them to camelCase would split the field name from its on-the-wire key. Function **parameters that receive these data values** therefore also stay `snake_case` (`function processNote(note_id: string)`), consistent with the local-variable rule. What stays `camelCase`: genuine UI event-handler props (`onClick`, `onSubmit`, `onNoteChange`) and function/callback names (including service-callback props like `setViewManagedState`, `postMessage` — these are functions, named per Function Naming, not `on*` UI events).
+**Exception - snake_case data fields and the parameters that carry them.** This codebase follows a deliberate *snake_case for data, camelCase for behaviour* split. Fields on the note/view data shapes and message payloads (`NoteProps`, `ViewProps`, `NoteOrigin`, the `*Message` types) use `snake_case` - e.g. `doc_path`, `relative_path`, `workspace_root`, `aggregate_total_discovered`, `include_filter` - because they mirror the serialized extension↔webview wire format, which is snake_case end-to-end. Renaming them to camelCase would split the field name from its on-the-wire key. Function **parameters that receive these data values** therefore also stay `snake_case` (`function processNote(note_id: string)`), consistent with the local-variable rule. What stays `camelCase`: genuine UI event-handler props (`onClick`, `onSubmit`, `onNoteChange`) and function/callback names (including service-callback props like `setViewManagedState`, `postMessage` - these are functions, named per Function Naming, not `on*` UI events).
 
 ### Types and Interfaces
 
@@ -96,11 +96,11 @@ const user_count = users.length;  // snake_case, not a constant
 
 ### Permanent name check
 
-**This rule only applies to names that get stored in some permanent or semi-permanent state *outside the notethink codebase*.** Internal names (variables, function names, types, in-memory data shapes, transient wire-format messages between the extension and webview bundles) do **not** need the check — pick a name and rename freely later.
+**This rule only applies to names that get stored in some permanent or semi-permanent state *outside the notethink codebase*.** Internal names (variables, function names, types, in-memory data shapes, transient wire-format messages between the extension and webview bundles) do **not** need the check - pick a name and rename freely later.
 
 The check applies because the names below land in a store this codebase can't unilaterally rewrite. A later rename requires either a migration path for existing data or simply breaks any user / tool that already pinned the old name:
 
-- VS Code (or any host) config keys (`notethink.settings.X.Y`) — written to `settings.json` on disk, on machines we don't own
+- VS Code (or any host) config keys (`notethink.settings.X.Y`) - written to `settings.json` on disk, on machines we don't own
 - Persisted-state keys (`vscode.setState` shapes, IndexedDB key names, JSON file keys on user disk)
 - Database table / column names; cookie / header names; URL path segments
 - Public API names that code outside this repo will import (anything exported from a published npm package)
@@ -108,16 +108,16 @@ The check applies because the names below land in a store this codebase can't un
 
 Before introducing or renaming anything in those categories, surface the candidate to the user and get explicit sign-off.
 
-**Why this rule exists.** The `notethink.folderView.*` workspace-config namespace was originally introduced when the only place those settings lived was the folder view; the scope later grew to cover all view-type settings but the namespace name didn't, forcing a rename pass (and would have required a user-facing migration if there had been external users). A 30-second naming check at the moment of introduction would have prevented the whole episode. When in doubt, default to asking — the question is cheap, the rename is expensive.
+**Why this rule exists.** The `notethink.folderView.*` workspace-config namespace was originally introduced when the only place those settings lived was the folder view; the scope later grew to cover all view-type settings but the namespace name didn't, forcing a rename pass (and would have required a user-facing migration if there had been external users). A 30-second naming check at the moment of introduction would have prevented the whole episode. When in doubt, default to asking - the question is cheap, the rename is expensive.
 
 ### `stable_id` field: implicit vs explicit provenance
 
 Every note has a `stable_id` field (the field name is fixed). Its value has two grades:
 
-- **Implicit (transient)** — derived from the headline via `storyStableIdSlug`; present at parse time, never written to the file. Tracks the title, so it changes on rename. Use for React keys, kanban drag projections, and any intra-session matching.
-- **Explicit (persistent)** — the authored `[](?id=slug)` linetag; frozen once written, survives renames and reloads. The only grade safe for durable cross-session references.
+- **Implicit (transient)** - derived from the headline via `storyStableIdSlug`; present at parse time, never written to the file. Tracks the title, so it changes on rename. Use for React keys, kanban drag projections, and any intra-session matching.
+- **Explicit (persistent)** - the authored `[](?id=slug)` linetag; frozen once written, survives renames and reloads. The only grade safe for durable cross-session references.
 
-**Implementer rule:** transient code uses the implicit derived id and writes nothing to the file. Write an explicit `id=` linetag only when a durable artifact (a `[[…]]` cross-reference, a user-authored link) needs to survive across sessions or renames. See [AUTHORING_GUIDE.md — Stable ids: implicit vs explicit](./AUTHORING_GUIDE.md#stable-ids-implicit-vs-explicit) for the full decision rules.
+**Implementer rule:** transient code uses the implicit derived id and writes nothing to the file. Write an explicit `id=` linetag only when a durable artifact (a `[[…]]` cross-reference, a user-authored link) needs to survive across sessions or renames. See [AUTHORING_GUIDE.md - Stable ids: implicit vs explicit](./AUTHORING_GUIDE.md#stable-ids-implicit-vs-explicit) for the full decision rules.
 
 ## Import Organization
 
@@ -127,10 +127,10 @@ Every note has a `stable_id` field (the field name is fixed). Its value has two 
 
 ### Import Grouping
 
-Organize imports in this order. **`import Debug from "debug"` always comes first** (the Debug Logger Pattern rule overrides grouping — it sits above React even though `debug` is otherwise an "external dependency"):
+Organize imports in this order. **`import Debug from "debug"` always comes first** (the Debug Logger Pattern rule overrides grouping - it sits above React even though `debug` is otherwise an "external dependency"):
 
 ```typescript
-// 0. Debug (first import in every webview file — see Debug Logger Pattern)
+// 0. Debug (first import in every webview file - see Debug Logger Pattern)
 import Debug from 'debug';
 // 1. React and framework imports
 import React, { useState, useEffect, useCallback } from 'react';
@@ -156,21 +156,21 @@ import './global.css';
 
 ### Function Length and Decomposition
 
-- **Keep functions short — aim for ≤ 30–35 lines of body.** When a function grows past that, break it into meaningful, well-named sub-functions rather than letting it sprawl. The threshold is guidance, not a hard cap: a flat data literal or an unavoidable single dispatch can run longer, but branching logic that spills past ~35 lines is almost always hiding extractable steps.
+- **Keep functions short - aim for ≤ 30-35 lines of body.** When a function grows past that, break it into meaningful, well-named sub-functions rather than letting it sprawl. The threshold is guidance, not a hard cap: a flat data literal or an unavoidable single dispatch can run longer, but branching logic that spills past ~35 lines is almost always hiding extractable steps.
 - **Extract by responsibility, not by line count.** Each sub-function should do one nameable thing. Split where there is a genuine seam (validation → transformation → output, or a self-contained sub-algorithm), not at an arbitrary line picked to satisfy the number.
-- **The caller should read as a sequence of named steps.** After decomposition the top-level body reads like a table of contents — `firstInvalidChange(...)`, `logEditTextChanges(...)`, `applyEditTextChanges(...)` — so a reader follows the flow without diving into every detail. Well-named calls replace narration.
-- **Favor function-header comments over interleaved line comments.** Put the explanation (what, why, invariants) in the block comment immediately above the function. Both header and inline comments are permitted, but the header is the default home for anything longer than a one-line local note. If you find yourself narrating each step inline, that is a signal the steps want to become named sub-functions — inline comments should stay sparse because the code already reads logically.
+- **The caller should read as a sequence of named steps.** After decomposition the top-level body reads like a table of contents - `firstInvalidChange(...)`, `logEditTextChanges(...)`, `applyEditTextChanges(...)` - so a reader follows the flow without diving into every detail. Well-named calls replace narration.
+- **Favor function-header comments over interleaved line comments.** Put the explanation (what, why, invariants) in the block comment immediately above the function. Both header and inline comments are permitted, but the header is the default home for anything longer than a one-line local note. If you find yourself narrating each step inline, that is a signal the steps want to become named sub-functions - inline comments should stay sparse because the code already reads logically.
 - **The point is explicit inputs/outputs and testable seams, not the number.** Line count is the symptom you watch; the cause you fix is *shared mutable state and implicit dependencies*. A 40-line function whose every input is a parameter and whose output is a return value is fine; a 25-line function reaching into ten ambient mutable variables is not. Optimise for "I can read this unit's signature and know its whole contract," and for "I can unit-test it without standing up its whole surrounding context."
-- **Closures-as-objects should be real classes.** When a long function owns several pieces of mutable state that many inner closures read and write (a per-session/per-panel controller written as one big function), the length is a symptom of missing encapsulation: every nested closure has ambient access to everything, nothing has a contract, and the unit is untestable except through its outer boundary. Promote it to a **class** — the mutable state becomes private fields, the closures become methods, and each method's dependencies become explicit (`this.x`). This is the preferred fix for stateful **non-React** closures.
-- **In React, decompose with custom hooks and child components — not plain helpers.** The Rules of Hooks forbid lifting a block that calls `useState`/`useEffect`/`useMemo` into an ordinary function. Extract a cohesive hook+derivation cluster into a **custom hook** (`useFolderDocs()`), and a JSX subtree into a **child component** (`<KanbanBoard>`). A long component body is shortened by moving these out, never by splitting at an arbitrary line.
+- **Closures-as-objects should be real classes.** When a long function owns several pieces of mutable state that many inner closures read and write (a per-session/per-panel controller written as one big function), the length is a symptom of missing encapsulation: every nested closure has ambient access to everything, nothing has a contract, and the unit is untestable except through its outer boundary. Promote it to a **class** - the mutable state becomes private fields, the closures become methods, and each method's dependencies become explicit (`this.x`). This is the preferred fix for stateful **non-React** closures.
+- **In React, decompose with custom hooks and child components - not plain helpers.** The Rules of Hooks forbid lifting a block that calls `useState`/`useEffect`/`useMemo` into an ordinary function. Extract a cohesive hook+derivation cluster into a **custom hook** (`useFolderDocs()`), and a JSX subtree into a **child component** (`<KanbanBoard>`). A long component body is shortened by moving these out, never by splitting at an arbitrary line.
 
 ```typescript
-// avoid — one function doing validation, logging, application, and dispatch inline
+// avoid - one function doing validation, logging, application, and dispatch inline
 async function applyEdit(doc_path, changes) {
     // ...60+ lines mixing offset checks, audit logging, edit application, re-emit...
 }
 
-// prefer — the caller reads as named steps; each helper has a header comment
+// prefer - the caller reads as named steps; each helper has a header comment
 async function applyEdit(doc_path: string, changes: TextChange[]): Promise<void> {
     if (!isWithinWorkspace(doc_path)) { return; }
     const invalid = firstInvalidChange(changes, doc_length);
@@ -210,15 +210,14 @@ function complexProcess(data: Data) {
 
 ### Comments
 
-- **Always start comments with a lowercase letter** (unless the first word is a proper noun, type, or component name). This applies to the first sentence only — a multi-sentence comment starts lowercase, but every subsequent sentence follows normal capitalisation rules (first word capitalised unless there's a reason not to).
+See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style for the full rules: lowercase-first, one comment is exactly one line and never two `//` lines in a row, keep inline comments short (~100 chars), no back-reference comments, no project-management version numbers, and the TODO format (`// TODO: description`, `// TODO(#123): description`). The no-consecutive-line-comments rule is mechanically enforced in this repo by the local `local/no-consecutive-line-comments` ESLint rule.
+
+notethink-specific extras:
+
+- never use the em or en dash character anywhere in this repo - see workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Dashes
 - no period at end (unless multiple sentences)
-- place above the code, not inline
-- **One `//` comment is exactly one line — never two `//` lines in a row.** An inline comment explains, in a single line, the one thing that needs explaining at that spot; let the line run long rather than wrapping it. If you need more than one line — a wrapped thought, several stacked thoughts, an ASCII/structure illustration — it is too complex to be inline: lift it into the **header block comment** (`/** … */` or `/* … */`) above the function / type / declaration. This is deliberately the simple, lintable form: *no consecutive `//` lines.* (Section-divider comments inside a data structure are single `//` lines separated by fields, so they are never consecutive — see the exception below.)
-- **Keep inline comments short.** When an inline comment is unavoidable, aim for 100 characters unless there's a good reason to make it more verbose (e.g. a tricky invariant that needs precise wording, or a non-obvious cross-reference). If an explanation genuinely needs more than ~100 chars, lift it into the function header comment (the block comment immediately above the function) rather than cramming it inline — long comments interleaved with statements break up the function body and make it hard to read.
-- **No back-reference comments.** Never write inline comments that point readers at context elsewhere in the same file or function — `// see function header for the rationale`, `// see above`, `// see the JSDoc`, `// (see comment on line 42)`. The reader is already there; pointers add clutter without information and rot when the layout changes. When lifting a long inline comment to a function-header JSDoc, either delete the inline outright (the JSDoc + well-named identifiers usually suffice) or replace it with a *short* self-contained factual one-liner that stands on its own — never leave a stub that says "see header for rationale". Same anti-pattern as the rule against referencing the current task / fix / callers (`// used by X`, `// added for the Y flow`, `// handles the case from issue #123`) — pointers belong in the PR description, not inline.
-- **No project-management version numbers in comments.** Never write inline comments like `// added in 2.11.0`, `// fixed in 2.12.3`, `// from v2.10 release`, etc. Project-management versions belong in `package.json` and any place that actively uses them — never in comments that don't get re-rendered when the version changes. Stale version-tagged comments accumulate every release and force a search-and-purge pass on the next minor bump. The only acceptable place a version literal appears in code is a block that actively *uses* it.
-- **No per-field comments inside data structures.** See workspace `AGENTS.md` > Code conventions > No per-field comments inside data structures.
-  - **Exception — section dividers.** Short comments that group related fields by purpose (e.g. `// --- identity ---`, `// --- mdast passthrough ---`, `// --- tree links ---`, `// --- runtime decoration added at React render stage ---`) are explicitly permitted and load-bearing as visual structure in long interfaces. Don't strip these when sweeping a data structure for comment violations. Classify each inline comment: a per-single-field explanation gets removed (lift to the type's header comment if useful); a comment that introduces ≥2 conceptually-grouped fields with a single purpose stays. A comment grouping the *absence* of related fields (e.g. `// doc_path/doc_relative_path/doc_text intentionally undefined for the merged view` above three `undefined` assignments) still qualifies as a section divider.
+- **No per-field comments inside data structures.** See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > No per-field comments inside data structures.
+  - **Exception - section dividers.** Short comments that group related fields by purpose (e.g. `// --- identity ---`, `// --- mdast passthrough ---`, `// --- tree links ---`, `// --- runtime decoration added at React render stage ---`) are explicitly permitted and load-bearing as visual structure in long interfaces. Don't strip these when sweeping a data structure for comment violations. Classify each inline comment: a per-single-field explanation gets removed (lift to the type's header comment if useful); a comment that introduces ≥2 conceptually-grouped fields with a single purpose stays. A comment grouping the *absence* of related fields (e.g. `// doc_path/doc_relative_path/doc_text intentionally undefined for the merged view` above three `undefined` assignments) still qualifies as a section divider.
 
 ```typescript
 // correct
@@ -233,10 +232,6 @@ const result = processItems(items);
 const tax_amount = calculateTax(subtotal, region); // Calculate tax
 const result = processItems(items); // This handles edge cases
 ```
-
-### TODO Comments
-- **MUST**: Use format: `// TODO: description`
-- **SHOULD**: Include issue number: `// TODO(#123): description`
 
 ### Braces and Blocks
 
@@ -310,11 +305,11 @@ import { NoteComponent, type NoteProps } from '@/components';
 ### Loop Safety
 - **Avoid potentially infinite loops** (do-while, while without bounds)
 - Use bounded for-loops with a maximum iteration count instead
-- **Exception — `while` driven by a strictly-progressing finite iterator.** A `while` loop whose continuation is a finite iterator that cannot stall is acceptable without an explicit counter: `regexp.exec(str)` with a **non-zero-width** pattern (lastIndex advances each match), `TreeWalker.nextNode()` (walks a finite DOM and returns null at the end), and a stack/queue drain that only `pop()`s (strictly shrinks). These terminate by construction; a `MAX_ITERATIONS` guard would be defensive clutter. The rule targets loops that *could* run forever (unbounded conditions, zero-width regex matches) — those still need a bound.
+- **Exception - `while` driven by a strictly-progressing finite iterator.** A `while` loop whose continuation is a finite iterator that cannot stall is acceptable without an explicit counter: `regexp.exec(str)` with a **non-zero-width** pattern (lastIndex advances each match), `TreeWalker.nextNode()` (walks a finite DOM and returns null at the end), and a stack/queue drain that only `pop()`s (strictly shrinks). These terminate by construction; a `MAX_ITERATIONS` guard would be defensive clutter. The rule targets loops that *could* run forever (unbounded conditions, zero-width regex matches) - those still need a bound.
 
 ### Type Placement
 - **File-level type definitions** (`type Foo = ...`, `interface Bar {...}`) should be declared **near the head of the file**, below imports and above constants/functions
-- Do not declare types in the middle of a file, interleaved with function definitions — even a small helper type used by one function belongs at the top with the others, so the reader has a single place to find all type shapes
+- Do not declare types in the middle of a file, interleaved with function definitions - even a small helper type used by one function belongs at the top with the others, so the reader has a single place to find all type shapes
 - If a type is only used in one file and has no external consumers, keep it in that file rather than splitting into `types/`; if it outgrows the file (many variants, many consumers), lift it to `src/types/`
 - Discriminated-union result types (e.g. `type FetchResult = {kind: 'found'; ...} | {kind: 'not_found'}`) count as type definitions and must sit at the top too, not above the function that happens to return them
 
@@ -330,13 +325,13 @@ import { NoteComponent, type NoteProps } from '@/components';
 - `import Debug from "debug"` must be the **first import** in every file
 - `const debug = Debug("nodejs:...")` should appear after imports, before the component/function
 - **Never remove** the debug constant, even if ESLint reports it as unused
-- The debug namespace is `nodejs:<area>:<File>` where `<area>` is the bundle/package the file belongs to (`notethink` for the webview app, `notethink-views` for the component library) and `<File>` is the source basename — e.g. `Debug("nodejs:notethink-views:KanbanView")`. It is **area-based, not a literal directory path**.
+- The debug namespace is `nodejs:<area>:<File>` where `<area>` is the bundle/package the file belongs to (`notethink` for the webview app, `notethink-views` for the component library) and `<File>` is the source basename - e.g. `Debug("nodejs:notethink-views:KanbanView")`. It is **area-based, not a literal directory path**.
 
-**Scope — webview only.** This pattern (the npm `debug` library + `nodejs:` namespace) is the convention for the **webview / notethink-views** bundles. The **extension host** (`client/extension/**`) does not use it: extension code logs through `writeToLog` / `writeToErrorLog` (winston, in `lib/errorops.ts`). Extension files therefore do **not** carry an `import Debug from "debug"` placeholder — adding one would introduce an unused dependency that doesn't match the extension's logging stack. Pure type-definition modules (files containing only `interface` / `type` declarations, e.g. `types/NoteProps.ts`) are also exempt: they have no statements to instrument and a runtime import would defeat their erasability.
+**Scope - webview only.** This pattern (the npm `debug` library + `nodejs:` namespace) is the convention for the **webview / notethink-views** bundles. The **extension host** (`client/extension/**`) does not use it: extension code logs through `writeToLog` / `writeToErrorLog` (winston, in `lib/errorops.ts`). Extension files therefore do **not** carry an `import Debug from "debug"` placeholder - adding one would introduce an unused dependency that doesn't match the extension's logging stack. Pure type-definition modules (files containing only `interface` / `type` declarations, e.g. `types/NoteProps.ts`) are also exempt: they have no statements to instrument and a runtime import would defeat their erasability.
 
 ### Extension Points
-- **Keep single-case switch statements** that currently dispatch on only one value. The switch structure signals "this is an extension point — add new variants here alongside the existing case". Do not collapse to `if (x !== 'only-value') return null` — it hides the intent and forces the next contributor to re-derive the pattern.
-- **Keep helper functions whose body has become trivial** after a refactor rather than deleting them, when the call site still represents a meaningful extension point. Leave the call site intact and replace the body with an empty return plus an inline comment explaining what must NOT be added and why, and (optionally) how to extend.
+
+See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Extension points (keep single-case `switch`/`if` dispatches and trivial-bodied helpers that mark meaningful extension points, rather than collapsing or deleting them).
 
 ## React Patterns
 
@@ -419,15 +414,15 @@ interface Props {
 
 ### View interaction state: latest-click-wins with the editor as tiebreaker
 
-**Per-view UI interaction state has two layers, and the editor wins ties.** The view writes its own click/drag/hover state directly to `display_options` (or a peer slot in view-managed state) so a gesture lands immediately — no waiting for an editor-selection round-trip. But the editor-derived match (caret-in-note via the per-doc + source-position matcher) is the **source of truth** whenever it produces a result: almost all real editing happens in the editor, and the view is a real-time visualisation that should reflect editor activity instantly. The view-driven layer is the immediate-feedback bridge for the brief window between a view click and the editor's `selectionChanged` round-trip, and the fallback when the editor has no opinion (active editor on a doc that isn't in the aggregated set, or caret outside every matched note).
+**Per-view UI interaction state has two layers, and the editor wins ties.** The view writes its own click/drag/hover state directly to `display_options` (or a peer slot in view-managed state) so a gesture lands immediately - no waiting for an editor-selection round-trip. But the editor-derived match (caret-in-note via the per-doc + source-position matcher) is the **source of truth** whenever it produces a result: almost all real editing happens in the editor, and the view is a real-time visualisation that should reflect editor activity instantly. The view-driven layer is the immediate-feedback bridge for the brief window between a view click and the editor's `selectionChanged` round-trip, and the fallback when the editor has no opinion (active editor on a doc that isn't in the aggregated set, or caret outside every matched note).
 
 Two non-negotiable consequences for any view→editor gesture (click, keyboard nav, clear):
-- **Editor takes DOM focus.** `revealRange` / `selectRange` posted by the view must route through `vscode.window.showTextDocument(..., { preserveFocus: false })` so the editor — not the webview — receives subsequent key events. The webview never captures keystrokes the user expects to land in the editor.
-- **The view follows the editor, not the other way round.** If the editor moves to a different note (the user clicked in the editor, an external file edit moved the caret, anything), the view's focused/selected state updates to match on the next derivation — even if the user previously clicked a different note in the view.
+- **Editor takes DOM focus.** `revealRange` / `selectRange` posted by the view must route through `vscode.window.showTextDocument(..., { preserveFocus: false })` so the editor - not the webview - receives subsequent key events. The webview never captures keystrokes the user expects to land in the editor.
+- **The view follows the editor, not the other way round.** If the editor moves to a different note (the user clicked in the editor, an external file edit moved the caret, anything), the view's focused/selected state updates to match on the next derivation - even if the user previously clicked a different note in the view.
 
-Why this matters: the view aggregates from N source files (folder mode); the editor only ever has one active doc. Driving view-interaction state through the editor selection alone silently breaks the moment the rendered tree contains anything outside that single doc — the round-trip never confirms and the view never updates. Pinning view focus on the most-recent view click instead silently breaks the moment the user starts editing in the editor — the visualisation goes stale. The fix is structural: write view state directly from the user's gesture for immediate feedback, then let the editor-derived match override as soon as it has an answer. See `client/webview/src/notethink-views/src/components/views/generic/useViewHandlers.ts` (click dispatcher writes `view_focused_seqs` / `view_selected_seqs` directly via `setViewManagedState`) and `useViewContext.ts` (`resolveFocusedNote` prefers editor-derived; view-driven fills in when the editor has no opinion) for the canonical pattern.
+Why this matters: the view aggregates from N source files (folder mode); the editor only ever has one active doc. Driving view-interaction state through the editor selection alone silently breaks the moment the rendered tree contains anything outside that single doc - the round-trip never confirms and the view never updates. Pinning view focus on the most-recent view click instead silently breaks the moment the user starts editing in the editor - the visualisation goes stale. The fix is structural: write view state directly from the user's gesture for immediate feedback, then let the editor-derived match override as soon as it has an answer. See `client/webview/src/notethink-views/src/components/views/generic/useViewHandlers.ts` (click dispatcher writes `view_focused_seqs` / `view_selected_seqs` directly via `setViewManagedState`) and `useViewContext.ts` (`resolveFocusedNote` prefers editor-derived; view-driven fills in when the editor has no opinion) for the canonical pattern.
 
-The same principle applies in reverse for editor-driven decoration: when the editor caret should highlight a note, the matcher must work across however many docs the view is aggregating from. Don't write a matcher that assumes a single coherent coordinate space — use per-doc origin metadata (e.g. `origin.doc_path` + `origin.source_position`) so the unified algorithm works in both `current_file` (trivial: all notes share one doc) and `folder` (N-doc merge with synthetic offsets) modes without an `integration_mode` branch.
+The same principle applies in reverse for editor-driven decoration: when the editor caret should highlight a note, the matcher must work across however many docs the view is aggregating from. Don't write a matcher that assumes a single coherent coordinate space - use per-doc origin metadata (e.g. `origin.doc_path` + `origin.source_position`) so the unified algorithm works in both `current_file` (trivial: all notes share one doc) and `folder` (N-doc merge with synthetic offsets) modes without an `integration_mode` branch.
 
 ## File Organization
 
@@ -458,8 +453,8 @@ src/
 ### File Naming
 
 - Components: `PascalCase.tsx` (e.g., `DocumentView.tsx`)
-- **Domain lib files**: `<noun>ops.ts` — see [Library organisation](#library-organisation) below.
-- **Single-export utility modules**: `camelCase.ts` when the filename mirrors the primary exported function — `convertMdastToNoteHierarchy.ts`, `mergeAggregateRoot.ts`, `globMatch.ts`. This is the accepted alternative to the `*ops.ts` pattern when a file's only purpose is one named operation. Pick one style per module and keep it stable.
+- **Domain lib files**: `<noun>ops.ts` - see [Library organisation](#library-organisation) below.
+- **Single-export utility modules**: `camelCase.ts` when the filename mirrors the primary exported function - `convertMdastToNoteHierarchy.ts`, `mergeAggregateRoot.ts`, `globMatch.ts`. This is the accepted alternative to the `*ops.ts` pattern when a file's only purpose is one named operation. Pick one style per module and keep it stable.
 - **Component-local helper files**: keep them next to the component they serve (e.g. `components/views/kanban/kanbanDragEndPayload.ts`), not in `lib/`. The path itself signals "not a general op". Filename follows the single-export camelCase rule above.
 - Types: `PascalCase.ts` (e.g., `NoteProps.ts`)
 - Tests: `*.test.tsx` or `*.test.ts` next to source file
@@ -467,33 +462,33 @@ src/
 
 ### Library organisation
 
-Files under `lib/` group **pure utility functions by domain**, named `<noun>ops.ts` (single concatenated word, no hyphen, no separator). The convention is project-agnostic — apply it whenever you reach for a `lib/` file in any JS/TS project.
+Files under `lib/` group **pure utility functions by domain**, named `<noun>ops.ts` (single concatenated word, no hyphen, no separator). The convention is project-agnostic - apply it whenever you reach for a `lib/` file in any JS/TS project.
 
 **The pattern**:
 
-- `noteops.ts` — operations on `Note` shapes (traversal, position checks, classification, chain construction; also generic array helpers when their only consumers are note-adjacent)
-- `originops.ts` — operations on `Origin` / project metadata (label derivation, hue, identification, folder derivation)
-- `pathops.ts` — path string operations (segmentation, containment, workspace-root derivation)
-- `viewstateops.ts` — operations on view-managed state (canonical-key resolution, state-update builders, mode detection)
-- `docops.ts` — operations on `Doc` shapes (picking, merging, abbreviating)
-- `editops.ts` — operations on text edits (change validation, audit logging)
-- `cryptoops.ts` — hashing, nonces, identifiers
-- `vscodeops.ts` — VS Code API wrappers + persisted state shape (project-specific example)
+- `noteops.ts` - operations on `Note` shapes (traversal, position checks, classification, chain construction; also generic array helpers when their only consumers are note-adjacent)
+- `originops.ts` - operations on `Origin` / project metadata (label derivation, hue, identification, folder derivation)
+- `pathops.ts` - path string operations (segmentation, containment, workspace-root derivation)
+- `viewstateops.ts` - operations on view-managed state (canonical-key resolution, state-update builders, mode detection)
+- `docops.ts` - operations on `Doc` shapes (picking, merging, abbreviating)
+- `editops.ts` - operations on text edits (change validation, audit logging)
+- `cryptoops.ts` - hashing, nonces, identifiers
+- `vscodeops.ts` - VS Code API wrappers + persisted state shape (project-specific example)
 
 **The rules**:
 
 1. **Group by the noun the operations act on, not by where the code is called from.** A function that walks notes goes in `noteops.ts` regardless of which component imports it. A function that builds a view-state payload goes in `viewstateops.ts` even if only one site calls it today.
 2. **Pure functions only.** No React hooks, no JSX, no `useState`/`useEffect`/`useRef`. Closures over component state belong in the component or a custom hook.
 3. **Prefer extending an existing `*ops.ts` over creating a new one.** A new helper that operates on `Note` extends `noteops.ts`; create `notetreeops.ts` only when the existing file's domain genuinely splits.
-4. **Aim for ≥ 4 exports per `*ops.ts` file. Rationalise periodically.** A standalone file with one or two exports is usually over-engineered — fold it into a closely-related `*ops.ts` that shares the same noun cluster or consumes/produces the same type. Worked examples from this codebase: a generic `arraysEqual<T>` helper folded into `noteops.ts` because its two consumers were both note-adjacent (with a docstring noting it would lift back out if a non-note caller appeared); a `stateops.ts` holding `VSCodeState` + `migrateSavedState` folded into `vscodeops.ts` because the wrappers there produce and consume the type. **When you finish a refactor that leaves any `*ops.ts` with fewer than 4 exports, do the merge pass in the same session** — small files accumulate fast and the rationalisation cost grows with every new contributor who imports them. The target is guidance, not a hard floor: a 1-export file with a genuinely distinct noun and plausible future growth (e.g. `docops.ts` holding only `pickMostRecentlySentDoc`) can stay if you can name the second function that's coming.
-5. **One domain per file.** A "junk drawer" `utils.ts` is the anti-pattern this convention exists to prevent — when you find one, split it by the noun each export operates on (`crypto.ts` + `getNonce` from `utils.ts` → one `cryptoops.ts`; `abbrevDoc` from `utils.ts` → `docops.ts`).
+4. **Aim for ≥ 4 exports per `*ops.ts` file. Rationalise periodically.** A standalone file with one or two exports is usually over-engineered - fold it into a closely-related `*ops.ts` that shares the same noun cluster or consumes/produces the same type. Worked examples from this codebase: a generic `arraysEqual<T>` helper folded into `noteops.ts` because its two consumers were both note-adjacent (with a docstring noting it would lift back out if a non-note caller appeared); a `stateops.ts` holding `VSCodeState` + `migrateSavedState` folded into `vscodeops.ts` because the wrappers there produce and consume the type. **When you finish a refactor that leaves any `*ops.ts` with fewer than 4 exports, do the merge pass in the same session** - small files accumulate fast and the rationalisation cost grows with every new contributor who imports them. The target is guidance, not a hard floor: a 1-export file with a genuinely distinct noun and plausible future growth (e.g. `docops.ts` holding only `pickMostRecentlySentDoc`) can stay if you can name the second function that's coming.
+5. **One domain per file.** A "junk drawer" `utils.ts` is the anti-pattern this convention exists to prevent - when you find one, split it by the noun each export operates on (`crypto.ts` + `getNonce` from `utils.ts` → one `cryptoops.ts`; `abbrevDoc` from `utils.ts` → `docops.ts`).
 6. **Mirrored constants across bundle boundaries are the documented exception.** If two bundles (e.g. extension host + webview) cannot share a module graph, a small set of constants may be byte-identical-duplicated in two `constants.ts` files. Don't `*ops.ts`-ify either side; the duplication is the wire contract. See [Avoid Duplication](#avoid-duplication) below.
 7. **Component-local helpers stay under `components/`**, not under `lib/`. If a pure helper is genuinely only ever used by one component family and lifting to `lib/` would imply general reusability that doesn't exist, leave it co-located with the component. The path is the signal.
 8. **Tests colocated** next to the lib file (`noteops.test.ts` next to `noteops.ts`).
 
-**Why this matters**: file-name-as-domain-label makes it obvious where to look for a function and where to add a new one. The alternative — `utils.ts` / `helpers.ts` / scattered `parse-X.ts` / mixed-purpose modules — defeats grepability and leads to duplication (two files independently growing helpers for the same noun because neither author found the other). `<noun>ops.ts` is the cheap convention that prevents both. The ≥ 4-exports target keeps the opposite failure mode — proliferation of tiny single-helper files — in check.
+**Why this matters**: file-name-as-domain-label makes it obvious where to look for a function and where to add a new one. The alternative - `utils.ts` / `helpers.ts` / scattered `parse-X.ts` / mixed-purpose modules - defeats grepability and leads to duplication (two files independently growing helpers for the same noun because neither author found the other). `<noun>ops.ts` is the cheap convention that prevents both. The ≥ 4-exports target keeps the opposite failure mode - proliferation of tiny single-helper files - in check.
 
-**When to keep a non-`*ops.ts` name**: a single-function file whose name reads as a sentence (`convertMdastToNoteHierarchy.ts`, `mergeAggregateRoot.ts`, `globMatch.ts`) — the filename mirrors the primary export and lifting to a `*ops.ts` would muddle the "one file = one named operation" signal. These are explicitly permitted and the ≥ 4-exports target does **not** apply to them; do not rename them.
+**When to keep a non-`*ops.ts` name**: a single-function file whose name reads as a sentence (`convertMdastToNoteHierarchy.ts`, `mergeAggregateRoot.ts`, `globMatch.ts`) - the filename mirrors the primary export and lifting to a `*ops.ts` would muddle the "one file = one named operation" signal. These are explicitly permitted and the ≥ 4-exports target does **not** apply to them; do not rename them.
 
 ## Code Quality
 
@@ -501,7 +496,7 @@ Files under `lib/` group **pure utility functions by domain**, named `<noun>ops.
 - Extract repeated code into shared utility functions
 - Use shared constants instead of hardcoding values
 - Create shared components for repeated UI patterns
-- **Exception — mirrored constants across the extension/webview bundle boundary.** A small set of folder-view defaults (include/exclude globs, default column order, max-notes-per-file) is intentionally duplicated in `client/extension/src/constants.ts` and `client/webview/src/constants.ts`. The two run as **separate webpack bundles with no shared module graph**, so there is no import path to a single source; the duplication is the wire contract (both sides must agree on the same defaults). Keep the two copies byte-identical and cross-reference them in a comment rather than trying to share a module.
+- **Exception - mirrored constants across the extension/webview bundle boundary.** A small set of folder-view defaults (include/exclude globs, default column order, max-notes-per-file) is intentionally duplicated in `client/extension/src/constants.ts` and `client/webview/src/constants.ts`. The two run as **separate webpack bundles with no shared module graph**, so there is no import path to a single source; the duplication is the wire contract (both sides must agree on the same defaults). Keep the two copies byte-identical and cross-reference them in a comment rather than trying to share a module.
 
 ### Remove Unused Code
 - Remove unused imports
@@ -512,7 +507,7 @@ Files under `lib/` group **pure utility functions by domain**, named `<noun>ops.
 
 ### Use Error Utilities
 
-**Extension host** logs through `writeToLog` / `writeToErrorLog` (winston, `client/extension/src/lib/errorops.ts`). **Webview** has no winston/output-channel access, so it logs through the `debug` library instance (`const debug = Debug("nodejs:...")`) and, for render failures that should reach the host, posts a `renderError` message to the extension. Either way, **`console.*` is not the error utility** — see "No `console.log` in committed code" in the workspace `AGENTS.md`. A caught error that is intentionally non-fatal must still be logged (`debug('… %O', err)` in the webview, `writeToErrorLog(...)` in the extension), never silently swallowed.
+**Extension host** logs through `writeToLog` / `writeToErrorLog` (winston, `client/extension/src/lib/errorops.ts`). **Webview** has no winston/output-channel access, so it logs through the `debug` library instance (`const debug = Debug("nodejs:...")`) and, for render failures that should reach the host, posts a `renderError` message to the extension. Either way, **`console.*` is not the error utility** - see "No `console.log` in committed code" in the workspace `AGENTS.md`. A caught error that is intentionally non-fatal must still be logged (`debug('… %O', err)` in the webview, `writeToErrorLog(...)` in the extension), never silently swallowed.
 
 ```typescript
 import { createError, handleError } from '@/lib/errorops';
@@ -526,7 +521,7 @@ try {
 
 ### Reading VS Code logs
 
-**The primary, CLI-friendly log is `notethink-extension.log`, written to the extension's standard VS Code log directory** — `vscode.ExtensionContext.logUri`, the canonical per-extension log location. **Never** the user's open workspace folder (a shipped extension must not litter the user's project with log files). Every `writeToLog` / `writeToErrorLog` call (and `logEditTextChanges`) is mirrored there by the file logger in `errorops.ts` (`initLogDir(context.logUri)` in `activate()`).
+**The primary, CLI-friendly log is `notethink-extension.log`, written to the extension's standard VS Code log directory** - `vscode.ExtensionContext.logUri`, the canonical per-extension log location. **Never** the user's open workspace folder (a shipped extension must not litter the user's project with log files). Every `writeToLog` / `writeToErrorLog` call (and `logEditTextChanges`) is mirrored there by the file logger in `errorops.ts` (`initLogDir(context.logUri)` in `activate()`).
 
 `logUri` resolves under the rotating per-session logs dir. NoteThink is a **web-worker** extension (publisher `NoteThink.notethink`), so on Linux it is:
 
@@ -543,24 +538,24 @@ echo "$LOG"; tail -f "$LOG"
 grep -E "editText|caret-probe" "$LOG"
 ```
 
-- **Dev-only, off by default.** Gated by the `NOTETHINK_DEV` webpack define, which is `process.env.SELFINSPECT_ENV === 'dev'` (the workspace-standard env marker — never `NODE_ENV`). The `build` / `watch` scripts export `SELFINSPECT_ENV=dev` to opt in; every other build (the marketplace `package` build, and any hosted/web build) leaves it unset, so the file logger is stripped (`if (true) { return; }` → dead-code-eliminated). Off-by-default is deliberate: a shipped extension must never silently fill a user's disk with logs. The Output-panel channel below still works in production.
+- **Dev-only, off by default.** Gated by the `NOTETHINK_DEV` webpack define, which is `process.env.SELFINSPECT_ENV === 'dev'` (the workspace-standard env marker - never `NODE_ENV`). The `build` / `watch` scripts export `SELFINSPECT_ENV=dev` to opt in; every other build (the marketplace `package` build, and any hosted/web build) leaves it unset, so the file logger is stripped (`if (true) { return; }` → dead-code-eliminated). Off-by-default is deliberate: a shipped extension must never silently fill a user's disk with logs. The Output-panel channel below still works in production.
 - **Rolling buffer.** Last 500 lines, flushed ~1s after a write, written wholesale (overwritten each flush, not appended).
-- If missing/empty: production build (no `NOTETHINK_DEV`), the window wasn't reloaded after a rebuild (so `activate`/`initLogDir` didn't re-run), or nothing has logged yet. A **new session dir is created each time VS Code starts**, so always re-resolve the latest with the `ls -t` one-liner — don't cache the path.
-- **Spurious in-repo copies.** `**/notethink-extension.log` is gitignored ("ignore spurious logs"). The `logUri` path above is the *only* authoritative runtime log — if you find a `notethink-extension.log` in the repo root or a parent dir, it's stale leftover litter, not the live log; don't read it, delete it.
-- **Desktop-only path.** The file logger writes via `vscode.workspace.fs.writeFile(logUri, …)`, so the tailable on-disk `notethink-extension.log` exists only in **desktop** VS Code. In a **web host** (any vscode-web build serving the extension) `workspace.fs` writes to browser/virtual storage with no terminal-readable file — there, read runtime/webview logs from the **browser devtools console** instead.
+- If missing/empty: production build (no `NOTETHINK_DEV`), the window wasn't reloaded after a rebuild (so `activate`/`initLogDir` didn't re-run), or nothing has logged yet. A **new session dir is created each time VS Code starts**, so always re-resolve the latest with the `ls -t` one-liner - don't cache the path.
+- **Spurious in-repo copies.** `**/notethink-extension.log` is gitignored ("ignore spurious logs"). The `logUri` path above is the *only* authoritative runtime log - if you find a `notethink-extension.log` in the repo root or a parent dir, it's stale leftover litter, not the live log; don't read it, delete it.
+- **Desktop-only path.** The file logger writes via `vscode.workspace.fs.writeFile(logUri, …)`, so the tailable on-disk `notethink-extension.log` exists only in **desktop** VS Code. In a **web host** (any vscode-web build serving the extension) `workspace.fs` writes to browser/virtual storage with no terminal-readable file - there, read runtime/webview logs from the **browser devtools console** instead.
 
-**Two log streams, two homes — don't conflate them.** The `notethink-extension.log` above is the **runtime / behaviour** log (what the running extension did). It is distinct from the **build / watch** log (webpack compile output: did the bundle compile, with what errors):
+**Two log streams, two homes - don't conflate them.** The `notethink-extension.log` above is the **runtime / behaviour** log (what the running extension did). It is distinct from the **build / watch** log (webpack compile output: did the bundle compile, with what errors):
 
 | Stream | Home | How to read |
 |--------|------|-------------|
 | Runtime / behaviour | `logUri` (the `…/NoteThink.notethink/notethink-extension.log` above) | `ls -t` one-liner, `dangerouslyDisableSandbox` |
 | Build / watch (webpack) | **`test-results/dev.log`** in the repo (gitignored) | `tail -f test-results/dev.log` |
 
-`test-results/dev.log` is where `/open-dev` redirects the `pnpm run watch` (`webpack --watch`) output, matching the cross-project `test-results/dev.log` convention. Use it to confirm a clean compile after edits; use the `logUri` log for runtime behaviour. Never route build output to `/tmp` — it's ephemeral and breaks the "one documented place per stream" narrative.
+`test-results/dev.log` is where `/open-dev` redirects the `pnpm run watch` (`webpack --watch`) output, matching the cross-project `test-results/dev.log` convention. Use it to confirm a clean compile after edits; use the `logUri` log for runtime behaviour. Never route build output to `/tmp` - it's ephemeral and breaks the "one documented place per stream" narrative.
 
-**Interactive alternative — the Output panel.** `writeToLog` also feeds the "NoteThink" `LogOutputChannel` (winston via `LogOutputChannelTransport`), visible under *View → Output → NoteThink*. VS Code persists that channel to `NoteThink.log` in the **same** `logUri` directory as above (subject to the channel's selected log level, so it is sometimes empty — prefer `notethink-extension.log` for CLI reads).
+**Interactive alternative - the Output panel.** `writeToLog` also feeds the "NoteThink" `LogOutputChannel` (winston via `LogOutputChannelTransport`), visible under *View → Output → NoteThink*. VS Code persists that channel to `NoteThink.log` in the **same** `logUri` directory as above (subject to the channel's selected log level, so it is sometimes empty - prefer `notethink-extension.log` for CLI reads).
 
-The `debug` library (webview only — `const debug = Debug("nodejs:...")`) is **not** captured to any file. Enable it via `localStorage.debug = 'nodejs:*'` in the webview Developer Tools console. Webview `console.error()` / `console.warn()` is also not file-captured — only visible in "Developer: Open Webview Developer Tools".
+The `debug` library (webview only - `const debug = Debug("nodejs:...")`) is **not** captured to any file. Enable it via `localStorage.debug = 'nodejs:*'` in the webview Developer Tools console. Webview `console.error()` / `console.warn()` is also not file-captured - only visible in "Developer: Open Webview Developer Tools".
 
 ### Avoid Silent Failures
 
@@ -598,7 +593,7 @@ components/
 └── DocumentView.module.scss
 ```
 
-**Exception — VS Code extension-host Mocha suite.** Tests that exercise the live VS Code API (`client/extension/src/test/suite/**`) run under the `@vscode/test-electron` Mocha runner, not Jest, and are deliberately kept in that central suite rather than colocated. The runner discovers them by directory, and they need the real extension-host environment a colocated Jest test can't provide. Colocate everything else (pure logic, webview components) next to source as above.
+**Exception - VS Code extension-host Mocha suite.** Tests that exercise the live VS Code API (`client/extension/src/test/suite/**`) run under the `@vscode/test-electron` Mocha runner, not Jest, and are deliberately kept in that central suite rather than colocated. The runner discovers them by directory, and they need the real extension-host environment a colocated Jest test can't provide. Colocate everything else (pure logic, webview components) next to source as above.
 
 ### Test Naming
 
@@ -637,28 +632,23 @@ describe('DocumentView', () => {
 });
 ```
 
-### E2E Test Scope — no reloads as workarounds
-- **Do not insert `page.goto()`, `page.reload()`, or any full-page refresh mid-flow** in a Playwright test as a way to make the assertion pass. The test name usually implies the UI updates reactively in response to a server action — a reload fetches fresh server state and papers over missing client-side state sync.
-- Reloads are legitimate only when the test is explicitly about refresh-resilience (e.g. "session persists after reload"). Make that intent clear in the test title and add a comment explaining why the reload is part of the flow.
-- If a test fails because the UI doesn't update after an action, the bug is in the UI, not the test. Fix the UI (server action returns the entity, client merges into state).
+### E2E Test Scope - no reloads as workarounds
 
-### Disabling a spec indefinitely — comment it out, don't `test.skip`
-- **`test.skip(...)` is for runtime-conditional skips** (e.g. `test.skip(!baseURL?.includes('localhost'), 'requires dev-only hook')` — the spec self-skips in prod but still runs in dev). Reported by Playwright as "1 skipped" every run, which is fine because the gating condition explains it.
-- **For an indefinite disable** (spec depends on a feature that's been commented out, a UI that hasn't shipped, an external dep that's down), **comment out the entire spec file contents** — not `test.skip`. Reasons:
-  - `test.skip` produces persistent "N skipped" noise in every `/prod-ready` summary, which masks genuinely unintentional skips from other reasons.
-  - A commented-out file is visibly unloaded — `git grep test.skip` still finds it and the reader sees exactly what's dormant and why.
-- **Required structure for a commented-out spec**: leading comment line stating the disable reason and the re-enable trigger, then the entire file body commented out (`//` per line or a single `/* … */` block), and a trailing `export {};` so the file still parses as a TypeScript module. When the feature re-lands, uncomment in one sweep.
-- Same principle applies to a single `test(...)` within a larger `test.describe`: comment it out inline rather than `test.skip(...)` it.
+See workspace [`../AGENTS.md`](../AGENTS.md) > Testing conventions > No page reloads as test workarounds. (Reloads are legitimate only for an explicit refresh-resilience test; if the UI doesn't update after an action, the bug is in the UI, not the test.)
+
+### Disabling a spec indefinitely - comment it out, don't `test.skip`
+
+See workspace [`../AGENTS.md`](../AGENTS.md) > Testing conventions > Disable a spec by commenting it out, not `test.skip`. (`test.skip` is for runtime-conditional skips; an indefinite disable comments out the whole file body with a leading reason/re-enable comment and a trailing `export {};`. Same applies to a single `test(...)` inside a larger `test.describe`.)
 
 ## Working Style
 
 ### Present, don't force a decision
 
-When the user asks to "have a look", "let me see them", "just present them", or "show me the options", **present the artifacts/options with a brief honest assessment and stop**. Do not follow up with an `AskUserQuestion` (or any other prompt) that forces an immediate choice. The user wants to evaluate on their own time and will volunteer the choice. Reserve `AskUserQuestion` for genuinely blocking ambiguity — not "which do you prefer?" when the user has explicitly asked to look first.
+When the user asks to "have a look", "let me see them", "just present them", or "show me the options", **present the artifacts/options with a brief honest assessment and stop**. Do not follow up with an `AskUserQuestion` (or any other prompt) that forces an immediate choice. The user wants to evaluate on their own time and will volunteer the choice. Reserve `AskUserQuestion` for genuinely blocking ambiguity - not "which do you prefer?" when the user has explicitly asked to look first.
 
 ### No speculative specs in todo.md
 
-When working through a story's planned phases, **do not invent new feature specs, phases, or tasks beyond what was originally scoped**. Phases and tasks come from the user, not extrapolated by Claude. Speculative additions clutter the backlog and waste time on work the user didn't ask for. If a follow-up genuinely seems worth doing, mention it in the wrap-up so the user can choose to add it — do not write it into `todo.md` unilaterally.
+When working through a story's planned phases, **do not invent new feature specs, phases, or tasks beyond what was originally scoped**. Phases and tasks come from the user, not extrapolated by Claude. Speculative additions clutter the backlog and waste time on work the user didn't ask for. If a follow-up genuinely seems worth doing, mention it in the wrap-up so the user can choose to add it - do not write it into `todo.md` unilaterally.
 
 ---
 
@@ -679,7 +669,7 @@ This runs, in order:
 CI only runs lint and build (no tests). Tests are the developer's responsibility before push.
 
 ### No web dev server
-notethink is a VS Code extension — there is no `pnpm run dev` and no HTTP server to start. The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host. Per the `/open-dev` skill's special cases, this project is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`).
+notethink is a VS Code extension - there is no `pnpm run dev` and no HTTP server to start. The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host. Per the `/open-dev` skill's special cases, this project is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`).
 
 The "no HTTP server" rule is about a long-running **dev** server. The Playwright **test** harness (`playwright.config.ts` auto-starts `playwright/harness/serve.mjs` on port 9123 for the run, then tears it down) is throwaway test infrastructure, not a dev server, and is exempt.
 
@@ -687,15 +677,15 @@ The "no HTTP server" rule is about a long-running **dev** server. The Playwright
 
 Always rebuild the extension after each code change so the developer can preview it in the VS Code dev host. Run `pnpm run build` (or `pnpm run check` which includes the build) before considering a change complete.
 
-**For webview/React changes specifically**, a source edit alone does NOT change what VS Code shows — the extension serves the prebuilt `client/webview/dist/index.js`. After editing anything under `client/webview/src/`:
+**For webview/React changes specifically**, a source edit alone does NOT change what VS Code shows - the extension serves the prebuilt `client/webview/dist/index.js`. After editing anything under `client/webview/src/`:
 
-1. **Identify the live code path first** when the component has multiple branches. Example: `BreadcrumbTrail.tsx` has two independent code paths — a single-file `splitPathSegments` branch (used when the toolbar shows "Current file") and a directory-aggregate `integration_path` branch. Determine which one is live from the current screenshot/state before editing, otherwise you'll edit the wrong branch and the visible behaviour will not change.
+1. **Identify the live code path first** when the component has multiple branches. Example: `BreadcrumbTrail.tsx` has two independent code paths - a single-file `splitPathSegments` branch (used when the toolbar shows "Current file") and a directory-aggregate `integration_path` branch. Determine which one is live from the current screenshot/state before editing, otherwise you'll edit the wrong branch and the visible behaviour will not change.
 2. Run `pnpm run build` (webpack compiles `notethink-views` from `src/`). `build-and-rollup` also refreshes `notethink-views/dist/esm`.
 3. **Confirm the edit landed in the bundle**: `grep client/webview/dist/index.js` for a token from your edit.
 4. The user must **reload the VS Code window** for an already-open webview to pick up the new bundle.
-5. Never report a UI change as done from a source edit alone — verify the bundle and ask the user to reload.
+5. Never report a UI change as done from a source edit alone - verify the bundle and ask the user to reload.
 
-**Webview bundle caching (dev):** webview resources are cached by URL. Historically a rebuilt `index.js` could be served **stale** across reloads (the bundle URL never changed), so a webview fix appeared not to take effect. `getHtmlForWebview` now appends a per-load `?v=<timestamp>` cache-buster **when `NOTETHINK_DEV`**, so a dev reload always fetches the fresh bundle (production keeps the cacheable URL). If a webview change still seems not to apply, confirm the running build via the file log and that the window was actually reloaded — don't assume the bundle is fresh.
+**Webview bundle caching (dev):** webview resources are cached by URL. Historically a rebuilt `index.js` could be served **stale** across reloads (the bundle URL never changed), so a webview fix appeared not to take effect. `getHtmlForWebview` now appends a per-load `?v=<timestamp>` cache-buster **when `NOTETHINK_DEV`**, so a dev reload always fetches the fresh bundle (production keeps the cacheable URL). If a webview change still seems not to apply, confirm the running build via the file log and that the window was actually reloaded - don't assume the bundle is fresh.
 
 ### Individual commands
 

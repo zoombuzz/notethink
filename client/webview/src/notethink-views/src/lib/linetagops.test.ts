@@ -146,7 +146,7 @@ describe('calculateTextChangesForNewLinetagValue', () => {
         expect(changes[0].insert).toContain('priority=high');
     });
 
-    // regression: reordering a kanban card whose status is inherited from a parent's nt_child_status= attribute used to insert nt_kanban_ordering_weight= at document offset 0 (inherited tags carry key_offset 0 and the note has no linetags_from), corrupting the parent heading and wiping the inherited status off every sibling — the whole column vanished
+    // regression: reordering a kanban card whose status is inherited from a parent's nt_child_status= attribute used to insert nt_kanban_ordering_weight= at document offset 0 (inherited tags carry key_offset 0 and the note has no linetags_from), corrupting the parent heading and wiping the inherited status off every sibling - the whole column vanished
     it('appends a fresh linetag block instead of writing to offset 0 when the only linetag is inherited', () => {
         const note = makeNote({
             linetags: {
@@ -163,7 +163,7 @@ describe('calculateTextChangesForNewLinetagValue', () => {
         });
         const changes = calculateTextChangesForNewLinetagValue(note, 'nt_kanban_ordering_weight', '1', '0');
         expect(changes).toHaveLength(1);
-        // must NOT land at offset 0 — append at the end of the headline instead
+        // must NOT land at offset 0 - append at the end of the headline instead
         expect(changes[0].from).toBe(9); // note.position.start.offset + headline_raw.length
         expect(changes[0].insert).toBe(' [](?nt_kanban_ordering_weight=1)');
     });
@@ -427,7 +427,7 @@ describe('calculateTextChangesForOrdering', () => {
         const changes = flattenOrderingChangeSets(calculateTextChangesForOrdering(column, to_index, 'nt_kanban_ordering_weight'));
         /*
          * a brand-new linetag is inserted at note.position.start.offset + headline_raw.length, so map each change back to its note by that offset
-         * notes the algorithm assigned weight 0 (the default) get no change and stay unweighted — kanbanNoteOrder ranks them ahead of weighted cards, which is intended
+         * notes the algorithm assigned weight 0 (the default) get no change and stay unweighted - kanbanNoteOrder ranks them ahead of weighted cards, which is intended
          */
         const weight_by_offset = new Map<number, number>();
         for (const c of changes) {
@@ -500,13 +500,13 @@ describe('calculateTextChangesForOrdering', () => {
         expect(flat.some(c => c.insert === '')).toBe(true);
         // successor is minimised down to 1 (value update), NOT cascaded up to 6
         expect(flat.some(c => c.insert === '1')).toBe(true);
-        // new_child stays unweighted — no fresh weight tag is inserted for it
+        // new_child stays unweighted - no fresh weight tag is inserted for it
         expect(flat.some(c => c.insert.includes('nt_kanban_ordering_weight='))).toBe(false);
     });
 
     /*
      * the acceptance test for "weights are minimal": drag a card out of its implicit slot
-     * (which mints weights), then drag it back — the column returns to implicit order and EVERY
+     * (which mints weights), then drag it back - the column returns to implicit order and EVERY
      * nt_kanban_ordering_weight is stripped, leaving the file weight-free.
      */
     it('drag a card out of place then back to implicit order strips every weight', () => {
@@ -516,7 +516,7 @@ describe('calculateTextChangesForOrdering', () => {
          */
         const desired = [weighted(10, 1), weighted(20, 2), weighted(30, 3), makeNote(40)];
         const flat = flattenOrderingChangeSets(calculateTextChangesForOrdering(desired, 3, 'nt_kanban_ordering_weight'));
-        // three weights to strip, and every emitted change is a removal — none re-applies a weight
+        // three weights to strip, and every emitted change is a removal - none re-applies a weight
         expect(flat.length).toBeGreaterThan(0);
         expect(flat.every(c => c.insert === '')).toBe(true);
     });
@@ -561,7 +561,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
         const a_succ = weighted(makeNoteWithOrigin(3, 'a.md'), 20);
         const column = [a_pred, new_child, a_succ];
         const result = calculateTextChangesForOrdering(column, 1, 'nt_kanban_ordering_weight');
-        // exactly one bucket — only b.md got an edit
+        // exactly one bucket - only b.md got an edit
         expect(result).toHaveLength(1);
         expect(result[0].doc_path).toBe('b.md');
         // new_child weight is 15 (midpoint between 10 and 20)
@@ -593,14 +593,14 @@ describe('calculateTextChangesForOrdering cross-file', () => {
         const b2 = weighted(makeNoteWithOrigin(4, 'b.md'), 3);
         const column = [b1, new_child, a_mid, b2];
         const result = calculateTextChangesForOrdering(column, 1, 'nt_kanban_ordering_weight');
-        // every emitted bucket is b.md — a.md never receives a rewrite
+        // every emitted bucket is b.md - a.md never receives a rewrite
         for (const set of result) {
             expect(set.doc_path).toBe('b.md');
         }
     });
 
     it('weighted predecessor + unweighted successor cascades (successor blocks unweighted)', () => {
-        // an unweighted successor would sort before a weighted new_child, so a gap insert would invert the order — the cascade runs and stays bounded to b.md
+        // an unweighted successor would sort before a weighted new_child, so a gap insert would invert the order - the cascade runs and stays bounded to b.md
         const a_pred = weighted(makeNoteWithOrigin(1, 'a.md'), 5);
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const a_succ = makeNoteWithOrigin(3, 'a.md');
@@ -614,7 +614,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
     it('mints no weight for a top drop into an all-unweighted column (status change alone places it)', () => {
         /*
          * the reported bug: dragging a file into the top of a column whose cards are all
-         * unweighted must NOT weight the dragged card — a weight would sort it AFTER the
+         * unweighted must NOT weight the dragged card - a weight would sort it AFTER the
          * unweighted successors (kanbanNoteOrder case 2) and sink it to the bottom. Implicit
          * mtime order floats the just-saved file up, so the correct ordering edit set is empty.
          */
@@ -638,7 +638,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
 
     it('still weights a top drop above a weighted successor (genuinely expressive)', () => {
         /*
-         * successor carries a weight, so a gap insert below it is meaningful — the guard must
+         * successor carries a weight, so a gap insert below it is meaningful - the guard must
          * not suppress this. new_child should receive a weight strictly below the successor's.
          */
         const new_child = makeNoteWithOrigin(1, 'b.md');

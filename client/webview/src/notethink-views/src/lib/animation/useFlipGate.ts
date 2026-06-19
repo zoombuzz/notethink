@@ -10,7 +10,7 @@ const debug = Debug("nodejs:notethink-views:useFlipGate");
  * echo reconciling it) rather than a passive external edit, so the move is never re-animated.
  *
  * This hook creates the gate once and HOLDS it open for the entire optimistic-projection lifetime
- * (`is_projecting`), releasing only when the projection clears — `release()` starts a short tail that
+ * (`is_projecting`), releasing only when the projection clears - `release()` starts a short tail that
  * also covers the reconcile-commit render (which clears the projection in the same tick). The
  * projection round-trip is unbounded, so a fixed timer cannot cover it; the hold can. The caller drives
  * the drag edges itself via the returned gate (`hold()` on drag-start, `release()` on drag-end); the

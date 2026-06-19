@@ -44,7 +44,7 @@ describe('usePendingWork', () => {
         act(() => { result.current.markPending('a'); });
         act(() => { jest.advanceTimersByTime(150); });
         expect(result.current.pending).toBe(true);
-        // clear immediately — min-visibility (250 ms) keeps it shown
+        // clear immediately - min-visibility (250 ms) keeps it shown
         act(() => { result.current.clearPending('a'); });
         expect(result.current.pending).toBe(true);
         act(() => { jest.advanceTimersByTime(249); });
@@ -60,7 +60,7 @@ describe('usePendingWork', () => {
         act(() => { jest.advanceTimersByTime(150); });
         expect(result.current.pending).toBe(true);
         act(() => { result.current.clearPending('a'); });
-        // 'b' still outstanding — stays pending=true even past min-visibility
+        // 'b' still outstanding - stays pending=true even past min-visibility
         act(() => { jest.advanceTimersByTime(500); });
         expect(result.current.pending).toBe(true);
         act(() => { result.current.clearPending('b'); });

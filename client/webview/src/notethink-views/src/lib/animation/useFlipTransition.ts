@@ -31,10 +31,10 @@ export interface FlipClassNames {
 /**
  * UseFlipTransitionOptions: the fixed hook contract.
  * - container_ref: the kanban content `<div>` to measure within (querySelectorAll scope)
- * - flip_ids: every card stable_id in render order (top-to-bottom, column-by-column) — the FLIP registry keys
+ * - flip_ids: every card stable_id in render order (top-to-bottom, column-by-column) - the FLIP registry keys
  * - column_ids: visible column values in render order
  * - enabled: display_options.settings.kanbanAnimateTransitions
- * - gate: the shared PassiveUpdateGate — when hot (a drag just completed), the hook commits baseline without animating
+ * - gate: the shared PassiveUpdateGate - when hot (a drag just completed), the hook commits baseline without animating
  * - class_names: the CSS-module class strings to toggle
  */
 export interface UseFlipTransitionOptions {
@@ -88,7 +88,7 @@ function measureColumns(container: HTMLElement): Map<string, HTMLElement> {
     return result;
 }
 
-/** the column values present now but absent in the previous render — the ones to slide in */
+/** the column values present now but absent in the previous render - the ones to slide in */
 function enteringColumns(next: Set<string>, prev: Set<string>): Set<string> {
     const result = new Set<string>();
     next.forEach((value) => { if (!prev.has(value)) { result.add(value); } });
@@ -182,14 +182,14 @@ function armGlobalCap(container: HTMLElement, cap_timer: React.MutableRefObject<
  * useFlipTransition: the FLIP (First-Last-Invert-Play) layer for kanban passive transitions.
  *
  * THE SEAM. A PASSIVE update (external file edit / AI edit / mtime re-parse) mutates the notes with
- * no active projection, so the board re-renders straight into the new layout — this hook measures the
+ * no active projection, so the board re-renders straight into the new layout - this hook measures the
  * before/after rects (cards keyed by the invariant stable_id via `data-flip-id`) and animates the
  * difference. A USER drag instead goes through the optimistic projection in useProjectedNotes; its
  * drag-end handler ARMS `gate`, so when the projection-commit re-render lands the hook sees
  * `gate.isHot()` and SKIPS animating (no double-animate on top of @hello-pangea/dnd's own drop tween).
  *
  * EXIT-ANIMATION LIMITATION. Cards present in the previous render but absent in the next are already
- * unmounted from the DOM by the time this layout effect runs — there is no element left to animate.
+ * unmounted from the DOM by the time this layout effect runs - there is no element left to animate.
  * The hook therefore emits an `exit` probe event for classification visibility (so tests can assert
  * the fade-out path is recognised at the schedule level) but performs no DOM exit animation. Real
  * exit choreography would need a mount-deferral / presence layer, which is out of scope here.
@@ -204,7 +204,7 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
     const first_run = useRef(true);
     const cap_timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // signature changes whenever the column set or card order/membership changes — drives the effect
+    // signature changes whenever the column set or card order/membership changes - drives the effect
     const signature = useMemo(
         () => options.column_ids.join('|') + '#' + options.flip_ids.join(','),
         [options.column_ids, options.flip_ids],

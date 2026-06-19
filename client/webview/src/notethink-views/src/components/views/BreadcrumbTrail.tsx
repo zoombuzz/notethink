@@ -81,7 +81,7 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactEleme
 
     const has_path = path_segments.length > 0;
     const has_notes = memoized_notes.length > 0;
-    // the pending-work spinner lives here (not out in the toolbar) so it sits immediately to the right of the "(X in Y files)" count — the slow path is far more often file discovery/loading than the view-type selector it used to neighbour
+    // the pending-work spinner lives here (not out in the toolbar) so it sits immediately to the right of the "(X in Y files)" count - the slow path is far more often file discovery/loading than the view-type selector it used to neighbour
     const { pending } = usePendingWorkContext();
 
     return (
@@ -122,7 +122,7 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactEleme
             {file_count_label && (
                 <button className={styles.fileCount}
                       data-testid="breadcrumb-file-count"
-                      aria-label={l10n.t('{0} notes in {1} files — open the Files panel', String(props.note_count ?? 0), String(props.file_count ?? 0))}
+                      aria-label={l10n.t('{0} notes in {1} files - open the Files panel', String(props.note_count ?? 0), String(props.file_count ?? 0))}
                       onClick={(event: MouseEvent<HTMLElement>) => {
                           event.stopPropagation();
                           props.onFileCountClick?.(event.currentTarget as HTMLElement);
@@ -135,8 +135,8 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactEleme
             {props.has_collisions && (
                 <button className={styles.collisionAlert}
                       data-testid="breadcrumb-collision-alert"
-                      aria-label={l10n.t('Duplicate note IDs detected — open the Collisions panel')}
-                      title={l10n.t('Duplicate note IDs detected — open the Collisions panel')}
+                      aria-label={l10n.t('Duplicate note IDs detected - open the Collisions panel')}
+                      title={l10n.t('Duplicate note IDs detected - open the Collisions panel')}
                       onClick={(event: MouseEvent<HTMLElement>) => {
                           event.stopPropagation();
                           props.onCollisionsClick?.(event.currentTarget as HTMLElement);

@@ -1,7 +1,7 @@
 /*
  * pure FLIP (First-Last-Invert-Play) math for the kanban passive-transition layer.
  * no DOM access and no React: every export takes plain values and returns plain values
- * (the Keyframe / KeyframeAnimationOptions types are object shapes only — no DOM call is made).
+ * (the Keyframe / KeyframeAnimationOptions types are object shapes only - no DOM call is made).
  */
 import Debug from 'debug';
 
@@ -81,7 +81,7 @@ export function computeInverseTransform(prev: RectLike, next: RectLike): FlipDel
     return { dx: prev.left - next.left, dy: prev.top - next.top };
 }
 
-/** true when a delta is visually significant — its hypotenuse exceeds `threshold` px (default 0.5) */
+/** true when a delta is visually significant - its hypotenuse exceeds `threshold` px (default 0.5) */
 export function isSignificantDelta(delta: FlipDelta, threshold: number = SIGNIFICANT_DELTA_THRESHOLD_PX): boolean {
     return Math.hypot(delta.dx, delta.dy) > threshold;
 }

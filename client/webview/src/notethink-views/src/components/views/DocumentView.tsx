@@ -59,7 +59,7 @@ export default React.memo(function DocumentView(props: ViewProps) {
         >
             <div className={view_specific_styles.centredPane}>
                 {props.nested?.document_strip}
-                {/* skipped when parent_context is the document root — document_strip already shows those pills */}
+                {/* skipped when parent_context is the document root - document_strip already shows those pills */}
                 {props.nested?.parent_context?.seq !== props.nested?.document_root?.seq && props.nested?.parent_context?.linetags && <GenericNoteAttributes
                     {...props.nested?.parent_context}
                 />}

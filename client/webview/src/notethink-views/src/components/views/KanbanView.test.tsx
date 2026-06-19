@@ -9,7 +9,7 @@ import type { OrderingChangeSet } from '../../lib/linetagops';
 // captured DragDropContext callbacks so tests can drive drag start/end directly
 const captured_dnd: { onDragStart?: (start: unknown, provided: unknown) => void; onDragEnd?: (result: unknown, provided: unknown) => void } = {};
 
-// per-test override for the ordering function — when set, the mocked linetagops module returns this value instead of running the real algorithm
+// per-test override for the ordering function - when set, the mocked linetagops module returns this value instead of running the real algorithm
 let mock_ordering_override: Array<OrderingChangeSet> | undefined;
 
 // mock linetagops: passthrough every export but allow tests to swap the ordering function's return value via mock_ordering_override
@@ -503,7 +503,7 @@ describe('KanbanView dragEndHandler', () => {
         render(<KanbanView {...props} />);
 
         /*
-         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) — 'doing' < 'done' lexicographically
+         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) - 'doing' < 'done' lexicographically
          * drag note seq=1 (status=doing) onto done column at index 0
          */
         captured_dnd.onDragEnd!({
@@ -627,7 +627,7 @@ describe('KanbanView dragEndHandler', () => {
     });
 
     it('folder mode: cascade spans file-A and file-B posts changes_by_doc with both files (real-algorithm scenario)', () => {
-        // drop a file-A note into a done column holding a file-B note; tolerate either dispatch shape — the test guards the contract that cross-file edits, if emitted, are partitioned
+        // drop a file-A note into a done column holding a file-B note; tolerate either dispatch shape - the test guards the contract that cross-file edits, if emitted, are partitioned
         const origin_a = makeOrigin({ doc_id: 'doc-a', doc_path: '/repo/file-a.md' });
         const origin_b = makeOrigin({ doc_id: 'doc-b', doc_path: '/repo/file-b.md' });
         // dragged note in doing column on file-A
@@ -675,7 +675,7 @@ describe('KanbanView dragEndHandler', () => {
         render(<KanbanView {...props} />);
 
         /*
-         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) — 'doing' < 'done'
+         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) - 'doing' < 'done'
          * drag doing_a onto done at index 0 (above the existing done notes)
          */
         captured_dnd.onDragEnd!({
@@ -699,7 +699,7 @@ describe('KanbanView dragEndHandler', () => {
             const file_b_changes = msg.changes_by_doc['/repo/file-b.md'];
             expect(file_b_changes.length).toBeGreaterThan(0);
         } else {
-            // if the cascade did not actually touch file-B (no weight rewrite needed), the legacy single-doc shape is acceptable as long as it routes to file-A — status tag MUST land on file-A
+            // if the cascade did not actually touch file-B (no weight rewrite needed), the legacy single-doc shape is acceptable as long as it routes to file-A - status tag MUST land on file-A
             expect(msg.docPath).toBe('/repo/file-a.md');
             expect(Array.isArray(msg.changes)).toBe(true);
         }
@@ -815,7 +815,7 @@ describe('KanbanView drag start does not move the caret', () => {
         mock_ordering_override = undefined;
     });
 
-    it('onDragStart posts nothing — it only arms the drag guard, never moves the caret', () => {
+    it('onDragStart posts nothing - it only arms the drag guard, never moves the caret', () => {
         const dragged = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -836,13 +836,13 @@ describe('KanbanView drag start does not move the caret', () => {
         });
         render(<KanbanView {...props} />);
 
-        // a drag-start responder exists (it arms the post-drop click guard) but must post no message — in particular no revealRange/selectRange that would move the editor caret
+        // a drag-start responder exists (it arms the post-drop click guard) but must post no message - in particular no revealRange/selectRange that would move the editor caret
         expect(captured_dnd.onDragStart).toBeDefined();
         captured_dnd.onDragStart!({ draggableId: '1' }, {});
         expect(post_message).not.toHaveBeenCalled();
     });
 
-    it('a completed drag posts editText only — never a revealRange that would move the caret', () => {
+    it('a completed drag posts editText only - never a revealRange that would move the caret', () => {
         const origin_a = makeOrigin({ doc_id: 'doc-a', doc_path: '/repo/file-a.md' });
         const dragged = makeNote({
             seq: 1,

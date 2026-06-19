@@ -21,7 +21,7 @@ describe('useFlipGate', () => {
         const { result, rerender } = renderHook(({ p }) => useFlipGate(p), { initialProps: { p: false } });
         rerender({ p: true });
         expect(result.current.isHot()).toBe(true);
-        // held has no expiry — far past any timer window it is still hot
+        // held has no expiry - far past any timer window it is still hot
         jest.advanceTimersByTime(KANBAN_ANIMATION_DRAG_GATE_MS * 10);
         expect(result.current.isHot()).toBe(true);
     });

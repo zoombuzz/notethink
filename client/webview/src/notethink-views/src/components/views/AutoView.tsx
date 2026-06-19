@@ -29,7 +29,7 @@ export default function AutoView(props: ViewProps): ReactElement {
         if (majority) {
             derived_attributes.type = majority;
         }
-        // fall through — focused-note linetag aggregation below may still tweak attributes
+        // fall through - focused-note linetag aggregation below may still tweak attributes
     }
 
     if (props.display_options?.focused_notes?.length) {

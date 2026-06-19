@@ -29,9 +29,9 @@ export interface GenericViewModel {
 }
 
 /**
- * orchestrates every hook a GenericView leaf needs — view context, handlers, the
+ * orchestrates every hook a GenericView leaf needs - view context, handlers, the
  * toolbar drawers, duplicate-stable_id collisions, keyboard navigation, the toolbar
- * dispatchers, and the insert modal — and returns a flat model so the component body
+ * dispatchers, and the insert modal - and returns a flat model so the component body
  * stays render-only. keeping the Rules-of-Hooks cluster here (rather than inline) is the
  * prescribed React decomposition: a long component body shortens by lifting hooks into a
  * custom hook, never by splitting at an arbitrary line.

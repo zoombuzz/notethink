@@ -58,7 +58,7 @@ export interface NoteRendererProps {
  * NoteRenderer dispatches the loaded Docs to a tree-composer.
  *
  * Current_file mode renders one NoteTreeComposer for the active doc (the most-recently
- * sent doc — `updateSentAt`-stamped by the extension). Stale entries lingering in the
+ * sent doc - `updateSentAt`-stamped by the extension). Stale entries lingering in the
  * docs map (folder→current_file transition states, message races) must not stack up as
  * extra single-file views. Aggregate (folder) mode renders a single FolderTreeComposer
  * that merges every Doc into one synthetic root.

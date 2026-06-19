@@ -324,7 +324,7 @@ function applyInTreeInheritance(note: NoteProps): void {
 
 /**
  * Root (front-matter) inheritance: the document root is the broadest ancestor.
- * Its depth-relative prefixes mirror the in-tree ones — nt_child_ reaches the
+ * Its depth-relative prefixes mirror the in-tree ones - nt_child_ reaches the
  * root's direct children, nt_child2y_ its grandchildren, nt_childall_ every note.
  * Runs AFTER in-tree inheritance, so any closer ancestor's tag already won.
  */
@@ -402,7 +402,7 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
     }
 
     /*
-     * lift front matter into the document root as linetags — the broadest, document-scoped layer
+     * lift front matter into the document root as linetags - the broadest, document-scoped layer
      * computed before the inheritance pass so the root can act as the top ancestor; absent front matter leaves both fields undefined
      */
     const frontmatter_node = findFrontmatterNode(mdast_children);

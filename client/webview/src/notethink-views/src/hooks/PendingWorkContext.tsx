@@ -16,7 +16,7 @@ const PendingWorkCtx = createContext<UsePendingWorkApi>(NOOP_API);
 
 /**
  * Provider props for PendingWorkProvider.
- * - api: an externally-owned hook instance — lets the parent wire the same instance into ExtensionReceiver's message reducer and the tree's components without two hooks fighting over state; when omitted the provider creates its own instance
+ * - api: an externally-owned hook instance - lets the parent wire the same instance into ExtensionReceiver's message reducer and the tree's components without two hooks fighting over state; when omitted the provider creates its own instance
  */
 interface PendingWorkProviderProps {
     children: React.ReactNode;

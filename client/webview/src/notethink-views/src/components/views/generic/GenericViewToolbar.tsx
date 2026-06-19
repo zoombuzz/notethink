@@ -29,7 +29,7 @@ interface GenericViewToolbarProps {
     integrationSelection: IntegrationMode;
     integrationMode: ConcreteIntegrationMode;
     onIntegrationChange: (mode: IntegrationMode, target_file_path?: string) => void;
-    // view-type dropdown: same shape — selection (may be auto), auto-resolved concrete type, change handler
+    // view-type dropdown: same shape - selection (may be auto), auto-resolved concrete type, change handler
     viewTypeSelection: string;
     autoResolvedType: string | undefined;
     onViewTypeChange: (view_type: string) => void;

@@ -5,7 +5,7 @@
 # marketplace (e.g. a no-op re-merge) it is skipped rather than hard-failing the
 # merge; any other publish failure aborts loudly and returns to the source branch.
 #
-# main MUST stay a fast-forward of staging — the merge below is --ff-only so it can
+# main MUST stay a fast-forward of staging - the merge below is --ff-only so it can
 # never create a merge commit or prompt for a merge message. if it aborts with
 # "Not possible to fast-forward", main has diverged (it carries a commit staging
 # lacks, e.g. an old merge commit or a direct push); realign once with:

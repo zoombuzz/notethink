@@ -3,7 +3,7 @@ import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { clearCapturedMessages } from '../helpers/capture-messages';
 
 /**
- * End-to-end coverage for the "auto-open the right breadcrumb via H1 linetags" story — the
+ * End-to-end coverage for the "auto-open the right breadcrumb via H1 linetags" story - the
  * automated replacement for that story's manual checklist. Each test maps to one manual item:
  *   1. cold-open of a folder-declaring file lands on the scoped Auto (Folder) board
  *   2. navigating folders in Auto (Folder) stays auto; the position survives a reload
@@ -53,7 +53,7 @@ test.describe('Auto integration mode (H1 linetags)', () => {
         await expect.poll(() => lastSetIntegrationPath(page, 'folder'), { timeout: 5000 }).toBe(PORTFOLIO);
         // and the view flips to the folder board without a manual toolbar switch
         await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
-        // the selector reads "Auto (Folder)" — auto is still in force, resolved to folder
+        // the selector reads "Auto (Folder)" - auto is still in force, resolved to folder
         await expect(selector(page)).toHaveValue('auto');
         await expect(selector(page).locator('option[value="auto"]')).toHaveText('Auto (Folder)');
         // the breadcrumb is scoped to the portfolio segment
@@ -75,7 +75,7 @@ test.describe('Auto integration mode (H1 linetags)', () => {
         await expect.poll(() => lastSetIntegrationPath(page, 'folder'), { timeout: 5000 }).toBe(WORKSPACE_ROOT);
     });
 
-    // manual item 2 (reload-resilience) — refresh-resilience test: the reload IS the behaviour under test
+    // manual item 2 (reload-resilience) - refresh-resilience test: the reload IS the behaviour under test
     test('a navigated Auto (Folder) position survives a reload', async ({ page }) => {
         await injectDocsFromFixture(page, 'auto-folder-portfolio.md', DECLARING_PATH, { workspace_root: WORKSPACE_ROOT, relative_path: DECLARING_REL });
         await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
@@ -109,7 +109,7 @@ test.describe('Auto integration mode (H1 linetags)', () => {
         await expect(selector(page).locator('option[value="auto"]')).toHaveText('Auto (Current file)');
         await clearCapturedMessages(page);
 
-        // click the "oma" folder segment — diverges from a current_file-declaring file → pin concrete Folder
+        // click the "oma" folder segment - diverges from a current_file-declaring file → pin concrete Folder
         await page.locator(`nav[aria-label="Breadcrumb"] button[data-path="${WORKSPACE_ROOT}/oma"]`).click();
         await expect(selector(page)).toHaveValue('folder');
         await expect.poll(() => lastSetIntegrationPath(page, 'folder'), { timeout: 5000 }).toBe(`${WORKSPACE_ROOT}/oma`);
@@ -125,12 +125,12 @@ test.describe('Auto integration mode (H1 linetags)', () => {
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
         await injectDocsFromFixture(page, 'auto-folder-portfolio.md', DECLARING_PATH, { workspace_root: WORKSPACE_ROOT, relative_path: DECLARING_REL });
 
-        // the concrete pin holds — the folder-declaring file is shown in current_file mode
+        // the concrete pin holds - the folder-declaring file is shown in current_file mode
         await expect(renderer(page)).not.toHaveAttribute('data-folder-mode', 'true');
         await expect(selector(page)).toHaveValue('current_file');
         await clearCapturedMessages(page);
 
-        // click the "portfolio" folder segment — congruent with the file's folder declaration → jump to Auto (Folder)
+        // click the "portfolio" folder segment - congruent with the file's folder declaration → jump to Auto (Folder)
         await page.locator(`nav[aria-label="Breadcrumb"] button[data-path="${PORTFOLIO}"]`).click();
         await expect(selector(page)).toHaveValue('auto');
         await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
@@ -162,7 +162,7 @@ test.describe('Auto integration mode (H1 linetags)', () => {
 
         await injectDocsFromFixture(page, 'auto-bogus-breadcrumb.md', `${WORKSPACE_ROOT}/notes/field.md`, { workspace_root: WORKSPACE_ROOT, relative_path: 'notes/field.md' });
 
-        // the document renders normally in current_file mode — the bogus label matched no folder or note
+        // the document renders normally in current_file mode - the bogus label matched no folder or note
         await expect(page.getByText('Field Notes')).toBeVisible({ timeout: 5000 });
         await expect(renderer(page)).not.toHaveAttribute('data-folder-mode', 'true');
         await expect(selector(page)).toHaveValue('auto');

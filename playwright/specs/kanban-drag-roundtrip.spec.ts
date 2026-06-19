@@ -7,14 +7,14 @@ import { clearCapturedMessages } from '../helpers/capture-messages';
  * Regression guard for the FLIP layer vs. a USER drag's own round-trip. In real VS Code, dropping a
  * card posts editText; the extension writes the file, the watcher refires (debounced), the doc is
  * re-parsed and an authoritative `update` echoes back. That echo is the user's OWN move arriving as a
- * passive document update — the FLIP layer must NOT re-animate the just-dropped card on it (the
+ * passive document update - the FLIP layer must NOT re-animate the just-dropped card on it (the
  * regression: cards slid across the board after a drop). Suppression is tied to the optimistic-projection
  * lifecycle, which is unbounded, NOT a fixed drag-end timer that the round-trip can outlast.
  *
  * The harness never echoes edits automatically, so these tests stand in for the extension by re-injecting
  * the moved fixture at the same doc_path, at both realistic and adversarial timings.
  */
-test.describe('Kanban drag round-trip — own echo never re-animates the dropped card', () => {
+test.describe('Kanban drag round-trip - own echo never re-animates the dropped card', () => {
 
     test.beforeEach(async ({ page }) => {
         await page.addInitScript(() => { (window as unknown as { __NOTETHINK_ANIM_PROBE__: boolean }).__NOTETHINK_ANIM_PROBE__ = true; });
@@ -94,10 +94,10 @@ test.describe('Kanban drag round-trip — own echo never re-animates the dropped
         const doc_path = await setupKanbanView(page);
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
         await clearProbe(page);
-        // no drag happened — this is a real external/AI edit, so FLIP must fire
+        // no drag happened - this is a real external/AI edit, so FLIP must fire
         await injectDocsFromFixture(page, 'kanban-moved.md', doc_path);
         await page.waitForTimeout(300);
         const moves = await probeMoves(page);
-        expect(moves.length, 'FLIP did not animate a genuine passive update — suppression is too broad').toBeGreaterThanOrEqual(1);
+        expect(moves.length, 'FLIP did not animate a genuine passive update - suppression is too broad').toBeGreaterThanOrEqual(1);
     });
 });

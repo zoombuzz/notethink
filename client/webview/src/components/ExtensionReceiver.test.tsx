@@ -715,7 +715,7 @@ describe('ExtensionReceiver', () => {
                 }]);
             });
 
-            // flip to current_file — dispatch targets canonical key, not any doc path
+            // flip to current_file - dispatch targets canonical key, not any doc path
             act(() => {
                 last_call.setViewManagedState([{
                     id: FOLDER_KEY,

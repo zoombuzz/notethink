@@ -8,7 +8,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Changed
 
-- Renamed the custom-editor `viewType` (`notethink.notethink` → `notethink.viewer`) and the command id (`notethink.openview` → `notethink.openViewer`); the command's display label is now **NoteThink: Open Viewer** (all locales). Migration: a markdown file that was pinned open with the previous NoteThink custom editor reopens in the plain text editor once after updating — reopen it via "Open With… → NoteThink" or run **NoteThink: Open Viewer**. No user settings or files are affected.
+- Renamed the custom-editor `viewType` (`notethink.notethink` → `notethink.viewer`) and the command id (`notethink.openview` → `notethink.openViewer`); the command's display label is now **NoteThink: Open Viewer** (all locales). Migration: a markdown file that was pinned open with the previous NoteThink custom editor reopens in the plain text editor once after updating - reopen it via "Open With… → NoteThink" or run **NoteThink: Open Viewer**. No user settings or files are affected.
 - Refreshed the extension icon and wordmark (`media/icon.png`, `docstech/design/logos/`).
 
 ### Fixed
@@ -43,8 +43,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 
-- Extension icon for the marketplace listing — final NoteThink logo (`media/icon.png`, 256×256; SVG source `docstech/design/logos/notethink-icon.svg`, drafts in `docstech/design/logos/variants/`)
-- `publish:marketplace` npm script — non-interactive `vsce publish` via a puppet-provisioned PAT env var (no `vsce login`)
+- Extension icon for the marketplace listing - final NoteThink logo (`media/icon.png`, 256×256; SVG source `docstech/design/logos/notethink-icon.svg`, drafts in `docstech/design/logos/variants/`)
+- `publish:marketplace` npm script - non-interactive `vsce publish` via a puppet-provisioned PAT env var (no `vsce login`)
 
 ## [0.1.1] - 2026-02-24
 

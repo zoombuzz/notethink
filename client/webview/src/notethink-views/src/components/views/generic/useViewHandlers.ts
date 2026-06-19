@@ -168,11 +168,11 @@ export function useViewHandlers(
     }, props.handlers);
 
     /*
-     * handle breadcrumb folder click — switch to (or narrow within) folder integration mode. Dispatch
+     * handle breadcrumb folder click - switch to (or narrow within) folder integration mode. Dispatch
      * targets FOLDER_VIEW_STATE_ID so the integration_mode tag never lands on a doc-path key in
      * single-file mode. Congruence-seeking: the destination is always folder mode, so persist 'auto'
      * when the opened file also declares folder (the view keeps following the file), and the concrete
-     * 'folder' pin only when the navigation diverges from a file that declares current_file — both
+     * 'folder' pin only when the navigation diverges from a file that declares current_file - both
      * resolve to folder for rendering.
      */
     const handle_folder_click = useCallback((folder_path: string): void => {
@@ -195,7 +195,7 @@ export function useViewHandlers(
     handlers.descendToFolder = handle_folder_click;
 
     /*
-     * handle_apply_filters — apply the user's edited include/exclude globs + per-file
+     * handle_apply_filters - apply the user's edited include/exclude globs + per-file
      * story cap. Persists them to per-view state (so they survive reload), posts a
      * background setIntegration so the extension re-discovers the folder set, and
      * round-trips each cascading setting to VS Code config via updateSetting so they

@@ -12,7 +12,7 @@ const noConsecutiveLineComments = {
     meta: {
         type: "problem",
         docs: { description: "an inline line comment is one line; stacked/wrapped comments belong in a block (header) comment" },
-        messages: { consecutive: "consecutive // comments — make it one line or lift to a block (header) comment" },
+        messages: { consecutive: "consecutive // comments - make it one line or lift to a block (header) comment" },
         schema: [],
     },
     create(context) {
@@ -78,7 +78,7 @@ export default [
             semi: "warn",
             "local/no-consecutive-line-comments": "error",
             /*
-             * automated audit checks (coding-standards-audit-remediation) — kept at "warn" not "error".
+             * automated audit checks (coding-standards-audit-remediation) - kept at "warn" not "error".
              * error-level would fail the gate on the test-side backlog (173 test `any`, ~1330 test missing
              * return types), out of scope here. warn still surfaces violations in editors/CI and blocks
              * casual new ones; bump to "error" once the test backlog is cleared
@@ -94,7 +94,7 @@ export default [
         },
     },
     {
-        // test-suite and playwright spec bodies are namespaces (describe/suite wrapping many tests, or end-to-end scenarios) — they do not fit the 80-line function-length cap, which is calibrated for production unit clarity
+        // test-suite and playwright spec bodies are namespaces (describe/suite wrapping many tests, or end-to-end scenarios) - they do not fit the 80-line function-length cap, which is calibrated for production unit clarity
         files: ["**/*.test.ts", "**/*.test.tsx", "**/test/suite/**/*.ts", "playwright/**/*.ts"],
         rules: {
             "max-lines-per-function": "off",

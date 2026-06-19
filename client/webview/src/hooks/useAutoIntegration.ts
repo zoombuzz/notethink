@@ -30,14 +30,14 @@ function pickOpenedDoc(docs: HashMapOf<Doc> | undefined, active_editor_doc_path:
 /**
  * Drive integration-mode auto-resolution at the App layer. Computes the opened file's declared
  * integration intent (mirrors view-type auto) and, on doc-arrival, dispatches the first
- * setIntegration / parent_context_seq seed when the view is still automatic — so a file that
+ * setIntegration / parent_context_seq seed when the view is still automatic - so a file that
  * declares folder mode (plus an nt_breadcrumb_last scope) lands on the intended aggregate view
  * without a manual toolbar switch. Returns the declaration so it can be threaded into the view
  * for the congruence-seeking navigation handlers.
  *
  * Rules:
  *  - a concrete persisted integration_mode (user pinned folder / current_file) is never overridden
- *  - the path is seeded only when the view is not already folder (cold open) — auto re-resolves the
+ *  - the path is seeded only when the view is not already folder (cold open) - auto re-resolves the
  *    mode but never re-snaps a folder the user has since navigated to (the persisted path wins)
  *  - resolution fires once per opened-doc identity (content hash) so re-renders don't re-aggregate
  *  - an unrecognised / unmatched declaration degrades to current_file with no dispatch
@@ -61,7 +61,7 @@ export function useAutoIntegration(deps: UseAutoIntegrationDeps): FileIntegratio
         const view_states = view_states_ref.current;
         const folder_options = view_states?.[FOLDER_VIEW_STATE_ID]?.display_options;
         const persisted_mode = folder_options?.integration_mode;
-        // a concrete persisted mode is an explicit user pin — auto no longer applies
+        // a concrete persisted mode is an explicit user pin - auto no longer applies
         if (persisted_mode === INTEGRATION_MODE_FOLDER || persisted_mode === INTEGRATION_MODE_CURRENT_FILE) {
             resolved_for_ref.current = guard_key;
             return;
@@ -80,7 +80,7 @@ export function useAutoIntegration(deps: UseAutoIntegrationDeps): FileIntegratio
             }
             return;
         }
-        // only seed the note-hierarchy scope when the view actually resolves to current_file — in folder mode the per-doc entry NoteTreeComposer would read is never rendered (FolderTreeComposer owns the tree), so the write would be dead state
+        // only seed the note-hierarchy scope when the view actually resolves to current_file - in folder mode the per-doc entry NoteTreeComposer would read is never rendered (FolderTreeComposer owns the tree), so the write would be dead state
         if (decl.mode === INTEGRATION_MODE_CURRENT_FILE && decl.parent_context_seq !== undefined
             && resolveIntegrationMode(folder_options) !== INTEGRATION_MODE_FOLDER) {
             // seed the note-hierarchy scope once, only when the user has not navigated it already

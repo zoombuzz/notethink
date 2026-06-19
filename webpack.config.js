@@ -19,7 +19,7 @@ const devtool = isProduction ? 'nosources-source-map' : 'source-map';
 // NOTETHINK_DEV gates the on-disk file logger and the webview cache-buster: OFF by default so any
 // shipped build (a `vsce publish` to the marketplace, or a hosted/web build) never litters a user's
 // machine with logs. The `build`/`watch` scripts opt in by exporting SELFINSPECT_ENV=dev (the
-// workspace-standard env marker, not NODE_ENV — see AGENTS.md).
+// workspace-standard env marker, not NODE_ENV - see AGENTS.md).
 const isDevBuild = process.env.SELFINSPECT_ENV === 'dev';
 
 /** @type WebpackConfig */

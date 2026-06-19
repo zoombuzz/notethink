@@ -239,7 +239,7 @@ describe('DocumentView document-level linetag strip', () => {
     });
 
     it('dedups by seq when parent_context is a CLONE of the root (the pipeline hands the view a clone)', () => {
-        // useViewContext spreads notes[0] into parent_context, so the descended-strip dedup gates on seq (the root is seq 0), not object identity — otherwise the pills double
+        // useViewContext spreads notes[0] into parent_context, so the descended-strip dedup gates on seq (the root is seq 0), not object identity - otherwise the pills double
         const root = makeRoot({ status: status_tag });
         render(<DocumentView id="test-doc" type="document" nested={{ parent_context: { ...root }, ...docStrip(root) }} />);
         expect(screen.getAllByText('active')).toHaveLength(1);

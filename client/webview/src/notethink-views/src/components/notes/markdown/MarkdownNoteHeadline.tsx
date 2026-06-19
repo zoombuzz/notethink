@@ -22,7 +22,7 @@ interface MarkdownNoteHeadlineProps {
  * via createNoteClickHandler so the same selection-mutation pathway used by
  * the rest of the note tree is preserved.
  *
- * The synthetic root container renders no headline row at all — empty rowheader
+ * The synthetic root container renders no headline row at all - empty rowheader
  * elements would otherwise be picked up by `[role="rowheader"]` selectors as
  * zero-height non-visible matches.
  */
@@ -45,7 +45,7 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
                 <OriginPill
                     origin={note.origin!}
                     onClick={(event) => {
-                        // pill click is ADDITIVE on top of the headline click: it descends the folder view into the pill's project subfolder, AND the bubbling click also fires the headline's createNoteClickHandler so the editor opens the story at its position and the matching note gets highlighted (editor-derived match in useViewContext finds the story by origin.doc_path + source_position in the descended view, even though seq numbers are renumbered by mergeAggregateRoot). A file living directly at the workspace-folder root has no sub-project to descend into — projectFolderFromOrigin returns '' and the descend becomes a no-op, but the headline click still fires
+                        // pill click is ADDITIVE on top of the headline click: it descends the folder view into the pill's project subfolder, AND the bubbling click also fires the headline's createNoteClickHandler so the editor opens the story at its position and the matching note gets highlighted (editor-derived match in useViewContext finds the story by origin.doc_path + source_position in the descended view, even though seq numbers are renumbered by mergeAggregateRoot). A file living directly at the workspace-folder root has no sub-project to descend into - projectFolderFromOrigin returns '' and the descend becomes a no-op, but the headline click still fires
                         const target_folder = projectFolderFromOrigin(note.origin!);
                         if (target_folder) {
                             note.handlers?.descendToFolder?.(target_folder);

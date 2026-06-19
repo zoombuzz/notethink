@@ -8,7 +8,7 @@ export type MdastRoot = Root;
 
 /**
  * Doc represents a loaded markdown file on its way from extension to webview.
- * - mtime: on-disk modification time (epoch ms from vscode.workspace.fs.stat); the implicit ordering signal — newer files float to the top of each file_rank band so background edits surface without any explicit prioritisation
+ * - mtime: on-disk modification time (epoch ms from vscode.workspace.fs.stat); the implicit ordering signal - newer files float to the top of each file_rank band so background edits surface without any explicit prioritisation
  */
 export interface Doc {
     id: string;

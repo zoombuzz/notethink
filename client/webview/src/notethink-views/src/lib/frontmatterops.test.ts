@@ -61,7 +61,7 @@ describe('findFrontmatterNode', () => {
     });
 });
 
-describe('parseFrontmatterLinetags — yaml', () => {
+describe('parseFrontmatterLinetags - yaml', () => {
     it('parses verbatim keys, numeric coercion, and plausible offsets', () => {
         const text = '---\nnt_view: kanban\norder: 3\n---\n# Title\n';
         const node = frontmatterNodeFromText('yaml', text);
@@ -98,7 +98,7 @@ describe('parseFrontmatterLinetags — yaml', () => {
     });
 });
 
-describe('parseFrontmatterLinetags — toml', () => {
+describe('parseFrontmatterLinetags - toml', () => {
     it('parses `key = value` form with correct offsets', () => {
         const text = '+++\nnt_view = kanban\norder = 3\n+++\n# Title\n';
         const node = frontmatterNodeFromText('toml', text);
@@ -112,7 +112,7 @@ describe('parseFrontmatterLinetags — toml', () => {
     });
 });
 
-describe('parseFrontmatterLinetags — value shapes', () => {
+describe('parseFrontmatterLinetags - value shapes', () => {
     it('strips matching quotes and keeps inline arrays verbatim', () => {
         const text = '---\ntitle: "Hello World"\ntags: [a, b, c]\nname: \'solo\'\n---\n';
         const node = frontmatterNodeFromText('yaml', text);
@@ -139,7 +139,7 @@ describe('parseFrontmatterLinetags — value shapes', () => {
     });
 });
 
-describe('parseFrontmatterLinetags — skipping', () => {
+describe('parseFrontmatterLinetags - skipping', () => {
     it('skips comment and blank lines', () => {
         const text = '---\n# a comment\n\nnt_view: kanban\n---\n';
         const node = frontmatterNodeFromText('yaml', text);

@@ -17,7 +17,7 @@ interface JumpDrawerProps {
 
 /**
  * Jump drawer: a compact folder tree rooted at the breadcrumb folder the user clicked. Lists
- * the navigation targets reachable from that leaf — child subfolders in folder mode (descend the
+ * the navigation targets reachable from that leaf - child subfolders in folder mode (descend the
  * aggregation) or sibling .md files in current-file mode (open in the editor). The root row is
  * clickable and calls onReturn to dismiss the drawer back to the view it was opened from. Renders
  * a loading row until the extension's jumpTargets reply for THIS leaf arrives (matched by
@@ -71,7 +71,7 @@ function JumpDrawer(props: JumpDrawerProps): ReactElement {
                                             title={entry.path}
                                             onClick={() => {
                                                 if (entry.kind === 'folder') { props.onFolderJump(entry.path); } else { props.onFileJump(entry.path); }
-                                                // every jump-drawer click navigates into a target (descend folder / open file), so dismiss the drawer — unlike the settings/files drawers which stay open while you adjust them
+                                                // every jump-drawer click navigates into a target (descend folder / open file), so dismiss the drawer - unlike the settings/files drawers which stay open while you adjust them
                                                 props.onReturn?.();
                                             }}
                                         >

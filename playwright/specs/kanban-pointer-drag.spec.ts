@@ -7,7 +7,7 @@ import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-m
  * Real POINTER (mouse) drag-and-drop coverage for the kanban board. The existing kanban-drag.spec.ts
  * drives @hello-pangea/dnd via its KEYBOARD sensor (Space + arrows), which is a different code path
  * from a mouse drag (no position:fixed clone, no transform-follows-cursor, no drop tween). This spec
- * exercises the pointer sensor so a regression in the live mouse-drag path is caught — the FLIP
+ * exercises the pointer sensor so a regression in the live mouse-drag path is caught - the FLIP
  * passive-transition layer must never interfere with a user's own drag.
  */
 test.describe('Kanban Pointer Drag and Drop', () => {
@@ -93,7 +93,7 @@ test.describe('Kanban Pointer Drag and Drop', () => {
 
         /*
          * no card may be left with a residual inline transform (a FLIP invert that never cleared, or a
-         * dnd drop tween that got clobbered) — that is the visible "broken drag" symptom
+         * dnd drop tween that got clobbered) - that is the visible "broken drag" symptom
          */
         const stuck = await page.evaluate(() => {
             const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-flip-id]'));

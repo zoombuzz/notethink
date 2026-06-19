@@ -30,7 +30,7 @@ interface VscodeMessagesDeps {
 
 /**
  * State exposed by useVscodeMessages: aggregated doc/selection/workspace state distilled from the wire-format messages the extension posts to the webview.
- * - active_editor_doc_path: path of the doc whose editor most recently emitted a selectionChanged — the closest proxy for "what the user is currently editing" available to the webview, since the extension only sends per-doc selection updates and never an explicit `activeEditor` signal
+ * - active_editor_doc_path: path of the doc whose editor most recently emitted a selectionChanged - the closest proxy for "what the user is currently editing" available to the webview, since the extension only sends per-doc selection updates and never an explicit `activeEditor` signal
  */
 interface VscodeMessagesState {
     docs: HashMapOf<Doc> | undefined;
@@ -261,7 +261,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                         },
                     },
                 }));
-                // the doc whose selection just changed is the active editor — folder mode's per-doc matcher reads this to scope the caret-to-note resolution
+                // the doc whose selection just changed is the active editor - folder mode's per-doc matcher reads this to scope the caret-to-note resolution
                 setActiveEditorDocPath(message.docPath);
                 return;
             case 'globalSettings':
@@ -314,7 +314,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 if (resolveIntegrationMode(vs?.display_options) === INTEGRATION_MODE_FOLDER && vs?.display_options?.integration_path) {
                     debug('restoring folder integration on reload: %s', vs.display_options.integration_path);
                     /*
-                     * host re-validates this path against the workspace before acting — persisted webview state is untrusted (defense-in-depth)
+                     * host re-validates this path against the workspace before acting - persisted webview state is untrusted (defense-in-depth)
                      * do NOT replay the persisted includeFilter / excludeFilter here: the workspace cascade (notethink.settings.files.*) is the source of truth, and replaying a snapshot from an earlier session masks any later edit the user made in settings.json. handle_apply_filters writes user-applied filters through to the cascade, so the cascade is always up to date with the user's intent after a fresh Apply
                      */
                     postMessage({

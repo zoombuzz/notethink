@@ -31,7 +31,7 @@ test.describe('Folder-mode click-focus and click-select (homogenisation)', () =>
         const headline_b1 = card_b1.locator('[role="rowheader"]').first();
         await expect(headline_b1).toBeVisible({ timeout: 5000 });
         await headline_b1.click({ force: true });
-        // view-driven focus state is the source of truth — no selectionChanged round-trip needed
+        // view-driven focus state is the source of truth - no selectionChanged round-trip needed
         await expect(card_b1).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
     });
 
@@ -55,7 +55,7 @@ test.describe('Folder-mode click-focus and click-select (homogenisation)', () =>
         await expect(card_a1).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
         await headline_b1.click({ force: true });
         await expect(card_b1).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
-        // alpha card no longer focused — only one card carries the focused outline at a time
+        // alpha card no longer focused - only one card carries the focused outline at a time
         await expect(card_a1).not.toHaveAttribute('aria-current', 'true');
     });
 
@@ -63,7 +63,7 @@ test.describe('Folder-mode click-focus and click-select (homogenisation)', () =>
         await setupFolderKanban(page);
         const card_b1 = page.locator('[role="row"][data-seq]:not([data-seq="0"])').filter({ hasText: 'Beta Task One' }).first();
         await expect(card_b1).toBeVisible({ timeout: 5000 });
-        // beta file: "# Todo\n\n### Beta Task One [](?status=backlog)\n+ [ ] queued\n…" — the H1 ends at offset 6, then a blank line ('\n\n' after the H1), so "### Beta Task One" starts at offset 8. Putting the caret at offset 15 lands inside the Beta Task One headline
+        // beta file: "# Todo\n\n### Beta Task One [](?status=backlog)\n+ [ ] queued\n…" - the H1 ends at offset 6, then a blank line ('\n\n' after the H1), so "### Beta Task One" starts at offset 8. Putting the caret at offset 15 lands inside the Beta Task One headline
         await simulateSelectionChanged(page, PATH_B, 15);
         await expect(card_b1).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
     });

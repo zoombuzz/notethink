@@ -22,7 +22,7 @@ let logFlushTimer: ReturnType<typeof setTimeout> | undefined;
 
 /*
  * the extension's standard log directory (vscode.ExtensionContext.logUri), set by initLogDir at activation
- * this is the canonical VS Code-managed place for extension log files — NEVER the user's open workspace folder
+ * this is the canonical VS Code-managed place for extension log files - NEVER the user's open workspace folder
  * it resolves under the rotating session logs dir (~/.config/Code/logs/<session>/window<N>/exthost/webWorker/NoteThink.notethink/ on Linux)
  * VS Code guarantees logUri's parent exists but not logUri itself, so we create it once
  */
@@ -189,7 +189,7 @@ export function writeToErrorLog(...data: Array<unknown>): void {
 /**
  * gated, fire-and-forget POST of a caught/logged error to the host's client-error receiver.
  * no-ops unless the build opted in via the NOTETHINK_CLIENT_ERROR_REPORTING define (guarded with
- * typeof so the absent symbol — e.g. under jest — is safe), and swallows every failure so reporting
+ * typeof so the absent symbol - e.g. under jest - is safe), and swallows every failure so reporting
  * can never disturb the logging path.
  */
 function sendClientError(kind: string, message: string, stack: string): void {

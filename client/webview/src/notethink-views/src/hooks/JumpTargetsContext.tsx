@@ -14,7 +14,7 @@ const JumpTargetsCtx = createContext<UseJumpTargetsApi>(NOOP_API);
 
 /**
  * provider props for JumpTargetsProvider.
- * - api: an externally-owned hook instance — lets the parent wire the same instance into ExtensionReceiver's message reducer and the tree's components without two hooks fighting over state; when omitted the provider creates its own instance
+ * - api: an externally-owned hook instance - lets the parent wire the same instance into ExtensionReceiver's message reducer and the tree's components without two hooks fighting over state; when omitted the provider creates its own instance
  */
 interface JumpTargetsProviderProps {
     children: React.ReactNode;

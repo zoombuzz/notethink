@@ -146,7 +146,7 @@ export interface CommandMessage {
     direction?: 'up' | 'down' | 'drillIn' | 'drillOut' | 'clearFocus';
 }
 
-// settings identifiers are camelCase end-to-end (TS keys, wire IDs, payload field names, VS Code config paths) — see client/extension/src/lib/settings.ts. This deviates from the project-wide snake_case-for-wire-data-fields convention because settings have a unique cross-boundary identity, and bridging two cases would mean every setting carries two names
+// settings identifiers are camelCase end-to-end (TS keys, wire IDs, payload field names, VS Code config paths) - see client/extension/src/lib/settings.ts. This deviates from the project-wide snake_case-for-wire-data-fields convention because settings have a unique cross-boundary identity, and bridging two cases would mean every setting carries two names
 export interface GlobalSettingsPayload {
     showLineNumbers: boolean;
     watchUnopenedFilesInViewer: boolean;

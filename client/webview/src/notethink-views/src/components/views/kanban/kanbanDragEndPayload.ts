@@ -26,7 +26,7 @@ export interface KanbanDragEndPayloadInput {
  * Assemble the edits for a drop and route them per origin file. The status-tag change
  * always targets the dragged note's origin file; the ordering cascade returns per-doc
  * partitioned change sets which are merged by docPath. When every change lands on one
- * file (or there is no origin at all — pure single-file mode) the legacy single-doc
+ * file (or there is no origin at all - pure single-file mode) the legacy single-doc
  * `editText` shape is returned so single-file behaviour stays byte-identical and the
  * extension takes its fast path; when the cascade spills across files the partitioned
  * `changes_by_doc` shape is returned instead.
@@ -75,14 +75,14 @@ export function buildKanbanDragEndPayload(input: KanbanDragEndPayloadInput): Edi
     const doc_paths = Object.keys(changes_by_doc);
     if (doc_paths.length === 0) { return null; }
 
-    // every change targets one file — legacy single-doc shape
+    // every change targets one file - legacy single-doc shape
     if (doc_paths.length === 1) {
         const only_doc = doc_paths[0];
         debug('single-doc payload: docPath=%s, %d changes', only_doc, changes_by_doc[only_doc].length);
         return { type: 'editText', changes: changes_by_doc[only_doc], docPath: only_doc };
     }
 
-    // cascade spilled across files — partitioned shape
+    // cascade spilled across files - partitioned shape
     debug('multi-doc payload: %d files', doc_paths.length);
     return { type: 'editText', changes_by_doc };
 }

@@ -4,12 +4,12 @@ const debug = Debug("nodejs:notethink-views:pathops");
 
 /**
  * Pure path-segmentation helpers used by breadcrumb rendering and origin-pill
- * navigation. All functions are deterministic string operations — no IO, no DOM,
+ * navigation. All functions are deterministic string operations - no IO, no DOM,
  * no React. The helpers unify two previously-duplicated derivations:
  *
- *   1. workspace_root from (doc_path, relative_path) — collapses
+ *   1. workspace_root from (doc_path, relative_path) - collapses
  *      `OriginPill.projectFolderFromOrigin` and `BreadcrumbTrail.splitPathSegments`.
- *   2. absolute-path → breadcrumb segments — collapses the two independent
+ *   2. absolute-path → breadcrumb segments - collapses the two independent
  *      "split on '/', accumulate, prepend root label" branches that used to live
  *      in `BreadcrumbTrail` (one for single-file doc paths, one for the
  *      folder-mode integration path).
@@ -81,7 +81,7 @@ export function segmentPathBelowWorkspace(absolute_path: string, workspace_root?
  * matching "click the rightmost matching breadcrumb segment".
  *
  * The match is exact and case-sensitive on the segment label. The terminal segment (the file
- * itself) is excluded — a breadcrumb folder scope only ever names a folder, never the open
+ * itself) is excluded - a breadcrumb folder scope only ever names a folder, never the open
  * file. Returns undefined when no folder segment matches (caller falls back to the note-seq
  * resolver, then to the default scope).
  */
@@ -93,7 +93,7 @@ export function resolveBreadcrumbFolderSegment(
 ): string | undefined {
     if (!label || !doc_path) { return undefined; }
     const segments = splitPathSegments(doc_path, workspace_root, doc_relative_path);
-    // exclude the terminal segment (the file) — breadcrumb_last names a folder, not the open file
+    // exclude the terminal segment (the file) - breadcrumb_last names a folder, not the open file
     const folder_segments = segments.slice(0, -1);
     let match: string | undefined;
     for (const segment of folder_segments) {

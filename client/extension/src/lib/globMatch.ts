@@ -3,7 +3,7 @@
  *
  * Mirrors the webview-side helper at `client/webview/src/notethink-views/src/lib/globMatch.ts`
  * because the extension and webview run as separate webpack bundles with no shared module
- * graph — keep these two files byte-identical (minus the debug import the extension stack
+ * graph - keep these two files byte-identical (minus the debug import the extension stack
  * doesn't use). Treat the pair as a shared cross-boundary contract.
  *
  * Used by `PanelSession.discoverFolderDocs` and `PanelSession.loadFolderDoc` so the
@@ -28,16 +28,16 @@ export function globToRegExp(glob: string): RegExp {
         if (ch === '*') {
             if (glob[i + 1] === '*') {
                 if (glob[i + 2] === '/') {
-                    // `**/` — zero or more leading path segments
+                    // `**/` - zero or more leading path segments
                     source += '(?:.*/)?';
                     i += 2;
                 } else {
-                    // bare `**` — anything, including separators
+                    // bare `**` - anything, including separators
                     source += '.*';
                     i += 1;
                 }
             } else {
-                // single `*` — anything except a separator
+                // single `*` - anything except a separator
                 source += '[^/]*';
             }
         } else if (ch === '?') {

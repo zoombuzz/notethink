@@ -74,7 +74,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
 
     // number of source files actually loaded into the merged view (the breadcrumb shows this)
     const file_count = Object.keys(docs).length;
-    // top-level stories merged into the synthetic root — the "X" in the breadcrumb "(X in Y files)"
+    // top-level stories merged into the synthetic root - the "X" in the breadcrumb "(X in Y files)"
     const note_count = merged_root.child_notes?.length ?? 0;
 
     // precedence: per-session override > extension's echoed effective globs > cascade > built-in default. `''` is a valid user value (exclude cleared) so ?? is correct (only null/undefined fall through)

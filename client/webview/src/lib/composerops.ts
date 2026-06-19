@@ -23,7 +23,7 @@ export interface BuildViewDisplayOptionsResult {
  * Precedence for every cascading setting: per-session viewState override > cascade
  * resolved by the extension > webview built-in default. View-type members
  * (columnOrder, showLinetagsInHeadlines, scrollNoteIntoView, autoExpandFocusedNote,
- * showContextBars, viewType) apply universally — a setting changed in folder mode
+ * showContextBars, viewType) apply universally - a setting changed in folder mode
  * shows up in current_file mode and vice versa.
  *
  * The integration_mode + integration_path stamp makes the composer the single source
@@ -35,8 +35,8 @@ export interface BuildViewDisplayOptionsResult {
  * stamped as integration_mode for the view internals; the persisted selection (which may be
  * 'auto') is captured separately as integration_mode_selection so the toolbar selector can
  * render "Auto (Folder)" / "Auto (Current file)" vs the concrete labels. The selection is read
- * from the canonical FOLDER_VIEW_STATE_ID — where handle_integration_change always writes the
- * pin — not from the per-doc view_state the current_file composer renders against, which never
+ * from the canonical FOLDER_VIEW_STATE_ID - where handle_integration_change always writes the
+ * pin - not from the per-doc view_state the current_file composer renders against, which never
  * carries the pin (and is explicitly cleared on a flip to current_file).
  */
 export function buildViewDisplayOptions(

@@ -45,7 +45,7 @@ export default function GenericView(props: ViewProps): React.ReactElement {
             }}
         />
     );
-    // render the toolbar at the leaf level only — when type is 'auto', AutoView delegates to a concrete type that renders GenericView again with the toolbar
+    // render the toolbar at the leaf level only - when type is 'auto', AutoView delegates to a concrete type that renders GenericView again with the toolbar
     const show_toolbar = props.type !== 'auto';
     const enriched_props: ViewProps = {
         ...props,

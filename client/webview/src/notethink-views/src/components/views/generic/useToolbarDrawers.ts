@@ -26,7 +26,7 @@ export interface ToolbarDrawers {
 export function useToolbarDrawers(view_id: string): ToolbarDrawers {
     const [active_drawer, setActiveDrawer] = useState<ActiveDrawer>('none');
     const gear_button_ref = useRef<HTMLButtonElement>(null);
-    // the element whose viewport position is held stable across the open/close animation (and refocused on Escape) — the gear for settings, the breadcrumb count for files
+    // the element whose viewport position is held stable across the open/close animation (and refocused on Escape) - the gear for settings, the breadcrumb count for files
     const anchor_el_ref = useRef<HTMLElement | null>(null);
     const anchor_top_ref = useRef<number | null>(null);
 
@@ -106,7 +106,7 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
 
     /*
      * outside-click closes whichever drawer is open; the trigger and the drawer body are excluded so the trigger's own onClick toggles cleanly and clicks inside the drawer don't dismiss
-     * pointerdown (not click) fires before any onClick on the click target, so the drawer is gone by the time the clicked control runs its handler; no focus restore here — focus follows the pointer
+     * pointerdown (not click) fires before any onClick on the click target, so the drawer is gone by the time the clicked control runs its handler; no focus restore here - focus follows the pointer
      */
     useEffect(() => {
         if (active_drawer === 'none') { return; }

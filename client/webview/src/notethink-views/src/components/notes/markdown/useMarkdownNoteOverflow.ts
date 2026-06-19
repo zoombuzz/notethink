@@ -18,7 +18,7 @@ export interface MarkdownNoteOverflowState {
  * Owns the overflow_state useState pair. Watches body_ref via ResizeObserver,
  * recomputing only on width-change events. Skips measurement during drag
  * (the dragged element is position:fixed with wrong dimensions) and while
- * the element has zero width (during initial layout or a hidden tab — leaving
+ * the element has zero width (during initial layout or a hidden tab - leaving
  * the previous reading in place rather than collapsing max_height to 0).
  *
  * Dependencies:

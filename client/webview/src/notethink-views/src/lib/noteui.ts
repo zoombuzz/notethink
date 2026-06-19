@@ -236,7 +236,7 @@ export function createNoteClickHandler(
 
 /**
  * "Is this click landing on a note that's already focused, at the same exact position?"
- * — the canonical second-click trigger for promoting a focused note to selected. Two
+ * - the canonical second-click trigger for promoting a focused note to selected. Two
  * complementary signals are OR'd:
  *
  * - `current_head === caret_pos` (editor-derived): matches the legacy behaviour where

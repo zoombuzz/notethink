@@ -14,7 +14,7 @@ const SCROLL_OCCLUDER_BUFFER_PX = 8;
 const SCROLL_FOCUS_RING_PX = 12;
 
 /**
- * nearest scrollable ancestor in the given axis — the element scrollIntoView would scroll.
+ * nearest scrollable ancestor in the given axis - the element scrollIntoView would scroll.
  * Falls back to the document scroller (the webview body scrolls the page). Walks ancestors
  * (including body) so the kanban board (overflow-x) and the page (overflow-y) each resolve.
  */
@@ -51,8 +51,8 @@ function outermostRingedElement(deepest: HTMLElement): HTMLElement {
 /**
  * signed scroll delta to frame [need_start, need_end] within [avail_start, avail_end].
  * When the need fits, reveal whichever edge is off-screen (and 0 when already wholly visible,
- * so an already-framed story is never yanked). When it doesn't fit, anchor the start edge —
- * top for the vertical axis, left for the horizontal — per the focused-note framing rule.
+ * so an already-framed story is never yanked). When it doesn't fit, anchor the start edge -
+ * top for the vertical axis, left for the horizontal - per the focused-note framing rule.
  */
 function frameDelta(need_start: number, need_end: number, avail_start: number, avail_end: number): number {
     const avail_size = avail_end - avail_start;
@@ -83,7 +83,7 @@ function resolveCaretTarget(
 }
 
 /**
- * Return the maximum bottom edge (viewport px) of the sticky header stack — the view's
+ * Return the maximum bottom edge (viewport px) of the sticky header stack - the view's
  * toolbar plus any currently-open drawer. Used to set scroll-margin-top before
  * scrollIntoView so the caret line lands below the header instead of behind it, and to
  * decide whether the target is genuinely visible (vs technically on-screen but occluded).
@@ -124,7 +124,7 @@ export function useScrollToCaret(
         scroll_raf_ref.current = requestAnimationFrame(() => {
             const resolved = resolveCaretTarget(display_options.focused_seqs, view_id, undefined);
             if (!resolved) { return; }
-            // frame the top-level story card (the element with the visible ring), not the deepest focused sub-note — the card's outline is what must stay clear of edges
+            // frame the top-level story card (the element with the visible ring), not the deepest focused sub-note - the card's outline is what must stay clear of edges
             const story = outermostRingedElement(resolved.note_element);
             const rect = story.getBoundingClientRect();
             const ring = SCROLL_FOCUS_RING_PX;

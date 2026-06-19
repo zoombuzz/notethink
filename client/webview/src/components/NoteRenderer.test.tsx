@@ -79,7 +79,7 @@ describe('NoteRenderer', () => {
     });
 
     it('current_file mode: renders only the most-recently-sent doc when the map has multiple entries', () => {
-        // current_file mode by definition shows exactly one file — stale entries (folder→current_file transition state, message races) must not stack as extra single-file views; the most recent updateSentAt is the active doc by construction
+        // current_file mode by definition shows exactly one file - stale entries (folder→current_file transition state, message races) must not stack as extra single-file views; the most recent updateSentAt is the active doc by construction
         const notes: HashMapOf<Doc> = {
             'a': {
                 id: 'a', path: '/a.md',

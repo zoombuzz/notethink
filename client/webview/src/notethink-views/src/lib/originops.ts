@@ -27,7 +27,7 @@ function djb2(str: string): number {
 }
 
 /**
- * Deterministic hue (0-359) for a project from its name alone — set-independent
+ * Deterministic hue (0-359) for a project from its name alone - set-independent
  * so the colour cannot change as the workspace universe fills in on first paint.
  * Same name always produces the same hue regardless of which other projects are
  * visible.
@@ -46,7 +46,7 @@ export function pillColourForHue(hue: number, theme: 'dark' | 'light'): string {
 
 /**
  * Deterministic colour for a project pill from the project name only. Uses
- * hueForProjectName (djb2 identity hash) so the colour is set-independent —
+ * hueForProjectName (djb2 identity hash) so the colour is set-independent -
  * single-file mode, folder mode, and legacy origins all converge on the same
  * value for a given project name.
  */
@@ -67,7 +67,7 @@ export function projectNameFromRelativePath(relative_path: string | undefined): 
 /**
  * Compute the absolute folder path to descend the folder view into when this pill is clicked.
  *
- * Returns the workspace-folder root joined with the pill's project segment — the folder
+ * Returns the workspace-folder root joined with the pill's project segment - the folder
  * whose contents the pill represents (e.g. `/path/to/active_development/notethink` for a
  * pill whose origin sits at `notethink/docstech/users/alex/todo.md` inside the
  * `active_development` workspace folder). Derives the root by stripping the
@@ -105,7 +105,7 @@ export function projectAbbreviation(project_name: string | undefined): string {
  * Compute a 2-character label per project across the supplied list. The first
  * character is always the project name's initial. The second character is taken
  * from the smallest index i >= 1 at which no other name in the set shares the
- * prefix `name.slice(0, i + 1)` — i.e. the earliest character that
+ * prefix `name.slice(0, i + 1)` - i.e. the earliest character that
  * differentiates this project from any other (so `notebook` vs `notethink` emit
  * `NB` and `NT` rather than two `N`s). If a name is a strict prefix of another
  * (no divergence found), we fall back to the second character of the name
@@ -130,7 +130,7 @@ export function buildProjectLabels(names: string[]): Map<string, string> {
             }
             if (!collides) { chosen_i = i; break; }
         }
-        // name is a strict prefix of another project — fall back to the second char of name itself
+        // name is a strict prefix of another project - fall back to the second char of name itself
         if (chosen_i === -1) { chosen_i = 1; }
         labels.set(name, first + name.charAt(chosen_i).toUpperCase());
     }

@@ -135,7 +135,7 @@ describe('useProjectedNotes', () => {
         // advance almost to the timeout
         act(() => { jest.advanceTimersByTime(1400); });
 
-        // apply a second move — should reset the safety timer
+        // apply a second move - should reset the safety timer
         act(() => { result.current.applyOptimisticMove({ ...SAMPLE_MOVE, destination_column_value: 'doing' }); });
 
         // advance by 200 more ms: the original timer would have fired by now but the new one hasn't

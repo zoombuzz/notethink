@@ -2,7 +2,7 @@
 
 This document provides essential information for AI agents working on the NoteThink codebase.
 
-**Workspace-wide rules** live in [`../AGENTS.md`](../AGENTS.md) — story state machine, story tracking format, version bumps, commit policy, git workflow, releaseable-state gate, test-failure discipline, edit verification, dev-server lifecycle, browser-snapshot cleanup. Read both: the workspace `AGENTS.md` defines the cross-project rules; this file documents NoteThink-specific architecture and overrides. Per-project coding standards are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md).
+**Workspace-wide rules** live in [`../AGENTS.md`](../AGENTS.md) - story state machine, story tracking format, version bumps, commit policy, git workflow, releaseable-state gate, test-failure discipline, edit verification, dev-server lifecycle, browser-snapshot cleanup. Read both: the workspace `AGENTS.md` defines the cross-project rules; this file documents NoteThink-specific architecture and overrides. Per-project coding standards are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md).
 
 ## Project Overview
 
@@ -120,10 +120,11 @@ import styles from './Component.module.scss';
 
 ## Comment Style
 
-- comments start with lowercase letters
+See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style for the full rules (lowercase-first, one comment is exactly one line and never two `//` in a row, ~100-char inline, no back-reference comments, no PM version numbers, TODO format). The single-line rule is enforced here by the local `local/no-consecutive-line-comments` ESLint rule. notethink-specific extras and the section-divider exception live in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Comments.
+
 - no period at the end unless multiple sentences
-- place comments on the line above, not inline
-- use `//` for single-line, `/* */` for multi-line
+- inline comments are allowed but kept short; use `//` for single-line, `/* */` for multi-line
+- never use the em or en dash character anywhere in this repo - see workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Dashes
 
 ```typescript
 // calculate the total including tax
@@ -196,9 +197,7 @@ describe('DocumentView', () => {
 
 ## Workflow and Commit Messages
 
-**Do not commit unless explicitly asked.** Write code, run lint and tests, and present your changes in the working copy for review. Only create a commit when the user explicitly requests it.
-
-When committing, messages must be consistent with the existing commit history. Review `git log --oneline` to match the style.
+Commit policy (when to commit, single-line messages, test-summary suffix, explicit staging) lives in workspace [`../AGENTS.md`](../AGENTS.md) > Commit policy. notethink-specific override: match this repo's existing commit history (`git log --oneline`) for style.
 
 **Examples from this repo's history:**
 ```
@@ -208,4 +207,4 @@ added component views including context; added playwright e2e tests; tests 157, 
 
 ## Dev Server
 
-notethink is a VS Code extension — it has no HTTP dev server and is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`). The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host.
+notethink is a VS Code extension - it has no HTTP dev server and is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`). The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host.

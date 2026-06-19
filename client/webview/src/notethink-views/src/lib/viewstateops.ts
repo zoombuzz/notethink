@@ -7,7 +7,7 @@ const debug = Debug("nodejs:notethink-views:viewstateops");
 /**
  * shared shape for the persisted view-state map this module inspects. Mirrors
  * the runtime ViewState the host (usePersistedViewStates) uses without forcing
- * a cross-bundle import — the only fields read here are display_options.integration_mode
+ * a cross-bundle import - the only fields read here are display_options.integration_mode
  * and display_options.integration_path.
  */
 export interface ViewStateLike {
@@ -28,13 +28,13 @@ export const FOLDER_VIEW_STATE_ID = '__folder__';
 /**
  * resolve a (possibly auto) persisted integration_mode down to the concrete mode the renderer
  * and toolbar act on. Concrete folder / current_file pass through unchanged. `auto` (and an
- * undefined / absent value, which is treated as auto for back-compat — untouched views need no
+ * undefined / absent value, which is treated as auto for back-compat - untouched views need no
  * migration) resolves to folder iff a folder `integration_path` was seeded, else current_file.
  *
  * The auto ⇄ concrete distinction is the visible "still automatic?" signal (no hidden marker):
  * the App-layer auto-resolution writes `integration_path` only when the opened file's
  * nt_integration_mode / nt_breadcrumb_last resolves to folder, and every flip-to-current_file
- * path clears it — so `auto` + a path unambiguously means "auto resolved to folder".
+ * path clears it - so `auto` + a path unambiguously means "auto resolved to folder".
  */
 export function resolveIntegrationMode(
     display_options: { integration_mode?: string; integration_path?: string } | undefined,
@@ -49,7 +49,7 @@ export function resolveIntegrationMode(
  * congruence-seeking reconciliation for a navigation gesture: given the concrete mode the
  * navigation lands on and the mode the opened file declares, return the value to persist as
  * `integration_mode`. Returns `auto` when the destination matches the file's declared mode
- * (keep / return to auto — the view keeps following the file), and the concrete resulting mode
+ * (keep / return to auto - the view keeps following the file), and the concrete resulting mode
  * when navigation diverges from the file's intent (pin the user's choice). A file with no
  * declaration (undefined) only ever returns auto when the destination is current_file.
  */
@@ -64,7 +64,7 @@ export function reconcileAutoIntegrationMode(
 /**
  * detect whether any of the supplied view states resolves to folder aggregation. Checks the
  * canonical FOLDER_VIEW_STATE_ID first, then falls back to a scan for any entry that resolves
- * folder so a stranded doc-path-keyed viewState still counts (legacy rescue — necessary for
+ * folder so a stranded doc-path-keyed viewState still counts (legacy rescue - necessary for
  * pre-fix persisted state that never had a canonical entry; the dispatcher's clearing-on-flip
  * is what eventually cleans this up). `auto` + a seeded integration_path resolves folder via
  * resolveIntegrationMode.

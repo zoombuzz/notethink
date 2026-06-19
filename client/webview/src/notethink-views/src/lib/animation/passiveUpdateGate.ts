@@ -6,14 +6,14 @@ const debug = Debug("nodejs:notethink-views:passiveUpdateGate");
 /**
  * PassiveUpdateGate: a tiny stateful gate shared between KanbanView (which drives it from the drag
  * and projection lifecycle) and the FLIP hook (which reads it). while hot, the FLIP layer knows the
- * next layout change is the user's own move being shown/reconciled — not a passive external edit —
+ * next layout change is the user's own move being shown/reconciled - not a passive external edit -
  * and suppresses its animation so a drag is never re-animated on top of @hello-pangea/dnd's drop.
  *
  * two ways to be hot:
  * - `hold()` / `release()`: held open for an indefinite span (the whole optimistic-projection
  *   lifetime, which can outlast any fixed timer because the document round-trip is unbounded).
- *   `release()` then starts a short tail so the projection→authoritative reconcile render — which
- *   commits in the same tick the projection clears — is still covered.
+ *   `release()` then starts a short tail so the projection→authoritative reconcile render - which
+ *   commits in the same tick the projection clears - is still covered.
  * - `arm()`: a fixed `window_ms` timer, used for the brief drag-start window before the projection
  *   exists (and to bridge the gap until @hello-pangea/dnd's async drag-end fires).
  */

@@ -63,7 +63,7 @@ test.describe('Aggregate (Folder) view', () => {
         // clear any messages from the mode-switch handshake
         await page.evaluate(() => { (window as unknown as { __captured_messages: unknown[] }).__captured_messages = []; });
 
-        // click the first oma origin pill — pill click is ADDITIVE: descend the folder root to `${WORKSPACE_ROOT}/oma` via setIntegration AND open the clicked story in the editor via revealRange (the underlying headline click fires alongside the descend because the pill no longer stopPropagates)
+        // click the first oma origin pill - pill click is ADDITIVE: descend the folder root to `${WORKSPACE_ROOT}/oma` via setIntegration AND open the clicked story in the editor via revealRange (the underlying headline click fires alongside the descend because the pill no longer stopPropagates)
         const pill = page.locator('[data-testid="origin-project-pill"][data-project="oma"]').first();
         await expect(pill).toBeVisible({ timeout: 5000 });
         await pill.click({ force: true });
@@ -77,7 +77,7 @@ test.describe('Aggregate (Folder) view', () => {
             { timeout: 5000 }
         ).toBe(`${WORKSPACE_ROOT}/oma`);
 
-        // pill click ALSO posts a revealRange routed to the clicked story's source doc — the headline click fires after the pill click via event bubbling
+        // pill click ALSO posts a revealRange routed to the clicked story's source doc - the headline click fires after the pill click via event bubbling
         await expect.poll(async () =>
             await page.evaluate(() => {
                 const msgs = (window as unknown as { __captured_messages: Array<{ type?: string; docPath?: string }> }).__captured_messages;
@@ -103,7 +103,7 @@ test.describe('Aggregate (Folder) view', () => {
         // clear messages
         await page.evaluate(() => { (window as unknown as { __captured_messages: unknown[] }).__captured_messages = []; });
 
-        // click a segment of the breadcrumb — choose the first available segment button
+        // click a segment of the breadcrumb - choose the first available segment button
         const nav = page.locator('nav[aria-label="Breadcrumb"]');
         await expect(nav).toBeVisible();
         const segment = nav.locator('button').first();
@@ -130,7 +130,7 @@ test.describe('Aggregate (Folder) view', () => {
         await selectFolderMode(page);
         await page.waitForSelector('[data-folder-mode="true"]');
 
-        // folder mode: "(X in 2 files)" — X is the merged top-level story count
+        // folder mode: "(X in 2 files)" - X is the merged top-level story count
         const count = page.getByTestId('breadcrumb-file-count');
         await expect(count).toBeVisible({ timeout: 5000 });
         await expect(count).toHaveText(/^\(\d+ in 2 files\)$/);
@@ -203,17 +203,17 @@ test.describe('Aggregate (Folder) view', () => {
         const files_drawer = page.locator('[data-testid="files-drawer-grid"]');
         const settings_drawer = page.locator('[data-testid="settings-drawer-grid"]');
 
-        // open Files, click inside the drawer body — stays open
+        // open Files, click inside the drawer body - stays open
         await page.getByTestId('breadcrumb-file-count').click();
         await expect(files_drawer).toHaveAttribute('data-open', 'true');
         await page.getByTestId('files-drawer-include').click();
         await expect(files_drawer).toHaveAttribute('data-open', 'true');
 
-        // click a merged note in the view body — drawer closes
+        // click a merged note in the view body - drawer closes
         await page.locator('[data-seq]').first().click();
         await expect(files_drawer).toHaveAttribute('data-open', 'false');
 
-        // open Settings, click the gear again — drawer toggles closed (not re-opened by the outside-click handler racing the trigger)
+        // open Settings, click the gear again - drawer toggles closed (not re-opened by the outside-click handler racing the trigger)
         await page.getByTestId('view-settings-button').click();
         await expect(settings_drawer).toHaveAttribute('data-open', 'true');
         await page.getByTestId('view-settings-button').click();

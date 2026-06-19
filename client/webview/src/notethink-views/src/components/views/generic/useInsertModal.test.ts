@@ -149,7 +149,7 @@ describe('useInsertModal', () => {
         });
 
         it('does not dispatch when postMessage is unavailable', () => {
-            // optional postMessage on ViewApi — guard must not throw.
+            // optional postMessage on ViewApi - guard must not throw.
             const { result } = renderHook(() => useInsertModal(
                 makeProps({ doc_text: 'abc', selection: selectionAt(1) }),
                 makeHandlers({ postMessage: undefined }),

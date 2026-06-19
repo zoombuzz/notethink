@@ -155,12 +155,12 @@ function columnIsSingleFile(column_children: Array<NoteProps>): boolean {
  * This function decides how to encode that order into `nt_kanban_ordering_weight`
  * values, and partitions the resulting text edits by `origin.doc_path`.
  *
- * Return shape: `Array<OrderingChangeSet>` — one entry per touched doc, with
+ * Return shape: `Array<OrderingChangeSet>` - one entry per touched doc, with
  * `doc_path` set to that file's path (or `undefined` in single-file mode).
  * Empty array means no edits are needed (sequence/seq ordering already matches).
  *
  * Single-file contract: when every child shares one `origin.doc_path` (or all
- * are undefined) the output is byte-identical to the pre-refactor algorithm —
+ * are undefined) the output is byte-identical to the pre-refactor algorithm -
  * see `singleFileOrderingChanges`. Cross-file ordering is handled by
  * `crossFileOrderingChanges`. Single-file callers can flatten the result with
  * `flattenOrderingChangeSets()`.
@@ -185,7 +185,7 @@ export function calculateTextChangesForOrdering(
  * weighted 1..k (per `kanbanNoteOrder` the unweighted run sorts first, the weighted suffix floats
  * below it in weight order). Each note's target weight is diffed against its current weight, so:
  *
- *   - a note that should be unweighted but still carries a weight has it REMOVED (the key goal —
+ *   - a note that should be unweighted but still carries a weight has it REMOVED (the key goal -
  *     weights live only as long as they are needed to force a non-implicit order);
  *   - when the desired order already equals implicit order the prefix is the whole column and every
  *     stale weight is stripped (drag a note out of place then back, and the column ends weight-free);
@@ -218,7 +218,7 @@ function singleFileOrderingChanges(
  * cross-file ordering: the chosen weight value carries the user's order, so the
  * comparator never needs `seq`. Tries a gap insertion (a weight strictly between
  * the weighted neighbours) and falls back to a same-file cascade. A gap insert is
- * only valid when neither neighbour is unweighted — per `kanbanNoteOrder` case-2 a
+ * only valid when neither neighbour is unweighted - per `kanbanNoteOrder` case-2 a
  * weighted note sorts after an unweighted one, so a weighted new_child would jump
  * ahead of an unweighted successor and invert the requested order.
  */
@@ -237,11 +237,11 @@ function crossFileOrderingChanges(
      * restraint guard: a drop into an unweighted neighbourhood cannot be honoured by
      * weighting the dragged card. Per kanbanNoteOrder case 2 a weighted card always
      * sorts AFTER every unweighted one, so minting a weight here would sink the card
-     * below its unweighted successor — the opposite of the requested placement (the
+     * below its unweighted successor - the opposite of the requested placement (the
      * top-drop-goes-to-bottom bug). Forcing the order would instead require weighting
      * every OTHER card, which contradicts the minimal, self-removing weights design.
-     * Implicit relevance order already expresses this region — the just-saved file's
-     * bumped mtime floats it up — so mint nothing and let noteOrder govern. Weights
+     * Implicit relevance order already expresses this region - the just-saved file's
+     * bumped mtime floats it up - so mint nothing and let noteOrder govern. Weights
      * are reserved for drops a weighted neighbour makes genuinely expressive.
      */
     const successor_unweighted = successor !== undefined && successor_weight === undefined;
@@ -281,8 +281,8 @@ function pickGapWeight(predecessor_weight: number | undefined, successor_weight:
 /**
  * cascade increasing weights from the inserted position to the end of the column,
  * emitting edits only for notes sharing the inserted note's origin file. Other-file
- * notes are stepped over — the counter leapfrogs their existing weight so same-file
- * notes still sort above them — and never rewritten.
+ * notes are stepped over - the counter leapfrogs their existing weight so same-file
+ * notes still sort above them - and never rewritten.
  */
 function cascadeSameFileWeights(
     column_children: Array<NoteProps>,
@@ -328,7 +328,7 @@ function groupChangesByDocPath(
 }
 
 /**
- * flatten partitioned ordering changes into a single array — for callers that
+ * flatten partitioned ordering changes into a single array - for callers that
  * are still single-file aware. Folder-mode DnD consumes the partitioned shape
  * directly via the multi-doc `editText` payload.
  */
@@ -349,7 +349,7 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
     const existing_tag = note.linetags?.[key_name];
     if (existing_tag?.inherited) {
         if (setting_as_default) { return []; }
-        // already carries this exact value via inheritance — materialising it would be a redundant write (e.g. reordering a card within the column it already inherits status= from)
+        // already carries this exact value via inheritance - materialising it would be a redundant write (e.g. reordering a card within the column it already inherits status= from)
         if (existing_tag.value === new_value) { return []; }
         // write a real linetag: if note has other (non-inherited) linetags, append to them; otherwise generate a fresh linetag block
         const has_real_linetags = note.linetags && Object.keys(note.linetags).some(k => !note.linetags![k].inherited);
@@ -383,7 +383,7 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
     else if (note.linetags && !note.linetags[key_name] && !setting_as_default) {
         /*
          * add the field to the first REAL (non-inherited) linetag
-         * guard: when every linetag is inherited (parent nt_child_*) there is no real block — inherited tags carry key_offset 0 and no linetags_from, so appending would land at document offset 0 and corrupt the parent heading; fall back to a fresh linetag block
+         * guard: when every linetag is inherited (parent nt_child_*) there is no real block - inherited tags carry key_offset 0 and no linetags_from, so appending would land at document offset 0 and corrupt the parent heading; fall back to a fresh linetag block
          */
         const first_real_key = Object.keys(note.linetags).find(k => !note.linetags![k].inherited);
         if (first_real_key) {

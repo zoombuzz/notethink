@@ -205,7 +205,7 @@ export class PanelSession {
 
 	/**
 	 * build the initial active doc but defer pushing it to the webview until
-	 * requestInitialState arrives — the webview sends setIntegration first on reload,
+	 * requestInitialState arrives - the webview sends setIntegration first on reload,
 	 * so by then integration_path is set and the merge path runs instead of wiping the
 	 * saved folder docs map.
 	 */
@@ -310,7 +310,7 @@ export class PanelSession {
 		});
 	}
 
-	// debounce change handler — only re-parse the active document
+	// debounce change handler - only re-parse the active document
 	private onDidChangeTextDocument(e: vscode.TextDocumentChangeEvent): void {
 		if (e.document.uri.path !== this.active_path) { return; }
 		if (this.change_timer) { clearTimeout(this.change_timer); }
@@ -370,10 +370,10 @@ export class PanelSession {
 		}
 	}
 
-	// track text editor selection changes — debounced to avoid flooding the webview
+	// track text editor selection changes - debounced to avoid flooding the webview
 	private onDidChangeTextEditorSelection(e: vscode.TextEditorSelectionChangeEvent): void {
 		if (e.textEditor.document.uri.path !== this.active_path) { return; }
-		// suppress selection while a document change is pending — the change handler sends selection after re-parse to keep MDAST and caret in sync
+		// suppress selection while a document change is pending - the change handler sends selection after re-parse to keep MDAST and caret in sync
 		if (this.change_timer) { return; }
 		if (this.selection_timer) { clearTimeout(this.selection_timer); }
 		this.selection_timer = setTimeout(() => {
@@ -525,7 +525,7 @@ export class PanelSession {
 				return;
 			}
 			if (this.revealInVisibleEditor(doc_path, from, to)) { return; }
-			// in folder mode the view is a set of signposts — jump to the file even when no editor shows it; in single-file mode stay silent to avoid spawning editors on stray clicks
+			// in folder mode the view is a set of signposts - jump to the file even when no editor shows it; in single-file mode stay silent to avoid spawning editors on stray clicks
 			if (!this.integration_path) { return; }
 			await this.revealByOpening(doc_path, from, to);
 		} catch (err) {
@@ -581,7 +581,7 @@ export class PanelSession {
 				}
 			}
 		} catch (err) {
-			// tabGroups API may be unavailable on older hosts — caller falls back to a beside column
+			// tabGroups API may be unavailable on older hosts - caller falls back to a beside column
 			debug('findColumnWithDoc: tabGroups unavailable: %O', err);
 		}
 		return undefined;
@@ -613,12 +613,12 @@ export class PanelSession {
 			}
 			/*
 			 * snapshot the previous integration_docs so the fast-path detection in discoverFolderDocs can compare against it
-			 * clearing the live cache up front would break that check — preserve the entries until discoverFolderDocs decides whether to keep or replace them
+			 * clearing the live cache up front would break that check - preserve the entries until discoverFolderDocs decides whether to keep or replace them
 			 */
 			const previous_docs = { ...this.integration_docs };
 			for (const key of Object.keys(this.integration_docs)) { delete this.integration_docs[key]; }
 			this.integration_path = folder_path;
-			// resolve filters BEFORE discovery so we never load a wider set than the user actually wants — the workspace cascade is the source of truth, and an explicit message field overrides on top
+			// resolve filters BEFORE discovery so we never load a wider set than the user actually wants - the workspace cascade is the source of truth, and an explicit message field overrides on top
 			this.adoptFolderFilters(e);
 			// recompute the workspace project universe AFTER filters are resolved so the exclude pattern is current; webview uses this list to stabilise pill labels + hues across folder descents
 			await this.computeWorkspaceProjects();
@@ -680,14 +680,14 @@ export class PanelSession {
 		}
 	}
 
-	// scheme: file — VS Code's native findFiles honours the RelativePattern and its glob exclude
+	// scheme: file - VS Code's native findFiles honours the RelativePattern and its glob exclude
 	private async discoverViaFindFiles(pattern: vscode.RelativePattern): Promise<Array<vscode.Uri>> {
 		// an empty exclude becomes null so findFiles applies no exclusions at all; the default skips derived/dependency dirs and overrides files.exclude/search.exclude
 		const find_exclude = this.integration_exclude.trim() === '' ? null : this.integration_exclude;
 		return vscode.workspace.findFiles(pattern, find_exclude);
 	}
 
-	// non-file: scheme — findFiles ignores a custom-scheme RelativePattern, so recursively walk the folder with the provider's own readDirectory (the API the Explorer uses) and apply the include glob ourselves. Excluded directories are pruned so the walk never descends into node_modules/.git/etc; the surviving file list still passes through the shared exclude post-filter in discoverFolderDocs
+	// non-file: scheme - findFiles ignores a custom-scheme RelativePattern, so recursively walk the folder with the provider's own readDirectory (the API the Explorer uses) and apply the include glob ourselves. Excluded directories are pruned so the walk never descends into node_modules/.git/etc; the surviving file list still passes through the shared exclude post-filter in discoverFolderDocs
 	private async discoverViaReadDirectoryWalk(base_uri: vscode.Uri, folder_path: string): Promise<Array<vscode.Uri>> {
 		const results: Array<vscode.Uri> = [];
 		const stack: Array<vscode.Uri> = [base_uri];
@@ -726,7 +726,7 @@ export class PanelSession {
 	 *
 	 * Fast-path detection: stat each discovered URI and compare the {path, mtime} set
 	 * against integration_docs. When they match exactly (no new files, no missing files,
-	 * no mtime changes — typical for a breadcrumb re-enter, an integration-mode toggle,
+	 * no mtime changes - typical for a breadcrumb re-enter, an integration-mode toggle,
 	 * or a filter edit that doesn't change the result set), skip the per-file reload
 	 * AND skip the pendingChange emit. The aggregated payload still ships so the webview
 	 * re-runs its merge with the cached docs.
@@ -737,7 +737,7 @@ export class PanelSession {
 		const discovered = base_uri.scheme === 'file'
 			? await this.discoverViaFindFiles(pattern)
 			: await this.discoverViaReadDirectoryWalk(base_uri, folder_path);
-		// defense in depth: post-filter against the same exclude using the host-side globMatches helper. findFiles' brace-expanded exclude has had edge cases bite us in practice (a "vendored" segment leaking through despite **/{...,vendored}/**), and the file-system watcher armed below has no exclude at all — applying the filter here AND in loadFolderDoc gives both paths one deterministic gate
+		// defense in depth: post-filter against the same exclude using the host-side globMatches helper. findFiles' brace-expanded exclude has had edge cases bite us in practice (a "vendored" segment leaking through despite **/{...,vendored}/**), and the file-system watcher armed below has no exclude at all - applying the filter here AND in loadFolderDoc gives both paths one deterministic gate
 		const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri, folder_path));
 		// deterministic order so the capped subset is stable across reloads
 		const sorted_uris = [...filtered].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
@@ -751,13 +751,13 @@ export class PanelSession {
 		}
 		const cache_hit = await this.discoveredSetMatchesCache(uris, previous_docs);
 		if (cache_hit) {
-			debug('setIntegration folder: fast-path — discovered set matches cached docs, skipping reload');
+			debug('setIntegration folder: fast-path - discovered set matches cached docs, skipping reload');
 			// restore the previous integration_docs so the aggregate payload below carries the cached map (enterFolderMode cleared the live cache before discovery)
 			for (const [id, doc] of Object.entries(previous_docs)) { this.integration_docs[id] = doc; }
 			this.sendAggregatePayload();
 			return;
 		}
-		// signal the webview that real work has started — only when there's actual loading to do; the fast path above skips this so the spinner never flashes on a no-op breadcrumb click
+		// signal the webview that real work has started - only when there's actual loading to do; the fast path above skips this so the spinner never flashes on a no-op breadcrumb click
 		this.sendPendingChange('folderDiscovery', true);
 		// arrow wrapper isolates loadFolderDoc from .map's (value, index, array) trio so the index does not collide with the opts argument
 		const load_promises = uris.map(uri => this.loadFolderDoc(uri));
@@ -771,7 +771,7 @@ export class PanelSession {
 	/**
 	 * stat each discovered URI and check whether the {path, mtime} set exactly matches
 	 * the previous integration_docs snapshot. Returns false on any difference (missing,
-	 * new, or mtime-changed file) and on any stat failure (treat as "uncertain — reload").
+	 * new, or mtime-changed file) and on any stat failure (treat as "uncertain - reload").
 	 */
 	private async discoveredSetMatchesCache(uris: vscode.Uri[], previous_docs: HashMapOf<Doc>): Promise<boolean> {
 		const cached_entries = Object.values(previous_docs);
@@ -818,11 +818,11 @@ export class PanelSession {
 	 */
 	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean } = {}): Promise<void> {
 		try {
-			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them — when the user descends folders (e.g. pill click from active_development → calfam), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the relative-path-based isExcludedByIntegrationFilter check below misses sibling paths (their relative_path starts with `..` which doesn't match `**/{...}/**` excludes)
+			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them - when the user descends folders (e.g. pill click from active_development → calfam), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the relative-path-based isExcludedByIntegrationFilter check below misses sibling paths (their relative_path starts with `..` which doesn't match `**/{...}/**` excludes)
 			if (!this.isWithinIntegrationPath(uri.path)) {
 				return;
 			}
-			// the file system watcher armed in armFolderWatcher takes only an include pattern — createFileSystemWatcher has no exclude argument — so a vendored or otherwise-excluded path inside integration_path can fire onDidCreate/onDidChange and reach this loader. gate every entry here against integration_exclude so the watcher cannot leak excluded files into integration_docs. The `!` is sound here because isWithinIntegrationPath above returns false (and we returned) whenever integration_path is undefined
+			// the file system watcher armed in armFolderWatcher takes only an include pattern - createFileSystemWatcher has no exclude argument - so a vendored or otherwise-excluded path inside integration_path can fire onDidCreate/onDidChange and reach this loader. gate every entry here against integration_exclude so the watcher cannot leak excluded files into integration_docs. The `!` is sound here because isWithinIntegrationPath above returns false (and we returned) whenever integration_path is undefined
 			if (this.isExcludedByIntegrationFilter(uri, this.integration_path!)) {
 				return;
 			}
@@ -841,7 +841,7 @@ export class PanelSession {
 				const document = await vscode.workspace.openTextDocument(uri);
 				doc = await this.buildDoc(document);
 			}
-			// re-check the integration-path containment AFTER the async load — between the guard at the top and now, the awaits above gave other handlers a chance to run, and a concurrent enterFolderMode (e.g. pill click descending into a sub-project) can clear integration_docs and switch integration_path. Without this re-check, a watcher event for a sibling project that started loading under the old integration_path can land in the new integration_path's integration_docs after the switch, surfacing as "stories from another project mysteriously appearing after an update" (clears on window reload because reload re-enters folder mode and re-runs discovery)
+			// re-check the integration-path containment AFTER the async load - between the guard at the top and now, the awaits above gave other handlers a chance to run, and a concurrent enterFolderMode (e.g. pill click descending into a sub-project) can clear integration_docs and switch integration_path. Without this re-check, a watcher event for a sibling project that started loading under the old integration_path can land in the new integration_path's integration_docs after the switch, surfacing as "stories from another project mysteriously appearing after an update" (clears on window reload because reload re-enters folder mode and re-runs discovery)
 			if (!this.isWithinIntegrationPath(uri.path)) {
 				return;
 			}
@@ -863,7 +863,7 @@ export class PanelSession {
 		}
 	}
 
-	// phase 2: watch the folder for incremental adds/edits/deletes. A custom FileSystemProvider may make watch() a no-op or throw (static/read-only content on a web host); a watcher failure must not abort folder entry — discovery already ran, so the view is populated, it just won't see live edits
+	// phase 2: watch the folder for incremental adds/edits/deletes. A custom FileSystemProvider may make watch() a no-op or throw (static/read-only content on a web host); a watcher failure must not abort folder entry - discovery already ran, so the view is populated, it just won't see live edits
 	private armFolderWatcher(pattern: vscode.RelativePattern): void {
 		try {
 			this.integration_watcher = vscode.workspace.createFileSystemWatcher(pattern);
@@ -882,7 +882,7 @@ export class PanelSession {
 			const id = await generateIdentifier(uri.path);
 			if (this.integration_docs[id]) {
 				delete this.integration_docs[id];
-				// signal the webview to drop this doc — convention: send tombstone with empty content
+				// signal the webview to drop this doc - convention: send tombstone with empty content
 				this.webviewPanel.webview.postMessage({ type: 'docDeleted', docId: id, docPath: uri.path });
 			}
 		} catch (err) {
@@ -891,7 +891,7 @@ export class PanelSession {
 	}
 
 	private async enterCurrentFileMode(target_path?: string): Promise<void> {
-		// switching back to single-file mode — tear down any active watcher
+		// switching back to single-file mode - tear down any active watcher
 		if (this.integration_watcher) {
 			this.integration_watcher.dispose();
 			this.integration_watcher = undefined;
@@ -1001,7 +1001,7 @@ export class PanelSession {
 	 * per file) vs `docPath`+`changes` (single-doc back-compat). Both route per-doc
 	 * work through `applyEditTextToDoc`; the batch path applies sequentially so
 	 * concurrent applyEdit calls do not race on change_timer / active state. A single
-	 * bad doc in a batch is logged and skipped — the remaining docs still apply.
+	 * bad doc in a batch is logged and skipped - the remaining docs still apply.
 	 */
 	private async handleEditText(e: Record<string, unknown>): Promise<void> {
 		const changes_by_doc = e.changes_by_doc as Record<string, Array<TextChange>> | undefined;
@@ -1071,7 +1071,7 @@ export class PanelSession {
 	 * open a relative .md link clicked in the rendered view, resolved against the ACTIVE
 	 * document's URI so the workspace scheme/authority is preserved (works on non-file:
 	 * hosts). The fragment/query is stripped before joining; the resolved target must stay
-	 * within the workspace (scheme-safe uri.path containment) and end in .md — `..`-escape
+	 * within the workspace (scheme-safe uri.path containment) and end in .md - `..`-escape
 	 * and non-.md links are refused. The viewer auto-follows via onDidChangeActiveTextEditor.
 	 */
 	private async handleOpenRelative(e: Record<string, unknown>): Promise<void> {

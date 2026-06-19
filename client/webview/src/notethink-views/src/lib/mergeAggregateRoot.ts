@@ -21,7 +21,7 @@ const debug = Debug("nodejs:notethink-views:mergeAggregateRoot");
 
 /**
  * AggregatedDocInput is one source file's contribution to mergeAggregateRoot.
- * - mtime: on-disk modification time (epoch ms) — stamped onto every story's origin so within-band ordering can surface recently-edited files
+ * - mtime: on-disk modification time (epoch ms) - stamped onto every story's origin so within-band ordering can surface recently-edited files
  */
 export interface AggregatedDocInput {
     id: string;
@@ -86,7 +86,7 @@ export { FOLDER_VIEW_STATE_ID, anyViewInFolderMode } from "./viewstateops";
  * `order` is the file H1's `order` linetag value. `newest-at-bottom` means the
  * newest stories sit at the END of the file: keep the LAST `max`, then reverse
  * so the newest (document-bottom) story gets the smallest merged seq and sorts
- * to the top of its column — the reversal applies even when uncapped. Anything
+ * to the top of its column - the reversal applies even when uncapped. Anything
  * else (`newest-at-top`, an unrecognised value, or absent) keeps the FIRST
  * `max` in document order, which is already newest-first. `max` undefined → no
  * cap; `<= 0` → keep none; `>=` length → keep all.
@@ -103,7 +103,7 @@ function selectFileStories<T>(stories: T[], max: number | undefined, order: stri
     } else {
         kept = stories.slice(0, max);
     }
-    // newest-at-bottom files are stored oldest-first; reverse (on a copy — kept may alias the caller's array) so the newest story sorts to the top of its column
+    // newest-at-bottom files are stored oldest-first; reverse (on a copy - kept may alias the caller's array) so the newest story sorts to the top of its column
     return newest_at_bottom ? [...kept].reverse() : kept;
 }
 
@@ -232,7 +232,7 @@ export function mergeAggregateRoot(
         return ar < br ? -1 : ar > br ? 1 : 0;
     });
 
-    // seed the label universe from workspace_projects when provided, then append any visible-set project not already in it. The workspace-driven seed keeps labels stable across folder descents. Hue is an identity hash of the project name (hueForProjectName) so it needs no universe — it is set-independent
+    // seed the label universe from workspace_projects when provided, then append any visible-set project not already in it. The workspace-driven seed keeps labels stable across folder descents. Hue is an identity hash of the project name (hueForProjectName) so it needs no universe - it is set-independent
     const seen_project_names = new Set<string>();
     const distinct_project_names: string[] = [];
     if (workspace_projects && workspace_projects.length > 0) {
@@ -250,7 +250,7 @@ export function mergeAggregateRoot(
             distinct_project_names.push(project_name);
         }
     }
-    // 2-character pill label per project — first letter + earliest character that differentiates this project from any other in the universe (notethink→NT, notebook→NB). Driven by the workspace universe when available so labels are stable across descents
+    // 2-character pill label per project - first letter + earliest character that differentiates this project from any other in the universe (notethink→NT, notebook→NB). Driven by the workspace universe when available so labels are stable across descents
     const project_label_by_name = buildProjectLabels(distinct_project_names);
 
     /*
@@ -432,7 +432,7 @@ export function firstIntegrationPath(
  * file's H1 and ## epic wrappers) get their own slug-based stable_id so view
  * code that keys on them remains stable across re-parse too.
  *
- * Mutates the passed root tree in place. Idempotent — safe to call twice.
+ * Mutates the passed root tree in place. Idempotent - safe to call twice.
  */
 export function stampSingleFileStableIds(root: NoteProps, doc_id: string): void {
     // synthetic root keys off doc_id so single-file view-state survives a flip to/from folder mode

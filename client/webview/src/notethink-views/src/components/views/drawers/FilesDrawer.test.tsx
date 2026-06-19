@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, act, type RenderResult } from '@testing-library/react';
 import FilesDrawer from './FilesDrawer';
 
-// library-side test fixture: a realistic exclude glob to feed the drawer prop. intentionally not coupled to the app's DEFAULT_EXCLUDE_FILTER (extension/webview own those) — this test exercises FilesDrawer rendering, not the app default
+// library-side test fixture: a realistic exclude glob to feed the drawer prop. intentionally not coupled to the app's DEFAULT_EXCLUDE_FILTER (extension/webview own those) - this test exercises FilesDrawer rendering, not the app default
 const DERIVED_DIR_EXCLUDE = '**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**';
 
 const default_props = {

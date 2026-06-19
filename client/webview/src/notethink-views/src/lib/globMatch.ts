@@ -36,16 +36,16 @@ export function globToRegExp(glob: string): RegExp {
         if (ch === '*') {
             if (glob[i + 1] === '*') {
                 if (glob[i + 2] === '/') {
-                    // `**/` — zero or more leading path segments
+                    // `**/` - zero or more leading path segments
                     source += '(?:.*/)?';
                     i += 2;
                 } else {
-                    // bare `**` — anything, including separators
+                    // bare `**` - anything, including separators
                     source += '.*';
                     i += 1;
                 }
             } else {
-                // single `*` — anything except a separator
+                // single `*` - anything except a separator
                 source += '[^/]*';
             }
         } else if (ch === '?') {

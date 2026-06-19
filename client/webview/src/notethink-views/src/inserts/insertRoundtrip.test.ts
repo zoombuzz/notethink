@@ -29,7 +29,7 @@ function toNotes(markdown: string): NoteProps {
 
 const ENTRIES = Object.entries(inserts);
 
-// every distinct body an Insert can place into the document — both the bare template and (where present) its worked example.
+// every distinct body an Insert can place into the document - both the bare template and (where present) its worked example.
 const BODIES: Array<[string, string]> = ENTRIES.flatMap(([key, insert]) => {
     const bodies: Array<[string, string]> = [[`${key} (content)`, insert.content]];
     if (insert.example_content) {
@@ -93,7 +93,7 @@ describe('insert round-trip (markdown → MDAST → notes)', () => {
         it('preserves checkbox state for the to-do template', () => {
             const root = parse(inserts['todoitem'].example_content!);
             const json = JSON.stringify(root);
-            // GFM task list items carry a `checked` boolean — both states appear in the example.
+            // GFM task list items carry a `checked` boolean - both states appear in the example.
             expect(json).toContain('"checked":false');
             expect(json).toContain('"checked":true');
         });

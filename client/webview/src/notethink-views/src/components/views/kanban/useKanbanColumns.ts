@@ -51,7 +51,7 @@ export function useKanbanColumns(
 }
 
 /**
- * derive the column descriptors (without note assignment) — pulled out so the hook body stays a short
+ * derive the column descriptors (without note assignment) - pulled out so the hook body stays a short
  * sequence of named steps. Behaviour matches the column-ordering rules documented on `useKanbanColumns`.
  *
  * Delegates the base status-value enumeration to `deriveNaturalColumnOrder` (alphabetical + trailing 'untagged');

@@ -28,7 +28,7 @@ test.describe('Pending-work spinner', () => {
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
-        // a toggleSetting command is purely a webview-side state change — no markPending is involved
+        // a toggleSetting command is purely a webview-side state change - no markPending is involved
         await sendCommand(page, 'toggleSetting', { setting: 'lineNumbers' });
         // give the show-delay a chance to flip something on if anything were marked
         await page.waitForTimeout(250);

@@ -133,7 +133,7 @@ function buildCloneMap(
 /**
  * return true when the authoritative notes already reflect the move. checks only the dragged note's
  * column membership and sorted position within that column; unrelated churn elsewhere is ignored.
- * returns true when the dragged note is absent (note was removed — adopt the authoritative state).
+ * returns true when the dragged note is absent (note was removed - adopt the authoritative state).
  */
 export function projectionSatisfied(notes: Array<NoteProps>, move: KanbanMove): boolean {
     const dragged_note = notes.find(n => n.stable_id === move.dragged_stable_id);

@@ -58,7 +58,7 @@ function captureLinetags(note: NoteProps): Record<string, LineTag> {
 
 // --- cross-column move ---
 
-describe('applyKanbanMove — cross-column move', () => {
+describe('applyKanbanMove - cross-column move', () => {
     const notes = [NOTE_A, NOTE_B, NOTE_C, NOTE_D];
     const move: KanbanMove = {
         dragged_stable_id: 'a',       // untagged note_A → 'done'
@@ -94,7 +94,7 @@ describe('applyKanbanMove — cross-column move', () => {
 
     it('notes outside the destination column are passed through by reference', () => {
         const result = applyKanbanMove(notes, move);
-        // NOTE_B and NOTE_C are in 'doing' — unaffected; must be the same reference
+        // NOTE_B and NOTE_C are in 'doing' - unaffected; must be the same reference
         expect(result.find(n => n.stable_id === 'b')).toBe(NOTE_B);
         expect(result.find(n => n.stable_id === 'c')).toBe(NOTE_C);
     });
@@ -102,7 +102,7 @@ describe('applyKanbanMove — cross-column move', () => {
 
 // --- within-column reorder ---
 
-describe('applyKanbanMove — within-column reorder', () => {
+describe('applyKanbanMove - within-column reorder', () => {
     // both B and C are in 'doing'; move C before B
     const notes = [NOTE_A, NOTE_B, NOTE_C, NOTE_D];
     const move: KanbanMove = {
@@ -133,7 +133,7 @@ describe('applyKanbanMove — within-column reorder', () => {
 
 // --- drop into 'untagged' ---
 
-describe('applyKanbanMove — drop into untagged', () => {
+describe('applyKanbanMove - drop into untagged', () => {
     const notes = [NOTE_A, NOTE_B, NOTE_C, NOTE_D];
     const move: KanbanMove = {
         dragged_stable_id: 'b',       // 'doing' note_B → 'untagged'
@@ -197,7 +197,7 @@ describe('projectionSatisfied', () => {
 
 // --- immutability ---
 
-describe('applyKanbanMove — no mutation of inputs', () => {
+describe('applyKanbanMove - no mutation of inputs', () => {
     it('does not mutate the input notes array', () => {
         const notes = [NOTE_A, NOTE_B, NOTE_C, NOTE_D];
         const original_refs = [...notes];
@@ -226,16 +226,16 @@ describe('applyKanbanMove — no mutation of inputs', () => {
         const notes = [NOTE_A, NOTE_B, NOTE_C, NOTE_D];
         const move: KanbanMove = { dragged_stable_id: 'b', destination_column_value: 'done', destination_index: 0 };
         const result = applyKanbanMove(notes, move);
-        // NOTE_C is in 'doing' — unrelated to destination 'done'; pass-through reference
+        // NOTE_C is in 'doing' - unrelated to destination 'done'; pass-through reference
         expect(result.find(n => n.stable_id === 'c')).toBe(NOTE_C);
-        // NOTE_A is untagged — unrelated; pass-through reference
+        // NOTE_A is untagged - unrelated; pass-through reference
         expect(result.find(n => n.stable_id === 'a')).toBe(NOTE_A);
     });
 });
 
 // --- edge cases ---
 
-describe('applyKanbanMove — edge cases', () => {
+describe('applyKanbanMove - edge cases', () => {
     it('returns the input array unchanged when stable_id is not found', () => {
         const notes = [NOTE_A, NOTE_B, NOTE_C, NOTE_D];
         const move: KanbanMove = { dragged_stable_id: 'nonexistent', destination_column_value: 'done', destination_index: 0 };

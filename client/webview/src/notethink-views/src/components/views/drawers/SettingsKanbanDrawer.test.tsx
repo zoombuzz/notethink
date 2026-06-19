@@ -42,7 +42,7 @@ describe('SettingsKanbanDrawer', () => {
     });
 
     it('appends live columns missing from a stale saved order so they stay reorderable', () => {
-        // a note has status=testing (so naturalColumnOrder includes it) but the saved columnOrder predates it — testing must still appear and be movable
+        // a note has status=testing (so naturalColumnOrder includes it) but the saved columnOrder predates it - testing must still appear and be movable
         renderDrawer({
             settings: { columnOrder: ['done', 'doing', 'untagged'] },
             naturalColumnOrder: ['doing', 'done', 'testing', 'untagged'],

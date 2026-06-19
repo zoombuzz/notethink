@@ -124,7 +124,7 @@ describe('useFlipTransition', () => {
         const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }, { id: 'b', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
         clearAnimationProbeEvents();
 
-        // render 2: passive reorder — a and b swap positions (signature changes); a moves from top 0 -> 50
+        // render 2: passive reorder - a and b swap positions (signature changes); a moves from top 0 -> 50
         rect_lookup = { a: { left: 0, top: 50, width: 100, height: 40 }, b: { left: 0, top: 0, width: 100, height: 40 } };
         act(() => {
             rerender(<Harness cards={[{ id: 'b', column: 'todo' }, { id: 'a', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
@@ -167,7 +167,7 @@ describe('useFlipTransition', () => {
         const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
         clearAnimationProbeEvents();
 
-        // arm the gate just before the next render — the hook must skip animating
+        // arm the gate just before the next render - the hook must skip animating
         gate.arm();
         rect_lookup = { a: { left: 0, top: 80, width: 100, height: 40 }, b: { left: 0, top: 0, width: 100, height: 40 } };
         act(() => {

@@ -8,7 +8,7 @@ const PATH_A = `${WORKSPACE_ROOT}/alpha/docstech/board.md`;
 const PATH_B = `${WORKSPACE_ROOT}/beta/docstech/board.md`;
 const PATH_C = `${WORKSPACE_ROOT}/gamma/docstech/board.md`;
 
-// keyboard-based drag — @hello-pangea/dnd supports lift (Space) + arrow moves + drop (Space). matches the established pattern in kanban-drag.spec.ts so the folder-mode specs use the same wire boundary as single-file mode
+// keyboard-based drag - @hello-pangea/dnd supports lift (Space) + arrow moves + drop (Space). matches the established pattern in kanban-drag.spec.ts so the folder-mode specs use the same wire boundary as single-file mode
 async function keyboardDrag(page: Page, draggable_locator: Locator, direction: 'right' | 'left' | 'up' | 'down', moves: number): Promise<void> {
     await draggable_locator.scrollIntoViewIfNeeded();
     await draggable_locator.focus();
@@ -49,7 +49,7 @@ test.describe('Folder-mode kanban drag and drop', () => {
     test('cross-column drag in folder mode targets only the source file', async ({ page }) => {
         await setupFolderKanban(page);
 
-        // each card row carries the drag-handle attribute directly (the row IS the draggable); filter by the origin pill nested inside to identify which file the card came from. start from "doing" because the default folder column_order arranges visible columns as [doing, done, backlog] — ArrowRight from doing lands on done and produces a real cross-column move (right-from-backlog would wrap to nowhere)
+        // each card row carries the drag-handle attribute directly (the row IS the draggable); filter by the origin pill nested inside to identify which file the card came from. start from "doing" because the default folder column_order arranges visible columns as [doing, done, backlog] - ArrowRight from doing lands on done and produces a real cross-column move (right-from-backlog would wrap to nowhere)
         const doing = page.locator('[role="region"][aria-label="doing"]');
         const alpha_handle = doing.locator('[data-rfd-drag-handle-draggable-id]').filter({
             has: page.locator('[data-testid="origin-project-pill"][data-project="alpha"]'),
@@ -69,7 +69,7 @@ test.describe('Folder-mode kanban drag and drop', () => {
         const doc_path_field = (edit_msg as { docPath?: string }).docPath;
         const changes_field = (edit_msg as { changes?: Array<{ from: number; to?: number; insert: string }> }).changes;
 
-        // the edit MUST target only PATH_A — either via the single-doc shape's docPath or the multi-doc shape's changes_by_doc keys. PATH_B must not appear anywhere
+        // the edit MUST target only PATH_A - either via the single-doc shape's docPath or the multi-doc shape's changes_by_doc keys. PATH_B must not appear anywhere
         let observed_changes: Array<{ from: number; to?: number; insert: string }> = [];
         if (changes_by_doc) {
             const keys = Object.keys(changes_by_doc);
@@ -93,8 +93,8 @@ test.describe('Folder-mode kanban drag and drop', () => {
 
     test('multi-file column interleave: a drag into an all-unweighted column mints no weight, and an unrelated parse update preserves interleaved order', async ({ page }) => {
         /*
-         * this test asserts two adjacent contracts: (a) dragging within a multi-file column whose cards are all unweighted mints NO nt_kanban_ordering_weight — the restraint guard in crossFileOrderingChanges suppresses it because a lone weight would sink the card below the unweighted cards (kanbanNoteOrder case 2), so the placement is carried by implicit mtime order. (b) once a weighted note is in the merged tree, an unrelated parse update for a third file does not perturb its user-chosen position.
-         * we cannot round-trip the editText through the live extension inside this harness, so (a) is verified via the captured message and (b) is verified by directly injecting a fixture whose text already carries the weight — that's exactly what the extension would deliver after applying an editText and re-emitting sendDoc
+         * this test asserts two adjacent contracts: (a) dragging within a multi-file column whose cards are all unweighted mints NO nt_kanban_ordering_weight - the restraint guard in crossFileOrderingChanges suppresses it because a lone weight would sink the card below the unweighted cards (kanbanNoteOrder case 2), so the placement is carried by implicit mtime order. (b) once a weighted note is in the merged tree, an unrelated parse update for a third file does not perturb its user-chosen position.
+         * we cannot round-trip the editText through the live extension inside this harness, so (a) is verified via the captured message and (b) is verified by directly injecting a fixture whose text already carries the weight - that's exactly what the extension would deliver after applying an editText and re-emitting sendDoc
          */
 
         await setupFolderKanban(page);
@@ -125,7 +125,7 @@ test.describe('Folder-mode kanban drag and drop', () => {
             | { changes_by_doc?: Record<string, Array<{ from: number; to?: number; insert: string }>>; changes?: Array<{ from: number; to?: number; insert: string }>; docPath?: string }
             | undefined;
 
-        // collect whatever changes the drag emitted (if any) — an all-unweighted reorder may emit no editText at all, since the only candidate write would be a weight and the guard suppresses it
+        // collect whatever changes the drag emitted (if any) - an all-unweighted reorder may emit no editText at all, since the only candidate write would be a weight and the guard suppresses it
         const all_changes: Array<{ from: number; to?: number; insert: string }> = [];
         if (edit_after_drag?.changes_by_doc) {
             for (const arr of Object.values(edit_after_drag.changes_by_doc)) {
@@ -134,13 +134,13 @@ test.describe('Folder-mode kanban drag and drop', () => {
         } else if (edit_after_drag?.changes) {
             for (const ch of edit_after_drag.changes) { all_changes.push(ch); }
         }
-        // no weight is minted — placement in an all-unweighted column is governed by implicit mtime order, not a persisted nt_kanban_ordering_weight
+        // no weight is minted - placement in an all-unweighted column is governed by implicit mtime order, not a persisted nt_kanban_ordering_weight
         const has_weight_change = all_changes.some((c) => c.insert.includes('nt_kanban_ordering_weight'));
         expect(has_weight_change).toBe(false);
 
         /*
          * ---- part (b): inject a fixture with the post-drag weight; assert interleave holds ----
-         * kanban-folder-b-weighted.md is identical to kanban-folder-b.md except Beta Task Two carries nt_kanban_ordering_weight=1. by kanbanNoteOrder's case 2 ("exactly one weighted — weighted sorts AFTER unweighted") beta should sort AFTER alpha, deliberately. capture the baseline order before applying the weight so we can prove the order changed because of the weight (not by accident)
+         * kanban-folder-b-weighted.md is identical to kanban-folder-b.md except Beta Task Two carries nt_kanban_ordering_weight=1. by kanbanNoteOrder's case 2 ("exactly one weighted - weighted sorts AFTER unweighted") beta should sort AFTER alpha, deliberately. capture the baseline order before applying the weight so we can prove the order changed because of the weight (not by accident)
          */
         const baseline_order = await doing.locator('[data-rfd-drag-handle-draggable-id] [data-testid="origin-project-pill"]').evaluateAll(
             (nodes) => nodes.map((n) => n.getAttribute('data-project')),
@@ -164,7 +164,7 @@ test.describe('Folder-mode kanban drag and drop', () => {
         // weighted sorts after unweighted under kanbanNoteOrder case 2
         expect(beta_index_weighted).toBeGreaterThan(alpha_index_weighted);
 
-        // now fire an unrelated parse update — the story's trigger. the harness's update message replaces the docs map (no merge_strategy), so we re-send all three docs; the meaningful change is the addition of gamma, alpha and beta are unchanged. user-chosen order (beta-after-alpha by weight) must survive
+        // now fire an unrelated parse update - the story's trigger. the harness's update message replaces the docs map (no merge_strategy), so we re-send all three docs; the meaningful change is the addition of gamma, alpha and beta are unchanged. user-chosen order (beta-after-alpha by weight) must survive
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'kanban-folder-a.md', doc_path: PATH_A, relative_path: 'alpha/docstech/board.md' },
             { fixture: 'kanban-folder-b-weighted.md', doc_path: PATH_B, relative_path: 'beta/docstech/board.md' },
@@ -179,7 +179,7 @@ test.describe('Folder-mode kanban drag and drop', () => {
         const alpha_index_final = final_order.indexOf('alpha');
         expect(beta_index_final).toBeGreaterThanOrEqual(0);
         expect(alpha_index_final).toBeGreaterThanOrEqual(0);
-        // user-chosen order survives the unrelated parse update — same relative position
+        // user-chosen order survives the unrelated parse update - same relative position
         expect(beta_index_final).toBeGreaterThan(alpha_index_final);
 
         // direction / baseline are captured so reviewers can see what the drag intent was; the weighted-fixture assertion above is deterministic on its own
@@ -188,7 +188,7 @@ test.describe('Folder-mode kanban drag and drop', () => {
     });
 
     test('single-file kanban drag still emits the legacy single-doc shape (regression guard)', async ({ page }) => {
-        // setup a folder with exactly one doc — this exercises the folder-renderer path while ensuring all changes land under one origin.doc_path. the dragEndHandler should pick the single-doc fast-path and emit `{type:'editText', changes, docPath}` with no `changes_by_doc`, matching the pre-refactor wire shape
+        // setup a folder with exactly one doc - this exercises the folder-renderer path while ensuring all changes land under one origin.doc_path. the dragEndHandler should pick the single-doc fast-path and emit `{type:'editText', changes, docPath}` with no `changes_by_doc`, matching the pre-refactor wire shape
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'kanban-folder-a.md', doc_path: PATH_A, relative_path: 'alpha/docstech/board.md' },
         ], { workspace_root: WORKSPACE_ROOT });
@@ -209,7 +209,7 @@ test.describe('Folder-mode kanban drag and drop', () => {
         const edit_msg = messages.find((m: { type?: string }) => m.type === 'editText');
         expect(edit_msg).toBeDefined();
 
-        // legacy shape required for byte-identical single-file behaviour — when every change targets one origin (here the only doc), the handler picks the single-doc fast path
+        // legacy shape required for byte-identical single-file behaviour - when every change targets one origin (here the only doc), the handler picks the single-doc fast path
         const changes_by_doc = (edit_msg as { changes_by_doc?: Record<string, unknown[]> }).changes_by_doc;
         expect(changes_by_doc).toBeUndefined();
         const doc_path_field = (edit_msg as { docPath?: string }).docPath;

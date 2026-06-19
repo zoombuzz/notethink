@@ -41,12 +41,12 @@ describe('hueForProjectName', () => {
         }
     });
 
-    it('is deterministic — same name always produces the same hue', () => {
+    it('is deterministic - same name always produces the same hue', () => {
         expect(hueForProjectName('lunagate')).toBe(hueForProjectName('lunagate'));
         expect(hueForProjectName('notethink')).toBe(hueForProjectName('notethink'));
     });
 
-    it('is set-independent — result does not depend on which other projects are present', () => {
+    it('is set-independent - result does not depend on which other projects are present', () => {
         // calling with no context vs calling after building a universe for other projects must give the same hue
         const hue_alone = hueForProjectName('notethink');
         // simulate "other projects have been processed first" by calling hueForProjectName for them

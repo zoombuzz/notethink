@@ -23,5 +23,5 @@ New this story (FLIP passive transitions + drag-regression fix):
                                        setting=false disables)
   - kanban-pointer-drag.spec.ts ...... 2 passed (real mouse drag completes + no residual transform)
   - kanban-drag-roundtrip.spec.ts .... 3 passed (dropped card's own authoritative echo never
-                                       re-animates — realistic + adversarial timing; positive control
+                                       re-animates - realistic + adversarial timing; positive control
                                        that a genuine passive update still animates)

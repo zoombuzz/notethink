@@ -72,7 +72,7 @@ export function findDeepestNote(notes: Array<NoteProps>, caret_position: number,
  * the editor-caret → note-focus derivation in both current_file mode (every
  * visible note's origin.doc_path matches the active doc) and folder mode (per-doc
  * filter, then match by source_position preserved through mergeAggregateRoot's
- * re-stamping). notes without an origin or source_position match nothing — the
+ * re-stamping). notes without an origin or source_position match nothing - the
  * caller falls back to the in-tree findDeepestNote path
  */
 export function findDeepestNoteByOriginPosition(notes: Array<NoteProps>, active_doc_path: string, caret_pos: number): NoteProps | undefined {
@@ -84,7 +84,7 @@ export function findDeepestNoteByOriginPosition(notes: Array<NoteProps>, active_
         if (!sp) { continue; }
         const end_offset = sp.end_body?.offset ?? sp.end.offset;
         if (caret_pos < sp.start.offset || caret_pos > end_offset) { continue; }
-        // prefer the deepest (most specific) note — the one with the latest start offset, mirroring findDeepestNote's right-to-left walk
+        // prefer the deepest (most specific) note - the one with the latest start offset, mirroring findDeepestNote's right-to-left walk
         if (sp.start.offset > best_start) {
             best = note;
             best_start = sp.start.offset;
@@ -122,7 +122,7 @@ export function findSelectedNotesByOriginPosition(
 
 /**
  * resolve the focused note by stable_id. latest-click-wins with the editor as
- * tiebreaker — the editor-derived caret match wins whenever it produces a note
+ * tiebreaker - the editor-derived caret match wins whenever it produces a note
  * (almost all real editing happens in the editor and the view is a real-time
  * visualisation). view_focused_ids is the immediate-feedback source for the brief
  * window between a view click and the editor's selectionChanged round-trip, and
@@ -144,7 +144,7 @@ export function resolveFocusedNote(
 }
 
 /**
- * detect whether the root parent_context is a synthetic aggregate root — one
+ * detect whether the root parent_context is a synthetic aggregate root - one
  * whose direct children carry note.origin with multiple distinct doc_ids (or a
  * single origin under an empty synthetic seq-0 root). pure document mode has
  * either no origins or a single origin under a real headline
@@ -193,7 +193,7 @@ export function majorityNgView(notes: NoteProps[] | undefined): string | undefin
  * a flat list. direction = -1 walks back, +1 walks forward; the result clamps at
  * the edges (no wraparound). when the focused seq isn't in the list, treats the
  * implicit index as -1 so up → first, down → first. used by useViewNavigation's
- * up/down keyboard handlers — identical computation for both directions
+ * up/down keyboard handlers - identical computation for both directions
  */
 export function navigateToNeighbour(notes: Array<NoteProps>, focused_seqs: number[] | undefined, direction: -1 | 1): NoteProps | undefined {
     if (!notes?.length) { return undefined; }
@@ -233,8 +233,8 @@ export function flattenAllNotes(root: NoteProps): NoteProps[] {
 
 /**
  * The document root note (notes[0], type 'root') when it should drive a
- * document-level front-matter strip: single-file mode only — the merged folder
- * root carries no front matter — and only when the root actually has linetags.
+ * document-level front-matter strip: single-file mode only - the merged folder
+ * root carries no front matter - and only when the root actually has linetags.
  * Returns undefined otherwise so callers can render `{root && <strip/>}` without a
  * second guard. Shared by DocumentView and KanbanView so the gate and root
  * selection stay identical across both views.
@@ -460,7 +460,7 @@ export function kanbanColumnValue(note: NoteProps): string {
 }
 
 /**
- * the notes belonging to one kanban column, in display order — selected by `kanbanColumnValue` and
+ * the notes belonging to one kanban column, in display order - selected by `kanbanColumnValue` and
  * sorted by `kanbanNoteOrder`. Shared so the column builder and the drag projection derive a
  * column's membership and ordering identically rather than each reimplementing the filter+sort.
  */
@@ -469,7 +469,7 @@ export function notesInKanbanColumn(notes: Array<NoteProps>, column_value: strin
 }
 
 /**
- * Standard note ordering: by seq (the canonical reading order — document order
+ * Standard note ordering: by seq (the canonical reading order - document order
  * for a single file, the round-robin cross-file interleave in folder mode), with
  * the document offset as a tiebreak when seqs are equal. This is the single
  * source of truth for implicit (non-drag) ordering across every view.
@@ -486,7 +486,7 @@ export function standardNoteOrder(a: NoteProps, b: NoteProps): number {
  * pure tiebreak: it never lifts a story above one of a better (lower) rank, so
  * the round-robin cross-file interleave is preserved. Saving the file you
  * currently have open bumps its on-disk mtime to now, so it floats to the top
- * of its band naturally — no separate "active file" signal is required. For
+ * of its band naturally - no separate "active file" signal is required. For
  * notes without an origin (single-file mode) or without `file_mtime` it is
  * exactly standardNoteOrder.
  */
@@ -508,7 +508,7 @@ export function noteOrder(a: NoteProps, b: NoteProps): number {
  * Kanban ordering: explicit `nt_kanban_ordering_weight` linetag is decisive,
  * including across files. The weight's *value* is what carries the user-chosen
  * cross-file order, so the comparator never consults `file_rank` / `file_mtime`
- * when either side carries a weight — that would let relevance shove a
+ * when either side carries a weight - that would let relevance shove a
  * deliberately-placed weighted card past another weighted card from a different
  * file.
  *
@@ -529,17 +529,17 @@ export function kanbanNoteOrder(a: NoteProps, b: NoteProps): number {
     const weight_b = b?.linetags?.nt_kanban_ordering_weight?.value_numeric;
     const has_a = weight_a !== undefined && weight_a !== 0;
     const has_b = weight_b !== undefined && weight_b !== 0;
-    // case 1: both weighted — pure numeric compare, seq tiebreak only
+    // case 1: both weighted - pure numeric compare, seq tiebreak only
     if (has_a && has_b) {
         if (weight_a !== weight_b) {
             return (weight_a! > weight_b! ? 1 : -1);
         }
         return (a.seq > b.seq ? 1 : -1);
     }
-    // case 2: exactly one weighted — weighted sorts AFTER unweighted
+    // case 2: exactly one weighted - weighted sorts AFTER unweighted
     if (has_a) { return 1; }
     if (has_b) { return -1; }
-    // case 3: neither weighted — implicit relevance order
+    // case 3: neither weighted - implicit relevance order
     return noteOrder(a, b);
 }
 
@@ -592,7 +592,7 @@ function collisionNoteLine(note: NoteProps): number {
 
 /**
  * group the in-scope flat note list by the slug each story-level heading would receive
- * (storyStableIdSlug — explicit `[](?id=...)` linetag, else slugified stripped headline,
+ * (storyStableIdSlug - explicit `[](?id=...)` linetag, else slugified stripped headline,
  * else `headline-<line>` fallback). returns one group per slug shared by >=2 story-level
  * notes; the `headline-<line>` fallback is kept on equal footing so two genuinely
  * blank-slug notes still surface. notes within a group are ordered by source line (so the

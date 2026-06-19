@@ -9,7 +9,7 @@ const debug = Debug("nodejs:notethink-views:GenericNoteAttributes");
 const HIDDEN_ATTRIBUTES = [
     // consumed by the 'progress' attribute's custom formatting, not shown on their own
     'progress_unit', 'progress_max',
-    // identifier — useful for linking/addressing but noise in the card's value pairs
+    // identifier - useful for linking/addressing but noise in the card's value pairs
     'id',
 ];
 

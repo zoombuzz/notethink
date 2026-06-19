@@ -14,7 +14,7 @@ interface SettingsCascadeButtonsProps {
 /**
  * Workspace ↔ user cascade controls, rendered in the bottom-right meta column of
  * every drawer for visual consistency. Both actions affect every folder-view
- * setting (not just the drawer the buttons happen to sit in) — they are global
+ * setting (not just the drawer the buttons happen to sit in) - they are global
  * to the folder-view cascade, intentionally separated from per-setting controls
  * (e.g. column-order reset) that live on the left.
  */

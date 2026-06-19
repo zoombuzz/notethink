@@ -313,7 +313,7 @@ describe('NotethinkEditorProvider', () => {
 			});
 
 			expect(editor.edit).toHaveBeenCalledTimes(1);
-			// WorkspaceEdit.applyEdit should NOT have been called (WorkspaceEdit is a vscode class — proper noun)
+			// WorkspaceEdit.applyEdit should NOT have been called (WorkspaceEdit is a vscode class - proper noun)
 			expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
 		});
 
@@ -703,7 +703,7 @@ describe('NotethinkEditorProvider', () => {
 			expect(find_call[1]).toBe('**/skip/**');
 		});
 
-		it('retains the user filters across a breadcrumb re-narrow that omits them — read from the workspace cascade, not stale in-memory state', async () => {
+		it('retains the user filters across a breadcrumb re-narrow that omits them - read from the workspace cascade, not stale in-memory state', async () => {
 			// simulate the user's filters being persisted under notethink.settings.files.* (what the Files drawer's Apply does via updateSetting). The settings module reads via getConfiguration('notethink.settings') and dotted paths
 			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation((section: string) => {
 				if (section === 'notethink.settings') {
@@ -831,7 +831,7 @@ describe('NotethinkEditorProvider', () => {
 				await new Promise(resolve => setImmediate(resolve));
 			}
 
-			// second entry: same path, same files, same mtimes — fast path should skip the pendingChange + skip per-file loads
+			// second entry: same path, same files, same mtimes - fast path should skip the pendingChange + skip per-file loads
 			panelHelper.postedMessages.length = 0;
 			(vscode.workspace.openTextDocument as jest.Mock).mockClear();
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
@@ -1309,7 +1309,7 @@ describe('NotethinkEditorProvider', () => {
 			};
 		}
 
-		// build a panel for a doc with no visible editor — the precondition that arms the watcher
+		// build a panel for a doc with no visible editor - the precondition that arms the watcher
 		async function setupUnvisitedDoc(opts: { settingOn?: boolean } = {}): Promise<{ provider: NotethinkEditorProvider; panel: ReturnType<typeof createMockWebviewPanel>; doc: MockTextDocument }> {
 			const setting_on = opts.settingOn ?? true;
 			(vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
@@ -1556,7 +1556,7 @@ describe('NotethinkEditorProvider', () => {
 				[`${VFS_ROOT}/welcome`]: [['main', vscode.FileType.Directory]],
 				[`${VFS_ROOT}/welcome/main`]: [['intro.md', vscode.FileType.File]],
 			});
-			// findFiles returns nothing on this scheme — discovery must come from the walk, not findFiles
+			// findFiles returns nothing on this scheme - discovery must come from the walk, not findFiles
 			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
 			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(
 				{ uri: vfsUri(`${VFS_ROOT}/welcome/main/intro.md`), getText: jest.fn(() => '# Intro'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) },

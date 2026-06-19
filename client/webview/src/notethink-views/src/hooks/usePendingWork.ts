@@ -60,7 +60,7 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
     const scheduleShow = useCallback((): void => {
         if (show_timer_ref.current !== undefined) { return; }
         if (hide_timer_ref.current !== undefined) {
-            // a pending hide is overridden by fresh work — keep pending=true, drop the hide
+            // a pending hide is overridden by fresh work - keep pending=true, drop the hide
             clearTimeout(hide_timer_ref.current);
             hide_timer_ref.current = undefined;
         }
@@ -81,7 +81,7 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
             return;
         }
         if (shown_at_ref.current === undefined) {
-            // pending wasn't shown — nothing to hide
+            // pending wasn't shown - nothing to hide
             setPending(false);
             return;
         }
@@ -96,7 +96,7 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
         hide_timer_ref.current = setTimeout(() => {
             hide_timer_ref.current = undefined;
             if (active_keys_ref.current.size > 0) {
-                // late mark arrived while we were waiting to hide — leave pending=true
+                // late mark arrived while we were waiting to hide - leave pending=true
                 return;
             }
             shown_at_ref.current = undefined;

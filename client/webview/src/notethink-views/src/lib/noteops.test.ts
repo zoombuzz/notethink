@@ -207,7 +207,7 @@ describe('resolveCaretPosition', () => {
 
 describe('standardNoteOrder', () => {
     it('sorts by seq primarily (the canonical reading / interleave order)', () => {
-        // a has the LARGER document offset but the SMALLER seq — seq must win
+        // a has the LARGER document offset but the SMALLER seq - seq must win
         const a = makeNote({ seq: 1, position: { start: { offset: 900, line: 90 }, end: { offset: 910, line: 91 } } });
         const b = makeNote({ seq: 2, position: { start: { offset: 5, line: 1 }, end: { offset: 15, line: 2 } } });
         expect(standardNoteOrder(a, b)).toBeLessThan(0);
@@ -239,7 +239,7 @@ describe('kanbanNoteOrder', () => {
     });
 
     it('falls back to merged seq (not document offset) when no weights', () => {
-        // a has the LARGER document offset but the SMALLER merged seq — e.g. a newest-at-bottom done.md story that mergeAggregateRoot reversed to the top. seq must win so the newest story sorts first in its column.
+        // a has the LARGER document offset but the SMALLER merged seq - e.g. a newest-at-bottom done.md story that mergeAggregateRoot reversed to the top. seq must win so the newest story sorts first in its column.
         const a = makeNote({ seq: 1, position: { start: { offset: 900, line: 90 }, end: { offset: 920, line: 91 } } });
         const b = makeNote({ seq: 2, position: { start: { offset: 5, line: 1 }, end: { offset: 15, line: 2 } } });
         expect(kanbanNoteOrder(a, b)).toBeLessThan(0);
@@ -429,7 +429,7 @@ describe('kanbanNoteOrder cross-file', () => {
         expect(kanbanNoteOrder(b, a)).toBeGreaterThan(0);
     });
 
-    it('(weighted, weighted) ties broken by seq only — file_rank/file_mtime ignored', () => {
+    it('(weighted, weighted) ties broken by seq only - file_rank/file_mtime ignored', () => {
         // same weight, different origins; a has worse rank and older mtime but smaller seq → a wins
         const a = makeCrossFileNote(1, 'a.md', 5, 1_000, 7);
         const b = makeCrossFileNote(2, 'b.md', 0, 9_000, 7);
@@ -1037,7 +1037,7 @@ describe('navigateToNeighbour', () => {
     });
 
     it('uses the last seq in focused_seqs (the deepest focused note)', () => {
-        // chain [1, 2] — deepest is seq 2; down → seq 3
+        // chain [1, 2] - deepest is seq 2; down → seq 3
         expect(navigateToNeighbour([a, b, c], [1, 2], 1)?.seq).toBe(3);
     });
 });

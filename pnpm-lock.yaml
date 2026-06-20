@@ -58,8 +58,8 @@ importers:
         specifier: ^10.0.10
         version: 10.0.10
       '@types/vscode':
-        specifier: ^1.120.0
-        version: 1.120.0
+        specifier: ^1.125.0
+        version: 1.125.0
       '@types/webpack-env':
         specifier: ^1.18.8
         version: 1.18.8
@@ -625,8 +625,8 @@ packages:
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
 
-  '@types/vscode@1.120.0':
-    resolution: {integrity: sha512-feaT4Rst+FkTch5zz/ZbNCxoIvo55YU80Be2kiL7OJcod4+CUYf2lUBPdIJzozNnSEMq1VRTGrWEcCGFB3fBmA==}
+  '@types/vscode@1.125.0':
+    resolution: {integrity: sha512-0icm/ZQAaism87P0ekHqi4/Ju9du+Tm0RUW+y7vqRsxY2cY0FNRX1nAnaW7nT6npPt2tfHiheZ55Zm9UhqonFA==}
 
   '@types/webpack-env@1.18.8':
     resolution: {integrity: sha512-G9eAoJRMLjcvN4I08wB5I7YofOb/kaJNd5uoCMX+LbKXTPCF+ZIHuqTnFaK9Jz1rgs035f9JUPUhNFtqgucy/A==}
@@ -3796,7 +3796,7 @@ snapshots:
 
   '@types/unist@3.0.3': {}
 
-  '@types/vscode@1.120.0': {}
+  '@types/vscode@1.125.0': {}
 
   '@types/webpack-env@1.18.8': {}
 

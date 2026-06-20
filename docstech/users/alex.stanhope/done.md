@@ -3226,3 +3226,17 @@ Fix: settle the clip GEOMETRY synchronously. New `useSyncedBodyClip` applies `ma
 + manual: reload the window and do a folder-mode status edit on the real 131-card board to confirm the displaced cards now slide one slot.
 
 Change is uncommitted on branch `staging`: `useSyncedBodyClip.ts` (new), `MarkdownNote.tsx`, `useFlipTransition.ts` (+ test), `flipMath.ts`.
+
+
+### Upgrade NPM packages for notethink (Wave 1 minor/patch) [](?time_taken=0)
+
+Pins in effect after this wave (snapshot):
+- eslint @9.39.4 (.ncurc reject) - structural - held — eslint-plugin-react 7.37.5 (latest) has no eslint-10 release; revisit when it ships eslint-10 compat
+- @eslint/js @9.39.4 (.ncurc reject) - structural - same
+Unpinned this wave: none (typescript-eslint already on caret ^8.61.1)
+
++ [X] run npm-check-updates
++ [X] revisit prior pins (try to unpin transient holds recorded in the last done.md story)
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass

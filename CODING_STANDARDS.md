@@ -1,6 +1,6 @@
 # NoteThink Coding Standards
 
-This document defines the coding standards for the NoteThink project.
+This document defines the coding standards for the NoteThink project. **It is the authoritative rulebook: read it end-to-end at the start of any session that touches `notethink`, and re-read the relevant section before any high-consequence action (commit, push, merge, version bump, refactor, new-file placement) rather than recalling from memory.** Don't grep for keywords mid-task in place of reading it, and don't fall back to training-data defaults when a rule seems missing - if an expected rule is absent, flag the gap and ask whether to add it here. Memory files are thin pointers into this document; if a rule belongs anywhere, it belongs here.
 
 **Workspace-wide rules** (story state machine, story tracking format, version bumps, commit policy, git workflow, releaseable-state gate, test-failure discipline, edit verification, dev-server lifecycle, browser-snapshot cleanup) live in [`../AGENTS.md`](../AGENTS.md). This file documents only NoteThink-specific overrides and coding standards.
 
@@ -423,6 +423,17 @@ Two non-negotiable consequences for any view→editor gesture (click, keyboard n
 Why this matters: the view aggregates from N source files (folder mode); the editor only ever has one active doc. Driving view-interaction state through the editor selection alone silently breaks the moment the rendered tree contains anything outside that single doc - the round-trip never confirms and the view never updates. Pinning view focus on the most-recent view click instead silently breaks the moment the user starts editing in the editor - the visualisation goes stale. The fix is structural: write view state directly from the user's gesture for immediate feedback, then let the editor-derived match override as soon as it has an answer. See `client/webview/src/notethink-views/src/components/views/generic/useViewHandlers.ts` (click dispatcher writes `view_focused_seqs` / `view_selected_seqs` directly via `setViewManagedState`) and `useViewContext.ts` (`resolveFocusedNote` prefers editor-derived; view-driven fills in when the editor has no opinion) for the canonical pattern.
 
 The same principle applies in reverse for editor-driven decoration: when the editor caret should highlight a note, the matcher must work across however many docs the view is aggregating from. Don't write a matcher that assumes a single coherent coordinate space - use per-doc origin metadata (e.g. `origin.doc_path` + `origin.source_position`) so the unified algorithm works in both `current_file` (trivial: all notes share one doc) and `folder` (N-doc merge with synthetic offsets) modes without an `integration_mode` branch.
+
+### Focused-note scroll framing
+
+When a note becomes focused/selected and `useScrollToCaret` (`viewhooks.ts`) scrolls it into the viewer, the framing rule is:
+
+- **The focus/selection highlight ring must be visible all the way around the note** - never cropped on any edge. The ring is an `outline` with offset + width that `getBoundingClientRect` excludes, so the scroll must reserve space for it (measure against the actual scroll-container client size, **not** `window.innerWidth/innerHeight`).
+- **When the note fits** the viewer (not wider AND not taller than the viewer's client area): show the **whole note**, ring included.
+- **When the note is wider OR taller** than the viewer: anchor to the **top and the left** (show top-left), since the whole thing can't fit.
+- Within-note caret reveal (scrolling the clipped body to the caret line) is owned by `useMarkdownNoteBodyScroll`, **not** this hook - this hook only positions the whole story in the viewer plus its horizontal scroll container.
+
+The recurring regression is the ring being cropped on the left edge when a card sits flush against the scroll container's edge; verify by focusing a card in the leftmost column - the left ring must show.
 
 ## File Organization
 

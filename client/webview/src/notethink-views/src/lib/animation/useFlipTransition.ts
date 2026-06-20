@@ -66,14 +66,64 @@ const scheduleFrame: (cb: () => void) => void =
         ? (cb) => { requestAnimationFrame(() => cb()); }
         : (cb) => { setTimeout(cb, 0); };
 
-/** FIRST: measure every `[data-flip-id]` card's rect within the container, keyed by stable_id */
+/** run `fn` over every `[data-flip-id]` card within the container (the one FLIP-registry query, shared) */
+function forEachFlipCard(container: HTMLElement, fn: (el: HTMLElement) => void): void {
+    container.querySelectorAll<HTMLElement>('[data-flip-id]').forEach(fn);
+}
+
+/** finish any running Web-Animation on a card so it settles to its identity (true-layout) box */
+function finishCardAnimations(el: HTMLElement): void {
+    if (typeof el.getAnimations === 'function') {
+        el.getAnimations().forEach((a) => a.finish());
+    }
+}
+
+/**
+ * settle every still-playing move before a fresh measurement. getBoundingClientRect reports a card's
+ * LIVE animated position, so measuring while a previous move is mid-flight would bake those in-between
+ * rects into the next baseline and the following transition would invert from the wrong `previous` spot
+ * (the displaced cards visibly fly in from the top of the column). Finishing snaps each card to its true
+ * layout box first. The caller skips this during a drag, where dnd owns the inline transforms.
+ */
+function settleInFlightAnimations(container: HTMLElement): void {
+    forEachFlipCard(container, finishCardAnimations);
+}
+
+/**
+ * FIRST: measure every `[data-flip-id]` card's rect, keyed by stable_id, in the BOARD's content space
+ * (relative to the board-root origin, plus its scroll) rather than the viewport.
+ *
+ * The board root (`[data-flip-root]`) is the cards' common ancestor, BELOW the scrolling `.content`
+ * container and BELOW the document-strip / parent-context header that folder mode renders above the board.
+ * Anchoring there makes the measurement immune to the two things that otherwise fold a uniform offset into
+ * every card and fling the whole column in from off-screen:
+ * - a SCROLL of `.content` (useScrollToCaret reveals the moved story between baseline and move) - board and
+ *   cards scroll together, so the offset cancels;
+ * - a HEIGHT CHANGE of the header above the board (folder-mode re-aggregation re-renders the strip /
+ *   parent-context) - the board shifts down with the cards, so the shift cancels.
+ * A card that only scrolled / was only pushed by the header (did not reorder) measures identically across
+ * renders, so its FLIP delta is zero. The constant board origin cancels in prev - next, so a static board
+ * is unaffected. Falls back to the container when no board root is present (e.g. the unit-test harness).
+ */
 function measureCards(container: HTMLElement): Map<string, MeasuredCard> {
     const result = new Map<string, MeasuredCard>();
-    container.querySelectorAll<HTMLElement>('[data-flip-id]').forEach((el) => {
+    const root = container.querySelector<HTMLElement>('[data-flip-root]') ?? container;
+    const base = root.getBoundingClientRect();
+    const scroll_left = root.scrollLeft;
+    const scroll_top = root.scrollTop;
+    forEachFlipCard(container, (el) => {
         const id = el.getAttribute('data-flip-id');
         if (id === null) { return; }
         const r = el.getBoundingClientRect();
-        result.set(id, { el, rect: { left: r.left, top: r.top, width: r.width, height: r.height } });
+        result.set(id, {
+            el,
+            rect: {
+                left: r.left - base.left + scroll_left,
+                top: r.top - base.top + scroll_top,
+                width: r.width,
+                height: r.height,
+            },
+        });
     });
     return result;
 }
@@ -169,11 +219,7 @@ function armGlobalCap(container: HTMLElement, cap_timer: React.MutableRefObject<
     if (cap_timer.current !== null) { clearTimeout(cap_timer.current); }
     cap_timer.current = setTimeout(() => {
         emitAnimationEvent({ kind: 'cap' });
-        container.querySelectorAll<HTMLElement>('[data-flip-id]').forEach((el) => {
-            if (typeof el.getAnimations === 'function') {
-                el.getAnimations().forEach((a) => a.finish());
-            }
-        });
+        forEachFlipCard(container, finishCardAnimations);
         cap_timer.current = null;
     }, KANBAN_ANIMATION_GLOBAL_CAP_MS);
 }
@@ -204,36 +250,56 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
     const first_run = useRef(true);
     const cap_timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // signature changes whenever the column set or card order/membership changes - drives the effect
+    // signature changes whenever the column set or card order/membership changes - i.e. a reorder
     const signature = useMemo(
         () => options.column_ids.join('|') + '#' + options.flip_ids.join(','),
         [options.column_ids, options.flip_ids],
     );
 
+    /*
+     * The FLIP samples each card's rect on the commit that introduces a reorder (LAST) and inverts it
+     * against the previous baseline (FIRST). For the deltas to mean "the reorder" and nothing else, both
+     * must be read against the SETTLED card heights - guaranteed by MarkdownNote's useSyncedBodyClip, which
+     * applies the overflow clip in a CHILD layout effect that React runs before this parent effect. So a
+     * freshly (re)mounted card (notably one that just changed kanban columns and remounted into the new
+     * Droppable) is already clipped when we measure it; without that it is sampled at full height and
+     * shoves its new siblings down by its whole unclipped height, which this hook then inverts - the
+     * "displaced cards fly up above their slot then settle" bug. Board-anchored measurement (measureCards)
+     * additionally makes a scroll or header-height shift cancel in FIRST - LAST, so neither perturbs the
+     * deltas.
+     */
     useLayoutEffect(() => {
         const container = options.container_ref.current;
         if (!container) { return; }
 
+        // snapshot the measured layout as the next baseline (the FIRST for the following reorder)
+        const snapshotBaseline = (rects: Map<string, MeasuredCard>, columns: Set<string>): void => {
+            const baseline = new Map<string, RectLike>();
+            rects.forEach((measured, id) => { baseline.set(id, measured.rect); });
+            prev_rects.current = baseline;
+            prev_columns.current = columns;
+            first_run.current = false;
+        };
+
+        /*
+         * settle any still-playing move so getBoundingClientRect reads the true layout box - a mid-flight
+         * position would otherwise bake into the baseline; skipped while the gate is hot, where dnd owns
+         * the card transforms and FLIP has nothing in flight.
+         */
+        if (!options.gate.isHot()) {
+            settleInFlightAnimations(container);
+        }
         const new_rects = measureCards(container);
         const new_column_els = measureColumns(container);
         const new_columns = new Set(new_column_els.keys());
         const reduced = prefersReducedMotion();
-
-        // commit the new layout as the next baseline (the "previous" for the following render)
-        const commitBaseline = (): void => {
-            const baseline = new Map<string, RectLike>();
-            new_rects.forEach((measured, id) => { baseline.set(id, measured.rect); });
-            prev_rects.current = baseline;
-            prev_columns.current = new_columns;
-            first_run.current = false;
-        };
 
         // GATE / FIRST-RUN / DISABLED / REDUCED-MOTION: establish baseline, never animate
         if (first_run.current || options.gate.isHot() || !options.enabled || reduced) {
             const reason = skipReason(first_run.current, options.gate.isHot(), options.enabled, reduced);
             debug('skip animate: %s', reason);
             emitAnimationEvent({ kind: 'skip', reason });
-            commitBaseline();
+            snapshotBaseline(new_rects, new_columns);
             return;
         }
 
@@ -251,7 +317,7 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
         classification.entering.forEach((id) => playCardEnter(id, new_rects.get(id)));
         classification.exiting.forEach((id) => { emitAnimationEvent({ kind: 'exit', id }); });
 
-        commitBaseline();
+        snapshotBaseline(new_rects, new_columns);
         armGlobalCap(container, cap_timer);
     }, [signature, options.container_ref, options.enabled, options.gate, options.class_names]);
 

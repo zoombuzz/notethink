@@ -40,6 +40,29 @@ export function workspaceRootFromDocAndRelative(doc_path: string | undefined, re
 }
 
 /**
+ * Whether `file_path` sits inside (or is) the folder at `folder_path`. Gates the reactive
+ * auto-integration exit: switching the active editor to a file OUTSIDE the current folder scope
+ * drops the board to current_file, while revealing a member file INSIDE the scope (e.g. a kanban
+ * card click) keeps the board. A path equal to the folder counts as inside (defensive). Empty
+ * inputs are treated as not-inside.
+ */
+export function isPathWithinFolder(file_path: string | undefined, folder_path: string | undefined): boolean {
+    if (!file_path || !folder_path) { return false; }
+    return file_path === folder_path || file_path.startsWith(folder_path.endsWith('/') ? folder_path : folder_path + '/');
+}
+
+/**
+ * The parent folder of an absolute path (everything before the last `/`). Returns undefined when the
+ * path is empty, has no separator, or is already a bare segment. Used for a file's own folder (the
+ * folder a concrete folder-pin or a folder-declaring file scopes to).
+ */
+export function parentFolderOf(file_path: string | undefined): string | undefined {
+    if (!file_path) { return undefined; }
+    const folder = file_path.replace(/\/[^/]+$/, '');
+    return folder && folder !== file_path ? folder : undefined;
+}
+
+/**
  * Segment an absolute path into clickable breadcrumb pieces, with the opened
  * workspace folder kept as the first segment so it is itself clickable
  * (selecting it re-narrows to the whole opened workspace folder, not just the

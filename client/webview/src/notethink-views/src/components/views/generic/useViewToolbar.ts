@@ -1,8 +1,9 @@
 import Debug from "debug";
 import { useCallback, useMemo } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
-import { FOLDER_VIEW_STATE_ID, resolveIntegrationMode } from "../../../lib/viewstateops";
+import { buildIntegrationDispatch, resolveIntegrationMode } from "../../../lib/viewstateops";
 import { arraysEqual, deriveNaturalColumnOrder } from "../../../lib/noteops";
+import { parentFolderOf } from "../../../lib/pathops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { GlobalSettingKey } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
@@ -69,48 +70,21 @@ export function useViewToolbar(
             ? (decl?.mode ?? INTEGRATION_MODE_CURRENT_FILE)
             : (mode as ConcreteIntegrationMode);
         const folder_path = resolved_mode === INTEGRATION_MODE_FOLDER
-            ? (is_auto_reset ? decl?.integration_path : (props.doc_path ? props.doc_path.replace(/\/[^/]+$/, '') : undefined))
+            ? (is_auto_reset ? decl?.integration_path : parentFolderOf(props.doc_path))
             : undefined;
-        const clear_stranded_folder_tag = resolved_mode === INTEGRATION_MODE_CURRENT_FILE;
-        const canonical_display_options: Record<string, unknown> = {
-            // persist 'auto' on reset (the view keeps following the file) and the concrete mode on a pin
-            integration_mode: is_auto_reset ? INTEGRATION_MODE_AUTO : resolved_mode,
-            integration_path: folder_path,
-            view_focused_ids: undefined,
-            view_selected_ids: undefined,
-        };
-        const updates: Array<Record<string, unknown>> = [{ id: FOLDER_VIEW_STATE_ID, display_options: canonical_display_options }];
-        for (const id of (props.view_state_ids ?? [])) {
-            if (id === FOLDER_VIEW_STATE_ID) { continue; }
-            const non_canonical_display_options: Record<string, unknown> = {
-                view_focused_ids: undefined,
-                view_selected_ids: undefined,
-            };
-            if (clear_stranded_folder_tag) {
-                non_canonical_display_options.integration_mode = undefined;
-                non_canonical_display_options.integration_path = undefined;
-            }
-            updates.push({ id, display_options: non_canonical_display_options });
-        }
-        // auto reset to a current_file file that declares an epic/story scope: re-seed parent_context_seq on the doc view
-        if (is_auto_reset && resolved_mode === INTEGRATION_MODE_CURRENT_FILE && decl?.parent_context_seq !== undefined && props.id !== FOLDER_VIEW_STATE_ID) {
-            updates.push({ id: props.id, display_options: { parent_context_seq: decl.parent_context_seq } });
-        }
+        // shared builder so the reactive editor-follow reconcile (useAutoIntegration) and this toolbar path can't drift
+        const { updates, message } = buildIntegrationDispatch({
+            is_auto: is_auto_reset,
+            resolved_mode,
+            folder_path,
+            seed_parent_context_seq: is_auto_reset && resolved_mode === INTEGRATION_MODE_CURRENT_FILE ? decl?.parent_context_seq : undefined,
+            view_id: props.id,
+            view_state_ids: props.view_state_ids ?? [],
+            target_file_path,
+        });
         handlers.setViewManagedState(updates);
-        if (resolved_mode === INTEGRATION_MODE_FOLDER && folder_path) {
-            handlers.postMessage?.({
-                type: 'setIntegration',
-                mode: INTEGRATION_MODE_FOLDER,
-                path: folder_path,
-            });
-        } else if (resolved_mode === INTEGRATION_MODE_CURRENT_FILE) {
-            // notify the extension so it disposes the folder watcher and re-sends just the active doc; without this the stale folder docs keep rendering as stacked single-file views. target_file_path (a Files-drawer click) makes the extension open + show that file instead of whatever was active
-            handlers.postMessage?.({
-                type: 'setIntegration',
-                mode: INTEGRATION_MODE_CURRENT_FILE,
-                path: target_file_path,
-            });
-        }
+        // a folder scope or any resolve-to-current_file posts setIntegration so the extension swaps folder discovery / re-sends just the active doc; target_file_path (a Files-drawer click) makes it open that file
+        if (message) { handlers.postMessage?.(message); }
     }, [handlers, props.doc_path, props.view_state_ids, props.id, props.file_declared_integration]);
 
     // natural column order for the Kanban drawer (alphabetical + 'untagged' last)

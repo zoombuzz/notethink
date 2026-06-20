@@ -9,6 +9,7 @@ import MarkdownNoteBody from "./markdown/MarkdownNoteBody";
 import MarkdownNoteContainer from "./markdown/MarkdownNoteContainer";
 import MarkdownNoteHeadline from "./markdown/MarkdownNoteHeadline";
 import { useMarkdownNoteOverflow } from "./markdown/useMarkdownNoteOverflow";
+import { useSyncedBodyClip } from "./markdown/useSyncedBodyClip";
 import { useMarkdownNoteBodyScroll } from "./markdown/useMarkdownNoteBodyScroll";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 
@@ -61,6 +62,9 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     const clip_lock_ref = useRef(should_clip_base);
     if (!is_dragging) { clip_lock_ref.current = should_clip_base; }
     const should_clip = is_dragging ? clip_lock_ref.current : should_clip_base;
+
+    // settle the clip geometry synchronously, before the kanban FLIP host samples positions
+    useSyncedBodyClip(body_ref, { is_top_level, is_dragging, auto_expand, focused: props.focused, manually_expanded });
 
     const { scrolled_top, at_bottom } = useMarkdownNoteBodyScroll({
         body_ref,

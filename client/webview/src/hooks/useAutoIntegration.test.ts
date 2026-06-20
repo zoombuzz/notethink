@@ -110,3 +110,101 @@ describe('useAutoIntegration', () => {
     });
 
 });
+
+describe('useAutoIntegration reactive follow', () => {
+
+    // a mutable-ref harness so a test can simulate the parent applying a dispatch (view_states_ref.current) then switch the active editor / edit the file via rerender
+    function reactiveHarness(initial_doc: Doc) {
+        const set_view_managed_state = jest.fn();
+        const post_message = jest.fn();
+        const view_states_ref: { current: Record<string, ViewState> } = { current: {} };
+        const makeProps = (active_path: string, docs: HashMapOf<Doc>): Parameters<typeof useAutoIntegration>[0] => ({
+            docs,
+            active_editor_doc_path: active_path,
+            workspace_root: '/repo',
+            view_states_ref,
+            postMessage: post_message,
+            setViewManagedState: set_view_managed_state,
+        });
+        const { rerender } = renderHook((p: Parameters<typeof useAutoIntegration>[0]) => useAutoIntegration(p), {
+            initialProps: makeProps(initial_doc.path!, { [initial_doc.id]: initial_doc }),
+        });
+        return { set_view_managed_state, post_message, view_states_ref, makeProps, rerender };
+    }
+
+    // persisted shape after an auto-resolution to folder@path (what the parent would write back)
+    function folderState(path: string): Record<string, ViewState> {
+        return { [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'auto', integration_path: path } } };
+    }
+
+    const mobile = () => parsedDoc('# Mobile [](?nt_integration_mode=folder)', { id: 'mobile', path: '/repo/portfolio/mobile-app.md', relative_path: 'portfolio/mobile-app.md', hash_sha256: 'h-mobile' });
+
+    it('EXIT (the bug): switching the active editor to a plain file OUTSIDE the scope drops to current_file', () => {
+        const h = reactiveHarness(mobile());
+        // cold open entered folder@/repo/portfolio
+        expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'folder', path: '/repo/portfolio' });
+        h.view_states_ref.current = folderState('/repo/portfolio');
+        h.post_message.mockClear();
+        h.set_view_managed_state.mockClear();
+        // switch to intro.md (declares nothing, sits outside portfolio)
+        const intro = parsedDoc('# Welcome', { id: 'intro', path: '/repo/intro.md', relative_path: 'intro.md', hash_sha256: 'h-intro' });
+        h.rerender(h.makeProps('/repo/intro.md', { mobile: mobile(), intro }));
+        expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file', path: undefined });
+    });
+
+    it('card-click gate: revealing a member file INSIDE the scope keeps the board', () => {
+        const h = reactiveHarness(mobile());
+        h.view_states_ref.current = folderState('/repo/portfolio');
+        h.post_message.mockClear();
+        h.set_view_managed_state.mockClear();
+        const member = parsedDoc('# Member', { id: 'member', path: '/repo/portfolio/member.md', relative_path: 'portfolio/member.md', hash_sha256: 'h-member' });
+        h.rerender(h.makeProps('/repo/portfolio/member.md', { mobile: mobile(), member }));
+        expect(h.post_message).not.toHaveBeenCalled();
+        expect(h.set_view_managed_state).not.toHaveBeenCalled();
+    });
+
+    it('reactive edit: removing the folder declaration from the active file exits to current_file', () => {
+        const h = reactiveHarness(mobile());
+        h.view_states_ref.current = folderState('/repo/portfolio');
+        h.post_message.mockClear();
+        // same doc id, new hash, declaration removed
+        const edited = parsedDoc('# Mobile', { id: 'mobile', path: '/repo/portfolio/mobile-app.md', relative_path: 'portfolio/mobile-app.md', hash_sha256: 'h-mobile-2' });
+        h.rerender(h.makeProps('/repo/portfolio/mobile-app.md', { mobile: edited }));
+        expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file', path: undefined });
+    });
+
+    it('reactive edit: adding a folder declaration to a plain file enters folder mode', () => {
+        const plain = parsedDoc('# Notes', { id: 'd', path: '/repo/portfolio/notes.md', relative_path: 'portfolio/notes.md', hash_sha256: 'p1' });
+        const h = reactiveHarness(plain);
+        // cold current_file: nothing dispatched
+        expect(h.set_view_managed_state).not.toHaveBeenCalled();
+        const edited = parsedDoc('# Notes [](?nt_integration_mode=folder)', { id: 'd', path: '/repo/portfolio/notes.md', relative_path: 'portfolio/notes.md', hash_sha256: 'p2' });
+        h.rerender(h.makeProps('/repo/portfolio/notes.md', { d: edited }));
+        expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'folder', path: '/repo/portfolio' });
+    });
+
+    it('re-snap (D1): switching to a file declaring a DIFFERENT folder re-snaps the board', () => {
+        const a = parsedDoc('# A [](?nt_integration_mode=folder)', { id: 'a', path: '/repo/folderA/a.md', relative_path: 'folderA/a.md', hash_sha256: 'ha' });
+        const h = reactiveHarness(a);
+        expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'folder', path: '/repo/folderA' });
+        h.view_states_ref.current = folderState('/repo/folderA');
+        h.post_message.mockClear();
+        const b = parsedDoc('# B [](?nt_integration_mode=folder)', { id: 'b', path: '/repo/folderB/b.md', relative_path: 'folderB/b.md', hash_sha256: 'hb' });
+        h.rerender(h.makeProps('/repo/folderB/b.md', { a, b }));
+        expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'folder', path: '/repo/folderB' });
+    });
+
+    it('preserve (D2): a same-file re-derive does not yank back a breadcrumb descent', () => {
+        const h = reactiveHarness(mobile());
+        // user breadcrumb-navigates deeper within the SAME file
+        h.view_states_ref.current = folderState('/repo/portfolio/sub');
+        h.post_message.mockClear();
+        h.set_view_managed_state.mockClear();
+        // a content edit that does not touch the integration tags
+        const edited = parsedDoc('# Mobile [](?nt_integration_mode=folder)', { id: 'mobile', path: '/repo/portfolio/mobile-app.md', relative_path: 'portfolio/mobile-app.md', hash_sha256: 'h-mobile-3' });
+        h.rerender(h.makeProps('/repo/portfolio/mobile-app.md', { mobile: edited }));
+        expect(h.post_message).not.toHaveBeenCalled();
+        expect(h.set_view_managed_state).not.toHaveBeenCalled();
+    });
+
+});

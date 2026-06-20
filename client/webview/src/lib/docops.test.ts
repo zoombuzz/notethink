@@ -1,5 +1,6 @@
 import type { Doc, HashMapOf } from "../types/general";
-import { pickMostRecentlySentDoc, resolveFileIntegrationDeclaration } from "./docops";
+import { decideAutoIntegrationReconcile, declTargetKey, pickMostRecentlySentDoc, resolveFileIntegrationDeclaration, type AutoReconcileInputs } from "./docops";
+import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../notethink-views/src/types/IntegrationMode";
 
 function buildDoc(overrides: Partial<Doc> = {}): Doc {
     return {
@@ -164,4 +165,162 @@ describe('docops.resolveFileIntegrationDeclaration', () => {
         expect(resolveFileIntegrationDeclaration({ id: 'x', path: '/x.md' }, '/repo')).toEqual({ mode: 'current_file' });
     });
 
+});
+
+describe('docops.declTargetKey', () => {
+    it('keys a folder declaration on mode + path', () => {
+        expect(declTargetKey({ mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/portfolio' })).toBe('folder:/repo/portfolio');
+    });
+
+    it('keys a current_file declaration with an empty path', () => {
+        expect(declTargetKey({ mode: INTEGRATION_MODE_CURRENT_FILE })).toBe('current_file:');
+    });
+
+    it('two declarations resolving the same board share a key (content edit not touching tags)', () => {
+        expect(declTargetKey({ mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/a' }))
+            .toBe(declTargetKey({ mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/a' }));
+    });
+});
+
+describe('docops.decideAutoIntegrationReconcile', () => {
+    function makeInputs(overrides: Partial<AutoReconcileInputs> = {}): AutoReconcileInputs {
+        return {
+            decl: { mode: INTEGRATION_MODE_CURRENT_FILE },
+            opened_doc_path: '/repo/portfolio/mobile-app.md',
+            persisted_raw_mode: undefined,
+            persisted_concrete: INTEGRATION_MODE_CURRENT_FILE,
+            persisted_path: undefined,
+            active_file_changed: false,
+            decl_changed: false,
+            ...overrides,
+        };
+    }
+
+    it('never overrides a concrete folder pin', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/portfolio' },
+            persisted_raw_mode: INTEGRATION_MODE_FOLDER,
+            persisted_concrete: INTEGRATION_MODE_FOLDER,
+            persisted_path: '/repo',
+        }))).toBeNull();
+    });
+
+    it('never overrides a concrete current_file pin', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/portfolio' },
+            persisted_raw_mode: INTEGRATION_MODE_CURRENT_FILE,
+            persisted_concrete: INTEGRATION_MODE_CURRENT_FILE,
+        }))).toBeNull();
+    });
+
+    it('cold open: a folder-declaring file over a current_file board ENTERs the declared folder', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/portfolio' },
+            persisted_concrete: INTEGRATION_MODE_CURRENT_FILE,
+        }))).toEqual({ resolved_mode: INTEGRATION_MODE_FOLDER, folder_path: '/repo/portfolio' });
+    });
+
+    it('a folder declaration with no resolvable path does nothing', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_FOLDER },
+            persisted_concrete: INTEGRATION_MODE_CURRENT_FILE,
+        }))).toBeNull();
+    });
+
+    it('reload (cold): an already-folder board at a navigated path is preserved, not re-snapped', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/portfolio' },
+            persisted_raw_mode: 'auto',
+            persisted_concrete: INTEGRATION_MODE_FOLDER,
+            persisted_path: '/repo/elsewhere',
+            active_file_changed: false,
+            decl_changed: false,
+        }))).toBeNull();
+    });
+
+    it('re-snap (D1): switching the active editor to a file declaring a DIFFERENT folder re-snaps', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/folderB' },
+            persisted_raw_mode: 'auto',
+            persisted_concrete: INTEGRATION_MODE_FOLDER,
+            persisted_path: '/repo/folderA',
+            active_file_changed: true,
+        }))).toEqual({ resolved_mode: INTEGRATION_MODE_FOLDER, folder_path: '/repo/folderB' });
+    });
+
+    it('re-snap: editing the active file to declare a different folder re-snaps (decl changed)', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/folderB' },
+            persisted_raw_mode: 'auto',
+            persisted_concrete: INTEGRATION_MODE_FOLDER,
+            persisted_path: '/repo/folderA',
+            decl_changed: true,
+        }))).toEqual({ resolved_mode: INTEGRATION_MODE_FOLDER, folder_path: '/repo/folderB' });
+    });
+
+    it('preserve (D2): a breadcrumb descent (declaration unchanged) is not yanked back on re-derive', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/folderA' },
+            persisted_raw_mode: 'auto',
+            persisted_concrete: INTEGRATION_MODE_FOLDER,
+            persisted_path: '/repo/folderA/deeper',
+            active_file_changed: false,
+            decl_changed: false,
+        }))).toBeNull();
+    });
+
+    it('congruent folder declaration matching the persisted scope does nothing', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/portfolio' },
+            persisted_raw_mode: 'auto',
+            persisted_concrete: INTEGRATION_MODE_FOLDER,
+            persisted_path: '/repo/portfolio',
+            active_file_changed: true,
+        }))).toBeNull();
+    });
+
+    it('EXIT (the bug): switching to a current_file file OUTSIDE the scope drops to current_file', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_CURRENT_FILE },
+            opened_doc_path: '/repo/intro.md',
+            persisted_raw_mode: 'auto',
+            persisted_concrete: INTEGRATION_MODE_FOLDER,
+            persisted_path: '/repo/portfolio',
+            active_file_changed: true,
+            decl_changed: true,
+        }))).toEqual({ resolved_mode: INTEGRATION_MODE_CURRENT_FILE, folder_path: undefined });
+    });
+
+    it('card-click gate: revealing a member file INSIDE the scope keeps the board', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_CURRENT_FILE },
+            opened_doc_path: '/repo/portfolio/member.md',
+            persisted_raw_mode: 'auto',
+            persisted_concrete: INTEGRATION_MODE_FOLDER,
+            persisted_path: '/repo/portfolio',
+            active_file_changed: true,
+            decl_changed: true,
+        }))).toBeNull();
+    });
+
+    it('reactive edit: the active file editing its own declaration away from folder EXITs (inside the scope)', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_CURRENT_FILE },
+            opened_doc_path: '/repo/portfolio/mobile-app.md',
+            persisted_raw_mode: 'auto',
+            persisted_concrete: INTEGRATION_MODE_FOLDER,
+            persisted_path: '/repo/portfolio',
+            active_file_changed: false,
+            decl_changed: true,
+        }))).toEqual({ resolved_mode: INTEGRATION_MODE_CURRENT_FILE, folder_path: undefined });
+    });
+
+    it('already current_file does nothing', () => {
+        expect(decideAutoIntegrationReconcile(makeInputs({
+            decl: { mode: INTEGRATION_MODE_CURRENT_FILE },
+            persisted_concrete: INTEGRATION_MODE_CURRENT_FILE,
+            active_file_changed: true,
+            decl_changed: true,
+        }))).toBeNull();
+    });
 });

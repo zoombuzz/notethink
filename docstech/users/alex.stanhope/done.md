@@ -3208,3 +3208,21 @@ The visible UX payoff. When the kanban view changes layout because of a *passive
   + new notes fade in; new columns slide in (CSS keyframes) with inbound notes choreographed afterwards; the layer is decorative - final DOM is correct regardless of playback (350 ms per-transition + 800 ms global ceiling, `prefers-reduced-motion` respected, Global `notethink.kanbanAnimateTransitions` setting + drawer toggle to disable)
   + FLIP suppression is tied to the projection lifecycle (`useFlipGate` hold/release), not a fixed timer, so a user drag is never re-animated by its own document round-trip; real pointer-drag + round-trip regression specs added
   + tests 1405 jest, 89 playwright
+
+
+### Kanban FLIP fling on passive edit: clip settles after the FLIP measures [](?id=kanban-flip-stale-baseline)
+
+On a passive linetag edit in folder/aggregate mode (~131 tall story cards, 2 columns), the moved card animates correctly but every other card in the target column is drawn UP above its slot then slides back down (off-screen for a tall board). Reproduced deterministically and captured before/after; cosmetic only, does not block ship.
+
+Root cause (proven, not guessed): the overflow clip is part of the layout but is applied a paint too LATE. `useMarkdownNoteOverflow` clips each top-level card to `width*1` from a PASSIVE effect, so on the frame the FLIP samples positions the cards are still at FULL height. Two faces of the same bug: (1) on first paint the FLIP captures a tall baseline; (2) the moved card changes column, React REMOUNTS it into the new Droppable with its clip reset, so it is sampled tall and shoves its new siblings down by its whole unclipped height. The FLIP inverts that bogus shift and the siblings fly up then settle. The earlier baseline-freshness attempts (board-anchor, every-render resync, ResizeObserver) only chased the symptom and left a residual fling.
+
+Fix: settle the clip GEOMETRY synchronously. New `useSyncedBodyClip` applies `maxHeight` to the body in a CHILD `useLayoutEffect`, which React runs before the parent FLIP host's layout effect - so the FLIP always samples clipped cards (both the baseline and the just-remounted moved card). The passive hook still owns the React state that drives the Show-more bars.
+
++ [X] reproduce deterministically: Playwright + slow-motion + a clip-delay recreating the real tall->clip transient; confirmed FIRST tall vs LAST clipped, fling `maxAbs` ~15000px (matches the real `prevTop=144908`/`newTop=35682` signature)
++ [X] pinpoint that the clip is applied after the FLIP measures, and that the moved card remounts tall on a column change
++ [X] fix via `useSyncedBodyClip` (synchronous child layout-effect clip; writes only on change); the FLIP then measures one-slot deltas (`maxAbs` 15000px -> ~500px = one card height)
++ [X] revert the now-redundant baseline-chasing machinery: FLIP host back to a `[signature]`-keyed effect (no every-render measure); kept board-anchored measurement + the cheap ResizeObserver as a window-resize defense
++ [X] before/after evidence captured (videos + frames in `/home/alex/flip-evidence/`); 141 jest + 26 Playwright kanban E2E green; lint clean; dev bundle rebuilt
++ manual: reload the window and do a folder-mode status edit on the real 131-card board to confirm the displaced cards now slide one slot.
+
+Change is uncommitted on branch `staging`: `useSyncedBodyClip.ts` (new), `MarkdownNote.tsx`, `useFlipTransition.ts` (+ test), `flipMath.ts`.

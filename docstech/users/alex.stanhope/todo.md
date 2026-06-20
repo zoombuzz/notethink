@@ -44,13 +44,15 @@
   + `client/webview/src/lib/docops.ts` - `resolveFileIntegrationDeclaration` stays the derivation primitive (already mirrors `mergeAggregateRoot`'s `file_view_type` read)
   + `client/webview/src/components/NoteRenderer.tsx` - confirm the render decision tracks the reactively-derived mode (no stale persisted-only read)
   + `client/extension/src/vscode/PanelSession.ts` - confirm no change needed (the `setIntegration current_file` teardown + folder re-discovery already exist)
-+ [ ] resolve the two open design decisions and record them here
-+ [ ] extract the shared auto-reset builder; route the toolbar `handle_integration_change('auto')` through it
-+ [ ] re-architect `useAutoIntegration` to derive-then-reconcile (bidirectional, keyed on derived target, gated on outside-integration_path for the exit)
-+ [ ] preserve concrete-pin immunity (no auto change when selection is folder / current_file)
-+ [ ] jest: editor switch folder→current_file exits; linetag removal exits; linetag add enters; member-file-inside-path stays folder; concrete pins untouched
-+ [ ] jest: folderA→folderB behaviour per the decision above
-+ [ ] playwright (welcome front door): open mobile-app.md → board; switch to intro.md → document render; live-edit a linetag flips the mode
++ [x] open design decisions resolved (2026-06-19):
+  + folderA -> folderB re-snap: YES, follow the active file. Switching the active editor to a file declaring a DIFFERENT folder (one outside the current `integration_path`) re-snaps the board to that folder, mirroring how `nt_view` follows the active file. Gated so a card-click that reveals a member file INSIDE the current `integration_path` never kicks the user off the board.
+  + breadcrumb descent vs re-derive: PRESERVE the navigated position. The persisted navigated `integration_path` wins over the file declaration whenever the SAME active file re-derives (edit / re-render), so a breadcrumb descent is never yanked back; a change of active file (above) is the only trigger that re-snaps.
++ [x] extract the shared auto-reset builder (`buildIntegrationDispatch` in `viewstateops.ts`); route the toolbar `handle_integration_change('auto')` through it
++ [x] re-architect `useAutoIntegration` to derive-then-reconcile (bidirectional, keyed on derived target via `declTargetKey`, exit gated on outside-`integration_path` via `isPathWithinFolder`; decision factored into pure `decideAutoIntegrationReconcile` in `docops.ts`)
++ [x] preserve concrete-pin immunity (no auto change when selection is folder / current_file)
++ [x] jest: editor switch folder→current_file exits; linetag removal exits; linetag add enters; member-file-inside-path stays folder; concrete pins untouched (`useAutoIntegration.test.ts` + `docops.test.ts` `decideAutoIntegrationReconcile`)
++ [x] jest: folderA→folderB re-snap (decideReconcile + hook re-snap case)
++ [x] playwright: switch to a file outside the scope → document render; member inside the scope stays; live linetag edit flips the mode (`auto-integration.spec.ts` reactive describe)
 + relationship - independent of [[single-file-kanban-story-descent]] (that story is WHAT renders inside single-file kanban; this is WHEN the integration mode flips); both touch the same portfolio demo files
 
 
@@ -84,16 +86,16 @@ In current_file (single-file) mode the kanban renders the *direct children of th
   + whether descent is automatic (detect an epic layer) or opt-in - automatic preserves the documented `###`-is-a-card contract with no authoring change
   + how drag-drop status + ordering rewrites route back to the one doc when cards are `###` under `##` (folder mode partitions by docPath; single-file has one doc, so the existing single-file editText path should apply - verify offsets)
   + interaction with `parent_context_seq` / `nt_breadcrumb_last` scoping into a single epic (should still work, narrowing to that epic's stories)
-+ [ ] reproduce: open a nested single file (e.g. `project-board.md`) in kanban, confirm `##` epics render as cards
-+ [ ] decide and document the transform seam (composer vs `useViewContext`)
-+ [ ] implement single-file `###`-story flatten with structural `##`-epic tagging, reusing `mergeAggregateRoot` machinery
-+ [ ] resolve explicit `epic=` overrides (direct > inherited > structural) in single-file mode
-+ [ ] render the epic chip via `OriginPill` without a project pill in single-file mode
-+ [ ] preserve flat-file behaviour (no epic layer → `##` cards unchanged)
-+ [ ] verify drag-drop status + ordering rewrites land correctly for `###` cards in a single doc
-+ [ ] jest: nested single-file tree yields `###` cards in status columns with epic tag present; flat file unchanged
-+ [ ] playwright: nested single file renders story cards (not epic cards) end-to-end
-+ [ ] revisit `AUTHORING_GUIDE.md` once the descent rule lands (it already claims `###` = card universally)
++ [x] reproduce / encode the bug: the playwright descent spec asserts the `##` epics are NOT cards and the `###` stories ARE (a contrast that would fail against the pre-fix tree)
++ [x] transform seam decided (2026-06-19): single-file composer (`NoteTreeComposer`), NOT `useViewContext`. `useViewContext` runs for both folder and single-file, so a shared-branch flatten would double-flatten the already-merged folder tree; the composer is single-file-only (folder mode renders `FolderTreeComposer`) and owns the docId/docPath postMessage wrapper that keeps drag routing on one doc. Descent is AUTOMATIC (no opt-in) but GATED on the file rendering as a kanban board (explicit kanban viewType, or H1/front-matter `nt_view=kanban` via `fileDeclaredViewType`) AND on the structural nested-vs-flat shape AND on a single `#` H1 - so a plain nested document keeps its `##` structure + prose (it is not a board) and a no-H1 file is never mistaken for a folder aggregate. For a kanban board the descent is at the data level, so its document view also shows the flattened stories, matching folder-mode parity (the D5 choice).
++ [x] implement single-file `###`-story flatten with structural `##`-epic tagging (`flattenSingleFileStories` in `mergeAggregateRoot.ts`, reusing `buildFileEpicRegistries` + `resolveEpicLinetag`; wired into `NoteTreeComposer` before the stable-id stamp)
++ [x] resolve explicit `epic=` overrides (direct > inherited > structural) in single-file mode (via `resolveEpicLinetag`; inherited `nt_child_epic=` already collapsed by `convertMdastToNoteHierarchy`)
++ [x] render the epic chip via `OriginPill` without a project pill in single-file mode (`epicOnly` prop; `MarkdownNoteHeadline` passes it for project-less origins and gates the empty-pill case)
++ [x] preserve flat-file behaviour (structural nested-vs-flat gate leaves flat `##`-card files byte-identical)
++ [x] verify drag-drop status + ordering rewrites land on the one doc for `###` cards (origin carries doc_path so payload routes single-doc; positions/seq preserved verbatim so offsets stay valid; covered by KanbanView single-file drag tests + kanban-pointer-drag playwright)
++ [x] jest: nested single-file tree yields `###` cards with epic tags; flat file unchanged; position/seq preserved; idempotent (`mergeAggregateRoot.test.ts` `flattenSingleFileStories`) + composer wiring (`NoteTreeComposer.test.tsx`) + `OriginPill.test.tsx` epicOnly
++ [x] playwright: nested single file renders `###` story cards in status columns with epic chips and no project pill (`kanban-single-file-descent.spec.ts`)
++ [x] revisited `AUTHORING_GUIDE.md`: its `###` = Kanban card claim (lines 84, 100) is now accurate in single-file mode too, so no wording change was needed
 
 
 ### View hierarchy and per-view card-type axis [](?id=view-hierarchy-and-card-types)

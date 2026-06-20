@@ -46,6 +46,95 @@ export function resolveIntegrationMode(
 }
 
 /**
+ * the setIntegration payload posted to the extension when an integration change resolves to a
+ * concrete mode. `path` is the folder scope (folder mode) or the file to open (a current_file
+ * resolve triggered by a Files-drawer click); undefined when neither applies.
+ */
+export interface SetIntegrationMessage {
+    type: 'setIntegration';
+    mode: ConcreteIntegrationMode;
+    path?: string;
+}
+
+/**
+ * inputs for buildIntegrationDispatch. The caller has already resolved the concrete mode + folder
+ * scope (an auto reset resolves them from the file declaration; a concrete pin from the user's pick).
+ * - is_auto: persist `auto` (the view keeps following the file) vs the concrete mode (a user pin)
+ * - resolved_mode: the concrete mode this change lands on
+ * - folder_path: the folder scope when resolved_mode is folder, else undefined
+ * - seed_parent_context_seq: re-seed the note-hierarchy scope on the view's own id (auto reset to a
+ *   current_file file that declares an epic/story scope); undefined to skip
+ * - view_id: the view's own id (the seed target; skipped in the clear loop)
+ * - view_state_ids: every persisted view-state id, so focused/selected are cleared everywhere and
+ *   stranded folder tags on non-canonical (doc-path) keys are cleared on a resolve to current_file
+ * - target_file_path: a Files-drawer click's file to open on a current_file resolve; undefined otherwise
+ */
+export interface IntegrationDispatchRequest {
+    is_auto: boolean;
+    resolved_mode: ConcreteIntegrationMode;
+    folder_path: string | undefined;
+    seed_parent_context_seq?: number;
+    view_id: string;
+    view_state_ids: readonly string[];
+    target_file_path?: string;
+}
+
+/**
+ * the view-state updates + optional setIntegration payload an integration change produces.
+ */
+export interface IntegrationDispatch {
+    updates: Array<Record<string, unknown>>;
+    message: SetIntegrationMessage | undefined;
+}
+
+/**
+ * Build the view-state updates + setIntegration payload for an integration-mode change. This is the
+ * single implementation shared by the toolbar's handle_integration_change and the reactive
+ * editor-follow reconcile (useAutoIntegration) so the two paths cannot drift.
+ *
+ * The integration tag always lands on the canonical FOLDER_VIEW_STATE_ID (so the folder viewState's
+ * other settings survive a flip and a flip-back). Per-view click-driven focused/selected state is
+ * transient and cleared on every change. On a resolve-to-current_file the per-state-id loop also
+ * clears stranded folder tags on non-canonical (doc-path) keys so the fallback scans no longer pin
+ * folder. The setIntegration message is posted for a concrete folder scope, or for any resolve to
+ * current_file (so the extension disposes the folder watcher and re-sends just the active doc).
+ */
+export function buildIntegrationDispatch(req: IntegrationDispatchRequest): IntegrationDispatch {
+    const { is_auto, resolved_mode, folder_path, seed_parent_context_seq, view_id, view_state_ids, target_file_path } = req;
+    const clear_stranded_folder_tag = resolved_mode === INTEGRATION_MODE_CURRENT_FILE;
+    const canonical_display_options: Record<string, unknown> = {
+        // persist 'auto' on a reset (the view keeps following the file) and the concrete mode on a pin
+        integration_mode: is_auto ? INTEGRATION_MODE_AUTO : resolved_mode,
+        integration_path: resolved_mode === INTEGRATION_MODE_FOLDER ? folder_path : undefined,
+        view_focused_ids: undefined,
+        view_selected_ids: undefined,
+    };
+    const updates: Array<Record<string, unknown>> = [{ id: FOLDER_VIEW_STATE_ID, display_options: canonical_display_options }];
+    for (const id of view_state_ids) {
+        if (id === FOLDER_VIEW_STATE_ID) { continue; }
+        const non_canonical_display_options: Record<string, unknown> = {
+            view_focused_ids: undefined,
+            view_selected_ids: undefined,
+        };
+        if (clear_stranded_folder_tag) {
+            non_canonical_display_options.integration_mode = undefined;
+            non_canonical_display_options.integration_path = undefined;
+        }
+        updates.push({ id, display_options: non_canonical_display_options });
+    }
+    if (resolved_mode === INTEGRATION_MODE_CURRENT_FILE && seed_parent_context_seq !== undefined && view_id !== FOLDER_VIEW_STATE_ID) {
+        updates.push({ id: view_id, display_options: { parent_context_seq: seed_parent_context_seq } });
+    }
+    let message: SetIntegrationMessage | undefined;
+    if (resolved_mode === INTEGRATION_MODE_FOLDER && folder_path) {
+        message = { type: 'setIntegration', mode: INTEGRATION_MODE_FOLDER, path: folder_path };
+    } else if (resolved_mode === INTEGRATION_MODE_CURRENT_FILE) {
+        message = { type: 'setIntegration', mode: INTEGRATION_MODE_CURRENT_FILE, path: target_file_path };
+    }
+    return { updates, message };
+}
+
+/**
  * congruence-seeking reconciliation for a navigation gesture: given the concrete mode the
  * navigation lands on and the mode the opened file declares, return the value to persist as
  * `integration_mode`. Returns `auto` when the destination matches the file's declared mode

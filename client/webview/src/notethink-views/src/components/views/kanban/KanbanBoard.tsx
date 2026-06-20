@@ -68,10 +68,15 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
     const { visible_columns, display_options, view, onDragStart, onDragEnd } = boardProps;
     debug('rendering %d columns', visible_columns.length);
     return (
-        <div className={view_specific_styles.board} data-total-columns={visible_columns.length}>
+        <div className={view_specific_styles.board} data-total-columns={visible_columns.length} data-flip-root>
             <DragDropContext onDragEnd={onDragEnd} onDragStart={onDragStart}>
                 {visible_columns.map((column: KanbanColumnDescriptor, i: number, column_array: Array<KanbanColumnDescriptor>) => (
-                    <Droppable key={i} droppableId={`${column.seq}`}>
+                    /*
+                     * key by the column's stable status value, not its array index: when a column empties and drops
+                     * out of visible_columns, index keys remap the surviving columns onto each other's DOM subtrees
+                     * (and the FLIP layer's data-flip-id nodes), which corrupts the before/after measurement
+                     */
+                    <Droppable key={column.value} droppableId={`${column.seq}`}>
                         {(provided_drop) => (
                             <KanbanColumn
                                 seq={column.seq || i}

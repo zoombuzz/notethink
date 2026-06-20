@@ -72,4 +72,26 @@ describe('OriginPill rendering', () => {
         const expected_colour = pillColourForHue(hueForProjectName(project_name), 'dark');
         expect(pill).toHaveStyle({ backgroundColor: expected_colour });
     });
+
+    describe('epicOnly (single-file story cards: epic chip, no project pill)', () => {
+        // a minimal single-file story origin: doc_id + doc_path + epic, no project metadata
+        const minimalOrigin = (epic?: NoteOrigin['epic']): NoteOrigin => ({ doc_id: 'doc-1', doc_path: '/repo/project.md', epic });
+
+        it('suppresses the project pill and renders only the epic chip', () => {
+            render(<OriginPill origin={minimalOrigin({ name: 'Storefront', id: 'sf' })} epicOnly />);
+            expect(screen.queryByTestId('origin-project-pill')).toBeNull();
+            expect(screen.getByTestId('origin-epic-pill')).toHaveTextContent('Storefront');
+        });
+
+        it('still carries the epic id on the chip when epicOnly', () => {
+            render(<OriginPill origin={minimalOrigin({ name: 'Storefront', id: 'sf' })} epicOnly />);
+            expect(screen.getByTestId('origin-epic-pill')).toHaveAttribute('data-epic-id', 'sf');
+        });
+
+        it('default (epicOnly absent) keeps rendering the project pill', () => {
+            render(<OriginPill origin={makeOrigin({ epic: { name: 'Phase 3' } })} />);
+            expect(screen.getByTestId('origin-project-pill')).toBeInTheDocument();
+            expect(screen.getByTestId('origin-epic-pill')).toHaveTextContent('Phase 3');
+        });
+    });
 });

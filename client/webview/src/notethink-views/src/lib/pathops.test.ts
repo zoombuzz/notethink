@@ -1,4 +1,46 @@
-import { resolveBreadcrumbFolderSegment, segmentPathBelowWorkspace, splitPathSegments, workspaceRootFromDocAndRelative } from './pathops';
+import { isPathWithinFolder, parentFolderOf, resolveBreadcrumbFolderSegment, segmentPathBelowWorkspace, splitPathSegments, workspaceRootFromDocAndRelative } from './pathops';
+
+describe('parentFolderOf', () => {
+    it('returns the folder containing a file', () => {
+        expect(parentFolderOf('/repo/portfolio/mobile-app.md')).toBe('/repo/portfolio');
+    });
+
+    it('returns undefined for a bare segment or empty input', () => {
+        expect(parentFolderOf('file.md')).toBeUndefined();
+        expect(parentFolderOf(undefined)).toBeUndefined();
+    });
+});
+
+describe('isPathWithinFolder', () => {
+    it('a file directly inside the folder is within it', () => {
+        expect(isPathWithinFolder('/repo/portfolio/mobile-app.md', '/repo/portfolio')).toBe(true);
+    });
+
+    it('a file nested deeper inside the folder is within it', () => {
+        expect(isPathWithinFolder('/repo/portfolio/sub/deep.md', '/repo/portfolio')).toBe(true);
+    });
+
+    it('a file outside the folder is not within it', () => {
+        expect(isPathWithinFolder('/repo/intro.md', '/repo/portfolio')).toBe(false);
+    });
+
+    it('a sibling folder sharing a name prefix is not within it (no false prefix match)', () => {
+        expect(isPathWithinFolder('/repo/portfolio-archive/x.md', '/repo/portfolio')).toBe(false);
+    });
+
+    it('a path equal to the folder counts as within (defensive)', () => {
+        expect(isPathWithinFolder('/repo/portfolio', '/repo/portfolio')).toBe(true);
+    });
+
+    it('tolerates a trailing slash on the folder', () => {
+        expect(isPathWithinFolder('/repo/portfolio/x.md', '/repo/portfolio/')).toBe(true);
+    });
+
+    it('empty inputs are not within', () => {
+        expect(isPathWithinFolder(undefined, '/repo')).toBe(false);
+        expect(isPathWithinFolder('/repo/x.md', undefined)).toBe(false);
+    });
+});
 
 describe('resolveBreadcrumbFolderSegment', () => {
     it('resolves a folder label to its absolute path on the file trail', () => {

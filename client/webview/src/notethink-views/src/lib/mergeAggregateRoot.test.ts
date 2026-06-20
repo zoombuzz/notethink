@@ -1,6 +1,7 @@
-import { mergeAggregateRoot, anyViewInFolderMode, firstIntegrationPath, stampSingleFileStableIds, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from './mergeAggregateRoot';
+import { mergeAggregateRoot, anyViewInFolderMode, firstIntegrationPath, flattenSingleFileStories, stampSingleFileStableIds, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from './mergeAggregateRoot';
 import { convertMdastToNoteHierarchy } from './convertMdastToNoteHierarchy';
-import type { MdastNode } from '../types/NoteProps';
+import { flattenAllNotes } from './noteops';
+import type { MdastNode, NoteProps } from '../types/NoteProps';
 
 /**
  * Helper to create a minimal MDAST node with position info.
@@ -1125,4 +1126,139 @@ describe('stampSingleFileStableIds', () => {
         expect(id_b).toBe('doc-b:same');
     });
 
+});
+
+describe('flattenSingleFileStories', () => {
+    // build a single-file NoteProps tree from heading lines (text + depth), offsets assigned in document order so linetags + positions are real
+    function buildTree(lines: Array<{ text: string; depth: number }>): NoteProps {
+        const text = lines.map(l => l.text).join('\n') + '\n';
+        const children: MdastNode[] = [];
+        let offset = 0;
+        for (const { text: line, depth } of lines) {
+            children.push(mdastNode('heading', offset, offset + line.length, { depth }));
+            offset += line.length + 1;
+        }
+        const content = { type: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: text.length, line: 1 } }, children } as MdastNode;
+        return convertMdastToNoteHierarchy(content, text);
+    }
+
+    function cards(root: NoteProps): NoteProps[] {
+        return (root.child_notes![0].child_notes ?? []);
+    }
+
+    it('nested file: ## epics with ### stories lift the ### stories to level-1 cards tagged by epic', () => {
+        const root = buildTree([
+            { text: '# Project [](?nt_view=kanban)', depth: 1 },
+            { text: '## Storefront [](?id=sf)', depth: 2 },
+            { text: '### Build cart [](?status=doing)', depth: 3 },
+            { text: '### Checkout [](?status=done)', depth: 3 },
+            { text: '## Design system', depth: 2 },
+            { text: '### Tokens', depth: 3 },
+        ]);
+        flattenSingleFileStories(root, 'doc-1', '/repo/project.md');
+        const c = cards(root);
+        expect(c.map(s => s.headline_raw)).toEqual(['### Build cart [](?status=doing)', '### Checkout [](?status=done)', '### Tokens']);
+        expect(c.map(s => s.level)).toEqual([1, 1, 1]);
+        expect(c[0].origin).toEqual({ doc_id: 'doc-1', doc_path: '/repo/project.md', epic: { name: 'Storefront', id: 'sf' } });
+        expect(c[1].origin?.epic).toEqual({ name: 'Storefront', id: 'sf' });
+        expect(c[2].origin?.epic).toEqual({ name: 'Design system', id: undefined });
+        // the ## epics are no longer cards, and the H1 scope is preserved at index 1 of the flat note list
+        const flat = flattenAllNotes(root);
+        expect(flat[1].headline_raw).toBe('# Project [](?nt_view=kanban)');
+        expect(flat.some(n => n.headline_raw.startsWith('## '))).toBe(false);
+    });
+
+    it('### story directly under the H1 (no ## epic) gets an origin with no epic', () => {
+        const root = buildTree([
+            { text: '# Project', depth: 1 },
+            { text: '### Loose story', depth: 3 },
+            { text: '## Epic A', depth: 2 },
+            { text: '### Under epic', depth: 3 },
+        ]);
+        flattenSingleFileStories(root, 'doc-1', '/repo/p.md');
+        const c = cards(root);
+        expect(c.map(s => s.headline_raw)).toEqual(['### Loose story', '### Under epic']);
+        expect(c[0].origin).toEqual({ doc_id: 'doc-1', doc_path: '/repo/p.md', epic: undefined });
+        expect(c[1].origin?.epic).toEqual({ name: 'Epic A', id: undefined });
+    });
+
+    it('direct epic= linetag on a ### story overrides the structural ## parent', () => {
+        const root = buildTree([
+            { text: '# Project', depth: 1 },
+            { text: '## Structural Epic', depth: 2 },
+            { text: '### Story [](?epic=Other)', depth: 3 },
+        ]);
+        flattenSingleFileStories(root, 'doc-1', '/repo/p.md');
+        expect(cards(root)[0].origin?.epic).toEqual({ name: 'Other', id: undefined });
+    });
+
+    it('inherited nt_child_epic= on the ## parent resolves onto the story like a direct tag', () => {
+        const root = buildTree([
+            { text: '# Project', depth: 1 },
+            { text: '## Platform [](?id=pf&nt_child_epic=pf)', depth: 2 },
+            { text: '### Wire it', depth: 3 },
+        ]);
+        flattenSingleFileStories(root, 'doc-1', '/repo/p.md');
+        // nt_child_epic=pf is collapsed onto the story as epic=pf, which resolves by id to the ## Platform epic
+        expect(cards(root)[0].origin?.epic).toEqual({ name: 'Platform', id: 'pf' });
+    });
+
+    it('flat file (## stories, no ### grandchildren) is left byte-identical', () => {
+        const root = buildTree([
+            { text: '# Board [](?nt_view=kanban)', depth: 1 },
+            { text: '## Task A [](?status=doing)', depth: 2 },
+            { text: '## Task B', depth: 2 },
+        ]);
+        const before = root.child_notes![0].child_notes!.map(n => ({ headline: n.headline_raw, level: n.level, origin: n.origin }));
+        flattenSingleFileStories(root, 'doc-1', '/repo/flat.md');
+        const after = root.child_notes![0].child_notes!.map(n => ({ headline: n.headline_raw, level: n.level, origin: n.origin }));
+        expect(after).toEqual(before);
+        expect(after.map(n => n.headline)).toEqual(['## Task A [](?status=doing)', '## Task B']);
+        expect(after.every(n => n.origin === undefined)).toBe(true);
+    });
+
+    it('preserves each lifted story position and seq (single-file edit offsets stay valid)', () => {
+        const root = buildTree([
+            { text: '# Project', depth: 1 },
+            { text: '## Epic', depth: 2 },
+            { text: '### Story one', depth: 3 },
+            { text: '### Story two', depth: 3 },
+        ]);
+        // capture each ### story's seq + start offset before the flatten
+        const before = flattenAllNotes(root).filter(n => n.depth === 3).map(n => ({ headline: n.headline_raw, seq: n.seq, start: n.position.start.offset }));
+        flattenSingleFileStories(root, 'doc-1', '/repo/p.md');
+        for (const story of cards(root)) {
+            const match = before.find(b => b.headline === story.headline_raw)!;
+            expect(story.seq).toBe(match.seq);
+            expect(story.position.start.offset).toBe(match.start);
+        }
+    });
+
+    it('is idempotent - a second call yields the same flattened structure', () => {
+        const root = buildTree([
+            { text: '# Project', depth: 1 },
+            { text: '## Epic', depth: 2 },
+            { text: '### A', depth: 3 },
+            { text: '### B', depth: 3 },
+        ]);
+        flattenSingleFileStories(root, 'doc-1', '/repo/p.md');
+        const once = cards(root).map(s => ({ headline: s.headline_raw, level: s.level, epic: s.origin?.epic }));
+        flattenSingleFileStories(root, 'doc-1', '/repo/p.md');
+        const twice = cards(root).map(s => ({ headline: s.headline_raw, level: s.level, epic: s.origin?.epic }));
+        expect(twice).toEqual(once);
+    });
+
+    it('no-H1 file is left unchanged - the descent requires a single # file root', () => {
+        const root = buildTree([
+            { text: '## Epic A', depth: 2 },
+            { text: '### Story A1', depth: 3 },
+            { text: '## Epic B', depth: 2 },
+            { text: '### Story B1', depth: 3 },
+        ]);
+        const before = root.child_notes!.map(n => n.headline_raw);
+        flattenSingleFileStories(root, 'doc-1', '/repo/noh1.md');
+        // without exactly one # H1 the document root stays the scope and the ## epics stay its children; lifting stories there would make a single file look like a folder aggregate (isAggregateRoot)
+        expect(root.child_notes!.map(n => n.headline_raw)).toEqual(before);
+        expect(root.child_notes!.every(n => n.origin === undefined)).toBe(true);
+    });
 });

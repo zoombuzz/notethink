@@ -31,7 +31,9 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
     if (note.type === 'root') { return null; }
     const show_lineno = note.display_options?.settings?.showLineNumbers
         && note.level === note.display_options?.deepest?.selectable_level;
-    const show_origin = note.origin && note.level === 1;
+    // folder-mode origins carry project metadata; single-file story cards carry only an epic (epic-chip only, no project pill). Render the pill only when there is something to show, so a single-file story with no epic shows no empty pill
+    const has_project = !!(note.origin && (note.origin.relative_path || note.origin.project_label || note.origin.project_hue !== undefined));
+    const show_origin = !!note.origin && note.level === 1 && (has_project || !!note.origin.epic);
     const show_inline_linetags = note.display_options?.settings?.showLinetagsInHeadlines && note.linetags;
     return (
         <div className={view_specific_styles.headline}
@@ -44,6 +46,7 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
             {show_origin && (
                 <OriginPill
                     origin={note.origin!}
+                    epicOnly={!has_project}
                     onClick={(event) => {
                         // pill click is ADDITIVE on top of the headline click: it descends the folder view into the pill's project subfolder, AND the bubbling click also fires the headline's createNoteClickHandler so the editor opens the story at its position and the matching note gets highlighted (editor-derived match in useViewContext finds the story by origin.doc_path + source_position in the descended view, even though seq numbers are renumbered by mergeAggregateRoot). A file living directly at the workspace-folder root has no sub-project to descend into - projectFolderFromOrigin returns '' and the descend becomes a no-op, but the headline click still fires
                         const target_folder = projectFolderFromOrigin(note.origin!);

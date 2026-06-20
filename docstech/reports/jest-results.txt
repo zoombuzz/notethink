@@ -1,30 +1,57 @@
 # Jest Test Results
 # Version: 0.3.16
-# Date: 2026-06-19T13:42:54+01:00
+# Date: 2026-06-20T09:11:57Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
-> notethink@0.3.16 test-jest
+> notethink@0.3.16 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
-> notethink-client-extension@0.1.0 test (client/extension)
-Test Suites: 9 passed, 9 total
-Tests:       214 passed, 214 total
 
-> notethink-client-display@0.1.0 test (client/webview)
-Test Suites: 9 passed, 9 total
-Tests:       103 passed, 103 total
+> notethink-client-extension@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/extension
+> jest --config jest.config.cjs --forceExit
 
-> @zoombuzz/notethink-views@0.1.0 test (client/webview/src/notethink-views)
-Test Suites: 50 passed, 50 total
-Tests:       1088 passed, 1088 total
 
-┌──────────────────┬───────┬────────┬────────┬─────────┐
-│ Suite            │ Files │ Passed │ Failed │ Time    │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     9 │    214 │      0 │ 2.515 s │
-│ webview          │     9 │    103 │      0 │ 0.787 s │
-│ notethink-views  │    50 │   1088 │      0 │ 3.009 s │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    68 │   1405 │      0 │         │
-└──────────────────┴───────┴────────┴────────┴─────────┘
+[1mTest Suites: [22m[1m[32m9 passed[39m[22m, 9 total
+[1mTests:       [22m[1m[32m214 passed[39m[22m, 214 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        3.204 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+
+> notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
+> jest --config jest.config.cjs --forceExit
+
+[33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
+
+[1mTest Suites: [22m[1m[32m9 passed[39m[22m, 9 total
+[1mTests:       [22m[1m[32m127 passed[39m[22m, 127 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        1.401 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+
+> @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
+> jest --config jest.config.cjs --forceExit
+
+[33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
+
+[1mTest Suites: [22m[1m[32m50 passed[39m[22m, 50 total
+[1mTests:       [22m[1m[32m1117 passed[39m[22m, 1117 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        [1m[33m3.366 s[39m[22m
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+
+[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
+[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+│ extension        │     9 │ [32m   214[0m │ [2m     0[0m │ 3.204 s │
+│ webview          │     9 │ [32m   127[0m │ [2m     0[0m │ 1.401 s │
+│ notethink-views  │    50 │ [32m  1117[0m │ [2m     0[0m │ 3.366 s │
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+[1m│ TOTAL            │    68 │[0m [32m  1458[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

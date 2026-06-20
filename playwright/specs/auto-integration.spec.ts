@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
+import { simulateSelectionChanged } from '../helpers/simulate-selection';
 import { clearCapturedMessages } from '../helpers/capture-messages';
 
 /**
@@ -36,6 +37,14 @@ async function lastSetIntegrationPath(page: Page, mode: 'folder' | 'current_file
 
 async function countSetIntegration(page: Page): Promise<number> {
     return page.evaluate(() => (window as unknown as { __captured_messages: Array<{ type?: string }> }).__captured_messages.filter((x) => x.type === 'setIntegration').length);
+}
+
+// the mode of the most recent outbound setIntegration message, or undefined
+async function lastSetIntegrationMode(page: Page): Promise<string | undefined> {
+    return page.evaluate(() => {
+        const msgs = (window as unknown as { __captured_messages: Array<{ type?: string; mode?: string }> }).__captured_messages.filter((x) => x.type === 'setIntegration');
+        return msgs.length ? msgs[msgs.length - 1].mode : undefined;
+    });
 }
 
 test.describe('Auto integration mode (H1 linetags)', () => {
@@ -169,6 +178,68 @@ test.describe('Auto integration mode (H1 linetags)', () => {
         // nothing to resolve → no setIntegration dispatched, and no thrown error
         expect(await countSetIntegration(page)).toBe(0);
         expect(page_errors).toEqual([]);
+    });
+
+});
+
+/**
+ * Reactive editor-follow: the integration mode tracks the active editor live, the same way nt_view
+ * tracks the active file. Switching the active editor out of the folder scope drops to the document
+ * render (the reported bug); revealing a member file inside the scope keeps the board; a live linetag
+ * edit flips the mode.
+ */
+test.describe('Auto integration mode (reactive editor follow)', () => {
+
+    test.beforeEach(async ({ page }) => {
+        await page.goto('/playwright/harness/index.html');
+        await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
+    });
+
+    test('switching the active editor to a plain file OUTSIDE the scope drops the folder board to the document render', async ({ page }) => {
+        await injectDocsFromFixture(page, 'auto-folder-portfolio.md', DECLARING_PATH, { workspace_root: WORKSPACE_ROOT, relative_path: DECLARING_REL });
+        await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
+        await clearCapturedMessages(page);
+
+        // switch the active editor to a plain file at the workspace root (outside portfolio)
+        const INTRO = `${WORKSPACE_ROOT}/intro.md`;
+        await injectDocsFromFixture(page, 'basic.md', INTRO, { workspace_root: WORKSPACE_ROOT, relative_path: 'intro.md' });
+        await simulateSelectionChanged(page, INTRO, 0);
+
+        // the board reactively drops to the document render and posts setIntegration current_file
+        await expect(renderer(page)).not.toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
+        await expect.poll(() => lastSetIntegrationMode(page), { timeout: 5000 }).toBe('current_file');
+    });
+
+    test('revealing a member file INSIDE the scope keeps the folder board (card-click gate)', async ({ page }) => {
+        await injectDocsFromFixture(page, 'auto-folder-portfolio.md', DECLARING_PATH, { workspace_root: WORKSPACE_ROOT, relative_path: DECLARING_REL });
+        await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
+        await clearCapturedMessages(page);
+
+        // reveal a member file inside portfolio (e.g. a card's source file)
+        const MEMBER = `${PORTFOLIO}/atlas/member.md`;
+        await injectDocsFromFixture(page, 'basic.md', MEMBER, { workspace_root: WORKSPACE_ROOT, relative_path: 'portfolio/atlas/member.md' });
+        await simulateSelectionChanged(page, MEMBER, 0);
+
+        // stays on the folder board - the opened file is inside the scope, so no exit
+        await page.waitForTimeout(500);
+        await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true');
+        expect(await countSetIntegration(page)).toBe(0);
+    });
+
+    test('a live linetag edit adding a folder declaration flips the active file to the folder board', async ({ page }) => {
+        const EDITED = `${PORTFOLIO}/atlas/todo.md`;
+        // open a plain file (declares nothing) -> Auto (Current file)
+        await injectDocsFromFixture(page, 'basic.md', EDITED, { workspace_root: WORKSPACE_ROOT, relative_path: DECLARING_REL });
+        await simulateSelectionChanged(page, EDITED, 0);
+        await expect(renderer(page)).not.toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
+        await clearCapturedMessages(page);
+
+        // edit the SAME file to declare folder mode (re-inject at the same path -> same id, new content)
+        await injectDocsFromFixture(page, 'auto-folder-portfolio.md', EDITED, { workspace_root: WORKSPACE_ROOT, relative_path: DECLARING_REL });
+
+        // the board enters folder mode reactively, scoped to portfolio
+        await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
+        await expect.poll(() => lastSetIntegrationPath(page, 'folder'), { timeout: 5000 }).toBe(PORTFOLIO);
     });
 
 });

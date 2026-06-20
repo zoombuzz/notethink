@@ -108,11 +108,20 @@ function selectFileStories<T>(stories: T[], max: number | undefined, order: stri
 }
 
 /**
- * Resolve the absolute path of the folder the aggregation is scoped to.
- * For breadcrumb segmenting we pass this through unchanged; callers segment it.
+ * Strip a heading's markdown prefix + trailing linetags down to its bare display text. Tolerates an
+ * undefined headline (returns '').
  */
 function safeStripHeadline(headline_raw: string | undefined): string {
     return headline_raw ? stripHeadlineLinetags(headline_raw) : '';
+}
+
+/**
+ * Build an EpicEntry from a depth-2 (`##`) heading note: its stripped headline as the name and its
+ * `id=` linetag as the id. The single source of the structural-epic shape, shared by the registry
+ * builder, the folder-mode collect loop, and the single-file descent.
+ */
+function epicEntryFromHeading(note: NoteProps): EpicEntry {
+    return { name: safeStripHeadline(note.headline_raw), id: note.linetags?.id?.value };
 }
 
 /**
@@ -125,6 +134,17 @@ export function findFileH1(root: NoteProps): NoteProps | undefined {
     const h1s = (root.child_notes || []).filter(n => n.depth === 1);
     if (h1s.length === 1) { return h1s[0]; }
     return undefined;
+}
+
+/**
+ * The view type a single file declares: its H1 `nt_view` (legacy `ng_view`) over the front-matter
+ * value (most-specific wins) - the single-file analogue of the per-file file_view_type folder mode
+ * captures. The composer uses it to decide whether a nested file renders as a column-based board (and
+ * so should descend to story cards). undefined when the file declares no view.
+ */
+export function fileDeclaredViewType(root: NoteProps): string | undefined {
+    const h1 = findFileH1(root);
+    return resolveNamespacedTag(h1?.linetags, 'view')?.value ?? resolveNamespacedTag(root.linetags, 'view')?.value;
 }
 
 /**
@@ -141,6 +161,25 @@ function resolveEpicLinetag(
     const by_name = file_epic_by_name.get(value);
     if (by_name) { return by_name; }
     return { name: value, id: undefined };
+}
+
+/**
+ * Build a file's epic registries from its depth-2 (`##`) headings: by `id=` linetag and by stripped
+ * headline name. Shared by folder mode (mergeAggregateRoot) and single-file descent
+ * (flattenSingleFileStories) so an `epic=` linetag resolves identically in both. `walk_children` is the
+ * level-2 children of the file H1 (or document root when there is no single H1).
+ */
+function buildFileEpicRegistries(walk_children: NoteProps[]): { file_epic_by_id: Map<string, EpicEntry>; file_epic_by_name: Map<string, EpicEntry> } {
+    const file_epic_by_id = new Map<string, EpicEntry>();
+    const file_epic_by_name = new Map<string, EpicEntry>();
+    for (const c of walk_children) {
+        if (c.depth === 2) {
+            const entry = epicEntryFromHeading(c);
+            if (entry.id) { file_epic_by_id.set(entry.id, entry); }
+            if (entry.name) { file_epic_by_name.set(entry.name, entry); }
+        }
+    }
+    return { file_epic_by_id, file_epic_by_name };
 }
 
 /**
@@ -200,7 +239,7 @@ function walkStorySubtree(
  *
  * `maxNotesPerFile` (optional) caps how many top-level stories each source file
  * contributes. Undefined → no cap (unchanged behaviour). Which end is kept depends on
- * the file H1's `order` linetag (see trimFileStories).
+ * the file H1's `order` linetag (see selectFileStories).
  *
  * `workspace_projects` (optional) is the universe of top-level subfolder names of the
  * VS Code workspace root (already exclude-filter applied and sorted by the extension).
@@ -261,26 +300,15 @@ export function mergeAggregateRoot(
 
     for (const file of parsed) {
         const { doc, root, h1 } = file;
-        const file_epic_by_id = new Map<string, EpicEntry>();
-        const file_epic_by_name = new Map<string, EpicEntry>();
 
         // walk_children returns the level-2 children of either H1 or doc root
         const walk_children = h1 ? (h1.child_notes || []) : (root.child_notes || []);
 
-        // first pass over walk_children: register epics
-        for (const c of walk_children) {
-            if (c.depth === 2) {
-                const epic_id = c.linetags?.id?.value;
-                const epic_name = safeStripHeadline(c.headline_raw);
-                const entry: EpicEntry = { name: epic_name, id: epic_id };
-                if (epic_id) { file_epic_by_id.set(epic_id, entry); }
-                if (epic_name) { file_epic_by_name.set(epic_name, entry); }
-            }
-        }
+        // register this file's epics (## headings) so direct/inherited epic= linetags resolve by id or name
+        const { file_epic_by_id, file_epic_by_name } = buildFileEpicRegistries(walk_children);
 
         // file-level view type: an H1 nt_view overrides the front-matter value (most-specific wins)
-        const file_view_type = resolveNamespacedTag(h1?.linetags, 'view')?.value
-            ?? resolveNamespacedTag(root.linetags, 'view')?.value;
+        const file_view_type = fileDeclaredViewType(root);
 
         // `order` for the per-file cap: an H1 value overrides the document-root (front-matter) value
         const file_order = h1?.linetags?.order?.value ?? root.linetags?.order?.value;
@@ -309,10 +337,7 @@ export function mergeAggregateRoot(
                 });
             } else if (c.depth === 2) {
                 // epic: recurse one level
-                const epic_entry: EpicEntry = {
-                    name: safeStripHeadline(c.headline_raw),
-                    id: c.linetags?.id?.value,
-                };
+                const epic_entry = epicEntryFromHeading(c);
                 for (const g of (c.child_notes || [])) {
                     if (g.depth === 3) {
                         file_stories.push({
@@ -476,6 +501,76 @@ function walkSingleFileStableIds(
     for (const child of (note.child_notes ?? [])) {
         walkSingleFileStableIds(child, doc_id, slug_counts, next_story_stable_id, next_story_start_offset);
     }
+}
+
+/**
+ * Re-level a lifted single-file story subtree so the story root sits at `level` directly under
+ * `parent_chain`, descendants incrementing from there. Mirrors walkStorySubtree's level/parent_notes
+ * rewrite but leaves seq / position / stable_id untouched - single-file mode keeps the file's own
+ * text coordinates so edit offsets stay valid. Mutates in place.
+ */
+function relevelStorySubtree(note: NoteProps, parent_chain: NoteProps[], level: number): void {
+    note.level = level;
+    note.parent_notes = parent_chain.length ? [...parent_chain] : undefined;
+    for (const child of (note.child_notes ?? [])) {
+        relevelStorySubtree(child, [...parent_chain, note], level + 1);
+    }
+}
+
+/**
+ * Single-file (current_file) story descent - the current_file companion to mergeAggregateRoot's
+ * folder-mode flatten. When the opened doc is NESTED (a `##` epic with `###` story children),
+ * restructure the rendered scope (its H1, or the document root when there is no single H1) so its
+ * children are the `###` stories: a nested file opened on its own then renders its stories as kanban
+ * cards partitioned by status, each tagged with its `##` epic - matching the folder-mode board and the
+ * AUTHORING_GUIDE's "### is the unit that becomes a card" contract. FLAT files (`##` directly under
+ * `#`, no `###` grandchildren) are detected structurally and left byte-identical.
+ *
+ * Epic resolution reuses the folder-mode machinery (buildFileEpicRegistries + resolveEpicLinetag), so
+ * precedence is identical: a direct `epic=` linetag (or an inherited `nt_child_epic=` already collapsed
+ * onto the story by convertMdastToNoteHierarchy) overrides the structural `##` parent. Each lifted
+ * story is re-leveled to 1 (so MarkdownNoteHeadline's `level === 1` gate renders the epic chip) and
+ * stamped a MINIMAL origin = { doc_id, doc_path, epic } - no relative_path / project_* / source_position
+ * - so OriginPill renders the epic chip without a project pill, the editor-caret matcher falls through
+ * to its in-tree path, and drag-drop routes the one doc. note.position and note.seq are preserved
+ * verbatim. Mutates the tree in place; run before stampSingleFileStableIds.
+ *
+ * Requires a single file H1 (the `#` root the AUTHORING_GUIDE assumes): the stories lift under it,
+ * which keeps the H1 as the rendered scope and stops the document root (seq 0, empty headline) from
+ * looking like a folder aggregate. A file with zero or multiple H1s is left unchanged.
+ */
+export function flattenSingleFileStories(root: NoteProps, doc_id: string, doc_path: string): void {
+    const parent = findFileH1(root);
+    if (!parent) { return; }
+    const walk_children = parent.child_notes ?? [];
+    const is_nested = walk_children.some(c => c.depth === 2 && (c.child_notes ?? []).some(g => g.depth === 3));
+    if (!is_nested) { return; }
+    const { file_epic_by_id, file_epic_by_name } = buildFileEpicRegistries(walk_children);
+    // collect ### stories: directly under the scope (no structural epic) and under ## epics (structural epic = the ## headline), mirroring mergeAggregateRoot's walk_children pass
+    const collected: Array<{ story: NoteProps; structural_epic: EpicEntry | undefined }> = [];
+    for (const c of walk_children) {
+        if (c.depth === 3) {
+            collected.push({ story: c, structural_epic: undefined });
+        } else if (c.depth === 2) {
+            const epic_entry = epicEntryFromHeading(c);
+            for (const g of (c.child_notes ?? [])) {
+                if (g.depth === 3) { collected.push({ story: g, structural_epic: epic_entry }); }
+            }
+        }
+    }
+    for (const { story, structural_epic } of collected) {
+        const epic_linetag = story.linetags?.epic;
+        const resolved_epic = epic_linetag?.value
+            ? resolveEpicLinetag(epic_linetag.value, file_epic_by_id, file_epic_by_name)
+            : structural_epic;
+        // keep the epic object whenever one resolved (matching folder mode, which stamps a structural epic even for an empty ## headline); only a story with no epic at all carries undefined
+        story.origin = { doc_id, doc_path, epic: resolved_epic ? { name: resolved_epic.name, id: resolved_epic.id } : undefined };
+        relevelStorySubtree(story, [parent], 1);
+    }
+    // re-link the scope so both the kanban card set (child_notes) and the flatten-walk source (children_body, read by flattenAllNotes) are exactly the lifted stories
+    const lifted = collected.map(c => c.story);
+    parent.child_notes = lifted;
+    parent.children_body = lifted;
 }
 
 // MdastNode is re-exported as a convenience to consumers that already import from this file

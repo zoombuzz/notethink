@@ -1,6 +1,7 @@
 import {
     FOLDER_VIEW_STATE_ID,
     anyViewInFolderMode,
+    buildIntegrationDispatch,
     reconcileAutoIntegrationMode,
     resolveIntegrationMode,
     resolveViewStateId,
@@ -188,5 +189,90 @@ describe('findFolderViewState', () => {
             '/repo/a.md': { display_options: { integration_mode: 'current_file' } },
         };
         expect(findFolderViewState(view_states)).toBeUndefined();
+    });
+});
+
+describe('buildIntegrationDispatch', () => {
+    it('auto reset to folder: persists auto + the scope path on the canonical key and posts setIntegration folder', () => {
+        const { updates, message } = buildIntegrationDispatch({
+            is_auto: true,
+            resolved_mode: INTEGRATION_MODE_FOLDER,
+            folder_path: '/repo/portfolio',
+            view_id: 'doc-1',
+            view_state_ids: [FOLDER_VIEW_STATE_ID, 'doc-1'],
+        });
+        expect(updates[0]).toEqual({
+            id: FOLDER_VIEW_STATE_ID,
+            display_options: { integration_mode: INTEGRATION_MODE_AUTO, integration_path: '/repo/portfolio', view_focused_ids: undefined, view_selected_ids: undefined },
+        });
+        // the canonical key is not re-listed in the clear loop; only the non-canonical id is, and it does not clear folder tags (this resolve is folder)
+        expect(updates).toHaveLength(2);
+        expect(updates[1]).toEqual({ id: 'doc-1', display_options: { view_focused_ids: undefined, view_selected_ids: undefined } });
+        expect(message).toEqual({ type: 'setIntegration', mode: INTEGRATION_MODE_FOLDER, path: '/repo/portfolio' });
+    });
+
+    it('concrete folder pin: persists the concrete mode, not auto', () => {
+        const { updates } = buildIntegrationDispatch({
+            is_auto: false,
+            resolved_mode: INTEGRATION_MODE_FOLDER,
+            folder_path: '/repo',
+            view_id: 'doc-1',
+            view_state_ids: [],
+        });
+        expect((updates[0].display_options as Record<string, unknown>).integration_mode).toBe(INTEGRATION_MODE_FOLDER);
+    });
+
+    it('resolve to current_file: clears the canonical path and clears stranded folder tags on doc-path keys', () => {
+        const { updates, message } = buildIntegrationDispatch({
+            is_auto: true,
+            resolved_mode: INTEGRATION_MODE_CURRENT_FILE,
+            folder_path: undefined,
+            view_id: 'doc-1',
+            view_state_ids: [FOLDER_VIEW_STATE_ID, 'doc-1'],
+        });
+        expect(updates[0]).toEqual({
+            id: FOLDER_VIEW_STATE_ID,
+            display_options: { integration_mode: INTEGRATION_MODE_AUTO, integration_path: undefined, view_focused_ids: undefined, view_selected_ids: undefined },
+        });
+        expect(updates[1]).toEqual({
+            id: 'doc-1',
+            display_options: { view_focused_ids: undefined, view_selected_ids: undefined, integration_mode: undefined, integration_path: undefined },
+        });
+        expect(message).toEqual({ type: 'setIntegration', mode: INTEGRATION_MODE_CURRENT_FILE, path: undefined });
+    });
+
+    it('current_file with a target file (Files-drawer click) carries the file path in the message', () => {
+        const { message } = buildIntegrationDispatch({
+            is_auto: false,
+            resolved_mode: INTEGRATION_MODE_CURRENT_FILE,
+            folder_path: undefined,
+            view_id: 'doc-1',
+            view_state_ids: [],
+            target_file_path: '/repo/other.md',
+        });
+        expect(message).toEqual({ type: 'setIntegration', mode: INTEGRATION_MODE_CURRENT_FILE, path: '/repo/other.md' });
+    });
+
+    it('auto reset to current_file with a declared note scope re-seeds parent_context_seq on the view id', () => {
+        const { updates } = buildIntegrationDispatch({
+            is_auto: true,
+            resolved_mode: INTEGRATION_MODE_CURRENT_FILE,
+            folder_path: undefined,
+            seed_parent_context_seq: 4,
+            view_id: 'doc-1',
+            view_state_ids: ['doc-1'],
+        });
+        expect(updates).toContainEqual({ id: 'doc-1', display_options: { parent_context_seq: 4 } });
+    });
+
+    it('folder with no resolvable scope path posts no setIntegration message', () => {
+        const { message } = buildIntegrationDispatch({
+            is_auto: true,
+            resolved_mode: INTEGRATION_MODE_FOLDER,
+            folder_path: undefined,
+            view_id: 'doc-1',
+            view_state_ids: [],
+        });
+        expect(message).toBeUndefined();
     });
 });

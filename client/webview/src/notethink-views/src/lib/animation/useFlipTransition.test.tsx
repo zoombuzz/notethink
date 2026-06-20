@@ -17,6 +17,8 @@ interface RectLookup { [id: string]: { left: number; top: number; width: number;
 
 // the test controls per-id rects; the mock reads data-flip-id off the element to pick its rect.
 let rect_lookup: RectLookup = {};
+// the board-root (`[data-flip-root]`) rect; tests shift it to simulate a scroll / folder-mode header growth
+let root_rect = { left: 0, top: 0, width: 0, height: 0 };
 
 // per-id card placement: id -> column value (render order follows the array)
 interface CardSpec { id: string; column: string; }
@@ -45,13 +47,15 @@ function Harness(props: HarnessProps): React.ReactElement {
     });
     return (
         <div ref={container_ref} data-testid="container">
-            {props.columns.map((col) => (
-                <div key={col} data-flip-column-id={col}>
-                    {props.cards.filter((c) => c.column === col).map((c) => (
-                        <div key={c.id} data-flip-id={c.id}>{c.id}</div>
-                    ))}
-                </div>
-            ))}
+            <div data-flip-root>
+                {props.columns.map((col) => (
+                    <div key={col} data-flip-column-id={col}>
+                        {props.cards.filter((c) => c.column === col).map((c) => (
+                            <div key={c.id} data-flip-id={c.id}>{c.id}</div>
+                        ))}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
@@ -76,6 +80,7 @@ describe('useFlipTransition', () => {
         enableAnimationProbe();
         clearAnimationProbeEvents();
         rect_lookup = {};
+        root_rect = { left: 0, top: 0, width: 0, height: 0 };
 
         original_grbc = Element.prototype.getBoundingClientRect;
         original_animate = Element.prototype.animate;
@@ -83,10 +88,11 @@ describe('useFlipTransition', () => {
         original_match_media = window.matchMedia;
         original_raf = globalThis.requestAnimationFrame;
 
-        // per-id rect mock: read data-flip-id and return the test's lookup (fallback to a zero rect)
+        // rect mock: a card returns its data-flip-id lookup; the board root returns root_rect; else a zero rect
         Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
             const id = this.getAttribute('data-flip-id');
-            const r = (id !== null && rect_lookup[id]) || { left: 0, top: 0, width: 0, height: 0 };
+            const r = (id !== null && rect_lookup[id]) ||
+                (this.getAttribute('data-flip-root') !== null ? root_rect : { left: 0, top: 0, width: 0, height: 0 });
             return { ...r, right: r.left + r.width, bottom: r.top + r.height, x: r.left, y: r.top, toJSON() {} } as DOMRect;
         };
 
@@ -249,5 +255,66 @@ describe('useFlipTransition', () => {
 
         expect(eventsOfKind('cap')).toHaveLength(1);
         expect(cap_finish).toHaveBeenCalled();
+    });
+
+    it('settles an in-flight move before measuring so a mid-flight position never corrupts the baseline', () => {
+        // a previous move is still playing, so the hook must finish() it before measuring the true layout
+        const settle_finish = jest.fn();
+        Element.prototype.getAnimations = jest.fn(() => [{ finish: settle_finish } as unknown as Animation]) as unknown as typeof Element.prototype.getAnimations;
+
+        const gate = createPassiveUpdateGate();
+        rect_lookup = { a: { left: 0, top: 0, width: 100, height: 40 }, b: { left: 0, top: 50, width: 100, height: 40 } };
+        const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }, { id: 'b', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
+        settle_finish.mockClear();
+
+        rect_lookup = { a: { left: 0, top: 50, width: 100, height: 40 }, b: { left: 0, top: 0, width: 100, height: 40 } };
+        act(() => {
+            rerender(<Harness cards={[{ id: 'b', column: 'todo' }, { id: 'a', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
+        });
+
+        expect(settle_finish).toHaveBeenCalled();
+    });
+
+    it('does not settle in-flight animations while the gate is hot (a drag owns the transforms)', () => {
+        const settle_finish = jest.fn();
+        Element.prototype.getAnimations = jest.fn(() => [{ finish: settle_finish } as unknown as Animation]) as unknown as typeof Element.prototype.getAnimations;
+
+        const gate = createPassiveUpdateGate();
+        rect_lookup = { a: { left: 0, top: 0, width: 100, height: 40 } };
+        const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
+        settle_finish.mockClear();
+
+        // gate hot: the hook must not touch animations, dnd owns the live drag/drop transforms
+        gate.arm();
+        rect_lookup = { a: { left: 0, top: 80, width: 100, height: 40 }, b: { left: 0, top: 0, width: 100, height: 40 } };
+        act(() => {
+            rerender(<Harness cards={[{ id: 'b', column: 'todo' }, { id: 'a', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
+        });
+
+        expect(settle_finish).not.toHaveBeenCalled();
+    });
+
+    it('is board-anchored: a uniform shift above the cards (scroll / folder-mode header growth) does not corrupt the deltas', () => {
+        const gate = createPassiveUpdateGate();
+        // baseline: board at top 0; a at top 0, b at top 50
+        root_rect = { left: 0, top: 0, width: 300, height: 200 };
+        rect_lookup = { a: { left: 0, top: 0, width: 100, height: 40 }, b: { left: 0, top: 50, width: 100, height: 40 } };
+        const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }, { id: 'b', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
+        clearAnimationProbeEvents();
+
+        /*
+         * a strip above the board grows by 200 (or the content scrolls) before the reorder lands: the board AND
+         * every card shift down 200 together. raw viewport measurement would fold +200 into every delta; anchoring
+         * to the board cancels it, so the deltas match the no-shift reorder (-50 / 50)
+         */
+        root_rect = { left: 0, top: 200, width: 300, height: 200 };
+        rect_lookup = { a: { left: 0, top: 250, width: 100, height: 40 }, b: { left: 0, top: 200, width: 100, height: 40 } };
+        act(() => {
+            rerender(<Harness cards={[{ id: 'b', column: 'todo' }, { id: 'a', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
+        });
+
+        const moves = moveEvents();
+        expect(moves.find((m) => m.id === 'a')).toMatchObject({ dx: 0, dy: -50 });
+        expect(moves.find((m) => m.id === 'b')).toMatchObject({ dx: 0, dy: 50 });
     });
 });

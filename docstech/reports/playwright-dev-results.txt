@@ -1,27 +1,106 @@
 # Playwright Test Results
 # Version: 0.3.16
-# Date: 2026-06-19T13:42:54+01:00
-# Command: npx playwright test (harness auto-started on :9123 by playwright.config.ts webServer)
+# Date: 2026-06-20T09:11:57Z
+# Command: npx playwright test
 # ---
+npm warn Unknown project config "enable-pre-post-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
 
-Running 89 tests using 10 workers
+Running 95 tests using 10 workers
 
-89 passed (17.7s)
+  ✓   6 [chromium] › playwright/specs/auto-integration.spec.ts:198:9 › Auto integration mode (reactive editor follow) › switching the active editor to a plain file OUTSIDE the scope drops the folder board to the document render (581ms)
+  ✓   9 [chromium] › playwright/specs/auto-integration.spec.ts:229:9 › Auto integration mode (reactive editor follow) › a live linetag edit adding a folder declaration flips the active file to the folder board (616ms)
+  ✓   1 [chromium] › playwright/specs/auto-integration.spec.ts:58:9 › Auto integration mode (H1 linetags) › cold-opens a folder-declaring file straight into the scoped Auto (Folder) board (875ms)
+  ✓   2 [chromium] › playwright/specs/auto-integration.spec.ts:112:9 › Auto integration mode (H1 linetags) › Auto (Current file) + a folder breadcrumb click pins concrete Folder (899ms)
+  ✓   7 [chromium] › playwright/specs/auto-integration.spec.ts:73:9 › Auto integration mode (H1 linetags) › navigating to another folder in Auto (Folder) stays Auto (Folder) (919ms)
+  ✓   8 [chromium] › playwright/specs/auto-integration.spec.ts:213:9 › Auto integration mode (reactive editor follow) › revealing a member file INSIDE the scope keeps the folder board (card-click gate) (1.1s)
+  ✓   4 [chromium] › playwright/specs/auto-integration.spec.ts:168:9 › Auto integration mode (H1 linetags) › a file with an unmatched nt_breadcrumb_last opens normally with no error (1.3s)
+  ✓   3 [chromium] › playwright/specs/auto-integration.spec.ts:150:9 › Auto integration mode (H1 linetags) › re-selecting Auto after pinning concrete restores the file-declared folder scope (1.4s)
+  ✓   5 [chromium] › playwright/specs/auto-integration.spec.ts:128:9 › Auto integration mode (H1 linetags) › a folder-declaring file pinned to current_file jumps to Auto (Folder) on a breadcrumb click (1.5s)
+  ✓  12 [chromium] › playwright/specs/breadcrumb-jump.spec.ts:77:9 › Terminal breadcrumb leaf jump drawer › current-file mode: leaf click lists sibling files; clicking one posts openFile (845ms)
+  ✓  10 [chromium] › playwright/specs/auto-integration.spec.ts:88:9 › Auto integration mode (H1 linetags) › a navigated Auto (Folder) position survives a reload (1.8s)
+  ✓  11 [chromium] › playwright/specs/breadcrumb-jump.spec.ts:34:9 › Terminal breadcrumb leaf jump drawer › folder mode: leaf click opens the drawer and lists child subfolders; clicking one descends (1.3s)
+  ✓  14 [chromium] › playwright/specs/breadcrumb.spec.ts:11:9 › Breadcrumb workspace root stripping › shows full path when no workspace_root is provided (1.2s)
+  ✓  15 [chromium] › playwright/specs/breadcrumb.spec.ts:26:9 › Breadcrumb workspace root stripping › keeps the opened workspace folder as the first breadcrumb segment (1.2s)
+  ✓  13 [chromium] › playwright/specs/breadcrumb-jump.spec.ts:112:9 › Terminal breadcrumb leaf jump drawer › empty-state row when the folder has no jump targets (1.3s)
+  ✓  16 [chromium] › playwright/specs/breadcrumb.spec.ts:42:9 › Breadcrumb workspace root stripping › uses relative_path for breadcrumb (symlink-safe), keeping the opened folder as root (1.2s)
+  ✓  17 [chromium] › playwright/specs/breadcrumb.spec.ts:70:9 › Breadcrumb workspace root stripping › relative_path data-path attributes use full absolute paths for folder loading (1.2s)
+  ✓  23 [chromium] › playwright/specs/collision-detection.spec.ts:14:9 › Duplicate stable_id collision detection › no alert when every headline resolves to a unique stable_id (437ms)
+  ✓  18 [chromium] › playwright/specs/breadcrumb.spec.ts:87:9 › Breadcrumb workspace root stripping › breadcrumb with workspace root shows the opened folder as the first segment (1.2s)
+  ✓  19 [chromium] › playwright/specs/click-interaction.spec.ts:13:9 › Click Interaction › clicking a note headline sends revealRange message (1.4s)
+  ✓  20 [chromium] › playwright/specs/click-interaction.spec.ts:29:9 › Click Interaction › clicking a note sets aria-current (focused) attribute (1.7s)
+  ✓  22 [chromium] › playwright/specs/click-interaction.spec.ts:95:9 › Click Interaction › captured messages include docId and docPath (1.4s)
+  ✓  24 [chromium] › playwright/specs/collision-detection.spec.ts:24:9 › Duplicate stable_id collision detection › within-file duplicate headlines raise the alert; the drawer lists the group (1.2s)
+  ✓  25 [chromium] › playwright/specs/collision-detection.spec.ts:43:9 › Duplicate stable_id collision detection › cross-file collisions in folder mode list both origins in the drawer (1.3s)
+  ✓  26 [chromium] › playwright/specs/collision-detection.spec.ts:63:9 › Duplicate stable_id collision detection › clicking a colliding title posts a revealRange so the editor jumps to that story (1.3s)
+  ✓  31 [chromium] › playwright/specs/error-boundary.spec.ts:48:9 › Error Boundary › shows fallback when malformed MDAST causes render error (421ms)
+  ✓  27 [chromium] › playwright/specs/document-view.spec.ts:12:9 › Document View › renders document container after injecting basic.md (1.2s)
+  ✓  28 [chromium] › playwright/specs/document-view.spec.ts:19:9 › Document View › renders note headlines with correct text (1.2s)
+  ✓  29 [chromium] › playwright/specs/document-view.spec.ts:32:9 › Document View › renders notes with data-seq attributes (1.2s)
+  ✓  33 [chromium] › playwright/specs/error-boundary.spec.ts:80:9 › Error Boundary › fallback includes a Try Again button (421ms)
+  ✓  32 [chromium] › playwright/specs/error-boundary.spec.ts:56:9 › Error Boundary › fallback displays friendly message and error details (438ms)
+  ✓  34 [chromium] › playwright/specs/error-boundary.spec.ts:90:9 › Error Boundary › NoteRenderer container remains in the DOM despite error (429ms)
+  ✓  21 [chromium] › playwright/specs/click-interaction.spec.ts:52:9 › Click Interaction › second click on focused note selects it without blanking the view (2.3s)
+  ✓  30 [chromium] › playwright/specs/document-view.spec.ts:41:9 › Document View › renders body paragraphs (1.2s)
+  ✓  43 [chromium] › playwright/specs/folder-view.spec.ts:15:9 › Aggregate (Folder) view › folder mode shows a single NoteRenderer with folder flag and single toolbar (810ms)
+  ✓  39 [chromium] › playwright/specs/folder-click-focus.spec.ts:79:9 › Current_file click-focus regression › current_file mode click + simulated selectionChanged still focuses the clicked note (1.2s)
+  ✓  44 [chromium] › playwright/specs/folder-view.spec.ts:35:9 › Aggregate (Folder) view › origin pills appear on each merged story showing the project first letter (1.3s)
+  ✓  35 [chromium] › playwright/specs/folder-click-focus.spec.ts:28:9 › Folder-mode click-focus and click-select (homogenisation) › clicking a card in folder mode lights the focused outline immediately (no editor round-trip) (2.1s)
+  ✓  36 [chromium] › playwright/specs/folder-click-focus.spec.ts:38:9 › Folder-mode click-focus and click-select (homogenisation) › second click on a focused card promotes to selected (solid outline + selection state) (2.1s)
+  ✓  37 [chromium] › playwright/specs/folder-click-focus.spec.ts:48:9 › Folder-mode click-focus and click-select (homogenisation) › clicking a card from file A then a card from file B moves focus to the latter (2.1s)
+  ✓  38 [chromium] › playwright/specs/folder-click-focus.spec.ts:62:9 › Folder-mode click-focus and click-select (homogenisation) › editor caret moving into a story in file B highlights the matching card in folder mode (no view click) (2.1s)
+  ✓  45 [chromium] › playwright/specs/folder-view.spec.ts:54:9 › Aggregate (Folder) view › click on an origin pill descends the folder root to the project subfolder AND opens the clicked story in the editor (1.3s)
+  ✓  46 [chromium] › playwright/specs/folder-view.spec.ts:90:9 › Aggregate (Folder) view › breadcrumb segment click in folder mode sends setIntegration (1.3s)
+  ✓  47 [chromium] › playwright/specs/folder-view.spec.ts:121:9 › Aggregate (Folder) view › breadcrumb shows the merged "(X in Y files)" count only in folder mode (1.2s)
+  ✓  40 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:49:9 › Folder-mode kanban drag and drop › cross-column drag in folder mode targets only the source file (3.3s)
+  ✓  49 [chromium] › playwright/specs/folder-view.spec.ts:169:9 › Aggregate (Folder) view › clicking a file in the Files drawer switches to current_file mode for that file and closes the drawer (1.3s)
+  ✓  42 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:190:9 › Folder-mode kanban drag and drop › single-file kanban drag still emits the legacy single-doc shape (regression guard) (3.3s)
+  ✓  48 [chromium] › playwright/specs/folder-view.spec.ts:139:9 › Aggregate (Folder) view › clicking the breadcrumb count opens the Files drawer; editing the include glob re-filters the list (1.6s)
+  ✓  52 [chromium] › playwright/specs/frontmatter-document-strip.spec.ts:15:9 › Document-level front-matter strip › non-namespaced front-matter key renders a document-level pill in single-file mode, suppressed in folder mode (1.2s)
+  ✓  50 [chromium] › playwright/specs/folder-view.spec.ts:194:9 › Aggregate (Folder) view › outside-click dismisses the toolbar drawer; clicks inside or on the trigger do not double-toggle (1.6s)
+  ✓  53 [chromium] › playwright/specs/header-spacing.spec.ts:11:9 › Header bar breathing room and root label suppression › does not render a literal "Root" headline for the synthetic root container (1.2s)
+  ✓  54 [chromium] › playwright/specs/header-spacing.spec.ts:25:9 › Header bar breathing room and root label suppression › top note rect does not overlap the sticky toolbar beyond the outline-offset clearance (1.2s)
+  ✓  51 [chromium] › playwright/specs/folder-view.spec.ts:223:9 › Aggregate (Folder) view › switching folder mode to Kanban shows stories grouped by status linetag with origin pills (2.0s)
+  ✓  56 [chromium] › playwright/specs/integration-flip.spec.ts:18:9 › Integration flip (folder ↔ current-file) › folder → current_file flips the selector value and drops the folder breadcrumb file-count in one render (1.3s)
+  ✓  55 [chromium] › playwright/specs/integration-flip.spec.ts:35:9 › Integration flip (folder ↔ current-file) › round-trip folder → current_file → folder → current_file leaves no stale toolbar state (1.3s)
+  ✓  41 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:94:9 › Folder-mode kanban drag and drop › multi-file column interleave: a drag into an all-unweighted column mints no weight, and an unrelated parse update preserves interleaved order (5.5s)
+  ✓  57 [chromium] › playwright/specs/kanban-animation.spec.ts:80:9 › Kanban Passive Transition Animations › cross-column passive move animates and lands correctly (2.2s)
+  ✓  58 [chromium] › playwright/specs/kanban-animation.spec.ts:109:9 › Kanban Passive Transition Animations › in-column passive reorder animates and swaps card order (2.3s)
+  ✓  59 [chromium] › playwright/specs/kanban-animation.spec.ts:151:9 › Kanban Passive Transition Animations › new column appears before its inbound card animates (2.2s)
+  ✓  62 [chromium] › playwright/specs/kanban-animation.spec.ts:252:9 › Kanban Passive Transition Animations › prefers-reduced-motion skips animation but lands correctly (2.2s)
+  ✓  61 [chromium] › playwright/specs/kanban-animation.spec.ts:213:9 › Kanban Passive Transition Animations › rapid burst of passive updates settles clean and correct (2.9s)
+  ✓  60 [chromium] › playwright/specs/kanban-animation.spec.ts:185:9 › Kanban Passive Transition Animations › user drag is not double-animated by the FLIP layer (2.9s)
+  ✓  63 [chromium] › playwright/specs/kanban-animation.spec.ts:283:9 › Kanban Passive Transition Animations › kanbanAnimateTransitions=false disables the FLIP layer (2.7s)
+  ✓  66 [chromium] › playwright/specs/kanban-drag-roundtrip.spec.ts:93:9 › Kanban drag round-trip - own echo never re-animates the dropped card › positive control: a genuine passive update (no preceding drag) still animates (2.3s)
+  ✓  65 [chromium] › playwright/specs/kanban-drag-roundtrip.spec.ts:86:9 › Kanban drag round-trip - own echo never re-animates the dropped card › echo arriving immediately (adversarial race) does not re-animate (3.3s)
+  ✓  67 [chromium] › playwright/specs/kanban-drag.spec.ts:47:9 › Kanban Drag and Drop › dragging a card between columns sends editText with status change (2.5s)
+  ✓  64 [chromium] › playwright/specs/kanban-drag-roundtrip.spec.ts:78:9 › Kanban drag round-trip - own echo never re-animates the dropped card › echo arriving AFTER the drag tail (realistic round-trip) does not re-animate (3.7s)
+  ✓  68 [chromium] › playwright/specs/kanban-drag.spec.ts:79:9 › Kanban Drag and Drop › dragging a card to untagged column sends editText that removes status tag (2.5s)
+  ✓  69 [chromium] › playwright/specs/kanban-drag.spec.ts:106:9 › Kanban Drag and Drop › view does not blank after drag completes (2.8s)
+  ✓  70 [chromium] › playwright/specs/kanban-drag.spec.ts:134:9 › Kanban Drag and Drop › card appears in destination column after extension sends updated doc (2.5s)
+  ✓  73 [chromium] › playwright/specs/kanban-single-file-descent.spec.ts:28:9 › Single-file kanban story descent › ### stories render as cards in their status columns, not the ## epics (2.0s)
+  ✓  75 [chromium] › playwright/specs/kanban-single-file-descent.spec.ts:54:9 › Single-file kanban story descent › a nested file with NO nt_view renders as a document and keeps its ## epic headings (descent is kanban-only) (1.2s)
+  ✓  74 [chromium] › playwright/specs/kanban-single-file-descent.spec.ts:42:9 › Single-file kanban story descent › each story card shows its epic chip and no project pill (2.0s)
+  ✓  76 [chromium] › playwright/specs/kanban-view.spec.ts:28:9 › Kanban View › renders kanban columns via auto view detecting ng_view linetag (1.7s)
+  ✓  78 [chromium] › playwright/specs/kanban-view.spec.ts:64:9 › Kanban View › places untagged tasks in untagged column (1.7s)
+  ✓  77 [chromium] › playwright/specs/kanban-view.spec.ts:47:9 › Kanban View › places tasks in correct columns (1.7s)
+  ✓  71 [chromium] › playwright/specs/kanban-pointer-drag.spec.ts:58:9 › Kanban Pointer Drag and Drop › pointer-dragging a card to another column sends editText and lands the card (3.4s)
+  ✓  85 [chromium] › playwright/specs/pending-work-spinner.spec.ts:26:9 › Pending-work spinner › a fast settings toggle (resolves under 150 ms) shows no visible spinner (673ms)
+  ✓  79 [chromium] › playwright/specs/kanban-view.spec.ts:73:9 › Kanban View › long unbreakable headline tokens wrap inside the card and do not punch past its right edge (2.0s)
+  ✓  72 [chromium] › playwright/specs/kanban-pointer-drag.spec.ts:83:9 › Kanban Pointer Drag and Drop › pointer drag leaves no card stuck under a transform and the board stays interactive (4.1s)
+  ✓  80 [chromium] › playwright/specs/keyboard-navigation.spec.ts:14:9 › Keyboard Navigation › clicking different notes produces revealRange messages (2.2s)
+  ✓  84 [chromium] › playwright/specs/list-bullets.spec.ts:11:9 › List bullets › non-checkbox parent listItem keeps its bullet even when nested children are checkboxes (1.3s)
+  ✓  81 [chromium] › playwright/specs/keyboard-navigation.spec.ts:38:9 › Keyboard Navigation › selection feedback updates focused note styling (2.4s)
+  ✓  87 [chromium] › playwright/specs/pending-work-spinner.spec.ts:56:9 › Pending-work spinner › integration-mode flip (folder ↔ current_file) does not flash the spinner (1.5s)
+  ✓  89 [chromium] › playwright/specs/pending-work-spinner.spec.ts:88:9 › Pending-work spinner › prefers-reduced-motion: spinner SVG is in the DOM but the rotation keyframe is not animating (996ms)
+  ✓  86 [chromium] › playwright/specs/pending-work-spinner.spec.ts:39:9 › Pending-work spinner › a slow folder-discovery (pendingChange on) shows the toolbar spinner; clearing it hides the spinner after min-visibility (1.7s)
+  ✓  82 [chromium] › playwright/specs/keyboard-navigation.spec.ts:60:9 › Keyboard Navigation › drillIn on nested doc changes parent context (3.0s)
+  ✓  88 [chromium] › playwright/specs/pending-work-spinner.spec.ts:68:9 › Pending-work spinner › with the Files drawer open during an apply, only the breadcrumb spinner shows (no redundant in-drawer spinner) (1.7s)
+  ✓  93 [chromium] › playwright/specs/view-switching.spec.ts:12:9 › View Switching › defaults to auto view which resolves to document for plain markdown (1.2s)
+  ✓  90 [chromium] › playwright/specs/settings-toggle.spec.ts:12:9 › Settings Toggle › toggling lineNumbers shows and hides line number elements (1.8s)
+  ✓  91 [chromium] › playwright/specs/settings-toggle.spec.ts:44:9 › Settings Toggle › toggling contextBars shows and hides context bar elements (1.8s)
+  ✓  92 [chromium] › playwright/specs/settings-toggle.spec.ts:65:9 › Settings Toggle › settings survive view type switch (2.0s)
+  ✓  83 [chromium] › playwright/specs/keyboard-navigation.spec.ts:88:9 › Keyboard Navigation › drillOut returns to parent context (3.5s)
+  ✓  94 [chromium] › playwright/specs/view-switching.spec.ts:22:9 › View Switching › switches to kanban view and back to document (2.0s)
+  ✓  95 [chromium] › playwright/specs/view-switching.spec.ts:39:9 › View Switching › switches to auto view (2.0s)
 
-0 failed, 0 flaky, 0 skipped.
-
-Specs exercised (23 files):
-  auto-integration, breadcrumb, breadcrumb-jump, click-interaction, collision-detection,
-  document-view, error-boundary, folder-click-focus, folder-kanban-drag, folder-view,
-  frontmatter-document-strip, header-spacing, integration-flip,
-  kanban-animation, kanban-drag, kanban-drag-roundtrip, kanban-pointer-drag, kanban-view,
-  keyboard-navigation, list-bullets, pending-work-spinner, settings-toggle, view-switching
-
-New this story (FLIP passive transitions + drag-regression fix):
-  - kanban-animation.spec.ts ......... 7 passed (cross-column move, in-column reorder, new-column
-                                       choreography, no-double-animate, rapid burst, reduced-motion,
-                                       setting=false disables)
-  - kanban-pointer-drag.spec.ts ...... 2 passed (real mouse drag completes + no residual transform)
-  - kanban-drag-roundtrip.spec.ts .... 3 passed (dropped card's own authoritative echo never
-                                       re-animates - realistic + adversarial timing; positive control
-                                       that a genuine passive update still animates)
+  95 passed (18.2s)

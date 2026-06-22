@@ -4,6 +4,10 @@ on:
   push:
     branches: [main, staging]
 
+env:
+  # CI never runs Playwright; @playwright/browser-chromium (via @vscode/test-web) otherwise downloads ~167MB Chrome during pnpm install then hangs to the 6h job timeout
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
 jobs:
   build:
     name: Build, Test & Package

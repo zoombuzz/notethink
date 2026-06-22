@@ -709,3 +709,18 @@ Always rebuild the extension after each code change so the developer can preview
 | Playwright E2E | `pnpm run test-playwright` |
 | Everything | `pnpm run check` |
 
+## Release & Publishing
+
+`sh/git/merge-main.sh` (staging -> main) is the production release: it fast-forwards `main`, pushes, then runs `vsce publish` to the VS Code Marketplace. The push to `main` also triggers CI to publish `@zoombuzz/notethink` to GitHub Packages and cut a GitHub Release with the `.vsix`. Two invariants must hold or the release breaks, and both break *after* the merge has already shipped to `main`.
+
+### `@types/vscode` must not exceed `engines.vscode`
+
+`vsce package` / `vsce publish` reject the build when `devDependencies.@types/vscode` declares a higher version than `engines.vscode` (`ERROR @types/vscode ^A greater than engines.vscode ^B`). The two are a matched pair: `engines.vscode` is the minimum VS Code the extension supports, and you must not type-check against an API surface newer than that floor.
+
+- bump them in lockstep. Whenever a dependency update raises `@types/vscode`, in the same commit either raise `engines.vscode` to the same minor or pin `@types/vscode` back down.
+- this fails only at publish time, which in this repo is *after* `merge-main.sh` has fast-forwarded `main`. `/prod-ready` does not catch it (lint, build, jest, and playwright never invoke `vsce`), so a mismatch surfaces mid-deploy with `main` already advanced. Treat the pairing as a pre-merge checklist item on any `@types/vscode` bump.
+
+### CI skips Playwright browser downloads
+
+`release.yml` and `publish.yml` set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`. CI only lints, builds, packages, and publishes - it never runs Playwright - but `@playwright/browser-chromium` (pulled in transitively by `@vscode/test-web`) otherwise runs its install script during `pnpm install`, downloads ~167MB of Chrome, then hangs until the 6h job timeout cancels the run. Do not remove the env var; if a CI job ever needs browsers, run `playwright install` as an explicit step instead.
+

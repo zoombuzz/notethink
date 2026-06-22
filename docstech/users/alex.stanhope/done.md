@@ -3054,32 +3054,32 @@ Two new file-root linetags let a document declare the view it should open into, 
   + `| nt_breadcrumb_last | The breadcrumb segment this file opens scoped to while in **auto** - a folder name (narrows folder-mode aggregation to that subfolder, implying folder mode) or an epic/story headline (scopes the note hierarchy). Seeds the initial position; navigate away freely. nt_-only |`
   + bump the guide header from 1.0.0 to 1.1.0 (minor - two new optional, backward-compatible linetags)
 
-+ [x] add `auto` to `IntegrationMode` / `INTEGRATION_MODES`, make it the default, treat undefined as auto
-+ [x] read + validate authored `nt_integration_mode` (`current_file` / `folder`) and `nt_breadcrumb_last` off the opened doc H1 / front matter
-+ [x] add `resolveBreadcrumbFolderSegment` to `pathops.ts` - deepest-label match over the file's path trail
-+ [x] add `breadcrumbSeqForLabel` to `noteops.ts` - match epic/story headline → seq
-+ [x] resolve auto on doc-arrival in `ExtensionReceiver`; dispatch `setIntegration` / `setParentContextSeq` only when the resolved target changes
-+ [x] add `reconcileAutoIntegrationMode` to `viewstateops.ts` - resulting mode == file-declared → auto, else concrete
-+ [x] reconcile `integration_mode` after every navigation via the helper; explicit "Auto" selection re-resolves mode + scope from the file
-+ [x] show the auto-resolved mode in `ViewIntegrationSelector` ("Auto (Folder)" / "Auto (Current file)")
-+ [x] debug-log + no-op on an unrecognised `nt_integration_mode` value or an unmatched `nt_breadcrumb_last` label
-+ [x] document both keys in the AUTHORING_GUIDE.md View-configuration table; bump the guide 1.0.0 → 1.1.0
-+ [x] bump notethink to 0.3.14
-+ [x] jest: undefined `integration_mode` resolves as auto; `nt_integration_mode=folder` resolves to folder; an invalid value falls back to current_file
-+ [x] jest: a `nt_breadcrumb_last` folder label resolves to the right `integration_path`; deepest match wins on duplicate labels
-+ [x] jest: a `nt_breadcrumb_last` epic label resolves to the right `parent_context_seq`
-+ [x] jest: a concrete persisted `integration_mode` (user choice) is NOT overridden by the file linetag - auto no longer applies
-+ [x] jest: navigation congruence - Auto(Folder) stays auto within folder; Auto(Current file)+folder-click pins concrete Folder; concrete Current file on a folder-declaring file + click → Auto(Folder)
-+ [x] jest: an unmatched `nt_breadcrumb_last` resolves to the default scope with no throw
-+ [x] `pnpm run check` green (lint + build + rollup + 1344 jest) + 77 playwright (70 existing + 7 new auto-integration E2E)
++ [X] add `auto` to `IntegrationMode` / `INTEGRATION_MODES`, make it the default, treat undefined as auto
++ [X] read + validate authored `nt_integration_mode` (`current_file` / `folder`) and `nt_breadcrumb_last` off the opened doc H1 / front matter
++ [X] add `resolveBreadcrumbFolderSegment` to `pathops.ts` - deepest-label match over the file's path trail
++ [X] add `breadcrumbSeqForLabel` to `noteops.ts` - match epic/story headline → seq
++ [X] resolve auto on doc-arrival in `ExtensionReceiver`; dispatch `setIntegration` / `setParentContextSeq` only when the resolved target changes
++ [X] add `reconcileAutoIntegrationMode` to `viewstateops.ts` - resulting mode == file-declared → auto, else concrete
++ [X] reconcile `integration_mode` after every navigation via the helper; explicit "Auto" selection re-resolves mode + scope from the file
++ [X] show the auto-resolved mode in `ViewIntegrationSelector` ("Auto (Folder)" / "Auto (Current file)")
++ [X] debug-log + no-op on an unrecognised `nt_integration_mode` value or an unmatched `nt_breadcrumb_last` label
++ [X] document both keys in the AUTHORING_GUIDE.md View-configuration table; bump the guide 1.0.0 → 1.1.0
++ [X] bump notethink to 0.3.14
++ [X] jest: undefined `integration_mode` resolves as auto; `nt_integration_mode=folder` resolves to folder; an invalid value falls back to current_file
++ [X] jest: a `nt_breadcrumb_last` folder label resolves to the right `integration_path`; deepest match wins on duplicate labels
++ [X] jest: a `nt_breadcrumb_last` epic label resolves to the right `parent_context_seq`
++ [X] jest: a concrete persisted `integration_mode` (user choice) is NOT overridden by the file linetag - auto no longer applies
++ [X] jest: navigation congruence - Auto(Folder) stays auto within folder; Auto(Current file)+folder-click pins concrete Folder; concrete Current file on a folder-declaring file + click → Auto(Folder)
++ [X] jest: an unmatched `nt_breadcrumb_last` resolves to the default scope with no throw
++ [X] `pnpm run check` green (lint + build + rollup + 1344 jest) + 77 playwright (70 existing + 7 new auto-integration E2E)
 + note - all six former manual checks are now automated Playwright E2E (`playwright/specs/auto-integration.spec.ts`). The harness has no real extension, so the folder aggregation is simulated by the webview's own setIntegration round-trip: each test asserts the outbound setIntegration message (the webview→host contract) plus the folder board the webview renders. Harness gained sessionStorage-backed webview state (`playwright/harness/index.html`) so reload-resilience is testable. The only residual "manual" is optional visual confirmation in a real VS Code host - NOT a pipeline blocker.
-+ [x] playwright: cold-open `nt_integration_mode=folder&nt_breadcrumb_last=portfolio` - posts setIntegration scoped to portfolio, renders the folder board, selector reads "Auto (Folder)", breadcrumb scoped to portfolio
-+ [x] playwright: Auto (Folder), click an ancestor folder breadcrumb - stays "Auto (Folder)", re-aggregates at the new folder
-+ [x] playwright: a navigated Auto (Folder) position survives a reload (sessionStorage-backed harness; refresh-resilience test)
-+ [x] playwright: Auto (Current file) + folder breadcrumb click - pins concrete "Folder"
-+ [x] playwright: a folder-declaring file pinned to current_file + breadcrumb click - jumps to "Auto (Folder)" (congruent)
-+ [x] playwright: pick "Auto" again after pinning concrete - re-resolves mode + scope from the file
-+ [x] playwright: bogus `nt_breadcrumb_last` - opens normally in current_file, no setIntegration, no error
++ [X] playwright: cold-open `nt_integration_mode=folder&nt_breadcrumb_last=portfolio` - posts setIntegration scoped to portfolio, renders the folder board, selector reads "Auto (Folder)", breadcrumb scoped to portfolio
++ [X] playwright: Auto (Folder), click an ancestor folder breadcrumb - stays "Auto (Folder)", re-aggregates at the new folder
++ [X] playwright: a navigated Auto (Folder) position survives a reload (sessionStorage-backed harness; refresh-resilience test)
++ [X] playwright: Auto (Current file) + folder breadcrumb click - pins concrete "Folder"
++ [X] playwright: a folder-declaring file pinned to current_file + breadcrumb click - jumps to "Auto (Folder)" (congruent)
++ [X] playwright: pick "Auto" again after pinning concrete - re-resolves mode + scope from the file
++ [X] playwright: bogus `nt_breadcrumb_last` - opens normally in current_file, no setIntegration, no error
 + note - downstream authoring (notegit, separate repo)
   + once shipped, set `nt_integration_mode=folder&nt_breadcrumb_last=portfolio` on the Atlas Mobile App H1 in the notegit demo content
   + this is a notegit content change, not part of this notethink story
@@ -3231,7 +3231,7 @@ Change is uncommitted on branch `staging`: `useSyncedBodyClip.ts` (new), `Markdo
 ### Upgrade NPM packages for notethink (Wave 1 minor/patch) [](?time_taken=0)
 
 Pins in effect after this wave (snapshot):
-- eslint @9.39.4 (.ncurc reject) - structural - held — eslint-plugin-react 7.37.5 (latest) has no eslint-10 release; revisit when it ships eslint-10 compat
+- eslint @9.39.4 (.ncurc reject) - structural - held - eslint-plugin-react 7.37.5 (latest) has no eslint-10 release; revisit when it ships eslint-10 compat
 - @eslint/js @9.39.4 (.ncurc reject) - structural - same
 Unpinned this wave: none (typescript-eslint already on caret ^8.61.1)
 
@@ -3240,3 +3240,111 @@ Unpinned this wave: none (typescript-eslint already on caret ^8.61.1)
 + [X] pnpm install
 + [X] verify lint passes
 + [X] verify jest tests pass
+
+
+### Auto integration mode follows live edits like nt_view [](?id=auto-integration-follows-content)
+
+`nt_integration_mode` and `nt_breadcrumb_last` must auto-resolve the **same reactive way** `nt_view` does. Editing the `nt_view` linetag in the editor updates the rendered view live; editing `nt_integration_mode` / `nt_breadcrumb_last` - or switching the active editor to a file with a different declaration - must update the viewer's integration mode the same way. Today it does not: once the viewer auto-enters folder mode it is sticky, so switching from a folder-declaring file back to a plain document file leaves the Kanban aggregate on screen instead of dropping to the document render.
+
++ motivating repro (notegit welcome content)
+  + open `portfolio/mobile-app.md` (H1 `?nt_integration_mode=folder&nt_breadcrumb_last=portfolio`) → viewer correctly auto-enters folder mode, 3-column board aggregated across `portfolio/`
+  + switch the active editor back to `intro.md` (bare `# Welcome to NoteGit`, declares current_file) → viewer SHOULD drop to the document render of intro.md; instead it stays stuck on the portfolio board (the reported bug - screenshot 2026-06-19)
+  + same failure for `project-board.md` (`?nt_view=kanban`, no integration tag → current_file) and any other non-portfolio file
++ reference architecture - how auto VIEW TYPE works (the model to copy)
+  + `AutoView.tsx` is a **pure render-time derivation**: when the selection is `auto`, it reads the file's `nt_view` from the CURRENT content every render (`resolveNamespacedTag(attributes,'view')` / `majorityNgView(props.notes)`) and delegates to `GenericView` with the derived concrete type - no persisted state, no dispatch, no once-per-doc guard
+  + reactivity is free: edit `nt_view` → extension re-parses + re-sends the doc → webview `docs` state updates → React re-renders → `AutoView` re-derives → new type. The same chain fires on an active-file switch (new doc becomes most-recent / active)
+  + selection/resolved split: persisted selection (may be `auto`) drives the dropdown value (`ViewTypeSelector`, "Auto (Kanban)"); the resolved concrete type is what renders (`replaced_attributes` = selection, `derived_attributes` = resolved). A concrete pick pins; `auto` keeps following the file
+  + file-level read primitive: `mergeAggregateRoot.ts:281-293` reads `file_view_type` (H1 `nt_view` over front-matter, most-specific wins)
++ root cause - how auto INTEGRATION MODE diverges from that model
+  + `useAutoIntegration.ts` is an **imperative one-shot effect**, not a derivation: behind a once-per-doc-identity guard (`resolved_for_ref`, keyed `id:hash`) it DISPATCHES `setIntegration` and WRITES persisted `integration_path` into `FOLDER_VIEW_STATE_ID`
+  + it is **one-directional**: the only branches ENTER folder mode (`decl.mode === folder`) or seed `parent_context_seq`. There is no branch that exits folder mode when the opened file resolves to current_file (`useAutoIntegration.ts:57-96`)
+  + the renderer reads the concrete mode from **persisted view-state**, not live content: `NoteRenderer.tsx:78` → `anyViewInFolderMode(props.viewStates)` → `resolveIntegrationMode` (`auto` + a seeded `integration_path` resolves folder, `viewstateops.ts:45`). So the board stays until something rewrites that persisted state
+  + net: editing the linetag away / switching files re-runs the effect (hash or active path changed) but it has nothing to do in the exit direction - the opposite of `AutoView`, which simply re-derives
++ the one necessary asymmetry (call out, don't ignore)
+  + auto view type is a pure webview rendering choice over the SAME data; integration mode changes WHAT DATA the extension loads - folder discovery + watchers + the aggregated docs map, via the `setIntegration` round-trip (`PanelSession.handleSetIntegration` → `enterFolderMode` / `enterCurrentFileMode`)
+  + so it cannot be a purely render-time function; the faithful port is two layers:
+    + (1) **derive** the target mode + path reactively from the active file's current declaration when the selection is `auto` (mirrors `AutoView` reading `nt_view` every render) - `resolveFileIntegrationDeclaration` is the existing derivation primitive
+    + (2) an **idempotent reconcile effect** that fires `setIntegration` and syncs the persisted `integration_path` only when the derived target diverges from what the extension currently has - keyed on the derived target (mode+path), NOT a once-per-doc guard
++ the existing manual equivalent already does the right thing - reuse it
+  + `handle_integration_change('auto')` (`useViewToolbar.ts:64-114`) IS the operation we want fired automatically: re-resolves mode+scope from `file_declared_integration`, on a current_file resolve it clears `integration_path`, clears stranded folder tags + focused/selected, re-seeds `parent_context_seq`, and posts `setIntegration current_file`
+  + factor the "auto reset → view-state updates + setIntegration payload" builder out of `useViewToolbar` so the toolbar path and the reactive editor-follow path share one implementation and can't drift (`reconcileAutoIntegrationMode` + a new shared builder in `viewstateops.ts`)
++ cases the reactive resolver must cover (bidirectional)
+  + folder-declaring file active, cold → enter folder at declared path (already works)
+  + in auto-folder, active editor switches to a current_file file OUTSIDE the current `integration_path` → exit to current_file (the bug)
+  + in auto-folder, user edits the active file to remove/blank `nt_integration_mode` + `nt_breadcrumb_last` → exit to current_file (reactive, like editing `nt_view`)
+  + in current_file, user edits the active file to ADD `nt_integration_mode=folder` or a folder-resolving `nt_breadcrumb_last` → enter folder (reactive)
+  + concrete `integration_mode_selection` pin (folder / current_file) → never auto-changed (preserve `useAutoIntegration.test.ts:59,69`)
+  + focus landing on a member file INSIDE the current `integration_path` (e.g. clicking a card reveals its source) → STAY folder; gate the exit on "opened file is outside `integration_path`" so card clicks never kick the user off the board
++ open design decisions (resolve in-story before coding)
+  + folderA → folderB re-snap: today auto deliberately never re-snaps a navigated folder (`useAutoIntegration.ts:72` comment). Decide whether switching the active editor to a file declaring a DIFFERENT folder re-snaps the scope (the reactive model implies yes; the current model says no)
+  + breadcrumb navigation within auto-folder: if the resolver re-derives the path from the file on every change, a user descent via breadcrumb would snap back. Decide whether a diverging breadcrumb descent pins concrete folder, or the persisted navigated path is honoured over the file declaration on re-derive
++ where (files)
+  + `client/webview/src/hooks/useAutoIntegration.ts` - re-architect: reactive derive + idempotent reconcile; drop the once-per-doc-only-enter guard
+  + `client/webview/src/notethink-views/src/lib/viewstateops.ts` - extract the shared auto-reset builder; keep `resolveIntegrationMode` / `reconcileAutoIntegrationMode` as the selection/resolved split
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts` - route `handle_integration_change('auto')` through the shared builder
+  + `client/webview/src/lib/docops.ts` - `resolveFileIntegrationDeclaration` stays the derivation primitive (already mirrors `mergeAggregateRoot`'s `file_view_type` read)
+  + `client/webview/src/components/NoteRenderer.tsx` - confirm the render decision tracks the reactively-derived mode (no stale persisted-only read)
+  + `client/extension/src/vscode/PanelSession.ts` - confirm no change needed (the `setIntegration current_file` teardown + folder re-discovery already exist)
++ [X] open design decisions resolved (2026-06-19):
+  + folderA -> folderB re-snap: YES, follow the active file. Switching the active editor to a file declaring a DIFFERENT folder (one outside the current `integration_path`) re-snaps the board to that folder, mirroring how `nt_view` follows the active file. Gated so a card-click that reveals a member file INSIDE the current `integration_path` never kicks the user off the board.
+  + breadcrumb descent vs re-derive: PRESERVE the navigated position. The persisted navigated `integration_path` wins over the file declaration whenever the SAME active file re-derives (edit / re-render), so a breadcrumb descent is never yanked back; a change of active file (above) is the only trigger that re-snaps.
++ [X] extract the shared auto-reset builder (`buildIntegrationDispatch` in `viewstateops.ts`); route the toolbar `handle_integration_change('auto')` through it
++ [X] re-architect `useAutoIntegration` to derive-then-reconcile (bidirectional, keyed on derived target via `declTargetKey`, exit gated on outside-`integration_path` via `isPathWithinFolder`; decision factored into pure `decideAutoIntegrationReconcile` in `docops.ts`)
++ [X] preserve concrete-pin immunity (no auto change when selection is folder / current_file)
++ [X] jest: editor switch folder→current_file exits; linetag removal exits; linetag add enters; member-file-inside-path stays folder; concrete pins untouched (`useAutoIntegration.test.ts` + `docops.test.ts` `decideAutoIntegrationReconcile`)
++ [X] jest: folderA→folderB re-snap (decideReconcile + hook re-snap case)
++ [X] playwright: switch to a file outside the scope → document render; member inside the scope stays; live linetag edit flips the mode (`auto-integration.spec.ts` reactive describe)
++ relationship - independent of [[single-file-kanban-story-descent]] (that story is WHAT renders inside single-file kanban; this is WHEN the integration mode flips); both touch the same portfolio demo files
++ FOLLOW-UP (2026-06-22, 0.3.19) - the webview fix shipped green but the bug still reproduced live in the notegit `:3500` preview: open `portfolio/mobile-app.md` (folder), switch to `intro.md`, board stays stuck on the portfolio aggregate
+  + residual root cause - the reactive reconcile was real but BLIND at the extension boundary. the original "where (files)" plan recorded `PanelSession.ts - confirm no change needed`; that assumption was wrong
+    + in folder mode `PanelSession.sendDoc` deliberately drops out-of-scope docs (`if (integration_path && !isWithinIntegrationPath(doc.path)) return`, the "skipping out-of-integration doc" log) so the aggregate is not polluted. `onDidChangeActiveTextEditor` builds + sends the newly-active doc through that same skip, so `intro.md` never reached the webview docs map; only its `selectionChanged` did
+    + so `pickOpenedDoc(docs, active_editor_doc_path)` could not find `intro.md` in `docs` and fell back to `pickMostRecentlySentDoc` - a portfolio member, still folder-declaring - so `decideAutoIntegrationReconcile` saw decl=folder, never hit the exit branch, returned null. the reconcile had nothing to react to
+  + why it tested green but failed live - the Playwright "switch OUTSIDE the scope" test injected `intro.md` straight into the webview docs via `injectDocsFromFixture`, bypassing `sendDoc`'s out-of-scope filter; it modelled a world where the out-of-scope doc is already in the webview, which never happens in real folder mode. classic green-suite / broken-feature at an unmocked boundary
+  + decision stays in the webview (per the story's design) - the extension only FEEDS it the active file's declaration; do not duplicate `resolveFileIntegrationDeclaration` / `decideAutoIntegrationReconcile` extension-side
+  + [X] extension: add a dedicated `activeEditorDoc` channel - `sendDoc`'s out-of-scope skip now calls `sendActiveEditorDoc(timestamped)` when the skipped doc is the active editor (`doc.path === active_path`), posting `{ type: 'activeEditorDoc', doc }` without merging into the aggregate (`PanelSession.ts`)
+  + [X] webview: `useVscodeMessages` handles `activeEditorDoc` into a new `active_doc` state (+ sets `active_editor_doc_path`); `ExtensionReceiver` threads `active_doc` into `useAutoIntegration`; `pickOpenedDoc` consults `active_doc` when the active path is absent from the aggregate, before the most-recently-sent fallback
+  + [X] jest: new `useAutoIntegration` case - out-of-scope active file delivered ONLY on the `active_doc` channel (absent from `docs`) still exits to current_file
+  + [X] playwright: the "switch OUTSIDE the scope" exit test now delivers `intro.md` via `injectActiveEditorDocFromFixture` (the real boundary), not the docs aggregate, so it actually gates this regression
+  + note - covers the editor-switch exit and the out-of-scope-active-file edit (both route through `sendDoc` with `doc.path === active_path`); on reload the cold-mount guard preserves a restored folder, unchanged
+
+
+### Single-file kanban descends to ### stories under ## epics [](?id=single-file-kanban-story-descent)
+
+In current_file (single-file) mode the kanban renders the *direct children of the scope heading* as cards. For a nested doc (`#` → `##` epics → `###` stories) those children are the `##` epics, so the board shows epic cards (e.g. "Storefront", "Design system") sitting in one untagged column instead of the `###` stories partitioned by status. The `###`-as-card / `##`-as-epic transform exists only in folder mode (`mergeAggregateRoot.ts`); single-file mode never had it. Bring that transform to current_file mode so a nested file opened on its own renders its stories as cards, each tagged with its epic.
+
++ background - root cause
+  + `useViewContext.ts:74` sets `notes_within_parent_context = parent_context.child_notes`, and `KanbanView` renders those as cards, so the card level is always exactly one below the scope heading
+  + AutoView scopes to the `nt_view`-declaring note (the `#` H1), so a nested file's cards come out as its `##` epics
+  + the depth-3-stories / `##`-epics flatten lives only in `mergeAggregateRoot.ts` (folder mode), added in `bf25cc2` (0.1.59)
+  + the single-file composer (`NoteTreeComposer`) only runs `convertMdastToNoteHierarchy` + `stampSingleFileStableIds` - the latter stamps `stable_id`s but does not restructure the tree
+  + not a refactor regression - `KanbanView` rendered `notes_within_parent_context` both before and after the `cd4fcb4` decomposition; single-file descent was never implemented
+  + `parent_context_seq` (seeded by `nt_breadcrumb_last`) only scopes into ONE subtree, so it cannot gather `###` stories across multiple `##` epics
+  + `AUTHORING_GUIDE.md` documents `###` as "the unit that becomes a Kanban card" universally, so the guide's own nested example mis-renders in single-file mode today
++ demonstrating files (notegit welcome content)
+  + `web-store.md`, `platform-infra.md`, `project-board.md` - nested, no folder trigger, so they show `##` epics as cards
+  + `mobile-app.md` - same shape but carries `nt_breadcrumb_last=portfolio`, which resolves to a folder segment and flips it into folder mode, so it renders correctly; this contrast is what makes the bug look like a regression
+  + a notegit-side content stopgap (out of scope for this story) is to add `nt_breadcrumb_last=portfolio` to the other portfolio files, but that shows the merged 3-file board, not the opened file's own stories, and does not fix standalone nested files
++ desired behaviour
+  + a nested single file in kanban view shows its `###` stories as cards, partitioned into status columns
+  + each card is tagged with its `##` epic (structural), with explicit `epic=` linetags overriding (direct > inherited > structural), matching folder mode
+  + flat files (`##` stories directly under `#`, no epic layer) keep rendering `##` as cards unchanged
+  + mixed shapes (some `###` directly under `#`, some under `##`) collect both, mirroring `mergeAggregateRoot`'s `walk_children` pass
++ approach
+  + give current_file mode the same transform folder mode has: when the scope heading's children are `##` epics containing `###` stories, descend and present the `###` stories as the rendered note set
+  + reuse the folder-mode machinery over a single doc where possible - the epic registry (`file_epic_by_id` / `file_epic_by_name`), structural `origin.epic`, and `walkStorySubtree` already exist in `mergeAggregateRoot.ts`
+  + stamp a minimal `origin.epic` (epic chip only; single-file notes carry no project, so `OriginPill` should render the epic without a project pill)
++ open questions / decisions
+  + where to run the transform (single-file composer vs a gated branch in `useViewContext`) so folder mode is never double-flattened
+  + whether descent is automatic (detect an epic layer) or opt-in - automatic preserves the documented `###`-is-a-card contract with no authoring change
+  + how drag-drop status + ordering rewrites route back to the one doc when cards are `###` under `##` (folder mode partitions by docPath; single-file has one doc, so the existing single-file editText path should apply - verify offsets)
+  + interaction with `parent_context_seq` / `nt_breadcrumb_last` scoping into a single epic (should still work, narrowing to that epic's stories)
++ [X] reproduce / encode the bug: the playwright descent spec asserts the `##` epics are NOT cards and the `###` stories ARE (a contrast that would fail against the pre-fix tree)
++ [X] transform seam decided (2026-06-19): single-file composer (`NoteTreeComposer`), NOT `useViewContext`. `useViewContext` runs for both folder and single-file, so a shared-branch flatten would double-flatten the already-merged folder tree; the composer is single-file-only (folder mode renders `FolderTreeComposer`) and owns the docId/docPath postMessage wrapper that keeps drag routing on one doc. Descent is AUTOMATIC (no opt-in) but GATED on the file rendering as a kanban board (explicit kanban viewType, or H1/front-matter `nt_view=kanban` via `fileDeclaredViewType`) AND on the structural nested-vs-flat shape AND on a single `#` H1 - so a plain nested document keeps its `##` structure + prose (it is not a board) and a no-H1 file is never mistaken for a folder aggregate. For a kanban board the descent is at the data level, so its document view also shows the flattened stories, matching folder-mode parity (the D5 choice).
++ [X] implement single-file `###`-story flatten with structural `##`-epic tagging (`flattenSingleFileStories` in `mergeAggregateRoot.ts`, reusing `buildFileEpicRegistries` + `resolveEpicLinetag`; wired into `NoteTreeComposer` before the stable-id stamp)
++ [X] resolve explicit `epic=` overrides (direct > inherited > structural) in single-file mode (via `resolveEpicLinetag`; inherited `nt_child_epic=` already collapsed by `convertMdastToNoteHierarchy`)
++ [X] render the epic chip via `OriginPill` without a project pill in single-file mode (`epicOnly` prop; `MarkdownNoteHeadline` passes it for project-less origins and gates the empty-pill case)
++ [X] preserve flat-file behaviour (structural nested-vs-flat gate leaves flat `##`-card files byte-identical)
++ [X] verify drag-drop status + ordering rewrites land on the one doc for `###` cards (origin carries doc_path so payload routes single-doc; positions/seq preserved verbatim so offsets stay valid; covered by KanbanView single-file drag tests + kanban-pointer-drag playwright)
++ [X] jest: nested single-file tree yields `###` cards with epic tags; flat file unchanged; position/seq preserved; idempotent (`mergeAggregateRoot.test.ts` `flattenSingleFileStories`) + composer wiring (`NoteTreeComposer.test.tsx`) + `OriginPill.test.tsx` epicOnly
++ [X] playwright: nested single file renders `###` story cards in status columns with epic chips and no project pill (`kanban-single-file-descent.spec.ts`)
++ [X] revisited `AUTHORING_GUIDE.md`: its `###` = Kanban card claim (lines 84, 100) is now accurate in single-file mode too, so no wording change was needed

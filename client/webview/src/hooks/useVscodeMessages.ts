@@ -30,12 +30,14 @@ interface VscodeMessagesDeps {
 
 /**
  * State exposed by useVscodeMessages: aggregated doc/selection/workspace state distilled from the wire-format messages the extension posts to the webview.
- * - active_editor_doc_path: path of the doc whose editor most recently emitted a selectionChanged - the closest proxy for "what the user is currently editing" available to the webview, since the extension only sends per-doc selection updates and never an explicit `activeEditor` signal
+ * - active_editor_doc_path: path of the doc whose editor most recently emitted a selectionChanged or arrived on the activeEditorDoc channel - the closest proxy for "what the user is currently editing"
+ * - active_doc: the active editor's full doc when it sits OUTSIDE the current folder scope, delivered on the dedicated activeEditorDoc channel because folder mode drops out-of-scope docs from the aggregate; lets useAutoIntegration read its declaration and follow the editor out of the folder
  */
 interface VscodeMessagesState {
     docs: HashMapOf<Doc> | undefined;
     selections: SelectionState;
     active_editor_doc_path: string | undefined;
+    active_doc: Doc | undefined;
     workspace_root: string;
     workspace_projects: string[];
     aggregate_total_discovered: number | undefined;
@@ -93,6 +95,13 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
             return false;
         }
     }
+    if (message.type === 'activeEditorDoc') {
+        const doc = message.doc as { path?: unknown } | null | undefined;
+        if (doc === null || doc === undefined || typeof doc !== 'object' || typeof doc.path !== 'string') {
+            debug('discarding activeEditorDoc message with invalid doc %O', message);
+            return false;
+        }
+    }
     return true;
 }
 
@@ -138,7 +147,7 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial
 
 /*
  * own the core doc/selection/workspace state, the host message listener, and the dispatch
- * the message-type string literals ('update', 'selectionChanged', 'command', 'globalSettings', 'settingsCascade', 'jumpTargets') are the on-the-wire contract and must stay exactly as-is
+ * the message-type string literals ('update', 'activeEditorDoc', 'selectionChanged', 'command', 'globalSettings', 'settingsCascade', 'jumpTargets') are the on-the-wire contract and must stay exactly as-is
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState {
@@ -146,6 +155,8 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     const [docs_state, setDocsState] = useState<{ docs?: HashMapOf<Doc> }>({ docs: deps.initial_docs || {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [active_editor_doc_path, setActiveEditorDocPath] = useState<string | undefined>(undefined);
+    // folder mode: the active editor's doc when it sits outside integration_path, delivered on the activeEditorDoc channel (sendDoc drops it from the aggregate) so useAutoIntegration can read its declaration and exit the folder
+    const [active_doc, setActiveDoc] = useState<Doc | undefined>(undefined);
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
     const [workspace_projects, setWorkspaceProjects] = useState<string[]>([]);
     // folder mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
@@ -250,6 +261,12 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                     return { ...current, docs: next };
                 });
                 return;
+            case 'activeEditorDoc':
+                debug('received activeEditorDoc for %s', (message.doc as Doc).path);
+                setActiveDoc(message.doc as Doc);
+                // the out-of-scope active editor never enters the folder aggregate, so record it as the active path here too (the selectionChanged echo also sets this, but cross-message ordering is not guaranteed)
+                setActiveEditorDocPath((message.doc as Doc).path);
+                return;
             case 'selectionChanged':
                 debug('received selectionChanged for %s', message.docPath);
                 setSelections(prev => ({
@@ -344,6 +361,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         docs: docs_state.docs,
         selections,
         active_editor_doc_path,
+        active_doc,
         workspace_root,
         workspace_projects,
         aggregate_total_discovered,

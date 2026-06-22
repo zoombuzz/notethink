@@ -118,9 +118,10 @@ describe('useAutoIntegration reactive follow', () => {
         const set_view_managed_state = jest.fn();
         const post_message = jest.fn();
         const view_states_ref: { current: Record<string, ViewState> } = { current: {} };
-        const makeProps = (active_path: string, docs: HashMapOf<Doc>): Parameters<typeof useAutoIntegration>[0] => ({
+        const makeProps = (active_path: string, docs: HashMapOf<Doc>, active_doc?: Doc): Parameters<typeof useAutoIntegration>[0] => ({
             docs,
             active_editor_doc_path: active_path,
+            active_doc,
             workspace_root: '/repo',
             view_states_ref,
             postMessage: post_message,
@@ -149,6 +150,18 @@ describe('useAutoIntegration reactive follow', () => {
         // switch to intro.md (declares nothing, sits outside portfolio)
         const intro = parsedDoc('# Welcome', { id: 'intro', path: '/repo/intro.md', relative_path: 'intro.md', hash_sha256: 'h-intro' });
         h.rerender(h.makeProps('/repo/intro.md', { mobile: mobile(), intro }));
+        expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file', path: undefined });
+    });
+
+    it('EXIT via the active_doc channel: an out-of-scope active file absent from the folder aggregate still exits', () => {
+        const h = reactiveHarness(mobile());
+        expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'folder', path: '/repo/portfolio' });
+        h.view_states_ref.current = folderState('/repo/portfolio');
+        h.post_message.mockClear();
+        h.set_view_managed_state.mockClear();
+        // intro.md is NOT in the folder aggregate - in real folder mode the extension's sendDoc drops out-of-scope docs, so intro arrives only on the active_doc channel; the docs map still holds only the folder member. this is the real-extension path the prior in-aggregate test could not exercise
+        const intro = parsedDoc('# Welcome', { id: 'intro', path: '/repo/intro.md', relative_path: 'intro.md', hash_sha256: 'h-intro' });
+        h.rerender(h.makeProps('/repo/intro.md', { mobile: mobile() }, intro));
         expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file', path: undefined });
     });
 

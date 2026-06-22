@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
-import { injectDocsFromFixture } from '../helpers/inject-docs';
+import { injectDocsFromFixture, injectActiveEditorDocFromFixture } from '../helpers/inject-docs';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
 import { clearCapturedMessages } from '../helpers/capture-messages';
 
@@ -200,9 +200,9 @@ test.describe('Auto integration mode (reactive editor follow)', () => {
         await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
         await clearCapturedMessages(page);
 
-        // switch the active editor to a plain file at the workspace root (outside portfolio)
+        // switch the active editor to a plain file at the workspace root (outside portfolio). in real folder mode the extension drops out-of-scope docs from the aggregate and surfaces the active editor on the dedicated activeEditorDoc channel, so model exactly that - intro must NOT be injected into the docs map, only delivered as the active doc
         const INTRO = `${WORKSPACE_ROOT}/intro.md`;
-        await injectDocsFromFixture(page, 'basic.md', INTRO, { workspace_root: WORKSPACE_ROOT, relative_path: 'intro.md' });
+        await injectActiveEditorDocFromFixture(page, 'basic.md', INTRO, { workspace_root: WORKSPACE_ROOT, relative_path: 'intro.md' });
         await simulateSelectionChanged(page, INTRO, 0);
 
         // the board reactively drops to the document render and posts setIntegration current_file

@@ -164,9 +164,10 @@ export class PanelSession {
 	private sendDoc(doc: Doc): void {
 		const timestamped = { ...doc, updateSentAt: new Date().toISOString() };
 		debug('sendDoc %s', doc.path);
-		// in folder mode only docs inside integration_path go into the merged view; selection updates for out-of-integration docs still flow through sendSelection separately
+		// in folder mode only docs inside integration_path go into the merged view; the active editor's out-of-scope doc is still surfaced via sendActiveEditorDoc so the webview's auto-integration reconcile can follow the editor out of the folder, and selection updates flow through sendSelection separately
 		if (this.integration_path && !this.isWithinIntegrationPath(doc.path)) {
 			debug('sendDoc: skipping out-of-integration doc %s', doc.path);
+			if (doc.path === this.active_path) { this.sendActiveEditorDoc(timestamped); }
 			return;
 		}
 		// in-memory edits to integration docs must merge into the existing map; otherwise the replace-strategy default would wipe every other file
@@ -180,6 +181,14 @@ export class PanelSession {
 			merge_strategy,
 			workspace_root: this.workspace_root,
 			extension_version: this.extension_version,
+		});
+	}
+
+	// surface the active editor's doc to the webview WITHOUT merging it into the folder aggregate. in folder mode sendDoc drops out-of-scope docs, which would otherwise leave the webview blind to an active editor outside the folder, so its auto-integration reconcile could never follow the editor out of the folder and exit to current_file. the in-scope active doc still arrives through sendDoc's merge path; this channel carries only the out-of-scope case
+	private sendActiveEditorDoc(doc: Doc): void {
+		this.webviewPanel.webview.postMessage({
+			type: 'activeEditorDoc',
+			doc,
 		});
 	}
 

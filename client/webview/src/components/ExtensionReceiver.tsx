@@ -44,6 +44,7 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         docs,
         selections,
         active_editor_doc_path,
+        active_doc,
         workspace_root,
         workspace_projects,
         aggregate_total_discovered,
@@ -71,6 +72,7 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
     const file_declared_integration = useAutoIntegration({
         docs,
         active_editor_doc_path,
+        active_doc,
         workspace_root,
         view_states_ref,
         postMessage: postMessageToExtension,

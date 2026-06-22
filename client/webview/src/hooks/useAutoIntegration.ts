@@ -11,19 +11,21 @@ const debug = Debug("nodejs:notethink:useAutoIntegration");
 interface UseAutoIntegrationDeps {
     docs: HashMapOf<Doc> | undefined;
     active_editor_doc_path: string | undefined;
+    active_doc?: Doc;
     workspace_root: string;
     view_states_ref: React.MutableRefObject<Record<string, ViewState>>;
     postMessage: (message: unknown) => void;
     setViewManagedState: (updates: Array<Record<string, unknown>>) => void;
 }
 
-// the opened doc whose H1 declares the integration intent: the active-editor doc when present in the map, else the most-recently-sent doc (the extension's notion of active); in current_file mode this is the single rendered doc, in folder mode it follows whichever file the editor is in
-function pickOpenedDoc(docs: HashMapOf<Doc> | undefined, active_editor_doc_path: string | undefined): Doc | undefined {
-    if (!docs) { return undefined; }
+// the opened doc whose H1 declares the integration intent: prefer the active-editor doc - found in the folder aggregate when in-scope, else delivered on the dedicated active_doc channel when the active editor sits OUTSIDE the folder (sendDoc drops it from the aggregate) - then fall back to the most-recently-sent doc (the extension's notion of active). without the active_doc fallback, switching the editor to an out-of-scope file would resolve back to a folder member and the board could never exit; in current_file mode the active doc is always in the map, in folder mode it follows whichever file the editor is in
+function pickOpenedDoc(docs: HashMapOf<Doc> | undefined, active_editor_doc_path: string | undefined, active_doc: Doc | undefined): Doc | undefined {
     if (active_editor_doc_path) {
-        const match = Object.values(docs).find(d => d.path === active_editor_doc_path);
+        const match = docs ? Object.values(docs).find(d => d.path === active_editor_doc_path) : undefined;
         if (match) { return match; }
+        if (active_doc?.path === active_editor_doc_path) { return active_doc; }
     }
+    if (!docs) { return undefined; }
     return pickMostRecentlySentDoc(docs)?.note;
 }
 
@@ -48,10 +50,10 @@ function pickOpenedDoc(docs: HashMapOf<Doc> | undefined, active_editor_doc_path:
  * payload, so the reactive path and the toolbar path cannot drift.
  */
 export function useAutoIntegration(deps: UseAutoIntegrationDeps): FileIntegrationDeclaration | undefined {
-    const { docs, active_editor_doc_path, workspace_root, view_states_ref, postMessage, setViewManagedState } = deps;
+    const { docs, active_editor_doc_path, active_doc, workspace_root, view_states_ref, postMessage, setViewManagedState } = deps;
     const opened_doc = useMemo(
-        () => pickOpenedDoc(docs, active_editor_doc_path),
-        [docs, active_editor_doc_path],
+        () => pickOpenedDoc(docs, active_editor_doc_path, active_doc),
+        [docs, active_editor_doc_path, active_doc],
     );
     const file_declared_integration = useMemo(
         () => (opened_doc ? resolveFileIntegrationDeclaration(opened_doc, workspace_root) : undefined),

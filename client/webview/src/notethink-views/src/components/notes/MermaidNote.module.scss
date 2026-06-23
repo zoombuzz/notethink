@@ -4,5 +4,7 @@
 
   &.type_gantt {
     width: 180%;
+    // anchor the gantt at the column's left edge; the inherited text-align: center would centre the natural-width svg inside this over-wide box and push it off to the right
+    text-align: left;
   }
 }

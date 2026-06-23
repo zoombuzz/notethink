@@ -3348,3 +3348,30 @@ In current_file (single-file) mode the kanban renders the *direct children of th
 + [X] jest: nested single-file tree yields `###` cards with epic tags; flat file unchanged; position/seq preserved; idempotent (`mergeAggregateRoot.test.ts` `flattenSingleFileStories`) + composer wiring (`NoteTreeComposer.test.tsx`) + `OriginPill.test.tsx` epicOnly
 + [X] playwright: nested single file renders `###` story cards in status columns with epic chips and no project pill (`kanban-single-file-descent.spec.ts`)
 + [X] revisited `AUTHORING_GUIDE.md`: its `###` = Kanban card claim (lines 84, 100) is now accurate in single-file mode too, so no wording change was needed
+
+
+### Restore viewer task-checkbox toggling
+
+Clicking a rendered task checkbox (`[ ]` / `[x]`) in the viewer should tick/untick it and write the matching `X`/space into the editor source. This silently stopped working: the checkbox rendered and was clickable, but no edit reached the file.
+
++ symptom
+  + a rendered task checkbox in the document/kanban viewer did nothing on click - no source edit, no visible toggle (the editor is the source of truth, so the box never changed)
+  + reproduced empirically: the click pipeline fired but `editText` was either never posted or rejected by the extension
++ root cause - two independent defects, both needed for the user's files
+  + `calculateTextChangesForCheckbox` (`noteops.ts`) matched only `-` task bullets via `/- \[([ xX])\]/g`; this repo's todo files use `+` bullets, so it returned no changes and nothing was posted (narrowed to dash-only in commit 5b7a2bb's "checkbox crash fix")
+  + the checkbox branch in `useViewHandlers.ts` posted `docPath: note.origin?.doc_path`, which is undefined in single-file mode for a flat file (no `flattenSingleFileStories` origin); `applyEditTextToDoc` refuses a falsy `doc_path`, so even a valid change was dropped. `revealNote` already had the `?? props.doc_path` fallback; the checkbox branch did not
+  + investigation corrected an early wrong theory ("interactive checkbox is dead code"): `GenericNoteWrapper` injects the listItem's `checked` onto its paragraph child, so `renderMarkdownNoteHeadline` does render a real, non-disabled `<input>` - the render was fine, the edit computation and routing were not
++ [X] confirm root cause empirically (parse + full render + click probe across `-`/`+`/`*` markers and single-file docPath)
++ [X] broaden the checkbox regex to `/[-+*] \[([ xX])\]/g` and derive the `[` offset from the match (marker-agnostic, no magic `+2`)
++ [X] add the `?? props.doc_path` single-file fallback to the checkbox branch's `editText` docPath
++ [X] add jest unit guards for `+` and `*` markers in `noteops.test.ts` (assert exact offset + insert)
++ [X] add a real render -> click -> `editText` integration test (`useViewHandlers.test.tsx`) covering interactive render, `-`/`+`/`*`, uncheck, and the single-file docPath fallback - the layer the old hand-fed unit tests could not catch
++ [X] add a Playwright e2e (`checkbox-toggle.spec.ts`) asserting a `+` checkbox click posts `editText` with a fallback docPath and `X`/space inserts, against the built bundle
++ [X] rebuild and verify the fixes are in `client/webview/dist/index.js`; full `pnpm run check` green; full Playwright green
++ delivery notes
+  + tests: 1467 jest (was 1459), 97 playwright (was 95)
+  + chose the minimal text-match fix (broadened regex) over a deterministic-offset rewrite: it is offset-verified for the working path, low risk, and consistent with the existing path in both integration modes
++ known limitations - out of scope, candidate follow-up
+  + text-matching still mis-toggles when a story has two identically-worded tasks (first match wins) or formatted task text (rendered text differs from source); a deterministic per-listItem source offset would fix both but needs offset-coherence verification in folder mode
++ commit message draft
+  + notethink: fix viewer task-checkbox toggling - broaden checkbox edit regex to accept `+`/`*` bullets (not just `-`) and fall back to the view doc_path in single-file mode so the editText is not dropped; add render->click->editText integration test + `+`/`*` unit guards + checkbox-toggle e2e; tests 1467 jest, 97 playwright

@@ -1,42 +1,56 @@
 # Jest Test Results
 # Version: 0.3.19
-# Date: 2026-06-22T17:38:21Z
-# Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
+# Date: 2026-06-23T11:25:50Z
+# Command: pnpm run test-jest
 # ---
 
-> notethink@0.3.19 test-jest
+> notethink@0.3.19 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
-> notethink-client-extension@0.1.0 test (client/extension)
-> jest --config jest.config.cjs --forceExit
-Test Suites: 9 passed, 9 total
-Tests:       214 passed, 214 total
-Snapshots:   0 total
-Time:        2.501 s, estimated 3 s
-Ran all test suites.
 
-> notethink-client-display@0.1.0 test (client/webview)
+> notethink-client-extension@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/extension
 > jest --config jest.config.cjs --forceExit
-Test Suites: 9 passed, 9 total
-Tests:       128 passed, 128 total
-Snapshots:   0 total
-Time:        0.796 s, estimated 1 s
-Ran all test suites.
 
-> @zoombuzz/notethink-views@0.1.0 test (client/webview/src/notethink-views)
+
+[1mTest Suites: [22m[1m[32m9 passed[39m[22m, 9 total
+[1mTests:       [22m[1m[32m214 passed[39m[22m, 214 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        2.493 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+
+> notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
 > jest --config jest.config.cjs --forceExit
-Test Suites: 50 passed, 50 total
-Tests:       1117 passed, 1117 total
-Snapshots:   0 total
-Time:        3.104 s
-Ran all test suites.
 
-┌──────────────────┬───────┬────────┬────────┬─────────┐
-│ Suite            │ Files │ Passed │ Failed │ Time    │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │     9 │    214 │      0 │ 2.501 s │
-│ webview          │     9 │    128 │      0 │ 0.796 s │
-│ notethink-views  │    50 │   1117 │      0 │ 3.104 s │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    68 │   1459 │      0 │         │
-└──────────────────┴───────┴────────┴────────┴─────────┘
+
+[1mTest Suites: [22m[1m[32m9 passed[39m[22m, 9 total
+[1mTests:       [22m[1m[32m128 passed[39m[22m, 128 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        0.773 s, estimated 1 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+
+> @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
+> jest --config jest.config.cjs --forceExit
+
+[33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
+
+[1mTest Suites: [22m[1m[32m51 passed[39m[22m, 51 total
+[1mTests:       [22m[1m[32m1125 passed[39m[22m, 1125 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        [1m[33m3.135 s[39m[22m
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+
+
+[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
+[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+│ extension        │     9 │ [32m   214[0m │ [2m     0[0m │ 2.493 s │
+│ webview          │     9 │ [32m   128[0m │ [2m     0[0m │ 0.773 s │
+│ notethink-views  │    51 │ [32m  1125[0m │ [2m     0[0m │ 3.135 s │
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+[1m│ TOTAL            │    69 │[0m [32m  1467[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

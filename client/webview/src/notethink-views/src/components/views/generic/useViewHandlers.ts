@@ -76,8 +76,8 @@ export function useViewHandlers(
                         props.handlers.postMessage({
                             type: 'editText',
                             changes: changes,
-                            // folder mode: route to the origin file; undefined in single-file mode
-                            docPath: note.origin?.doc_path,
+                            // single-file falls back to the view doc so the extension does not reject a falsy docPath
+                            docPath: note.origin?.doc_path ?? props.doc_path,
                         });
                     }
                 } catch (err) {

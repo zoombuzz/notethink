@@ -339,8 +339,10 @@ export function findBodyItemElement(note_element: HTMLElement, caret_offset: num
 
 /**
  * Calculate text changes for a checkbox action.
- * Searches for `- [ ] text` or `- [x] text` patterns in the note's body_raw,
- * using a regex to avoid matching linetags or markdown links.
+ * Searches for `- [ ] text` / `+ [x] text` / `* [ ] text` task list patterns in
+ * the note's body_raw, using a regex to avoid matching linetags or markdown links.
+ * All three GFM unordered-list markers are accepted because this repo's todo files
+ * use `+` bullets while standard markdown uses `-`.
  */
 export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check: boolean, match_text: string, match_context: Array<string>): Array<{ from: number; to: number; insert: string }> {
     const content = note.body_raw;
@@ -349,16 +351,16 @@ export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check
     if (!note.position.end_body) {
         content_start_position = note.position.start;
     }
-    // find all checkbox patterns: `[x]` or `[ ]` preceded by `- ` on the same line
-    const checkbox_re = /- \[([ xX])\]/g;
+    // match a `[x]`/`[ ]` checkbox preceded by any unordered-list marker (- + *) and a space
+    const checkbox_re = /[-+*] \[([ xX])\]/g;
     let match: RegExpExecArray | null;
     while ((match = checkbox_re.exec(content)) !== null) {
         // check if the text after this checkbox matches match_text
         const bracket_close = match.index + match[0].length; // position after `]`
         const text_after = content.slice(bracket_close);
         if (match_text && (text_after.startsWith(match_text) || text_after.startsWith(` ${match_text}`))) {
-            // bracket_start is the position of `[`, the char to replace is at bracket_start + 1
-            const bracket_start = match.index + 2; // `- [`  →  index of `[`
+            // locate `[` within the matched marker so the offset is marker-agnostic; the state char sits at bracket_start + 1
+            const bracket_start = match.index + match[0].indexOf('[');
             const from = content_start_position.offset + bracket_start + 1;
             const to = content_start_position.offset + bracket_start + 2;
             // validate: from < to and the replacement makes sense

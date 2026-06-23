@@ -618,6 +618,35 @@ describe('calculateTextChangesForCheckbox', () => {
         const changes = calculateTextChangesForCheckbox(note, true, ' nonexistent', []);
         expect(changes).toHaveLength(0);
     });
+
+    it('matches a + bullet task (regression: repo todo files use + markers)', () => {
+        const note = makeNote({
+            body_raw: '+ [ ] buy milk\n+ [ ] buy eggs',
+            position: {
+                start: { offset: 0, line: 1 },
+                end: { offset: 10, line: 1 },
+                end_body: { offset: 40, line: 3 },
+            },
+        });
+        const changes = calculateTextChangesForCheckbox(note, true, ' buy milk', []);
+        expect(changes).toHaveLength(1);
+        expect(changes[0].insert).toBe('X');
+        // content_start (end=10) + '[' index (2) + 1 => state char at offset 13
+        expect(changes[0]).toEqual({ from: 13, to: 14, insert: 'X' });
+    });
+
+    it('matches a * bullet task', () => {
+        const note = makeNote({
+            body_raw: '* [x] buy milk',
+            position: {
+                start: { offset: 0, line: 1 },
+                end: { offset: 10, line: 1 },
+                end_body: { offset: 25, line: 2 },
+            },
+        });
+        const changes = calculateTextChangesForCheckbox(note, false, ' buy milk', []);
+        expect(changes).toEqual([{ from: 13, to: 14, insert: ' ' }]);
+    });
 });
 
 describe('findBodyItemElement', () => {

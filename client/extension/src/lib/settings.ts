@@ -25,6 +25,8 @@ export const SETTINGS = {
     showLineNumbers:            { path: 'view.generic.showLineNumbers',             default: false,                                    inCascade: false },
     watchUnopenedFilesInViewer: { path: 'view.generic.watchUnopenedFilesInViewer',  default: true,                                     inCascade: false },
     kanbanAnimateTransitions:   { path: 'view.specific.kanban.animateTransitions',  default: true,                                     inCascade: false },
+    switchEditorOnClick:        { path: 'view.generic.switchEditorOnClick',         default: true,                                     inCascade: false },
+    openNewEditorIfNoneOpen:    { path: 'view.generic.openNewEditorIfNoneOpen',     default: false,                                    inCascade: false },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;
@@ -48,6 +50,12 @@ export function hasWorkspaceOverride<K extends SettingKey>(key: K): boolean {
     return inspected?.workspaceValue !== undefined;
 }
 
+// true when the key has a value at either the Workspace or the Global (User) scope - i.e. anything overrides the built-in default. Drives the "Reset to built-in default" button, which clears both scopes
+export function hasOverride<K extends SettingKey>(key: K): boolean {
+    const inspected = vscode.workspace.getConfiguration(CONFIG_ROOT).inspect(SETTINGS[key].path);
+    return inspected?.workspaceValue !== undefined || inspected?.globalValue !== undefined;
+}
+
 export async function writeSetting<K extends SettingKey>(
     key: K,
     value: SettingValue<K> | undefined,
@@ -60,14 +68,17 @@ export function cascadeKeys(): SettingKey[] {
     return (Object.keys(SETTINGS) as SettingKey[]).filter(k => SETTINGS[k].inCascade);
 }
 
-// build the cascade payload from every cascade-tier setting. Field names match the SettingKey (camelCase end-to-end). Also reports whether any cascade key has a Workspace-scope override (drives the Reset button's enabled state)
+// build the cascade payload from every cascade-tier setting. Field names match the SettingKey (camelCase end-to-end). Also reports whether any cascade key has a Workspace-scope override (drives "Reset to user default") and whether any has a Workspace-or-User override (drives "Reset to built-in default")
 export function buildSettingsCascadePayload(): Record<string, unknown> {
     const payload: Record<string, unknown> = {};
     let hasWorkspaceOverrides = false;
+    let hasAnyOverrides = false;
     for (const key of cascadeKeys()) {
         payload[key] = readSetting(key);
         if (hasWorkspaceOverride(key)) { hasWorkspaceOverrides = true; }
+        if (hasOverride(key)) { hasAnyOverrides = true; }
     }
     payload.hasWorkspaceOverrides = hasWorkspaceOverrides;
+    payload.hasAnyOverrides = hasAnyOverrides;
     return payload;
 }

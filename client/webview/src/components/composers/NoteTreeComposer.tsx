@@ -59,6 +59,7 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
         workspace_root: props.workspace_root,
         // --- settings-cascade mirror: camelCase (not snake_case) because these carry VS Code config values whose keys (notethink.settings.*) are camelCase end-to-end, unlike the snake_case note-tree wire data ---
         settingsCascadeHasWorkspaceOverrides: cascade?.hasWorkspaceOverrides,
+        settingsCascadeHasAnyOverrides: cascade?.hasAnyOverrides,
         // --- view state + the opened file's declared integration intent ---
         view_state_ids,
         file_declared_integration: props.fileDeclaredIntegration,

@@ -325,6 +325,7 @@ describe('ExtensionReceiver', () => {
                             maxNotesPerFile: 10,
                             showContextBars: true,
                             hasWorkspaceOverrides: false,
+                            hasAnyOverrides: false,
                         },
                     },
                 }));
@@ -574,6 +575,7 @@ describe('ExtensionReceiver', () => {
                             maxNotesPerFile: 5,
                             showContextBars: false,
                             hasWorkspaceOverrides: true,
+                            hasAnyOverrides: true,
                         },
                     },
                 }));

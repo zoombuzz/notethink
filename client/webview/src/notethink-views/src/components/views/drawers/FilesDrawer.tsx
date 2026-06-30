@@ -26,6 +26,8 @@ interface FilesDrawerProps {
     onMakeDefault?: () => void;
     onResetToDefault?: () => void;
     canResetToDefault?: boolean;
+    onRestoreBuiltinDefault?: () => void;
+    canRestoreBuiltinDefault?: boolean;
 }
 
 // resolve a Files-drawer entry to the absolute path the openFile message needs (aggregate_loaded_files are workspace-relative where known)
@@ -182,11 +184,13 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
 
             <aside className={styles.drawerMeta}>
                 <h3>{l10n.t('File settings')}</h3>
-                {props.onMakeDefault && props.onResetToDefault && (
+                {props.onMakeDefault && props.onResetToDefault && props.onRestoreBuiltinDefault && (
                     <SettingsCascadeButtons
                         onMakeDefault={props.onMakeDefault}
                         onResetToDefault={props.onResetToDefault}
                         canResetToDefault={props.canResetToDefault}
+                        onRestoreBuiltinDefault={props.onRestoreBuiltinDefault}
+                        canRestoreBuiltinDefault={props.canRestoreBuiltinDefault}
                     />
                 )}
             </aside>

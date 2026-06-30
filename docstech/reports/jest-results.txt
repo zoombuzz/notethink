@@ -1,10 +1,10 @@
 # Jest Test Results
-# Version: 0.3.19
-# Date: 2026-06-23T11:25:50Z
-# Command: pnpm run test-jest
+# Version: 0.3.21
+# Date: 2026-06-30T20:18:54Z
+# Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
-> notethink@0.3.19 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> notethink@0.3.21 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
 
@@ -12,10 +12,10 @@
 > jest --config jest.config.cjs --forceExit
 
 
-[1mTest Suites: [22m[1m[32m9 passed[39m[22m, 9 total
-[1mTests:       [22m[1m[32m214 passed[39m[22m, 214 total
+[1mTest Suites: [22m[1m[32m10 passed[39m[22m, 10 total
+[1mTests:       [22m[1m[32m226 passed[39m[22m, 226 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        2.493 s
+[1mTime:[22m        2.544 s
 [2mRan all test suites[22m[2m.[22m
 [1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -27,7 +27,7 @@
 [1mTest Suites: [22m[1m[32m9 passed[39m[22m, 9 total
 [1mTests:       [22m[1m[32m128 passed[39m[22m, 128 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        0.773 s, estimated 1 s
+[1mTime:[22m        0.779 s, estimated 1 s
 [2mRan all test suites[22m[2m.[22m
 [1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -37,8 +37,8 @@
 
 [33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
 
-[1mTest Suites: [22m[1m[32m51 passed[39m[22m, 51 total
-[1mTests:       [22m[1m[32m1125 passed[39m[22m, 1125 total
+[1mTest Suites: [22m[1m[32m52 passed[39m[22m, 52 total
+[1mTests:       [22m[1m[32m1132 passed[39m[22m, 1132 total
 [1mSnapshots:   [22m0 total
 [1mTime:[22m        [1m[33m3.135 s[39m[22m
 [2mRan all test suites[22m[2m.[22m
@@ -48,9 +48,9 @@
 [1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
 [1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │     9 │ [32m   214[0m │ [2m     0[0m │ 2.493 s │
-│ webview          │     9 │ [32m   128[0m │ [2m     0[0m │ 0.773 s │
-│ notethink-views  │    51 │ [32m  1125[0m │ [2m     0[0m │ 3.135 s │
+│ extension        │    10 │ [32m   226[0m │ [2m     0[0m │ 2.544 s │
+│ webview          │     9 │ [32m   128[0m │ [2m     0[0m │ 0.779 s │
+│ notethink-views  │    52 │ [32m  1132[0m │ [2m     0[0m │ 3.135 s │
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-[1m│ TOTAL            │    69 │[0m [32m  1467[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m│ TOTAL            │    71 │[0m [32m  1486[0m [1m│[0m [2m     0[0m [1m│         │[0m
 [1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

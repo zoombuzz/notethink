@@ -3375,3 +3375,86 @@ Clicking a rendered task checkbox (`[ ]` / `[x]`) in the viewer should tick/unti
   + text-matching still mis-toggles when a story has two identically-worded tasks (first match wins) or formatted task text (rendered text differs from source); a deterministic per-listItem source offset would fix both but needs offset-coherence verification in folder mode
 + commit message draft
   + notethink: fix viewer task-checkbox toggling - broaden checkbox edit regex to accept `+`/`*` bullets (not just `-`) and fall back to the view doc_path in single-file mode so the editText is not dropped; add render->click->editText integration test + `+`/`*` unit guards + checkbox-toggle e2e; tests 1467 jest, 97 playwright
+
+
+### Configurable editor behavior on note/story click [](?id=click-open-editor-settings&time_estimated=120)
+
+Clicking a story in a NoteThink view always reveals it in an editor today. When the board fills the window with no other editor groups open, that spawns a new editor group on every click - almost always unwanted. Put the editor-switching behavior behind two user settings so the board can act as a standalone surface.
+
++ goal
+  + clicking a note no longer spawns a new editor group when the board is alone, unless the user opts in
+  + the existing switch-to-editor behavior stays the default whenever an editor is already open
+  + both behaviors are user-controllable VS Code settings, gated entirely extension-side
++ settings - both global (scope `window`, `inCascade: false`), mirroring `kanbanAnimateTransitions`
+  + `notethink.settings.view.generic.switchEditorOnClick` - default `true`
+    + true keeps current behavior: a click reveals and switches focus to the clicked note's editor
+    + false does not switch focus to an editor or open one, but an already-open editor still has its caret moved to the clicked note; the board's own focus highlight updates either way
+  + `notethink.settings.view.generic.openNewEditorIfNoneOpen` - default `false`
+    + governs only the "no other editor group exists" case (board in pseudo-fullscreen)
+    + false: clicking a note does not create a new editor group
+    + true: clicking a note opens a new group beside the board (today's fallback behavior)
+  + generic namespace because the reveal handler is shared by kanban and document views (operator sign-off given for keys + scope)
++ background - current flow is all extension-side
+  + webview posts `revealRange` (single click) / `selectRange` (double click) from the `useViewHandlers.ts` click dispatcher
+  + extension routes both to `PanelSession.handleRevealRange` (`client/extension/src/vscode/PanelSession.ts:525`)
+  + `handleRevealRange` tries `revealInVisibleEditor` (`PanelSession.ts:546`) - switches to the doc when it is already visible
+  + single-file mode (`!this.integration_path`) already returns silently to avoid spawning editors (`PanelSession.ts:537`)
+  + folder mode calls `revealByOpening` (`PanelSession.ts:562`), which falls back to `vscode.ViewColumn.Beside` when no other group holds or can host the doc - this `Beside` fallback is the new-group spawn we want to gate
+  + the gate is entirely in the extension's reveal path; no setting needs to reach the webview for the core behavior
++ design - gate the reveal path
+  + read both settings once at the top of `handleRevealRange` via `readSetting` (`client/extension/src/lib/settings.ts`)
+  + thread `switchEditorOnClick` into `revealInVisibleEditor`: always set the selection and `revealRange` (move the caret), but only call `showTextDocument` to steal focus when the flag is true
+  + when `switchEditorOnClick` is false and no editor shows the doc, return without opening one (opening an editor is itself a switch)
+  + in `revealByOpening`, when no existing group holds the doc and no other editor group exists, only fall back to `ViewColumn.Beside` if `openNewEditorIfNoneOpen` is true; otherwise return without opening
+  + reuse-an-existing-other-group stays unconditional under switch=true (that is switching, not spawning)
++ design decision - switch=false still moves the caret (and the selection range on double-click) in an already-open editor; it only suppresses stealing focus and opening a new editor
++ scope - settings declaration
+  + add both keys to `contributes.configuration[0].properties` in `package.json` (after `package.json:230`), type boolean, scope `window`, with `%...%` description placeholders
+  + add description strings to all five `package.nls*.json` files (`json`, `de`, `es`, `fr`, `it`) - no em or en dashes in any locale string
+  + add both to the `SETTINGS` map in `client/extension/src/lib/settings.ts` with `inCascade: false`
++ scope - core behavior
+  + branch `handleRevealRange` and `revealByOpening` per the design above
++ scope - settings-panel surfacing (deferred to a follow-up, not needed for the behavior)
+  + the gate is entirely extension-side, so the VS Code Settings UI already exposes both toggles
+  + surfacing them in the in-webview global-settings panel (via `GlobalSettingsPayload` + `sendGlobalSettings`) is a later nicety, out of scope this round
++ out of scope
+  + per-workspace overrides (settings are global this round)
+  + any change to single-file mode, which already stays silent
+  + new webview interaction behavior beyond reading the toggles for the settings panel
++ files
+  + `package.json` - two new `notethink.settings.view.generic.*` boolean properties
+  + `package.nls.json` + `package.nls.{de,es,fr,it}.json` - description strings
+  + `client/extension/src/lib/settings.ts` - two `SETTINGS` entries (`inCascade: false`)
+  + `client/extension/src/vscode/PanelSession.ts` - gate `handleRevealRange` / `revealByOpening`; optionally extend `sendGlobalSettings`
+  + `client/webview/src/notethink-views/src/types/Messages.ts` - optional `GlobalSettingsPayload` extension
+  + `client/extension/src/vscode/notethinkEditor.test.ts` (or a PanelSession test) - branching tests
++ [X] add `view.generic.switchEditorOnClick` (default true) + `view.generic.openNewEditorIfNoneOpen` (default false) to `package.json`
++ [X] add the two description strings to all five `package.nls*.json` files
++ [X] add both keys to the `SETTINGS` map in `settings.ts` with `inCascade: false`
++ [X] thread `switchEditorOnClick` into `revealInVisibleEditor` so the caret moves but focus is stolen only when true
++ [X] return from `handleRevealRange` without opening an editor when `switchEditorOnClick` is false and no editor shows the doc
++ [X] gate `revealByOpening` to skip the `ViewColumn.Beside` new-group fallback when `openNewEditorIfNoneOpen` is false and no other editor group exists
++ [X] jest: switch=false with a visible editor moves the caret (`revealRange`) but does not call `showTextDocument`
++ [X] jest: switch=true with the doc already visible moves the caret and calls `showTextDocument` (focus steal)
++ [X] jest: switch=true, board alone, openNew=false opens no editor (no new group)
++ [X] jest: switch=true, board alone, openNew=true opens with `ViewColumn.Beside`
++ [X] jest: switch=true with another group open reuses that group's column
++ [X] jest: built-in defaults (true / false) and explicit overrides flow through `readSetting` in the behaviour tests
++ [X] bump patch version in `package.json`
++ [X] `pnpm run check` green
++ manual: board alone with defaults - click stories, confirm no new editor group spawns and the board highlight still tracks the click
++ manual: open an editor beside the board - click a story, confirm that editor navigates to it
++ manual: set `switchEditorOnClick=false` with an editor open beside the board - click stories, confirm the caret moves in that editor but focus stays on the board, and that clicking with no editor open opens nothing
++ manual: set `openNewEditorIfNoneOpen=true` with the board alone - click a story, confirm a new editor group opens
++ manual: repeat the board-alone check in document view to confirm the generic scope applies there too
++ acceptance
+  + with defaults, a click on a standalone board no longer spawns an editor group
+  + with defaults, a click still switches an already-open editor to the clicked note
+  + `switchEditorOnClick=false` moves the caret in an already-open editor without stealing focus, and never opens an editor
+  + `openNewEditorIfNoneOpen=true` restores today's new-group-on-click behavior
+  + behavior is identical across kanban and document views
++ open questions for the implementing agent
+  + whether the in-webview settings panel auto-lists new global settings or needs per-toggle wiring (decides if the optional surfacing task is trivial)
++ commit message draft
+  + notethink 0.3.21: put editor behaviour on note click behind two settings - `view.generic.switchEditorOnClick` (default true) governs the focus-switch (off still moves the caret in an open editor), `view.generic.openNewEditorIfNoneOpen` (default false) stops a standalone board spawning a new editor group on click
+  + tests N jest, N playwright

@@ -77,11 +77,9 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
     // top-level stories merged into the synthetic root - the "X" in the breadcrumb "(X in Y files)"
     const note_count = merged_root.child_notes?.length ?? 0;
 
-    // precedence: per-session override > extension's echoed effective globs > cascade > built-in default. `''` is a valid user value (exclude cleared) so ?? is correct (only null/undefined fall through)
-    const includeFilter = view_state?.display_options?.includeFilter
-        ?? props.includeFilter ?? cascade?.includeFilter ?? DEFAULT_INCLUDE_FILTER;
-    const excludeFilter = view_state?.display_options?.excludeFilter
-        ?? props.excludeFilter ?? cascade?.excludeFilter ?? DEFAULT_EXCLUDE_FILTER;
+    // the include/exclude globs are config-tier cascade settings with a SINGLE source of truth: the extension resolves them (workspace > user > built-in) and is the only thing that discovers files with them, then echoes the effective values back as props.{include,exclude}Filter. The drawer must mirror exactly what discovery used, so do NOT layer a per-view viewState override on top - that store can drift from (and silently shadow) the config the extension actually discovered with, leaving the box showing one glob while the loaded file set was filtered by another, and making the cascade Reset buttons (which only clear config) appear to do nothing. cascade is the fallback before the first echo arrives; `''` is a valid user value so ?? is correct (only null/undefined fall through)
+    const includeFilter = props.includeFilter ?? cascade?.includeFilter ?? DEFAULT_INCLUDE_FILTER;
+    const excludeFilter = props.excludeFilter ?? cascade?.excludeFilter ?? DEFAULT_EXCLUDE_FILTER;
 
     // loaded source files (workspace-relative where known) for the Files drawer list, stable order
     const aggregate_loaded_files = Object.values(docs)
@@ -108,6 +106,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
         includeFilter,
         excludeFilter,
         settingsCascadeHasWorkspaceOverrides: cascade?.hasWorkspaceOverrides,
+        settingsCascadeHasAnyOverrides: cascade?.hasAnyOverrides,
         // --- view state + the opened file's declared integration intent ---
         view_state_ids,
         file_declared_integration: props.fileDeclaredIntegration,

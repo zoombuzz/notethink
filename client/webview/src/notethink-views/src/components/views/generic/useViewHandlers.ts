@@ -196,21 +196,24 @@ export function useViewHandlers(
 
     /*
      * handle_apply_filters - apply the user's edited include/exclude globs + per-file
-     * story cap. Persists them to per-view state (so they survive reload), posts a
-     * background setIntegration so the extension re-discovers the folder set, and
-     * round-trips each cascading setting to VS Code config via updateSetting so they
-     * survive across windows when promoted to default. Marks the 'integrationFilters'
-     * sentinel so the spinner appears if the re-discovery is slow; the aggregate-payload
-     * echo reducer clears it, and the extension emits its own pendingChange for the
-     * folder-discovery sub-step.
+     * story cap. Posts a background setIntegration so the extension re-discovers the
+     * folder set, and round-trips each cascading setting to VS Code config via
+     * updateSetting (config is the single source of truth for the cascade - the extension
+     * discovers with it and echoes the effective globs back, which the drawer mirrors).
+     * The include/exclude globs are deliberately NOT written to per-view state: a
+     * viewState copy can drift from the config the extension actually discovered with,
+     * shadowing it in the drawer and defeating the cascade Reset buttons (which only
+     * clear config). maxNotesPerFile stays in view state because it's a webview-side
+     * merge cap the drawer reads back from display_options, not a discovery filter.
+     * Marks the 'integrationFilters' sentinel so the spinner appears if the re-discovery
+     * is slow; the aggregate-payload echo reducer clears it, and the extension emits its
+     * own pendingChange for the folder-discovery sub-step.
      */
     const handle_apply_filters = useCallback((next_include: string, next_exclude: string, next_max_notes_per_file: number): void => {
         markPending('integrationFilters');
         handlers.setViewManagedState([{
             id: props.id,
             display_options: {
-                includeFilter: next_include,
-                excludeFilter: next_exclude,
                 maxNotesPerFile: next_max_notes_per_file,
             },
         }]);

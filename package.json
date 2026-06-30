@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.20",
+  "version": "0.3.21",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -196,6 +196,18 @@
             "default": true,
             "description": "%config.settings.view.generic.showContextBars.description%"
           },
+          "notethink.settings.view.generic.switchEditorOnClick": {
+            "type": "boolean",
+            "scope": "window",
+            "default": true,
+            "description": "%config.settings.view.generic.switchEditorOnClick.description%"
+          },
+          "notethink.settings.view.generic.openNewEditorIfNoneOpen": {
+            "type": "boolean",
+            "scope": "window",
+            "default": false,
+            "description": "%config.settings.view.generic.openNewEditorIfNoneOpen.description%"
+          },
           "notethink.settings.view.specific.kanban.columnOrder": {
             "type": "array",
             "scope": "resource",
@@ -218,7 +230,7 @@
           "notethink.settings.files.excludeFilter": {
             "type": "string",
             "scope": "resource",
-            "default": "**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**",
+            "default": "**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**",
             "description": "%config.settings.files.excludeFilter.description%"
           },
           "notethink.settings.files.maxNotesPerFile": {

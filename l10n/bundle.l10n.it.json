@@ -55,6 +55,8 @@
   "Reset to user default": "Ripristina al predefinito utente",
   "Save your current folder view settings as your user default across every VS Code window.": "Salva le impostazioni correnti della vista cartella come predefinito utente per ogni finestra di VS Code.",
   "Clear this workspace's folder view overrides and fall back to your user default.": "Cancella le sostituzioni della vista cartella in quest'area di lavoro e ripiega sul predefinito utente.",
+  "Reset to built-in default": "Ripristina al predefinito integrato",
+  "Clear both this workspace's and your user folder view overrides and restore NoteThink's built-in defaults.": "Cancella le sostituzioni della vista cartella sia di quest'area di lavoro sia dell'utente e ripristina i valori predefiniti integrati di NoteThink.",
   "Jump to…": "Vai a…",
   "Jump to another folder or file": "Vai a un'altra cartella o file",
   "Jump to": "Vai a",

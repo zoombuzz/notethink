@@ -7,7 +7,7 @@ import { debug, writeToLog, writeToErrorLog } from '../lib/errorops';
 import { globMatches } from '../lib/globMatch';
 import { parse } from '../lib/parseops';
 import { isPathWithin, isWithinWorkspace } from '../lib/pathops';
-import { SETTINGS, type SettingKey, isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, cascadeKeys, buildSettingsCascadePayload } from '../lib/settings';
+import { SETTINGS, type SettingKey, isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, hasOverride, cascadeKeys, buildSettingsCascadePayload } from '../lib/settings';
 import type { HashMapOf, Doc } from '../types/general';
 
 const CHANGE_DEBOUNCE_MS = 250;
@@ -405,6 +405,7 @@ export class PanelSession {
 				case 'updateSetting': return this.handleUpdateSetting(e);
 				case 'promoteSettingsToUser': return this.handlePromoteSettings();
 				case 'resetSettingsToDefault': return this.handleResetSettings();
+				case 'restoreSettingsToBuiltinDefault': return this.handleRestoreBuiltinDefaults();
 				case 'revealRange':
 				case 'selectRange': return this.handleRevealRange(e);
 				case 'setIntegration': return this.handleSetIntegration(e);
@@ -522,6 +523,19 @@ export class PanelSession {
 		}
 	}
 
+	private async handleRestoreBuiltinDefaults(): Promise<void> {
+		// clear both Workspace- and User-scope cascade overrides so every cascade setting falls back to the built-in (package.json) default. The recovery path when even the user default has been edited away (e.g. a wiped exclude filter) - "Reset to user default" cannot help once the user default itself is gone
+		try {
+			for (const key of cascadeKeys()) {
+				if (!hasOverride(key)) { continue; }
+				await writeSetting(key, undefined, vscode.ConfigurationTarget.Workspace);
+				await writeSetting(key, undefined, vscode.ConfigurationTarget.Global);
+			}
+		} catch (err) {
+			writeToErrorLog('restoreSettingsToBuiltinDefault failed', '', err);
+		}
+	}
+
 	private async handleRevealRange(e: Record<string, unknown>): Promise<void> {
 		const doc_path = e.docPath as string;
 		const from = e.from as number;
@@ -533,17 +547,21 @@ export class PanelSession {
 				writeToErrorLog(`${e.type}: path outside workspace, refusing`, doc_path);
 				return;
 			}
-			if (this.revealInVisibleEditor(doc_path, from, to)) { return; }
+			const switch_editor = readSetting('switchEditorOnClick');
+			// an already-visible editor always gets its caret moved; switch_editor only governs whether we steal focus to it
+			if (this.revealInVisibleEditor(doc_path, from, to, switch_editor)) { return; }
+			// no editor shows the doc, so revealing it means opening or switching one - honour switchEditorOnClick
+			if (!switch_editor) { return; }
 			// in folder mode the view is a set of signposts - jump to the file even when no editor shows it; in single-file mode stay silent to avoid spawning editors on stray clicks
 			if (!this.integration_path) { return; }
-			await this.revealByOpening(doc_path, from, to);
+			await this.revealByOpening(doc_path, from, to, readSetting('openNewEditorIfNoneOpen'));
 		} catch (err) {
 			writeToErrorLog(`${e.type} failed`, doc_path, err);
 		}
 	}
 
-	// reveal/select in a visible editor without opening anything; returns true if handled
-	private revealInVisibleEditor(doc_path: string, from: number, to: number): boolean {
+	// reveal/select in a visible editor without opening anything; always moves the caret, and steals focus only when switch_editor is set; returns true if handled
+	private revealInVisibleEditor(doc_path: string, from: number, to: number, switch_editor: boolean): boolean {
 		const existing = vscode.window.visibleTextEditors.find(ed => ed.document.uri.path === doc_path);
 		if (!existing) { return false; }
 		const document = existing.document;
@@ -554,18 +572,28 @@ export class PanelSession {
 			? new vscode.Selection(start_pos, end_pos)
 			: new vscode.Selection(end_pos, start_pos);
 		existing.revealRange(new vscode.Range(start_pos, end_pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-		vscode.window.showTextDocument(existing.document, existing.viewColumn, false);
+		// only pull focus into the editor when switching is enabled; otherwise the caret moves but the view keeps focus
+		if (switch_editor) {
+			vscode.window.showTextDocument(existing.document, existing.viewColumn, false);
+		}
 		return true;
 	}
 
-	// open the doc in a column that isn't this NoteThink panel's, preferring a group that already has it open. Accepts a resolved URI (scheme-preserving) or an absolute path (rebuilt via the workspace scheme carrier)
-	private async revealByOpening(target: string | vscode.Uri, from: number, to: number): Promise<void> {
+	// open the doc in a column that isn't this NoteThink panel's, preferring a group that already has it open. When the board is the only group open, a new beside-group is created only if open_new_if_none is set. Accepts a resolved URI (scheme-preserving) or an absolute path (rebuilt via the workspace scheme carrier)
+	private async revealByOpening(target: string | vscode.Uri, from: number, to: number, open_new_if_none: boolean): Promise<void> {
 		const uri = typeof target === 'string' ? this.resolveWorkspaceUri(target) : target;
 		let target_column = this.findColumnWithDoc(uri.path);
 		if (target_column === undefined) {
 			const notethink_column = this.webviewPanel.viewColumn;
 			const other_group = vscode.window.tabGroups?.all?.find(g => g.viewColumn !== notethink_column);
-			target_column = other_group?.viewColumn ?? vscode.ViewColumn.Beside;
+			if (other_group) {
+				target_column = other_group.viewColumn;
+			} else if (open_new_if_none) {
+				target_column = vscode.ViewColumn.Beside;
+			} else {
+				// the board is the only editor group open; spawning a new group on click is gated off by default
+				return;
+			}
 		}
 		const document = await vscode.workspace.openTextDocument(uri);
 		const start_pos = document.positionAt(from);
@@ -913,7 +941,7 @@ export class PanelSession {
 		try {
 			// a Files-drawer file click targets a specific file: open + focus it first so it becomes the active editor this mode renders (doing it here, in one handler, avoids the race a separate openFile message would have)
 			if (target_path && isWithinWorkspace(target_path, { requireExtension: '.md' })) {
-				await this.revealByOpening(target_path, 0, 0);
+				await this.revealByOpening(target_path, 0, 0, true);
 			}
 			const current_editor = vscode.window.activeTextEditor;
 			if (current_editor?.document.uri.path.endsWith('.md') && current_editor.document.uri.path !== this.active_path) {
@@ -999,7 +1027,7 @@ export class PanelSession {
 				writeToErrorLog('openFile: path outside workspace, refusing', file_path);
 				return;
 			}
-			await this.revealByOpening(file_path, 0, 0);
+			await this.revealByOpening(file_path, 0, 0, true);
 		} catch (err) {
 			writeToErrorLog('openFile failed', file_path, err);
 		}
@@ -1093,7 +1121,7 @@ export class PanelSession {
 				writeToErrorLog('openRelative: target outside workspace or not .md, refusing', target.path);
 				return;
 			}
-			await this.revealByOpening(target, 0, 0);
+			await this.revealByOpening(target, 0, 0, true);
 		} catch (err) {
 			writeToErrorLog('openRelative failed', href, err);
 		}

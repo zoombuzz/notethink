@@ -27,6 +27,7 @@ export interface ViewToolbar {
     handle_column_order_change: (next_order: string[]) => void;
     handle_make_default: () => void;
     handle_reset_to_default: () => void;
+    handle_restore_builtin_default: () => void;
 }
 
 /**
@@ -131,6 +132,10 @@ export function useViewToolbar(
         handlers.postMessage?.({ type: 'resetSettingsToDefault' });
     }, [handlers]);
 
+    const handle_restore_builtin_default = useCallback((): void => {
+        handlers.postMessage?.({ type: 'restoreSettingsToBuiltinDefault' });
+    }, [handlers]);
+
     /*
      * handle_setting_change - real-time apply for a per-view (display_options-owned)
      * setting. Dispatches setViewManagedState immediately. Global keys are stripped from
@@ -197,5 +202,6 @@ export function useViewToolbar(
         handle_column_order_change,
         handle_make_default,
         handle_reset_to_default,
+        handle_restore_builtin_default,
     };
 }

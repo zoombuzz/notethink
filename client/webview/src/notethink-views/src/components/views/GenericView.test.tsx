@@ -1231,17 +1231,23 @@ describe('GenericView folder files drawer', () => {
 
         capturedOnApplyFilters!('**/users/**', '**/dist/**', 7);
 
-        // the cap is persisted to per-view state alongside the globs
+        /*
+         * only the webview-side merge cap is persisted to per-view state; the globs are config-tier
+         * cascade settings with a single source of truth (config, echoed back) and must NOT be copied
+         * into viewState, or the drawer can drift from the globs discovery used and shadow the config
+         * the Reset buttons clear
+         */
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: 'test-view',
             display_options: {
-                includeFilter: '**/users/**',
-                excludeFilter: '**/dist/**',
                 maxNotesPerFile: 7,
             },
         }]);
+        const managed = set_view_managed_state.mock.calls[0][0][0];
+        expect(managed.display_options).not.toHaveProperty('includeFilter');
+        expect(managed.display_options).not.toHaveProperty('excludeFilter');
 
-        // but the cap is webview-only: only include/exclude round-trip to the extension
+        // the globs round-trip to the extension via setIntegration (re-discovery), but the cap does not
         expect(post_message).toHaveBeenCalledWith({
             type: 'setIntegration',
             mode: 'folder',
@@ -1253,7 +1259,6 @@ describe('GenericView folder files drawer', () => {
             ([msg]) => msg?.type === 'setIntegration',
         );
         expect(set_integration_call).toBeDefined();
-        expect(set_integration_call![0]).not.toHaveProperty('maxNotesPerFile');
         expect(set_integration_call![0]).not.toHaveProperty('maxNotesPerFile');
     });
 });

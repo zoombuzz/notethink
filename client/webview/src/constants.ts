@@ -1,6 +1,6 @@
 // webview-side mirror of the extension's folder-mode filter defaults (see client/extension/src/constants.ts); used until the extension echoes the effective globs back through the first update message
 export const DEFAULT_INCLUDE_FILTER = '**/*.md';
-export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage}/**';
+export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**';
 
 // webview-only cap on top-level stories taken per source file when merging; not round-tripped to the extension
 export const DEFAULT_MAX_NOTES_PER_FILE = 10;

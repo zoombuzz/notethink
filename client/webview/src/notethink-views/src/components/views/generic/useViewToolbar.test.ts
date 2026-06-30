@@ -234,4 +234,16 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'viewType', value: 'kanban' });
     });
 
+    it('handle_make_default / handle_reset_to_default / handle_restore_builtin_default each post their cascade message', () => {
+        const { handlers, post_message } = makeHandlers();
+        const props = makeProps();
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
+        act(() => { result.current.handle_make_default(); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'promoteSettingsToUser' });
+        act(() => { result.current.handle_reset_to_default(); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'resetSettingsToDefault' });
+        act(() => { result.current.handle_restore_builtin_default(); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'restoreSettingsToBuiltinDefault' });
+    });
+
 });

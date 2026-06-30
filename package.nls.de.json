@@ -19,6 +19,8 @@
   "config.settings.view.generic.showLineNumbers.description": "Zeilennummern in NoteThink-Ansichten anzeigen.",
   "config.settings.view.generic.watchUnopenedFilesInViewer.description": "Die aktiv angezeigte Datei auf Änderungen auf der Festplatte überwachen, wenn sie nicht in einem Text-Editor geöffnet ist (aktualisiert die Ansicht, wenn ein anderes Werkzeug sie bearbeitet).",
   "config.settings.view.generic.showContextBars.description": "Kontextleisten über den Stories anzeigen.",
+  "config.settings.view.generic.switchEditorOnClick.description": "Den Fokus auf den Editor einer Notiz setzen, wenn Sie in einer NoteThink-Ansicht darauf klicken. Wenn deaktiviert, bewegt ein bereits geöffneter Editor trotzdem seinen Cursor zur angeklickten Notiz, aber der Fokus bleibt auf der Ansicht und es wird kein Editor geöffnet.",
+  "config.settings.view.generic.openNewEditorIfNoneOpen.description": "Wenn Sie auf eine Notiz klicken und neben der NoteThink-Ansicht kein Editor geöffnet ist, die Notiz in einer neuen Editorgruppe öffnen. Wenn deaktiviert, öffnet ein Klick auf eine Notiz nie eine neue Editorgruppe.",
   "config.settings.view.specific.kanban.columnOrder.description": "Spaltenreihenfolge für Kanban (rohe Status-Slugs wie 'doing', 'done'). Nicht aufgeführte Spalten erscheinen danach, alphabetisch sortiert mit 'untagged' am Ende.",
   "config.settings.view.specific.kanban.animateTransitions.description": "Passive Kanban-Übergänge animieren (Karten, die sich bewegen, wenn ein anderes Werkzeug oder der Editor ihren Status ändert) mit einem kurzen Gleiten.",
   "config.settings.files.includeFilter.description": "Glob der Dateien, die im Ordner-Modus eingeschlossen werden.",

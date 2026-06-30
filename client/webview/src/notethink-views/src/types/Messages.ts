@@ -91,6 +91,13 @@ export interface ResetSettingsToDefaultMessage {
 }
 
 /**
+ * clear every Workspace- AND User-scope cascade override so the cascade falls back to the extension's built-in (package.json) defaults. The recovery path when both the workspace and the user default have been edited away (e.g. a wiped exclude filter the user can't reconstruct by hand).
+ */
+export interface RestoreSettingsToBuiltinDefaultMessage {
+    type: 'restoreSettingsToBuiltinDefault';
+}
+
+/**
  * webview -> extension request for the list of jump targets (folders/files) reachable from the breadcrumb terminal leaf. The extension replies asynchronously with a JumpTargetsMessage carrying the same mode/path so the webview can correlate the response.
  */
 export interface RequestJumpTargetsMessage {
@@ -117,6 +124,7 @@ export type WebviewToExtensionMessage =
     | UpdateSettingMessage
     | PromoteSettingsToUserMessage
     | ResetSettingsToDefaultMessage
+    | RestoreSettingsToBuiltinDefaultMessage
     | RequestJumpTargetsMessage
     | OpenFileMessage;
 
@@ -162,7 +170,8 @@ export interface GlobalSettingsMessage {
 
 /**
  * resolved values for the settings cascade. The extension reads each key via vscode.workspace.getConfiguration() (built-in default → User → Workspace) under `notethink.settings.*` and sends this payload on requestInitialState and whenever onDidChangeConfiguration fires for any of the underlying keys.
- * - hasWorkspaceOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace; drives whether the Reset button is enabled in the UI
+ * - hasWorkspaceOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace; drives whether the "Reset to user default" button is enabled in the UI
+ * - hasAnyOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace OR ConfigurationTarget.Global (User); drives whether the "Reset to built-in default" button is enabled (nothing to restore when the cascade is already at built-in defaults)
  *
  * Settings identifiers are camelCase end-to-end (see client/extension/src/lib/settings.ts).
  */
@@ -174,9 +183,10 @@ export interface SettingsCascadePayload {
     maxNotesPerFile: number;
     showContextBars: boolean;
     hasWorkspaceOverrides: boolean;
+    hasAnyOverrides: boolean;
 }
 
-export type SettingsCascadeKey = Exclude<keyof SettingsCascadePayload, 'hasWorkspaceOverrides'>;
+export type SettingsCascadeKey = Exclude<keyof SettingsCascadePayload, 'hasWorkspaceOverrides' | 'hasAnyOverrides'>;
 
 export interface SettingsCascadeMessage {
     type: 'settingsCascade';

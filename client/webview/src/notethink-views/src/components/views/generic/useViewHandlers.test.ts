@@ -329,3 +329,45 @@ describe('useViewHandlers revealNote', () => {
         expect(post_message).toHaveBeenCalledWith({ type: 'revealRange', from: 17, docPath: '/ws/open.md' });
     });
 });
+
+describe('useViewHandlers.handle_apply_filters', () => {
+
+    function makeFolderProps(set_view_managed_state: jest.Mock, post_message: jest.Mock): ViewProps {
+        return makeProps({
+            id: 'folder-view',
+            display_options: { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo/notes' },
+            handlers: {
+                setViewManagedState: set_view_managed_state,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: post_message,
+            },
+        });
+    }
+
+    // the include/exclude globs are config-tier cascade settings with a single source of truth (VS Code config, echoed back). Writing them to per-view state would let the drawer drift from the globs discovery actually used and would shadow the config the Reset buttons clear, so handle_apply_filters must NOT persist them to viewState
+    it('does not write include/exclude globs to per-view state (only the webview-side maxNotesPerFile cap)', () => {
+        const set_view_managed_state = jest.fn();
+        const post_message = jest.fn();
+        const props = makeFolderProps(set_view_managed_state, post_message);
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handle_apply_filters('**/todo.md', '**/{node_modules}/**', 7);
+        expect(set_view_managed_state).toHaveBeenCalledTimes(1);
+        const update = set_view_managed_state.mock.calls[0][0][0];
+        expect(update.display_options).toEqual({ maxNotesPerFile: 7 });
+        expect(update.display_options).not.toHaveProperty('includeFilter');
+        expect(update.display_options).not.toHaveProperty('excludeFilter');
+    });
+
+    it('re-discovers via setIntegration and round-trips every filter to VS Code config', () => {
+        const set_view_managed_state = jest.fn();
+        const post_message = jest.fn();
+        const props = makeFolderProps(set_view_managed_state, post_message);
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handle_apply_filters('**/todo.md', '**/{node_modules}/**', 7);
+        expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: INTEGRATION_MODE_FOLDER, path: '/repo/notes', include: '**/todo.md', exclude: '**/{node_modules}/**' });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'includeFilter', value: '**/todo.md' });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'excludeFilter', value: '**/{node_modules}/**' });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'maxNotesPerFile', value: 7 });
+    });
+});

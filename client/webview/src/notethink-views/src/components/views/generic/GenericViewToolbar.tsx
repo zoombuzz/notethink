@@ -48,6 +48,7 @@ interface GenericViewToolbarProps {
     onColumnOrderChange: (next_order: string[]) => void;
     onMakeDefault: () => void;
     onResetToDefault: () => void;
+    onRestoreBuiltinDefault: () => void;
     onApplyFilters: (next_include: string, next_exclude: string, next_max_notes_per_file: number) => void;
 }
 
@@ -95,6 +96,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         onColumnOrderChange,
         onMakeDefault,
         onResetToDefault,
+        onRestoreBuiltinDefault,
         onApplyFilters,
         onViewTypeChange,
     } = component_props;
@@ -157,6 +159,8 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         onMakeDefault={onMakeDefault}
                         onResetToDefault={onResetToDefault}
                         canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
+                        onRestoreBuiltinDefault={onRestoreBuiltinDefault}
+                        canRestoreBuiltinDefault={props.settingsCascadeHasAnyOverrides ?? false}
                     />
                 )}
                 {props.type === 'kanban' && (
@@ -177,6 +181,8 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         onMakeDefault={onMakeDefault}
                         onResetToDefault={onResetToDefault}
                         canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
+                        onRestoreBuiltinDefault={onRestoreBuiltinDefault}
+                        canRestoreBuiltinDefault={props.settingsCascadeHasAnyOverrides ?? false}
                     />
                 )}
             </ToolbarDrawer>
@@ -205,6 +211,8 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         onMakeDefault={onMakeDefault}
                         onResetToDefault={onResetToDefault}
                         canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
+                        onRestoreBuiltinDefault={onRestoreBuiltinDefault}
+                        canRestoreBuiltinDefault={props.settingsCascadeHasAnyOverrides ?? false}
                     />
                 </ToolbarDrawer>
             )}

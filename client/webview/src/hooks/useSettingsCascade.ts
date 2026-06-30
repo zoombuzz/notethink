@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS_CASCADE: SettingsCascadePayload = {
     maxNotesPerFile: DEFAULT_MAX_NOTES_PER_FILE,
     showContextBars: true,
     hasWorkspaceOverrides: false,
+    hasAnyOverrides: false,
 };
 
 // hold the host-pushed settings cascade (view type, column order, filters, etc.) resolved by the extension under notethink.settings.*

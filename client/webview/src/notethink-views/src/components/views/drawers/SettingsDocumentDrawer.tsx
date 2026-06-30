@@ -21,6 +21,8 @@ interface SettingsDocumentDrawerProps {
     onMakeDefault?: () => void;
     onResetToDefault?: () => void;
     canResetToDefault?: boolean;
+    onRestoreBuiltinDefault?: () => void;
+    canRestoreBuiltinDefault?: boolean;
 }
 
 function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps): React.ReactElement {
@@ -44,11 +46,13 @@ function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps): React.React
                     NoteThink v{typeof NOTETHINK_VERSION !== 'undefined' ? NOTETHINK_VERSION : 'dev'}
                     {' '}(ext: {(window as unknown as Record<string, unknown>).__NOTETHINK_EXTENSION_VERSION__ as string || '?'})
                 </p>
-                {props.onMakeDefault && props.onResetToDefault && (
+                {props.onMakeDefault && props.onResetToDefault && props.onRestoreBuiltinDefault && (
                     <SettingsCascadeButtons
                         onMakeDefault={props.onMakeDefault}
                         onResetToDefault={props.onResetToDefault}
                         canResetToDefault={props.canResetToDefault}
+                        onRestoreBuiltinDefault={props.onRestoreBuiltinDefault}
+                        canRestoreBuiltinDefault={props.canRestoreBuiltinDefault}
                     />
                 )}
             </aside>

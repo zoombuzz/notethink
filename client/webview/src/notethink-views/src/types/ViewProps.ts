@@ -23,6 +23,7 @@ export interface ViewProps {
     maxNotesPerFile?: number;
     aggregate_loaded_files?: Array<string>;
     settingsCascadeHasWorkspaceOverrides?: boolean;
+    settingsCascadeHasAnyOverrides?: boolean;
     view_state_ids?: readonly string[];
     file_declared_integration?: {
         mode: ConcreteIntegrationMode;

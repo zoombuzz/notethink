@@ -65,6 +65,7 @@ describe('composerops.buildViewDisplayOptions', () => {
                     maxNotesPerFile: 10,
                     showContextBars: true,
                     hasWorkspaceOverrides: false,
+                    hasAnyOverrides: false,
                 },
             });
             const result = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
@@ -81,6 +82,7 @@ describe('composerops.buildViewDisplayOptions', () => {
                     maxNotesPerFile: 10,
                     showContextBars: true,
                     hasWorkspaceOverrides: false,
+                    hasAnyOverrides: false,
                 },
             });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
@@ -97,6 +99,7 @@ describe('composerops.buildViewDisplayOptions', () => {
                     maxNotesPerFile: 10,
                     showContextBars: true,
                     hasWorkspaceOverrides: false,
+                    hasAnyOverrides: false,
                 },
             });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
@@ -113,6 +116,7 @@ describe('composerops.buildViewDisplayOptions', () => {
                     maxNotesPerFile: 10,
                     showContextBars: true,
                     hasWorkspaceOverrides: false,
+                    hasAnyOverrides: false,
                 },
             });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
@@ -132,6 +136,7 @@ describe('composerops.buildViewDisplayOptions', () => {
                     maxNotesPerFile: 10,
                     showContextBars: true,
                     hasWorkspaceOverrides: false,
+                    hasAnyOverrides: false,
                 },
             });
             const result = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);

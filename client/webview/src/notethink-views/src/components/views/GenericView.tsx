@@ -84,6 +84,7 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     onColumnOrderChange={toolbar.handle_column_order_change}
                     onMakeDefault={toolbar.handle_make_default}
                     onResetToDefault={toolbar.handle_reset_to_default}
+                    onRestoreBuiltinDefault={toolbar.handle_restore_builtin_default}
                     onApplyFilters={handle_apply_filters}
                 />
             )}

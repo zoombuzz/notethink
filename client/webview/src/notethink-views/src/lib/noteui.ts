@@ -239,18 +239,22 @@ export function createNoteClickHandler(
  * - the canonical second-click trigger for promoting a focused note to selected. Two
  * complementary signals are OR'd:
  *
- * - `current_head === caret_pos` (editor-derived): matches the legacy behaviour where
+ * - `effective_head === caret_pos` (caret-derived): matches the legacy behaviour where
  *   clicking on a sub-heading of the focused parent re-focuses (different offset)
- *   rather than promoting to selected. Works when the editor confirms the focus via a
- *   selectionChanged round-trip.
+ *   rather than promoting to selected. The editor head wins when present (editor confirms
+ *   the focus via a selectionChanged round-trip); when no editor is live the virtual caret
+ *   (board-as-editor caret, written by the previous click) is the fallback so a second click
+ *   at the same offset still promotes to selected with no editor.
  * - `note.focused && caret_pos === note.position.start.offset` (view-derived): the
  *   folder-mode fallback for when the editor selection may never confirm (the clicked
  *   note's source file may not be the active editor). Gated on the click landing on
  *   the note's own headline start, so sub-heading / body clicks still trigger
  *   revealRange instead of promoting.
  */
-export function isAlreadyFocusedClick(note: NoteProps, caret_pos: number, current_head: number | undefined): boolean {
-    const is_focused_same_position = current_head !== undefined && current_head === caret_pos;
+export function isAlreadyFocusedClick(note: NoteProps, caret_pos: number, current_head: number | undefined, view_caret?: number): boolean {
+    // editor head is authoritative when present; the virtual caret is the no-editor fallback and must never override a live editor head
+    const effective_head = current_head ?? view_caret;
+    const is_focused_same_position = effective_head !== undefined && effective_head === caret_pos;
     const is_view_focused_headline_click = note.focused === true && caret_pos === note.position.start.offset;
     return is_focused_same_position || is_view_focused_headline_click;
 }

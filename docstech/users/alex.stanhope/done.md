@@ -3458,3 +3458,95 @@ Clicking a story in a NoteThink view always reveals it in an editor today. When 
 + commit message draft
   + notethink 0.3.21: put editor behaviour on note click behind two settings - `view.generic.switchEditorOnClick` (default true) governs the focus-switch (off still moves the caret in an open editor), `view.generic.openNewEditorIfNoneOpen` (default false) stops a standalone board spawning a new editor group on click
   + tests N jest, N playwright
+
+
+### Board interaction parity + story-drag regression [](?id=parity-and-drag)
+
+Two independent deliverables from the reviewed single-caret-ownership plan. Part 1 (drag) is an active bug and is implemented first; Part 2 (parity) follows so the tree stays releaseable between them.
+
++ background
+  + drag: the in-house FLIP layer writes transforms onto the same DOM `@hello-pangea/dnd` uses for its `position:fixed` drag clone, with no `renderClone`/portal isolation; the same seam caused the prior three drag regressions
+  + drag: all kanban + animation jest tests pass while the real drag breaks, because jsdom has no layout - the suite is blind to the geometry failure class
+  + parity: the board already writes a view-driven store (`view_focused_ids`/`view_selected_ids`); it depends on the editor only via render-time precedence (`useViewContext.ts:120`, `resolveFocusedNote` `noteops.ts:137`) and the second-click promotion gate (`isAlreadyFocusedClick` `noteui.ts:252`, needs the editor caret echo)
+  + model: one caret, owner follows the live editor surface; the store holds augmented state only (never text) so files stay master
++ Part 1 - story-drag regression fix + geometry net
+  + goal
+    + dragging a story tracks the cursor and never disappears, freezes, or scrolls the wrong way
+    + a fourth regression fails a test that asserts geometry, instead of shipping green
+  + scope
+    + portal the dragging Draggable to `document.body` so the clone's containing block is the viewport, immune to any ancestor transform
+    + settle in-flight FLIP animations at drag-start (finish WAAPI, clear inline transforms, strip flip/column classes) before holding the gate
+    + pin `@hello-pangea/dnd` and `react` so a floating install cannot silently bump the drag lib (resolve the right layer - app pin, not the library's wide peer range)
+  + files
+    + `client/webview/src/notethink-views/src/components/views/kanban/KanbanBoard.tsx` - portal the dragging Draggable
+    + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx` - settle FLIP in `dragStartHandler`
+    + `client/webview/src/notethink-views/src/lib/animation/settleFlipAnimations.ts` - new shared helper (colocated test)
+    + `package.json` / `client/webview/src/notethink-views/package.json` - dependency pin
+  + [X] portal the dragging Draggable to `document.body`
+  + [X] add `settleFlipAnimations` helper and call it at drag-start before holding the gate
+  + [X] pin the drag lib at the app layer (`@hello-pangea/dnd` -> exact 18.0.1; react left on the resolved 19.2.x)
+  + [X] jest: `settleFlipAnimations` finishes animations, clears transforms, strips flip/column classes
+  + [X] jest: drag-start force-finishes in-flight FLIP before the gate holds
+  + [X] jest/static: structural guard - Draggable render portals while dragging; no `transition:transform` on `.note`
+  + [X] playwright: mid-drag, every ancestor of the fixed clone has `transform: none`
+  + [X] playwright: clone centre tracks the pointer within tolerance per step
+  + [X] playwright: a passive edit injected mid-drag neither aborts nor re-animates the drag
+  + [X] playwright: dragging to a board edge scrolls toward the drag; the drop does not scroll the card backward
+  + [X] playwright: real-pointer drop posts the correct `editText`, holds with no snap-back, never flings
+  + [X] verify existing kanban specs stay green
+  + delivered Part 1: portal via `useDragPortalNode` + `createPortal` (dragging-only) so no FLIP/column transform can re-anchor the fixed clone; `settleFlipAnimations` snaps in-flight FLIP at drag-start; net is 3 jest suites (15 tests) + 5 playwright specs; `pnpm run check` green (1509 jest, lint/tsc/build/rollup clean), scoped kanban/drag playwright 31/31; not committed
+  + design note: the mid-flight passive test uses a same-layout content edit and continues the gesture, because @hello-pangea/dnd cannot complete a drop if a Draggable changes index or size mid-drag (a dnd constraint the portal fix does not alter)
++ Part 2 - interaction parity (single-caret ownership)
+  + goal
+    + clicking a story highlights it and clicking again selects it, identically whether or not an editor is open
+    + files remain the sole source of text state; the store holds only augmented (caret/highlight/selection) state
+  + scope
+    + add a view-owned virtual caret offset used when no editor owns the clicked note's file
+    + editor stays authoritative when present (today's derivation unchanged); board is a virtual editor when not
+    + drop `switchEditorOnClick` from the UI (hardcode `switch_editor` true, keep the param); revert `openNewEditorIfNoneOpen` default to false and the WIP forced-editor plumbing + `isRevealTargetAllowed` relaxation
+    + folder mode option (ii): clicking a note whose file is not visible switches the existing editor to it; never yank a file that already has a visible editor
+  + files
+    + `.../generic/useViewContext.ts`, `.../lib/noteops.ts`, `.../lib/noteui.ts` - precedence + virtual caret + seq fallback
+    + `.../generic/useViewHandlers.ts`, `.../generic/useViewNavigation.ts`, `.../lib/viewstateops.ts` - write/move the virtual caret
+    + `.../types/NoteProps.ts`, `ViewProps.ts` - virtual caret field
+    + `client/extension/src/vscode/PanelSession.ts`, `lib/settings.ts`, `constants.ts`, `package.json` - settings revert + reveal path
+    + webview settings mirror + l10n - remove the `switchEditorOnClick` surface
+  + [X] add the virtual caret to view-managed state and its type (`view_caret` offset on `NoteDisplayOptions`)
+  + [X] write the virtual caret on board click (`useViewHandlers`) and arrow-key nav (`useViewNavigation`)
+  + [X] compare `isAlreadyFocusedClick` against the virtual caret when the editor head is absent
+  + [X] resolve focus/selection editor-first when present, virtual-caret when absent; seq/position fallback for notes without `stable_id`
+  + [X] drop `switchEditorOnClick` from the UI and hardcode `switch_editor` true at the call site
+  + [X] revert `openNewEditorIfNoneOpen` default to false and the WIP forced-editor plumbing
+  + [X] confirm folder-mode option (ii) in `revealByOpening`
+  + [X] jest: identical board highlight/select with editor caret present vs virtual caret
+  + [X] jest: virtual-caret second-click promotes focus to selected with no editor
+  + [X] jest: editor drag-select (head != anchor) still multi-highlights spanned notes
+  + [X] playwright: same click cycle with editor open vs closed yields identical highlight/select
+  + delivered Part 2: `view_caret` (offset in view-managed `display_options`, augmented state only) drives highlight/select with no editor; editor-open derivation unchanged (editor head wins in `isAlreadyFocusedClick`, `editor_derived_match` wins in `resolveFocusedNote`); `switchEditorOnClick` dropped as a setting + hardcoded on; `openNewEditorIfNoneOpen` default reverted to false; version 0.3.23; +7 parity jest + 1 playwright parity spec; `pnpm run check` green (1512 jest), scoped playwright 43/43
+  + decision: kept `isRevealTargetAllowed` (did NOT restore the stricter `isWithinWorkspace`) - removing it would break revealing the board's own loose `.md` into an existing editor in a folderless window; it still refuses any non-board path
++ Part 3 - fixes from manual testing (2026-07-02)
+  + [X] drag preview restored to the full card look: removed the drag-clone portal (it moved the card out of its column-scoped styling, so the preview rendered as oversized bare text); the FLIP gate already suppresses ancestor transforms during a drag, so no portal is needed - the settle-at-drag-start fix stays
+  + [X] highlight/select now works with no editor: the extension pinned a phantom (0,0) selection when no editor was visible; it now clears the selection (`sendSelectionCleared` -> `selection: null`), so `props.selection` is undefined and the virtual caret drives highlight/select; closing an editor clears too (`onDidChangeVisibleTextEditors`)
+  + [X] ctrl/cmd-click a story force-opens its source in an editor (reuses an existing one, else opens beside) even when `openNewEditorIfNoneOpen` is off, via a `forceOpen` flag on `revealRange`/`selectRange`
+  + [X] regression net updated to catch these: clone-isolation spec now asserts the dragging card keeps its card border (guards the portal-appearance bug); structural guard checks settle-before-hold; the parity spec feeds the real phantom-(0,0)-then-clear sequence so it would fail on the old behaviour; +ctrl/cmd-click jest guards
+  + note: found an unrelated uncommitted change in `client/extension/src/extension.ts` (`waitForRestorableMdUri`, a panel-restore fix for virtual-FS docs) that I did NOT make - assumed it is the user's from live testing; left the logic untouched, only reformatted its comments to pass the consecutive-comment lint rule
+  + verified: `pnpm run check` green (1513 jest), full playwright 105/105; version 0.3.24
++ Part 4 - drag-after-a-passive-move stall (2026-07-06)
+  + [X] root cause, found with a new self-driving harness (`playwright/specs/kanban-drag-collapse.spec.ts`): the FLIP tweens used `fill: 'both'`, so a FINISHED glide animation kept owning the card's `transform`; an animation-origin transform outranks `@hello-pangea/dnd`'s inline drag transform, so the next drag on a just-glided card lifted a clone that could not track and stalled (on a large board this reads as the source column collapsing/concertina-ing, and it survived a reload because the load render re-ran FLIP)
+  + [X] fix: `flipMath.ts` move/enter/exit timings `fill: 'both'` -> `'backwards'` - keeps the anti-flash pre-frame but applies no forwards fill, so the tween releases `transform` when it ends; the existing `settleFlipAnimations`/global-cap `.finish()` calls now release too, so no other call site changed
+  + [X] harnesses added: `kanban-drag-collapse.spec.ts` mounts the REAL webview in a bare page (no cross-iframe focus artifact, so real pointer drags lift) and replays drag -> reconcile -> undo x2, asserting every drag posts `editText` and no finished FLIP holds a transform; `kanbanDragUndoRoundtrip.test.ts` is a deterministic parse->payload->apply->single-file-undo jest round-trip that ruled out file corruption; `sh/repro-drag.mjs` is the self-sufficient `@vscode/test-web` recorder that characterises the separate webview-focus bug (drag will not start when the webview iframe is unfocused after a Monaco edit)
+  + verified: `pnpm run check` green (1517 jest), full playwright 106/106; version 0.3.24
++ acceptance
+  + drag tracks the cursor, never disappears/freezes, auto-scrolls toward the drag; the geometry net fails if a transformed ancestor is reintroduced around the clone
+  + click-highlight-then-select behaves identically with an editor open and with none
+  + with an editor open a board click moves the editor caret and focus lands in the editor; with none the board owns the virtual caret
+  + `pnpm run check` green after each part; version bumped per part
++ manual: drag a story - it tracks the cursor, never disappears/freezes, and auto-scrolls toward the drag
++ manual: editor closed - click a story highlights it, click it again selects it
++ manual: editor open - clicking a story moves the editor caret and focus lands in the editor
++ open questions for the implementing agent
+  + dependency-pin layer (app pin vs the library's intentionally-wide peer range) - resolve in Part 1
+  + whether the virtual highlight persists across a webview reload - keep it, reconcile against file state
++ commit message draft
+  + Part 1: notethink 0.3.22: portal the kanban drag clone out of the FLIP-transformed ancestry and settle in-flight FLIP at drag-start so a drag never re-anchors or flings; geometry-asserting regression net (clone isolation, cursor tracking, autoscroll direction, passive-midflight, real-pointer roundtrip) plus jest settle + structural guards; tests N jest, N playwright
+  + Part 2: notethink 0.3.23: single-caret ownership so board highlight/select is identical with or without an editor via a view-owned virtual caret; drop switchEditorOnClick, openNewEditorIfNoneOpen default false; tests N jest, N playwright

@@ -127,18 +127,27 @@ export function findSelectedNotesByOriginPosition(
  * visualisation). view_focused_ids is the immediate-feedback source for the brief
  * window between a view click and the editor's selectionChanged round-trip, and
  * the fallback when the editor has no opinion (active editor on a doc outside the
- * aggregated set, or caret outside every matched note)
+ * aggregated set, or caret outside every matched note). view_caret is the virtual-caret
+ * offset (board-as-editor caret when no editor is live); it is the last resort so a note
+ * clicked WITHOUT a stable_id still highlights - the caret lives in in-tree offset space,
+ * so findDeepestNote resolves it in both single-file and folder mode
  */
 export function resolveFocusedNote(
     view_focused_ids: string[] | undefined,
     notes: Array<NoteProps>,
     editor_derived_match: NoteProps | undefined,
+    view_caret?: number,
 ): NoteProps | undefined {
     if (editor_derived_match) { return editor_derived_match; }
     const last_id = view_focused_ids?.[view_focused_ids.length - 1];
     if (last_id) {
         const found = notes.find(n => n.stable_id === last_id);
         if (found) { return found; }
+    }
+    // no-editor / no-stable_id fallback: resolve the virtual caret against the in-tree offsets
+    if (view_caret !== undefined) {
+        const by_caret = findDeepestNote(notes, view_caret);
+        if (by_caret) { return by_caret; }
     }
     return undefined;
 }

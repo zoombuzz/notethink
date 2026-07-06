@@ -54,6 +54,7 @@ export function buildViewDisplayOptions(
         showLineNumbers: props.globalSettings?.showLineNumbers ?? false,
         watchUnopenedFilesInViewer: props.globalSettings?.watchUnopenedFilesInViewer ?? true,
         kanbanAnimateTransitions: props.globalSettings?.kanbanAnimateTransitions ?? true,
+        openNewEditorIfNoneOpen: props.globalSettings?.openNewEditorIfNoneOpen ?? false,
         showContextBars: cascade?.showContextBars ?? true,
     };
     if (cascade_column_order) { cascade_settings.columnOrder = cascade_column_order; }

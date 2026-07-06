@@ -51,8 +51,8 @@ export function useViewHandlers(
             }]);
         },
 
-        setViewInteractionState: (focused_ids: string[], selected_ids: string[]) => {
-            writeViewInteractionState(props, handlers, focused_ids, selected_ids);
+        setViewInteractionState: (focused_ids: string[], selected_ids: string[], view_caret?: number) => {
+            writeViewInteractionState(props, handlers, focused_ids, selected_ids, view_caret);
         },
 
         click: (event: MouseEvent<HTMLElement>, note: NoteProps, click_profile: ClickPositionInfo) => {
@@ -87,43 +87,51 @@ export function useViewHandlers(
                 // click note to reveal in editor; read selection from ref to avoid stale closure when memo prevents re-render
                 const caret_pos = resolveCaretPosition(click_profile, note);
                 const current_head = selection_ref.current?.main.head;
+                // virtual caret written by the previous click; the no-editor fallback for the second-click->select promotion
+                const view_caret = props.display_options?.view_caret;
                 const origin_doc_path = note.origin?.doc_path;
+                // ctrl/cmd-click forces the source open in an editor even when openNewEditorIfNoneOpen is off
+                const force_open = Boolean(event.ctrlKey || event.metaKey);
                 const focused_chain = focusedChainIdsFor(note);
                 const note_selected_ids = note.stable_id ? [note.stable_id] : [];
-                const is_already_focused = isAlreadyFocusedClick(note, caret_pos, current_head);
+                const is_already_focused = isAlreadyFocusedClick(note, caret_pos, current_head, view_caret);
                 if (event.detail === 2) {
                     // double-click selects the note immediately; per-view state-of-truth, plus the editor reveal so the cursor follows opportunistically
-                    writeViewInteractionState(props, handlers, focused_chain, note_selected_ids);
+                    writeViewInteractionState(props, handlers, focused_chain, note_selected_ids, caret_pos);
                     props.handlers?.postMessage?.({
                         type: 'selectRange',
                         from: click_profile.selection_from ?? click_profile.from,
                         to: click_profile.selection_to ?? click_profile.to,
                         docPath: origin_doc_path,
+                        forceOpen: force_open,
                     });
                 } else if (note.selected) {
                     // click on an already-selected note returns it to focused (drop selection)
-                    writeViewInteractionState(props, handlers, focused_chain, []);
+                    writeViewInteractionState(props, handlers, focused_chain, [], caret_pos);
                     props.handlers?.postMessage?.({
                         type: 'revealRange',
                         from: caret_pos,
                         docPath: origin_doc_path,
+                        forceOpen: force_open,
                     });
                 } else if (is_already_focused) {
                     // click on a focused note promotes it to selected
-                    writeViewInteractionState(props, handlers, focused_chain, note_selected_ids);
+                    writeViewInteractionState(props, handlers, focused_chain, note_selected_ids, caret_pos);
                     props.handlers?.postMessage?.({
                         type: 'selectRange',
                         from: click_profile.selection_from ?? click_profile.from,
                         to: click_profile.selection_to ?? click_profile.to,
                         docPath: origin_doc_path,
+                        forceOpen: force_open,
                     });
                 } else {
                     // first click on a different note focuses it (replaces focused set, drops selection)
-                    writeViewInteractionState(props, handlers, focused_chain, []);
+                    writeViewInteractionState(props, handlers, focused_chain, [], caret_pos);
                     props.handlers?.postMessage?.({
                         type: 'revealRange',
                         from: caret_pos,
                         docPath: origin_doc_path,
+                        forceOpen: force_open,
                     });
                 }
             }

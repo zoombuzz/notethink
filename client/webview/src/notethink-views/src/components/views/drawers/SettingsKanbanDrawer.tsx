@@ -20,6 +20,7 @@ interface SettingsKanbanDrawerProps {
     naturalColumnOrder: string[];
     showLineNumbers?: boolean;
     watchUnopenedFilesInViewer?: boolean;
+    openNewEditorIfNoneOpen?: boolean;
     kanbanAnimateTransitions?: boolean;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
@@ -95,6 +96,7 @@ function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps): React.ReactElem
                         settings={props.settings}
                         showLineNumbers={props.showLineNumbers}
                         watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
+                        openNewEditorIfNoneOpen={props.openNewEditorIfNoneOpen}
                         onSettingChange={props.onSettingChange}
                         onGlobalSettingChange={props.onGlobalSettingChange}
                     />

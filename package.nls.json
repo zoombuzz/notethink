@@ -19,7 +19,6 @@
   "config.settings.view.generic.showLineNumbers.description": "Show line numbers in NoteThink views.",
   "config.settings.view.generic.watchUnopenedFilesInViewer.description": "Watch the active viewed file for on-disk changes when it isn't open in a text editor (refreshes the viewer when another tool edits it).",
   "config.settings.view.generic.showContextBars.description": "Show context bars above stories.",
-  "config.settings.view.generic.switchEditorOnClick.description": "Switch focus to a note's editor when you click it in a NoteThink view. When off, an already-open editor still moves its caret to the clicked note, but focus stays on the view and no editor is opened.",
   "config.settings.view.generic.openNewEditorIfNoneOpen.description": "When you click a note and no editor is open beside the NoteThink view, open the note in a new editor group. When off, clicking a note never spawns a new editor group.",
   "config.settings.view.specific.kanban.columnOrder.description": "Kanban column order (raw status slugs like 'code-review' or 'done'). Columns not in the list appear after, sorted alphabetically with 'untagged' last.",
   "config.settings.view.specific.kanban.animateTransitions.description": "Animate passive kanban transitions (cards moving as another tool or the editor changes their status) with a brief slide.",

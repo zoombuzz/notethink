@@ -13,9 +13,10 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsPayload = {
     showLineNumbers: false,
     watchUnopenedFilesInViewer: true,
     kanbanAnimateTransitions: true,
+    openNewEditorIfNoneOpen: false,
 };
 
-// hold the host-pushed global settings (line numbers, unopened-file watching)
+// hold the host-pushed global settings (line numbers, unopened-file watching, editor-on-click behaviour)
 export function useGlobalSettings(): GlobalSettingsState {
     const [global_settings, setGlobalSettings] = useState<GlobalSettingsPayload>(DEFAULT_GLOBAL_SETTINGS);
     return { global_settings, setGlobalSettings };

@@ -16,6 +16,7 @@ import { buildKanbanDragEndPayload } from "./kanban/kanbanDragEndPayload";
 import { useProjectedNotes } from "./kanban/useProjectedNotes";
 import { useFlipGate } from "../../lib/animation/useFlipGate";
 import { useFlipTransition } from "../../lib/animation/useFlipTransition";
+import { settleFlipAnimations } from "../../lib/animation/settleFlipAnimations";
 import KanbanBoard from "./kanban/KanbanBoard";
 import master_view_styles from "../ViewRenderer.module.scss";
 import view_specific_styles from "../ViewRenderer.module.scss";
@@ -103,6 +104,8 @@ export default function KanbanView(props: ViewProps): ReactElement {
      */
     const dragStartHandler = (_start: DragStart, _provided: ResponderProvided): void => {
         drag_active.current = true;
+        // snap any in-flight FLIP move to its true box BEFORE the gate holds, so a card grabbed mid-animation is at rest when dnd lifts it into a fixed drag clone (a leftover transform would jump the clone)
+        if (content_ref.current) { settleFlipAnimations(content_ref.current); }
         // hold the FLIP gate for the whole drag (any duration) so an update arriving mid-drag - or in the race before @hello-pangea/dnd's async drag-end fires - is never animated; drag-end releases it (projection hold then takes over)
         flip_gate.hold();
     };

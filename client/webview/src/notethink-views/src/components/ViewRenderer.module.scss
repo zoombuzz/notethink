@@ -1336,7 +1336,7 @@ body.disableAddressBarHidingOnScroll {
           //transform: translateY(-1px);
         }
 
-        // hello-pangea/dnd sets [data-rbd-draggable-id] on dragging items
+        // hello-pangea/dnd sets [data-rfd-draggable-id] on dragging items
         &.dragging {
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
           transform: rotate(2deg) scale(1.02);

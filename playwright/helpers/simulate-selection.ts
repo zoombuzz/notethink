@@ -16,6 +16,22 @@ export async function simulateSelectionChanged(
     }, { docPath, from: position });
 }
 
+// the extension's "no editor owns this doc" signal: a selectionChanged carrying a null selection, which the webview treats as a clear
+export async function simulateSelectionCleared(
+    page: Page,
+    docPath: string,
+): Promise<void> {
+    await page.evaluate(({ docPath }) => {
+        window.dispatchEvent(new MessageEvent('message', {
+            data: {
+                type: 'selectionChanged',
+                docPath,
+                selection: null,
+            },
+        }));
+    }, { docPath });
+}
+
 export async function simulateRangeSelectionChanged(
     page: Page,
     docPath: string,

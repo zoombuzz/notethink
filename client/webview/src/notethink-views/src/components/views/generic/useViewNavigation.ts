@@ -48,9 +48,9 @@ export function useViewNavigation(input: ViewNavigationInput): void {
                 const step: -1 | 1 = direction === 'up' ? -1 : 1;
                 const target_note = navigateToNeighbour(notes_within_parent_context, focused_seqs, step);
                 if (target_note) {
-                    // write view-driven stable_ids so view focus moves under view-driven-wins policy; postMessage drives the editor in parallel and attaches origin doc path for folder mode
+                    // write view-driven stable_ids so view focus moves under view-driven-wins policy; move the virtual caret to the target's start so keyboard focus works with no editor; postMessage drives the editor in parallel and attaches origin doc path for folder mode
                     const target_chain = focusedChainIdsFor(target_note);
-                    handlers.setViewInteractionState?.(target_chain, []);
+                    handlers.setViewInteractionState?.(target_chain, [], target_note.position.start.offset);
                     handlers.postMessage?.({
                         type: 'revealRange',
                         from: target_note.position.start.offset,

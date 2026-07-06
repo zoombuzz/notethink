@@ -154,6 +154,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         }}
                         showLineNumbers={displayOptions.settings?.showLineNumbers}
                         watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}
+                        openNewEditorIfNoneOpen={displayOptions.settings?.openNewEditorIfNoneOpen}
                         onSettingChange={onSettingChange}
                         onGlobalSettingChange={onGlobalSettingChange}
                         onMakeDefault={onMakeDefault}
@@ -174,6 +175,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         naturalColumnOrder={naturalColumnOrder}
                         showLineNumbers={displayOptions.settings?.showLineNumbers}
                         watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}
+                        openNewEditorIfNoneOpen={displayOptions.settings?.openNewEditorIfNoneOpen}
                         kanbanAnimateTransitions={displayOptions.settings?.kanbanAnimateTransitions}
                         onSettingChange={onSettingChange}
                         onGlobalSettingChange={onGlobalSettingChange}

@@ -14,6 +14,7 @@ export interface RevealRangeMessage {
     docPath: string;
     from: number;
     to?: number;
+    forceOpen?: boolean;
 }
 
 export interface SelectRangeMessage {
@@ -22,6 +23,7 @@ export interface SelectRangeMessage {
     docPath: string;
     from: number;
     to: number;
+    forceOpen?: boolean;
 }
 
 export interface EditTextChange {
@@ -159,6 +161,7 @@ export interface GlobalSettingsPayload {
     showLineNumbers: boolean;
     watchUnopenedFilesInViewer: boolean;
     kanbanAnimateTransitions: boolean;
+    openNewEditorIfNoneOpen: boolean;
 }
 
 export type GlobalSettingKey = keyof GlobalSettingsPayload;

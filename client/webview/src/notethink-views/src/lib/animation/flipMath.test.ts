@@ -139,27 +139,32 @@ describe('buildExitKeyframes', () => {
 // --- timing options ---
 
 describe('moveTiming / enterTiming / exitTiming', () => {
-    it('moveTiming uses the transition-max duration, easing, and fill both', () => {
+    /*
+     * fill MUST be 'backwards', not 'both': a forwards fill leaves the finished animation permanently owning the
+     * card's `transform`, which outranks @hello-pangea/dnd's inline drag transform and stalls the next drag on a
+     * just-glided card. backwards keeps the anti-flash pre-frame while releasing the transform when the tween ends
+     */
+    it('moveTiming uses the transition-max duration, easing, and fill backwards', () => {
         expect(moveTiming()).toEqual({
             duration: KANBAN_ANIMATION_TRANSITION_MAX_MS,
             easing: KANBAN_ANIMATION_EASING,
-            fill: 'both',
+            fill: 'backwards',
         });
     });
 
-    it('enterTiming uses the enter duration, easing, and fill both', () => {
+    it('enterTiming uses the enter duration, easing, and fill backwards', () => {
         expect(enterTiming()).toEqual({
             duration: KANBAN_ANIMATION_ENTER_MS,
             easing: KANBAN_ANIMATION_EASING,
-            fill: 'both',
+            fill: 'backwards',
         });
     });
 
-    it('exitTiming uses the enter duration, easing, and fill both', () => {
+    it('exitTiming uses the enter duration, easing, and fill backwards', () => {
         expect(exitTiming()).toEqual({
             duration: KANBAN_ANIMATION_ENTER_MS,
             easing: KANBAN_ANIMATION_EASING,
-            fill: 'both',
+            fill: 'backwards',
         });
     });
 });

@@ -60,7 +60,8 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
     }
     if (message.type === 'selectionChanged') {
         const selection = message.selection as { head?: unknown; anchor?: unknown } | null | undefined;
-        if (selection === null || selection === undefined || typeof selection !== 'object' || typeof selection.head !== 'number' || typeof selection.anchor !== 'number') {
+        // a null selection is the explicit "no editor owns this doc" clear signal and is valid; only a malformed non-null selection is discarded
+        if (selection !== null && (selection === undefined || typeof selection !== 'object' || typeof selection.head !== 'number' || typeof selection.anchor !== 'number')) {
             debug('discarding selectionChanged message with invalid selection %O', message);
             return false;
         }
@@ -269,6 +270,15 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 return;
             case 'selectionChanged':
                 debug('received selectionChanged for %s', message.docPath);
+                if (message.selection === null) {
+                    // no editor owns this doc's caret: drop its selection so the board's virtual caret drives focus/select
+                    setSelections(prev => {
+                        const next = { ...prev };
+                        delete next[message.docPath];
+                        return next;
+                    });
+                    return;
+                }
                 setSelections(prev => ({
                     ...prev,
                     [message.docPath]: {

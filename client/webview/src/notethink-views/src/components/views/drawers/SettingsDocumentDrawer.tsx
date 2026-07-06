@@ -16,6 +16,7 @@ interface SettingsDocumentDrawerProps {
     settings: DocumentSettings;
     showLineNumbers?: boolean;
     watchUnopenedFilesInViewer?: boolean;
+    openNewEditorIfNoneOpen?: boolean;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
     onMakeDefault?: () => void;
@@ -34,6 +35,7 @@ function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps): React.React
                         settings={props.settings}
                         showLineNumbers={props.showLineNumbers}
                         watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
+                        openNewEditorIfNoneOpen={props.openNewEditorIfNoneOpen}
                         onSettingChange={props.onSettingChange}
                         onGlobalSettingChange={props.onGlobalSettingChange}
                     />

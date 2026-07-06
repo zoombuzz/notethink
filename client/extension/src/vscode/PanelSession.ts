@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from '../constants';
+import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, NOTETHINK_VIEW_TYPE } from '../constants';
 import { generateIdentifier } from '../lib/cryptoops';
 import { type TextChange, firstInvalidChange, logEditTextChanges, offsetDeltaBefore } from '../lib/editops';
 import { debug, writeToLog, writeToErrorLog } from '../lib/errorops';
@@ -200,6 +200,15 @@ export class PanelSession {
 		});
 	}
 
+	// signal the webview that no real editor owns this doc's caret; it clears props.selection so the board's virtual caret drives highlight/select
+	private sendSelectionCleared(doc_path: string): void {
+		this.webviewPanel.webview.postMessage({
+			type: 'selectionChanged',
+			docPath: doc_path,
+			selection: null,
+		});
+	}
+
 	private sendCurrentSelection(): void {
 		if (!this.active_path) { return; }
 		const editor = vscode.window.visibleTextEditors.find(ed => ed.document.uri.path === this.active_path);
@@ -208,7 +217,8 @@ export class PanelSession {
 			const anchor = editor.document.offsetAt(editor.selection.anchor);
 			this.sendSelection(this.active_path, head, anchor);
 		} else {
-			this.sendSelection(this.active_path, 0, 0);
+			// no visible editor owns this doc, so there is no real editor caret; clear the selection so the board becomes the caret owner (virtual-caret path) instead of pinning a phantom caret at offset 0
+			this.sendSelectionCleared(this.active_path);
 		}
 	}
 
@@ -279,11 +289,12 @@ export class PanelSession {
 
 	// --- settings ---
 
-	private readGlobalSettings(): { showLineNumbers: boolean; watchUnopenedFilesInViewer: boolean; kanbanAnimateTransitions: boolean } {
+	private readGlobalSettings(): { showLineNumbers: boolean; watchUnopenedFilesInViewer: boolean; kanbanAnimateTransitions: boolean; openNewEditorIfNoneOpen: boolean } {
 		return {
 			showLineNumbers: readSetting('showLineNumbers'),
 			watchUnopenedFilesInViewer: readSetting('watchUnopenedFilesInViewer'),
 			kanbanAnimateTransitions: readSetting('kanbanAnimateTransitions'),
+			openNewEditorIfNoneOpen: readSetting('openNewEditorIfNoneOpen'),
 		};
 	}
 
@@ -301,7 +312,11 @@ export class PanelSession {
 		const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => this.onDidChangeTextDocument(e));
 		const activeEditorSubscription = vscode.window.onDidChangeActiveTextEditor(editor => this.onDidChangeActiveTextEditor(editor));
 		// an editor split opening or closing for the active file flips whether we still need the active-file watcher
-		const visibleEditorsSubscription = vscode.window.onDidChangeVisibleTextEditors(() => this.syncActiveFileWatcher());
+		const visibleEditorsSubscription = vscode.window.onDidChangeVisibleTextEditors(() => {
+			this.syncActiveFileWatcher();
+			// re-evaluate caret ownership when editors open or close: a closed editor hands the caret back to the board
+			this.sendCurrentSelection();
+		});
 		const configSubscription = vscode.workspace.onDidChangeConfiguration(e => this.onDidChangeConfiguration(e));
 		this.webviewPanel.webview.onDidReceiveMessage(e => this.handleMessage(e));
 		const selectionSubscription = vscode.window.onDidChangeTextEditorSelection(e => this.onDidChangeTextEditorSelection(e));
@@ -362,6 +377,9 @@ export class PanelSession {
 			this.syncActiveFileWatcher();
 		}
 		if (e.affectsConfiguration('notethink.settings.view.specific.kanban.animateTransitions')) {
+			this.sendGlobalSettings();
+		}
+		if (e.affectsConfiguration('notethink.settings.view.generic.openNewEditorIfNoneOpen')) {
 			this.sendGlobalSettings();
 		}
 		// catch-all for any cascade setting change (covers the two above and the cascade keys)
@@ -443,11 +461,12 @@ export class PanelSession {
 		}
 	}
 
-	// per-setting storage target preference for the two non-cascade globals: showLineNumbers persists per-workspace; watchUnopenedFilesInViewer is a personal preference that follows the user across projects
+	// per-setting storage target preference for the non-cascade globals: showLineNumbers persists per-workspace; the rest are personal preferences that follow the user across projects (matching each key's window/resource scope in package.json)
 	private readonly GLOBAL_SETTING_TARGETS: Partial<Record<SettingKey, vscode.ConfigurationTarget>> = {
 		showLineNumbers: vscode.ConfigurationTarget.Workspace,
 		watchUnopenedFilesInViewer: vscode.ConfigurationTarget.Global,
 		kanbanAnimateTransitions: vscode.ConfigurationTarget.Global,
+		openNewEditorIfNoneOpen: vscode.ConfigurationTarget.Global,
 	};
 
 	private async handleUpdateGlobalSetting(e: Record<string, unknown>): Promise<void> {
@@ -536,6 +555,12 @@ export class PanelSession {
 		}
 	}
 
+	// a reveal target is allowed if it sits inside an open workspace folder, or it is the board's own trusted current file. the second case covers single-file mode in a folderless window (File > Open a loose .md), where workspaceFolders is empty and isWithinWorkspace fails closed, silently killing every click. active_path is only ever set from real opened documents, never from a webview message, so an attacker-supplied path that is not the board's own file is still refused
+	private isRevealTargetAllowed(doc_path: string): boolean {
+		if (isWithinWorkspace(doc_path, { requireExtension: '.md' })) { return true; }
+		return doc_path === this.active_path && doc_path.toLowerCase().endsWith('.md');
+	}
+
 	private async handleRevealRange(e: Record<string, unknown>): Promise<void> {
 		const doc_path = e.docPath as string;
 		const from = e.from as number;
@@ -543,18 +568,17 @@ export class PanelSession {
 		try {
 			if (!doc_path) { return; }
 			// gate both the visible-editor fast path and the openTextDocument path: webview-supplied paths are untrusted
-			if (!isWithinWorkspace(doc_path, { requireExtension: '.md' })) {
+			if (!this.isRevealTargetAllowed(doc_path)) {
 				writeToErrorLog(`${e.type}: path outside workspace, refusing`, doc_path);
 				return;
 			}
-			const switch_editor = readSetting('switchEditorOnClick');
-			// an already-visible editor always gets its caret moved; switch_editor only governs whether we steal focus to it
+			// switching to the editor on click is hardcoded on: focus transfers with the caret under the single-caret model. the switch_editor parameter stays plumbed through so a passive-mirror mode is a one-line reintroduction later
+			const switch_editor = true;
+			// an already-visible editor always gets its caret moved and focus transfers to it (folder-mode option (i): file already has a visible editor)
 			if (this.revealInVisibleEditor(doc_path, from, to, switch_editor)) { return; }
-			// no editor shows the doc, so revealing it means opening or switching one - honour switchEditorOnClick
-			if (!switch_editor) { return; }
-			// in folder mode the view is a set of signposts - jump to the file even when no editor shows it; in single-file mode stay silent to avoid spawning editors on stray clicks
-			if (!this.integration_path) { return; }
-			await this.revealByOpening(doc_path, from, to, readSetting('openNewEditorIfNoneOpen'));
+			// folder-mode option (ii): the file has no visible editor, so revealByOpening switches an existing non-board editor group to it (reusing that group), and spawns a new beside group when openNewEditorIfNoneOpen is set OR the click forced it (ctrl/cmd-click). it never yanks a file that already has a visible editor - revealInVisibleEditor handled that above. findColumnWithDoc skips our own board tab so a single-file reveal never replaces the board with a plain text editor
+			const force_open = e.forceOpen === true;
+			await this.revealByOpening(doc_path, from, to, force_open || readSetting('openNewEditorIfNoneOpen'));
 		} catch (err) {
 			writeToErrorLog(`${e.type} failed`, doc_path, err);
 		}
@@ -591,7 +615,7 @@ export class PanelSession {
 			} else if (open_new_if_none) {
 				target_column = vscode.ViewColumn.Beside;
 			} else {
-				// the board is the only editor group open; spawning a new group on click is gated off by default
+				// the board is the only editor group open; only spawn a new beside group when openNewEditorIfNoneOpen is set (off by default)
 				return;
 			}
 		}
@@ -613,7 +637,9 @@ export class PanelSession {
 		try {
 			for (const group of vscode.window.tabGroups.all) {
 				for (const tab of group.tabs) {
-					const input = tab.input as { uri?: vscode.Uri } | undefined;
+					const input = tab.input as { uri?: vscode.Uri; viewType?: string } | undefined;
+					// skip our own NoteThink board tabs: in single-file mode the clicked note's doc_path equals the board's file, and revealing into the board's own column would replace the rendered view with a plain text editor
+					if (input?.viewType === NOTETHINK_VIEW_TYPE) { continue; }
 					if (input?.uri?.path === doc_path) { return group.viewColumn; }
 				}
 			}

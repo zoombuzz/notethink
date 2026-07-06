@@ -6,6 +6,7 @@ const default_props = {
     settings: {},
     showLineNumbers: false,
     watchUnopenedFilesInViewer: true,
+    openNewEditorIfNoneOpen: false,
     onSettingChange: jest.fn(),
     onGlobalSettingChange: jest.fn(),
 };
@@ -21,10 +22,16 @@ describe('SettingsCommonControls', () => {
         jest.clearAllMocks();
     });
 
-    it('renders the five common checkboxes', () => {
+    it('renders the six common checkboxes', () => {
         renderControls();
         const checkboxes = screen.getAllByRole('checkbox');
-        expect(checkboxes).toHaveLength(5);
+        expect(checkboxes).toHaveLength(6);
+    });
+
+    it('no longer renders the removed "switch to editor on click" checkbox', () => {
+        renderControls();
+        const labels = screen.getAllByRole('checkbox').map(cb => cb.closest('label')?.textContent ?? '');
+        expect(labels.some(text => /switch to editor/i.test(text))).toBe(false);
     });
 
     it.each([
@@ -67,5 +74,17 @@ describe('SettingsCommonControls', () => {
         expect(on_change).not.toHaveBeenCalled();
         expect(on_global).toHaveBeenCalledTimes(1);
         expect(on_global).toHaveBeenCalledWith('watchUnopenedFilesInViewer', false);
+    });
+
+    it('toggles openNewEditorIfNoneOpen via onGlobalSettingChange (default-off shows unchecked)', () => {
+        const on_global = jest.fn();
+        renderControls({ onGlobalSettingChange: on_global });
+        const cb = screen.getAllByRole('checkbox').find(
+            c => c.closest('label')?.textContent?.includes('Open a new editor')
+        )! as HTMLInputElement;
+        expect(cb.checked).toBe(false);
+        fireEvent.click(cb);
+        expect(on_global).toHaveBeenCalledTimes(1);
+        expect(on_global).toHaveBeenCalledWith('openNewEditorIfNoneOpen', true);
     });
 });

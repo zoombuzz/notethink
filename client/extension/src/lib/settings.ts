@@ -25,7 +25,6 @@ export const SETTINGS = {
     showLineNumbers:            { path: 'view.generic.showLineNumbers',             default: false,                                    inCascade: false },
     watchUnopenedFilesInViewer: { path: 'view.generic.watchUnopenedFilesInViewer',  default: true,                                     inCascade: false },
     kanbanAnimateTransitions:   { path: 'view.specific.kanban.animateTransitions',  default: true,                                     inCascade: false },
-    switchEditorOnClick:        { path: 'view.generic.switchEditorOnClick',         default: true,                                     inCascade: false },
     openNewEditorIfNoneOpen:    { path: 'view.generic.openNewEditorIfNoneOpen',     default: false,                                    inCascade: false },
 } as const;
 

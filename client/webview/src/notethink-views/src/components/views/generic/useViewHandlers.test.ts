@@ -73,14 +73,36 @@ describe('useViewHandlers click dispatcher', () => {
         const note = makeNote({ seq: 5, stable_id: 'n5' });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         result.current.handlers.click!(mockClickEvent(), note, click_profile);
-        // view-driven state-of-truth: focused = [stable_id], selected = []
+        // view-driven state-of-truth: focused = [stable_id], selected = [], virtual caret = click offset (10)
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_ids: ['n5'], view_selected_ids: [] },
+            display_options: { view_focused_ids: ['n5'], view_selected_ids: [], view_caret: 10 },
         }]);
         // editor reveal still posts so the cursor follows opportunistically
-        expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', from: 10 }));
+        expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', from: 10, forceOpen: false }));
+    });
+
+    it('ctrl-click posts revealRange with forceOpen so the source opens even when openNewEditorIfNoneOpen is off', () => {
+        const post_message = jest.fn();
+        const props = makeProps({
+            handlers: { setViewManagedState: jest.fn(), deleteViewFromManagedState: jest.fn(), revertAllViewsToDefaultState: jest.fn(), postMessage: post_message },
+        });
+        const note = makeNote({ seq: 5, stable_id: 'n5' });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.click!(mockClickEvent({ ctrlKey: true }), note, click_profile);
+        expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', forceOpen: true }));
+    });
+
+    it('cmd-click (metaKey) also forces the source open', () => {
+        const post_message = jest.fn();
+        const props = makeProps({
+            handlers: { setViewManagedState: jest.fn(), deleteViewFromManagedState: jest.fn(), revertAllViewsToDefaultState: jest.fn(), postMessage: post_message },
+        });
+        const note = makeNote({ seq: 5, stable_id: 'n5' });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.click!(mockClickEvent({ metaKey: true }), note, click_profile);
+        expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', forceOpen: true }));
     });
 
     it('clicking a focused note promotes to selected: writes view_selected_ids and posts selectRange', () => {
@@ -101,7 +123,7 @@ describe('useViewHandlers click dispatcher', () => {
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_ids: ['n5'], view_selected_ids: ['n5'] },
+            display_options: { view_focused_ids: ['n5'], view_selected_ids: ['n5'], view_caret: 10 },
         }]);
         expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'selectRange', from: 10, to: 50 }));
     });
@@ -119,11 +141,11 @@ describe('useViewHandlers click dispatcher', () => {
         const other = makeNote({ seq: 7, stable_id: 'n7', focused: false, selected: false });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         result.current.handlers.click!(mockClickEvent(), other, click_profile);
-        // new focused note = ['n7'], selected dropped to []
+        // new focused note = ['n7'], selected dropped to [], virtual caret = click offset (10)
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_ids: ['n7'], view_selected_ids: [] },
+            display_options: { view_focused_ids: ['n7'], view_selected_ids: [], view_caret: 10 },
         }]);
     });
 
@@ -148,7 +170,7 @@ describe('useViewHandlers click dispatcher', () => {
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: FOLDER_VIEW_STATE_ID,
             type: props.type,
-            display_options: { view_focused_ids: ['n3'], view_selected_ids: [] },
+            display_options: { view_focused_ids: ['n3'], view_selected_ids: [], view_caret: 10 },
         }]);
         // editor reveal targets the origin doc
         expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', docPath: origin_doc_path }));
@@ -171,9 +193,69 @@ describe('useViewHandlers click dispatcher', () => {
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_ids: ['n9'], view_selected_ids: ['n9'] },
+            display_options: { view_focused_ids: ['n9'], view_selected_ids: ['n9'], view_caret: 10 },
         }]);
         expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'selectRange', from: 10, to: 50 }));
+    });
+});
+
+describe('useViewHandlers virtual-caret parity (no editor)', () => {
+
+    // body click: caret offset (25) differs from the note headline start (0) so only the virtual caret, not the view-focused-headline path, can promote focus to select
+    const body_click: ClickPositionInfo = { from: 25, to: 30, selection_from: 0, selection_to: 50, type: 'note_body' };
+
+    it('a first click highlights the note and a second click at the same offset promotes to selected via the virtual caret', () => {
+        const set_view_managed_state = jest.fn();
+        const post_message = jest.fn();
+        const note = makeNote({ seq: 5, stable_id: 'n5', position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 }, end_body: { offset: 50, line: 5 } } });
+        // first render: no editor and no prior virtual caret
+        const first_props = makeProps({
+            handlers: { setViewManagedState: set_view_managed_state, deleteViewFromManagedState: jest.fn(), revertAllViewsToDefaultState: jest.fn(), postMessage: post_message },
+        });
+        const { result, rerender } = renderHook(
+            ({ p }: { p: ViewProps }) => useViewHandlers(p, makeSelectionRef(undefined)),
+            { initialProps: { p: first_props } },
+        );
+        result.current.handlers.click!(mockClickEvent(), note, body_click);
+        // first click highlights: focused set, selection empty, virtual caret stamped at the click offset (25)
+        expect(set_view_managed_state).toHaveBeenLastCalledWith([{
+            id: first_props.id,
+            type: first_props.type,
+            display_options: { view_focused_ids: ['n5'], view_selected_ids: [], view_caret: 25 },
+        }]);
+        // second render: the store now carries the virtual caret from click 1 and the note is enriched focused
+        const second_props = makeProps({
+            display_options: { integration_mode: INTEGRATION_MODE_CURRENT_FILE, view_caret: 25 },
+            handlers: { setViewManagedState: set_view_managed_state, deleteViewFromManagedState: jest.fn(), revertAllViewsToDefaultState: jest.fn(), postMessage: post_message },
+        });
+        rerender({ p: second_props });
+        result.current.handlers.click!(mockClickEvent(), { ...note, focused: true }, body_click);
+        // effective_head = view_caret (25) === caret_pos (25), so the second click promotes to selected with no editor
+        expect(set_view_managed_state).toHaveBeenLastCalledWith([{
+            id: second_props.id,
+            type: second_props.type,
+            display_options: { view_focused_ids: ['n5'], view_selected_ids: ['n5'], view_caret: 25 },
+        }]);
+        expect(post_message).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'selectRange' }));
+    });
+
+    it('without a virtual caret and no editor, a body click on a focused note does not promote to selected', () => {
+        const set_view_managed_state = jest.fn();
+        const post_message = jest.fn();
+        // focused note, but the store carries no virtual caret and there is no editor head
+        const props = makeProps({
+            handlers: { setViewManagedState: set_view_managed_state, deleteViewFromManagedState: jest.fn(), revertAllViewsToDefaultState: jest.fn(), postMessage: post_message },
+        });
+        const focused_note = makeNote({ seq: 5, stable_id: 'n5', focused: true, position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 }, end_body: { offset: 50, line: 5 } } });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.click!(mockClickEvent(), focused_note, body_click);
+        // caret (25) != headline start (0) and no virtual caret -> isAlreadyFocusedClick false -> first-click branch keeps selection empty
+        expect(set_view_managed_state).toHaveBeenLastCalledWith([{
+            id: props.id,
+            type: props.type,
+            display_options: { view_focused_ids: ['n5'], view_selected_ids: [], view_caret: 25 },
+        }]);
+        expect(post_message).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'revealRange' }));
     });
 });
 

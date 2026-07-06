@@ -17,6 +17,7 @@ interface SettingsCommonControlsProps {
     settings: CommonSettings;
     showLineNumbers?: boolean;
     watchUnopenedFilesInViewer?: boolean;
+    openNewEditorIfNoneOpen?: boolean;
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
 }
@@ -28,6 +29,8 @@ export default function SettingsCommonControls(props: SettingsCommonControlsProp
     const line_numbers = props.showLineNumbers ?? false;
     // default true matches the extension-side default (notethink.watchUnopenedFilesInViewer)
     const watch_unopened = props.watchUnopenedFilesInViewer ?? true;
+    // default off mirrors the extension-side default (notethink.openNewEditorIfNoneOpen)
+    const open_new_editor = props.openNewEditorIfNoneOpen ?? false;
 
     return (
         <>
@@ -83,6 +86,17 @@ export default function SettingsCommonControls(props: SettingsCommonControlsProp
                         onChange={(e) => props.onGlobalSettingChange('watchUnopenedFilesInViewer', e.target.checked)}
                     />
                     {' '}{l10n.t('Watch unopened files in viewer')}
+                </label>
+            </p>
+
+            <p>
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={open_new_editor}
+                        onChange={(e) => props.onGlobalSettingChange('openNewEditorIfNoneOpen', e.target.checked)}
+                    />
+                    {' '}{l10n.t('Open a new editor if none is open')}
                 </label>
             </p>
         </>

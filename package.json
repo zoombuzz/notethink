@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.21",
+  "version": "0.3.24",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -195,12 +195,6 @@
             "scope": "resource",
             "default": true,
             "description": "%config.settings.view.generic.showContextBars.description%"
-          },
-          "notethink.settings.view.generic.switchEditorOnClick": {
-            "type": "boolean",
-            "scope": "window",
-            "default": true,
-            "description": "%config.settings.view.generic.switchEditorOnClick.description%"
           },
           "notethink.settings.view.generic.openNewEditorIfNoneOpen": {
             "type": "boolean",

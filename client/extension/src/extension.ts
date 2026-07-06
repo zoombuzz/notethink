@@ -4,6 +4,27 @@ import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 
 const PANEL_VIEWTYPE = 'notethink';
 
+/*
+ * on window reload a webview panel can be deserialized before its source editor finishes restoring, and the persisted
+ * state carries only a path (no scheme) - a plain file:// reconstruction of that bare path then fails for virtual-FS docs
+ * (notegit:/github:), which disposed the panel and made the viewer vanish on a returning-user reload. poll a short window
+ * for an open/visible/active .md editor matching the saved path and reuse its full uri so the doc resolves with the right scheme.
+ */
+async function waitForRestorableMdUri(preferred_path?: string): Promise<vscode.Uri | undefined> {
+	const matches = (uri: vscode.Uri) => uri.path.endsWith('.md') && (!preferred_path || uri.path === preferred_path);
+	for (let attempt = 0; attempt < 30; attempt++) {
+		const open_doc = vscode.workspace.textDocuments.find((doc) => matches(doc.uri));
+		if (open_doc) { return open_doc.uri; }
+		const active = vscode.window.activeTextEditor;
+		if (active && matches(active.document.uri)) { return active.document.uri; }
+		const visible = vscode.window.visibleTextEditors.find((editor) => matches(editor.document.uri));
+		if (visible) { return visible.document.uri; }
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+	// nothing matched in time; fall back to a file:// uri from the saved path (best effort) rather than restoring nothing
+	return preferred_path ? vscode.Uri.file(preferred_path) : undefined;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
 
 	// write the file log to the extension's standard VS Code log dir (context.logUri), never the user's open workspace folder
@@ -17,25 +38,20 @@ export function activate(context: vscode.ExtensionContext): void {
 	// register serializer to restore panels after window reload
 	context.subscriptions.push(vscode.window.registerWebviewPanelSerializer(PANEL_VIEWTYPE, {
 		async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: unknown) {
-			// extract document path from persisted webview state
+			/*
+			 * the webview state stores only `.path` (no scheme/authority), so reconstructing with vscode.Uri.file() yields a
+			 * dead file:// path for virtual-FS docs; instead reuse an open/restoring editor's full uri (correct scheme)
+			 */
 			const saved = state as { docs?: Record<string, { path?: string }> } | undefined;
 			const first_doc = saved?.docs ? Object.values(saved.docs)[0] : undefined;
-			let doc_path = first_doc?.path;
-			// fall back to current active .md editor if saved state has no doc (happens when VS Code restarts before the first doc was sent to the webview)
-			if (!doc_path) {
-				const active = vscode.window.activeTextEditor;
-				if (active?.document.uri.path.endsWith('.md')) {
-					doc_path = active.document.uri.path;
-				}
-			}
-			if (!doc_path) { panel.dispose(); return; }
+			const uri = await waitForRestorableMdUri(first_doc?.path);
+			if (!uri) { panel.dispose(); return; }
 			try {
-				const uri = vscode.Uri.file(doc_path);
 				const document = await vscode.workspace.openTextDocument(uri);
 				await provider.myWebviewPanel(panel, document);
 			} catch (err) {
 				// document may have been deleted since last session
-				writeToErrorLog('deserializeWebviewPanel: failed to restore doc', doc_path, err);
+				writeToErrorLog('deserializeWebviewPanel: failed to restore doc', uri.toString(), err);
 				panel.dispose();
 			}
 		}
@@ -52,8 +68,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		const panel = vscode.window.createWebviewPanel(
 			PANEL_VIEWTYPE,
 			'NoteThink',
-			// open beside without stealing the caret - the read-only viewer can't use focus (mirrors VS Code's "Open Preview to the Side")
-			{ viewColumn: vscode.ViewColumn.Two, preserveFocus: true },
+			// open the viewer in column One (viewer-left); the notegit source opens in column Two. read-only viewer can't take focus, so preserveFocus (mirrors "Open Preview to the Side")
+			{ viewColumn: vscode.ViewColumn.One, preserveFocus: true },
 			{ enableScripts: true, retainContextWhenHidden: true },
 		);
 		await provider.myWebviewPanel(panel, active_editor.document);

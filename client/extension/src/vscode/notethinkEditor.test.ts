@@ -654,7 +654,7 @@ describe('NotethinkEditorProvider', () => {
 
 	// ---- editor-on-click settings -------------------------------------------
 
-	describe('switchEditorOnClick / openNewEditorIfNoneOpen settings', () => {
+	describe('editor-on-click reveal / openNewEditorIfNoneOpen setting', () => {
 		const docPath = '/workspace/test.md';
 		const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
@@ -673,7 +673,7 @@ describe('NotethinkEditorProvider', () => {
 			delete (vscode.window as unknown as { tabGroups?: unknown }).tabGroups;
 		});
 
-		it('switchEditorOnClick on (default) moves the caret and steals focus to a visible editor', async () => {
+		it('reveal moves the caret and steals focus to a visible editor (switching hardcoded on)', async () => {
 			const doc = mockTextDocument('Hello World', docPath);
 			const editor = mockTextEditor(doc);
 			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
@@ -684,30 +684,7 @@ describe('NotethinkEditorProvider', () => {
 			expect(vscode.window.showTextDocument).toHaveBeenCalledTimes(1);
 		});
 
-		it('switchEditorOnClick off moves the caret in a visible editor but does not steal focus', async () => {
-			mockSettings({ 'view.generic.switchEditorOnClick': false });
-			const doc = mockTextDocument('Hello World', docPath);
-			const editor = mockTextEditor(doc);
-			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
-
-			await panelHelper.simulateMessage({ type: 'revealRange', docPath, from: 1, to: 4 });
-
-			expect(editor.revealRange).toHaveBeenCalledTimes(1);
-			expect(editor.selection.active.character).toBe(1);
-			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
-		});
-
-		it('switchEditorOnClick off opens nothing when no editor shows the doc', async () => {
-			mockSettings({ 'view.generic.switchEditorOnClick': false });
-			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
-
-			await panelHelper.simulateMessage({ type: 'revealRange', docPath, from: 0, to: 5 });
-
-			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
-			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
-		});
-
-		it('openNewEditorIfNoneOpen off does not spawn a group when the board is the only group', async () => {
+		it('openNewEditorIfNoneOpen off (default) does not spawn a group when the board is the only group', async () => {
 			mockSettings({});
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
 			await flush();
@@ -738,7 +715,7 @@ describe('NotethinkEditorProvider', () => {
 			expect(open_call[1].viewColumn).toBe(vscode.ViewColumn.Beside);
 		});
 
-		it('switchEditorOnClick on reuses an existing other editor group instead of spawning a beside group', async () => {
+		it('reveal reuses an existing other editor group instead of spawning a beside group', async () => {
 			mockSettings({});
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
 			await flush();
@@ -755,6 +732,102 @@ describe('NotethinkEditorProvider', () => {
 			expect(vscode.window.showTextDocument).toHaveBeenCalledTimes(1);
 			const open_call = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
 			expect(open_call[1].viewColumn).toBe(vscode.ViewColumn.One);
+		});
+
+		// single-file mode (no folder integration): the clicked note's docPath is the board's own file, so the reveal path must never target the board's own column - when the user opts into openNewEditorIfNoneOpen it opens Beside, never over the board
+		it('single-file mode opens the source beside the board (never over it) when openNewEditorIfNoneOpen is on', async () => {
+			mockSettings({ 'view.generic.openNewEditorIfNoneOpen': true });
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
+			// the only tab open is our own NoteThink board, holding the same file the note comes from, in column One (the panel's column)
+			(panelHelper.panel as unknown as { viewColumn: vscode.ViewColumn }).viewColumn = vscode.ViewColumn.One;
+			(vscode.window as unknown as { tabGroups: unknown }).tabGroups = {
+				all: [{ viewColumn: vscode.ViewColumn.One, tabs: [{ input: { uri: Uri.file(docPath), viewType: 'notethink.viewer' } }] }],
+			};
+			const target_doc = mockTextDocument('# note', docPath);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(target_doc);
+			(vscode.window.showTextDocument as jest.Mock).mockResolvedValue(mockTextEditor(target_doc));
+			(vscode.window.showTextDocument as jest.Mock).mockClear();
+
+			await panelHelper.simulateMessage({ type: 'revealRange', docPath, from: 0, to: 5 });
+
+			// board tab is skipped by findColumnWithDoc, so with no other group the note opens Beside rather than over the board's own column
+			expect(vscode.window.showTextDocument).toHaveBeenCalledTimes(1);
+			const open_call = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
+			expect(open_call[1].viewColumn).toBe(vscode.ViewColumn.Beside);
+		});
+
+		it('single-file mode stays quiet when openNewEditorIfNoneOpen is off and the board is the only tab', async () => {
+			mockSettings({ 'view.generic.openNewEditorIfNoneOpen': false });
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
+			(panelHelper.panel as unknown as { viewColumn: vscode.ViewColumn }).viewColumn = vscode.ViewColumn.One;
+			(vscode.window as unknown as { tabGroups: unknown }).tabGroups = {
+				all: [{ viewColumn: vscode.ViewColumn.One, tabs: [{ input: { uri: Uri.file(docPath), viewType: 'notethink.viewer' } }] }],
+			};
+			(vscode.workspace.openTextDocument as jest.Mock).mockClear();
+			(vscode.window.showTextDocument as jest.Mock).mockClear();
+
+			await panelHelper.simulateMessage({ type: 'revealRange', docPath, from: 0, to: 5 });
+
+			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
+		});
+
+		it('reuses an existing plain text-editor tab of the doc rather than spawning a beside group', async () => {
+			mockSettings({});
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
+			(panelHelper.panel as unknown as { viewColumn: vscode.ViewColumn }).viewColumn = vscode.ViewColumn.One;
+			// a real text-editor tab (no viewType) holds the doc in column Two; the board tab sits in column One
+			(vscode.window as unknown as { tabGroups: unknown }).tabGroups = {
+				all: [
+					{ viewColumn: vscode.ViewColumn.One, tabs: [{ input: { uri: Uri.file(docPath), viewType: 'notethink.viewer' } }] },
+					{ viewColumn: vscode.ViewColumn.Two, tabs: [{ input: { uri: Uri.file(docPath) } }] },
+				],
+			};
+			const target_doc = mockTextDocument('# note', docPath);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(target_doc);
+			(vscode.window.showTextDocument as jest.Mock).mockResolvedValue(mockTextEditor(target_doc));
+			(vscode.window.showTextDocument as jest.Mock).mockClear();
+
+			await panelHelper.simulateMessage({ type: 'revealRange', docPath, from: 0, to: 5 });
+
+			expect(vscode.window.showTextDocument).toHaveBeenCalledTimes(1);
+			const open_call = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
+			expect(open_call[1].viewColumn).toBe(vscode.ViewColumn.Two);
+		});
+
+		// folderless window (a loose .md opened with no workspace folder): isWithinWorkspace fails closed, but the board's own file must still be revealable when the user opts into openNewEditorIfNoneOpen
+		it('folderless window opens the board own file even with no workspace folder open', async () => {
+			setWorkspaceRoots(undefined);
+			mockSettings({ 'view.generic.openNewEditorIfNoneOpen': true });
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
+			(panelHelper.panel as unknown as { viewColumn: vscode.ViewColumn }).viewColumn = vscode.ViewColumn.One;
+			(vscode.window as unknown as { tabGroups: unknown }).tabGroups = {
+				all: [{ viewColumn: vscode.ViewColumn.One, tabs: [{ input: { uri: Uri.file(defaultDocPath), viewType: 'notethink.viewer' } }] }],
+			};
+			const target_doc = mockTextDocument('# note', defaultDocPath);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(target_doc);
+			(vscode.window.showTextDocument as jest.Mock).mockResolvedValue(mockTextEditor(target_doc));
+			(vscode.window.showTextDocument as jest.Mock).mockClear();
+
+			// defaultDocPath is the board's own file (active_path), so the reveal is allowed despite the empty workspace
+			await panelHelper.simulateMessage({ type: 'revealRange', docPath: defaultDocPath, from: 0, to: 5 });
+
+			expect(vscode.window.showTextDocument).toHaveBeenCalledTimes(1);
+			const open_call = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
+			expect(open_call[1].viewColumn).toBe(vscode.ViewColumn.Beside);
+		});
+
+		it('folderless window still refuses a reveal target that is not the board own file', async () => {
+			setWorkspaceRoots(undefined);
+			mockSettings({});
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
+			(vscode.workspace.openTextDocument as jest.Mock).mockClear();
+			(vscode.window.showTextDocument as jest.Mock).mockClear();
+
+			await panelHelper.simulateMessage({ type: 'revealRange', docPath: '/elsewhere/evil.md', from: 0, to: 5 });
+
+			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
 		});
 	});
 

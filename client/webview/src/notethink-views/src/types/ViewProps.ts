@@ -56,7 +56,7 @@ export interface ViewProps {
  * - setParentContextSeq and below are injected by functional components in certain situations
  * - postMessage: extension communication (view→host dispatch channel)
  * - descendToFolder: switch the view into folder integration mode at the given absolute folder path; same gesture the breadcrumb uses, exposed here so the origin pill can descend into its project subfolder
- * - setViewInteractionState: write view-driven focused/selected seqs to the canonical view-state key (FOLDER_VIEW_STATE_ID in folder mode, view's own id in current_file mode); used by click handler, getClearHandler, and keyboard navigation so any path that moves focus also updates the view-driven state (view-driven-wins policy in useViewContext means an editor-side revealRange alone cannot move view focus)
+ * - setViewInteractionState: write view-driven focused/selected stable_ids (and the optional virtual caret offset) to the canonical view-state key (FOLDER_VIEW_STATE_ID in folder mode, view's own id in current_file mode); used by click handler, getClearHandler, and keyboard navigation so any path that moves focus also updates the view-driven state (view-driven-wins policy in useViewContext means an editor-side revealRange alone cannot move view focus). the virtual caret is the board-as-editor caret used when no editor is live
  * - onNavigationCommand: navigation callback ref - GenericView registers handler, ExtensionReceiver invokes via ref
  * - revealNote: reveal a note's source range in the editor (jump to the story); resolves the source offset/doc_path from origin in folder mode and the in-tree position in current_file mode. used by the collisions drawer to jump to a colliding note so the user can rename it
  */
@@ -73,6 +73,6 @@ export interface ViewApi {
     postMessage?: (message: unknown) => void;
     descendToFolder?: (folder_path: string) => void;
     revealNote?: (note: NoteProps) => void;
-    setViewInteractionState?: (focused_ids: string[], selected_ids: string[]) => void;
+    setViewInteractionState?: (focused_ids: string[], selected_ids: string[], view_caret?: number) => void;
     onNavigationCommand?: MutableRefObject<((direction: string) => void) | undefined>;
 }

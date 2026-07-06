@@ -326,6 +326,7 @@ describe('GenericView click state machine', () => {
         expect(post_message).toHaveBeenCalledWith({
             type: 'revealRange',
             from: 10,
+            forceOpen: false,
         });
     });
 
@@ -367,6 +368,7 @@ describe('GenericView click state machine', () => {
             type: 'selectRange',
             from: 10,
             to: 50,
+            forceOpen: false,
         });
     });
 
@@ -407,6 +409,7 @@ describe('GenericView click state machine', () => {
         expect(post_message).toHaveBeenCalledWith({
             type: 'revealRange',
             from: 10,
+            forceOpen: false,
         });
     });
 
@@ -451,6 +454,7 @@ describe('GenericView click state machine', () => {
         expect(post_message).toHaveBeenCalledWith({
             type: 'revealRange',
             from: 60,
+            forceOpen: false,
         });
     });
 

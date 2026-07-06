@@ -50,7 +50,8 @@ describe('useViewNavigation', () => {
             navigation_command_ref,
         }));
         navigation_command_ref.current!('up');
-        expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['a'], []);
+        // third arg is the virtual caret: the target note's start offset moves the board-as-editor caret with no editor
+        expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['a'], [], 0);
         expect(handlers.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', from: 0 }));
     });
 
@@ -69,7 +70,8 @@ describe('useViewNavigation', () => {
             navigation_command_ref,
         }));
         navigation_command_ref.current!('down');
-        expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['b'], []);
+        // third arg is the virtual caret: note_b's start offset (20)
+        expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['b'], [], 20);
         expect(handlers.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', from: 20 }));
     });
 
@@ -89,7 +91,8 @@ describe('useViewNavigation', () => {
         }));
         // current focused seq (99) isn't in the list, so findIndex returns -1; prev_index = 0; target = parent
         navigation_command_ref.current!('up');
-        expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['p'], []);
+        // third arg is the virtual caret: the parent's start offset (0)
+        expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['p'], [], 0);
     });
 
     it('clearFocus routes through getClearHandler', () => {

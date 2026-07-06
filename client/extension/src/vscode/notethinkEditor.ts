@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import { getNonce } from '../lib/cryptoops';
+import { NOTETHINK_VIEW_TYPE } from '../constants';
 import { PanelSession } from './PanelSession';
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
-	public static readonly viewType = 'notethink.viewer';
+	public static readonly viewType = NOTETHINK_VIEW_TYPE;
 	private activePanel: vscode.WebviewPanel | undefined;
 
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {

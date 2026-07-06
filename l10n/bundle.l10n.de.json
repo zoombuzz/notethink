@@ -28,6 +28,7 @@
   "Auto-expand focused note": "Fokussierte Notiz automatisch erweitern",
   "Show line numbers": "Zeilennummern anzeigen",
   "Watch unopened files in viewer": "Nicht geöffnete Dateien in der Ansicht überwachen",
+  "Open a new editor if none is open": "Neuen Editor öffnen, wenn keiner geöffnet ist",
   "Animate passive transitions": "Passive Übergänge animieren",
   "Save": "Speichern",
   "Document Settings": "Dokumenteinstellungen",

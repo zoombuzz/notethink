@@ -1,5 +1,6 @@
 import Debug from "debug";
 import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../types/IntegrationMode";
+import type { NoteDisplayOptions } from "../types/NoteProps";
 import type { ViewApi, ViewProps } from "../types/ViewProps";
 
 const debug = Debug("nodejs:notethink-views:viewstateops");
@@ -108,6 +109,7 @@ export function buildIntegrationDispatch(req: IntegrationDispatchRequest): Integ
         integration_path: resolved_mode === INTEGRATION_MODE_FOLDER ? folder_path : undefined,
         view_focused_ids: undefined,
         view_selected_ids: undefined,
+        view_caret: undefined,
     };
     const updates: Array<Record<string, unknown>> = [{ id: FOLDER_VIEW_STATE_ID, display_options: canonical_display_options }];
     for (const id of view_state_ids) {
@@ -115,6 +117,7 @@ export function buildIntegrationDispatch(req: IntegrationDispatchRequest): Integ
         const non_canonical_display_options: Record<string, unknown> = {
             view_focused_ids: undefined,
             view_selected_ids: undefined,
+            view_caret: undefined,
         };
         if (clear_stranded_folder_tag) {
             non_canonical_display_options.integration_mode = undefined;
@@ -190,21 +193,29 @@ export function resolveViewStateId(props: ViewProps): string {
  * responsible for computing the focused chain (deepest note + ancestors); selected is
  * typically a single-id list (the clicked note) or empty when transitioning out of
  * selection. Stored as stable_ids (invariant across re-parse) so a drag-reorder does not
- * make the highlight jump to whichever note now holds the reassigned seq.
+ * make the highlight jump to whichever note now holds the reassigned seq. view_caret is the
+ * optional virtual-caret offset (board-as-editor caret used when no editor is live); when
+ * omitted the existing caret is left untouched.
  */
 export function writeViewInteractionState(
     props: ViewProps,
     handlers: ViewApi,
     focused_ids: string[],
     selected_ids: string[],
+    view_caret?: number,
 ): void {
+    const display_options: NoteDisplayOptions = {
+        view_focused_ids: focused_ids,
+        view_selected_ids: selected_ids,
+    };
+    // only stamp the virtual caret when the caller supplies one, so callers that only move focus do not clobber it
+    if (view_caret !== undefined) {
+        display_options.view_caret = view_caret;
+    }
     handlers.setViewManagedState([{
         id: resolveViewStateId(props),
         type: props.type,
-        display_options: {
-            view_focused_ids: focused_ids,
-            view_selected_ids: selected_ids,
-        },
+        display_options,
     }]);
 }
 

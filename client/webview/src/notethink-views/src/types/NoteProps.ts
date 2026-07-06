@@ -14,6 +14,7 @@ export type NoteClickHandler = (event: MouseEvent<HTMLElement>, note: NoteProps 
 /**
  * NoteDisplayOptions, per-view display state threaded onto each note's display_options.
  * - integration_mode_selection: the persisted integration-mode choice (auto / current_file / folder), carried alongside the composer-resolved concrete integration_mode so the toolbar selector can render "Auto (…)" vs the concrete label; never persisted itself - the composer re-stamps it from the canonical folder view-state each render
+ * - view_caret: the view's own caret offset when no editor is live, in in-tree (merged-tree) offset space so it resolves via findDeepestNote in both single-file and folder mode; augmented state only, never text - files stay master
  */
 export interface NoteDisplayOptions {
     id?: string;
@@ -26,6 +27,7 @@ export interface NoteDisplayOptions {
         showLineNumbers?: boolean;
         watchUnopenedFilesInViewer?: boolean;
         kanbanAnimateTransitions?: boolean;
+        openNewEditorIfNoneOpen?: boolean;
         scrollTextIntoView?: boolean;
         scrollNoteIntoView?: boolean;
         autoExpandFocusedNote?: boolean;
@@ -46,6 +48,7 @@ export interface NoteDisplayOptions {
     // --- per-view interaction state (view-driven, persisted on display_options); these hold note stable_ids (invariant across re-parse), unlike the per-render focused_seqs/selected_seqs above which stay seq-based ---
     view_focused_ids?: string[];
     view_selected_ids?: string[];
+    view_caret?: number;
     integration_mode?: string;
     integration_mode_selection?: string;
     integration_path?: string;

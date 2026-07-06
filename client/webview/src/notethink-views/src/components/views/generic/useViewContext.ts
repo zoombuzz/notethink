@@ -51,6 +51,7 @@ export function useViewContext(props: ViewProps): ViewContext {
             showLineNumbers: false,
             watchUnopenedFilesInViewer: true,
             kanbanAnimateTransitions: true,
+            openNewEditorIfNoneOpen: false,
             showContextBars: true,
             scrollTextIntoView: true,
             scrollNoteIntoView: true,
@@ -113,14 +114,17 @@ export function useViewContext(props: ViewProps): ViewContext {
     // per-view focused/selected stable_ids written by the click dispatcher; the editor-derived match wins when it resolves a note (the documented editor-as-tiebreaker), and these fill in only when it has no opinion - the latest-click-wins immediate-feedback bridge and fallback
     const view_focused_ids = display_options.view_focused_ids;
     const view_selected_ids = display_options.view_selected_ids;
+    // virtual caret: only consulted when no editor selection is present (props.selection undefined => editor_derived_match undefined), so the editor-open path is unchanged
+    const view_caret = display_options.view_caret;
 
     deepest.note = useMemo(() => {
-        return resolveFocusedNote(view_focused_ids, props.notes || [], editor_derived_match) || parent_context;
+        return resolveFocusedNote(view_focused_ids, props.notes || [], editor_derived_match, view_caret) || parent_context;
     }, [
         view_focused_ids,
         parent_context,
         props.notes,
         editor_derived_match,
+        view_caret,
     ]);
 
     if (deepest.note) {

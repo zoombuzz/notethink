@@ -116,17 +116,24 @@ export function buildExitKeyframes(): Keyframe[] {
     ];
 }
 
-/** timing options for the move .animate() call */
+/*
+ * fill: 'backwards' NOT 'both'. backwards holds the first keyframe during the pre-active frame (so a card never
+ * flashes at its final spot before the invert->play starts), but crucially applies NO forwards fill: once the
+ * animation ends it stops controlling `transform`, which reverts to the (natural-position) inline style. a forwards
+ * fill left the finished move animation permanently owning `transform: translate(0)`, and since an animation-origin
+ * value outranks an inline style, that overrode @hello-pangea/dnd's own drag transform - the next drag on a just-
+ * glided card lifted a clone that could not track the cursor and stalled (the drag-after-a-passive-move bug).
+ */
 export function moveTiming(): KeyframeAnimationOptions {
-    return { duration: KANBAN_ANIMATION_TRANSITION_MAX_MS, easing: KANBAN_ANIMATION_EASING, fill: 'both' };
+    return { duration: KANBAN_ANIMATION_TRANSITION_MAX_MS, easing: KANBAN_ANIMATION_EASING, fill: 'backwards' };
 }
 
-/** timing options for the enter .animate() call */
+/** timing options for the enter .animate() call - fill: 'backwards' so a just-entered card releases its transform for a subsequent drag */
 export function enterTiming(): KeyframeAnimationOptions {
-    return { duration: KANBAN_ANIMATION_ENTER_MS, easing: KANBAN_ANIMATION_EASING, fill: 'both' };
+    return { duration: KANBAN_ANIMATION_ENTER_MS, easing: KANBAN_ANIMATION_EASING, fill: 'backwards' };
 }
 
-/** timing options for the exit .animate() call */
+/** timing options for the exit .animate() call - fill: 'backwards' to match move/enter (an exiting card is removed, so it never holds anyway) */
 export function exitTiming(): KeyframeAnimationOptions {
-    return { duration: KANBAN_ANIMATION_ENTER_MS, easing: KANBAN_ANIMATION_EASING, fill: 'both' };
+    return { duration: KANBAN_ANIMATION_ENTER_MS, easing: KANBAN_ANIMATION_EASING, fill: 'backwards' };
 }

@@ -16,3 +16,6 @@ export const DEFAULT_COLUMN_ORDER: string[] = ['untagged', 'doing', 'code-review
 // mirror of the IntegrationMode values from notethink-views (client/webview/src/notethink-views/src/components/views/ViewIntegrationSelector.tsx); these are wire-format strings on the `setIntegration` message and must stay byte-identical with the webview side
 export const INTEGRATION_MODE_CURRENT_FILE = 'current_file';
 export const INTEGRATION_MODE_FOLDER = 'folder';
+
+// custom-editor viewType registered for the NoteThink board; the single source of truth so the reveal path can tell our own board tabs apart from real text-editor tabs sharing the same file uri
+export const NOTETHINK_VIEW_TYPE = 'notethink.viewer';

@@ -711,7 +711,7 @@ Always rebuild the extension after each code change so the developer can preview
 
 ## Release & Publishing
 
-`sh/git/merge-main.sh` (staging -> main) is the production release: it fast-forwards `main`, pushes, then runs `vsce publish` to the VS Code Marketplace. The push to `main` also triggers CI to publish `@zoombuzz/notethink` to GitHub Packages and cut a GitHub Release with the `.vsix`. Two invariants must hold or the release breaks, and both break *after* the merge has already shipped to `main`.
+`sh/git/merge-main.sh` (staging -> main) is the production release: it fast-forwards `main`, pushes, then runs `vsce publish` to the VS Code Marketplace. The push to `main` also triggers CI to publish `@zoombuzz/notethink` to GitHub Packages and cut a GitHub Release with the `.vsix`. Three invariants must hold or the release breaks, and all break *after* the merge has already shipped to `main`.
 
 ### `@types/vscode` must not exceed `engines.vscode`
 
@@ -719,6 +719,14 @@ Always rebuild the extension after each code change so the developer can preview
 
 - bump them in lockstep. Whenever a dependency update raises `@types/vscode`, in the same commit either raise `engines.vscode` to the same minor or pin `@types/vscode` back down.
 - this fails only at publish time, which in this repo is *after* `merge-main.sh` has fast-forwarded `main`. `/prod-ready` does not catch it (lint, build, jest, and playwright never invoke `vsce`), so a mismatch surfaces mid-deploy with `main` already advanced. Treat the pairing as a pre-merge checklist item on any `@types/vscode` bump.
+
+### A dependency-specifier change must regenerate the lockfile
+
+CI runs `pnpm install` with `CI=true`, which pnpm treats as `--frozen-lockfile`: it aborts (`ERR_PNPM_OUTDATED_LOCKFILE`) when a `package.json` dependency **specifier** does not match the specifier recorded in the matching `pnpm-lock.yaml`. The root `postinstall` cascades a `pnpm install` into `client/extension`, `client/webview`, and `client/webview/src/notethink-views`, so all four package/lockfile pairs must stay in sync - a mismatch in any one fails every workflow at the "Install dependencies" step.
+
+- when you change a dependency specifier (e.g. pinning `@hello-pangea/dnd` from `^18.0.1` to `18.0.1`), regenerate and commit the matching `pnpm-lock.yaml` in the SAME commit. `pnpm install` updates it locally; when the resolved version is unchanged the only diff is the `specifier:` line.
+- match CI's pnpm major - the workflows pin `pnpm/action-setup` to v9. regenerating with a newer local pnpm can add format-only fields (e.g. `libc:`) that the CI pnpm may reject; when only the specifier moved, a one-line hand-edit of the `specifier:` line is the minimal, version-safe fix.
+- like the `@types/vscode` pairing this fails only at CI install time, *after* `merge-main.sh` has shipped to `main`; `/prod-ready` runs a NON-frozen local install and never catches it. Treat a specifier change as a pre-merge checklist item.
 
 ### CI skips Playwright browser downloads
 

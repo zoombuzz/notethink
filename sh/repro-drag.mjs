@@ -102,6 +102,13 @@ async function realDrag(page, cf, sourceCol, targetCol, label, cardName) {
     const hb = await cf.locator(`[role="region"][aria-label="${sourceCol}"]`).boundingBox().catch(() => null);
     if (hb) { await page.mouse.click(hb.x + hb.width / 2, hb.y + 10); await sleep(700); }
     const hasFocus = await cf.evaluate(() => document.hasFocus());
+    // window-event probe: dnd's mouse sensor listens on window (capture); count whether this drag's mousedown/mousemove actually reach the webview window when it is unfocused
+    await cf.evaluate(() => {
+        const w = window;
+        w.__dragprobe = { down: 0, move: 0 };
+        w.addEventListener('mousedown', () => { w.__dragprobe.down++; }, true);
+        w.addEventListener('mousemove', () => { w.__dragprobe.move++; }, true);
+    });
     const sourceRegionH = await cf.evaluate((col) => { const r = document.querySelector(`[role="region"][aria-label="${col}"]`); return r ? Math.round(r.getBoundingClientRect().height) : null; }, sourceCol);
     const before = await columnCounts(cf);
     const src = cardName
@@ -117,6 +124,7 @@ async function realDrag(page, cf, sourceCol, targetCol, label, cardName) {
     await page.mouse.down(); await sleep(220);
     for (let i = 1; i <= 6; i++) { await page.mouse.move(sx, sy + i * 4, { steps: 2 }); await sleep(45); }
     const lifted = await cf.evaluate(() => Array.from(document.querySelectorAll('[data-rfd-draggable-id]')).filter((el) => getComputedStyle(el).position === 'fixed').length);
+    const evprobe = await cf.evaluate(() => window.__dragprobe || { down: -1, move: -1 });
     // geometry probe: during the lift, does the SOURCE column keep its height (placeholder holding the slot) or collapse/concertina?
     const geom = await cf.evaluate((col) => {
         const region = document.querySelector(`[role="region"][aria-label="${col}"]`);
@@ -136,7 +144,7 @@ async function realDrag(page, cf, sourceCol, targetCol, label, cardName) {
     await sleep(400); await page.mouse.up(); await sleep(1800);
     const after = await columnCounts(cf);
     const landed = after[targetCol] === before[targetCol] + 1 && after[sourceCol] === before[sourceCol] - 1;
-    log(`  ${label}: iframeHasFocus=${hasFocus} lifted-clone=${lifted}  ${JSON.stringify(before)} -> ${JSON.stringify(after)}  ==>  ${landed ? 'LANDED' : 'DID NOT LAND'}`);
+    log(`  ${label}: iframeHasFocus=${hasFocus} winEvents=down:${evprobe.down}/move:${evprobe.move} lifted-clone=${lifted}  ${JSON.stringify(before)} -> ${JSON.stringify(after)}  ==>  ${landed ? 'LANDED' : 'DID NOT LAND'}`);
     return landed;
 }
 

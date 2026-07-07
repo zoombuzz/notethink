@@ -1,6 +1,215 @@
 # Todo [](?nt_view=kanban)
 
 
+### Kanban perf harness and budgets [](?id=kanban-perf-harness)
+
+Measurement tooling that gates the whole performance cycle (stories [[dev-host-production-react]] through [[extension-parse-offload]]). Every acceptance budget below was baselined 2026-07-07 by driving the real webview bundle in the existing Playwright harness (`playwright/harness/index.html` + mocked VS Code API) with the exact wire-format messages `PanelSession` posts.
+
++ goal
+  + one command produces per-scenario timings (elapsed, long-task count/total/max) against the current bundle as JSON
+  + each optimization story proves its budget with this tool; regressions fail loudly before push
++ background - the measured baseline (production-mode bundle unless marked dev)
+  + folder progressive load (8KB files, 10 cards each): 50 files 9.2s, 100 files 36.4s, 200 files 211.8s with 206.8s of long tasks - clean O(N^2); 200 is the extension's own `MAX_AGGREGATE_FILES` cap (`client/extension/src/constants.ts:5`)
+  + interactions on a 50-file/500-card board: card click 168ms, editor caret move (selectionChanged) 154ms, one-file merge update 155ms; dev bundle: 708ms / 840ms / 2758ms
+  + single-file kanban (nt_view=kanban): 400KB/467 cards loads in 1.7s; a 400KB edit re-send crashed the renderer (repeatable); a 100-file progressive load under the CPU profiler also crashed the renderer
+  + extension-host costs (node bench): mdast parse 0.6ms/KB (400KB done.md = 230ms per debounced keystroke); mdast JSON payload is 6.2x the source text (200-file folder load ships ~9.3MB through postMessage); hashing negligible
+  + real workspace shape this models: ~601 md files, done.md files 400-820KB, maxNotesPerFile=10
++ scope
+  + `scripts/perf/` node runner + `pnpm run test-perf`; writes `test-results/perf.json`
+  + scenarios: folder progressive load (20/50/100/200 files), folder interactions (click, selectionChanged, single-file merge), folder with 10x400KB long files, single-file load + edit re-send (100KB and 400KB)
+  + budget config in one file, asserted per scenario, exit non-zero on breach; initial thresholds = baseline + 20%, ratcheted down by later stories
+  + defaults to the production-mode webview bundle; `--dev-bundle` flag for the dev build
++ out of scope
+  + CI integration (CI skips browser downloads by design - see CODING_STANDARDS Release section)
++ implementation notes (from the analysis prototypes - port, do not rediscover)
+  + generate synthetic story files (`### Story [](?status=...)` + checkbox bullets); single-file kanban needs H1 `[](?nt_view=kanban)` plus a selectionChanged at offset 2 so AutoView resolves kanban
+  + stage messages into the page as JSON strings and JSON.parse in-page; playwright's structured argument walk hangs for minutes on large mdast graphs
+  + settle = `[data-flip-id]` count reaches expected, then double-rAF; long tasks via a buffered PerformanceObserver installed in an init script
+  + folder mode boots via pre-seeded `window.__vsCodeState` viewStates (`__folder__` with `type: 'kanban'`, `integration_mode: 'folder'`)
++ acceptance criteria
+  + `pnpm run test-perf` runs headless, writes `test-results/perf.json`, asserts budgets, exits non-zero on breach
+  + scenario semantics documented in the runner header comment, including how to add a scenario
+  + baseline JSON captured and committed alongside the budget config so later ratchets have provenance
++ [ ] build the generator + scenario runner under `scripts/perf/` with JSON-string staging and settle/longtask instrumentation
++ [ ] add budget config + assertions + `test-perf` script; capture the initial baseline file
++ [ ] document scenarios and the add-a-scenario recipe in the runner header
+
+
+### Dev host: production React in the webview bundle [](?id=dev-host-production-react)
+
+The dev-host webview currently runs the React development build: `webpack.config.js:110` sets `mode: 'none'` unless `NODE_ENV=production`, and the `build`/`watch` scripts never set it, so `process.env.NODE_ENV` stays undefined and React's dev instrumentation ships. Measured cost on a 50-file board: card click 708ms vs 168ms, caret move 840ms vs 154ms, single-file merge 2758ms vs 155ms - a 4-17x tax on every interaction the developer feels daily. CPU profiles attribute ~22% of load time to dev-only functions (`addObjectDiffToProperties`, `logComponentRender`).
+
++ goal
+  + the bundle the dev host serves runs production React while keeping the NOTETHINK_DEV conveniences (file logger, cache-buster) and usable source maps
++ scope
+  + make `build`/`watch` produce a production-mode (or at minimum NODE_ENV=production-defined) webview bundle; NOTETHINK_DEV define stays driven by SELFINSPECT_ENV as today (`webpack.config.js:23,87,172`)
+  + keep `devtool: 'source-map'` for dev builds so webview debugging still works
+  + decide (and document in CODING_STANDARDS Pre-Push Verification) whether the extension bundle follows or stays as-is; only the webview bundle carries React
++ out of scope
+  + changing the marketplace `package` build (already production)
++ acceptance criteria
+  + perf harness interaction scenarios on the build produced by `pnpm run build` meet the production-bundle baseline (click <= 200ms, selectionChanged <= 200ms, single-file merge <= 250ms on the 50-file scenario)
+  + `NOTETHINK_DEV` gated features still function: file logger writes to `logUri`, webview cache-buster appends `?v=`
+  + webview sources remain debuggable (source map resolves in webview devtools)
++ [ ] wire NODE_ENV/production mode into the default build + watch for the webview bundle
++ [ ] verify NOTETHINK_DEV logger + cache-buster still work in the dev host
++ [ ] run test-perf against the dev-workflow bundle and record the delta in this story
+
+
+### Incremental folder merge with stable card identity [](?id=kanban-incremental-merge)
+
+The core structural fix. Today every incoming doc update rebuilds the entire merged tree: `FolderTreeComposer.tsx:56-72` re-runs `mergeAggregateRoot`, which re-runs `convertMdastToNoteHierarchy` for EVERY doc (`mergeAggregateRoot.ts:263`), and `walkStorySubtree` renumbers every note's `seq` globally (`mergeAggregateRoot.ts:203`), which defeats `areMarkdownNotePropsEqual` (`MarkdownNote.tsx:127` compares seq first) so every card re-renders. A progressive N-file load therefore does O(N^2) conversions and N full-board renders; one file changing (watcher event, or the drag write-back echo) re-converts all 200 files and re-renders 2000 cards.
+
++ goal
+  + a doc update re-converts only the changed doc and re-renders only the affected cards
+  + the post-drag authoritative echo lands well inside `KANBAN_PROJECTION_MAX_MS` (1500ms, `useProjectedNotes.ts:10`) so drops never snap back
++ background
+  + measured: one-file merge on a 50-file board costs 155ms (prod) / 2758ms (dev) as a single long task; at 200 files this scales ~4x further and breaks the projection window
+  + `renderCache` (renderops.tsx:82) is a WeakMap keyed on mdast node identity - unchanged docs keep identity across merges, so preserving NoteProps identity unlocks the whole memo chain
++ scope
+  + cache per-doc `convertMdastToNoteHierarchy` results keyed on `(doc id, hash_sha256)`; invalidate on hash change or doc removal
+  + make story/card identity stable across merges: derive per-story keys and memo checks from `stable_id` (already stamped) instead of the global seq; assign seqs deterministically per (file, story) so an unchanged file's notes keep their numbers when a sibling file changes
+  + audit the in-place mutation in `walkStorySubtree` - a cached subtree must not be mutated into a state React cannot detect; clone story roots on stamp or version them explicitly
+  + memoize `flattenAllNotes` (`NoteTreeComposer.tsx:47`) and stop sorting `notes_within_parent_context` inside render (`useViewContext.ts:80` mutates and sorts every render)
++ out of scope
+  + message batching (see [[kanban-folder-load-coalescing]]) and windowing (see [[kanban-virtualized-columns]])
++ acceptance criteria
+  + perf harness single-file-merge scenario on the 50-file board: <= 60ms elapsed, no long task > 50ms (prod bundle); on the 200-file board <= 120ms
+  + conversion-call probe (debug counter exposed for tests): a one-doc merge converts exactly 1 doc on a 50-doc board
+  + drag round-trip: folder-kanban-drag playwright specs stay green; add a spec asserting no snap-back with a simulated 200-file-scale echo delay
+  + jest: unchanged docs' NoteProps (or their memo-relevant fields) are reference-stable across a merge; changed doc's notes re-derive
+  + full `pnpm run check` green; all 106 playwright specs green
++ [ ] add per-doc conversion cache keyed on (id, hash) with removal handling
++ [ ] make seq assignment deterministic per file + story; key React and memo comparisons on stable_id
++ [ ] resolve the walkStorySubtree mutation-vs-cache hazard (clone or version stamped subtrees)
++ [ ] memoize flattenAllNotes and the parent-context sort
++ [ ] add the conversion-call probe + jest coverage; ratchet perf budgets
+
+
+### Folder-load batching and update coalescing [](?id=kanban-folder-load-coalescing)
+
+Initial folder discovery streams one postMessage per file (`PanelSession.ts:826` fan-out, `:912` per-file merge update), and the webview commits a full state update per message (`useVscodeMessages.ts:245`), so a 200-file load produces 200 board renders plus a final aggregate replace. Measured: 20 files 5.3s, 50 files 9.2s (prod), 200 files 211.8s; the per-message costs (render + FLIP re-measure + persist) multiply with the O(N^2) merge fixed in [[kanban-incremental-merge]].
+
++ goal
+  + a 200-file folder load reaches a settled board in seconds with bounded, small long tasks, while still showing progressive fill (spinner + growing board), not a blank wait
++ scope
+  + extension: batch per-file merge updates during discovery - flush every ~100ms or every ~20 docs, whichever first; watcher-driven single-file updates keep streaming individually
+  + webview: coalesce incoming update messages within an animation frame into one setState (queue + rAF flush in useVscodeMessages); message validation unchanged
+  + keep the pendingChange spinner semantics (`pending-work-spinner` specs must stay green)
++ out of scope
+  + changing the wire payload shape (see [[folder-wire-payload-diet]])
++ acceptance criteria
+  + perf harness folder-200 progressive scenario: settled in <= 15s on the prod bundle with [[kanban-incremental-merge]] landed; no single long task > 500ms after the first paint
+  + board commit probe: <= 15 board-level commits for a 200-file load (vs ~200 today)
+  + progressive fill still visible: harness asserts cards appear before the final flush (not one big bang)
+  + all pending-work-spinner + folder playwright specs green; `pnpm run check` green
++ [ ] batch discovery-phase merge posts in PanelSession with a flush timer + size cap
++ [ ] coalesce webview update handling into per-frame state commits
++ [ ] add a board-commit probe for the harness; assert progressive fill + budgets
+
+
+### Virtualized kanban columns [](?id=kanban-virtualized-columns)
+
+Every card mounts into the DOM: 200 files x 10 stories = 2000 `Draggable` cards (`KanbanBoard.tsx:96-127`), each rendering markdown, and the FLIP layer measures every `[data-flip-id]` node with getBoundingClientRect on each membership change (`useFlipTransition.ts:292`, fired per merge via the `signature` memo). CPU profiles show querySelectorAll + getAnimations at ~9-12% of load. @hello-pangea/dnd officially supports virtual lists (react-window pattern, overscan required). This is also the natural place to fold in the `ColumnBasedView` factor-out from [[view-hierarchy-and-card-types]] so every future column-based view inherits windowing for free - coordinate the two stories rather than implementing twice.
+
++ goal
+  + DOM card count is bounded by viewport + overscan regardless of corpus size; scrolling a column streams cards in (the infinite-scroll feel)
+  + FLIP measurement cost scales with visible cards, not total cards
++ scope
+  + adopt react-window (or equivalent fixed/variable-size list) per kanban column following the dnd virtual-lists pattern, with overscanning and drag-clone rendering per their docs
+  + variable card heights: measure-and-cache strategy (cards clip to a max height already via useMarkdownNoteOverflow)
+  + scroll-to-focused-card (`useScrollToCaret`, viewhooks.ts) must ask the virtualizer to scroll before framing; keyboard navigation and the focus ring rules (CODING_STANDARDS Focused-note scroll framing) still hold
+  + FLIP: restrict measure/animate to mounted (visible) cards; skip animation entirely when a membership change exceeds a threshold (bulk load)
+  + land inside (or immediately after) the ColumnBasedView base so group-by-X views inherit it - agree ordering with [[view-hierarchy-and-card-types]] before starting
++ out of scope
+  + virtualizing document view (different scroll model; follow-up once ColumnBasedView ships)
++ acceptance criteria
+  + 200-file board: mounted cards <= visible + overscan (assert via DOM count in the harness); folder-200 settled load <= 8s prod with prior stories landed
+  + card click and selectionChanged on the 200-file board <= 200ms with no long task > 100ms
+  + all kanban drag playwright specs green, including cross-column drags of cards that start off-screen (add spec)
+  + keyboard navigation + focused-card scroll framing specs green (focus ring fully visible per CODING_STANDARDS)
+  + kanban-animation specs green with FLIP scoped to visible cards; bulk-load renders skip animation (assert via animation probe events)
++ [ ] agree sequencing with the ColumnBasedView story; implement windowed columns per the dnd virtual pattern
++ [ ] wire scroll-to-focus + keyboard nav through the virtualizer
++ [ ] scope FLIP to mounted cards + bulk-change skip; keep animation probe coverage
++ [ ] add off-screen drag + DOM-bound assertions to playwright; ratchet perf budgets
+
+
+### Webview state persistence diet [](?id=webview-state-persistence-diet)
+
+`useVscodeStatePersistence` calls `vscode.setState({docs, viewStates})` on every docs change (`usePersistedViewStates.ts:78-82`), serializing the full docs map - text plus mdast at 6.2x text size - once per incoming message. On a 200-file load that is ~200 serializations of a growing multi-MB object; profiles show setItem/setState at 2-3% even in the mock, and the real VS Code setState crosses an IPC boundary. It is also a memory-pressure contributor to the observed renderer crashes (docs map + persisted copy + NoteProps trees).
+
++ goal
+  + setState payloads become small and infrequent; reload still restores the board without a blank flash
++ background
+  + reload already re-requests state: the webview replays setIntegration + requestInitialState on mount (`useVscodeMessages.ts:330-368`), and the extension's discovery fast-path skips reloading unchanged files via mtime (`PanelSession.ts:839`)
++ scope
+  + persist viewStates always; persist doc METADATA only (id, path, relative_path, hash, mtime) instead of full text + mdast
+  + debounce persistence (e.g. 500ms trailing) and flush on visibilitychange/dispose
+  + reload path: render from re-requested extension state; verify the folder restore flow needs no persisted doc bodies (fast-path makes this cheap)
+  + migrate old persisted shapes via migrateSavedState (vscodeops.ts) so stale full-doc states load cleanly once then shrink
++ acceptance criteria
+  + setState payload per persist <= 100KB on the 200-file board (probe in harness mock)
+  + persist frequency during a 200-file load <= 5 calls (debounced), not ~200
+  + reload of a folder-mode board restores columns/cards without error and without a persisted-docs dependency (playwright reload spec)
+  + `pnpm run check` green
++ [ ] slim the persisted shape to metadata + viewStates with migration
++ [ ] debounce persist + flush on hide/dispose
++ [ ] add payload-size + frequency probes and a folder reload spec
+
+
+### Folder wire-payload diet (no mdast over the wire) [](?id=folder-wire-payload-diet)
+
+Every Doc ships `text` plus the full mdast `content` (6.2x text) through postMessage (`PanelSession.ts:178,912`): a 200-file folder load transfers ~9.3MB, a single 400KB done.md re-send ~2.6MB, and serialization blocks both the extension host and the webview realms. The webview then derives its own NoteProps hierarchy anyway and caps each file at maxNotesPerFile=10 stories - most of the shipped tree is discarded. Design-first story: pick and prove one of the two payload shapes below, then implement.
+
++ goal
+  + folder-mode wire payload per file scales with what the board renders (capped stories), not file size; memory footprint stops duplicating full mdast per doc
+  + unlocks raising MAX_AGGREGATE_FILES (today 200, workspace has ~601 files) and file-level lazy loading
++ option A - ship digests
+  + extension converts to hierarchy + applies the per-file story cap host-side, ships only capped story subtrees (NoteProps + the text slices those stories cover, with source offsets preserved in origin.source_position)
+  + conversion code is pure TS in notethink-views; the extension bundle can import it (verify webpack config supports the cross-package import; the mirrored-constants exception in CODING_STANDARDS documents why modules are not currently shared - this import goes the allowed direction, webview package -> extension consumer)
+  + edits still route by source offsets, so buildKanbanDragEndPayload and editText flows are unchanged
++ option B - ship text only
+  + drop `content` from the wire Doc; the webview parses text in a Web Worker (workers in webviews load via blob: URI per the VS Code webview docs) and feeds the existing convertMdastToNoteHierarchy path
+  + keeps one parser location but moves parse cost into the webview; combine with [[kanban-incremental-merge]] caching so each file parses once per hash
++ scope
+  + spike both options against the perf harness long-files scenario (50 files with 10x400KB); pick by measured payload, settle time, and memory; record the decision in this story
+  + implement the winner behind the existing message validation; update playwright helpers (inject-docs/inject-multi-docs build wire docs) and fixtures accordingly
+  + document view (current_file mode) keeps full text + mdast for the active doc - only folder aggregation goes on the diet
++ acceptance criteria
+  + wire payload for one 400KB file's folder update <= 100KB (measure serialized message size in the harness)
+  + folder-50-with-long-files scenario: settled <= 6s prod (baseline 40s dev / to-be-measured prod); no renderer crash at 200 files under the harness memory probe
+  + drag write-back, click-to-editor reveal, and caret matching still work in folder mode (existing folder specs + drag roundtrip specs green)
+  + `pnpm run check` green
++ [ ] spike option A vs B on the harness; record numbers + decision here
++ [ ] implement the chosen shape end-to-end (PanelSession, Messages types, useVscodeMessages, composers, playwright helpers)
++ [ ] add payload-size + memory probes; ratchet budgets and raise-cap follow-up note
+
+
+### Extension parse offload and adaptive debounce [](?id=extension-parse-offload)
+
+mdast parse costs 0.6ms/KB on the extension host: each debounced keystroke on a 400KB done.md re-parses for 230ms (800KB: 509ms) on the same web worker that services every other extension request, and initial folder discovery parses up to 200 files inline (620ms for 200x8KB, several seconds with real done.md sizes). The web extension host supports spawning nested Web Workers (VS Code web-extensions guide), which is the safe first step; a WASM parser (markdown-rs, micromark's Rust sibling, via the @vscode/wasm toolchain) is the escalation if parse itself remains the bottleneck after offload.
+
++ goal
+  + typing in a large file never saturates the extension host; parse work happens off the host thread and only the final result crosses back
++ scope
+  + move parse() calls (buildDoc / buildDocFromUriAndText / loadFolderDoc paths in PanelSession) onto a worker pool (size ~cores/2, bounded queue); results post back as the existing Doc shape
+  + adaptive debounce: scale CHANGE_DEBOUNCE_MS (PanelSession.ts:13) with the last parse duration for that doc (floor 250ms, cap ~1s) so big files self-throttle
+  + drop stale parses: a newer edit for the same doc cancels the queued/in-flight older parse
+  + verify worker creation works in both desktop (webWorker extension host) and vscode-test-web; feature-detect and fall back inline if Worker is unavailable
++ out of scope
+  + WASM parser swap - leave a spike task with clear go/no-go criteria instead of committing to it
++ acceptance criteria
+  + extension jest: worker pool parses and returns identical mdast to inline parse for fixture corpus; stale-parse cancellation covered
+  + keystroke scenario: webview receives the re-send and the extension host stays responsive - measure by interleaving a settings round-trip during a 400KB keystroke storm in the harness (round-trip latency <= 100ms)
+  + folder discovery of the long-files scenario does not block watcher/selection handling (same interleaving probe)
+  + `pnpm run check` green including the extension Mocha suite
++ [ ] implement the parse worker pool with fallback + stale cancellation
++ [ ] make the change debounce adaptive to measured parse cost
++ [ ] add the host-responsiveness interleaving probe to the perf harness
++ [ ] write the markdown-rs/WASM spike task with go/no-go criteria (mdast position-compatibility, payload parity, measured speedup >= 3x) as a follow-up candidate for the user to green-light
+
+
 ### View hierarchy and per-view card-type axis [](?id=view-hierarchy-and-card-types)
 
 The view system today has a flat dispatch (`GenericView.tsx:774-776`): `auto` → `document` → `kanban`. Two structural changes in one story:
@@ -117,14 +326,3 @@ The view system today has a flat dispatch (`GenericView.tsx:774-776`): `auto` �
 + [ ] render RootNote via DocumentView with child_views
   + each child_view represents one document
   + parent_context and breadcrumb_trail for navigation
-
-
-### Optimisation cycle [post-v1]
-
-+ create language server
-  + communicate to separate thread via LSP
-    + add to webpack watch
-  + investigated previously, deferred as non-essential for now
-+ consider whether parsing (mdast-util-from-markdown) is the bottleneck
-  + or whether it's the React re-rendering
-  + profile before optimising

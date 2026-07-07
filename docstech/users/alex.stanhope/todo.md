@@ -1,6 +1,27 @@
 # Todo [](?nt_view=kanban)
 
 
+### Manual "Show more" expand collapses on any edit; only "Show less" should collapse it [](?id=manual-expand-survives-edits)
+
+A top-level note the user has expanded with "Show more" silently re-collapses on the next content edit - most visibly, ticking one of its own checkboxes. `MarkdownNote.tsx` keeps the manual-expand flag in local state and force-resets it on every body change: `useEffect(() => setManuallyExpanded(false), [props.body_raw])` (`client/webview/src/notethink-views/src/components/notes/MarkdownNote.tsx:48-51`). Ticking a checkbox rewrites the body (`[ ]` -> `[X]`), so `body_raw` changes, the effect fires, `useSyncedBodyClip` re-applies the clip, and the card snaps back to its collapsed summary a beat after the click - reading as if the click scrolled the note. The only intended collapse path is the "Show less" button (`MarkdownNote.tsx:117`).
+
++ goal
+  + a manually-expanded note stays expanded across content edits (checkbox tick, text edit); the only thing that collapses it is a "Show less" click
++ why the reset is not needed (safe to remove)
+  + cards are keyed by stable identity, not content or position: `kanbanDraggableId(note)` returns `note.stable_id ?? String(note.seq)` (`client/webview/src/notethink-views/src/lib/noteops.ts:562`), used as the `<Draggable key>` in `KanbanBoard.tsx:99`. React remounts a card only when a DIFFERENT note takes the slot (fresh state, flag defaults to false); the same note keeps its instance across edits. So the effect is not guarding against instance reuse - it only produces the bug
+  + the "note shrank below the overflow threshold" case is already covered: the clip gates on `overflow_state.overflows` (`MarkdownNote.tsx:57`), so a note that no longer overflows will not clip regardless of the flag
++ scope
+  + remove the `body_raw` reset effect (`MarkdownNote.tsx:48-51`), leaving "Show less" (line 117) as the sole collapse trigger; if a defensive reset is still wanted, key it on note identity (`props.seq`), never on `props.body_raw`
++ acceptance criteria
+  + expand a long note (Show more), tick one of its checkboxes: the note stays expanded and only the box fills
+  + click "Show less": the note collapses
+  + move the note to another column, or replace the slot with a different note: expand resets to collapsed (unchanged)
+  + a note edited short enough that it no longer overflows shows no clip and no Show-more bar (unchanged)
++ found by: the notegit typical-user demo video (which doubles as a regression check) - ticking three checkboxes on an expanded card collapsed it mid-demo
++ [ ] remove (or narrow to `props.seq`) the manually_expanded reset effect in `MarkdownNote.tsx`
++ [ ] add a test: expanded note + checkbox tick stays expanded; "Show less" collapses it
+
+
 ### Kanban perf harness and budgets [](?id=kanban-perf-harness)
 
 Measurement tooling that gates the whole performance cycle (stories [[dev-host-production-react]] through [[extension-parse-offload]]). Every acceptance budget below was baselined 2026-07-07 by driving the real webview bundle in the existing Playwright harness (`playwright/harness/index.html` + mocked VS Code API) with the exact wire-format messages `PanelSession` posts.

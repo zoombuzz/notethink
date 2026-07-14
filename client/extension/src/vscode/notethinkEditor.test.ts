@@ -882,6 +882,42 @@ describe('NotethinkEditorProvider', () => {
 			expect(find_call[1]).toBe('**/skip/**');
 		});
 
+		it('drops a multi-segment excluded path (notegit/nodejs) when the board is rooted inside notegit, not at the workspace root', async () => {
+			const story_path = '/workspace/notegit/docstech/users/alex/todo.md';
+			const demo_path = '/workspace/notegit/nodejs/dulcet/content/notegit/welcome/ai-board/budget/todo.md';
+			// findFiles' brace-expanded exclude is unreliable, so assume it hands both back: the host-side post-filter is the deterministic gate and must match workspace-relative, or the notegit/ segment is missing and notegit/nodejs stops matching
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(story_path), Uri.file(demo_path)]);
+			// distinct body per file: identical text hashes to one doc id, which would collapse the two entries and mask a leak
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => mockTextDocument(`# story in ${u.path}`, u.path));
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notegit' });
+			while (getUpdates(panelHelper.postedMessages).length < 1) { await flush(); }
+
+			const paths = getUpdates(panelHelper.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+			expect(paths).toContain(story_path);
+			expect(paths).not.toContain(demo_path);
+		});
+
+		it('matches the exclude workspace-relative, never against the absolute path, so a workspace living under a "build" directory is not wholly excluded', async () => {
+			setWorkspaceRoots(['/build/ws']);
+			const story_path = '/build/ws/notes/todo.md';
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(story_path)]);
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => mockTextDocument(`# story in ${u.path}`, u.path));
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/build/ws/notes' });
+			while (getUpdates(panelHelper.postedMessages).length < 1) { await flush(); }
+
+			// the absolute path carries a `build` segment the default exclude matches; the workspace-relative path (notes/todo.md) does not, and only the latter is the legitimate base
+			const paths = getUpdates(panelHelper.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+			expect(paths).toContain(story_path);
+		});
+
 		it('retains the user filters across a breadcrumb re-narrow that omits them - read from the workspace cascade, not stale in-memory state', async () => {
 			// simulate the user's filters being persisted under notethink.settings.files.* (what the Files drawer's Apply does via updateSetting). The settings module reads via getConfiguration('notethink.settings') and dotted paths
 			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation((section: string) => {
@@ -1146,6 +1182,22 @@ describe('NotethinkEditorProvider', () => {
 			expect(reply.entries).toEqual([
 				{ label: 'projects', path: '/workspace/notes/projects', kind: 'folder' },
 				{ label: 'users', path: '/workspace/notes/users', kind: 'folder' },
+			]);
+		});
+
+		it('folder mode drops a multi-segment excluded child (notegit/nodejs) when listing children of notegit', async () => {
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([
+				['docstech', dir],
+				['nodejs', dir],
+			]);
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({ type: 'requestJumpTargets', mode: 'folder', path: '/workspace/notegit' });
+
+			const reply = findByType(panelHelper.postedMessages, 'jumpTargets') as JumpTargetsMessage;
+			// the exclude probe must be built from the workspace-relative path (notegit/nodejs/…); a bare-name probe (nodejs/…) can never match a multi-segment entry and would keep the folder
+			expect(reply.entries).toEqual([
+				{ label: 'docstech', path: '/workspace/notegit/docstech', kind: 'folder' },
 			]);
 		});
 

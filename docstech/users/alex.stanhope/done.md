@@ -3550,3 +3550,52 @@ Two independent deliverables from the reviewed single-caret-ownership plan. Part
 + commit message draft
   + Part 1: notethink 0.3.22: portal the kanban drag clone out of the FLIP-transformed ancestry and settle in-flight FLIP at drag-start so a drag never re-anchors or flings; geometry-asserting regression net (clone isolation, cursor tracking, autoscroll direction, passive-midflight, real-pointer roundtrip) plus jest settle + structural guards; tests N jest, N playwright
   + Part 2: notethink 0.3.23: single-caret ownership so board highlight/select is identical with or without an editor via a view-owned virtual caret; drop switchEditorOnClick, openNewEditorIfNoneOpen default false; tests N jest, N playwright
+
+
+### Upgrade NPM packages for notethink (Wave 1 minor/patch) [](?time_taken=90)
+
+Applied (minor/patch): `@typescript-eslint/eslint-plugin` + `@typescript-eslint/parser` + `typescript-eslint` 8.61.1 -> 8.64.0, `memfs` 4.57.7 -> 4.64.0, `webpack` 5.107.2 -> 5.108.4, `webpack-cli` 7.0.3 -> 7.2.1, `@playwright/test` 1.61.0 -> 1.61.1, `@vscode/test-web` 0.0.80 -> 0.0.81, `ts-loader` 9.6.1 -> 9.6.2, `npm-check-updates` 22.2.3 -> 22.2.9. Version 0.3.24 -> 0.3.25.
+
+Pins in effect after this wave (snapshot):
+- eslint @9.39.4 (.ncurc reject) - structural - held - eslint-plugin-react is still 7.37.5 (latest) with no eslint-10 release; revisit when it ships eslint-10 compat
+- @eslint/js @9.39.4 (.ncurc reject) - structural - same
+- typescript @^6.0.3 (caret, no reject entry) - structural - held by peer ranges - @typescript-eslint/* peer `<6.1.0` and ts-jest peer `<7`; TS7 is being piloted in ledger only. Revisit when both peer ranges admit 7.x
+Unpinned this wave: none - the last wave recorded no transient holds, and both live pins are structural with their clear-conditions still unmet
+
+Note for the next wave: ncu reads `.ncurc.json` from the shell's cwd, NOT from `--cwd`. Invoking it as `ncu --cwd <notethink>` from the workspace root silently bypasses the reject list (it offered eslint/@eslint/js 9.39.4 -> 9.39.5). `--target minor` still held eslint 10 back, but do not rely on the reject list surviving a `--cwd` invocation - always diff package.json afterwards and re-assert the pins.
+
++ [X] run npm-check-updates
++ [X] revisit prior pins (try to unpin transient holds recorded in the last done.md story)
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
++ verified: lint clean (0 errors, 6 pre-existing warnings); 1517 jest green (229 extension + 128 webview + 1160 notethink-views); webpack build clean on 5.108.4 (both bundles emit, so the output dulcet vendors stays sane)
++ commit message draft
+  + notethink 0.3.25: upgrade npm packages (wave 1, minor/patch) - typescript-eslint 8.64, webpack 5.108, memfs 4.64; eslint held at 9.39.4; tests 1517 jest
+
+
+### Multi-segment excludes fail below the workspace root [](?id=exclude-base-workspace-relative)
+
+With the board rooted on `notegit`, the demo boards under `notegit/nodejs/dulcet/content/notegit/welcome/ai-board/*/todo.md` appear alongside notegit's real stories, even though the default exclude names `notegit/nodejs`. The glob matcher is correct; the base path it was handed was not. `isExcludedByIntegrationFilter` matched the exclude against the path relative to the *integration folder*, so a file presented as `nodejs/dulcet/...`, the `notegit/` segment was gone, and the only multi-segment entry in the list stopped matching. Single-segment entries (node_modules, dist, .git) hid the defect because the pattern's leading globstar matches them at any depth from any base.
+
++ background
+  + the same entry failed a second way: the directory-prune probes built `${name}/dummy.md` from a BARE directory name, which a two-segment entry can never match, so `nodejs` was always offered as a descendable child of notegit
+  + the two gates disagreed on origin: findFiles matches its exclude workspace-relative, the host-side post-filter matched it folder-relative
++ scope
+  + match every exclude against the workspace-root-relative path, the same base VS Code uses for `files.exclude` / `search.exclude` / findFiles
+  + out of scope: opening `notegit` as its own workspace root, where `nodejs/...` is genuinely the workspace-relative path and the default glob cannot match it
++ acceptance criteria
+  + board rooted on `notegit` shows notegit's own stories and none of the `nodejs/dulcet` demo boards
+  + board rooted on the workspace root behaves exactly as before
+  + `nodejs` is not offered as a child folder when descending into notegit
++ [X] add `toWorkspaceRelative` as the single origin for exclude matching (`PanelSession.ts`)
++ [X] rebase `isExcludedByIntegrationFilter` on it and drop the now-unused folder_path argument
++ [X] add `isExcludedDirectory` and route the walk prune, the project pills, and the breadcrumb child list through it
++ [X] document the workspace-root anchoring next to `DEFAULT_EXCLUDE_FILTER` (`constants.ts`)
++ [X] add regression tests: discovery post-filter, and the breadcrumb child list (both verified red before the fix)
++ [X] resolve the workspace root live from the CONTAINING workspace folder, so the exclude never degrades to matching an absolute path
+  + the review pass caught it: `workspace_root` is cached at panel construction but `isWithinWorkspace` reads `workspaceFolders` live, so the two diverge when the folder resolves after the panel is built. The empty-root fallback then matched excludes against the raw absolute path, which would wholly exclude any checkout living under a directory named `build`, `dist` or `out`
+  + resolving the containing folder (rather than folders[0]) also makes a multi-root workspace behave the way VS Code does
++ [X] add a regression test proving a workspace under a `build/` directory is not wholly excluded (verified red against the absolute-path fallback)
++ manual: root the board on notegit and confirm the ai-board demo stories are gone
++ manual: root the board on the workspace root and confirm every project's stories still render

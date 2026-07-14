@@ -15,6 +15,8 @@ const SELECTION_DEBOUNCE_MS = 120;
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
 // upper bound on directories visited by the non-file: scheme readDirectory walk, so a symlink cycle or pathological provider can't loop forever
 const MAX_WALK_ENTRIES = 5000;
+// synthetic child filename used to ask an exclude glob "would you drop everything inside this directory?"; the globs end in /** so they only ever match a file path, never a bare directory
+const EXCLUDE_PROBE_FILE = '__probe__.md';
 
 /**
  * apply changes to a document end-to-start so earlier offsets stay valid. Prefers an
@@ -713,12 +715,45 @@ export class PanelSession {
 		return isPathWithin(target_path, [this.integration_path]);
 	}
 
-	// check whether a discovered or watcher-delivered URI is excluded by the current integration_exclude. Matches against the path relative to the integration folder, which is the same convention the user writes excludes in (e.g. **/{...,vendored}/**). Empty exclude => never excluded
-	private isExcludedByIntegrationFilter(uri: vscode.Uri, folder_path: string): boolean {
+	/**
+	 * the base every exclude glob is matched against: the path relative to the WORKSPACE ROOT,
+	 * never relative to the folder the board is currently rooted at.
+	 *
+	 * This is the same base VS Code uses for `files.exclude`, `search.exclude` and the exclude
+	 * argument of `findFiles`, so the host-side post-filter and findFiles agree on one origin.
+	 * Matching relative to the integration folder instead silently defeats every MULTI-SEGMENT
+	 * exclude entry the moment the board is rooted inside it: with the board on `notegit`, a
+	 * `notegit/nodejs/...` file presents as `nodejs/...`, the `notegit/` segment is gone, and the
+	 * `notegit/nodejs` brace member stops matching. Single-segment entries (node_modules, dist,
+	 * .git) hide the bug, because the pattern's leading globstar matches them at any depth from
+	 * any base, so the defect only ever shows on a multi-segment entry.
+	 *
+	 * Scheme-safe: operates on uri.path (always POSIX), never fsPath which assumes file: + the OS separator.
+	 * With no resolvable root the path is returned unchanged, which is inert: every caller below sits
+	 * behind a live isWithinWorkspace gate that already refuses when there are no workspace folders.
+	 */
+	private toWorkspaceRelative(absolute_path: string): string {
+		const workspace_root = this.workspaceRootFor(absolute_path);
+		if (!workspace_root) { return absolute_path; }
+		return path.posix.relative(workspace_root, absolute_path);
+	}
+
+	// resolve the workspace folder CONTAINING this path, read live: a multi-root workspace has several (VS Code matches excludes against the containing one), and workspaceFolders can still be unresolved when the panel is constructed, leaving the cached workspace_root empty while folder mode - gated by the live isWithinWorkspace - runs anyway
+	private workspaceRootFor(absolute_path: string): string {
+		const root_paths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.path);
+		return root_paths.find(root_path => isPathWithin(absolute_path, [root_path])) ?? this.workspace_root;
+	}
+
+	// check whether a discovered or watcher-delivered URI is excluded by the current integration_exclude. Empty exclude => never excluded
+	private isExcludedByIntegrationFilter(uri: vscode.Uri): boolean {
 		if (this.integration_exclude.trim() === '') { return false; }
-		// scheme-safe: compute the path relative to the integration folder's uri.path (always POSIX), never fsPath which assumes file: + the OS separator
-		const relative_path = path.posix.relative(folder_path, uri.path);
-		return !globMatches(relative_path, '', this.integration_exclude);
+		return !globMatches(this.toWorkspaceRelative(uri.path), '', this.integration_exclude);
+	}
+
+	// check whether a directory's whole subtree is excluded, by probing a representative child file against the same workspace-relative gate
+	private isExcludedDirectory(absolute_dir_path: string): boolean {
+		if (this.integration_exclude.trim() === '') { return false; }
+		return !globMatches(`${this.toWorkspaceRelative(absolute_dir_path)}/${EXCLUDE_PROBE_FILE}`, '', this.integration_exclude);
 	}
 
 	// enumerate top-level subfolders of the VS Code workspace root, filter by exclude, sort alphabetically. The webview uses this set as the stable universe for pill labels + hues so descending into a sub-project doesn't re-derive the disambiguation against a smaller visible set (e.g. notethink's label staying "NT" instead of collapsing to "NO" when a same-initial sibling project drops out of the visible set)
@@ -732,10 +767,8 @@ export class PanelSession {
 			const dir_names = entries
 				.filter(([, type]) => type === vscode.FileType.Directory)
 				.map(([name]) => name);
-			// run each candidate through the same glob matcher used for file discovery (synthetic placeholder child path) so .git, node_modules, .claude, vendored, etc. don't consume hue indices
-			const filtered = this.integration_exclude.trim() === ''
-				? dir_names
-				: dir_names.filter(name => globMatches(`${name}/dummy.md`, '', this.integration_exclude));
+			// run each candidate through the same exclude gate used for file discovery so .git, node_modules, .claude, vendored, etc. don't consume hue indices
+			const filtered = dir_names.filter(name => !this.isExcludedDirectory(path.posix.join(this.workspace_root, name)));
 			this.workspace_projects = filtered.sort();
 		} catch (err) {
 			writeToErrorLog('computeWorkspaceProjects failed', this.workspace_root, err);
@@ -767,10 +800,11 @@ export class PanelSession {
 			}
 			for (const [name, type] of entries) {
 				const child = vscode.Uri.joinPath(dir, name);
+				// the include glob is folder-relative (it mirrors the RelativePattern findFiles gets on the file: scheme), while the exclude is matched against the workspace-root-relative path
 				const child_rel = path.posix.relative(folder_path, child.path);
 				if (type === vscode.FileType.Directory) {
-					// prune dirs whose contents the exclude would drop (probe a representative child, mirroring computeWorkspaceProjects) so the walk never descends into node_modules/.git/etc
-					if (globMatches(`${child_rel}/__probe__.md`, '', this.integration_exclude)) { stack.push(child); }
+					// prune dirs whose contents the exclude would drop so the walk never descends into node_modules/.git/etc
+					if (!this.isExcludedDirectory(child.path)) { stack.push(child); }
 				} else if (type === vscode.FileType.File && globMatches(child_rel, this.integration_include, '')) {
 					results.push(child);
 				}
@@ -801,7 +835,7 @@ export class PanelSession {
 			? await this.discoverViaFindFiles(pattern)
 			: await this.discoverViaReadDirectoryWalk(base_uri, folder_path);
 		// defense in depth: post-filter against the same exclude using the host-side globMatches helper. findFiles' brace-expanded exclude has had edge cases bite us in practice (a "vendored" segment leaking through despite **/{...,vendored}/**), and the file-system watcher armed below has no exclude at all - applying the filter here AND in loadFolderDoc gives both paths one deterministic gate
-		const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri, folder_path));
+		const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri));
 		// deterministic order so the capped subset is stable across reloads
 		const sorted_uris = [...filtered].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 		// store on the session so later watcher-driven incremental updates re-send the same totals (reproduces the original closure-capture behaviour)
@@ -881,12 +915,12 @@ export class PanelSession {
 	 */
 	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean } = {}): Promise<void> {
 		try {
-			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them - when the user descends folders (e.g. pill click from active_development → calfam), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the relative-path-based isExcludedByIntegrationFilter check below misses sibling paths (their relative_path starts with `..` which doesn't match `**/{...}/**` excludes)
+			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them - when the user descends folders (e.g. pill click from active_development → calfam), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the isExcludedByIntegrationFilter check below never rejects a sibling project (nothing in the exclude list names it, so its path passes the filter cleanly)
 			if (!this.isWithinIntegrationPath(uri.path)) {
 				return;
 			}
-			// the file system watcher armed in armFolderWatcher takes only an include pattern - createFileSystemWatcher has no exclude argument - so a vendored or otherwise-excluded path inside integration_path can fire onDidCreate/onDidChange and reach this loader. gate every entry here against integration_exclude so the watcher cannot leak excluded files into integration_docs. The `!` is sound here because isWithinIntegrationPath above returns false (and we returned) whenever integration_path is undefined
-			if (this.isExcludedByIntegrationFilter(uri, this.integration_path!)) {
+			// the file system watcher armed in armFolderWatcher takes only an include pattern - createFileSystemWatcher has no exclude argument - so a vendored or otherwise-excluded path inside integration_path can fire onDidCreate/onDidChange and reach this loader. Gate every entry here against integration_exclude so the watcher cannot leak excluded files into integration_docs
+			if (this.isExcludedByIntegrationFilter(uri)) {
 				return;
 			}
 			// respect the cap for watcher-driven adds too: never grow a new path past MAX_AGGREGATE_FILES (re-parses of already-loaded paths still pass)
@@ -1020,9 +1054,7 @@ export class PanelSession {
 		const dir_names = dir_entries
 			.filter(([, type]) => type === vscode.FileType.Directory)
 			.map(([name]) => name);
-		const filtered = this.integration_exclude.trim() === ''
-			? dir_names
-			: dir_names.filter(name => globMatches(`${name}/dummy.md`, '', this.integration_exclude));
+		const filtered = dir_names.filter(name => !this.isExcludedDirectory(path.posix.join(base_path, name)));
 		return filtered
 			.sort()
 			.map(name => ({ label: name, path: path.posix.join(base_path, name), kind: 'folder' as const }));

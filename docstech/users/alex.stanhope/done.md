@@ -3228,7 +3228,7 @@ Fix: settle the clip GEOMETRY synchronously. New `useSyncedBodyClip` applies `ma
 Change is uncommitted on branch `staging`: `useSyncedBodyClip.ts` (new), `MarkdownNote.tsx`, `useFlipTransition.ts` (+ test), `flipMath.ts`.
 
 
-### Upgrade NPM packages for notethink (Wave 1 minor/patch) [](?time_taken=0)
+### Upgrade NPM packages for notethink inc eslint maybe pin (Wave 1 minor/patch) [](?time_taken=0)
 
 Pins in effect after this wave (snapshot):
 - eslint @9.39.4 (.ncurc reject) - structural - held - eslint-plugin-react 7.37.5 (latest) has no eslint-10 release; revisit when it ships eslint-10 compat
@@ -3552,7 +3552,7 @@ Two independent deliverables from the reviewed single-caret-ownership plan. Part
   + Part 2: notethink 0.3.23: single-caret ownership so board highlight/select is identical with or without an editor via a view-owned virtual caret; drop switchEditorOnClick, openNewEditorIfNoneOpen default false; tests N jest, N playwright
 
 
-### Upgrade NPM packages for notethink (Wave 1 minor/patch) [](?time_taken=90)
+### Upgrade NPM packages for notethink (Wave 1 minor/patch) eval TS7 [](?time_taken=90)
 
 Applied (minor/patch): `@typescript-eslint/eslint-plugin` + `@typescript-eslint/parser` + `typescript-eslint` 8.61.1 -> 8.64.0, `memfs` 4.57.7 -> 4.64.0, `webpack` 5.107.2 -> 5.108.4, `webpack-cli` 7.0.3 -> 7.2.1, `@playwright/test` 1.61.0 -> 1.61.1, `@vscode/test-web` 0.0.80 -> 0.0.81, `ts-loader` 9.6.1 -> 9.6.2, `npm-check-updates` 22.2.3 -> 22.2.9. Version 0.3.24 -> 0.3.25.
 

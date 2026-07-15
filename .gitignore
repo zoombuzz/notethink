@@ -20,10 +20,13 @@ nohup.out
 **/node_modules
 /.pnp
 .pnp.js
-.env
-.env*.local
-.env*.local-docker
-**/.env.development.local
+
+# Secrets: ignore every .env variant, but keep the committed templates
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.default
+!**/.env.*.example
 
 # Python dev
 *_venv/

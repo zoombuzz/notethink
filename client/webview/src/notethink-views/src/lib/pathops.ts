@@ -97,6 +97,26 @@ export function segmentPathBelowWorkspace(absolute_path: string, workspace_root?
 }
 
 /**
+ * The breadcrumb segment trail a view renders. In folder mode `integration_path` is set and the
+ * aggregation folder itself is segmented, so clicking a segment re-narrows the aggregation; in
+ * single-file mode the opened file's path is segmented instead. Both branches keep the opened
+ * workspace folder as the first clickable segment. Returns [] when there is nothing to segment.
+ *
+ * Shared so the rendered breadcrumb and the toolbar's Jump to tab resolve the same terminal leaf.
+ */
+export function breadcrumbSegmentsForView(
+    integration_path: string | undefined,
+    doc_path: string | undefined,
+    workspace_root?: string,
+    doc_relative_path?: string,
+): PathSegment[] {
+    if (integration_path) {
+        return segmentPathBelowWorkspace(integration_path, workspace_root);
+    }
+    return doc_path ? splitPathSegments(doc_path, workspace_root, doc_relative_path) : [];
+}
+
+/**
  * Resolve an `nt_breadcrumb_last` folder label against the opened file's path trail.
  * Segments `doc_path` below the workspace root (the same trail the breadcrumb renders) and
  * returns the absolute path of the DEEPEST segment whose label matches `label`. Deepest wins

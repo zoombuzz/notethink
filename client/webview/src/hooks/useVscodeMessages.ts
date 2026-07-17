@@ -1,6 +1,6 @@
 import Debug from 'debug';
 import { useCallback, useEffect, useState } from 'react';
-import { anyViewInFolderMode, resolveIntegrationMode } from '../notethink-views/src/lib/viewstateops';
+import { anyViewInFolderMode, resolveIntegrationMode, FOLDER_VIEW_STATE_ID } from '../notethink-views/src/lib/viewstateops';
 import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { TextSelection } from '../notethink-views/src/types/NoteProps';
@@ -21,6 +21,7 @@ interface VscodeMessagesDeps {
     setGlobalSettings: (settings: GlobalSettingsPayload) => void;
     setSettingsCascade: (settings: SettingsCascadePayload) => void;
     updateAllViewStates: (updater: (view_state: ViewState) => ViewState) => void;
+    setViewManagedState: (updates: Array<Record<string, unknown>>) => void;
     view_states_ref: React.MutableRefObject<Record<string, ViewState>>;
     navigation_callback_ref: React.MutableRefObject<((direction: string) => void) | undefined>;
     markPending: (key: string) => void;
@@ -152,7 +153,7 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState {
-    const { postMessage, markConnected, setGlobalSettings, setSettingsCascade, updateAllViewStates, view_states_ref, navigation_callback_ref, saved_view_states, markPending, clearPending, setJumpTargets } = deps;
+    const { postMessage, markConnected, setGlobalSettings, setSettingsCascade, updateAllViewStates, setViewManagedState, view_states_ref, navigation_callback_ref, saved_view_states, markPending, clearPending, setJumpTargets } = deps;
     const [docs_state, setDocsState] = useState<{ docs?: HashMapOf<Doc> }>({ docs: deps.initial_docs || {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [active_editor_doc_path, setActiveEditorDocPath] = useState<string | undefined>(undefined);
@@ -167,9 +168,23 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     const [excludeFilter, setExcludeFilter] = useState<string | undefined>(undefined);
 
     // dispatch a validated command message to the appropriate viewState mutation / navigation
-    const handleCommand = useCallback((message: { command: string; viewType?: string; setting?: string; direction?: string }) => {
+    const handleCommand = useCallback((message: { command: string; viewType?: string; setting?: string; direction?: string; mode?: string; path?: string }) => {
         debug('received command %s', message.command);
         switch (message.command) {
+            case 'setIntegrationScope':
+                /*
+                 * host-originated folder scope, sent only for a docless open (Open Viewer with no .md file active), where nothing else can seed one
+                 * resolveIntegrationMode defaults an unseeded view state to current_file and the aggregate `update` payload carries no scope to infer from, so without this the board renders an arbitrary file out of the folder's docs instead of the folder
+                 */
+                if (message.mode !== INTEGRATION_MODE_FOLDER || !message.path) { return; }
+                // never stomp a scope the webview already owns - state restored from a reload, or a mode the user pinned
+                if (anyViewInFolderMode(view_states_ref.current)) { return; }
+                setViewManagedState([{
+                    id: FOLDER_VIEW_STATE_ID,
+                    // concrete 'folder' rather than 'auto': the scope came from the workspace, not from any file's declaration, so the auto reconcile must not re-derive it from whichever doc the aggregate happens to surface
+                    display_options: { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: message.path },
+                }]);
+                return;
             case 'setViewType':
                 updateAllViewStates(view_state => ({ ...view_state, type: message.viewType }));
                 // cascade: if folder mode is currently active, persist the new view type
@@ -211,7 +226,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 }
                 return;
         }
-    }, [postMessage, updateAllViewStates, view_states_ref, navigation_callback_ref]);
+    }, [postMessage, updateAllViewStates, setViewManagedState, view_states_ref, navigation_callback_ref]);
 
     // eslint-disable-next-line max-lines-per-function -- onMessage dispatches on every wire-format message type; further decomposition would split the switch across two functions without making the contract clearer (tracked: function-decomposition-wave2)
     const onMessage = useCallback((event: MessageEvent) => {

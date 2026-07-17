@@ -254,15 +254,18 @@ export const workspace = {
 		const p = typeof u === 'string' ? u : u?.path || u?.toString?.() || '';
 		return p;
 	}),
+	// inspect() is part of the real WorkspaceConfiguration and the settings module calls it unconditionally; without it here every cascade read throws
 	getConfiguration: jest.fn(() => ({
 		get: jest.fn(() => undefined),
 		update: jest.fn(async () => {}),
+		inspect: jest.fn(() => undefined),
 	})),
 	onDidChangeConfiguration: jest.fn(() => ({ dispose: jest.fn() })),
 	registerFileSystemProvider: jest.fn(() => ({ dispose: jest.fn() })),
 	fs: {
 		readFile: jest.fn(async () => new Uint8Array()),
 		writeFile: jest.fn(async () => {}),
+		createDirectory: jest.fn(async () => {}),
 		stat: jest.fn(async () => ({ type: 1, ctime: 0, mtime: 0, size: 0 })),
 		readDirectory: jest.fn(async (): Promise<Array<[string, FileType]>> => []),
 	},
@@ -276,6 +279,11 @@ export const commands = {
 export const env = {
 	appName: '',
 	openExternal: jest.fn(async () => true),
+};
+
+// t() returns the source string: the real API falls back to it when no bundle is loaded, so tests can assert on the literal
+export const l10n = {
+	t: jest.fn((message: string) => message),
 };
 
 export const ExtensionContext = jest.fn();

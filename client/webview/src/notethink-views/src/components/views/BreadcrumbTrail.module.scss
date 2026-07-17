@@ -3,11 +3,15 @@
   align-items: center;
   margin: 0;
   padding: 0;
+  // full height, and topped out rather than sitting on a baseline: the trail hosts drawer tabs whose align-self: stretch can only reach as far as this box does, so without it they stretch to the text's height and float clear of the row's edges
+  height: 100%;
+  vertical-align: top;
   line-height: 1.4em;
   white-space: nowrap;
   color: var(--vscode-breadcrumb-foregroundColor, var(--vscode-foreground, inherit));
 
-  button {
+  // scoped to .breadcrumbItem rather than every button in the trail: the trail also hosts drawer tabs, which must keep their own .toolbarTab look instead of being flattened to a bare segment
+  .breadcrumbItem {
     background: none;
     border: none;
     padding: 1px 2px;
@@ -24,9 +28,7 @@
       color: var(--vscode-breadcrumb-activeSelectionForegroundColor, var(--vscode-foreground, inherit));
       outline: none;
     }
-  }
 
-  .breadcrumbItem {
     &.clickable {
       cursor: pointer;
     }
@@ -41,17 +43,9 @@
     opacity: 0.6;
     font-size: inherit;
   }
+}
 
-  .fileCount {
-    margin-left: 0.4em;
-    opacity: 0.6;
-    font-size: inherit;
-  }
-
-  .collisionAlert {
-    margin-left: 0.4em;
-    opacity: 0.8;
-    font-size: inherit;
-    color: var(--vscode-editorWarning-foreground, var(--vscode-foreground, inherit));
-  }
+// the Warnings tab's trailing glyph: the tab already carries the word, so the glyph only has to carry the theme's warning colour
+.collisionAlert {
+  color: var(--vscode-editorWarning-foreground, var(--vscode-foreground, inherit));
 }

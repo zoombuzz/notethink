@@ -14,6 +14,9 @@ export type DocumentSettings = CommonSettings;
 
 interface SettingsDocumentDrawerProps {
     settings: DocumentSettings;
+    viewTypeSelection: string;
+    autoResolvedType?: string;
+    onViewTypeChange: (view_type: string) => void;
     showLineNumbers?: boolean;
     watchUnopenedFilesInViewer?: boolean;
     openNewEditorIfNoneOpen?: boolean;
@@ -33,6 +36,9 @@ function SettingsDocumentDrawer(props: SettingsDocumentDrawerProps): React.React
                 <section className={styles.drawerGroup}>
                     <SettingsCommonControls
                         settings={props.settings}
+                        viewTypeSelection={props.viewTypeSelection}
+                        autoResolvedType={props.autoResolvedType}
+                        onViewTypeChange={props.onViewTypeChange}
                         showLineNumbers={props.showLineNumbers}
                         watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
                         openNewEditorIfNoneOpen={props.openNewEditorIfNoneOpen}

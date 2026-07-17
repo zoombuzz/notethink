@@ -4,6 +4,9 @@ import SettingsKanbanDrawer from './SettingsKanbanDrawer';
 
 const default_props = {
     settings: {},
+    viewTypeSelection: 'auto',
+    autoResolvedType: 'document',
+    onViewTypeChange: jest.fn(),
     naturalColumnOrder: ['doing', 'done', 'untagged'],
     showLineNumbers: false,
     onSettingChange: jest.fn(),

@@ -11,7 +11,7 @@ test.describe('Duplicate stable_id collision detection', () => {
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
     });
 
-    test('no alert when every headline resolves to a unique stable_id', async ({ page }) => {
+    test('no Warnings tab when every headline resolves to a unique stable_id', async ({ page }) => {
         // collision-b has all-unique story headlines, so nothing collides
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
@@ -21,18 +21,18 @@ test.describe('Duplicate stable_id collision detection', () => {
         await expect(page.getByTestId('breadcrumb-collision-alert')).toHaveCount(0);
     });
 
-    test('within-file duplicate headlines raise the alert; the drawer lists the group', async ({ page }) => {
+    test('within-file duplicate headlines raise the Warnings tab; the drawer lists the group', async ({ page }) => {
         // collision-a has two '### Plan release' stories in one file
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'collision-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
-        const alert = page.getByTestId('breadcrumb-collision-alert');
-        await expect(alert).toBeVisible({ timeout: 5000 });
+        const warnings_tab = page.getByTestId('breadcrumb-collision-alert');
+        await expect(warnings_tab).toBeVisible({ timeout: 5000 });
 
         const drawer = page.getByTestId('collisions-drawer-grid');
         await expect(drawer).toHaveAttribute('data-open', 'false');
-        await alert.click();
+        await warnings_tab.click();
         await expect(drawer).toHaveAttribute('data-open', 'true');
 
         const list = page.getByTestId('collisions-drawer-list');
@@ -50,9 +50,9 @@ test.describe('Duplicate stable_id collision detection', () => {
         await selectFolderMode(page);
         await page.waitForSelector('[data-folder-mode="true"]');
 
-        const alert = page.getByTestId('breadcrumb-collision-alert');
-        await expect(alert).toBeVisible({ timeout: 5000 });
-        await alert.click();
+        const warnings_tab = page.getByTestId('breadcrumb-collision-alert');
+        await expect(warnings_tab).toBeVisible({ timeout: 5000 });
+        await warnings_tab.click();
 
         const list = page.getByTestId('collisions-drawer-list');
         await expect(list).toContainText('shared-milestone');

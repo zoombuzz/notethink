@@ -58,6 +58,7 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         setGlobalSettings,
         setSettingsCascade,
         updateAllViewStates,
+        setViewManagedState: handleSetViewManagedState,
         view_states_ref,
         navigation_callback_ref,
         markPending: props.pendingWorkApi.markPending,

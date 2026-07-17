@@ -1566,9 +1566,11 @@ describe('NotethinkEditorProvider', () => {
 		});
 		afterEach(() => {
 			setWorkspaceRoots(undefined);
+			// restore the vscode mock's own default shape - dropping inspect() here leaks a config object the settings cascade throws on into every later test
 			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation(() => ({
 				get: jest.fn(() => undefined),
 				update: jest.fn(async () => {}),
+				inspect: jest.fn(() => undefined),
 			}));
 		});
 
@@ -1664,6 +1666,7 @@ describe('NotethinkEditorProvider', () => {
 			(vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
 				get: jest.fn(() => false),
 				update: jest.fn(async () => {}),
+				inspect: jest.fn(() => undefined),
 			});
 			const on_config_cb = (vscode.workspace.onDidChangeConfiguration as jest.Mock).mock.calls.slice(-1)[0][0];
 			on_config_cb({ affectsConfiguration: (key: string) => key === 'notethink.settings.view.generic.watchUnopenedFilesInViewer' });
@@ -1679,6 +1682,7 @@ describe('NotethinkEditorProvider', () => {
 			(vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
 				get: jest.fn(() => true),
 				update: jest.fn(async () => {}),
+				inspect: jest.fn(() => undefined),
 			});
 			const on_config_cb = (vscode.workspace.onDidChangeConfiguration as jest.Mock).mock.calls.slice(-1)[0][0];
 			on_config_cb({ affectsConfiguration: (key: string) => key === 'notethink.settings.view.generic.watchUnopenedFilesInViewer' });
@@ -1918,6 +1922,125 @@ describe('NotethinkEditorProvider', () => {
 			await panel.simulateMessage({ type: 'openRelative', href: 'evil.sh' });
 
 			expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+		});
+	});
+
+	// ---- docless session (Open Viewer with no .md file active) --------------
+
+	describe('docless session', () => {
+		const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+		// build a session with NO initial document, the way the openViewer command does when no .md editor is active
+		async function startDoclessPanel(): Promise<ReturnType<typeof createMockWebviewPanel>> {
+			const local_provider = new NotethinkEditorProvider(mockExtensionContext());
+			const local_panel = createMockWebviewPanel();
+			await (local_provider as unknown as { myWebviewPanel: (panel: unknown, doc?: unknown) => Promise<void> }).myWebviewPanel(local_panel.panel);
+			return local_panel;
+		}
+
+		beforeEach(() => {
+			setWorkspaceRoots(['/workspace']);
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
+		});
+		afterEach(() => setWorkspaceRoots(undefined));
+
+		it('starts without an initial document and posts nothing before requestInitialState', async () => {
+			const panel = await startDoclessPanel();
+
+			// buildInitialDoc is skipped entirely: there is no doc to parse and no active path to watch
+			expect(panel.postedMessages).toEqual([]);
+			expect(vscode.workspace.createFileSystemWatcher).not.toHaveBeenCalled();
+		});
+
+		it('never sends an initial doc update or selection because buildInitialDoc is skipped', async () => {
+			const panel = await startDoclessPanel();
+
+			await panel.simulateMessage({ type: 'requestInitialState' });
+			await flush();
+
+			// sendCurrentSelection only runs off an active_doc, which a docless session never builds
+			expect(getSelections(panel.postedMessages)).toEqual([]);
+			const doc_paths = getUpdates(panel.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+			expect(doc_paths).not.toContain(defaultDocPath);
+		});
+
+		it('seeds the webview folder scope with the root from workspaceFolders[0]', async () => {
+			const panel = await startDoclessPanel();
+
+			await panel.simulateMessage({ type: 'requestInitialState' });
+			await flush();
+
+			const seed = findByType(panel.postedMessages, 'command');
+			expect(seed).toBeDefined();
+			expect(seed.command).toBe('setIntegrationScope');
+			expect(seed.mode).toBe('folder');
+			expect(seed.path).toBe('/workspace');
+		});
+
+		it('enters folder mode at the workspace root, discovering from that root', async () => {
+			const panel = await startDoclessPanel();
+
+			await panel.simulateMessage({ type: 'requestInitialState' });
+			await flush();
+
+			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[0];
+			expect(find_call[0].base).toBe('/workspace');
+			expect(find_call[0].pattern).toBe('**/*.md');
+			const aggregate = getUpdates(panel.postedMessages).pop();
+			expect(aggregate.workspace_root).toBe('/workspace');
+		});
+
+		// the seed must land before the docs, or the webview renders one file out of the aggregate while it waits
+		it('seeds the folder scope before shipping the aggregate docs', async () => {
+			const panel = await startDoclessPanel();
+
+			await panel.simulateMessage({ type: 'requestInitialState' });
+			await flush();
+
+			const seed_index = panel.postedMessages.findIndex(m => m.type === 'command');
+			const first_update_index = panel.postedMessages.findIndex(m => m.type === 'update');
+			expect(seed_index).toBeGreaterThanOrEqual(0);
+			expect(first_update_index).toBeGreaterThan(seed_index);
+		});
+
+		it('does not seed a folder scope when there is no workspace folder', async () => {
+			setWorkspaceRoots(undefined);
+			const panel = await startDoclessPanel();
+
+			await panel.simulateMessage({ type: 'requestInitialState' });
+			await flush();
+
+			expect(findByType(panel.postedMessages, 'command')).toBeUndefined();
+			expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
+		});
+
+		// the reload path restores its own scope by posting setIntegration BEFORE requestInitialState; the docless open must stay out of its way
+		it('does not override a folder scope the webview already restored', async () => {
+			const panel = await startDoclessPanel();
+
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			await flush();
+			(vscode.workspace.findFiles as jest.Mock).mockClear();
+			panel.postedMessages.length = 0;
+			await panel.simulateMessage({ type: 'requestInitialState' });
+			await flush();
+
+			expect(findByType(panel.postedMessages, 'command')).toBeUndefined();
+			expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
+		});
+
+		// a .md file IS active: behaviour is unchanged, so the board stays on that file and no folder scope is originated
+		it('does not seed a folder scope for a session that has an initial document', async () => {
+			panelHelper.postedMessages.length = 0;
+			(vscode.workspace.findFiles as jest.Mock).mockClear();
+
+			await panelHelper.simulateMessage({ type: 'requestInitialState' });
+			await flush();
+
+			expect(findByType(panelHelper.postedMessages, 'command')).toBeUndefined();
+			expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
 		});
 	});
 });

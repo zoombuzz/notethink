@@ -8,24 +8,32 @@ import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import type { CommonSettingKey } from "../SettingsCommonControls";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 import type { StableIdCollision } from "../../../lib/noteops";
+import type { ActiveDrawer } from "./useToolbarDrawers";
 import CollisionsDrawer from "../drawers/CollisionsDrawer";
 import FilesDrawer from "../drawers/FilesDrawer";
 import JumpDrawer from "../drawers/JumpDrawer";
 import SettingsDocumentDrawer from "../drawers/SettingsDocumentDrawer";
 import SettingsKanbanDrawer from "../drawers/SettingsKanbanDrawer";
 import ToolbarDrawer from "../drawers/ToolbarDrawer";
-import ViewIntegrationSelector from "../ViewIntegrationSelector";
-import ViewTypeSelector from "../ViewTypeSelector";
+import ToolbarTab from "../drawers/ToolbarTab";
+import { viewTypeLabel } from "../viewTypeLabel";
 import master_view_styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:GenericViewToolbar");
+
+// the + trigger is hidden while it waits to return as a menu item; typed as boolean so the wiring below stays live code rather than a branch TS narrows away
+const SHOW_INSERT_BUTTON: boolean = false;
 
 interface GenericViewToolbarProps {
     props: ViewProps;
     handlers: ViewApi;
     displayOptions: NoteDisplayOptions;
     breadcrumbTrail: ReactElement;
-    // integration-mode dropdown: selection (may be auto), resolved concrete mode, change handler
+    /*
+     * integration-mode dropdown, hosted by the Jump to drawer: selection (may be auto), resolved
+     * concrete mode, change handler. The change handler also serves the Files drawer's file click,
+     * which pins current_file on a chosen file
+     */
     integrationSelection: IntegrationMode;
     integrationMode: ConcreteIntegrationMode;
     onIntegrationChange: (mode: IntegrationMode, target_file_path?: string) => void;
@@ -35,7 +43,7 @@ interface GenericViewToolbarProps {
     onViewTypeChange: (view_type: string) => void;
     naturalColumnOrder: string[];
     collisions: StableIdCollision[];
-    activeDrawer: 'none' | 'settings' | 'files' | 'collisions' | 'jump';
+    activeDrawer: ActiveDrawer;
     requestedJumpPath: string | undefined;
     onFolderJump: (folder_path: string) => void;
     onFileJump: (file_path: string) => void;
@@ -52,22 +60,13 @@ interface GenericViewToolbarProps {
     onApplyFilters: (next_include: string, next_exclude: string, next_max_notes_per_file: number) => void;
 }
 
-// shared inline style for the toolbar's icon buttons (insert, settings gear)
-const ICON_BUTTON_STYLE: React.CSSProperties = {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: '1.1em',
-    padding: '0 0.3em',
-    color: 'var(--vscode-foreground, inherit)',
-    opacity: 0.6,
-    marginLeft: '0.3em',
-};
-
 /**
- * Leaf-level view toolbar: integration + view-type selectors, breadcrumb, insert
- * and settings buttons, plus the settings and files drawers. Rendered only when
- * the view is a concrete type (the 'auto' view delegates before reaching this).
+ * Leaf-level view toolbar: the breadcrumb, then the View settings tab, followed by the drawers
+ * themselves. Only one tab renders here - the other three live inside the breadcrumb, on the state
+ * each of them is titled with. Neither selector is on this row: the view-type selector is in the
+ * View settings drawer's body and the integration selector in the Jump to drawer's, each reached
+ * through its tab, so the row holds no dropdown at all. Rendered only when the view is a concrete
+ * type (the 'auto' view delegates before reaching this).
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function GenericViewToolbar(component_props: GenericViewToolbarProps): React.ReactElement {
@@ -103,40 +102,30 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
     return (
         <>
             <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
-                <ViewIntegrationSelector
-                    currentSelection={integrationSelection}
-                    resolvedMode={integrationMode}
-                    onChange={onIntegrationChange}
-                />
                 <div className={master_view_styles.viewToolbarBreadcrumb}>
                     {breadcrumbTrail}
                 </div>
-                <ViewTypeSelector
-                    currentSelection={viewTypeSelection}
-                    resolvedType={autoResolvedType}
-                    onChange={onViewTypeChange}
+                {SHOW_INSERT_BUTTON && (
+                    <button
+                        type="button"
+                        className={master_view_styles.toolbarIconButton}
+                        data-testid="view-insert-button"
+                        onClick={(e) => { e.stopPropagation(); onInsertOpen(); }}
+                        title={l10n.t('Insert')}
+                        aria-label={l10n.t('Insert')}
+                    >
+                        &#43;
+                    </button>
+                )}
+                <ToolbarTab
+                    label={viewTypeLabel(viewTypeSelection, autoResolvedType)}
+                    testId="view-settings-button"
+                    controls={`v${props.id}-settings-drawer`}
+                    open={activeDrawer === 'settings'}
+                    title={l10n.t('View settings')}
+                    buttonRef={gearButtonRef}
+                    onToggle={() => onSettingsToggle()}
                 />
-                <button
-                    data-testid="view-insert-button"
-                    onClick={(e) => { e.stopPropagation(); onInsertOpen(); }}
-                    style={ICON_BUTTON_STYLE}
-                    title={l10n.t('Insert')}
-                    aria-label={l10n.t('Insert')}
-                >
-                    &#43;
-                </button>
-                <button
-                    ref={gearButtonRef}
-                    data-testid="view-settings-button"
-                    onClick={(e) => { e.stopPropagation(); onSettingsToggle(); }}
-                    style={ICON_BUTTON_STYLE}
-                    title={l10n.t('Settings')}
-                    aria-label={l10n.t('Settings')}
-                    aria-expanded={activeDrawer === 'settings'}
-                    aria-controls={`v${props.id}-settings-drawer`}
-                >
-                    &#9881;
-                </button>
             </div>
             <ToolbarDrawer
                 open={activeDrawer === 'settings'}
@@ -152,6 +141,9 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                             scrollNoteIntoView: displayOptions.settings?.scrollNoteIntoView,
                             autoExpandFocusedNote: displayOptions.settings?.autoExpandFocusedNote,
                         }}
+                        viewTypeSelection={viewTypeSelection}
+                        autoResolvedType={autoResolvedType}
+                        onViewTypeChange={onViewTypeChange}
                         showLineNumbers={displayOptions.settings?.showLineNumbers}
                         watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}
                         openNewEditorIfNoneOpen={displayOptions.settings?.openNewEditorIfNoneOpen}
@@ -172,6 +164,9 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                             autoExpandFocusedNote: displayOptions.settings?.autoExpandFocusedNote,
                             columnOrder: displayOptions.settings?.columnOrder,
                         }}
+                        viewTypeSelection={viewTypeSelection}
+                        autoResolvedType={autoResolvedType}
+                        onViewTypeChange={onViewTypeChange}
                         naturalColumnOrder={naturalColumnOrder}
                         showLineNumbers={displayOptions.settings?.showLineNumbers}
                         watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}
@@ -234,7 +229,15 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                 ariaLabel={l10n.t('Jump to')}
                 onClose={onCloseDrawer}
             >
-                <JumpDrawer requestedPath={requestedJumpPath} onFolderJump={onFolderJump} onFileJump={onFileJump} onReturn={onCloseDrawer} />
+                <JumpDrawer
+                    requestedPath={requestedJumpPath}
+                    integrationSelection={integrationSelection}
+                    integrationMode={integrationMode}
+                    onIntegrationChange={onIntegrationChange}
+                    onFolderJump={onFolderJump}
+                    onFileJump={onFileJump}
+                    onReturn={onCloseDrawer}
+                />
             </ToolbarDrawer>
         </>
     );

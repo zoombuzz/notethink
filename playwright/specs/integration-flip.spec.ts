@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
+import { injectMultipleDocsFromFixtures, selectFolderMode, selectIntegrationMode } from '../helpers/inject-multi-docs';
 
 const WORKSPACE_ROOT = '/mnt/workspace/active_development';
 
 async function selectCurrentFileMode(page: Parameters<typeof selectFolderMode>[0]): Promise<void> {
-    const selector = page.locator('[data-testid="view-integration-selector"]').first();
-    await selector.selectOption('current_file');
+    await selectIntegrationMode(page, 'current_file');
 }
 
 test.describe('Integration flip (folder ↔ current-file)', () => {

@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
@@ -60,9 +60,28 @@ export async function injectMultipleDocsFromFixtures(
 }
 
 /**
- * Toggle the integration selector dropdown to 'folder' mode via the existing UI.
+ * Set the integration selector via the existing UI. The selector lives in the Jump to drawer's
+ * body, so this drives the real user route: open the drawer from the breadcrumb's terminal leaf,
+ * which is that drawer's tab, pick the mode, then leave the board as the user would, with the mode
+ * changed and no drawer hanging open over the view. Assertions on the selector's own DOM (value,
+ * option text) do not need the drawer open and can address it directly.
+ *
+ * Closing is deliberately Escape and not a second tab click. A mode change can re-key the view
+ * (current_file addresses the view by doc path, folder by the canonical __folder__), which remounts
+ * the toolbar with a fresh drawer state that is already closed - so a second tab click would land on
+ * a new tab and re-open it. Escape closes an open drawer and no-ops when none is open, which holds
+ * whether or not the flip happened to remount.
  */
+export async function selectIntegrationMode(page: Page, mode: 'auto' | 'folder' | 'current_file'): Promise<void> {
+    const tab = page.locator('[data-testid="breadcrumb-leaf"]').first();
+    const drawer = page.locator('[data-testid="jump-drawer-grid"]').first();
+    await tab.click();
+    await expect(drawer).toHaveAttribute('data-open', 'true');
+    await page.locator('[data-testid="view-integration-selector"]').first().selectOption(mode);
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveAttribute('data-open', 'false');
+}
+
 export async function selectFolderMode(page: Page): Promise<void> {
-    const selector = page.locator('[data-testid="view-integration-selector"]').first();
-    await selector.selectOption('folder');
+    await selectIntegrationMode(page, 'folder');
 }

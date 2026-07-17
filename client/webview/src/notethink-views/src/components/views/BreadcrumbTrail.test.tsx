@@ -154,8 +154,9 @@ describe('BreadcrumbTrail', () => {
             parent_notes: [parent1],
         });
         const { container } = render(<BreadcrumbTrail {...current} doc_path="/docs/todo.md" />);
-        const items = container.querySelectorAll('[class*="breadcrumbItem"]');
-        // 2 path segments + 1 note breadcrumb
+        // the terminal segment is the Jump to tab, so it carries the tab class rather than .breadcrumbItem
+        const items = container.querySelectorAll('[class*="breadcrumbItem"], [data-testid="breadcrumb-leaf"]');
+        // 1 path segment + the leaf tab + 1 note breadcrumb
         expect(items).toHaveLength(3);
         expect(items[0]).toHaveTextContent('docs');
         expect(items[1]).toHaveTextContent('todo.md');
@@ -293,6 +294,41 @@ describe('BreadcrumbTrail', () => {
         expect(leaf).toHaveTextContent('todo.md');
         expect(leaf).toHaveAttribute('aria-haspopup', 'menu');
         expect(leaf).toHaveAttribute('data-path', '/workspace/docs/todo.md');
+    });
+
+    describe('leaf as the Jump to tab', () => {
+
+        it('renders the leaf as a tab titled with the leaf label, carrying a chevron', () => {
+            const current = makeNote({ seq: 0 });
+            render(<BreadcrumbTrail {...current} doc_path="/workspace/docs/todo.md" view_id="v1" />);
+            const leaf = screen.getByTestId('breadcrumb-leaf');
+            expect(leaf).toHaveAttribute('aria-expanded', 'false');
+            expect(leaf).toHaveAttribute('aria-controls', 'vv1-jump-drawer');
+            expect(screen.getByTestId('breadcrumb-leaf-chevron')).toHaveAttribute('data-direction', 'down');
+        });
+
+        it('renders the leaf exactly once - as the tab, never also as a plain segment', () => {
+            const current = makeNote({ seq: 0 });
+            render(<BreadcrumbTrail {...current} doc_path="/workspace/docs/todo.md" />);
+            expect(screen.getAllByTestId('breadcrumb-leaf')).toHaveLength(1);
+            // the label appears in the trail once: inside the tab, and nowhere else
+            expect(screen.getAllByText('todo.md')).toHaveLength(1);
+            expect(screen.getByText('todo.md').closest('button')).toBe(screen.getByTestId('breadcrumb-leaf'));
+        });
+
+        it('points the leaf chevron up while the jump drawer is the open one', () => {
+            const current = makeNote({ seq: 0 });
+            render(<BreadcrumbTrail {...current} doc_path="/workspace/docs/todo.md" active_drawer="jump" />);
+            expect(screen.getByTestId('breadcrumb-leaf')).toHaveAttribute('aria-expanded', 'true');
+            expect(screen.getByTestId('breadcrumb-leaf-chevron')).toHaveAttribute('data-direction', 'up');
+        });
+
+        it('leaves the leaf chevron down while a different drawer is open', () => {
+            const current = makeNote({ seq: 0 });
+            render(<BreadcrumbTrail {...current} doc_path="/workspace/docs/todo.md" active_drawer="settings" />);
+            expect(screen.getByTestId('breadcrumb-leaf')).toHaveAttribute('aria-expanded', 'false');
+            expect(screen.getByTestId('breadcrumb-leaf-chevron')).toHaveAttribute('data-direction', 'down');
+        });
     });
 
     it('calls onFolderClick with full path when workspace_root is set', () => {
@@ -517,6 +553,24 @@ describe('BreadcrumbTrail', () => {
             expect(onFileCountClick.mock.calls[0][0]).toBe(count);
         });
 
+        it('renders the count as the Files tab, titled with the count itself', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/alex/github.com/active_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/calfam'}
+                view_id="v1"
+                active_drawer="files"
+                file_count={17}
+                note_count={214}
+            />);
+            const tab = screen.getByTestId('breadcrumb-file-count');
+            expect(tab).toHaveTextContent('(214 in 17 files)');
+            expect(tab).toHaveAttribute('aria-controls', 'vv1-files-drawer');
+            expect(tab).toHaveAttribute('aria-expanded', 'true');
+            expect(screen.getByTestId('breadcrumb-file-count-chevron')).toHaveAttribute('data-direction', 'up');
+        });
+
         it('does not render a count when file_count is undefined', () => {
             const current = makeNote({ seq: 0 });
             const workspace_root = '/home/alex/github.com/active_development';
@@ -585,30 +639,34 @@ describe('BreadcrumbTrail', () => {
         });
     });
 
-    describe('collision alert', () => {
+    describe('collision alert as the Warnings tab', () => {
 
-        it('renders the alert when has_collisions is true', () => {
-            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} has_collisions={true} />);
-            expect(screen.getByTestId('breadcrumb-collision-alert')).toBeInTheDocument();
-        });
-
-        it('does not render the alert when has_collisions is false', () => {
-            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} has_collisions={false} />);
-            expect(screen.queryByTestId('breadcrumb-collision-alert')).not.toBeInTheDocument();
-        });
-
-        it('does not render the alert when has_collisions is undefined', () => {
+        it('does not render the Warnings tab when nothing collides', () => {
             render(<BreadcrumbTrail {...makeNote({ seq: 0 })} />);
             expect(screen.queryByTestId('breadcrumb-collision-alert')).not.toBeInTheDocument();
         });
 
-        it('calls onCollisionsClick with the alert element when clicked', () => {
-            const onCollisionsClick = jest.fn();
-            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} has_collisions={true} onCollisionsClick={onCollisionsClick} />);
-            const alert = screen.getByTestId('breadcrumb-collision-alert');
-            alert.click();
-            expect(onCollisionsClick).toHaveBeenCalledTimes(1);
-            expect(onCollisionsClick.mock.calls[0][0]).toBe(alert);
+        it('renders the Warnings tab titled with the word followed by the alert glyph', () => {
+            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} has_collisions view_id="v1" />);
+            const tab = screen.getByTestId('breadcrumb-collision-alert');
+            expect(tab).toHaveTextContent('Warnings');
+            expect(tab).toHaveTextContent('⚠');
+            expect(tab).toHaveAttribute('aria-controls', 'vv1-collisions-drawer');
+        });
+
+        it('calls onCollisionsClick with the tab element when the Warnings tab is clicked', () => {
+            const on_collisions_click = jest.fn();
+            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} has_collisions onCollisionsClick={on_collisions_click} />);
+            const tab = screen.getByTestId('breadcrumb-collision-alert');
+            tab.click();
+            expect(on_collisions_click).toHaveBeenCalledTimes(1);
+            expect(on_collisions_click.mock.calls[0][0]).toBe(tab);
+        });
+
+        it('points the Warnings chevron up while the collisions drawer is open', () => {
+            render(<BreadcrumbTrail {...makeNote({ seq: 0 })} has_collisions active_drawer="collisions" />);
+            expect(screen.getByTestId('breadcrumb-collision-alert')).toHaveAttribute('aria-expanded', 'true');
+            expect(screen.getByTestId('breadcrumb-collision-alert-chevron')).toHaveAttribute('data-direction', 'up');
         });
     });
 });

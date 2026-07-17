@@ -60,7 +60,9 @@ export function activate(context: vscode.ExtensionContext): void {
 	// register command defined in package.json
 	const open_viewer_command = vscode.commands.registerCommand('notethink.openViewer', async () => {
 		const active_editor = vscode.window.activeTextEditor;
-		if (!active_editor || !active_editor.document.uri.path.endsWith('.md')) {
+		const active_md_document = active_editor?.document.uri.path.endsWith('.md') ? active_editor.document : undefined;
+		// with no .md file to open on, the panel goes docless and PanelSession opens folder mode at the workspace root instead; warn only when neither a file nor a folder gives it anything to show
+		if (!active_md_document && !vscode.workspace.workspaceFolders?.[0]) {
 			vscode.window.showWarningMessage(vscode.l10n.t('NoteThink: open a .md file first'));
 			return;
 		}
@@ -72,7 +74,7 @@ export function activate(context: vscode.ExtensionContext): void {
 			{ viewColumn: vscode.ViewColumn.One, preserveFocus: true },
 			{ enableScripts: true, retainContextWhenHidden: true },
 		);
-		await provider.myWebviewPanel(panel, active_editor.document);
+		await provider.myWebviewPanel(panel, active_md_document);
 	});
 	context.subscriptions.push(open_viewer_command);
 

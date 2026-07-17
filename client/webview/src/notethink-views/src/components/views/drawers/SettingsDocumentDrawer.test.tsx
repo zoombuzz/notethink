@@ -4,6 +4,9 @@ import SettingsDocumentDrawer from './SettingsDocumentDrawer';
 
 const default_props = {
     settings: {},
+    viewTypeSelection: 'auto',
+    autoResolvedType: 'document',
+    onViewTypeChange: jest.fn(),
     showLineNumbers: false,
     onSettingChange: jest.fn(),
     onGlobalSettingChange: jest.fn(),

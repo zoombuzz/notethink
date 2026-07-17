@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
+import { injectMultipleDocsFromFixtures, selectFolderMode, selectIntegrationMode } from '../helpers/inject-multi-docs';
 import { sendCommand } from '../helpers/send-command';
 
 const WORKSPACE_ROOT = '/mnt/workspace/active_development';
@@ -12,8 +12,7 @@ async function emitPendingChange(page: Page, key: string, on: boolean): Promise<
 }
 
 async function selectCurrentFileMode(page: Page): Promise<void> {
-    const selector = page.locator('[data-testid="view-integration-selector"]').first();
-    await selector.selectOption('current_file');
+    await selectIntegrationMode(page, 'current_file');
 }
 
 test.describe('Pending-work spinner', () => {

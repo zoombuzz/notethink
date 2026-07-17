@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { injectDocsFromFixture, injectActiveEditorDocFromFixture } from '../helpers/inject-docs';
+import { selectIntegrationMode } from '../helpers/inject-multi-docs';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
 import { clearCapturedMessages } from '../helpers/capture-messages';
 
@@ -23,6 +24,7 @@ const PORTFOLIO = `${WORKSPACE_ROOT}/portfolio`;
 const DECLARING_PATH = `${PORTFOLIO}/atlas/todo.md`;
 const DECLARING_REL = 'portfolio/atlas/todo.md';
 
+// the selector lives in the Jump to drawer; reading its value / option text works with the drawer shut, only a selection has to open it (selectIntegrationMode)
 const selector = (page: Page): Locator => page.locator('[data-testid="view-integration-selector"]').first();
 const renderer = (page: Page): Locator => page.locator('[data-testid="NoteRenderer"]');
 
@@ -65,8 +67,8 @@ test.describe('Auto integration mode (H1 linetags)', () => {
         // the selector reads "Auto (Folder)" - auto is still in force, resolved to folder
         await expect(selector(page)).toHaveValue('auto');
         await expect(selector(page).locator('option[value="auto"]')).toHaveText('Auto (Folder)');
-        // the breadcrumb is scoped to the portfolio segment
-        await expect(page.getByTestId('breadcrumb-leaf')).toHaveText('portfolio');
+        // the breadcrumb is scoped to the portfolio segment, which titles its leaf tab
+        await expect(page.getByTestId('breadcrumb-leaf-label')).toHaveText('portfolio');
     });
 
     // manual item 2 (navigation congruence)
@@ -152,13 +154,13 @@ test.describe('Auto integration mode (H1 linetags)', () => {
         await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
 
         // pin concrete current_file
-        await selector(page).selectOption('current_file');
+        await selectIntegrationMode(page, 'current_file');
         await expect(selector(page)).toHaveValue('current_file');
         await expect(renderer(page)).not.toHaveAttribute('data-folder-mode', 'true');
         await clearCapturedMessages(page);
 
         // re-select Auto → full reset to the file's declaration (folder, scoped to portfolio)
-        await selector(page).selectOption('auto');
+        await selectIntegrationMode(page, 'auto');
         await expect(selector(page)).toHaveValue('auto');
         await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
         await expect.poll(() => lastSetIntegrationPath(page, 'folder'), { timeout: 5000 }).toBe(PORTFOLIO);

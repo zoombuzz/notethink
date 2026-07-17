@@ -5,8 +5,6 @@ import { INTEGRATION_MODE_AUTO, INTEGRATION_MODES, type ConcreteIntegrationMode,
 
 const debug = Debug("nodejs:notethink-views:ViewIntegrationSelector");
 
-export { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, INTEGRATION_MODES, type IntegrationMode } from "../../types/IntegrationMode";
-
 // concrete-mode labels; the 'auto' option's label is composed from the resolved mode ("Auto (Folder)")
 function getConcreteModeLabels(): Record<ConcreteIntegrationMode, string> {
     return {

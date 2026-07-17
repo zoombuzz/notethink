@@ -2,6 +2,7 @@ import Debug from "debug";
 import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import type { GlobalSettingKey } from "../../types/Messages";
+import ViewTypeSelector from "./ViewTypeSelector";
 
 const debug = Debug("nodejs:notethink-views:SettingsCommonControls");
 
@@ -13,8 +14,16 @@ export interface CommonSettings {
 
 export type CommonSettingKey = keyof CommonSettings;
 
+/**
+ * viewTypeSelection / autoResolvedType / onViewTypeChange: the view-type selector's wiring. It rides
+ * with the common controls because switching between Document and Kanban has to be reachable from
+ * whichever of the two the board is currently showing.
+ */
 interface SettingsCommonControlsProps {
     settings: CommonSettings;
+    viewTypeSelection: string;
+    autoResolvedType?: string;
+    onViewTypeChange: (view_type: string) => void;
     showLineNumbers?: boolean;
     watchUnopenedFilesInViewer?: boolean;
     openNewEditorIfNoneOpen?: boolean;
@@ -34,6 +43,15 @@ export default function SettingsCommonControls(props: SettingsCommonControlsProp
 
     return (
         <>
+            <p>{l10n.t('View type')}</p>
+            <p>
+                <ViewTypeSelector
+                    currentSelection={props.viewTypeSelection}
+                    resolvedType={props.autoResolvedType}
+                    onChange={props.onViewTypeChange}
+                />
+            </p>
+
             <p>
                 <label>
                     <input

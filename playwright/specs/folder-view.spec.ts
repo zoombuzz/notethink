@@ -130,10 +130,10 @@ test.describe('Aggregate (Folder) view', () => {
         await selectFolderMode(page);
         await page.waitForSelector('[data-folder-mode="true"]');
 
-        // folder mode: "(X in 2 files)" - X is the merged top-level story count
+        // folder mode: "(X in 2 files)" - X is the merged top-level story count. the count is the Files tab's own title, so read the label element rather than the tab, which also carries a chevron
         const count = page.getByTestId('breadcrumb-file-count');
         await expect(count).toBeVisible({ timeout: 5000 });
-        await expect(count).toHaveText(/^\(\d+ in 2 files\)$/);
+        await expect(page.getByTestId('breadcrumb-file-count-label')).toHaveText(/^\(\d+ in 2 files\)$/);
     });
 
     test('clicking the breadcrumb count opens the Files drawer; editing the include glob re-filters the list', async ({ page }) => {

@@ -17,6 +17,11 @@ const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
 const MAX_WALK_ENTRIES = 5000;
 // synthetic child filename used to ask an exclude glob "would you drop everything inside this directory?"; the globs end in /** so they only ever match a file path, never a bare directory
 const EXCLUDE_PROBE_FILE = '__probe__.md';
+/*
+ * last-resort scheme carrier for a session with neither a document nor a workspace folder to borrow one from
+ * unreachable through the three real entry points (the custom editor and the deserializer always carry a document; the openViewer command refuses when there is no document AND no folder), and inert if ever reached: every path that consumes base_uri sits behind isWithinWorkspace, which fails closed with no workspace folders
+ */
+const INERT_BASE_URI = vscode.Uri.file('/');
 
 /**
  * apply changes to a document end-to-start so earlier offsets stay valid. Prefers an
@@ -65,6 +70,10 @@ async function applyEditTextChanges(document: vscode.TextDocument, uri: vscode.U
  *
  * Constructed and started by `NotethinkEditorProvider.myWebviewPanel`, which keeps
  * the panel reference for command relay via the `onActivate`/`onDispose` callbacks.
+ *
+ * initialDocument is optional: a docless session (the openViewer command with no active
+ * .md editor) has no file to render and opens folder mode at the workspace root instead,
+ * originated from openFolderAtWorkspaceRootIfDocless.
  */
 export class PanelSession {
 	private active_doc: Doc | undefined;
@@ -90,18 +99,18 @@ export class PanelSession {
 
 	constructor(
 		private readonly webviewPanel: vscode.WebviewPanel,
-		private readonly initialDocument: vscode.TextDocument,
+		private readonly initialDocument: vscode.TextDocument | undefined,
 		private readonly context: vscode.ExtensionContext,
 		private readonly getHtml: (webview: vscode.Webview) => string,
 		private readonly onActivate: (panel: vscode.WebviewPanel) => void,
 		private readonly onDispose: (panel: vscode.WebviewPanel) => void,
 	) {
 		// resolve workspace root for breadcrumb display; asRelativePath/getWorkspaceFolder handle symlinks and may return undefined in web hosts
-		const workspace_folder = vscode.workspace.getWorkspaceFolder(initialDocument.uri)
+		const workspace_folder = (initialDocument ? vscode.workspace.getWorkspaceFolder(initialDocument.uri) : undefined)
 			|| vscode.workspace.workspaceFolders?.[0];
 		this.workspace_root = workspace_folder?.uri.path || '';
 		// prefer the workspace folder's URI as the scheme carrier; fall back to the active doc's URI when no folder is open (single loose file)
-		this.base_uri = workspace_folder?.uri ?? initialDocument.uri;
+		this.base_uri = workspace_folder?.uri ?? initialDocument?.uri ?? INERT_BASE_URI;
 		this.extension_version = this.context.extension.packageJSON.version as string || '';
 	}
 
@@ -115,6 +124,9 @@ export class PanelSession {
 	 * active-file watcher, register every vscode listener, and subscribe to webview
 	 * messages. Returns once initial state is built (the doc is pushed lazily on the
 	 * webview's requestInitialState).
+	 *
+	 * A docless session has nothing to build here: it leaves active_doc / active_path unset
+	 * and the folder-at-root open runs from requestInitialState, once the webview is listening.
 	 */
 	public async start(): Promise<void> {
 		this.onActivate(this.webviewPanel);
@@ -123,7 +135,7 @@ export class PanelSession {
 		});
 		this.webviewPanel.webview.options = { enableScripts: true };
 		this.webviewPanel.webview.html = this.getHtml(this.webviewPanel.webview);
-		await this.buildInitialDoc();
+		if (this.initialDocument) { await this.buildInitialDoc(this.initialDocument); }
 		this.registerListeners();
 	}
 
@@ -230,12 +242,12 @@ export class PanelSession {
 	 * so by then integration_path is set and the merge path runs instead of wiping the
 	 * saved folder docs map.
 	 */
-	private async buildInitialDoc(): Promise<void> {
-		this.active_path = this.initialDocument.uri.path;
+	private async buildInitialDoc(initialDocument: vscode.TextDocument): Promise<void> {
+		this.active_path = initialDocument.uri.path;
 		try {
-			this.active_doc = await this.buildDoc(this.initialDocument);
+			this.active_doc = await this.buildDoc(initialDocument);
 		} catch (err) {
-			writeToErrorLog('failed to build initial document', this.initialDocument.uri.path, err);
+			writeToErrorLog('failed to build initial document', initialDocument.uri.path, err);
 		}
 		this.syncActiveFileWatcher();
 	}
@@ -458,9 +470,46 @@ export class PanelSession {
 			this.sendGlobalSettings();
 			this.sendSettingsCascade();
 			this.syncActiveFileWatcher();
+			await this.openFolderAtWorkspaceRootIfDocless();
 		} catch (err) {
 			writeToErrorLog('requestInitialState failed', '', err);
 		}
+	}
+
+	/**
+	 * a docless session (openViewer with no active .md editor) has no file to render, so the board
+	 * opens in folder mode at the workspace root instead. Runs from requestInitialState rather than
+	 * start() because that message is the first proof the webview is listening - a seed posted into a
+	 * webview whose bundle has not loaded yet is simply dropped.
+	 *
+	 * Inert whenever anything else already owns the scope: an active doc (single-file mode is
+	 * unchanged) or an integration_path the webview restored from persisted state (its setIntegration
+	 * is deliberately posted BEFORE requestInitialState, so it has already landed by now).
+	 */
+	private async openFolderAtWorkspaceRootIfDocless(): Promise<void> {
+		if (this.active_doc || this.integration_path) { return; }
+		// same first-folder convention the constructor uses to resolve workspace_root; multi-root picks folder [0]
+		const root_path = vscode.workspace.workspaceFolders?.[0]?.uri.path;
+		if (!root_path) { return; }
+		debug('docless open: entering folder mode at workspace root %s', root_path);
+		this.sendSeedIntegration(root_path);
+		await this.enterFolderMode(root_path, {});
+	}
+
+	/**
+	 * tell the webview to scope its own folder view state to this path. The webview decides
+	 * folder-vs-file from its `__folder__` view state alone, so a host-side enterFolderMode is
+	 * invisible to it: with no seed it resolves current_file and renders an arbitrary file out of
+	 * the aggregate the discovery ships. This rides the existing validated command channel rather
+	 * than the aggregate `update` payload, which is a hot path and carries no scope today.
+	 */
+	private sendSeedIntegration(folder_path: string): void {
+		this.webviewPanel.webview.postMessage({
+			type: 'command',
+			command: 'setIntegrationScope',
+			mode: INTEGRATION_MODE_FOLDER,
+			path: folder_path,
+		});
 	}
 
 	// per-setting storage target preference for the non-cascade globals: showLineNumbers persists per-workspace; the rest are personal preferences that follow the user across projects (matching each key's window/resource scope in package.json)

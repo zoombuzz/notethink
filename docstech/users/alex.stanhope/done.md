@@ -3599,3 +3599,165 @@ With the board rooted on `notegit`, the demo boards under `notegit/nodejs/dulcet
 + [X] add a regression test proving a workspace under a `build/` directory is not wholly excluded (verified red against the absolute-path fallback)
 + manual: root the board on notegit and confirm the ai-board demo stories are gone
 + manual: root the board on the workspace root and confirm every project's stories still render
+
+
+### Drawer tabs, and integration selector into Jump to [](?id=drawer-tabs-and-jump-integration)
+
+The toolbar's four drawers share no affordance. Only Settings has a real button (a bare `&#9881;` glyph); Files opens from the breadcrumb's `(12 in 4 files)` count, Collisions from a `&#9888;` glyph, and Jump from the breadcrumb leaf. None shows an open/closed indicator: `aria-expanded` on the gear (`GenericViewToolbar.tsx:135`) is the only signal and it is screen-reader-only. Meanwhile the integration selector holds the top-left as a permanent dropdown that goes untouched, when the breadcrumb already says whether the view is a file or a folder. Give every drawer a tab, and move the selector behind one.
+
++ goal
+  + every drawer opens from a tab-styled trigger carrying a name and a chevron
+  + the chevron points down when the drawer is closed and up when it is open
+  + the drawers read as one learnable set instead of unrelated glyphs scattered across the row
+  + the integration selector keeps every behaviour it has today, relocated into the Jump to drawer
++ background
+  + drawers are full-width push-down panels (`ToolbarDrawer.tsx:27-51`; `.drawerGrid` 0fr->1fr at `ViewRenderer.module.scss:321-337`), sticky at `top: 26px`, one z-index below the toolbar
+  + so a tab that shares the drawer's `--vscode-editorWidget-background` (`ViewRenderer.module.scss:355`) reads as joined to the panel beneath it
+  + `useToolbarDrawers.ts:27` already holds a single `active_drawer` scalar (`'none' | 'settings' | 'files' | 'collisions' | 'jump'`), so the drawers are mutually exclusive and the state a tab strip needs exists
+  + the repo has no codicons; every glyph is a unicode entity
+  + the in-repo chevron precedent is a rotated `›`: `.jumpTreeGlyphOpen { transform: rotate(90deg) }` (`ViewRenderer.module.scss:647-650`, used at `JumpDrawer.tsx:50`)
+  + no `--vscode-tab-*` variable is used anywhere in the repo yet, so the tab palette is an unconstrained choice
+  + the toolbar's `border-bottom` (`ViewRenderer.module.scss:690`) is currently invisible - it is set to the same colour as the background
++ scope - tab affordance
+  + name the triggers: gear becomes "View settings", the collisions glyph becomes "Warnings", alongside "Files" and "Jump to"
+  + render each tab as its name followed by a chevron, reusing the rotated `›` technique rather than a new glyph
+  + drive the chevron direction off `active_drawer`, so it flips with the drawer it controls
+  + give the active tab `--vscode-editorWidget-background` and no bottom border, so it merges into its open panel
+  + carry `aria-expanded` and `aria-controls` on every tab, not just the gear
+  + tab-ify each trigger where it already sits rather than gathering them into a group elsewhere
+  + every tab is titled with its own current state, which is the rule the whole toolbar now follows
++ scope - tab placement and titles (decided 2026-07-17, revising the first pass which grouped them right)
+  + the breadcrumb's terminal leaf becomes the Jump to tab, titled with the leaf itself, so the trail reads `oma > docstech > [todo.md v]` and the leaf is never rendered twice
+  + the file count becomes the Files tab, titled `(X in Y files)`
+  + the collisions alert becomes the Warnings tab, titled "Warnings" followed by the `&#9888;` glyph
+  + those three sit on the left, in the breadcrumb, because that is where their content already lives
++ scope - merge View settings with the view-type selector
+  + the two become ONE tab on the right, titled with the resolved view type ("Auto (Kanban)"), opening the View settings drawer
+  + no `<select>` remains in the toolbar row; a `<select>` inside a drawer body is fine and is now the established pattern
+  + the existing `ViewTypeSelector` moves into the View settings drawer body unchanged, mirroring how `ViewIntegrationSelector` moved into Jump to
+  + keep this move deliberately thin: a separate design session is integrating view-type selection and view settings at a deeper level, and anything clever built here would be thrown away
+  + keep the existing "Auto ({0})" resolved-label semantics for the tab title
++ scope - header bar baseline and tab height (from a dev-host screenshot, 2026-07-17)
+  + the baseline runs the full width of the header bar, not just under each tab, and the active tab breaks it
+  + a `border-bottom` on the tab cannot do this, and a border on `.viewToolbar` cannot be painted over because `overflow: hidden` clips children at the padding box; an absolutely-positioned `::after` on the toolbar plus `z-index` on the active tab is the shape that works
+  + tabs are a little taller, with consistent spacing above and below
+  + that spacing must not depend on ancestor segments being present: with `oma > docstech >` the ancestor text sets the row height, but rooted at the workspace root there are no ancestors and the row collapses
+  + `.drawerGrid`'s sticky `top: 26px` is hand-tuned to the toolbar height and must move with it, ideally via a shared variable rather than two hand-synced magic numbers
++ scope - hide the insert button
+  + hide the `+` button behind a flag rather than deleting it; it returns later as a menu item
+  + leave the InsertModal and its open handler wired so the restore is a one-line change
++ scope - integration selector
+  + move `ViewIntegrationSelector` out of the toolbar row and into the Jump to drawer body
+  + change no behaviour: `currentSelection` / `resolvedMode` / `onChange` wiring stays as-is
++ out of scope
+  + removing any integration mode, the `auto` selection, or the pin/auto semantics
+  + changing drawer contents beyond adding the selector to Jump to
+  + the `+` insert button, which opens a modal and is an action rather than a drawer
++ implementation notes - traps found while scoping
+  + inline styles beat CSS-module rules, so `ICON_BUTTON_STYLE` (`GenericViewToolbar.tsx:56-65`) must be deleted before any SCSS can style the gear; the same applies to the selectors' inline `--vscode-dropdown-*` styles
+  + `ICON_BUTTON_STYLE` has no `:hover` or `:focus-visible` because inline styles cannot express pseudo-classes; moving to SCSS is what finally gives these buttons hover and focus states
+  + css-loader runs with `exportLocalsConvention: "as-is"` (`webpack.config.js:159`), so new SCSS classes must be camelCase to be reachable as `styles.x`
+  + `.viewToolbar` sets `overflow: hidden` (`ViewRenderer.module.scss:688`), which can clip a tab trying to bleed into the panel below; verify the join renders before committing to negative margins
+  + the breadcrumb wrapper takes `flex: 1` (`:696`), so named tabs compete with it for width; check a narrow panel
+  + `ViewIntegrationSelector.tsx:8` re-exports the mode constants, but every consumer already imports from `types/IntegrationMode.ts` directly, so the re-export is dead and the file can move freely
++ files
+  + `client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx` - tab group, drop `ICON_BUTTON_STYLE`, move the selector out
+  + `client/webview/src/notethink-views/src/components/views/drawers/JumpDrawer.tsx` - host the selector
+  + `client/webview/src/notethink-views/src/components/views/drawers/ToolbarDrawer.tsx` - if the tab renders from the shell
+  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` - tab classes, chevron rotation
+  + `client/webview/src/notethink-views/src/components/views/BreadcrumbTrail.tsx` - collisions glyph leaves the breadcrumb
+  + `client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts` - selector props follow the selector
+  + `client/webview/src/notethink-views/src/components/views/GenericView.tsx` - prop plumbing
+  + `l10n/bundle.l10n*.json` (5 files) - "View settings", "Warnings", "Jump to", "Files"
++ [X] add the tab component + SCSS, with the rotated-chevron open/closed indicator
++ [X] rename the triggers to "View settings" and "Warnings"; group the tabs right of the breadcrumb
++ [X] delete `ICON_BUTTON_STYLE` and move the gear to SCSS, gaining hover + focus states
++ [X] move `ViewIntegrationSelector` into the Jump to drawer body
++ [X] add the four l10n strings across all 5 bundles
++ [X] jest: chevron flips with `active_drawer`; `aria-expanded` tracks each tab
++ [X] jest: the selector renders in the Jump to drawer and still dispatches unchanged
++ [X] update `GenericView.test.tsx:226-233` (selector testid in toolbar) for the new home
++ [X] playwright: repoint `selectFolderMode` (`playwright/helpers/inject-multi-docs.ts:65-68`) - it drives the selector, which is now drawer-bound
++ [X] playwright: an open drawer's tab shows an up chevron; closed tabs show down
++ [X] `pnpm run check` green
++ [X] move the Jump to tab into the breadcrumb as its terminal leaf, titled with the leaf label
++ [X] retitle the Files tab to the `(X in Y files)` count and move it into the breadcrumb
++ [X] retitle the Warnings tab to "Warnings" plus the `&#9888;` glyph and move it into the breadcrumb
++ [X] merge the view-type selector into the View settings tab, titled with the resolved view type
++ [X] move the existing `ViewTypeSelector` into the View settings drawer body, unchanged
++ [X] hide the `+` insert button behind a flag, leaving the InsertModal wiring intact
++ [X] run the baseline the full width of the header bar, with the active tab breaking it
++ [X] make the tabs taller with consistent spacing that holds when no ancestor segments render
++ [X] move `.drawerGrid`'s sticky `top` with the new toolbar height, sharing the value rather than hand-syncing it
++ [X] jest: the breadcrumb renders its leaf as the Jump tab and never renders the leaf twice
++ [X] jest: the View settings tab title tracks the resolved view type; the in-drawer picker switches view
++ [X] playwright: repoint the specs that address the view-type `<select>` and the moved tabs
++ [X] `pnpm run check` green after the rework
++ manual: confirm the open tab visually joins its panel, with no clipped border from `.viewToolbar overflow: hidden`
++ manual: narrow the panel and confirm the tabs and breadcrumb still coexist
++ manual: trigger a collision and confirm the Warnings tab appears alongside the others
++ acceptance criteria
+  + each drawer has a tab, titled with its own current state, whose chevron flips down to up as it opens
+  + the active tab reads as attached to the panel below it
+  + the integration selector is reachable only from the Jump to drawer, with identical behaviour
+  + the top-left of the toolbar no longer carries the integration dropdown
+  + no `<select>` remains in the toolbar row, though drawer bodies may still hold one
+  + the breadcrumb leaf, the file count and the warnings alert each appear exactly once, as tabs
+
+
+### Open the viewer at the workspace root when no .md file is open [](?id=docless-open-at-root)
+
+`notethink.openViewer` refuses to do anything without an active markdown editor: `extension.ts:62-66` shows "NoteThink: open a .md file first" and returns before `createWebviewPanel`. Opening the viewer should not require first hunting for a file to open - with no .md file active it should open folder mode at the top folder. Opening the viewer with a file already active keeps defaulting to that file, exactly as today.
+
++ goal
+  + running Open Viewer with no .md file active opens the board in folder mode at the workspace root
+  + running it with a .md file active is unchanged
++ background
+  + `PanelSession` takes `initialDocument: vscode.TextDocument` as a required positional (`PanelSession.ts:93`) and a docless session is currently not representable
+  + but the document is barely load-bearing: the constructor already falls back to `workspaceFolders?.[0]` for both the root and `base_uri` (`PanelSession.ts:100-104`), and `buildInitialDoc` (`:233-240`) is the only other consumer
+  + `handleRequestInitialState` already guards `if (this.active_doc)` (`:454`), so it tolerates having no doc
+  + `enterFolderMode` (`:673-696`) is fully independent of `active_doc`, and `isWithinWorkspace` admits the root itself because `isPathWithin` returns true when the relative path is empty (`pathops.ts:41`) - so folder mode at the workspace root already works host-side with no changes
++ the actual blocker - the webview must be told, not just the host
+  + the webview picks folder mode from its own `__folder__` view state, and on reload it drives restoration itself from persisted state (`useVscodeMessages.ts:337-355`)
+  + a fresh docless open has no persisted state, so nothing seeds `__folder__`
+  + the aggregate `update` payload (`PanelSession.ts:892-904`) carries `workspace_root` but **not** `integration_path`, so the webview cannot infer the scope from it
+  + without a seed the webview would resolve `current_file` (`viewstateops.ts:46`) and render an arbitrary file from the aggregate, not the folder
+  + so the host must originate the intent and the webview must apply it; deciding that wire shape is the design work in this story
++ scope
+  + open the panel with no document when no .md editor is active but a workspace folder exists
+  + make `initialDocument` optional on `PanelSession`, skipping `buildInitialDoc` when absent
+  + have the host enter folder mode at the workspace root and tell the webview to seed `__folder__` with that scope
+  + keep the existing warning only when there is nothing to show at all - no active .md file and no workspace folder
++ out of scope
+  + changing behaviour when a .md file is active
+  + a folder-vs-file picker, or any new UI
+  + multi-root selection beyond the existing `workspaceFolders?.[0]` convention
++ files
+  + `client/extension/src/extension.ts` - the `openViewer` command guard at `:61-76`
+  + `client/extension/src/vscode/notethinkEditor.ts` - `myWebviewPanel` signature at `:34-37`
+  + `client/extension/src/vscode/PanelSession.ts` - optional doc, folder-mode-at-root origination
+  + `client/webview/src/hooks/useVscodeMessages.ts` - apply the seed
++ [X] make `initialDocument` optional through `myWebviewPanel` and `PanelSession`
++ [X] open at the workspace root in folder mode when no .md file is active
++ [X] seed the webview's `__folder__` scope from the host, and record the chosen wire shape in this story
+  + delivered: the host posts `{ type: 'command', command: 'setIntegrationScope', mode: 'folder', path }` on the existing validated host->webview command channel, and `handleCommand` writes the scope to `FOLDER_VIEW_STATE_ID`
+  + chosen over adding `integration_path` to the aggregate `update` payload because `update` keeps flowing after a flip to current_file, so a scope riding on it would re-seed folder mode and fight the user
+  + origination runs from `handleRequestInitialState`, not `start()`: that message is the first proof the webview bundle is listening, and a seed posted earlier is silently dropped
+  + inert when anything else owns the scope - an active doc, or an `integration_path` the reload path restored (its `setIntegration` is deliberately posted before `requestInitialState`)
+  + seeded as concrete `folder` rather than `auto`, since the scope came from the workspace and not from any file's declaration, so the auto reconcile must not re-derive it from whichever doc the aggregate surfaces
++ [X] keep the warning for the no-folder-and-no-file case
++ [X] jest: a docless session builds, skips `buildInitialDoc`, and resolves the root from `workspaceFolders[0]`
++ [X] jest: the webview seeds `__folder__` from the host signal and resolves folder mode
++ [X] playwright: a docless open renders the folder board rooted at the workspace root
++ [X] `pnpm run check` green
++ manual: close every editor, run Open Viewer, confirm the board opens on the workspace root rather than warning
++ manual: open a .md file, run Open Viewer, confirm it still opens on that file
++ manual: in a window with no folder open and no file, confirm the warning still appears
++ manual: click a card on the docless board - note `openNewEditorIfNoneOpen` defaults to false (`settings.ts:28`), so nothing opens until that setting is on
++ acceptance criteria
+  + Open Viewer with no .md file active shows the folder board at the workspace root
+  + Open Viewer with a .md file active is unchanged
+  + a window with no workspace folder and no .md file still warns rather than opening an empty board
++ commit message draft
+  + notethink 0.3.27: open the viewer in folder mode at the workspace root when no .md file is active, instead of refusing with a warning
+  + tests N jest, N playwright

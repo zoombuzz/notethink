@@ -4,6 +4,9 @@ import SettingsCommonControls from './SettingsCommonControls';
 
 const default_props = {
     settings: {},
+    viewTypeSelection: 'auto',
+    autoResolvedType: 'document',
+    onViewTypeChange: jest.fn(),
     showLineNumbers: false,
     watchUnopenedFilesInViewer: true,
     openNewEditorIfNoneOpen: false,
@@ -26,6 +29,21 @@ describe('SettingsCommonControls', () => {
         renderControls();
         const checkboxes = screen.getAllByRole('checkbox');
         expect(checkboxes).toHaveLength(6);
+    });
+
+    it('renders the view-type selector, so both settings drawers can switch view type', () => {
+        renderControls();
+        const selector = screen.getByTestId('view-type-selector');
+        expect(selector).toHaveValue('auto');
+        // the auto option keeps its resolved form, matching the tab that opened this drawer
+        expect(screen.getByRole('option', { name: 'Auto (Document)' })).toBeInTheDocument();
+    });
+
+    it('dispatches onViewTypeChange when a different view type is picked', () => {
+        const on_view_type_change = jest.fn();
+        renderControls({ onViewTypeChange: on_view_type_change });
+        fireEvent.change(screen.getByTestId('view-type-selector'), { target: { value: 'kanban' } });
+        expect(on_view_type_change).toHaveBeenCalledWith('kanban');
     });
 
     it('no longer renders the removed "switch to editor on click" checkbox', () => {

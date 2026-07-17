@@ -3,13 +3,17 @@ import React from "react";
 import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import { useJumpTargetsContext } from "../../../hooks/JumpTargetsContext";
-import { INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
+import { INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
+import ViewIntegrationSelector from "../ViewIntegrationSelector";
 import styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:JumpDrawer");
 
 interface JumpDrawerProps {
     requestedPath: string | undefined;
+    integrationSelection: IntegrationMode;
+    integrationMode: ConcreteIntegrationMode;
+    onIntegrationChange: (mode: IntegrationMode) => void;
     onFolderJump: (folder_path: string) => void;
     onFileJump: (file_path: string) => void;
     onReturn?: () => void;
@@ -23,6 +27,10 @@ interface JumpDrawerProps {
  * a loading row until the extension's jumpTargets reply for THIS leaf arrives (matched by
  * jump_targets.path === requestedPath), an empty-state row when the reply carries no entries,
  * otherwise one clickable row per entry dispatched by kind.
+ *
+ * Also hosts the view-integration selector: choosing whether the board aggregates a folder or
+ * follows the current file is the same "where am I looking" decision the tree navigates, so both
+ * live behind this one tab rather than the selector holding a permanent slot on the toolbar.
  */
 function JumpDrawer(props: JumpDrawerProps): ReactElement {
     const { jump_targets } = useJumpTargetsContext();
@@ -83,6 +91,17 @@ function JumpDrawer(props: JumpDrawerProps): ReactElement {
                             </ul>
                         </li>
                     </ul>
+                </section>
+
+                <section className={styles.drawerGroup} data-testid="jump-drawer-integration">
+                    <p>{l10n.t('View integration')}</p>
+                    <p>
+                        <ViewIntegrationSelector
+                            currentSelection={props.integrationSelection}
+                            resolvedMode={props.integrationMode}
+                            onChange={props.onIntegrationChange}
+                        />
+                    </p>
                 </section>
             </div>
 

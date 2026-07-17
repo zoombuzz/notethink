@@ -2,12 +2,9 @@ import Debug from "debug";
 import type { ChangeEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import { SELECTABLE_VIEWTYPES } from "./GenericView";
+import { viewTypeLabel } from "./viewTypeLabel";
 
 const debug = Debug("nodejs:notethink-views:ViewTypeSelector");
-
-function capitalize(s: string): string {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-}
 
 interface ViewTypeSelectorProps {
     // the persisted selection: drives the <select> value (auto / document / kanban)
@@ -17,6 +14,11 @@ interface ViewTypeSelectorProps {
     onChange: (view_type: string) => void;
 }
 
+/**
+ * View-type dropdown, hosted by the View settings drawer's body. It is not on the toolbar row: the
+ * tab that opens the drawer is already titled with the resolved view type, so the toolbar states the
+ * current type and the drawer holds the control that changes it.
+ */
 export default function ViewTypeSelector(props: ViewTypeSelectorProps): ReactElement {
     const handleChange = (e: ChangeEvent<HTMLSelectElement>): void => {
         props.onChange(e.target.value);
@@ -40,9 +42,7 @@ export default function ViewTypeSelector(props: ViewTypeSelectorProps): ReactEle
         >
             {SELECTABLE_VIEWTYPES.map((vt) => (
                 <option key={vt} value={vt}>
-                    {vt === 'auto' && props.resolvedType
-                        ? l10n.t('Auto ({0})', capitalize(props.resolvedType))
-                        : capitalize(vt)}
+                    {viewTypeLabel(vt, props.resolvedType)}
                 </option>
             ))}
         </select>

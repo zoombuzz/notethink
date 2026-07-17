@@ -5,6 +5,14 @@
 // produce off_grey colour, darker than default in light-mode, lighter than default in dark-mode
 $off_grey: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 5%);
 
+/*
+ * the view toolbar's full border-box height, floor and ceiling in one: it holds the row steady when
+ * the breadcrumb has no ancestor segments to set the height (a board rooted at the workspace root),
+ * and it is the offset the drawers stick at, since a drawer hangs immediately below the toolbar.
+ * both .viewToolbar and .drawerGrid read it, so the two can never drift apart
+ */
+$toolbar_height: 26px;
+
 @mixin themed-checkbox {
   appearance: none;
   width: 1em;
@@ -323,7 +331,7 @@ body.disableAddressBarHidingOnScroll {
   grid-template-rows: 0fr;
   transition: grid-template-rows 150ms cubic-bezier(0.2, 0, 0.38, 0.9);
   position: sticky;
-  top: 26px; // matches .viewToolbar height (22px) + top padding (4px)
+  top: $toolbar_height; // hangs immediately below the sticky toolbar, whose full height this is
   z-index: 9; // one below .viewToolbar (z-index: 10)
 
   &[data-open="true"] {
@@ -681,24 +689,150 @@ body.disableAddressBarHidingOnScroll {
   z-index: 10;
   display: flex;
   align-items: center;
-  // don't think we need to set an explicit height on this
-  // height: 22px;
-  padding: 2px 0 0 0;
+  box-sizing: border-box;
+  // the row is the same height whether or not the breadcrumb has ancestor segments to set it, so the tabs never collapse on a board rooted at the workspace root
+  min-height: $toolbar_height;
+  /*
+   * no vertical padding: a tab is the handle of the drawer it opens, so its background has to meet
+   * the row's top and bottom edges. Any padding here insets the content box, strands the tab inside
+   * the bar, and opens a gap between an open tab and the drawer it is supposed to be joined to
+   */
+  padding: 0;
   font-size: 13px;
   overflow: hidden;
   white-space: nowrap;
-  border-bottom: 1px solid var(--vscode-breadcrumb-background, transparent);
   background: var(--vscode-breadcrumb-background, var(--vscode-editor-background));
   color: var(--vscode-breadcrumb-foregroundColor, var(--vscode-foreground, inherit));
+
+  /*
+   * the baseline spans the whole row as a positioned pseudo-element rather than a border-bottom:
+   * being positioned it paints over the tabs, so the line reads as continuous, and only
+   * .toolbarTabActive lifts above it to break the line and merge into its open drawer. A border
+   * could not work - overflow: hidden clips children at the padding box, so no tab could paint over it
+   */
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--vscode-tab-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+    pointer-events: none;
+  }
 }
 
+// the + insert trigger: an action, not a drawer, so it stays a bare glyph button rather than a tab
+.toolbarIconButton {
+  flex: none;
+  padding: 0 0.3em;
+  margin-left: 0.3em;
+  border: none;
+  background: none;
+  color: var(--vscode-foreground, inherit);
+  font-family: inherit;
+  font-size: 1.1em;
+  cursor: pointer;
+  opacity: 0.6;
+
+  &:hover {
+    background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2));
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #0078d4);
+    outline-offset: -1px;
+    opacity: 1;
+  }
+}
+
+/*
+ * a drawer tab, drawn wherever its own state already lives - three inside the breadcrumb, the
+ * view-type one on the right. Stretched to the toolbar's full height so an active tab's background
+ * meets the drawer body below with no seam
+ */
+.toolbarTab {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 0.15em;
+  margin-left: 0.4em;
+  // symmetric vertical padding, so a tab reads the same above and below its label; align-self: stretch then takes it to the row's full height and the toolbar's bottom edge
+  padding: 4px 0.5em;
+  border: none;
+  background: var(--vscode-editorGroupHeader-tabsBackground, transparent);
+  /*
+   * these tabs borrow the menu bar's colours, not the editor tab strip's, so a VS Code user reads them as menus that open something
+   * tab-inactiveForeground is the wrong key here: themes deliberately dim it to push unfocused editor tabs back, and every one of these tabs is live
+   */
+  color: var(--vscode-titleBar-activeForeground, var(--vscode-foreground, inherit));
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+
+  // menubar.selection* is what VS Code paints under a hovered File / Edit / View, so hovering a tab lands on the colour that reflex already expects
+  &:hover {
+    background: var(--vscode-menubar-selectionBackground, var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2)));
+    color: var(--vscode-menubar-selectionForeground, var(--vscode-titleBar-activeForeground, var(--vscode-foreground, inherit)));
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #0078d4);
+    outline-offset: -1px;
+  }
+}
+
+// the open tab takes the drawer body's own background (.drawerBody), so tab and panel read as one surface; positioning it above the row's baseline pseudo-element is what breaks the line under this tab alone
+.toolbarTabActive {
+  position: relative;
+  z-index: 1;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, inherit));
+
+  // the open tab is part of the panel, not a hover target: hold both colours so it does not flash the menu hover treatment while the drawer it belongs to is open
+  &:hover {
+    background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, inherit));
+  }
+}
+
+.toolbarTabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// open/closed indicator: the same › glyph the jump tree rotates, so both chevrons match in weight
+.toolbarTabChevron {
+  flex: none;
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.toolbarTabChevronClosed {
+  transform: rotate(90deg);
+}
+
+.toolbarTabChevronOpen {
+  transform: rotate(-90deg);
+}
+
+// direction: rtl makes the inline trail overflow (and therefore clip) on its left, so a long path loses its outermost folders rather than the leaf tab the user is aiming at; the trail itself is flipped back to ltr below
 .viewToolbarBreadcrumb {
   flex: 1;
+  align-self: stretch;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   direction: rtl;
   text-align: left;
+  // zero the strut so the inline trail's line box is exactly the trail's own height: any half-leading below it would sit between an open tab and the drawer body and break the seam
+  line-height: 0;
 
   > * {
     direction: ltr;

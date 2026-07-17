@@ -41,6 +41,30 @@ test.describe('Settings Toggle', () => {
          */
     });
 
+    test('the open drawer tab shows an up chevron while every closed tab shows down', async ({ page }) => {
+        await injectDocsFromFixture(page, 'basic.md');
+        await page.waitForSelector('[data-seq]', { timeout: 5000 });
+
+        // the two tabs a single-file board always has: the View settings tab on the right, and the breadcrumb's terminal leaf, which is the Jump to tab
+        const settings_tab = page.getByTestId('view-settings-button');
+        const jump_tab = page.getByTestId('breadcrumb-leaf');
+        await expect(page.getByTestId('view-settings-button-chevron')).toHaveAttribute('data-direction', 'down');
+        await expect(page.getByTestId('breadcrumb-leaf-chevron')).toHaveAttribute('data-direction', 'down');
+
+        await settings_tab.click();
+        await expect(page.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'true');
+        await expect(settings_tab).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.getByTestId('view-settings-button-chevron')).toHaveAttribute('data-direction', 'up');
+        // the drawers are mutually exclusive, so only the open one's chevron ever points up
+        await expect(page.getByTestId('breadcrumb-leaf-chevron')).toHaveAttribute('data-direction', 'down');
+
+        // opening another drawer hands the up chevron over rather than showing two
+        await jump_tab.click();
+        await expect(page.getByTestId('breadcrumb-leaf-chevron')).toHaveAttribute('data-direction', 'up');
+        await expect(page.getByTestId('view-settings-button-chevron')).toHaveAttribute('data-direction', 'down');
+        await expect(settings_tab).toHaveAttribute('aria-expanded', 'false');
+    });
+
     test('toggling contextBars shows and hides context bar elements', async ({ page }) => {
         await injectDocsFromFixture(page, 'basic.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });

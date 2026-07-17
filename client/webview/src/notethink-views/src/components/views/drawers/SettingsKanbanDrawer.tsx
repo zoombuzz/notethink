@@ -17,6 +17,9 @@ export interface KanbanSettings extends CommonSettings {
 
 interface SettingsKanbanDrawerProps {
     settings: KanbanSettings;
+    viewTypeSelection: string;
+    autoResolvedType?: string;
+    onViewTypeChange: (view_type: string) => void;
     naturalColumnOrder: string[];
     showLineNumbers?: boolean;
     watchUnopenedFilesInViewer?: boolean;
@@ -94,6 +97,9 @@ function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps): React.ReactElem
                 <section className={styles.drawerGroup}>
                     <SettingsCommonControls
                         settings={props.settings}
+                        viewTypeSelection={props.viewTypeSelection}
+                        autoResolvedType={props.autoResolvedType}
+                        onViewTypeChange={props.onViewTypeChange}
                         showLineNumbers={props.showLineNumbers}
                         watchUnopenedFilesInViewer={props.watchUnopenedFilesInViewer}
                         openNewEditorIfNoneOpen={props.openNewEditorIfNoneOpen}

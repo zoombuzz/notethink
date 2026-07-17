@@ -1,5 +1,5 @@
 import React, { Suspense, createRef, type MouseEvent as ReactMouseEvent } from 'react';
-import { render, screen, waitFor, fireEvent, act, type RenderResult } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within, type RenderResult } from '@testing-library/react';
 import GenericView from './GenericView';
 import type { ViewProps, ViewApi } from '../../types/ViewProps';
 import type { NoteProps, ClickPositionInfo } from '../../types/NoteProps';
@@ -33,35 +33,38 @@ jest.mock('./KanbanView', () => ({
     },
 }));
 
-// mock BreadcrumbTrail - capture onFolderClick for integration testing
-let capturedOnFolderClick: ((folder_path: string) => void) | undefined;
-jest.mock('./BreadcrumbTrail', () => ({
-    __esModule: true,
-    default: (props: NoteProps & { onFolderClick?: (folder_path: string) => void }) => {
-        capturedOnFolderClick = props.onFolderClick;
-        return <div data-testid="breadcrumb-trail">BreadcrumbTrail</div>;
-    },
+/*
+ * BreadcrumbTrail renders for real here: it hosts the leaf, file-count and warnings tabs, so mocking
+ * it out would leave the drawer tabs below untested. Only its markdown headline renderer is mocked,
+ * to keep the ESM unified stack out of this suite (BreadcrumbTrail.test.tsx does the same).
+ */
+jest.mock('../../lib/renderops', () => ({
+    renderMarkdownNoteHeadline: (note: NoteProps) => <span>{note.headline_raw}</span>,
 }));
 
-// mock ViewTypeSelector
+// mock ViewTypeSelector - capture onChange for view-type testing
+let capturedOnViewTypeChange: ((view_type: string) => void) | undefined;
 jest.mock('./ViewTypeSelector', () => ({
     __esModule: true,
-    default: (props: { currentSelection: string; resolvedType?: string }) => (
-        <select data-testid="view-type-selector" data-auto-resolved={props.resolvedType || ''}>
-            <option value={props.currentSelection}>{props.currentSelection}</option>
-        </select>
-    ),
+    default: (props: { currentSelection: string; resolvedType?: string; onChange?: (view_type: string) => void }) => {
+        capturedOnViewTypeChange = props.onChange;
+        return (
+            <select data-testid="view-type-selector" data-auto-resolved={props.resolvedType || ''}>
+                <option value={props.currentSelection}>{props.currentSelection}</option>
+            </select>
+        );
+    },
 }));
 
 // mock ViewIntegrationSelector - capture onChange for integration-mode testing
 let capturedOnIntegrationChange: ((mode: string) => void) | undefined;
 jest.mock('./ViewIntegrationSelector', () => ({
     __esModule: true,
-    default: (props: { currentMode: string; onChange?: (mode: string) => void }) => {
+    default: (props: { currentSelection: string; resolvedMode: string; onChange?: (mode: string) => void }) => {
         capturedOnIntegrationChange = props.onChange;
         return (
-            <select data-testid="view-integration-selector" value={props.currentMode} onChange={() => {}}>
-                <option value={props.currentMode}>{props.currentMode}</option>
+            <select data-testid="view-integration-selector" data-resolved-mode={props.resolvedMode} value={props.currentSelection} onChange={() => {}}>
+                <option value={props.currentSelection}>{props.currentSelection}</option>
             </select>
         );
     },
@@ -82,14 +85,6 @@ jest.mock('./drawers/FilesDrawer', () => ({
         capturedOnApplyFilters = props.onApplyFilters;
         return <div data-testid="files-drawer-mock" data-max-notes={props.maxNotesPerFile}>FilesDrawer</div>;
     },
-}));
-
-// mock ViewRenderer styles
-jest.mock('../ViewRenderer.module.scss', () => ({
-    viewToolbar: 'viewToolbar',
-    viewToolbarBreadcrumb: 'viewToolbarBreadcrumb',
-    contextBar: 'contextBar',
-    content: 'content',
 }));
 
 function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
@@ -143,8 +138,8 @@ beforeEach(() => {
     mockDocViewRender.mockClear();
     mockKanbanViewRender.mockClear();
     mockAutoViewRender.mockClear();
-    capturedOnFolderClick = undefined;
     capturedOnIntegrationChange = undefined;
+    capturedOnViewTypeChange = undefined;
     capturedFilesDrawerProps = undefined;
     capturedOnApplyFilters = undefined;
 });
@@ -213,23 +208,47 @@ describe('GenericView', () => {
         await waitFor(() => expect(screen.getByTestId('document-view')).toBeInTheDocument());
     });
 
-    it('renders always-visible toolbar with view type selector', async () => {
+    it('renders the view type selector inside the View settings drawer, not the toolbar', async () => {
         render(
             <Suspense fallback={<div>loading</div>}>
                 <GenericView {...makeViewProps({ type: 'document' })} />
             </Suspense>
         );
         await waitFor(() => expect(screen.getByTestId('view-toolbar')).toBeInTheDocument());
-        expect(screen.getByTestId('view-type-selector')).toBeInTheDocument();
+        const selector = screen.getByTestId('view-type-selector');
+        expect(within(screen.getByTestId('settings-drawer-grid')).getByTestId('view-type-selector')).toBe(selector);
+        expect(within(screen.getByTestId('view-toolbar')).queryByTestId('view-type-selector')).not.toBeInTheDocument();
     });
 
-    it('renders view integration selector in toolbar', async () => {
+    it('leaves no dropdown at all on the toolbar row', async () => {
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({ type: 'document', doc_path: '/workspace/project/docs/todo.md' })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('view-toolbar')).toBeInTheDocument());
+        expect(screen.getByTestId('view-toolbar').querySelectorAll('select')).toHaveLength(0);
+    });
+
+    it('hides the insert button behind its flag, leaving the InsertModal wiring in place', async () => {
         render(
             <Suspense fallback={<div>loading</div>}>
                 <GenericView {...makeViewProps({ type: 'document' })} />
             </Suspense>
         );
-        await waitFor(() => expect(screen.getByTestId('view-integration-selector')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByTestId('view-toolbar')).toBeInTheDocument());
+        expect(screen.queryByTestId('view-insert-button')).not.toBeInTheDocument();
+    });
+
+    it('renders the view integration selector inside the Jump to drawer, not the toolbar', async () => {
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({ type: 'document', doc_path: '/workspace/project/docs/todo.md' })} />
+            </Suspense>
+        );
+        const selector = await screen.findByTestId('view-integration-selector');
+        expect(within(screen.getByTestId('jump-drawer-grid')).getByTestId('view-integration-selector')).toBe(selector);
+        expect(within(screen.getByTestId('view-toolbar')).queryByTestId('view-integration-selector')).not.toBeInTheDocument();
     });
 
     it('passes auto_resolved_type to view type selector when set', async () => {
@@ -244,6 +263,27 @@ describe('GenericView', () => {
         await waitFor(() => expect(screen.getByTestId('view-type-selector')).toBeInTheDocument());
         const selector = screen.getByTestId('view-type-selector');
         expect(selector).toHaveAttribute('data-auto-resolved', 'kanban');
+    });
+
+    it('dispatches a view-type change from the selector inside the View settings drawer', async () => {
+        const set_view_managed_state = jest.fn();
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'document',
+                    handlers: {
+                        setViewManagedState: set_view_managed_state,
+                        deleteViewFromManagedState: jest.fn(),
+                        revertAllViewsToDefaultState: jest.fn(),
+                        postMessage: jest.fn(),
+                    },
+                })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('view-type-selector')).toBeInTheDocument());
+        // the selector's onChange is the same handle_view_type_change the toolbar used to drive
+        capturedOnViewTypeChange!('kanban');
+        expect(set_view_managed_state).toHaveBeenCalledWith([{ id: 'test-view', type: 'kanban' }]);
     });
 
     it('clamps caret position that exceeds root note end offset', async () => {
@@ -898,9 +938,8 @@ describe('GenericView navigation callback', () => {
         );
         await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
 
-        // BreadcrumbTrail mock captured onFolderClick
-        expect(capturedOnFolderClick).toBeInstanceOf(Function);
-        capturedOnFolderClick!('/workspace/project/docs');
+        // 'docs' is an ancestor segment of the open file, so clicking it re-narrows the aggregation to that folder
+        fireEvent.click(screen.getByText('docs'));
 
         // dispatch must land on the canonical folder key so a later flip back to folder mode doesn't lose settings stored under a doc-path key
         expect(set_view_managed_state).toHaveBeenCalledWith([{
@@ -1264,6 +1303,236 @@ describe('GenericView folder files drawer', () => {
         );
         expect(set_integration_call).toBeDefined();
         expect(set_integration_call![0]).not.toHaveProperty('maxNotesPerFile');
+    });
+});
+
+/*
+ * Each drawer's trigger is one element with one testid, named for wherever that trigger has always
+ * lived: the breadcrumb-* tabs render inside the trail on the state they are titled with, and
+ * view-settings-button is the single tab on the right, now titled with the resolved view type.
+ */
+describe('GenericView drawer tabs', () => {
+
+    const DOC_PATH = '/workspace/project/docs/todo.md';
+    // the Files tab IS the file count, so folder mode alone is not enough to raise it - a count has to have arrived
+    const FOLDER_PROPS: Partial<ViewProps> = {
+        display_options: { integration_mode: 'folder', integration_path: '/workspace/project/docs' },
+        file_count: 4,
+        note_count: 12,
+    };
+
+    function makeStory(seq: number, headline: string, line: number): NoteProps {
+        return makeNote({
+            seq, level: 2, type: 'heading', headline_raw: headline,
+            position: { start: { offset: line * 10, line }, end: { offset: line * 10 + 5, line } },
+        });
+    }
+
+    function renderTabs(view_overrides: Partial<ViewProps> = {}): RenderResult {
+        return render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({ type: 'document', doc_path: DOC_PATH, ...view_overrides })} />
+            </Suspense>
+        );
+    }
+
+    // two story headings sharing a headline slug, which is what findStableIdCollisions groups on
+    function collidingNotes(): NoteProps[] {
+        return [makeNote({ seq: 0, level: 0, type: 'root' }), makeStory(1, '### Plan release', 2), makeStory(2, '### Plan release', 6)];
+    }
+
+    it('renders a tab per available drawer, all closed with a down chevron', async () => {
+        renderTabs();
+        for (const test_id of ['breadcrumb-leaf', 'view-settings-button']) {
+            const tab = await screen.findByTestId(test_id);
+            expect(tab).toHaveAttribute('aria-expanded', 'false');
+            expect(screen.getByTestId(`${test_id}-chevron`)).toHaveAttribute('data-direction', 'down');
+        }
+    });
+
+    it('points each tab at the drawer it controls via aria-controls', async () => {
+        renderTabs(FOLDER_PROPS);
+        expect(await screen.findByTestId('view-settings-button')).toHaveAttribute('aria-controls', 'vtest-view-settings-drawer');
+        expect(screen.getByTestId('breadcrumb-file-count')).toHaveAttribute('aria-controls', 'vtest-view-files-drawer');
+        expect(screen.getByTestId('breadcrumb-leaf')).toHaveAttribute('aria-controls', 'vtest-view-jump-drawer');
+    });
+
+    it('flips the chevron up and aria-expanded true on the clicked tab only', async () => {
+        renderTabs();
+        const settings_tab = await screen.findByTestId('view-settings-button');
+        fireEvent.click(settings_tab);
+        expect(settings_tab).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByTestId('view-settings-button-chevron')).toHaveAttribute('data-direction', 'up');
+        // the drawers are mutually exclusive, so every other tab stays closed
+        expect(screen.getByTestId('breadcrumb-leaf')).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByTestId('breadcrumb-leaf-chevron')).toHaveAttribute('data-direction', 'down');
+    });
+
+    it('flips the chevron back down when the open tab is clicked again', async () => {
+        renderTabs();
+        const settings_tab = await screen.findByTestId('view-settings-button');
+        fireEvent.click(settings_tab);
+        fireEvent.click(settings_tab);
+        expect(settings_tab).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByTestId('view-settings-button-chevron')).toHaveAttribute('data-direction', 'down');
+    });
+
+    it('renders the Files tab in folder mode only', async () => {
+        const { unmount } = renderTabs();
+        await screen.findByTestId('view-settings-button');
+        expect(screen.queryByTestId('breadcrumb-file-count')).not.toBeInTheDocument();
+        unmount();
+
+        renderTabs(FOLDER_PROPS);
+        expect(await screen.findByTestId('breadcrumb-file-count')).toBeInTheDocument();
+    });
+
+    it('titles the Files tab with the file count itself', async () => {
+        renderTabs(FOLDER_PROPS);
+        expect(await screen.findByTestId('breadcrumb-file-count')).toHaveTextContent('(12 in 4 files)');
+    });
+
+    it('opens the Files drawer from the Files tab', async () => {
+        renderTabs(FOLDER_PROPS);
+        const grid = await screen.findByTestId('files-drawer-grid');
+        expect(grid).toHaveAttribute('data-open', 'false');
+        fireEvent.click(screen.getByTestId('breadcrumb-file-count'));
+        expect(grid).toHaveAttribute('data-open', 'true');
+        expect(screen.getByTestId('breadcrumb-file-count-chevron')).toHaveAttribute('data-direction', 'up');
+    });
+
+    it('renders the Warnings tab only when there are collisions', async () => {
+        const { unmount } = renderTabs({ notes: [makeNote({ seq: 0, level: 0, type: 'root' })] });
+        await screen.findByTestId('view-settings-button');
+        expect(screen.queryByTestId('breadcrumb-collision-alert')).not.toBeInTheDocument();
+        unmount();
+
+        renderTabs({ notes: collidingNotes() });
+        expect(await screen.findByTestId('breadcrumb-collision-alert')).toBeInTheDocument();
+    });
+
+    it('titles the Warnings tab with the word followed by the alert glyph', async () => {
+        renderTabs({ notes: collidingNotes() });
+        const tab = await screen.findByTestId('breadcrumb-collision-alert');
+        expect(tab).toHaveTextContent('Warnings');
+        expect(tab).toHaveTextContent('⚠');
+    });
+
+    it('opens the Collisions drawer from the Warnings tab', async () => {
+        renderTabs({ notes: collidingNotes() });
+        const grid = await screen.findByTestId('collisions-drawer-grid');
+        expect(grid).toHaveAttribute('data-open', 'false');
+        fireEvent.click(await screen.findByTestId('breadcrumb-collision-alert'));
+        expect(grid).toHaveAttribute('data-open', 'true');
+        expect(screen.getByTestId('breadcrumb-collision-alert-chevron')).toHaveAttribute('data-direction', 'up');
+    });
+
+    it('opens the Jump drawer from the leaf tab and requests targets for that leaf', async () => {
+        const post_message = jest.fn();
+        renderTabs({
+            workspace_root: '/workspace/project',
+            handlers: {
+                setViewManagedState: jest.fn(),
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: post_message,
+            },
+        });
+        const grid = await screen.findByTestId('jump-drawer-grid');
+        expect(grid).toHaveAttribute('data-open', 'false');
+        fireEvent.click(screen.getByTestId('breadcrumb-leaf'));
+        expect(grid).toHaveAttribute('data-open', 'true');
+        // the leaf tab targets its own segment - the open file in current_file mode
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'requestJumpTargets',
+            mode: 'current_file',
+            path: DOC_PATH,
+        });
+    });
+
+    it('titles the leaf tab with the leaf and never renders the leaf twice', async () => {
+        renderTabs({ workspace_root: '/workspace/project' });
+        const leaf = await screen.findByTestId('breadcrumb-leaf');
+        expect(leaf).toHaveTextContent('todo.md');
+        expect(screen.getAllByTestId('breadcrumb-leaf')).toHaveLength(1);
+        expect(screen.getAllByText('todo.md')).toHaveLength(1);
+    });
+
+    it('targets the aggregation folder from the leaf tab in folder mode', async () => {
+        const post_message = jest.fn();
+        renderTabs({
+            ...FOLDER_PROPS,
+            workspace_root: '/workspace/project',
+            handlers: {
+                setViewManagedState: jest.fn(),
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: post_message,
+            },
+        });
+        fireEvent.click(await screen.findByTestId('breadcrumb-leaf'));
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'requestJumpTargets',
+            mode: 'folder',
+            path: '/workspace/project/docs',
+        });
+    });
+
+    it('hides the leaf tab when there is no path to jump from', async () => {
+        renderTabs({ doc_path: undefined });
+        await screen.findByTestId('view-settings-button');
+        expect(screen.queryByTestId('breadcrumb-leaf')).not.toBeInTheDocument();
+    });
+
+    it('titles the View settings tab with the resolved view type', async () => {
+        // an auto selection that AutoView resolved to kanban: the tab states what the board is actually showing
+        renderTabs({ type: 'kanban', nested: { replaced_attributes: { type: 'auto' }, auto_resolved_type: 'kanban' } });
+        expect(await screen.findByTestId('view-settings-button')).toHaveTextContent('Auto (Kanban)');
+    });
+
+    it('titles the View settings tab with the plain type when the selection is concrete', async () => {
+        renderTabs({ type: 'kanban' });
+        expect(await screen.findByTestId('view-settings-button')).toHaveTextContent('Kanban');
+    });
+
+    it('opens the View settings drawer, which is where the view-type selector now lives', async () => {
+        renderTabs();
+        const grid = await screen.findByTestId('settings-drawer-grid');
+        fireEvent.click(screen.getByTestId('view-settings-button'));
+        expect(grid).toHaveAttribute('data-open', 'true');
+        expect(within(grid).getByTestId('view-type-selector')).toBeInTheDocument();
+    });
+
+    it('dispatches an integration change from the selector inside the open Jump to drawer', async () => {
+        const post_message = jest.fn();
+        const set_view_managed_state = jest.fn();
+        renderTabs({
+            handlers: {
+                setViewManagedState: set_view_managed_state,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: post_message,
+            },
+        });
+        fireEvent.click(await screen.findByTestId('breadcrumb-leaf'));
+        const drawer = screen.getByTestId('jump-drawer-grid');
+        expect(drawer).toHaveAttribute('data-open', 'true');
+        expect(within(drawer).getByTestId('view-integration-selector')).toBeInTheDocument();
+
+        // the selector's onChange is the same handle_integration_change the toolbar used to drive
+        capturedOnIntegrationChange!('folder');
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: '__folder__',
+            display_options: {
+                integration_mode: 'folder',
+                integration_path: '/workspace/project/docs',
+            },
+        }]);
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'setIntegration',
+            mode: 'folder',
+            path: '/workspace/project/docs',
+        });
     });
 });
 

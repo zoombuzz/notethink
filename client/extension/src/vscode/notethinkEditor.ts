@@ -31,9 +31,15 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		});
 	}
 
+	/**
+	 * wire a PanelSession onto a panel. initialDocument is optional: the openViewer command opens
+	 * the panel docless when no .md editor is active, and the session then aggregates the workspace
+	 * root in folder mode instead of rendering one file. The custom-editor and deserializer paths
+	 * always have a real document.
+	 */
 	public async myWebviewPanel(
 		webviewPanel: vscode.WebviewPanel,
-		initialDocument: vscode.TextDocument,
+		initialDocument?: vscode.TextDocument,
 	): Promise<void> {
 		// PanelSession owns all per-panel mutable state and behaviour; the provider only relays the active-panel reference for command posting
 		const session = new PanelSession(

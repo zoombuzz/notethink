@@ -1,0 +1,391 @@
+<style>
+  :root {
+    color-scheme: light dark;
+    --ground: #e9ebef; --panel: #ffffff; --widget: #f4f5f7; --control: #ffffff;
+    --control-border: #c7ccd4; --ink: #23262d; --muted: #626977; --faint: #8a909c;
+    --line: #d9dce2; --accent: #005fb8; --accent-ink: #ffffff; --accent-soft: rgba(0,95,184,0.11);
+    --accent-line: rgba(0,95,184,0.45); --fixed-ink: #9a6712;
+    --future-bg: rgba(120,128,142,0.14);
+    --shadow: 0 1px 2px rgba(20,24,33,0.08), 0 8px 24px rgba(20,24,33,0.10);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #131519; --panel: #1a1d23; --widget: #22262e; --control: #2d323b;
+      --control-border: #3b414c; --ink: #d6d9df; --muted: #8c93a0; --faint: #6b7280;
+      --line: #2b303a; --accent: #4aa3ff; --accent-ink: #0a0d12; --accent-soft: rgba(74,163,255,0.15);
+      --accent-line: rgba(74,163,255,0.5); --fixed-ink: #e0a34e; --future-bg: rgba(120,128,142,0.12);
+      --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --ground: #e9ebef; --panel: #ffffff; --widget: #f4f5f7; --control: #ffffff;
+    --control-border: #c7ccd4; --ink: #23262d; --muted: #626977; --faint: #8a909c;
+    --line: #d9dce2; --accent: #005fb8; --accent-ink: #ffffff; --accent-soft: rgba(0,95,184,0.11);
+    --accent-line: rgba(0,95,184,0.45); --fixed-ink: #9a6712; --future-bg: rgba(120,128,142,0.14);
+    --shadow: 0 1px 2px rgba(20,24,33,0.08), 0 8px 24px rgba(20,24,33,0.10);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #131519; --panel: #1a1d23; --widget: #22262e; --control: #2d323b;
+    --control-border: #3b414c; --ink: #d6d9df; --muted: #8c93a0; --faint: #6b7280;
+    --line: #2b303a; --accent: #4aa3ff; --accent-ink: #0a0d12; --accent-soft: rgba(74,163,255,0.15);
+    --accent-line: rgba(74,163,255,0.5); --fixed-ink: #e0a34e; --future-bg: rgba(120,128,142,0.12);
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .stage { background: var(--ground); color: var(--ink); font-family: var(--sans); line-height: 1.5;
+    min-height: 100vh; padding: clamp(20px,4vw,56px) clamp(16px,4vw,40px) 72px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+  h1 { font-family: var(--mono); font-weight: 600; font-size: clamp(26px,4vw,40px); line-height: 1.08; letter-spacing: -0.01em; text-wrap: balance; margin: 0 0 18px; }
+  .lede { max-width: 66ch; color: var(--muted); font-size: 16px; margin: 0 0 10px; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .topbar { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center; justify-content: space-between; margin: 28px 0 10px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .legItem { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+  .dotmark { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .d-sel { background: var(--accent); }
+  .d-abs { background: transparent; border: 1.5px solid var(--faint); }
+  .d-sw { width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--accent-line); }
+  .themeBtn { font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 15px; cursor: pointer; white-space: nowrap; }
+  .themeBtn:hover { border-color: var(--accent-line); }
+  .themeBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .constant { margin: 26px 0 8px; font-size: 13.5px; color: var(--muted); }
+  .constant b { color: var(--ink); font-weight: 600; }
+
+  .grid { display: grid; gap: clamp(20px,2.4vw,30px); grid-template-columns: repeat(auto-fit, minmax(400px,1fr)); margin-top: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .card-head { display: flex; flex-direction: column; gap: 6px; }
+  .card-tag { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+  .card-name { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+  .card-thesis { font-size: 14px; color: var(--muted); margin: 0; }
+  .tradeoff { font-size: 12.5px; color: var(--muted); margin: 2px 0 0; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .tradeoff b { color: var(--ink); font-weight: 600; }
+
+  /* ---- mock shell ---- */
+  .mock { background: var(--widget); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); font-size: 12.5px; color: var(--ink); }
+  .mock-toolbar { display: flex; align-items: stretch; gap: 8px; padding: 0 8px; height: 30px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 12px; }
+  .crumb { display: flex; align-items: center; gap: 5px; color: var(--muted); flex: 1; min-width: 0; }
+  .crumb .sep { color: var(--faint); }
+  .crumb .leaf { color: var(--ink); font-weight: 600; }
+  .tab { display: inline-flex; align-items: center; gap: 6px; align-self: flex-end; padding: 0 10px; height: 30px; margin-bottom: -1px; background: var(--widget); border: 1px solid var(--line); border-bottom-color: var(--widget); border-radius: 6px 6px 0 0; color: var(--ink); font-weight: 600; }
+  .tab .chev { transform: rotate(180deg); color: var(--muted); font-size: 11px; }
+  .body { padding: 12px 14px 15px; }
+
+  /* ---- shared setting controls ---- */
+  .field { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+  .field .lab { color: var(--muted); flex: 1; min-width: 0; }
+  .field .ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .select { display: inline-flex; align-items: center; gap: 10px; justify-content: space-between; background: var(--control); border: 1px solid var(--control-border); border-radius: 4px; padding: 3px 8px; color: var(--ink); min-width: 132px; cursor: pointer; }
+  .select .chev { color: var(--muted); font-size: 10px; }
+  .seg { display: inline-flex; border: 1px solid var(--control-border); border-radius: 5px; overflow: hidden; background: var(--control); }
+  .seg button { font: inherit; border: 0; background: transparent; color: var(--muted); padding: 3px 11px; cursor: pointer; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; background: var(--control); border: 1px solid var(--control-border); border-radius: 5px; padding: 2px 7px 2px 5px; color: var(--ink); white-space: nowrap; cursor: grab; }
+  .chip .grip { color: var(--faint); font-size: 10px; letter-spacing: -2px; }
+  .chip.muted { color: var(--muted); border-style: dashed; }
+  .check { display: flex; align-items: center; gap: 8px; padding: 5px 0; color: var(--ink); cursor: pointer; }
+  .box { width: 14px; height: 14px; border: 1px solid var(--control-border); border-radius: 3px; background: var(--control); flex: none; display: grid; place-items: center; }
+  .box.on { background: var(--accent); border-color: var(--accent); }
+  .box.on::after { content: ""; width: 3.5px; height: 7px; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg) translateY(-1px); }
+  .lock { display: inline-flex; align-items: center; gap: 5px; color: var(--fixed-ink); }
+  .lock svg { width: 9px; height: 11px; }
+  .fixnote { font-size: 11px; color: var(--faint); margin: 1px 0 3px; }
+  .fixnote a, .jump { color: var(--accent); cursor: pointer; text-decoration: none; }
+  .fixnote a:hover, .jump:hover { text-decoration: underline; }
+
+  /* level label used above a settings block */
+  .lvlLabel { display: inline-flex; align-items: center; gap: 7px; font-weight: 650; font-size: 12.5px; }
+  .lvlLabel .kind { font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+
+  /* ============ V1 + aligned spine grid ============ */
+  .spine { display: flex; flex-direction: column; }
+  .level { display: flex; gap: 12px; align-items: stretch; }
+  .rail { flex: none; display: flex; flex-direction: column; align-items: stretch; position: relative; }
+  .rail.wide { width: 116px; }
+  .rail.thin { width: 20px; }
+  .dotrow { display: flex; align-items: center; gap: 8px; padding-top: 2px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; flex: none; border: 1.5px solid var(--faint); background: var(--widget); }
+  .dot.sel { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .dot.pick { border-color: var(--accent); }
+  .railName { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .railName.sel { color: var(--accent); font-weight: 650; }
+  .railName.pick { color: var(--ink); cursor: pointer; }
+  .connector { width: 1.5px; background: var(--line); margin-left: 4.5px; flex: 1; min-height: 10px; }
+  .block { flex: 1; padding: 0 0 14px; min-width: 0; }
+  .block .blkHead { margin-bottom: 3px; }
+  .level:last-child .block { padding-bottom: 0; }
+
+  .switchBtn { display: inline-flex; align-items: center; gap: 7px; width: 100%; justify-content: space-between; background: var(--control); border: 1px solid var(--control-border); border-radius: 6px; padding: 6px 10px; color: var(--ink); cursor: pointer; margin-bottom: 12px; }
+  .switchBtn:hover { border-color: var(--accent-line); }
+  .switchBtn .mm { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+
+  /* ============ V2 selector -> breadcrumb -> options ============ */
+  .selRow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-bottom: 11px; border-bottom: 1px solid var(--line); margin-bottom: 11px; }
+  .selRow .selLbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin-right: 2px; }
+  .pill { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--control-border); background: var(--control); color: var(--muted); cursor: pointer; }
+  .pill:hover { color: var(--ink); border-color: var(--accent-line); }
+  .pill.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .pill.more { border-style: dashed; }
+  .bc { display: flex; flex-direction: column; gap: 0; margin: 2px 0 12px; }
+  .bcNode { display: flex; align-items: center; gap: 8px; }
+  .bcNode .lab { font-size: 12.5px; color: var(--muted); }
+  .bcNode.here .lab { color: var(--accent); font-weight: 650; }
+  .bcArrow { color: var(--faint); font-size: 11px; margin: 1px 0 1px 5px; }
+  .optBlock { border-left: 2px solid var(--line); padding: 2px 0 10px 12px; margin-left: 4px; }
+  .optBlock.here { border-left-color: var(--accent); }
+  .optHead { font-weight: 650; font-size: 12px; margin-bottom: 3px; }
+  .optHead .from { font-weight: 400; color: var(--faint); font-size: 11px; }
+
+  /* ============ V4 overflow gallery ============ */
+  .gallery { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .galHead { display: flex; align-items: center; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin-bottom: 7px; }
+  .galRow { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; }
+  .galItem { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--control-border); background: var(--control); color: var(--ink); cursor: pointer; white-space: nowrap; }
+  .galItem:hover { border-color: var(--accent-line); }
+  .galItem.cur { border-color: var(--accent); color: var(--accent); }
+  .galItem.future { opacity: 0.5; }
+  .galItem .soon { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+
+  .footnote { margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; max-width: 74ch; }
+  .footnote h2 { font-family: var(--mono); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); margin: 0 0 12px; }
+  .footnote ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+  .footnote b { color: var(--ink); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .themeBtn, .select, .pill, .galItem, .switchBtn, .railName.pick { transition: background .12s ease, border-color .12s ease, color .12s ease; }
+  }
+</style>
+
+<div class="stage">
+  <div class="wrap">
+    <p class="eyebrow">NoteThink &middot; design exploration v3</p>
+    <h1>The spine goes down, and the settings follow it</h1>
+    <p class="lede">Grouped is a <strong>view</strong>, not a category heading. The left side shows the selected view's <strong>ancestor spine</strong> - the chain it inherits from - drawn top to bottom, because the settings descend that way too. The right side lists settings <strong>broadest-first</strong>: what comes from Grouped, then Line, then Kanban, each block aligned to its node on the spine. And because a real workspace has more views than fit, each variant has to keep saying <strong>other views exist</strong>. One of these is the selector-then-breadcrumb-then-options flow you described.</p>
+
+    <div class="topbar">
+      <div class="legend">
+        <span class="legItem"><span class="dotmark d-sel"></span>selected view</span>
+        <span class="legItem"><span class="dotmark d-abs"></span>abstract view (owns settings, cannot render)</span>
+        <span class="legItem"><span class="dotmark d-sw"></span>other views to switch to</span>
+      </div>
+      <button class="themeBtn" id="themeBtn" type="button">Theme: system</button>
+    </div>
+
+    <p class="constant"><b>Held constant:</b> Kanban selected; its spine is Grouped &rarr; Line &rarr; Kanban; settings descend in that order. Only the way the spine is drawn and other views are surfaced changes.</p>
+
+    <div class="grid">
+
+      <!-- ============ V1 aligned spine ============ -->
+      <section class="card">
+        <div class="card-head">
+          <span class="card-tag">Variant 1</span>
+          <h2 class="card-name">Aligned spine</h2>
+          <p class="card-thesis">The spine is a vertical rail of the ancestor views on the left, each node sitting level with the settings it contributes on the right. A switcher at the top reaches every other view.</p>
+        </div>
+        <div class="mock">
+          <div class="mock-toolbar">
+            <div class="crumb"><span>oma</span><span class="sep">&rsaquo;</span><span>docstech</span><span class="sep">&rsaquo;</span><span class="leaf">todo.md</span></div>
+            <span class="tab">Kanban <span class="chev">&rsaquo;</span></span>
+          </div>
+          <div class="body">
+            <button class="switchBtn" type="button">Switch view: <b>Kanban</b> <span class="mm">6 views &or;</span></button>
+            <div class="spine">
+              <div class="level">
+                <div class="rail wide"><div class="dotrow"><span class="dot"></span><span class="railName">Grouped</span></div><div class="connector"></div></div>
+                <div class="block">
+                  <div class="field"><span class="lab">Group by</span><span class="ctl"><span class="lock"><svg viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="6.5" rx="1" stroke="currentColor" stroke-width="1.1"/><path d="M2.5 5V3.4A2.5 2 0 0 1 7.5 3.4V5" stroke="currentColor" stroke-width="1.1"/></svg>Status</span></span></div>
+                  <p class="fixnote">fixed by Kanban - <a>edit in Line</a></p>
+                  <div class="field"><span class="lab">Group order</span><span class="ctl"><span class="chips"><span class="chip muted"><span class="grip">&#10247;</span>untagged</span><span class="chip"><span class="grip">&#10247;</span>doing</span><span class="chip"><span class="grip">&#10247;</span>done</span></span></span></div>
+                </div>
+              </div>
+              <div class="level">
+                <div class="rail wide"><div class="dotrow"><span class="dot pick"></span><span class="railName pick">Line</span></div><div class="connector"></div></div>
+                <div class="block">
+                  <div class="field"><span class="lab">Lay out as</span><span class="ctl"><span class="seg"><button class="on" type="button">Columns</button><button type="button">Rows</button></span></span></div>
+                </div>
+              </div>
+              <div class="level">
+                <div class="rail wide"><div class="dotrow"><span class="dot sel"></span><span class="railName sel">Kanban</span></div></div>
+                <div class="block">
+                  <label class="check"><span class="box on"></span>Animate transitions</label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="tradeoff"><b>Reads well:</b> the node-to-block alignment makes "this setting comes from here" spatial, no labels needed. <b>Costs:</b> the rail eats width, and other views live behind one click rather than in view.</p>
+      </section>
+
+      <!-- ============ V2 selector -> breadcrumb -> options ============ -->
+      <section class="card">
+        <div class="card-head">
+          <span class="card-tag">Variant 2</span>
+          <h2 class="card-name">Selector, then breadcrumb, then options</h2>
+          <p class="card-thesis">Pick a view up top; that yields its spine as a short vertical breadcrumb; the options then render in exactly that order. The three stages are the mental model, laid out literally.</p>
+        </div>
+        <div class="mock">
+          <div class="mock-toolbar">
+            <div class="crumb"><span>oma</span><span class="sep">&rsaquo;</span><span>docstech</span><span class="sep">&rsaquo;</span><span class="leaf">todo.md</span></div>
+            <span class="tab">Kanban <span class="chev">&rsaquo;</span></span>
+          </div>
+          <div class="body">
+            <div class="selRow">
+              <span class="selLbl">View</span>
+              <span class="pill">Document</span>
+              <span class="pill">Line</span>
+              <span class="pill on">Kanban</span>
+              <span class="pill more">3 more &or;</span>
+            </div>
+            <div class="bc">
+              <div class="bcNode"><span class="dot"></span><span class="lab">Grouped</span></div>
+              <div class="bcArrow">&darr;</div>
+              <div class="bcNode"><span class="dot pick"></span><span class="lab">Line</span></div>
+              <div class="bcArrow">&darr;</div>
+              <div class="bcNode here"><span class="dot sel"></span><span class="lab">Kanban</span></div>
+            </div>
+            <div class="optBlock">
+              <div class="optHead">Grouped</div>
+              <div class="field"><span class="lab">Group by</span><span class="ctl"><span class="lock"><svg viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="6.5" rx="1" stroke="currentColor" stroke-width="1.1"/><path d="M2.5 5V3.4A2.5 2 0 0 1 7.5 3.4V5" stroke="currentColor" stroke-width="1.1"/></svg>Status</span><span class="jump">edit in Line</span></span></div>
+              <div class="field"><span class="lab">Group order</span><span class="ctl"><span class="chips"><span class="chip muted"><span class="grip">&#10247;</span>untagged</span><span class="chip"><span class="grip">&#10247;</span>doing</span><span class="chip"><span class="grip">&#10247;</span>done</span></span></span></div>
+            </div>
+            <div class="optBlock">
+              <div class="optHead">Line</div>
+              <div class="field"><span class="lab">Lay out as</span><span class="ctl"><span class="seg"><button class="on" type="button">Columns</button><button type="button">Rows</button></span></span></div>
+            </div>
+            <div class="optBlock here">
+              <div class="optHead">Kanban</div>
+              <label class="check"><span class="box on"></span>Animate transitions</label>
+            </div>
+          </div>
+        </div>
+        <p class="tradeoff"><b>Reads well:</b> the selector owns "which view" and the breadcrumb owns "what it inherits" - two clear jobs; overflow is just "3 more". <b>Costs:</b> the breadcrumb and the option headings restate the same three names.</p>
+      </section>
+
+      <!-- ============ V3 thin gutter, right-led ============ -->
+      <section class="card">
+        <div class="card-head">
+          <span class="card-tag">Variant 3</span>
+          <h2 class="card-name">Descending settings, spine as a gutter</h2>
+          <p class="card-thesis">The settings lead, in descending order, each block headed by its view. A slim connected gutter on the left is the spine - the vertical breadcrumb reduced to a thread linking the levels.</p>
+        </div>
+        <div class="mock">
+          <div class="mock-toolbar">
+            <div class="crumb"><span>oma</span><span class="sep">&rsaquo;</span><span>docstech</span><span class="sep">&rsaquo;</span><span class="leaf">todo.md</span></div>
+            <span class="tab">Kanban <span class="chev">&rsaquo;</span></span>
+          </div>
+          <div class="body">
+            <button class="switchBtn" type="button">Kanban <span class="mm">switch view &or;</span></button>
+            <div class="spine">
+              <div class="level">
+                <div class="rail thin"><div class="dotrow"><span class="dot"></span></div><div class="connector"></div></div>
+                <div class="block">
+                  <div class="blkHead"><span class="lvlLabel">Grouped <span class="kind">shared</span></span></div>
+                  <div class="field"><span class="lab">Group by</span><span class="ctl"><span class="lock"><svg viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="6.5" rx="1" stroke="currentColor" stroke-width="1.1"/><path d="M2.5 5V3.4A2.5 2 0 0 1 7.5 3.4V5" stroke="currentColor" stroke-width="1.1"/></svg>Status</span><span class="jump">edit in Line</span></span></div>
+                  <div class="field"><span class="lab">Group order</span><span class="ctl"><span class="chips"><span class="chip muted"><span class="grip">&#10247;</span>untagged</span><span class="chip"><span class="grip">&#10247;</span>doing</span><span class="chip"><span class="grip">&#10247;</span>done</span></span></span></div>
+                </div>
+              </div>
+              <div class="level">
+                <div class="rail thin"><div class="dotrow"><span class="dot pick"></span></div><div class="connector"></div></div>
+                <div class="block">
+                  <div class="blkHead"><span class="lvlLabel">Line</span></div>
+                  <div class="field"><span class="lab">Lay out as</span><span class="ctl"><span class="seg"><button class="on" type="button">Columns</button><button type="button">Rows</button></span></span></div>
+                </div>
+              </div>
+              <div class="level">
+                <div class="rail thin"><div class="dotrow"><span class="dot sel"></span></div></div>
+                <div class="block">
+                  <div class="blkHead"><span class="lvlLabel" style="color:var(--accent)">Kanban <span class="kind">you are here</span></span></div>
+                  <label class="check"><span class="box on"></span>Animate transitions</label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="tradeoff"><b>Reads well:</b> narrowest of the three; the thread still says "these descend and connect" without a wide rail. <b>Costs:</b> the gutter dots are a subtle spine - easy to miss that they are also how you'd jump up a level.</p>
+      </section>
+
+      <!-- ============ V4 aligned spine + overflow gallery ============ -->
+      <section class="card">
+        <div class="card-head">
+          <span class="card-tag">Variant 4</span>
+          <h2 class="card-name">Aligned spine, views on show</h2>
+          <p class="card-thesis">Variant 1's aligned spine, but instead of hiding the rest behind a click, a scrolling gallery keeps every other view visible - answering "there are more views" without breaking the alignment.</p>
+        </div>
+        <div class="mock">
+          <div class="mock-toolbar">
+            <div class="crumb"><span>oma</span><span class="sep">&rsaquo;</span><span>docstech</span><span class="sep">&rsaquo;</span><span class="leaf">todo.md</span></div>
+            <span class="tab">Kanban <span class="chev">&rsaquo;</span></span>
+          </div>
+          <div class="body">
+            <div class="spine">
+              <div class="level">
+                <div class="rail wide"><div class="dotrow"><span class="dot"></span><span class="railName">Grouped</span></div><div class="connector"></div></div>
+                <div class="block">
+                  <div class="field"><span class="lab">Group by</span><span class="ctl"><span class="lock"><svg viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="6.5" rx="1" stroke="currentColor" stroke-width="1.1"/><path d="M2.5 5V3.4A2.5 2 0 0 1 7.5 3.4V5" stroke="currentColor" stroke-width="1.1"/></svg>Status</span><span class="jump">edit in Line</span></span></div>
+                  <div class="field"><span class="lab">Group order</span><span class="ctl"><span class="chips"><span class="chip muted"><span class="grip">&#10247;</span>untagged</span><span class="chip"><span class="grip">&#10247;</span>doing</span><span class="chip"><span class="grip">&#10247;</span>done</span></span></span></div>
+                </div>
+              </div>
+              <div class="level">
+                <div class="rail wide"><div class="dotrow"><span class="dot pick"></span><span class="railName pick">Line</span></div><div class="connector"></div></div>
+                <div class="block"><div class="field"><span class="lab">Lay out as</span><span class="ctl"><span class="seg"><button class="on" type="button">Columns</button><button type="button">Rows</button></span></span></div></div>
+              </div>
+              <div class="level">
+                <div class="rail wide"><div class="dotrow"><span class="dot sel"></span><span class="railName sel">Kanban</span></div></div>
+                <div class="block"><label class="check"><span class="box on"></span>Animate transitions</label></div>
+              </div>
+            </div>
+            <div class="gallery">
+              <div class="galHead"><span>Other views</span><span>scroll &rarr;</span></div>
+              <div class="galRow">
+                <span class="galItem">Document</span>
+                <span class="galItem cur">Kanban</span>
+                <span class="galItem">Line</span>
+                <span class="galItem future">Grid <span class="soon">soon</span></span>
+                <span class="galItem future">Gantt <span class="soon">soon</span></span>
+                <span class="galItem future">Cube <span class="soon">soon</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="tradeoff"><b>Reads well:</b> nothing is hidden - the spine explains the current view, the gallery shows the whole set and what is coming. <b>Costs:</b> two view mechanisms on screen (spine + gallery) risk reading as competing rather than "here" vs "elsewhere".</p>
+      </section>
+
+    </div>
+
+    <div class="footnote">
+      <h2>What changed from v2</h2>
+      <ul>
+        <li><b>Grouped is a view now, not a heading.</b> The left side is the selected view's ancestor spine (Grouped &rarr; Line &rarr; Kanban), drawn vertically because the settings descend that way.</li>
+        <li><b>Right pane is broadest-first.</b> Grouped's settings, then Line's, then Kanban's - each block tied to its spine node.</li>
+        <li><b>Alignment</b> is tried literally in V1 and V4 (node level with its block); V3 reduces the spine to a thread; V2 is the selector &rarr; breadcrumb &rarr; options flow you asked for.</li>
+        <li><b>"Other views exist"</b> is solved four ways: a switcher (V1, V3), a "3 more" pill (V2), and an always-visible gallery (V4).</li>
+        <li>Still assuming Kanban's Group by is <b>fixed</b> (edit by moving to Line). Open if you want it editable in place.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var btn = document.getElementById('themeBtn');
+    var root = document.documentElement;
+    var order = ['system', 'light', 'dark'];
+    var i = 0;
+    btn.addEventListener('click', function () {
+      i = (i + 1) % order.length;
+      var m = order[i];
+      if (m === 'system') { root.removeAttribute('data-theme'); }
+      else { root.setAttribute('data-theme', m); }
+      btn.textContent = 'Theme: ' + m;
+    });
+  })();
+</script>

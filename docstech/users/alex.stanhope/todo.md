@@ -22,236 +22,26 @@ A top-level note the user has expanded with "Show more" silently re-collapses on
 + [ ] add a test: expanded note + checkbox tick stays expanded; "Show less" collapses it
 
 
-### View registry: the view hierarchy as data [](?id=view-registry)
+### View settings drawer: view tree and inherited settings [](?id=view-settings-tree-drawer)
 
-The keystone for the column-view programme. Today the view hierarchy does not exist as data: `SELECTABLE_VIEWTYPES = ['auto', 'document', 'kanban']` is a flat array (`GenericView.tsx:19`), dispatch is three parallel `props.type ===` guards (`GenericView.tsx:87-89`), and the settings drawer dispatches the same way (`GenericViewToolbar.tsx:142,161`). Every part of the column-view design - the indented selector tree, column->kanban parentage, a group-by that is locked in the child and unlocked in the parent, a group-by shared by the column and row families - is a query against a registry that declares parent, children, and per-setting ownership. Build it once here or write the same inheritance logic in three places later.
-
-+ goal
-  + one declarative registry describes every view: id, parent, label, selectable, own settings, locked settings
-  + settings resolve by walking a view's ancestor chain, most-specific wins
-  + that same walk answers "is this setting locked for this view, and which ancestor would unlock it"
-+ background - the config namespace is already a two-level view tree
-  + `view.generic.*` is the settings of the ROOT view node (applies to all views) - `settings.ts:21,25,26,28`
-  + `view.specific.kanban.*` is the settings of a LEAF node - `settings.ts:20,27`
-  + so `generic`/`specific` already mirrors a root+leaves tree; what is missing is only the ability to name an INTERMEDIATE node
-  + `files.*` is a separate sibling namespace and is out of scope
-+ scope - the tree
-  + declare the tree: root -> {document, grouped}; grouped -> {column, row}; column -> {kanban}; row -> {gantt}
-  + `grouped` is abstract: it owns settings but is not selectable, so the selector still reads Column -> Kanban with no phantom node
-  + it exists so `groupBy` is declared once for both the column and row families rather than duplicated on each
-  + ship only the nodes that have a view today (root, document, kanban); column/row/gantt land with their own stories
-  + replace `SELECTABLE_VIEWTYPES` and the parallel type guards with registry lookups
-+ scope - settings ownership
-  + extend `view.specific.<node>.*` so `<node>` is any registry node id, including abstract ancestors
-  + `groupBy` therefore lands at `view.specific.grouped.groupBy` and is inherited by column, kanban, row, gantt
-  + a child that pins an inherited setting to a constant (kanban pins groupBy=status) declares it as locked, naming the ancestor that unlocks it
-  + resolution order stays as today: per-session viewState -> extension cascade -> built-in default (`composerops.ts:49`)
-+ out of scope
-  + renaming `generic`/`specific` to a literal tree mirror (`view.all.*`, `view.grouped.*`) - see the decision below
-  + any UI change; the selector and drawers keep their current shape until [[view-settings-tree-drawer]]
-  + shipping column, row or gantt views
-+ decisions
-  + [X] keep `generic`/`specific` and extend `specific` to intermediate nodes - zero migration for the six shipped config keys, and this extension is published so a rename breaks real users' settings.json. The wart is that "specific" reads oddly for a node shared by four views; accepted
-  + [ ] `columnOrder` default is `['untagged','doing','code-review','testing','done']`, which is inherently a STATUS order and meaningless under group-by=assignee - so the order is per-(view, group-by key), not per-view. Decide whether it becomes a map keyed by group-by key and moves to `grouped` as a group order (a shape change to the shipped `view.specific.kanban.columnOrder`, currently `string[]`), or stays as-is and simply resets per key
-+ files
-  + new `client/webview/src/notethink-views/src/lib/viewregistryops.ts` - the tree, ancestor walk, settings resolution, lock query
-  + `client/webview/src/notethink-views/src/components/views/GenericView.tsx` - drop `SELECTABLE_VIEWTYPES`, dispatch from the registry
-  + `client/extension/src/lib/settings.ts` - `SETTINGS` entries gain their owning node
-  + `package.json` - `contributes.configuration` follows any new path
-+ [ ] build the registry + ancestor-walk settings resolution + lock query
-+ [ ] dispatch `GenericView` from the registry instead of the parallel type guards
-+ [ ] drive the settings drawer's per-type dispatch from the registry
-+ [ ] jest: ancestor walk resolves most-specific-wins across root/abstract/leaf nodes
-+ [ ] jest: a locked setting reports its value and the ancestor that unlocks it
-+ [ ] jest: existing document + kanban settings resolve byte-identically to today (regression)
-+ [ ] `pnpm run check` green
-+ acceptance criteria
-  + the view tree is one data structure; adding a view is one registry entry plus its component
-  + every existing setting resolves exactly as it does today
-  + no `SELECTABLE_VIEWTYPES` and no parallel `props.type ===` dispatch remains
-
-
-### Group-by candidate enumeration [](?id=group-by-enumeration)
-
-Pure-lib groundwork for [[column-view-group-by]], with no UI. Enumerate the attribute keys a board could group by, and for each the values it would produce. Cheap by construction: the notes are already parsed and in memory, so this is a sweep over `note.linetags`, not a re-parse. Runs in parallel with [[view-registry]].
+The deep integration [[drawer-tabs-and-jump-integration]] deliberately left alone (it landed the thin move: the view-type `<select>` into `SettingsCommonControls.tsx:48`, tab titled by resolved type). This is the real thing: the drawer becomes a two-pane selector + settings, per the picked mockup variant (`docstech/plans/view-settings-mockup.html`). FAST-FOLLOW, not in the first build push - it waits on the pane-design pick and on the functional stories landing.
 
 + goal
-  + given the rendered notes, return the group-by candidate keys and each key's distinct values
-  + candidates cover authored attributes plus implicit keys computed from a note's origin
-+ background - most of the filtering already exists
-  + there is NO whitelist: `parseLineTags` retains every arbitrary key (`linetagops.ts:64-100`), so any authored attribute is already available
-  + `isNamespacedKey` (`linetagops.ts:10-25`) already separates internal `nt_`/`ng_` keys from content attributes - that IS the candidate filter, and it is the same rule that drives chip visibility (`renderops.tsx:110`)
-  + `value_numeric` (`linetagops.ts:88`) already marks numeric values - that IS the text-vs-numeric filter, so `time_taken` / `time_estimated` self-exclude
-  + `HIDDEN_ATTRIBUTES = ['progress_unit', 'progress_max', 'id']` (`GenericNoteAttributes.tsx:9-14`) is the existing noise list
-  + "first level folder" already exists as `projectNameFromRelativePath` (`originops.ts:61-65`) - the first segment of `relative_path`, and already what drives the project pills
-+ scope
-  + enumerate distinct keys across the notes, dropping namespaced, hidden, and all-numeric-valued keys
-  + a key qualifies only if it has at least one text value; mixed text/numeric keys qualify on their text values
-  + add implicit keys: `nt_first_level_folder`, computed per note via `projectNameFromRelativePath`, not read from linetags
-  + implicit keys are namespaced to preserve the authored key space and cannot collide with a real attribute
-  + mark each candidate writable or read-only - authored attributes are writable, implicit keys are read-only
-  + memoise on the same key as the folder merge cache so the sweep is not O(all notes) per render
-+ out of scope
-  + any UI, selector, or column derivation - [[column-view-group-by]] consumes this
-  + a second implicit key beyond first level folder
-+ implementation notes
-  + `value_numeric` tests with `parseFloat` but stores `Number(value)` (`linetagops.ts:88`), so `"5px"` passes the test and stores `NaN` - do not treat a present `value_numeric` as proof of a numeric value without checking `isNaN`
-  + `status` is read as a bare unnamespaced key (`noteops.ts:470`) while `nt_kanban_ordering_weight` is a namespaced literal (`noteops.ts:539`); neither uses `resolveNamespacedTag`, so an enumeration that assumes one convention will miss the other
-  + inherited tags (`nt_child_*`) are real entries in `linetags` with `inherited: true` - they count as values, since a card grouped by an inherited status belongs in that column
-+ files
-  + new `client/webview/src/notethink-views/src/lib/groupbyops.ts` - candidates, values, implicit-key resolution, writability
-+ [ ] enumerate candidate keys + distinct values, dropping namespaced / hidden / all-numeric keys
-+ [ ] add the `nt_first_level_folder` implicit key over `projectNameFromRelativePath`
-+ [ ] mark candidates writable vs read-only
-+ [ ] memoise the sweep against the merge cache key
-+ [ ] jest: an authored text attribute becomes a candidate with its distinct values
-+ [ ] jest: `nt_`/`ng_`-prefixed, hidden, and numeric-only keys are excluded
-+ [ ] jest: a key with mixed text and numeric values qualifies on its text values
-+ [ ] jest: `nt_first_level_folder` enumerates per-file folders and reports read-only
-+ [ ] jest: inherited tags count toward a key's values
-+ [ ] `pnpm run check` green
-+ acceptance criteria
-  + candidates come from data with no hardcoded key list
-  + `time_taken` / `time_estimated` never appear; `status` and any authored text attribute do
-  + the sweep costs nothing measurable on a 200-file board (memoised, not per-render)
-
-
-### Factor ColumnBasedView out of KanbanView [](?id=column-based-view)
-
-Split out of [[view-hierarchy-and-card-types]], which bundled this with the orthogonal `nt_card` axis and was blocking on it. This half gates the whole column-view programme; the card axis does not and now stands alone. Kanban becomes a thin specialisation supplying "group by the `status` linetag", so every future grouped view inherits column layout, ordering, and drag-and-drop.
-
-+ goal
-  + a grouped view supplies a group derivation and inherits all of kanban's column rendering, ordering, and drag-and-drop
-  + kanban renders identically after the refactor
-+ background - the base naming question is now answered
-  + the original story left open: `ColumnBasedView` vs `GroupedView` vs `BoardView`
-  + row view and gantt resolve it: group-by spans BOTH the column and row families, so grouping is layout-independent and must NOT live inside the column base
-  + so this is two pieces - a grouping engine (shared with row view later) and `ColumnBasedView` (column layout only)
-  + `kanbanColumnValue` (`noteops.ts:469`) is the single note->column rule and is the natural seam
-+ scope
-  + extract the grouping engine: `(notes, group_key) => { values, valueForNote, label }`, layout-independent
-  + `deriveNaturalColumnOrder` (`noteops.ts:455-462`), `notesInKanbanColumn` (`:478-480`) and `formatColumnLabel` (`:441-449`) generalise off the hardcoded `status` onto the group key
-  + new `ColumnBasedView` owns the column memo, header bar, drop zones, and column-order persistence, factored out of `KanbanView.tsx:73-107`
-  + `KanbanView` becomes a thin wrapper supplying the `status` derivation
-  + no new view ships here; the proof is the kanban refactor with no regression
-+ out of scope
-  + the `nt_card` axis - stays in [[view-hierarchy-and-card-types]]
-  + shipping column, row or gantt views
-  + windowing - see the sequencing note in [[kanban-virtualized-columns]]
-+ implementation notes
-  + the untagged column is synthetic - no file carries `status=untagged`; the `||` in `kanbanColumnValue` invents it, and dropping there DELETES the linetag (`kanbanProjection.ts:49-51`, `cloneWithoutLinetag`)
-  + so the generalised engine needs an "absent value" bucket per group key, not a literal `untagged` string
-  + `KanbanView.tsx:165-166` culls empty columns and falls back to all columns, so a stale `columnOrder` naming dead values is already harmless
-+ files
-  + new `client/webview/src/notethink-views/src/components/views/ColumnBasedView.tsx`
-  + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx` - thin wrapper
-  + `client/webview/src/notethink-views/src/lib/noteops.ts` - generalise the column helpers off `status`
-  + `client/webview/src/notethink-views/src/components/views/kanban/useKanbanColumns.ts`
-+ [ ] extract the layout-independent grouping engine off `kanbanColumnValue`
-+ [ ] generalise the natural-order, membership and label helpers onto a group key
-+ [ ] factor `ColumnBasedView` out of `KanbanView`; reduce `KanbanView` to the status derivation
-+ [ ] jest: `ColumnBasedView` yields the same column shape under an arbitrary derivation (status + a fake attribute)
-+ [ ] jest: the absent-value bucket works for a group key other than `status`
-+ [ ] jest: kanban renders identically against existing fixtures
-+ [ ] playwright: every existing kanban spec green (refactor regression check)
-+ [ ] `pnpm run check` green
-+ acceptance criteria
-  + kanban is visually and behaviourally unchanged
-  + a new grouped view needs only a derivation, not a reimplementation of column layout or drag-and-drop
-  + the grouping engine carries no column-layout assumptions, so row view can reuse it
-
-
-### Column view with group-by [](?id=column-view-group-by)
-
-The feature. Column view is the parent; kanban becomes the child that pins group-by to `status`. Column view exposes a group-by selector over the enumerated candidates, defaulting to first level folder, and honours an `nt_group_by` root attribute with the same auto semantics as `nt_view`. Depends on [[view-registry]], [[group-by-enumeration]] and [[column-based-view]].
-
-+ goal
-  + column view groups cards by any candidate attribute, selectable at runtime
-  + kanban is column view with group-by pinned to `status` and locked
-  + `nt_group_by=assignee` on the file root resolves and displays as "Auto (Assignee)"
+  + the drawer presents the view hierarchy as a selector (left) and the selected view's settings (right)
+  + selecting a view switches to it; settings are organised by what they do, with inherited/fixed as quiet signals, not by owner
+  + a setting a view inherits and pins reads as fixed, naming the view that unlocks it (kanban group-by -> Line)
 + background
-  + auto resolution has an exact precedent to mirror: `majorityNgView` (`noteops.ts:176-198`) - one vote per file, first story wins, strict plurality, ties return undefined
-  + the "Auto (X)" label already exists as `viewTypeLabel` (`components/views/viewTypeLabel.ts`)
-  + `fileDeclaredViewType` (`mergeAggregateRoot.ts:145-148`) shows the H1-over-frontmatter precedence to copy
-+ scope - the view
-  + add `column` to the registry as the parent of `kanban`; both render `ColumnBasedView` with different derivations
-  + column view defaults group-by to `nt_first_level_folder`, matching how the project pills already read
-  + kanban declares groupBy locked to `status`, naming column view as the unlocking ancestor
-  + switching kanban -> column changes nothing on screen at first; it only unlocks the options
-+ scope - the linetag
-  + new `nt_group_by` root attribute, read off the file H1 with frontmatter fallback
-  + auto-resolves by majority vote across files, mirroring `majorityNgView`, with a focused-note override
-  + values are candidate keys, plus implicit keys in their `nt_` form (`nt_group_by=nt_first_level_folder`)
-  + bump AUTHORING_GUIDE to 1.2.0 (new optional backward-compatible key) and add the rows to its tables
-+ scope - drag write-back
-  + a drop writes the group-by key, generalising today's `status=` write: group by assignee, drop, and it writes `assignee=X`
-  + a drop on the absent-value bucket deletes the linetag, as `status` does today
-  + drag is DISABLED when the group-by key is read-only, because a drop would have to move a file on disk
-  + so first level folder is a read-only grouping: it renders columns but takes no drops
-+ out of scope
-  + row view and gantt - the `grouped` ancestor exists for them but they ship separately
-  + the tree selector and lock UI - [[view-settings-tree-drawer]] presents this; here group-by is a plain select in the view's settings drawer
-  + writing an implicit key back (i.e. moving files by drag)
-+ implementation notes
-  + `nt_group_by` is a permanent name: it lands in users' files and cannot be renamed without a migration
-  + implicit values are namespaced (`nt_first_level_folder`) to preserve the authored key space - decided 2026-07-17
-  + `DEFAULT_COLUMN_ORDER` is mirrored in THREE places that must stay in lockstep: `client/extension/src/constants.ts:19`, `client/webview/src/constants.ts:9`, `package.json:205-210`
-  + that default is a status order, so it must not be applied to a board grouped by anything else - see the open decision in [[view-registry]]
-+ files
-  + `client/webview/src/notethink-views/src/components/views/ColumnBasedView.tsx` - group-by prop
-  + `client/webview/src/notethink-views/src/components/views/AutoView.tsx` - majority-vote `nt_group_by` alongside `nt_view`
-  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` - capture `nt_group_by` onto origin
-  + `client/webview/src/notethink-views/src/components/views/kanban/kanbanProjection.ts` - write the group key, not `status`
-  + `AUTHORING_GUIDE.md` - version 1.2.0, `nt_group_by` row, `nt_view=column` value
-  + `l10n/bundle.l10n*.json` (5 files) - group-by labels
-+ [ ] add `column` to the registry with group-by unlocked; pin kanban's groupBy to `status`, locked
-+ [ ] default column view's group-by to `nt_first_level_folder`
-+ [ ] add the group-by select over the enumerated candidates in the view's settings drawer
-+ [ ] parse `nt_group_by` off the file root and auto-resolve it by majority vote
-+ [ ] label the resolved selection "Auto (Assignee)" via `viewTypeLabel`
-+ [ ] generalise the drag write-back off `status` onto the group-by key
-+ [ ] disable drag when the group-by key is read-only
-+ [ ] update AUTHORING_GUIDE to 1.2.0 with `nt_group_by` and `nt_view=column`
-+ [ ] add the l10n strings across all 5 bundles
-+ [ ] jest: column view groups by an arbitrary attribute; kanban still groups by status
-+ [ ] jest: `nt_group_by` majority-votes across files; ties fall back to the default
-+ [ ] jest: a drop writes the group-by key, and the absent-value bucket deletes it
-+ [ ] jest: a read-only group-by key yields non-draggable cards
-+ [ ] playwright: switch to column view, change group-by, columns re-derive
-+ [ ] playwright: group by first level folder - columns match the project pills and cards do not drag
-+ [ ] playwright: every existing kanban drag spec green
-+ [ ] `pnpm run check` green
-+ manual: open a folder board, switch to column view, confirm it defaults to first level folder columns matching the pills
-+ manual: set `nt_group_by=assignee` on a file root and confirm the selector reads "Auto (Assignee)"
-+ manual: group by an authored attribute, drag a card, confirm the attribute is rewritten in the file
-+ acceptance criteria
-  + column view groups by any enumerated candidate, defaulting to first level folder
-  + kanban is unchanged and shows its group-by as status, locked
-  + `nt_group_by` resolves with the same auto semantics as `nt_view`
-  + dragging writes the group-by attribute, and is disabled entirely for read-only keys
-
-
-### View settings drawer: view tree and locked settings [](?id=view-settings-tree-drawer)
-
-The deep integration [[drawer-tabs-and-jump-integration]] deliberately left alone. That story lands the thin move - the view-type `<select>` into the drawer body (`SettingsCommonControls.tsx:48`), the tab titled with the resolved type - and says anything clever built there would be thrown away. This is that work: the drawer becomes a view tree on the left and the selected view's settings on the right, with inherited settings shown locked.
-
-+ goal
-  + the drawer presents the view hierarchy as an indented tree, replacing the `<select>`
-  + selecting a view switches to it and shows its settings alongside
-  + a setting a view inherits and pins reads as locked, naming the ancestor that unlocks it
-+ background
-  + selecting a view in the tree IS switching to it, so selected == active and the right-hand panel can keep keying off `props.type` as it does today
+  + selecting a view IS switching to it, so selected == active and the right pane keys off `props.type` as today
   + the settings drawer already dispatches per view type (`GenericViewToolbar.tsx:142,161`) with a shared `SettingsCommonControls` - the tiering exists, it is only flat
-  + `role="tree"` appears exactly ONCE in the whole webview (`JumpDrawer.tsx:48`): hand-rolled inline, root plus one level, CSS-only indent (`.jumpTreeChildren`, `ViewRenderer.module.scss:653-658`), no depth prop, no recursion
-  + so there is no reusable tree to be consistent with; it has to be extracted first
-  + `.drawerLink` / `.drawerList` ARE already shared across the files, collisions and jump drawers - only the tree glyph/indent pattern is unique to Jump
+  + `role="tree"` appears exactly ONCE in the webview (`JumpDrawer.tsx:48`): hand-rolled inline, root plus one level, CSS-only indent, no recursion - there is no reusable tree, it has to be extracted
+  + `.drawerLink` / `.drawerList` ARE already shared; only the tree glyph/indent pattern is unique to Jump
+  + the four candidate pane layouts are in `docstech/plans/view-settings-mockup.html`; pick one before building
 + scope
-  + extract the `jumpTree*` glyph + indent pattern into a shared tree component, made recursive for arbitrary depth
+  + extract the `jumpTree*` glyph + indent pattern into a shared recursive tree component
   + repoint JumpDrawer at it with no behaviour change
-  + render the view tree in the drawer's left column from the registry, skipping abstract nodes
-  + move the view-type selector out of `SettingsCommonControls` - its placement there was the deliberate thin step
-  + show the selected view's settings on the right; render inherited-and-pinned settings as locked with the unlocking ancestor named
-  + a locked control unlocks the instant its unlocking ancestor is selected, with the view unchanged underneath
+  + render the registry's selectable views in the left pane; abstract nodes (grouped) appear as category labels, not clickable rows; future rungs dimmed
+  + move the view-type selector out of `SettingsCommonControls`
+  + render the selected view's effective settings in the picked organisation; inherited-and-fixed settings read as fixed with the unlocking view named, editable the instant that view is selected
 + out of scope
   + changing which settings exist, or their values
   + the other drawers' contents
@@ -259,27 +49,28 @@ The deep integration [[drawer-tabs-and-jump-integration]] deliberately left alon
   + new `client/webview/src/notethink-views/src/components/views/drawers/DrawerTree.tsx` - shared, recursive
   + `client/webview/src/notethink-views/src/components/views/drawers/JumpDrawer.tsx` - repoint at it
   + `client/webview/src/notethink-views/src/components/views/SettingsCommonControls.tsx` - selector leaves
-  + `client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx` - two-column drawer body
-  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` - tree + two-column classes
+  + `client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx` - two-pane drawer body
+  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` - tree + two-pane classes
++ [ ] pick the pane variant from the mockup and record it here
 + [ ] extract the shared recursive tree component from JumpDrawer's inline markup
 + [ ] repoint JumpDrawer at it with no behaviour change
-+ [ ] render the registry's view tree in the drawer's left column
++ [ ] render the registry's selectable views in the left pane; grouped as a label, future rungs dimmed
 + [ ] move the view-type selector out of `SettingsCommonControls`
-+ [ ] render inherited-and-pinned settings as locked, naming the unlocking ancestor
-+ [ ] jest: the tree renders the registry hierarchy and skips abstract nodes
++ [ ] render inherited-and-fixed settings as fixed, naming the unlocking view
++ [ ] jest: the tree renders the registry hierarchy; abstract nodes are non-selectable
 + [ ] jest: selecting a tree node switches the view
-+ [ ] jest: kanban shows group-by locked to status; selecting column view unlocks it
++ [ ] jest: kanban shows group-by fixed to status; selecting Line unlocks it
 + [ ] playwright: the jump drawer's tree is unchanged after the extraction
-+ [ ] playwright: open View settings, select column view from the tree, group-by becomes editable
++ [ ] playwright: open View settings, select Line, group-by becomes editable
 + [ ] `pnpm run check` green
 + manual: confirm the view tree reads consistently with the jump drawer's tree
-+ manual: in kanban, confirm group-by shows status locked and it is obvious column view unlocks it
-+ manual: select column view and confirm the board does not change until an option is changed
++ manual: in kanban, confirm group-by shows status fixed and it is obvious Line unlocks it
++ manual: select Line and confirm the board does not change until an option is changed
 + acceptance criteria
-  + no view-type `<select>` remains; the tree is the selector
+  + no view-type `<select>` remains; the selector is the tree
   + the view tree and the jump tree render from one component
-  + a locked setting names the ancestor that unlocks it, and unlocks on selecting that ancestor
-  + selecting a parent view changes nothing on screen until an option is changed
+  + a fixed setting names the view that unlocks it, and unlocks on selecting it
+  + settings read by what they do, not by which node owns them
 
 
 ### Kanban perf harness and budgets [](?id=kanban-perf-harness)
@@ -391,7 +182,7 @@ Initial folder discovery streams one postMessage per file (`PanelSession.ts:826`
 
 ### Virtualized kanban columns [](?id=kanban-virtualized-columns)
 
-Every card mounts into the DOM: 200 files x 10 stories = 2000 `Draggable` cards (`KanbanBoard.tsx:96-127`), each rendering markdown, and the FLIP layer measures every `[data-flip-id]` node with getBoundingClientRect on each membership change (`useFlipTransition.ts:292`, fired per merge via the `signature` memo). CPU profiles show querySelectorAll + getAnimations at ~9-12% of load. @hello-pangea/dnd officially supports virtual lists (react-window pattern, overscan required). The `ColumnBasedView` factor-out this story asked to coordinate with is now [[column-based-view]], and the ordering is resolved: it lands FIRST, so windowing is implemented once in the base and every grouped view inherits it. This is the only story in the perf cycle that the column-view programme blocks.
+Every card mounts into the DOM: 200 files x 10 stories = 2000 `Draggable` cards (`KanbanBoard.tsx:96-127`), each rendering markdown, and the FLIP layer measures every `[data-flip-id]` node with getBoundingClientRect on each membership change (`useFlipTransition.ts:292`, fired per merge via the `signature` memo). CPU profiles show querySelectorAll + getAnimations at ~9-12% of load. @hello-pangea/dnd officially supports virtual lists (react-window pattern, overscan required). The factor-out this story asked to coordinate with is now [[line-view]], and the ordering is resolved: it lands FIRST, so windowing is implemented once in `LineView` and every grouped view inherits it. This is the only story in the perf cycle that the view programme blocks.
 
 + goal
   + DOM card count is bounded by viewport + overscan regardless of corpus size; scrolling a column streams cards in (the infinite-scroll feel)
@@ -401,16 +192,16 @@ Every card mounts into the DOM: 200 files x 10 stories = 2000 `Draggable` cards 
   + variable card heights: measure-and-cache strategy (cards clip to a max height already via useMarkdownNoteOverflow)
   + scroll-to-focused-card (`useScrollToCaret`, viewhooks.ts) must ask the virtualizer to scroll before framing; keyboard navigation and the focus ring rules (CODING_STANDARDS Focused-note scroll framing) still hold
   + FLIP: restrict measure/animate to mounted (visible) cards; skip animation entirely when a membership change exceeds a threshold (bulk load)
-  + land inside the `ColumnBasedView` base so grouped views inherit it - [[column-based-view]] is a hard prerequisite, not a coordination question
+  + land inside `LineView` so grouped views inherit it - [[line-view]] is a hard prerequisite, not a coordination question
 + out of scope
-  + virtualizing document view (different scroll model; follow-up once ColumnBasedView ships)
+  + virtualizing document view (different scroll model; follow-up once LineView ships)
 + acceptance criteria
   + 200-file board: mounted cards <= visible + overscan (assert via DOM count in the harness); folder-200 settled load <= 8s prod with prior stories landed
   + card click and selectionChanged on the 200-file board <= 200ms with no long task > 100ms
   + all kanban drag playwright specs green, including cross-column drags of cards that start off-screen (add spec)
   + keyboard navigation + focused-card scroll framing specs green (focus ring fully visible per CODING_STANDARDS)
   + kanban-animation specs green with FLIP scoped to visible cards; bulk-load renders skip animation (assert via animation probe events)
-+ [ ] agree sequencing with the ColumnBasedView story; implement windowed columns per the dnd virtual pattern
++ [ ] implement windowed lanes inside `LineView` per the dnd virtual pattern (after [[line-view]])
 + [ ] wire scroll-to-focus + keyboard nav through the virtualizer
 + [ ] scope FLIP to mounted cards + bulk-change skip; keep animation probe coverage
 + [ ] add off-screen drag + DOM-bound assertions to playwright; ratchet perf budgets
@@ -497,7 +288,7 @@ mdast parse costs 0.6ms/KB on the extension host: each debounced keystroke on a 
 
 ### Per-view card-type axis [](?id=view-hierarchy-and-card-types)
 
-The view-hierarchy half of this story was split out to [[column-based-view]] on 2026-07-17: it gates the column-view programme, this card axis does not, and bundling them was blocking the gate. What remains is the orthogonal card-type axis, which now stands alone and can run any time after [[view-registry]] (each view declares its default card type, which is a registry entry).
+The view-hierarchy half of this story was split out to [[line-view]] on 2026-07-17: it gates the view programme, this card axis does not, and bundling them was blocking the gate. What remains is the orthogonal card-type axis, which now stands alone and can run any time after [[view-registry]] (each view declares its default card type, which is a registry entry).
 
 **Card-type axis.** Orthogonal to view choice. Within any view a note can be rendered as a full card (current default - pill, title, attributes, body) or a compact summary (e.g. a sticky-note). Introduce an `nt_card` linetag alongside `nt_view`, with auto-resolution and a second selector - "Auto (Card)" alongside the existing "Auto (Kanban)".
 
@@ -522,7 +313,7 @@ The view-hierarchy half of this story was split out to [[column-based-view]] on 
   + dispatch: `setViewManagedState({ card_type: ... })` mirroring the view-type dispatch
   + layout: two selects side-by-side at `GenericView.tsx:662-670`; on narrow widths they wrap to two rows
 + out of scope
-  + the view hierarchy and the `ColumnBasedView` factor-out - split to [[column-based-view]] 2026-07-17
+  + the view hierarchy and the `LineView` factor-out - split to [[line-view]] 2026-07-17
   + further card types beyond `card` and `sticky` - registry is open, more added later
   + per-note `nt_card` override (file-level only for now)
   + animation-layer integration - the work in [[animated-passive-transitions]] keys on `stable_id`, which is orthogonal to card type

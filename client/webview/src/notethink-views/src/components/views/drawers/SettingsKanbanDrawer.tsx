@@ -5,6 +5,7 @@ import { formatColumnLabel } from "../../../lib/noteops";
 import styles from "../../ViewRenderer.module.scss";
 import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } from "../SettingsCommonControls";
 import SettingsCascadeButtons from "../SettingsCascadeButtons";
+import GroupBySelector, { type GroupBySelectorProps } from "../GroupBySelector";
 import type { GlobalSettingKey } from "../../../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:SettingsKanbanDrawer");
@@ -20,6 +21,7 @@ interface SettingsKanbanDrawerProps {
     viewTypeSelection: string;
     autoResolvedType?: string;
     onViewTypeChange: (view_type: string) => void;
+    groupBy: GroupBySelectorProps;
     naturalColumnOrder: string[];
     showLineNumbers?: boolean;
     watchUnopenedFilesInViewer?: boolean;
@@ -64,6 +66,11 @@ function SettingsKanbanDrawer(props: SettingsKanbanDrawerProps): React.ReactElem
     return (
         <div className={styles.drawerBody} data-testid="settings-drawer-kanban">
             <div className={styles.drawerGroups}>
+                <section className={styles.drawerGroup}>
+                    <p><strong>{l10n.t('Group by')}</strong></p>
+                    <p><GroupBySelector {...props.groupBy} /></p>
+                </section>
+
                 <section className={styles.drawerGroup}>
                     <p><strong>{l10n.t('Column order')}</strong></p>
                     <ul className={styles.settingsDrawerColumnOrder}>

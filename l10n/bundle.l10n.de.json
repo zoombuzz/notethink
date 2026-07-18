@@ -20,6 +20,8 @@
   "View integration": "Ansichtsintegration",
   "Kanban Settings": "Kanban-Einstellungen",
   "Column order": "Spaltenreihenfolge",
+  "Group by": "Gruppieren nach",
+  "Set by {0}": "Durch {0} festgelegt",
   "Move {0} up": "{0} nach oben verschieben",
   "Move {0} down": "{0} nach unten verschieben",
   "Reset order": "Reihenfolge zurücksetzen",

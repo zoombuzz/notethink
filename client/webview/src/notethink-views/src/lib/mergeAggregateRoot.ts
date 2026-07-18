@@ -148,6 +148,27 @@ export function fileDeclaredViewType(root: NoteProps): string | undefined {
 }
 
 /**
+ * The group-by key a single file declares: its H1 `nt_group_by` over the front-matter value
+ * (most-specific wins) - the per-file analogue of file_group_by, majority-voted across the merged tree
+ * to auto-resolve the Line view's group key exactly as fileDeclaredViewType feeds view-type auto. Value
+ * is a candidate key ('assignee') or an implicit key in nt_ form ('nt_first_level_folder').
+ */
+export function fileDeclaredGroupBy(root: NoteProps): string | undefined {
+    const h1 = findFileH1(root);
+    return resolveNamespacedTag(h1?.linetags, 'group_by')?.value ?? resolveNamespacedTag(root.linetags, 'group_by')?.value;
+}
+
+/**
+ * The lane order a single file declares: its H1 `nt_group_order` over the front-matter value. The
+ * authored per-axis order for grouped's group key; captured onto every story's origin so the view can
+ * seed lane order from the files without a separate config round-trip.
+ */
+export function fileDeclaredGroupOrder(root: NoteProps): string | undefined {
+    const h1 = findFileH1(root);
+    return resolveNamespacedTag(h1?.linetags, 'group_order')?.value ?? resolveNamespacedTag(root.linetags, 'group_order')?.value;
+}
+
+/**
  * Resolve `epic` linetag value against this file's epic registry.
  * Returns origin.epic shape, or `{ name: value, id: undefined }` for unresolved literals.
  */
@@ -310,6 +331,10 @@ export function mergeAggregateRoot(
         // file-level view type: an H1 nt_view overrides the front-matter value (most-specific wins)
         const file_view_type = fileDeclaredViewType(root);
 
+        // file-level group-by key + lane order: an H1 nt_group_by / nt_group_order overrides the front-matter value
+        const file_group_by = fileDeclaredGroupBy(root);
+        const file_group_order = fileDeclaredGroupOrder(root);
+
         // `order` for the per-file cap: an H1 value overrides the document-root (front-matter) value
         const file_order = h1?.linetags?.order?.value ?? root.linetags?.order?.value;
 
@@ -319,6 +344,8 @@ export function mergeAggregateRoot(
             doc_path: doc.path,
             relative_path: doc.relative_path,
             file_view_type,
+            file_group_by,
+            file_group_order,
             file_mtime: doc.mtime,
             project_hue: project_name ? hueForProjectName(project_name) : undefined,
             project_label: project_name ? project_label_by_name.get(project_name) : undefined,

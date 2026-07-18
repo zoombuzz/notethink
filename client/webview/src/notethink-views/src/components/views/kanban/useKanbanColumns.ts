@@ -1,6 +1,7 @@
 import Debug from 'debug';
 import { useMemo } from 'react';
 import { deriveNaturalColumnOrder, notesInKanbanColumn } from '../../../lib/noteops';
+import type { Axis } from '../../../lib/axisops';
 import type { NoteProps, NoteDisplayOptions } from '../../../types/NoteProps';
 
 const debug = Debug("nodejs:notethink-views:useKanbanColumns");
@@ -33,21 +34,25 @@ export interface KanbanColumnDescriptor {
  *   the synthetic 'untagged' bucket is ensured at the end if not already named.
  * - otherwise: named columns alphabetically followed by 'untagged' last.
  *
- * note assignment: every column carries the matching subset of `notes` sorted by `kanbanNoteOrder`.
- * A note with no `linetags.status` lands in the 'untagged' pseudo-column.
+ * note assignment: every lane carries the matching subset of `notes` sorted by `kanbanNoteOrder`.
+ * A note with no value for the axis field lands in the absent-value ('untagged') pseudo-lane.
+ *
+ * `axis` selects which attribute the lanes group by; it defaults to the status axis so kanban is
+ * unchanged, and a grouped view passes its own group-by axis.
  */
 export function useKanbanColumns(
     notes: Array<NoteProps> | undefined,
     custom_order: Array<string> | undefined,
+    axis: Axis = 'status',
 ): Array<KanbanColumnDescriptor> {
     return useMemo<Array<KanbanColumnDescriptor>>(() => {
-        const columns = deriveColumnOrder(notes, custom_order);
+        const columns = deriveColumnOrder(notes, custom_order, axis);
         for (const column of columns) {
-            column.child_notes = notesInKanbanColumn(notes || [], column.value);
+            column.child_notes = notesInKanbanColumn(notes || [], column.value, axis);
         }
-        debug('built %d columns, total notes=%d', columns.length, (notes || []).length);
+        debug('built %d lanes, total notes=%d', columns.length, (notes || []).length);
         return columns;
-    }, [notes, custom_order]);
+    }, [notes, custom_order, axis]);
 }
 
 /**
@@ -60,8 +65,9 @@ export function useKanbanColumns(
 function deriveColumnOrder(
     notes: Array<NoteProps> | undefined,
     custom_order: Array<string> | undefined,
+    axis: Axis = 'status',
 ): Array<KanbanColumnDescriptor> {
-    const natural_order = deriveNaturalColumnOrder(notes || []);
+    const natural_order = deriveNaturalColumnOrder(notes || [], axis);
     if (custom_order && custom_order.length > 0) {
         const ordered: KanbanColumnDescriptor[] = custom_order.map((value, index) => ({
             seq: index,

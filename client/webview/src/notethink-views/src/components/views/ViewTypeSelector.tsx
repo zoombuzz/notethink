@@ -1,7 +1,7 @@
 import Debug from "debug";
 import type { ChangeEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
-import { SELECTABLE_VIEWTYPES } from "./GenericView";
+import { selectableViewTypes } from "./GenericView";
 import { viewTypeLabel } from "./viewTypeLabel";
 
 const debug = Debug("nodejs:notethink-views:ViewTypeSelector");
@@ -40,7 +40,7 @@ export default function ViewTypeSelector(props: ViewTypeSelectorProps): ReactEle
                 color: 'var(--vscode-dropdown-foreground)',
             }}
         >
-            {SELECTABLE_VIEWTYPES.map((vt) => (
+            {selectableViewTypes().map((vt) => (
                 <option key={vt} value={vt}>
                     {viewTypeLabel(vt, props.resolvedType)}
                 </option>

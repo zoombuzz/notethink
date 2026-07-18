@@ -20,6 +20,8 @@
   "View integration": "Intégration de la vue",
   "Kanban Settings": "Paramètres Kanban",
   "Column order": "Ordre des colonnes",
+  "Group by": "Grouper par",
+  "Set by {0}": "Défini par {0}",
   "Move {0} up": "Déplacer {0} vers le haut",
   "Move {0} down": "Déplacer {0} vers le bas",
   "Reset order": "Réinitialiser l'ordre",

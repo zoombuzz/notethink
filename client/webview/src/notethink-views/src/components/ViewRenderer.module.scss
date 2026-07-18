@@ -1423,6 +1423,12 @@ body.disableAddressBarHidingOnScroll {
     margin-top: 0.8em;
     overflow-x: auto;
 
+    // orientation is one flex-direction flip: columns (default) lay lanes side by side, rows stack them
+    &[data-orientation="rows"] {
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
     .column {
       flex: 1;
       background: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 4%);

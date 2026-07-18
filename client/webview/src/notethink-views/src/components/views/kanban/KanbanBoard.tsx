@@ -42,18 +42,22 @@ function draggableStyleWithoutDropAnimation(
 /**
  * props for the kanban board subtree.
  *
- * - visible_columns: filtered + ordered list of columns to render (caller picks populated vs all)
+ * - visible_columns: filtered + ordered list of lanes to render (caller picks populated vs all)
  * - display_options: cascaded view-level display options, propagated into each rendered note via buildChildNoteDisplayOptions
  * - view: the owning view's ViewProps; passed to buildChildNoteDisplayOptions and used to extract per-note handlers (click, setCaretPosition, postMessage)
- * - onDragStart / onDragEnd: drag responders owned by the parent KanbanView so post-message routing stays at the view level
+ * - orientation: lays the lanes out as columns (side by side, the kanban default) or rows (stacked); one flex-direction flip, not a forked renderer
+ * - dragDisabled: when true (a read-only group axis, e.g. the first level folder) the cards are not draggable, so the board renders lanes but takes no drops
+ * - onDragStart / onDragEnd: drag responders owned by the parent LineView so post-message routing stays at the view level
  *
- * The board owns only DOM/JSX assembly; the column derivation, note partitioning, and drag policy
+ * The board owns only DOM/JSX assembly; the lane derivation, note partitioning, and drag policy
  * decisions all live in the parent (and the pure helpers it delegates to).
  */
 export interface KanbanBoardProps {
     visible_columns: Array<KanbanColumnDescriptor>;
     display_options: NoteDisplayOptions;
     view: ViewProps;
+    orientation?: 'columns' | 'rows';
+    dragDisabled?: boolean;
     onDragStart: (start: DragStart, provided: ResponderProvided) => void;
     onDragEnd: (result: DropResult, provided: ResponderProvided) => void;
 }
@@ -65,10 +69,10 @@ export interface KanbanBoardProps {
  * focused on what `ColumnBasedView` would also need: visible_columns plus the drag wiring.
  */
 export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement {
-    const { visible_columns, display_options, view, onDragStart, onDragEnd } = boardProps;
-    debug('rendering %d columns', visible_columns.length);
+    const { visible_columns, display_options, view, orientation, dragDisabled, onDragStart, onDragEnd } = boardProps;
+    debug('rendering %d lanes', visible_columns.length);
     return (
-        <div className={view_specific_styles.board} data-total-columns={visible_columns.length} data-flip-root>
+        <div className={view_specific_styles.board} data-total-columns={visible_columns.length} data-orientation={orientation ?? 'columns'} data-flip-root>
             <DragDropContext onDragEnd={onDragEnd} onDragStart={onDragStart}>
                 {visible_columns.map((column: KanbanColumnDescriptor, i: number, column_array: Array<KanbanColumnDescriptor>) => (
                     /*
@@ -96,7 +100,7 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                                     .map((note: NoteProps, index: number) => {
                                         const draggable_id = kanbanDraggableId(note);
                                         return (
-                                        <Draggable key={draggable_id} draggableId={draggable_id} index={index}>
+                                        <Draggable key={draggable_id} draggableId={draggable_id} index={index} isDragDisabled={dragDisabled}>
                                             {(provided_drag, snapshot_drag) => (
                                                 <GenericNote
                                                     {...note}

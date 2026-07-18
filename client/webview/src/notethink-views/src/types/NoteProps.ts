@@ -32,6 +32,8 @@ export interface NoteDisplayOptions {
         scrollNoteIntoView?: boolean;
         autoExpandFocusedNote?: boolean;
         columnOrder?: string[];
+        orientation?: 'columns' | 'rows';
+        groupBy?: string;
     };
     deepest?: {
         selectable_level?: number;
@@ -159,6 +161,8 @@ export interface NoteProps {
  * descendants by mergeAggregateRoot; lets callers route edits back to the
  * source file and drives implicit cross-file ordering.
  * - file_view_type: the nt_view (legacy ng_view) value declared on the originating file's H1, if any; used by AutoView to majority-vote view type across the merged tree (one vote per file)
+ * - file_group_by: the nt_group_by value declared on the originating file's H1 (front-matter fallback), if any; majority-voted across files to auto-resolve the Line view's group-by key, mirroring file_view_type
+ * - file_group_order: the nt_group_order value declared on the originating file's H1 (front-matter fallback), if any; the authored per-axis lane order that seeds grouped's group order
  * - file_rank: 0-based index of this story within its source file's selected story list (after the per-file cap + `order` reversal); the implicit ordering weight - equal across files means equal priority, which relevance ordering then breaks by file_mtime (newer first)
  * - file_mtime: on-disk mtime (epoch ms) of the source file at parse time; within a file_rank band, stories from more recently modified files sort first - background edits by another tool (or a save of the file currently open) naturally surface to the top without any explicit "active file" signal
  * - project_hue: identity hash of the project name (0-359), set-independent; stamped by mergeAggregateRoot via hueForProjectName(project_name) so the colour is fixed at the project name alone and cannot change as the workspace universe fills in on first paint
@@ -174,6 +178,8 @@ export interface NoteOrigin {
         id?: string;
     };
     file_view_type?: string;
+    file_group_by?: string;
+    file_group_order?: string;
     file_rank?: number;
     file_mtime?: number;
     project_hue?: number;

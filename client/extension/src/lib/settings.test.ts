@@ -23,6 +23,31 @@ function mockConfigStore(store: Record<string, FakeConfigEntry>): void {
 
 const EXCLUDE_PATH = SETTINGS.excludeFilter.path;
 
+describe('settings map is byte-identical after the view-registry node annotation', () => {
+    // the view-registry node annotation must not disturb any existing path / default / cascade membership
+    it('keeps every setting path, default, and cascade flag unchanged', () => {
+        expect(SETTINGS.viewType.path).toBe('view.type');
+        expect(SETTINGS.viewType.default).toBe('auto');
+        expect(SETTINGS.viewType.inCascade).toBe(true);
+        expect(SETTINGS.columnOrder.path).toBe('view.specific.kanban.columnOrder');
+        expect(SETTINGS.columnOrder.default).toEqual(['untagged', 'doing', 'code-review', 'testing', 'done']);
+        expect(SETTINGS.columnOrder.inCascade).toBe(true);
+        expect(SETTINGS.kanbanAnimateTransitions.path).toBe('view.specific.kanban.animateTransitions');
+        expect(SETTINGS.kanbanAnimateTransitions.inCascade).toBe(false);
+        expect(SETTINGS.showContextBars.path).toBe('view.generic.showContextBars');
+    });
+
+    it('every setting declares an owning node, kanban ones under kanban and generic ones under root', () => {
+        for (const key of Object.keys(SETTINGS) as Array<keyof typeof SETTINGS>) {
+            expect(typeof SETTINGS[key].node).toBe('string');
+        }
+        expect(SETTINGS.columnOrder.node).toBe('kanban');
+        expect(SETTINGS.kanbanAnimateTransitions.node).toBe('kanban');
+        expect(SETTINGS.viewType.node).toBe('root');
+        expect(SETTINGS.showContextBars.node).toBe('root');
+    });
+});
+
 describe('settings override helpers', () => {
 
     beforeEach(() => {

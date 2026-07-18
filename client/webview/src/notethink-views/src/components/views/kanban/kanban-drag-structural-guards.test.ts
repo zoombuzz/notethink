@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const kanban_view_source = fs.readFileSync(path.join(__dirname, '..', 'KanbanView.tsx'), 'utf8');
+// the drag-start settle/hold machinery lives in the useLineViewDrag hook (LineView's extracted drag lifecycle)
+const drag_hook_source = fs.readFileSync(path.join(__dirname, '..', 'useLineViewDrag.ts'), 'utf8');
 const view_renderer_scss = fs.readFileSync(path.join(__dirname, '..', '..', 'ViewRenderer.module.scss'), 'utf8');
 
 // walk balanced braces from the first `{` at or after start_index and return the whole `{ ... }` block, nesting-aware
@@ -39,16 +40,16 @@ describe('kanban drag structural guards', () => {
     describe('drag-start settles in-flight FLIP before holding the gate', () => {
 
         it('imports settleFlipAnimations', () => {
-            expect(kanban_view_source).toMatch(/import\s*\{[^}]*settleFlipAnimations[^}]*\}\s*from/);
+            expect(drag_hook_source).toMatch(/import\s*\{[^}]*settleFlipAnimations[^}]*\}\s*from/);
         });
 
         it('settles the flip animations inside the drag-start handler', () => {
-            expect(kanban_view_source).toContain('settleFlipAnimations(content_ref.current)');
+            expect(drag_hook_source).toContain('settleFlipAnimations(content_ref.current)');
         });
 
         it('settles before holding the gate so a card grabbed mid-animation is at rest', () => {
-            const settle_index = kanban_view_source.indexOf('settleFlipAnimations(content_ref.current)');
-            const hold_index = kanban_view_source.indexOf('flip_gate.hold()');
+            const settle_index = drag_hook_source.indexOf('settleFlipAnimations(content_ref.current)');
+            const hold_index = drag_hook_source.indexOf('flip_gate.hold()');
             expect(settle_index).toBeGreaterThan(-1);
             expect(hold_index).toBeGreaterThan(-1);
             expect(settle_index).toBeLessThan(hold_index);

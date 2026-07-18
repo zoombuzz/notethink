@@ -8,6 +8,9 @@ import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import type { CommonSettingKey } from "../SettingsCommonControls";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 import type { StableIdCollision } from "../../../lib/noteops";
+import { getViewNode, isGroupedViewType, isSettingFixed, resolveSetting, unlockingViewFor } from "../../../lib/viewregistryops";
+import { enumerateGroupByCandidates, resolveGroupByAxisKey } from "../../../lib/groupbyops";
+import type { GroupBySelectorProps } from "../GroupBySelector";
 import type { ActiveDrawer } from "./useToolbarDrawers";
 import CollisionsDrawer from "../drawers/CollisionsDrawer";
 import FilesDrawer from "../drawers/FilesDrawer";
@@ -54,6 +57,7 @@ interface GenericViewToolbarProps {
     onSettingChange: (key: CommonSettingKey, value: boolean) => void;
     onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
     onColumnOrderChange: (next_order: string[]) => void;
+    onGroupByChange: (group_by_key: string) => void;
     onMakeDefault: () => void;
     onResetToDefault: () => void;
     onRestoreBuiltinDefault: () => void;
@@ -98,7 +102,27 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         onRestoreBuiltinDefault,
         onApplyFilters,
         onViewTypeChange,
+        onGroupByChange,
     } = component_props;
+    // registry-driven drawer choice, not a hardcoded type list: grouped views take the lane drawer, other concrete views the document drawer
+    const grouped_view = isGroupedViewType(props.type);
+    const document_view = getViewNode(props.type)?.kind === 'concrete' && !grouped_view;
+    /*
+     * the group-by control for the lane drawer: the persisted selection resolves against the enumerated
+     * categorical candidates, with the registry lock disabling it for kanban (axes[0] fixed to status,
+     * unlocked by selecting Line). Cheap - the enumeration is memoised on the notes identity.
+     */
+    const group_by_axes = resolveSetting(props.type, 'axes').value as string[] | undefined;
+    const group_by_fixed = isSettingFixed(props.type, 'axes');
+    const group_by_control: GroupBySelectorProps = {
+        selection: props.display_options?.settings?.groupBy ?? 'auto',
+        resolvedKey: resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, props.display_options?.settings?.groupBy),
+        candidateKeys: enumerateGroupByCandidates(props.notes).filter(c => c.kind === 'categorical').map(c => c.key),
+        fixed: group_by_fixed,
+        fixedValue: group_by_fixed ? group_by_axes?.[0] : undefined,
+        unlockView: unlockingViewFor(props.type, 'axes'),
+        onChange: onGroupByChange,
+    };
     return (
         <>
             <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
@@ -134,7 +158,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                 ariaLabel={l10n.t('Settings')}
                 onClose={onCloseDrawer}
             >
-                {props.type === 'document' && (
+                {document_view && (
                     <SettingsDocumentDrawer
                         settings={{
                             showLinetagsInHeadlines: displayOptions.settings?.showLinetagsInHeadlines,
@@ -156,7 +180,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         canRestoreBuiltinDefault={props.settingsCascadeHasAnyOverrides ?? false}
                     />
                 )}
-                {props.type === 'kanban' && (
+                {grouped_view && (
                     <SettingsKanbanDrawer
                         settings={{
                             showLinetagsInHeadlines: displayOptions.settings?.showLinetagsInHeadlines,
@@ -167,6 +191,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         viewTypeSelection={viewTypeSelection}
                         autoResolvedType={autoResolvedType}
                         onViewTypeChange={onViewTypeChange}
+                        groupBy={group_by_control}
                         naturalColumnOrder={naturalColumnOrder}
                         showLineNumbers={displayOptions.settings?.showLineNumbers}
                         watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}

@@ -7,6 +7,13 @@ const default_props = {
     viewTypeSelection: 'auto',
     autoResolvedType: 'document',
     onViewTypeChange: jest.fn(),
+    groupBy: {
+        selection: 'auto',
+        resolvedKey: 'nt_first_level_folder',
+        candidateKeys: [] as string[],
+        fixed: false,
+        onChange: jest.fn(),
+    },
     naturalColumnOrder: ['doing', 'done', 'untagged'],
     showLineNumbers: false,
     onSettingChange: jest.fn(),
@@ -29,6 +36,23 @@ describe('SettingsKanbanDrawer', () => {
         renderDrawer();
         expect(screen.getByTestId('settings-drawer-kanban')).toBeInTheDocument();
         expect(screen.queryByRole('dialog', { hidden: true })).not.toBeInTheDocument();
+    });
+
+    it('renders an editable group-by selector over the candidates and dispatches onChange', () => {
+        const on_group_by = jest.fn();
+        renderDrawer({ groupBy: { selection: 'auto', resolvedKey: 'nt_first_level_folder', candidateKeys: ['assignee', 'status'], fixed: false, onChange: on_group_by } });
+        const selector = screen.getByTestId('group-by-selector') as HTMLSelectElement;
+        expect(selector).not.toBeDisabled();
+        fireEvent.change(selector, { target: { value: 'assignee' } });
+        expect(on_group_by).toHaveBeenCalledWith('assignee');
+    });
+
+    it('renders the group-by selector disabled and pinned when fixed (kanban), naming the unlocking view', () => {
+        renderDrawer({ groupBy: { selection: 'auto', resolvedKey: 'status', candidateKeys: ['status'], fixed: true, fixedValue: 'status', unlockView: 'line', onChange: jest.fn() } });
+        const selector = screen.getByTestId('group-by-selector') as HTMLSelectElement;
+        expect(selector).toBeDisabled();
+        expect(selector.value).toBe('status');
+        expect(screen.getByTestId('group-by-fixed-hint')).toBeInTheDocument();
     });
 
     it('shows column order list (custom order if set, else natural)', () => {

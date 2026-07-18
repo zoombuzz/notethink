@@ -272,3 +272,33 @@ describe('applyKanbanMove - edge cases', () => {
         expect(doing_col[0].stable_id).toBe('a');
     });
 });
+
+describe('applyKanbanMove / projectionSatisfied with a non-status group_field', () => {
+    function withField(note: NoteProps, field: string, value: string): NoteProps {
+        const tag: LineTag = { key: field, value, key_offset: 0, value_offset: 0, linktext_offset: 0, note_seq: note.seq };
+        return { ...note, linetags: { ...(note.linetags ?? {}), [field]: tag } };
+    }
+
+    it('re-tags the dragged note on the group field when moved to another lane', () => {
+        const alex = withField(makeNote({ seq: 1, stable_id: 'a' }), 'assignee', 'alex');
+        const sam = withField(makeNote({ seq: 2, stable_id: 'b' }), 'assignee', 'sam');
+        const move: KanbanMove = { dragged_stable_id: 'a', destination_column_value: 'sam', destination_index: 0, group_field: 'assignee' };
+        const moved = applyKanbanMove([alex, sam], move).find(n => n.stable_id === 'a')!;
+        expect(moved.linetags?.assignee?.value).toBe('sam');
+    });
+
+    it('deletes the group field linetag when moved to the absent-value lane', () => {
+        const alex = withField(makeNote({ seq: 1, stable_id: 'a' }), 'assignee', 'alex');
+        const move: KanbanMove = { dragged_stable_id: 'a', destination_column_value: 'untagged', destination_index: 0, group_field: 'assignee' };
+        const moved = applyKanbanMove([alex], move).find(n => n.stable_id === 'a')!;
+        expect(moved.linetags?.assignee).toBeUndefined();
+    });
+
+    it('reads lane membership on the group field, not status', () => {
+        const sam = withField(makeNote({ seq: 1, stable_id: 'a' }), 'assignee', 'sam');
+        const move: KanbanMove = { dragged_stable_id: 'a', destination_column_value: 'sam', destination_index: 0, group_field: 'assignee' };
+        expect(projectionSatisfied([sam], move)).toBe(true);
+        const alex = withField(makeNote({ seq: 1, stable_id: 'a' }), 'assignee', 'alex');
+        expect(projectionSatisfied([alex], move)).toBe(false);
+    });
+});

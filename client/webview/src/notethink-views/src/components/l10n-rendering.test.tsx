@@ -26,6 +26,13 @@ const DOC_DRAWER_PROPS = {
 
 const KANBAN_DRAWER_PROPS = {
     settings: {},
+    groupBy: {
+        selection: 'auto',
+        resolvedKey: 'nt_first_level_folder',
+        candidateKeys: [] as string[],
+        fixed: false,
+        onChange: jest.fn(),
+    },
     naturalColumnOrder: ['backlog', 'doing', 'done'],
     showLineNumbers: false,
     onSettingChange: jest.fn(),

@@ -1,6 +1,8 @@
 import Debug from "debug";
 import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } from "../types/NoteProps";
 import { INTEGRATION_MODE_CURRENT_FILE } from "../types/IntegrationMode";
+import { ABSENT_VALUE_BUCKET, FIRST_LEVEL_FOLDER_KEY, axisField, categoricalLaneFor, projectNoteOntoAxis, type Axis } from "./axisops";
+import { projectNameFromRelativePath } from "./originops";
 
 const debug = Debug("nodejs:notethink-views:noteops");
 
@@ -169,32 +171,49 @@ export function isAggregateRoot(parent_context: NoteProps | undefined): boolean 
 }
 
 /**
- * majority-vote nt_view across the originating files in an aggregate tree. one
- * vote per file, taken from origin.file_view_type (captured from each file's H1).
- * ties or no votes return undefined; caller falls back to 'document'
+ * majority-vote a per-file attribute across the originating files in an aggregate tree. one vote per
+ * file (keyed on origin.doc_id), taken by `voteFor` from each note's origin; the first note seen for a
+ * file casts its vote. strict plurality wins; ties or no votes return undefined. shared by the nt_view
+ * and nt_group_by auto-resolution so both apply identical semantics.
  */
-export function majorityNgView(notes: NoteProps[] | undefined): string | undefined {
+export function majorityFileVote(notes: NoteProps[] | undefined, voteFor: (note: NoteProps) => string | undefined): string | undefined {
     if (!notes?.length) { return undefined; }
     const file_votes = new Map<string, string>();
     for (const n of notes) {
-        if (!n.origin?.doc_id || !n.origin?.file_view_type) { continue; }
-        if (!file_votes.has(n.origin.doc_id)) {
-            file_votes.set(n.origin.doc_id, n.origin.file_view_type);
-        }
+        const doc_id = n.origin?.doc_id;
+        const vote = voteFor(n);
+        if (!doc_id || !vote) { continue; }
+        if (!file_votes.has(doc_id)) { file_votes.set(doc_id, vote); }
     }
     if (file_votes.size === 0) { return undefined; }
     const tally = new Map<string, number>();
     for (const v of file_votes.values()) {
         tally.set(v, (tally.get(v) ?? 0) + 1);
     }
-    let best_type: string | undefined;
+    let best_value: string | undefined;
     let best_count = 0;
     let tied = false;
-    for (const [type, count] of tally.entries()) {
-        if (count > best_count) { best_type = type; best_count = count; tied = false; }
+    for (const [value, count] of tally.entries()) {
+        if (count > best_count) { best_value = value; best_count = count; tied = false; }
         else if (count === best_count) { tied = true; }
     }
-    return tied ? undefined : best_type;
+    return tied ? undefined : best_value;
+}
+
+/**
+ * majority-vote nt_view across the originating files (one vote per file from origin.file_view_type,
+ * captured from each file's H1). ties or no votes return undefined; caller falls back to 'document'.
+ */
+export function majorityNgView(notes: NoteProps[] | undefined): string | undefined {
+    return majorityFileVote(notes, n => n.origin?.file_view_type);
+}
+
+/**
+ * majority-vote nt_group_by across the originating files (one vote per file from origin.file_group_by).
+ * ties or no votes return undefined; the Line view then falls back to the first level folder default.
+ */
+export function majorityGroupBy(notes: NoteProps[] | undefined): string | undefined {
+    return majorityFileVote(notes, n => n.origin?.file_group_by);
 }
 
 /**
@@ -449,34 +468,40 @@ export function formatColumnLabel(value: string): string {
 }
 
 /**
- * Natural Kanban column order: the distinct status values present in the notes,
- * sorted alphabetically, with the synthetic 'untagged' column always last.
+ * Natural lane order for an axis: the distinct lane values present in the notes, sorted alphabetically,
+ * with the synthetic absent-value bucket always last. `axis` selects the categorical field to group by
+ * and defaults to the status axis, so a bare call orders kanban's status columns (untagged is the absent bucket).
  */
-export function deriveNaturalColumnOrder(notes: Array<NoteProps>): string[] {
-    const status_values = new Set<string>();
+export function deriveNaturalColumnOrder(notes: Array<NoteProps>, axis: Axis = 'status'): string[] {
+    const lane_values = new Set<string>();
     for (const note of (notes || [])) {
-        const value = kanbanColumnValue(note);
-        if (value !== 'untagged') { status_values.add(value); }
+        const value = kanbanColumnValue(note, axis);
+        if (value !== ABSENT_VALUE_BUCKET) { lane_values.add(value); }
     }
-    return [...Array.from(status_values).sort(), 'untagged'];
+    return [...Array.from(lane_values).sort(), ABSENT_VALUE_BUCKET];
 }
 
 /**
- * the kanban column a note belongs to: its `status` linetag value, or 'untagged' when it has no
- * status linetag (an empty value also falls through to 'untagged'). Single source of truth for the
- * note→column rule, shared by the column builder, the drag projection, and the natural column order.
+ * the lane a note belongs to on an axis: its linetag value for the axis field, or the absent-value
+ * bucket when it has none (an empty value also falls through to the absent bucket). The `status` default
+ * is the kanban case; passing another axis groups by that attribute. Single source of truth for the
+ * note->lane rule, shared by the lane builder, the drag projection, and the natural lane order.
  */
-export function kanbanColumnValue(note: NoteProps): string {
-    return note.linetags?.status?.value || 'untagged';
+export function kanbanColumnValue(note: NoteProps, axis: Axis = 'status'): string {
+    // the first-level-folder axis is computed from origin, not a linetag; every other axis reads its linetag
+    if (axisField(axis) === FIRST_LEVEL_FOLDER_KEY) {
+        return categoricalLaneFor(projectNameFromRelativePath(note.origin?.relative_path));
+    }
+    return projectNoteOntoAxis(note, axis);
 }
 
 /**
- * the notes belonging to one kanban column, in display order - selected by `kanbanColumnValue` and
- * sorted by `kanbanNoteOrder`. Shared so the column builder and the drag projection derive a
- * column's membership and ordering identically rather than each reimplementing the filter+sort.
+ * the notes belonging to one lane on an axis, in display order - selected by `kanbanColumnValue` and
+ * sorted by `kanbanNoteOrder`. Shared so the lane builder and the drag projection derive a lane's
+ * membership and ordering identically rather than each reimplementing the filter+sort.
  */
-export function notesInKanbanColumn(notes: Array<NoteProps>, column_value: string): Array<NoteProps> {
-    return notes.filter(note => kanbanColumnValue(note) === column_value).sort(kanbanNoteOrder);
+export function notesInKanbanColumn(notes: Array<NoteProps>, column_value: string, axis: Axis = 'status'): Array<NoteProps> {
+    return notes.filter(note => kanbanColumnValue(note, axis) === column_value).sort(kanbanNoteOrder);
 }
 
 /**

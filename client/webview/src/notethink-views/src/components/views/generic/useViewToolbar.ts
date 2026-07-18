@@ -25,6 +25,7 @@ export interface ViewToolbar {
     handle_setting_change: (key: CommonSettingKey, value: boolean) => void;
     handle_global_setting_change: (key: GlobalSettingKey, value: boolean) => void;
     handle_column_order_change: (next_order: string[]) => void;
+    handle_group_by_change: (group_by_key: string) => void;
     handle_make_default: () => void;
     handle_reset_to_default: () => void;
     handle_restore_builtin_default: () => void;
@@ -124,6 +125,26 @@ export function useViewToolbar(
         cascade_write_setting('viewType', view_type);
     }, [handlers, props.id, cascade_write_setting]);
 
+    /*
+     * handle_group_by_change - real-time apply for the Line group-by selection (a per-view
+     * display_options setting, like columnOrder). 'auto' clears the pin so the view auto-resolves
+     * nt_group_by again; a concrete candidate key pins the group axis. Global keys are stripped so they
+     * don't get baked into per-view state.
+     */
+    const handle_group_by_change = useCallback((group_by_key: string): void => {
+        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, kanbanAnimateTransitions: _kat, openNewEditorIfNoneOpen: _oneno, ...per_view_settings } = display_options.settings || {};
+        const persisted_group_by = group_by_key === 'auto' ? undefined : group_by_key;
+        handlers.setViewManagedState([{
+            id: props.id,
+            display_options: {
+                settings: {
+                    ...per_view_settings,
+                    groupBy: persisted_group_by,
+                },
+            },
+        }]);
+    }, [handlers, props.id, display_options.settings]);
+
     const handle_make_default = useCallback((): void => {
         handlers.postMessage?.({ type: 'promoteSettingsToUser' });
     }, [handlers]);
@@ -200,6 +221,7 @@ export function useViewToolbar(
         handle_setting_change,
         handle_global_setting_change,
         handle_column_order_change,
+        handle_group_by_change,
         handle_make_default,
         handle_reset_to_default,
         handle_restore_builtin_default,

@@ -3761,3 +3761,287 @@ The toolbar's four drawers share no affordance. Only Settings has a real button 
 + commit message draft
   + notethink 0.3.27: open the viewer in folder mode at the workspace root when no .md file is active, instead of refusing with a warning
   + tests N jest, N playwright
+
+
+### View registry: the view hierarchy as data [](?id=view-registry)
+
+The keystone for the view programme. Today the view hierarchy does not exist as data: `SELECTABLE_VIEWTYPES = ['auto', 'document', 'kanban']` is a flat array (`GenericView.tsx:19`), dispatch is three parallel `props.type ===` guards (`GenericView.tsx:87-89`), and the settings drawer dispatches the same way (`GenericViewToolbar.tsx:142,161`). Every part of the programme - the indented selector, line->kanban parentage, a group-by owned by a shared ancestor, a setting a child fixes but an ancestor can edit - is a query against a registry that declares parent, children, and per-setting ownership. Build it once here or write the same inheritance logic in three places later.
+
++ goal
+  + one declarative registry describes every view: id, parent, label, selectable, owned settings, fixed (locked) settings
+  + settings resolve by walking a view's ancestor chain, deepest override wins
+  + that same walk answers "is this setting fixed for this view, and which ancestor would unlock it"
++ the tree (dimensional ladder)
+  + root (abstract) -> document; root -> grouped
+  + grouped (abstract) -> line; grouped -> grid (future); grouped -> cube (future)
+  + line (concrete, selectable) -> kanban (concrete, selectable)
+  + node kinds: abstract nodes own settings but are not selectable (root, grouped); concrete nodes render (document, line, kanban)
+  + line is the single-axis card-lane view; kanban is line preset to status + chrome; grid is two axes, cube three - future rungs the model accommodates, this story does not build
+  + ship the nodes that have a view today plus line: root, document, grouped, line, kanban
++ the settings model - three concerns, one engine
+  + storage: every setting has ONE home node where it is declared; a descendant may carry an override
+  + an override is FIXED (child pins it as identity, read-only here, edit at the unlocking ancestor - kanban group-by=status) or OPEN (child holds its own editable value - kanban group order)
+  + resolution: the effective value for a node is the deepest override on its ancestor chain, else the home default; the per-session viewState -> extension cascade -> built-in default layering (`composerops.ts:49`) sits under each node's value
+  + display (for [[view-settings-tree-drawer]], not built here): a setting renders once, at the deepest spine node that determines it; editing an inherited-open setting writes to its HOME node, not a fork, so siblings stay in sync
++ settings homes
+  + generic settings -> root (all views), unchanged
+  + `axes` (ordered group keys) and per-axis `group_order` -> grouped; the axis shape is [[axis-model]]
+  + `orientation` (columns | rows) -> line
+  + kanban overrides `axes[0]` to `status` (FIXED) and holds its own group order; `animate` stays kanban-local
++ config namespace - keep generic/specific, extend specific to any node
+  + `view.generic.*` already is the root node's settings; `view.specific.kanban.*` already is a leaf's - `settings.ts:18-29`
+  + extend `view.specific.<node>.*` so `<node>` is any registry id, including abstract ancestors
+  + grouped's shared group order lands at `view.specific.grouped.groupOrder`; kanban's override KEEPS its existing path `view.specific.kanban.columnOrder` (no migration of a shipped key)
++ out of scope
+  + renaming `generic`/`specific` to a literal tree mirror (`view.all.*`, `view.grouped.*`)
+  + any UI change; selector and drawers keep their shape until [[view-settings-tree-drawer]]
+  + shipping grid, cube or gantt
++ decisions
+  + [X] keep `generic`/`specific`, extend `specific` to intermediate nodes - zero migration for the six shipped keys; this extension is published so a rename breaks real users' settings.json
+  + [X] group order homes at `grouped` as a flat `string[]` (self-heals when the group key changes - stale values cull, matching today's fallback `KanbanView.tsx:165-166`); kanban overrides it at the existing `view.specific.kanban.columnOrder`, so nothing shipped migrates
+  + [X] kanban's group-by: FIXED to status (edit by selecting Line) vs a default changed in place - recommended FIXED; confirm before [[line-view-grouping-drag]] wires the lock
+    + applied FIXED per the build brief: registry override `{ node: 'kanban', key: 'axes', mode: 'fixed', value: ['status'] }`, unlocked by selecting Line; a later "editable default" is a one-line flip of that override's mode
++ files
+  + new `client/webview/src/notethink-views/src/lib/viewregistryops.ts` - the tree, ancestor walk, settings resolution, lock query
+  + `client/webview/src/notethink-views/src/components/views/GenericView.tsx` - drop `SELECTABLE_VIEWTYPES`, dispatch from the registry
+  + `client/extension/src/lib/settings.ts` - `SETTINGS` entries gain their owning node
+  + `package.json` - `contributes.configuration` follows any new path
++ [X] build the registry + ancestor-walk settings resolution + lock query
+  + delivered `lib/viewregistryops.ts`: `VIEW_REGISTRY` (nodes + settings homes + overrides), `chainOf`/`ancestorsOf`/`isDescendantOf`/`isGroupedViewType`, `resolveSetting`/`resolveSettingIn` (deepest-override-wins), `isSettingFixed`/`unlockingViewFor` (lock query)
++ [X] dispatch `GenericView` from the registry instead of the parallel type guards
+  + `GenericView.tsx` now dispatches via a `VIEW_COMPONENTS` map keyed on registry ids + `selectableViewTypes()`; `SELECTABLE_VIEWTYPES` removed, `ViewTypeSelector` reads the derived list
++ [X] drive the settings drawer's per-type dispatch from the registry
+  + `GenericViewToolbar.tsx` picks the lane drawer via `isGroupedViewType(type)` and the document drawer via the registry node kind, not `type ===` literals
++ [X] jest: ancestor walk resolves deepest-override-wins across root/abstract/leaf nodes
++ [X] jest: a fixed setting reports its value and the ancestor that unlocks it
++ [X] jest: existing document + kanban settings resolve byte-identically to today (regression)
++ [X] `pnpm run check` green
++ acceptance criteria
+  + the view tree is one data structure; adding a view is one registry entry plus its component
+  + every existing setting resolves exactly as it does today
+  + no `SELECTABLE_VIEWTYPES` and no parallel `props.type ===` dispatch remains
+
+
+### Axis and projection model [](?id=axis-model)
+
+Foundation shared by enumeration, the line view, and drag. An axis is a scale spec (grammar-of-graphics: fields map through scales to positions); a drop is the inverse. Building the inverse projection now, while there is exactly one categorical axis, is what stops a rewrite when grid and gantt arrive. Pure lib, no UI. Parallel with [[view-registry]].
+
++ goal
+  + one `Axis` type spans the simple case (a categorical field) and the rich case (continuous, scaled, binned, interval), string-sugared so the common case is just a field
+  + forward projection places a story on an axis; inverse projection turns a drop coordinate into an attribute write
+  + per-axis writability constrains drag: a drop may only move a story along writable axes
++ the Axis shape (ship categorical only; the rest are declared slots)
+  + `Axis = string | { field, kind: 'categorical' | 'ordinal' | 'continuous', order?, scale?, domain?, bins?, extent?, writable? }`
+  + a bare string is sugar for `{ field, kind: 'categorical' }`
+  + `order` (categorical) is the per-axis group order; `scale` ('linear'|'log'|'time'), `domain` [from,to], `bins`, `extent` {start,end} are continuous-only and NOT built here
+  + `field: string | string[]` - a compound categorical key is a slot; a single field is what ships
++ drag as inverse projection - three composable channels
+  + bucket membership (categorical axis): drop lands in a lane, write `field := lane value`; the absent-value bucket deletes the linetag
+  + scalar position (continuous axis): `field := scale.invert(coord)` - a slot, not built here
+  + intra-cell rank (orthogonal to axes): the existing `nt_kanban_ordering_weight`, generalised as intra-cell order
+  + a single drop resolves which cell (invert each axis) and where in the cell (rank); a view lights up as many channels as it has
++ writability
+  + each axis is writable (authored attribute) or read-only (computed, e.g. `nt_first_level_folder`)
+  + a drop may only write its writable axes; a move across a read-only axis is rejected and the card snaps back on that axis
++ scope - what ships now
+  + `Axis` type + categorical forward/inverse projection + writability + intra-cell rank
+  + today's kanban drop expressed as a degenerate single-categorical-axis inverse projection - no behaviour change, just the general seam
++ out of scope
+  + continuous scales, log/time, bins, extents, multi-axis, cross-axis drag - declared in the type, not implemented
++ files
+  + new `client/webview/src/notethink-views/src/lib/axisops.ts` - Axis type, project, invert, writability
++ [X] define the `Axis` type with the categorical case live and the rest as typed slots
+  + delivered `lib/axisops.ts`: `Axis = string | AxisSpec`, `AxisKind`/`AxisScale`, `normalizeAxis`/`axisField`/`isAxisWritable`; continuous members (scale/domain/bins/extent) + compound `field` are typed slots
++ [X] implement categorical forward + inverse projection and the absent-value bucket
+  + `projectNoteOntoAxis` (forward) + `invertCategoricalAxis`/`invertDrop` (inverse); `ABSENT_VALUE_BUCKET`/`categoricalLaneFor` give the synthetic absent lane (drop there = delete)
++ [X] express kanban's current status drop through invert(), unchanged
++ [X] carry intra-cell rank as a separate channel from axis inversion
+  + `INTRA_CELL_RANK_KEY` + `IntraCellRank`; `invertDrop` resolves cell (per-axis invert) and rank as separate channels
++ [X] jest: invert of a categorical axis returns the bucket write; the absent bucket returns the delete
++ [X] jest: a read-only axis rejects a cross-axis move
++ [X] jest: the kanban status drop round-trips identically through the general path
++ [X] `pnpm run check` green
++ acceptance criteria
+  + the single-axis categorical drop is a special case of the general invert(), not a parallel code path
+  + read-only axes are non-writable by construction
+  + adding a continuous axis later needs no change to the drop handler's shape
+
+
+### Group-by candidate enumeration [](?id=group-by-enumeration)
+
+Pure-lib groundwork for [[line-view-grouping-drag]], with no UI. Enumerate the attribute keys a board could group by, tagged with the axis kind each would produce. Cheap by construction: the notes are already parsed and in memory, so this is a sweep over `note.linetags`, not a re-parse. Depends on [[axis-model]] for the axis kind; parallel with [[view-registry]].
+
++ goal
+  + given the rendered notes, return the group-by candidate keys, each key's distinct values, its axis kind (categorical | continuous), and its writability
+  + candidates cover authored attributes plus implicit keys computed from a note's origin
++ background - most of the filtering already exists
+  + there is NO whitelist: `parseLineTags` retains every arbitrary key (`linetagops.ts:64-100`), so any authored attribute is already available
+  + `isNamespacedKey` (`linetagops.ts:10-25`) already separates internal `nt_`/`ng_` keys from content attributes - that IS the candidate filter, and it is the same rule that drives chip visibility (`renderops.tsx:110`)
+  + `value_numeric` (`linetagops.ts:88`) already marks numeric values - now the axis-KIND signal, not an exclusion: text keys are categorical candidates, numeric/date keys are continuous candidates
+  + `HIDDEN_ATTRIBUTES = ['progress_unit', 'progress_max', 'id']` (`GenericNoteAttributes.tsx:9-14`) is the existing noise list
+  + "first level folder" already exists as `projectNameFromRelativePath` (`originops.ts:61-65`) - the first segment of `relative_path`, and already what drives the project pills
++ scope
+  + enumerate distinct keys across the notes, dropping namespaced and hidden keys
+  + tag each candidate categorical (has text values) or continuous (all values numeric/date); do NOT drop numeric keys - they are the continuous-axis candidates [[axis-model]]
+  + ship consumes categorical candidates; continuous candidates are enumerated but the line view ignores them until a continuous view exists
+  + add implicit keys: `nt_first_level_folder`, computed per note via `projectNameFromRelativePath`, not read from linetags
+  + implicit keys are namespaced to preserve the authored key space and cannot collide with a real attribute
+  + mark each candidate writable or read-only - authored attributes are writable, implicit keys are read-only
+  + memoise on the same key as the folder merge cache so the sweep is not O(all notes) per render
++ out of scope
+  + any UI, selector, or lane derivation - [[line-view-grouping-drag]] consumes this
+  + a second implicit key beyond first level folder
++ implementation notes
+  + `value_numeric` tests with `parseFloat` but stores `Number(value)` (`linetagops.ts:88`), so `"5px"` passes the test and stores `NaN` - do not treat a present `value_numeric` as proof of a numeric value without checking `isNaN`
+  + `status` is read as a bare unnamespaced key (`noteops.ts:470`) while `nt_kanban_ordering_weight` is a namespaced literal (`noteops.ts:539`); neither uses `resolveNamespacedTag`, so an enumeration that assumes one convention will miss the other
+  + inherited tags (`nt_child_*`) are real entries in `linetags` with `inherited: true` - they count as values, since a card grouped by an inherited status belongs in that lane
++ files
+  + new `client/webview/src/notethink-views/src/lib/groupbyops.ts` - candidates, values, axis kind, implicit-key resolution, writability
++ [X] enumerate candidate keys + distinct values, dropping namespaced / hidden keys
+  + delivered `lib/groupbyops.ts`: `enumerateGroupByCandidates(notes)` sweeps `note.linetags`, skipping `isNamespacedKey` and the (now-exported) `HIDDEN_ATTRIBUTES`
++ [X] tag each candidate categorical vs continuous by its values; keep both
+  + kind is `continuous` only when every value is numeric via `isNumericTag` (`value_numeric !== undefined && !isNaN`), so `"5px"` reads categorical; numeric keys kept, not dropped
++ [X] add the `nt_first_level_folder` implicit key over `projectNameFromRelativePath`
++ [X] mark candidates writable vs read-only
+  + authored attributes `writable: true`; the implicit folder key `writable: false, implicit: true`
++ [X] memoise the sweep against the merge cache key
+  + module-level `WeakMap<object, GroupByCandidate[]>` keyed on the notes array identity (merge output), guarded before the cache
++ [X] jest: an authored text attribute is a categorical candidate with its distinct values
++ [X] jest: a numeric-only key is a continuous candidate, not excluded
++ [X] jest: `nt_`/`ng_`-prefixed and hidden keys are excluded
++ [X] jest: `nt_first_level_folder` enumerates per-file folders and reports read-only
++ [X] jest: inherited tags count toward a key's values
++ [X] `pnpm run check` green
++ acceptance criteria
+  + candidates come from data with no hardcoded key list
+  + `status` and authored text attributes are categorical; `time_taken` / `time_estimated` appear as continuous, not dropped
+  + the sweep costs nothing measurable on a 200-file board (memoised, not per-render)
+
+
+### Factor LineView out of KanbanView [](?id=line-view)
+
+Split out of [[view-hierarchy-and-card-types]], which bundled this with the orthogonal `nt_card` axis. This half gates the view programme; the card axis does not and stands alone. Kanban becomes a thin specialisation of a new `LineView` - the single-axis card-lane view - supplying "group by the `status` linetag". Every grouped view then inherits lane layout, ordering, and drag. Depends on [[view-registry]] and [[axis-model]].
+
++ goal
+  + `LineView` renders one axis of lanes (grouping engine + lane layout + orientation) and kanban becomes a preset over it
+  + kanban renders identically after the refactor
++ background - naming settled
+  + the base is `LineView` (single categorical axis, card-lane renderer); grid/cube are separate dimensional rungs, not this
+  + grouping is layout-independent (it serves grid and a future gantt too), so the grouping engine is a lib seam, NOT inside LineView
+  + `kanbanColumnValue` (`noteops.ts:469`) is the single note->lane rule and is the natural seam; it becomes the categorical projection from [[axis-model]]
++ scope
+  + the grouping engine is the categorical `Axis` projection from [[axis-model]]: `(notes, axis) => { values, valueForNote, label }`, layout-independent
+  + `deriveNaturalColumnOrder` (`noteops.ts:455-462`), `notesInKanbanColumn` (`:478-480`) and `formatColumnLabel` (`:441-449`) generalise off the hardcoded `status` onto the axis
+  + new `LineView` owns the lane memo, header bar, drop zones, orientation, and group-order persistence, factored out of `KanbanView.tsx:73-107`
+  + orientation (columns | rows) is a LineView setting per [[view-registry]]; default columns matches today
+  + `KanbanView` becomes a thin preset supplying the `status` axis + its chrome
+  + no new selectable view ships here beyond keeping kanban working; the proof is the kanban refactor with no regression
++ out of scope
+  + the group-by selector, `nt_group_by`, and drag write-back generalisation - [[line-view-grouping-drag]]
+  + the `nt_card` axis - [[view-hierarchy-and-card-types]]
+  + grid, cube, gantt
+  + windowing - [[kanban-virtualized-columns]] lands inside LineView afterwards
++ implementation notes
+  + the absent-value lane is synthetic - no file carries `status=untagged`; the `||` in `kanbanColumnValue` invents it, and dropping there DELETES the linetag (`kanbanProjection.ts:49-51`, `cloneWithoutLinetag`) - this is the absent-value bucket from [[axis-model]]
+  + `KanbanView.tsx:165-166` culls empty lanes and falls back to all, so a stale order naming dead values is already harmless
+  + orientation must not fork the renderer - columns vs rows is one flex-direction axis, not two code paths
++ files
+  + new `client/webview/src/notethink-views/src/components/views/LineView.tsx`
+  + `client/webview/src/notethink-views/src/components/views/KanbanView.tsx` - thin preset
+  + `client/webview/src/notethink-views/src/lib/noteops.ts` - generalise the lane helpers off `status` onto an axis
+  + `client/webview/src/notethink-views/src/components/views/kanban/useKanbanColumns.ts`
++ [X] route the lane helpers through the categorical axis projection from [[axis-model]]
+  + `kanbanColumnValue`/`deriveNaturalColumnOrder`/`notesInKanbanColumn` (noteops) + `useKanbanColumns` gained an `axis: Axis = 'status'` param routing through `projectNoteOntoAxis` + `ABSENT_VALUE_BUCKET`; the status default keeps kanban byte-identical
++ [X] factor `LineView` out of `KanbanView`; reduce `KanbanView` to the status preset + chrome
+  + new `LineView.tsx` owns the lane memo, board, drag handlers, projection, FLIP, orientation; `KanbanView.tsx` is now `<LineView {...props} axis="status" />`
++ [X] add orientation (columns | rows) as a LineView setting, default columns
+  + read from `display_options.settings.orientation` (default columns), applied as one `data-orientation` flex-direction flip on the board (`KanbanBoard` + SCSS), not a forked renderer
++ [X] jest: `LineView` yields the same lane shape under an arbitrary axis (status + a fake attribute)
++ [X] jest: the absent-value bucket works for an axis other than `status`
++ [X] jest: orientation flips lane direction without changing membership
++ [X] jest: kanban renders identically against existing fixtures
+  + existing `KanbanView.test.tsx` + `KanbanView.dragStart-settle.test.tsx` render through the delegation unchanged; `kanban-drag-structural-guards` repointed to `LineView.tsx` (the settle/hold logic moved there)
++ [X] playwright: every existing kanban spec green (refactor regression check)
+  + 35 kanban specs pass (`playwright test kanban`)
++ [X] `pnpm run check` green
++ acceptance criteria
+  + kanban is visually and behaviourally unchanged (orientation defaults to columns)
+  + a grouped view needs only an axis, not a reimplementation of lane layout or drag
+  + the grouping engine carries no lane-layout assumptions, so grid can reuse it
+
+
+### Line view: grouping and drag [](?id=line-view-grouping-drag)
+
+The feature. Line becomes a selectable view that groups by any candidate attribute; kanban is Line preset to `status`. Line exposes a group-by selector over the enumerated candidates, defaulting to first level folder, honours an `nt_group_by` root attribute with the same auto semantics as `nt_view`, and generalises drag through inverse projection. Depends on [[view-registry]], [[axis-model]], [[group-by-enumeration]] and [[line-view]].
+
++ goal
+  + Line groups cards by any categorical candidate, selectable at runtime, defaulting to first level folder
+  + kanban is Line with `axes[0]` = status (see the FIXED-vs-default decision in [[view-registry]])
+  + `nt_group_by=assignee` on the file root resolves and displays as "Auto (Assignee)"; `nt_view=line` selects the view
++ background
+  + auto resolution has an exact precedent: `majorityNgView` (`noteops.ts:176-198`) - one vote per file, first story wins, strict plurality, ties return undefined
+  + the "Auto (X)" label already exists as `viewTypeLabel` (`components/views/viewTypeLabel.ts`)
+  + `fileDeclaredViewType` (`mergeAggregateRoot.ts:145-148`) shows the H1-over-frontmatter precedence to copy
++ scope - the view
+  + Line reads `axes[0]` (grouped's group key) and renders it as lanes via [[line-view]]
+  + Line defaults group-by to `nt_first_level_folder`, matching how the project pills already read
+  + kanban presets `axes[0]` = status; whether that is FIXED (edit by selecting Line) follows the [[view-registry]] decision
+  + `nt_view=line` is a new selectable value; `nt_view=kanban` unchanged
++ scope - the linetags
+  + `nt_group_by` root attribute -> grouped's `axes[0]` field; `nt_group_order` -> that axis's order; read off the file H1 with frontmatter fallback
+  + auto-resolve `nt_group_by` by majority vote across files, mirroring `majorityNgView`, with a focused-note override
+  + values are candidate keys, plus implicit keys in their `nt_` form (`nt_group_by=nt_first_level_folder`)
+  + bump AUTHORING_GUIDE to 1.2.0 (new optional backward-compatible keys) and add the rows: `nt_view=line`, `nt_group_by`, `nt_group_order`
++ scope - drag write-back through inverse projection
+  + wire drag through the inverse projection from [[axis-model]]: a drop writes the group key, generalising today's `status=` write - group by assignee, drop, and it writes `assignee=X`
+  + a drop on the absent-value lane deletes the linetag, as `status` does today
+  + drag is DISABLED when `axes[0]` is read-only, because a drop would have to move a file on disk - so first level folder renders lanes but takes no drops
++ out of scope
+  + grid, cube, gantt, and continuous axes - the machinery exists in [[axis-model]] but no view here builds them
+  + the tree selector and lock UI - [[view-settings-tree-drawer]]; here group-by is a plain select in the settings drawer (pending the pane-design pick)
+  + writing an implicit/read-only key back (i.e. moving files by drag)
++ implementation notes
+  + `nt_group_by`, `nt_group_order`, `nt_view=line` are permanent names - they land in users' files and cannot be renamed without migration (blessed 2026-07-17)
+  + implicit values are namespaced (`nt_first_level_folder`) to preserve the authored key space
+  + `DEFAULT_COLUMN_ORDER` is mirrored in THREE places that must stay in lockstep: `client/extension/src/constants.ts:19`, `client/webview/src/constants.ts:9`, `package.json:205-210` - it is kanban's status order, not a general default
++ files
+  + `client/webview/src/notethink-views/src/components/views/LineView.tsx` - group-by (axes[0]) prop
+  + `client/webview/src/notethink-views/src/components/views/AutoView.tsx` - majority-vote `nt_group_by` alongside `nt_view`
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` - capture `nt_group_by` / `nt_group_order` onto origin
+  + `client/webview/src/notethink-views/src/components/views/kanban/kanbanProjection.ts` - write via the axis inverse, not a hardcoded `status`
+  + `AUTHORING_GUIDE.md` - version 1.2.0, `nt_view=line`, `nt_group_by`, `nt_group_order`
+  + `l10n/bundle.l10n*.json` (5 files) - group-by labels
++ [X] add `line` as a selectable view; kanban presets `axes[0]` = status per the [[view-registry]] decision
+  + `line` added to `VIEW_COMPONENTS` (GenericView) so it dispatches + appears in the selector; kanban keeps its `axis="status"` preset, fixed via the registry
++ [X] default Line's group-by to `nt_first_level_folder`
+  + `resolveGroupByAxisKey` (groupbyops) returns the first-level-folder key when no selection / vote; LineView resolves its axis from it
++ [X] add the group-by select over the categorical candidates in the settings drawer
+  + new `GroupBySelector.tsx`; rendered in the lane drawer (`SettingsKanbanDrawer`), wired via `GenericViewToolbar` + `useViewToolbar.handle_group_by_change`
++ [X] parse `nt_group_by` / `nt_group_order` off the file root and auto-resolve group-by by majority vote
+  + `mergeAggregateRoot` captures `file_group_by` / `file_group_order` (H1 over front-matter) onto origin; `majorityGroupBy` (noteops, shared `majorityFileVote`) + focused-note override
++ [X] label the resolved selection "Auto (Assignee)" via `viewTypeLabel`
+  + GroupBySelector's auto option uses `viewTypeLabel('auto', groupByKeyLabel(resolvedKey))`, e.g. "Auto (Assignee)" / "Auto (First Level Folder)"
++ [X] route drag write-back through the [[axis-model]] inverse projection
+  + `buildKanbanDragEndPayload` + `applyKanbanMove` take a `group_field` (default status) and write `field := lane value` via `calculateTextChangesForNewLinetagValue`, absent lane deletes
++ [X] disable drag when `axes[0]` is read-only
+  + LineView computes `drag_disabled = !isAxisWritable(axis)`, passed to `KanbanBoard` -> `Draggable isDragDisabled`; the drop handler also early-returns
++ [X] update AUTHORING_GUIDE to 1.2.0 with `nt_view=line`, `nt_group_by`, `nt_group_order`
++ [X] add the l10n strings across all 5 bundles
+  + "Group by" + "Set by {0}" added to en/fr/de/es/it (all parse)
++ [X] jest: Line groups by an arbitrary categorical attribute; kanban still groups by status
++ [X] jest: `nt_group_by` majority-votes across files; ties fall back to the default
++ [X] jest: a drop writes the group key through invert(), and the absent lane deletes it
++ [X] jest: a read-only group key yields non-draggable cards
++ [X] playwright: switch to Line, change group-by, lanes re-derive
++ [X] playwright: group by first level folder - lanes match the project pills and cards do not drag
++ [X] playwright: every existing kanban drag spec green
+  + 35 kanban specs green after the drag generalisation; full suite 114 green
++ [X] `pnpm run check` green
++ manual: open a folder board, select Line, confirm it defaults to first level folder lanes matching the pills
++ manual: set `nt_group_by=assignee` on a file root and confirm the selector reads "Auto (Assignee)"
++ manual: group by an authored attribute, drag a card, confirm the attribute is rewritten in the file
++ acceptance criteria
+  + Line groups by any categorical candidate, defaulting to first level folder
+  + kanban is unchanged and shows its group-by as status
+  + `nt_group_by` resolves with the same auto semantics as `nt_view`; `nt_view=line` selects Line
+  + dragging writes the group key through the general inverse projection, disabled for read-only keys

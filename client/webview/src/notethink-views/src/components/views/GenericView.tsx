@@ -1,6 +1,7 @@
 import Debug from "debug";
 import React, { lazy } from "react";
 import { documentRootForStrip } from "../../lib/noteops";
+import { selectableViewIds } from "../../lib/viewregistryops";
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteAttributes from "../notes/GenericNoteAttributes";
@@ -11,12 +12,27 @@ import { useGenericView } from "./generic/useGenericView";
 
 const debug = Debug("nodejs:notethink-views:GenericView");
 
-// dynamic import() is required by React.lazy for per-view code-splitting; static imports would pull every view into the initial bundle
-const AutoView = lazy(() => import('./AutoView'));
-const DocumentView = lazy(() => import('./DocumentView'));
-const KanbanView = lazy(() => import('./KanbanView'));
+/*
+ * component per concrete view id, keyed by the same ids the view registry declares. dynamic import() is
+ * required by React.lazy for per-view code-splitting; static imports would pull every view into the
+ * initial bundle. `auto` is not a registry node - it is the majority-vote meta-selection that delegates
+ * to a concrete type. Adding a view is one registry entry plus one line here.
+ */
+const VIEW_COMPONENTS: Record<string, React.ComponentType<ViewProps>> = {
+    auto: lazy(() => import('./AutoView')),
+    document: lazy(() => import('./DocumentView')),
+    line: lazy(() => import('./LineView')),
+    kanban: lazy(() => import('./KanbanView')),
+};
 
-export const SELECTABLE_VIEWTYPES = ['auto', 'document', 'kanban'];
+/**
+ * the ordered view types the selector offers: `auto` plus every selectable registry view that has a
+ * component wired here. A registry view declared without a component is not offered, so the view tree can
+ * grow ahead of its renderers.
+ */
+export function selectableViewTypes(): string[] {
+    return ['auto', ...selectableViewIds().filter(id => id in VIEW_COMPONENTS)];
+}
 
 export default function GenericView(props: ViewProps): React.ReactElement {
     const { view_context, handlers, handle_folder_click, handle_apply_filters, handle_file_jump, drawers, jump, collisions, toolbar, insert, auto_resolved_type } = useGenericView(props);
@@ -42,6 +58,8 @@ export default function GenericView(props: ViewProps): React.ReactElement {
     );
     // render the toolbar at the leaf level only - when type is 'auto', AutoView delegates to a concrete type that renders GenericView again with the toolbar
     const show_toolbar = props.type !== 'auto';
+    // dispatch to the registry-keyed component for this view type; an unknown type maps to nothing (toolbar still shows)
+    const ViewComponent = VIEW_COMPONENTS[props.type];
     const enriched_props: ViewProps = {
         ...props,
         display_options: { ...display_options, deepest },
@@ -77,15 +95,14 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     onSettingChange={toolbar.handle_setting_change}
                     onGlobalSettingChange={toolbar.handle_global_setting_change}
                     onColumnOrderChange={toolbar.handle_column_order_change}
+                    onGroupByChange={toolbar.handle_group_by_change}
                     onMakeDefault={toolbar.handle_make_default}
                     onResetToDefault={toolbar.handle_reset_to_default}
                     onRestoreBuiltinDefault={toolbar.handle_restore_builtin_default}
                     onApplyFilters={handle_apply_filters}
                 />
             )}
-            {props.type === 'auto' && <AutoView {...enriched_props} />}
-            {props.type === 'document' && <DocumentView {...enriched_props} />}
-            {props.type === 'kanban' && <KanbanView {...enriched_props} />}
+            {ViewComponent && <ViewComponent {...enriched_props} />}
             <InsertModal
                 opened={insert.insert_modal_open}
                 onClose={insert.close_insert_modal}

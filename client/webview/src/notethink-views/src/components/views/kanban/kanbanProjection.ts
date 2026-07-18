@@ -1,5 +1,6 @@
 import Debug from "debug";
 import { kanbanColumnValue, notesInKanbanColumn } from "../../../lib/noteops";
+import { ABSENT_VALUE_BUCKET } from "../../../lib/axisops";
 import type { NoteProps, LineTag } from "../../../types/NoteProps";
 
 const debug = Debug("nodejs:notethink-views:kanbanProjection");
@@ -7,13 +8,16 @@ const debug = Debug("nodejs:notethink-views:kanbanProjection");
 /**
  * KanbanMove: a single drag-and-drop move that applyKanbanMove and projectionSatisfied interpret.
  * - dragged_stable_id: the stable_id of the note being moved
- * - destination_column_value: status value of the target column ('done', 'doing', 'untagged', …)
- * - destination_index: zero-based insertion slot within the destination column (clamped to valid range)
+ * - destination_column_value: the target lane's value on the group axis ('done', 'doing', 'untagged', …)
+ * - destination_index: zero-based insertion slot within the destination lane (clamped to valid range)
+ * - group_field: the axis field the lanes group by; defaults to 'status' so kanban is unchanged. The
+ *   projection re-tags the dragged note on this field (or deletes it for the absent-value lane).
  */
 export interface KanbanMove {
     dragged_stable_id: string;
     destination_column_value: string;
     destination_index: number;
+    group_field?: string;
 }
 
 // --- helpers ---
@@ -44,13 +48,13 @@ function cloneWithoutLinetag(note: NoteProps, key: string): NoteProps {
     return { ...note, linetags: cloned_linetags };
 }
 
-/** build the dragged note clone with its destination-column status applied */
-function cloneDraggedWithStatus(note: NoteProps, destination_column_value: string): NoteProps {
-    if (destination_column_value === 'untagged') {
-        return cloneWithoutLinetag(note, 'status');
+/** build the dragged note clone with its destination-lane value applied to the group field (absent lane deletes it) */
+function cloneDraggedWithFieldValue(note: NoteProps, group_field: string, destination_column_value: string): NoteProps {
+    if (destination_column_value === ABSENT_VALUE_BUCKET) {
+        return cloneWithoutLinetag(note, group_field);
     }
-    const status_tag: LineTag = {
-        key: 'status',
+    const field_tag: LineTag = {
+        key: group_field,
         value: destination_column_value,
         key_offset: 0,
         value_offset: 0,
@@ -58,7 +62,7 @@ function cloneDraggedWithStatus(note: NoteProps, destination_column_value: strin
         note_seq: note.seq,
         inherited: true,
     };
-    return cloneWithLinetags(note, { status: status_tag });
+    return cloneWithLinetags(note, { [group_field]: field_tag });
 }
 
 /** clamp an index to [0, max] inclusive */
@@ -98,7 +102,7 @@ function buildDestinationMembers(
     move: KanbanMove,
 ): Array<NoteProps> {
     const without_dragged = notes.filter(n => n.seq !== dragged_note.seq);
-    const existing = notesInKanbanColumn(without_dragged, move.destination_column_value);
+    const existing = notesInKanbanColumn(without_dragged, move.destination_column_value, move.group_field ?? 'status');
     const clamped = clampIndex(move.destination_index, existing.length);
     const ordered = [...existing];
     ordered.splice(clamped, 0, dragged_note);
@@ -115,8 +119,8 @@ function buildCloneMap(
     move: KanbanMove,
 ): Map<number, NoteProps> {
     const clone_map = new Map<number, NoteProps>();
-    // first pass: apply destination-column status to dragged note clone
-    const dragged_clone = cloneDraggedWithStatus(dragged_note, move.destination_column_value);
+    // first pass: apply the destination lane's value to the dragged note's group field
+    const dragged_clone = cloneDraggedWithFieldValue(dragged_note, move.group_field ?? 'status', move.destination_column_value);
     clone_map.set(dragged_note.seq, dragged_clone);
 
     // second pass: apply synthetic weight to every position in the ordered destination list
@@ -142,11 +146,12 @@ export function projectionSatisfied(notes: Array<NoteProps>, move: KanbanMove): 
         return true;
     }
 
-    if (kanbanColumnValue(dragged_note) !== move.destination_column_value) {
+    const group_field = move.group_field ?? 'status';
+    if (kanbanColumnValue(dragged_note, group_field) !== move.destination_column_value) {
         return false;
     }
 
-    const dest_members = notesInKanbanColumn(notes, move.destination_column_value);
+    const dest_members = notesInKanbanColumn(notes, move.destination_column_value, group_field);
 
     const actual_index = dest_members.findIndex(n => n.stable_id === move.dragged_stable_id);
     const clamped = clampIndex(move.destination_index, dest_members.length - 1);

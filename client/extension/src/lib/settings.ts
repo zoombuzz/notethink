@@ -4,7 +4,7 @@ import { DEFAULT_COLUMN_ORDER, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER } 
 /*
  * settings module. One canonical place to read, write, and inspect every notethink setting.
  *
- * Each entry binds: the TS identifier (camelCase, used in code as a SettingKey AND as the wire setting ID AND as the payload field name), the dotted config path under `notethink.settings.*` (matches package.json contributes), the built-in default, and whether the setting is part of the cascade subset (true) or a global toggle (false). Settings identifiers are camelCase end-to-end - this is a deliberate, scoped exception to the project-wide snake_case-for-wire-data-fields convention; settings have a unique cross-boundary identity (TS code, wire IDs, payload field names, VS Code config keys), and bridging conventions would mean every setting carries two names.
+ * Each entry binds: the TS identifier (camelCase, used in code as a SettingKey AND as the wire setting ID AND as the payload field name), the dotted config path under `notethink.settings.*` (matches package.json contributes), the built-in default, whether the setting is part of the cascade subset (true) or a global toggle (false), and the owning view-registry node (the tree node whose settings this belongs to - `root` for generic/all-view settings, `kanban` for kanban-specific ones). The `node` is metadata linking each config key to its home in the view registry (client/webview/.../lib/viewregistryops.ts); it does not affect read/write/cascade behaviour. Settings identifiers are camelCase end-to-end - this is a deliberate, scoped exception to the project-wide snake_case-for-wire-data-fields convention; settings have a unique cross-boundary identity (TS code, wire IDs, payload field names, VS Code config keys), and bridging conventions would mean every setting carries two names.
  *
  * Adding a setting = one entry here. The read/write helpers stay one-liners; the cascade payload, the workspace-overrides flag, and the promote/reset handlers all iterate this map.
  */
@@ -13,19 +13,20 @@ export interface SettingDef<T> {
     path: string;
     default: T;
     inCascade: boolean;
+    node: string;
 }
 
 export const SETTINGS = {
-    viewType:                   { path: 'view.type',                                default: 'auto' as 'auto' | 'document' | 'kanban', inCascade: true  },
-    columnOrder:                { path: 'view.specific.kanban.columnOrder',         default: DEFAULT_COLUMN_ORDER as string[],         inCascade: true  },
-    showContextBars:            { path: 'view.generic.showContextBars',             default: true,                                     inCascade: true  },
-    includeFilter:              { path: 'files.includeFilter',                      default: DEFAULT_INCLUDE_FILTER as string,         inCascade: true  },
-    excludeFilter:              { path: 'files.excludeFilter',                      default: DEFAULT_EXCLUDE_FILTER as string,         inCascade: true  },
-    maxNotesPerFile:            { path: 'files.maxNotesPerFile',                    default: 10 as number,                             inCascade: true  },
-    showLineNumbers:            { path: 'view.generic.showLineNumbers',             default: false,                                    inCascade: false },
-    watchUnopenedFilesInViewer: { path: 'view.generic.watchUnopenedFilesInViewer',  default: true,                                     inCascade: false },
-    kanbanAnimateTransitions:   { path: 'view.specific.kanban.animateTransitions',  default: true,                                     inCascade: false },
-    openNewEditorIfNoneOpen:    { path: 'view.generic.openNewEditorIfNoneOpen',     default: false,                                    inCascade: false },
+    viewType:                   { path: 'view.type',                                default: 'auto' as 'auto' | 'document' | 'kanban', inCascade: true,  node: 'root'   },
+    columnOrder:                { path: 'view.specific.kanban.columnOrder',         default: DEFAULT_COLUMN_ORDER as string[],         inCascade: true,  node: 'kanban' },
+    showContextBars:            { path: 'view.generic.showContextBars',             default: true,                                     inCascade: true,  node: 'root'   },
+    includeFilter:              { path: 'files.includeFilter',                      default: DEFAULT_INCLUDE_FILTER as string,         inCascade: true,  node: 'root'   },
+    excludeFilter:              { path: 'files.excludeFilter',                      default: DEFAULT_EXCLUDE_FILTER as string,         inCascade: true,  node: 'root'   },
+    maxNotesPerFile:            { path: 'files.maxNotesPerFile',                    default: 10 as number,                             inCascade: true,  node: 'root'   },
+    showLineNumbers:            { path: 'view.generic.showLineNumbers',             default: false,                                    inCascade: false, node: 'root'   },
+    watchUnopenedFilesInViewer: { path: 'view.generic.watchUnopenedFilesInViewer',  default: true,                                     inCascade: false, node: 'root'   },
+    kanbanAnimateTransitions:   { path: 'view.specific.kanban.animateTransitions',  default: true,                                     inCascade: false, node: 'kanban' },
+    openNewEditorIfNoneOpen:    { path: 'view.generic.openNewEditorIfNoneOpen',     default: false,                                    inCascade: false, node: 'root'   },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

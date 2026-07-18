@@ -9,6 +9,7 @@ import {
     findSelectedNotesByOriginPosition,
     flattenAllNotes,
     isAggregateRoot,
+    majorityGroupBy,
     majorityNgView,
     navigateToNeighbour,
     resolveFocusedNote,
@@ -1030,6 +1031,35 @@ describe('majorityNgView', () => {
     it('returns undefined for empty or missing input', () => {
         expect(majorityNgView([])).toBeUndefined();
         expect(majorityNgView(undefined)).toBeUndefined();
+    });
+});
+
+describe('majorityGroupBy', () => {
+    function noteFrom(seq: number, doc_id: string, group_by: string | undefined): NoteProps {
+        return makeNote({ seq, origin: { doc_id, doc_path: doc_id, file_group_by: group_by } });
+    }
+
+    it('returns the majority nt_group_by winner across distinct files', () => {
+        const notes = [
+            noteFrom(1, 'a', 'assignee'),
+            noteFrom(2, 'b', 'assignee'),
+            noteFrom(3, 'c', 'priority'),
+        ];
+        expect(majorityGroupBy(notes)).toBe('assignee');
+    });
+
+    it('returns undefined on a tie so the caller falls back to the default', () => {
+        const notes = [noteFrom(1, 'a', 'assignee'), noteFrom(2, 'b', 'priority')];
+        expect(majorityGroupBy(notes)).toBeUndefined();
+    });
+
+    it('counts one vote per file and ignores notes without a file_group_by', () => {
+        const notes = [
+            noteFrom(1, 'a', 'assignee'),
+            noteFrom(2, 'a', 'assignee'),
+            noteFrom(3, 'b', undefined),
+        ];
+        expect(majorityGroupBy(notes)).toBe('assignee');
     });
 });
 

@@ -24,6 +24,14 @@ export function resolveNamespacedTag(linetags: HashMapOf<LineTag> | undefined, n
     return undefined;
 }
 
+// content-attribute keys that are noise on their own: they drive other rendering or address a note, so they are hidden from the attribute chips and excluded as group-by candidates
+export const HIDDEN_ATTRIBUTES = [
+    // consumed by the 'progress' attribute's custom formatting, not shown on their own
+    'progress_unit', 'progress_max',
+    // identifier - useful for linking/addressing but noise in the card's value pairs
+    'id',
+];
+
 /**
  * @param input
  * @return string all the linetags ([...))$ in a single string

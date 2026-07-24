@@ -4045,3 +4045,37 @@ The feature. Line becomes a selectable view that groups by any candidate attribu
   + kanban is unchanged and shows its group-by as status
   + `nt_group_by` resolves with the same auto semantics as `nt_view`; `nt_view=line` selects Line
   + dragging writes the group key through the general inverse projection, disabled for read-only keys
+
+
+### Upgrade NPM packages for notethink (Wave 1 minor/patch)
+
+Applied (minor/patch): `@typescript-eslint/eslint-plugin` + `@typescript-eslint/parser` + `typescript-eslint` 8.64.0 -> 8.65.0, `sass` 1.101.0 -> 1.101.7 (specifier `^1.101.6`). Version 0.3.30 -> 0.3.31. A quiet wave: nothing else was inside the release-age window.
+
+`webpack` 5.109.0 was NOT taken - it published 2026-07-23T19:19Z, inside the mandatory 24h `--cooldown`, so the wave stayed on 5.108.4. It is the obvious first pick next wave. `sass` 1.101.7 published 2026-07-23T21:46Z, also inside the cooldown, and ncu duly held it by writing the specifier as `^1.101.6` - but the caret admits 1.101.7 and pnpm resolved to it anyway, so the hold did not bind and the tree ships 1.101.7. ncu `--cooldown` only constrains what ncu writes into package.json; it cannot stop pnpm re-resolving a caret to a newer release. Whether to enforce such holds with an exact specifier (or pnpm `minimumReleaseAge`) is a workspace-wide policy call, not a notethink one, since every project in this wave shares the gap.
+
+Passing `--configFilePath` fixed the reject-list bypass recorded last wave. ncu logged `Using config file .../notethink/.ncurc.json` and the 9.39.4 -> 9.39.5 patch slip did NOT recur: `eslint` and `@eslint/js` are still exactly 9.39.4 and `typescript` still `^6.0.3`, verified by diffing package.json afterwards. No manual reverts were needed.
+
+Pins in effect after this wave (snapshot):
+- eslint @9.39.4 (.ncurc reject) - structural - held - no majors were approved for notethink this wave. Worth flagging for the next one: the recorded rationale (eslint-plugin-react has no eslint-10 release) does not hold in THIS repo - notethink has no eslint-plugin-react dependency, and its flat config imports only `@typescript-eslint/eslint-plugin` and `@typescript-eslint/parser`, both of which peer `eslint ^8.57.0 || ^9.0.0 || ^10.0.0` as of 8.65.0. The eslint-10 blocker for notethink needs re-deriving before the pin is carried forward again
+- @eslint/js @9.39.4 (.ncurc reject) - structural - same
+- typescript @^6.0.3 (caret, no reject entry) - structural - held by peer ranges - `@typescript-eslint/parser@8.65.0` still peers `typescript >=4.8.4 <6.1.0` (re-verified 2026-07-24) and ts-jest peers `<7`; TS7 is being piloted in ledger only. Revisit when both peer ranges admit 7.x
+Unpinned this wave: none - the last wave's snapshot recorded no transient holds, and all three live pins are structural with their clear-conditions still unmet
+
++ [X] run npm-check-updates
++ [X] revisit prior pins (try to unpin transient holds recorded in the last done.md story)
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
++ [X] verify webpack build emits both bundles (dulcet vendors these)
++ [X] exclude the generated lockfile from the em-dash guardrail
+  + `sh/check-no-emdash.sh` now skips `pnpm-lock.yaml`, propagated across the workspace this wave
+  + a lockfile embeds registry-authored strings that cannot be durably edited, since the next install rewrites them. The trigger was the `@rescale/nemo` deprecation notice, which carries a literal em dash and failed the guard in calfam
+  + notethink has no nemo dependency, so nothing was failing here; the exclusion is a durable guard against any future dep whose registry metadata carries a dash
+  + notethink runs the newer `git grep` implementation, so the exclusion is written as `:(exclude)` pathspecs. calfam runs an older filesystem-`grep` variant using `--exclude=pnpm-lock.yaml`. Two implementations exist across the workspace and that is expected, not drift
++ verified: lint clean (0 errors, 6 pre-existing warnings); 1651 jest green (248 extension + 134 webview + 1269 notethink-views); webpack build clean on 5.108.4
+  + both bundles emit fresh: `client/extension/dist/extension.js` (2.2 MiB) and `client/webview/dist/index.js` (11.4 MiB), so the output dulcet vendors via `copy-extensions` is current
++ toolchain divergence raised with the team lead, deliberately NOT changed here
+  + notethink's package.json declares no `packageManager` field and no `engines.node` field, while every other workspace project pins `pnpm@11.x` and `node >=22.18.0`
+  + left as-is because a VS Code extension has different publishing constraints (vsce reads `engines.vscode`, and the marketplace does not consume `engines.node`); adding either is the user's call
++ commit message draft
+  + notethink 0.3.31: upgrade npm packages (wave 1, minor/patch) - typescript-eslint 8.65.0, sass 1.101.7; exclude pnpm-lock.yaml from the em-dash guard; eslint held at 9.39.4, webpack 5.109 held by cooldown; tests 1651 jest, 115 playwright

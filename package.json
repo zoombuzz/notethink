@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.31",
+  "version": "0.3.32",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -174,7 +174,11 @@
           "notethink.settings.view.type": {
             "type": "string",
             "scope": "resource",
-            "enum": ["auto", "document", "kanban"],
+            "enum": [
+              "auto",
+              "document",
+              "kanban"
+            ],
             "default": "auto",
             "description": "%config.settings.view.type.description%"
           },
@@ -205,8 +209,16 @@
           "notethink.settings.view.specific.kanban.columnOrder": {
             "type": "array",
             "scope": "resource",
-            "items": { "type": "string" },
-            "default": ["untagged", "doing", "code-review", "testing", "done"],
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "untagged",
+              "doing",
+              "code-review",
+              "testing",
+              "done"
+            ],
             "description": "%config.settings.view.specific.kanban.columnOrder.description%"
           },
           "notethink.settings.view.specific.kanban.animateTransitions": {

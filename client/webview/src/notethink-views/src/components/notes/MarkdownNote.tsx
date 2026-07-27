@@ -1,5 +1,5 @@
 import Debug from 'debug';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import { arraysEqual } from "../../lib/noteops";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
@@ -41,14 +41,14 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
 
     const overflow_state = useMarkdownNoteOverflow(body_ref, is_top_level);
 
-    // manual expand state: tracks user's "Show more" click when auto-expand is off
+    /*
+     * manual expand state: tracks the user's "Show more" click when auto-expand is off. Nothing resets it
+     * on a content change - the card is keyed by note identity, so a slot handover remounts with a fresh
+     * flag, and "Show less" is the only in-place collapse. An earlier body_raw-keyed reset collapsed the
+     * card on every edit (a checkbox tick rewrites the body), which read as the click scrolling the note.
+     */
     const [manually_expanded, setManuallyExpanded] = useState(false);
     const auto_expand = props.display_options?.settings?.autoExpandFocusedNote;
-
-    // reset manually_expanded when note content changes
-    useEffect(() => {
-        setManuallyExpanded(false);
-    }, [props.body_raw]);
 
     /*
      * clip logic: auto-expand ON → expand on focus; OFF → respect manually_expanded;

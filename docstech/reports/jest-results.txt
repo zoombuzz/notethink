@@ -1,6 +1,6 @@
 # Jest Test Results
 # Version: 0.3.31
-# Date: 2026-07-24T15:37:22+01:00
+# Date: 2026-07-27T20:00:58+01:00
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
@@ -12,45 +12,45 @@
 > jest --config jest.config.cjs --forceExit
 
 
-Test Suites: 11 passed, 11 total
-Tests:       248 passed, 248 total
-Snapshots:   0 total
-Time:        2.696 s
-Ran all test suites.
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+[1mTest Suites: [22m[1m[32m11 passed[39m[22m, 11 total
+[1mTests:       [22m[1m[32m248 passed[39m[22m, 248 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        2.856 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
 > notethink-client-display@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview
 > jest --config jest.config.cjs --forceExit
 
 
-Test Suites: 10 passed, 10 total
-Tests:       134 passed, 134 total
-Snapshots:   0 total
-Time:        1.004 s
-Ran all test suites.
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+[1mTest Suites: [22m[1m[32m10 passed[39m[22m, 10 total
+[1mTests:       [22m[1m[32m134 passed[39m[22m, 134 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        0.846 s, estimated 1 s
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
 > @zoombuzz/notethink-views@0.1.0 test /mnt/secure/home/alex/git/github.com/active_development/notethink/client/webview/src/notethink-views
 > jest --config jest.config.cjs --forceExit
 
-A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+[33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
 
-Test Suites: 62 passed, 62 total
-Tests:       1269 passed, 1269 total
-Snapshots:   0 total
-Time:        3.432 s
-Ran all test suites.
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+[1mTest Suites: [22m[1m[32m62 passed[39m[22m, 62 total
+[1mTests:       [22m[1m[32m1273 passed[39m[22m, 1273 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        [1m[33m3.232 s[39m[22m
+[2mRan all test suites[22m[2m.[22m
+[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
-┌──────────────────┬───────┬────────┬────────┬─────────┐
-│ Suite            │ Files │ Passed │ Failed │ Time    │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ extension        │    11 │    248 │      0 │ 2.696 s │
-│ webview          │    10 │    134 │      0 │ 1.004 s │
-│ notethink-views  │    62 │   1269 │      0 │ 3.432 s │
-├──────────────────┼───────┼────────┼────────┼─────────┤
-│ TOTAL            │    83 │   1651 │      0 │         │
-└──────────────────┴───────┴────────┴────────┴─────────┘
+[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
+[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+│ extension        │    11 │ [32m   248[0m │ [2m     0[0m │ 2.856 s │
+│ webview          │    10 │ [32m   134[0m │ [2m     0[0m │ 0.846 s │
+│ notethink-views  │    62 │ [32m  1273[0m │ [2m     0[0m │ 3.232 s │
+[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
+[1m│ TOTAL            │    83 │[0m [32m  1655[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

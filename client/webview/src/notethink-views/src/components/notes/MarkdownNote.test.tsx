@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import MarkdownNote from './MarkdownNote';
 import type { NoteProps } from '../../types/NoteProps';
 
@@ -85,6 +85,23 @@ function simulateOverflow(el: HTMLElement, scrollHeight: number, offsetWidth: nu
     if (resizeCallback) {
         act(() => { resizeCallback!([] as unknown as ResizeObserverEntry[], {} as ResizeObserver); });
     }
+}
+
+/*
+ * render an overflowing top-level note and expand it via "Show more", returning the handles a caller
+ * needs to drive the collapse rules: the body element (its inline maxHeight is the clip) and rerender.
+ */
+function renderExpandedNote(): { body: HTMLElement; rerender: (ui: React.ReactElement) => void; note: NoteProps } {
+    const note = makeNote({
+        stable_id: 'story-a',
+        children_body: [makeList(2, [makeListItem(3, true), makeListItem(4, false)])],
+    });
+    const { container, rerender } = render(<MarkdownNote {...note} />);
+    const body = container.querySelector('[class*="body"]') as HTMLElement;
+    simulateOverflow(body, 500, 200);
+    fireEvent.click(screen.getAllByRole('button', { name: /show more/i })[0]);
+    expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
+    return { body, rerender, note };
 }
 
 describe('MarkdownNote', () => {
@@ -233,5 +250,34 @@ describe('MarkdownNote', () => {
         // only bottom Show more (no top fade since scrollTop stays 0)
         const buttons = screen.getAllByRole('button', { name: /show more/i });
         expect(buttons.length).toBe(1);
+    });
+
+    it('stays expanded when a checkbox tick rewrites the body', () => {
+        const { body, rerender, note } = renderExpandedNote();
+        rerender(<MarkdownNote {...note} body_raw={'+ [X] done\n+ [X] todo'} />);
+        expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
+        expect(body.style.maxHeight).toBe('');
+    });
+
+    it('stays expanded when the headline is edited', () => {
+        // stable_id tracks the headline slug, so a rename must not be mistaken for a slot handover
+        const { body, rerender, note } = renderExpandedNote();
+        rerender(<MarkdownNote {...note} headline_raw="### Story title renamed" stable_id="story-title-renamed" />);
+        expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
+        expect(body.style.maxHeight).toBe('');
+    });
+
+    it('collapses when "Show less" is clicked', () => {
+        const { body } = renderExpandedNote();
+        fireEvent.click(screen.getByRole('button', { name: /show less/i }));
+        expect(screen.queryByRole('button', { name: /show less/i })).not.toBeInTheDocument();
+        expect(body).toHaveStyle({ maxHeight: '200px', overflow: 'hidden' });
+    });
+
+    it('resets to collapsed when a different note remounts into the slot', () => {
+        // views key cards by note identity, so a handover mounts a fresh instance with the flag cleared
+        const { rerender, note } = renderExpandedNote();
+        rerender(<MarkdownNote key="story-b" {...note} stable_id="story-b" headline_raw="### Another story" />);
+        expect(screen.queryByRole('button', { name: /show less/i })).not.toBeInTheDocument();
     });
 });

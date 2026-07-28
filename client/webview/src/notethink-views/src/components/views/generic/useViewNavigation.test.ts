@@ -95,6 +95,90 @@ describe('useViewNavigation', () => {
         expect(handlers.setViewInteractionState).toHaveBeenCalledWith(['p'], [], 0);
     });
 
+    it('drillIn scopes the view to the focused note stable_id, never its seq', () => {
+        const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
+        const child = makeNote({ seq: 3, stable_id: 'doc:child' });
+        const target = makeNote({ seq: 2, stable_id: 'doc:story', child_notes: [child] });
+        const handlers = makeHandlers({ setParentContextId: jest.fn() });
+        renderHook(() => useViewNavigation({
+            display_options: { focused_seqs: [2], focused_notes: [target] },
+            notes_within_parent_context: [target],
+            parent_context: undefined,
+            parent_context_seq: 0,
+            handlers,
+            navigation_command_ref,
+        }));
+        navigation_command_ref.current!('drillIn');
+        expect(handlers.setParentContextId).toHaveBeenCalledWith('doc:story');
+    });
+
+    // the scope is persisted, so a note with no stable_id has nothing durable to address and must not be scoped to at all
+    it('drillIn does nothing when the focused note has children but no stable_id', () => {
+        const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
+        const child = makeNote({ seq: 3 });
+        const target = makeNote({ seq: 2, child_notes: [child] });
+        const handlers = makeHandlers({ setParentContextId: jest.fn() });
+        renderHook(() => useViewNavigation({
+            display_options: { focused_seqs: [2], focused_notes: [target] },
+            notes_within_parent_context: [target],
+            parent_context: undefined,
+            parent_context_seq: 0,
+            handlers,
+            navigation_command_ref,
+        }));
+        navigation_command_ref.current!('drillIn');
+        expect(handlers.setParentContextId).not.toHaveBeenCalled();
+    });
+
+    it('drillOut scopes to the grandparent stable_id', () => {
+        const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
+        const grandparent = makeNote({ seq: 1, stable_id: 'doc:epic' });
+        const parent_context = makeNote({ seq: 2, stable_id: 'doc:story', parent_notes: [grandparent] });
+        const handlers = makeHandlers({ setParentContextId: jest.fn() });
+        renderHook(() => useViewNavigation({
+            display_options: { focused_seqs: [], focused_notes: [] },
+            notes_within_parent_context: [],
+            parent_context,
+            parent_context_seq: 2,
+            handlers,
+            navigation_command_ref,
+        }));
+        navigation_command_ref.current!('drillOut');
+        expect(handlers.setParentContextId).toHaveBeenCalledWith('doc:epic');
+    });
+
+    // undefined is the re-root signal: resolveParentContextNote returns undefined for it and useViewContext falls back to the seq-0 root
+    it('drillOut from a top-level scope clears the scope with undefined', () => {
+        const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
+        const parent_context = makeNote({ seq: 2, stable_id: 'doc:story' });
+        const handlers = makeHandlers({ setParentContextId: jest.fn() });
+        renderHook(() => useViewNavigation({
+            display_options: { focused_seqs: [], focused_notes: [] },
+            notes_within_parent_context: [],
+            parent_context,
+            parent_context_seq: 2,
+            handlers,
+            navigation_command_ref,
+        }));
+        navigation_command_ref.current!('drillOut');
+        expect(handlers.setParentContextId).toHaveBeenCalledWith(undefined);
+    });
+
+    it('drillOut at the root scope does nothing', () => {
+        const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
+        const handlers = makeHandlers({ setParentContextId: jest.fn() });
+        renderHook(() => useViewNavigation({
+            display_options: { focused_seqs: [], focused_notes: [] },
+            notes_within_parent_context: [],
+            parent_context: undefined,
+            parent_context_seq: 0,
+            handlers,
+            navigation_command_ref,
+        }));
+        navigation_command_ref.current!('drillOut');
+        expect(handlers.setParentContextId).not.toHaveBeenCalled();
+    });
+
     it('clearFocus routes through getClearHandler', () => {
         const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
         const inner_clear = jest.fn();

@@ -227,6 +227,51 @@ describe('useViewContext', () => {
         });
     });
 
+    describe('parent context scope resolves from parent_context_id, not a persisted seq', () => {
+        const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });
+
+        it('a re-parse that renumbers seq keeps the view scoped to the same note', () => {
+            const before_story = makeNote({ seq: 5, level: 1, stable_id: 'doc:story', child_notes: [] });
+            const { result, rerender } = renderHook((props: ViewProps) => useViewContext(props), {
+                initialProps: makeViewProps({
+                    notes: [root, before_story],
+                    display_options: { parent_context_id: 'doc:story' },
+                }),
+            });
+            expect(result.current.parent_context_seq).toBe(5);
+            // after re-parse: another note inherited seq 5 and the story moved to seq 9
+            const after_other = makeNote({ seq: 5, level: 1, stable_id: 'doc:other', child_notes: [] });
+            const after_story = makeNote({ seq: 9, level: 1, stable_id: 'doc:story', child_notes: [] });
+            rerender(makeViewProps({
+                notes: [root, after_other, after_story],
+                display_options: { parent_context_id: 'doc:story' },
+            }));
+            expect(result.current.parent_context?.stable_id).toBe('doc:story');
+            expect(result.current.parent_context_seq).toBe(9);
+        });
+
+        it('an id that resolves to nothing scopes to the root rather than the note that inherited the number', () => {
+            const other = makeNote({ seq: 5, level: 1, stable_id: 'doc:other', child_notes: [] });
+            const { result } = renderHook(() => useViewContext(makeViewProps({
+                notes: [root, other],
+                display_options: { parent_context_id: 'doc:deleted-story' },
+            })));
+            expect(result.current.parent_context_seq).toBe(0);
+            expect(result.current.parent_context?.stable_id).toBe('root');
+        });
+
+        // the seq branch serves AutoView's per-render derivation; a gapped list is what flattenSingleFileStories produces
+        it('falls back to a seq-matched lookup when no id is set, matching on seq rather than array index', () => {
+            const story = makeNote({ seq: 7, level: 1, stable_id: 'doc:story', child_notes: [] });
+            const { result } = renderHook(() => useViewContext(makeViewProps({
+                notes: [root, story],
+                display_options: { parent_context_seq: 7 },
+            })));
+            expect(result.current.parent_context?.stable_id).toBe('doc:story');
+            expect(result.current.parent_context_seq).toBe(7);
+        });
+    });
+
     describe('editor-open vs editor-closed parity (single-caret ownership)', () => {
         // one caret, two owners: with an identical view store, the resolved focus/selection must match whether the caret lives in a real editor (props.selection set) or is the board's virtual caret (props.selection undefined)
         const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });

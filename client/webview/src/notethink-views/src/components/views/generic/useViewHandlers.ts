@@ -40,13 +40,13 @@ export function useViewHandlers(
         deleteViewFromManagedState: props.handlers?.deleteViewFromManagedState ?? (() => {}),
         revertAllViewsToDefaultState: props.handlers?.revertAllViewsToDefaultState ?? (() => {}),
 
-        setParentContextSeq: (seq: number) => {
-            // local state management for view context navigation
+        setParentContextId: (id: string | undefined) => {
+            // a stable_id, not a seq: this is persisted and re-resolved after the next re-parse
             handlers?.setViewManagedState?.([{
                 id: props.id,
                 type: props.type,
                 display_options: {
-                    parent_context_seq: seq,
+                    parent_context_id: id,
                 }
             }]);
         },

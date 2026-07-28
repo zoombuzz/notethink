@@ -108,7 +108,7 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactEleme
                 />
             )}
             {has_path && has_notes && <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>}
-            <BreadcrumbNoteSegments notes={parent_notes} onNoteClick={props.handlers?.setParentContextSeq} />
+            <BreadcrumbNoteSegments notes={parent_notes} onNoteClick={props.handlers?.setParentContextId} />
         </nav>
     );
 }

@@ -79,7 +79,7 @@ export function useViewToolbar(
             is_auto: is_auto_reset,
             resolved_mode,
             folder_path,
-            seed_parent_context_seq: is_auto_reset && resolved_mode === INTEGRATION_MODE_CURRENT_FILE ? decl?.parent_context_seq : undefined,
+            seed_parent_context_id: is_auto_reset && resolved_mode === INTEGRATION_MODE_CURRENT_FILE ? decl?.parent_context_label : undefined,
             view_id: props.id,
             view_state_ids: props.view_state_ids ?? [],
             target_file_path,

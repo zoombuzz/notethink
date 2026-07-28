@@ -15,11 +15,13 @@ export type NoteClickHandler = (event: MouseEvent<HTMLElement>, note: NoteProps 
  * NoteDisplayOptions, per-view display state threaded onto each note's display_options.
  * - integration_mode_selection: the persisted integration-mode choice (auto / current_file / folder), carried alongside the composer-resolved concrete integration_mode so the toolbar selector can render "Auto (…)" vs the concrete label; never persisted itself - the composer re-stamps it from the canonical folder view-state each render
  * - view_caret: the view's own caret offset when no editor is live, in in-tree (merged-tree) offset space so it resolves via findDeepestNote in both single-file and folder mode; augmented state only, never text - files stay master
+ * - parent_context_id / parent_context_seq: the note-hierarchy scope this view opens at. The id is the persisted half (a stable_id from a drill-in or breadcrumb click, else the authored nt_breadcrumb_last headline label) and is re-resolved against the current tree by resolveParentContextNote on every render; the seq is the resolved result, derived per render and never persisted
  */
 export interface NoteDisplayOptions {
     id?: string;
     view_id?: string;
     level?: number;
+    parent_context_id?: string;
     parent_context_seq?: number;
     settings?: {
         showContextBars?: boolean;
@@ -77,7 +79,7 @@ export interface NoteHandlers {
     singleClick?: NoteClickHandler;
     doubleClick?: NoteClickHandler;
     setCaretPosition?: (position: number) => void;
-    setParentContextSeq?: (seq: number) => void;
+    setParentContextId?: (id: string | undefined) => void;
     postMessage?: (message: unknown) => void;
     descendToFolder?: (folder_path: string) => void;
     [key: string]: unknown;
@@ -90,7 +92,17 @@ export interface NoteHandlers {
  * mergeAggregateRoot.
  * - seq: 1-based document-order index assigned during parse. Globally
  *   renumbered by mergeAggregateRoot when the per-file trees are interleaved,
- *   which is why React must NOT key on this - see stable_id.
+ *   which is why React must NOT key on this - see stable_id. A seq is valid only
+ *   within the render pass that derived it: the moment one outlives a re-parse
+ *   (cached in a memo, written to view state, stashed in a ref, or put in the DOM
+ *   to be looked up later) it addresses whichever note now holds that number. Use
+ *   stable_id, or a source offset, for anything that crosses an update boundary.
+ *   A seq is NOT an index into the flat `notes` array, however much it looks like
+ *   one: the two coincide for a plain parse (both numbering passes append in the
+ *   same document-order walk that assigns the seq) and diverge as soon as
+ *   flattenSingleFileStories lifts `###` stories out from under their `##` epics,
+ *   which drops the epic headings from the walked tree without renumbering. Look
+ *   notes up with findNoteBySeq, never `notes.at(seq)`.
  * - origin: folder mode metadata stamped on every story and its descendants by
  *   mergeAggregateRoot; lets callers route edits back to the source file and
  *   drives implicit cross-file ordering (single-file mode leaves it

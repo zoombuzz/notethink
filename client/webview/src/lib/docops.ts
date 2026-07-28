@@ -2,7 +2,7 @@ import Debug from "debug";
 import { convertMdastToNoteHierarchy } from "../notethink-views/src/lib/convertMdastToNoteHierarchy";
 import { findFileH1 } from "../notethink-views/src/lib/mergeAggregateRoot";
 import { resolveNamespacedTag } from "../notethink-views/src/lib/linetagops";
-import { breadcrumbSeqForLabel, flattenAllNotes } from "../notethink-views/src/lib/noteops";
+import { breadcrumbNoteForLabel, flattenAllNotes } from "../notethink-views/src/lib/noteops";
 import { isPathWithinFolder, parentFolderOf, resolveBreadcrumbFolderSegment } from "../notethink-views/src/lib/pathops";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode } from "../notethink-views/src/types/IntegrationMode";
 import type { HashMapOf, Doc } from "../types/general";
@@ -15,13 +15,14 @@ const debug = Debug("nodejs:notethink:docops");
  * - mode: the concrete integration mode the file declares (never 'auto')
  * - integration_path: the folder to scope aggregation to (folder mode only) - the nt_breadcrumb_last
  *   folder segment when it matched, else the file's own parent folder
- * - parent_context_seq: the note-hierarchy depth to open scoped to (current_file mode only), seeded
- *   from an nt_breadcrumb_last epic/story label
+ * - parent_context_label: the nt_breadcrumb_last epic/story label the view opens scoped to
+ *   (current_file mode only), carried as the authored label rather than the seq it resolved to
+ *   here, because it is persisted and has to be re-resolved against each later parse
  */
 export interface FileIntegrationDeclaration {
     mode: ConcreteIntegrationMode;
     integration_path?: string;
-    parent_context_seq?: number;
+    parent_context_label?: string;
 }
 
 /**
@@ -118,9 +119,9 @@ const VALID_AUTHORED_MODES: ReadonlySet<string> = new Set<string>([INTEGRATION_M
  * debug-logged and ignored, degrading to current_file). nt_breadcrumb_last is matched first as a
  * folder segment of the file's path trail (deepest match wins) - a folder match implies folder mode
  * even when nt_integration_mode is absent - then as an epic/story headline (seeding
- * parent_context_seq). Folder mode always carries a scope path (the matched segment, else the file's
- * own folder); a note seq is single-file-only and is dropped in folder mode (it does not address the
- * merged tree). Never throws - a parse failure degrades to current_file with a debug line.
+ * parent_context_label). Folder mode always carries a scope path (the matched segment, else the
+ * file's own folder); a note scope is single-file-only and is dropped in folder mode (it does not
+ * address the merged tree). Never throws - a parse failure degrades to current_file with a debug line.
  */
 export function resolveFileIntegrationDeclaration(doc: Doc | undefined, workspace_root?: string): FileIntegrationDeclaration {
     const fallback: FileIntegrationDeclaration = { mode: INTEGRATION_MODE_CURRENT_FILE };
@@ -143,23 +144,24 @@ export function resolveFileIntegrationDeclaration(doc: Doc | undefined, workspac
     const breadcrumb_last = resolveNamespacedTag(h1?.linetags, 'breadcrumb_last')?.value
         ?? resolveNamespacedTag(root.linetags, 'breadcrumb_last')?.value;
     let integration_path: string | undefined;
-    let parent_context_seq: number | undefined;
+    let parent_context_label: string | undefined;
     if (breadcrumb_last) {
         const folder_segment = resolveBreadcrumbFolderSegment(breadcrumb_last, doc.path, workspace_root, doc.relative_path);
         if (folder_segment) {
             mode = INTEGRATION_MODE_FOLDER;
             integration_path = folder_segment;
+        } else if (breadcrumbNoteForLabel(breadcrumb_last, flattenAllNotes(root))) {
+            // the match only proves the label addresses a note in this file; the view re-resolves it
+            parent_context_label = breadcrumb_last;
         } else {
-            const seq = breadcrumbSeqForLabel(breadcrumb_last, flattenAllNotes(root));
-            if (seq !== undefined) { parent_context_seq = seq; }
-            else { debug('nt_breadcrumb_last=%s matched no folder segment or note', breadcrumb_last); }
+            debug('nt_breadcrumb_last=%s matched no folder segment or note', breadcrumb_last);
         }
     }
     if (mode === INTEGRATION_MODE_FOLDER) {
         if (!integration_path) { integration_path = parentFolderOf(doc.path); }
-        parent_context_seq = undefined;
+        parent_context_label = undefined;
     }
-    return { mode, integration_path, parent_context_seq };
+    return { mode, integration_path, parent_context_label };
 }
 
 /**

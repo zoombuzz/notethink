@@ -63,8 +63,9 @@ export interface SetIntegrationMessage {
  * - is_auto: persist `auto` (the view keeps following the file) vs the concrete mode (a user pin)
  * - resolved_mode: the concrete mode this change lands on
  * - folder_path: the folder scope when resolved_mode is folder, else undefined
- * - seed_parent_context_seq: re-seed the note-hierarchy scope on the view's own id (auto reset to a
- *   current_file file that declares an epic/story scope); undefined to skip
+ * - seed_parent_context_id: re-seed the note-hierarchy scope on the view's own id (auto reset to a
+ *   current_file file that declares an epic/story scope), as the authored nt_breadcrumb_last label
+ *   the view re-resolves each render; undefined to skip
  * - view_id: the view's own id (the seed target; skipped in the clear loop)
  * - view_state_ids: every persisted view-state id, so focused/selected are cleared everywhere and
  *   stranded folder tags on non-canonical (doc-path) keys are cleared on a resolve to current_file
@@ -74,7 +75,7 @@ export interface IntegrationDispatchRequest {
     is_auto: boolean;
     resolved_mode: ConcreteIntegrationMode;
     folder_path: string | undefined;
-    seed_parent_context_seq?: number;
+    seed_parent_context_id?: string;
     view_id: string;
     view_state_ids: readonly string[];
     target_file_path?: string;
@@ -101,7 +102,7 @@ export interface IntegrationDispatch {
  * current_file (so the extension disposes the folder watcher and re-sends just the active doc).
  */
 export function buildIntegrationDispatch(req: IntegrationDispatchRequest): IntegrationDispatch {
-    const { is_auto, resolved_mode, folder_path, seed_parent_context_seq, view_id, view_state_ids, target_file_path } = req;
+    const { is_auto, resolved_mode, folder_path, seed_parent_context_id, view_id, view_state_ids, target_file_path } = req;
     const clear_stranded_folder_tag = resolved_mode === INTEGRATION_MODE_CURRENT_FILE;
     const canonical_display_options: Record<string, unknown> = {
         // persist 'auto' on a reset (the view keeps following the file) and the concrete mode on a pin
@@ -125,8 +126,8 @@ export function buildIntegrationDispatch(req: IntegrationDispatchRequest): Integ
         }
         updates.push({ id, display_options: non_canonical_display_options });
     }
-    if (resolved_mode === INTEGRATION_MODE_CURRENT_FILE && seed_parent_context_seq !== undefined && view_id !== FOLDER_VIEW_STATE_ID) {
-        updates.push({ id: view_id, display_options: { parent_context_seq: seed_parent_context_seq } });
+    if (resolved_mode === INTEGRATION_MODE_CURRENT_FILE && seed_parent_context_id !== undefined && view_id !== FOLDER_VIEW_STATE_ID) {
+        updates.push({ id: view_id, display_options: { parent_context_id: seed_parent_context_id } });
     }
     let message: SetIntegrationMessage | undefined;
     if (resolved_mode === INTEGRATION_MODE_FOLDER && folder_path) {

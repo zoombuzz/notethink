@@ -21,6 +21,8 @@ export type VSCodeState = {
  * - the folder-mode viewState key '__aggregate__' → '__folder__'
  * - per-viewState display_options.integration_mode 'directory' → 'folder'
  * - legacy aggregate_* display_options fields → includeFilter / excludeFilter / maxNotesPerFile
+ * - display_options.parent_context_seq dropped in favour of parent_context_id; the seq is a
+ *   per-render value now, and a persisted one would outlive the parse that produced it
  *
  * Returns the same `s` reference (mutated in place) so callers can chain or destructure.
  * Returns the input unchanged when there are no viewStates to migrate (undefined input,
@@ -50,6 +52,10 @@ export function migrateSavedState(s: VSCodeState | undefined): VSCodeState | und
         if ('aggregate_max_notes_per_file' in dopts) {
             dopts.maxNotesPerFile = dopts.aggregate_max_notes_per_file;
             delete dopts.aggregate_max_notes_per_file;
+        }
+        // a stale persisted seq would win the scope ternary in useViewContext and pin drill-out to a permanent no-op
+        if ('parent_context_seq' in dopts) {
+            delete dopts.parent_context_seq;
         }
     }
     return s;

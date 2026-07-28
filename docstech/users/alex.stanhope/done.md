@@ -4104,3 +4104,52 @@ A top-level note the user has expanded with "Show more" silently re-collapses on
 + [X] add a test: expanded note + checkbox tick stays expanded; "Show less" collapses it
   + four jest cases in `MarkdownNote.test.tsx` (body edit, headline edit, "Show less", remount) plus `playwright/specs/manual-expand-persists.spec.ts` driving the real bundle: expand a kanban card, land the ticked doc update, assert still expanded
   + both the jest body-edit case and the playwright spec were verified to fail against a reinstated `[props.body_raw]` reset before being kept
+
+
+### A clipped card frames the wrong task, and a drilled-in view re-roots, when a seq outlives its parse [](?id=persisted-seq-identity)
+
+On a folder board a clipped story card frames an arbitrary completed item part-way up the story instead of its first incomplete task. The story's own text never changes: editing ANY other file in the folder is enough to break it, and the card stays wrong until something re-runs the framing. The same defect re-roots a drilled-in view - scope the view to a heading, add a heading above it, and the view silently comes back scoped to whichever note now holds the old number.
+
+One root cause wearing three hats. A `seq` is a document-order index reassigned from scratch on every parse and renumbered globally by `mergeAggregateRoot` when the per-file trees are re-interleaved, so it addresses a position in the current tree, not a note. `useMarkdownNoteBodyScroll` cached `findFirstIncompleteTaskSeq` in a `useMemo` keyed on `body_raw`, but `seq` is not a function of `body_raw`, so a renumber driven by a different file left the cache holding a number that resolved to a different note in the same card. `parent_context_seq` was persisted to view-managed state as the note-hierarchy scope, so it went stale the same way one re-parse later. And `notes.at(seq)` was used as a lookup in `AutoView` and `useViewContext`, which is only correct for a plain parse: `flattenSingleFileStories` lifts `###` stories out from under their `##` epics without renumbering, so past the first epic every note sits at an index below its seq.
+
++ background
+  + third rediscovery of the same rule: persisted focus/selection stored raw seqs until `view_focused_ids` / `view_selected_ids` replaced them, then the card framing, now the view scope
+  + each presented as a caching or scrolling problem rather than an identity problem, and each cost far more to diagnose than to fix, so the rule is now written down rather than re-derived
++ scope
+  + derive the first-incomplete-task seq per render; one effect with an explicit precedence order (not clipped, then caret-aware, then task-aware)
+  + persist `parent_context_id` in place of `parent_context_seq` end to end, and re-resolve it every render
+  + `findNoteBySeq` as the only sanctioned seq lookup into the flat notes list
+  + out of scope: the byte-offset descendant `stable_id` churn, which is [[note-ui-state-by-identity]] phase 1
++ acceptance criteria
+  + no seq is cached in a memo, written to view-managed state, stashed in a ref, or persisted anywhere
+  + a clipped card frames its first incomplete task regardless of what else in the folder changed
+  + a drilled-in view stays on the note it was scoped to across a re-parse, and falls back to the root when that note is renamed or deleted
+  + `notes.at(seq)` appears nowhere as a note lookup
++ [X] drop the `body_raw`-keyed memo and merge the two framing effects into one with an explicit precedence order
+  + `applyBodyScroll` now reads `scrollTop` back rather than trusting the requested value: the browser clamps a write the body cannot satisfy, and `scrolled_top` drives the top fade, so the overlays must describe where the body actually is. A clamp is debug-logged
+  + one behaviour delta from the merge, kept deliberately: a focused body whose caret resolves to no body item now falls through to the task framing instead of leaving scrollTop untouched, and says so in the log
++ [X] persist the view's note-hierarchy scope as `parent_context_id` and re-resolve it every render
+  + `resolveParentContextNote` mirrors `resolveFocusedNote`'s precedence chain: exact `stable_id`, then the authored `nt_breadcrumb_last` headline label, then undefined so the view lands on the root rather than pinning to whatever inherited the number
+  + `setParentContextSeq` becomes `setParentContextId` across `NoteHandlers`, `ViewApi`, `BreadcrumbNoteSegments`, `BreadcrumbTrail`, `GenericViewBreadcrumb`, `useViewHandlers` and `useViewNavigation`; drill-out passes the grandparent's `stable_id`, and `undefined` re-roots at the document root
+  + `FileIntegrationDeclaration.parent_context_seq` becomes `parent_context_label`: the authored label is carried through rather than the seq it resolved to at declaration time, because the view re-resolves it against each later parse
+  + `migrateSavedState` drops any legacy persisted `parent_context_seq`. Without it the spread merge in `handleSetViewManagedState` keeps the stale value forever, it wins the scope ternary whenever `parent_context_id` is cleared, and drill-out-to-root becomes a permanent no-op for an upgrading user
+  + `breadcrumbSeqForLabel` became `breadcrumbNoteForLabel` and returns the note: both callers wanted the note, and returning a seq from a resolver is the pattern this story exists to retire
++ [X] add `findNoteBySeq` and route `AutoView` and `useViewContext` through it instead of `notes.at(seq)`
++ [X] write the rule down: a CODING_STANDARDS section on seq lifetime, plus the seq contract in the `NoteProps` header
++ [X] playwright: a clipped card frames its first incomplete task, and still does after an unrelated file in the folder grows
+  + `playwright/specs/card-task-framing.spec.ts` with three fixtures; two files are needed and the untouched story must sort after the file that grows, so its notes are the ones renumbered
+  + `manual-expand.md` cannot catch this: its first incomplete task is the first line of the body, so a stale seq still lands near scrollTop 0 and passes for the wrong reason
+  + verified red before green - against the pre-fix hook the first incomplete task sits 187px from the body top instead of 40px
++ [X] jest: the identity resolvers and every path that writes or reads the scope
+  + `findNoteBySeq` matches on seq rather than position, asserted against a gapped list where `notes.at(5)` returns undefined
+  + `resolveParentContextNote` follows the note through a renumber, falls back to the authored label, and returns undefined rather than the note that inherited the number
+  + `useViewContext` keeps the scope on the same note across a renumber, and lands on the root for an unresolvable id
+  + `useViewHandlers.setParentContextId` persists `parent_context_id` and never a seq; `useViewNavigation` drill-in dispatches a `stable_id`, bails when the note has none, and drill-out dispatches the grandparent's id or undefined at the top level
+  + `migrateSavedState` drops a legacy `parent_context_seq` and leaves `parent_context_id` intact
++ [X] `pnpm run check` green
++ manual: on a folder board, open a long story card and confirm it frames the first unticked task with a little completed context above it
++ manual: edit an unrelated file in the same folder and confirm the card's framing does not move
++ manual: drill into a story, add a heading above it in the file, and confirm the view stays scoped to the same story
++ follow-ups not taken here
+  + `keyboard-navigation.spec.ts`'s drillIn / drillOut tests assert only that `[data-parent-content-seq]` exists and compare nothing across the action, so neither can fail; the new jest cases cover the same paths deterministically, but the specs want repairing
+  + `useMarkdownNoteBodyScroll` still has no jest coverage; the framing precedence is proven only through playwright

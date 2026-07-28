@@ -1,6 +1,6 @@
 import Debug from "debug";
 import type { ReactElement } from "react";
-import { aggregateNoteLinetags, isAggregateRoot, majorityNgView } from "../../lib/noteops";
+import { aggregateNoteLinetags, findNoteBySeq, isAggregateRoot, majorityNgView } from "../../lib/noteops";
 import { resolveNamespacedTag } from "../../lib/linetagops";
 import type { ViewProps } from "../../types/ViewProps";
 import type { LineTag } from "../../types/NoteProps";
@@ -38,10 +38,13 @@ export default function AutoView(props: ViewProps): ReactElement {
         const level_tag = resolveNamespacedTag(attributes, 'level');
         if (view_tag?.value) {
             derived_attributes.type = view_tag.value;
-            const view_typing_note = (props.notes || []).at(view_tag.note_seq);
+            // match by seq, not index: the two disagree after flattenSingleFileStories lifts stories out of their epics
+            const view_typing_note = findNoteBySeq(props.notes, view_tag.note_seq);
             if (view_typing_note) {
                 derived_attributes.display_options.parent_context_seq = view_typing_note.seq;
+                derived_attributes.display_options.parent_context_id = view_typing_note.stable_id;
                 replaced_attributes.display_options.parent_context_seq = props.display_options?.parent_context_seq;
+                replaced_attributes.display_options.parent_context_id = props.display_options?.parent_context_id;
             }
         }
         if (level_tag?.value_numeric) {

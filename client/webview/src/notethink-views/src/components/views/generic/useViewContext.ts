@@ -5,9 +5,11 @@ import {
     findDeepestNoteByOriginPosition,
     findSelectedNotes,
     findSelectedNotesByOriginPosition,
+    findNoteBySeq,
     focusedChainFor,
     noteOrder,
     resolveFocusedNote,
+    resolveParentContextNote,
 } from "../../../lib/noteops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { ViewProps } from "../../../types/ViewProps";
@@ -63,9 +65,23 @@ export function useViewContext(props: ViewProps): ViewContext {
         },
     };
 
-    // parse parent note (often partly displayed)
-    const parent_context_seq: number = display_options?.parent_context_seq || 0;
-    const unparsed_parent_context: NoteProps | undefined = (props.notes || []).at(parent_context_seq);
+    /*
+     * parse parent note (often partly displayed). The scope arrives as parent_context_id (persisted,
+     * an identity) and is re-resolved against this parse; parent_context_seq is only the per-render
+     * result, either resolved here or already derived upstream by AutoView. Lookups go through
+     * findNoteBySeq rather than notes.at(seq), because the two disagree once
+     * flattenSingleFileStories has lifted stories out from under their epics.
+     */
+    const resolved_parent_context: NoteProps | undefined = display_options?.parent_context_id
+        ? resolveParentContextNote(display_options.parent_context_id, props.notes)
+        : findNoteBySeq(props.notes, display_options?.parent_context_seq || 0);
+    if (!resolved_parent_context && (display_options?.parent_context_seq ?? 0) !== 0) {
+        debug('parent_context_seq %d resolved to no note in this parse, scoping to the root', display_options.parent_context_seq);
+    }
+    // an unresolvable scope lands on the document root, the same note a seq of 0 resolves to
+    const unparsed_parent_context: NoteProps | undefined = resolved_parent_context ?? findNoteBySeq(props.notes, 0);
+    const parent_context_seq: number = unparsed_parent_context?.seq ?? 0;
+    display_options.parent_context_seq = parent_context_seq;
 
     // get latest updates: always take the `props` version of `note` attributes
     const parent_context = unparsed_parent_context ? {

@@ -253,16 +253,16 @@ describe('buildIntegrationDispatch', () => {
         expect(message).toEqual({ type: 'setIntegration', mode: INTEGRATION_MODE_CURRENT_FILE, path: '/repo/other.md' });
     });
 
-    it('auto reset to current_file with a declared note scope re-seeds parent_context_seq on the view id', () => {
+    it('auto reset to current_file with a declared note scope re-seeds parent_context_id on the view id', () => {
         const { updates } = buildIntegrationDispatch({
             is_auto: true,
             resolved_mode: INTEGRATION_MODE_CURRENT_FILE,
             folder_path: undefined,
-            seed_parent_context_seq: 4,
+            seed_parent_context_id: 'Backend',
             view_id: 'doc-1',
             view_state_ids: ['doc-1'],
         });
-        expect(updates).toContainEqual({ id: 'doc-1', display_options: { parent_context_seq: 4 } });
+        expect(updates).toContainEqual({ id: 'doc-1', display_options: { parent_context_id: 'Backend' } });
     });
 
     it('folder with no resolvable scope path posts no setIntegration message', () => {

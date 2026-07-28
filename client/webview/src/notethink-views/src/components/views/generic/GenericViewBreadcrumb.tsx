@@ -57,7 +57,7 @@ export default function GenericViewBreadcrumb(component_props: GenericViewBreadc
             onCollisionsClick={onCollisionsClick}
             onLeafClick={onLeafClick}
             handlers={{
-                setParentContextSeq: handlers?.setParentContextSeq
+                setParentContextId: handlers?.setParentContextId
             }}
             parent_notes={parentContext ? parentContext.parent_notes?.concat([parentContext]) : []}
         />

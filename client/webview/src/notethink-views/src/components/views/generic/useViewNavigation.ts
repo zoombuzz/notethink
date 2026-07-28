@@ -62,21 +62,25 @@ export function useViewNavigation(input: ViewNavigationInput): void {
             case 'drillIn': {
                 if (!focused_notes_list.length) {break;}
                 const deepest_note = focused_notes_list[focused_notes_list.length - 1];
-                if (deepest_note.child_notes?.length) {
-                    handlers.setParentContextSeq?.(deepest_note.seq);
+                if (!deepest_note.child_notes?.length) {break;}
+                if (!deepest_note.stable_id) {
+                    debug('drillIn: note seq=%d has no stable_id to scope to', deepest_note.seq);
+                    break;
                 }
+                handlers.setParentContextId?.(deepest_note.stable_id);
                 break;
             }
             case 'drillOut': {
                 if (parent_context_seq === 0) {break;}
-                // navigate to grandparent or root
+                // navigate to grandparent, or back to the root when there is no grandparent
                 const current_parent = parent_context;
-                if (current_parent?.parent_notes?.length) {
-                    const grandparent = current_parent.parent_notes[current_parent.parent_notes.length - 1];
-                    handlers.setParentContextSeq?.(grandparent.seq);
-                } else {
-                    handlers.setParentContextSeq?.(0);
+                const grandparent = current_parent?.parent_notes?.length
+                    ? current_parent.parent_notes[current_parent.parent_notes.length - 1]
+                    : undefined;
+                if (grandparent && !grandparent.stable_id) {
+                    debug('drillOut: grandparent seq=%d has no stable_id, re-rooting to the document root instead', grandparent.seq);
                 }
+                handlers.setParentContextId?.(grandparent?.stable_id);
                 break;
             }
         }

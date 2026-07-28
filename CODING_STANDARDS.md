@@ -119,6 +119,24 @@ Every note has a `stable_id` field (the field name is fixed). Its value has two 
 
 **Implementer rule:** transient code uses the implicit derived id and writes nothing to the file. Write an explicit `id=` linetag only when a durable artifact (a `[[…]]` cross-reference, a user-authored link) needs to survive across sessions or renames. See [AUTHORING_GUIDE.md - Stable ids: implicit vs explicit](./AUTHORING_GUIDE.md#stable-ids-implicit-vs-explicit) for the full decision rules.
 
+### A `seq` is valid only within the render pass that derived it
+
+`note.seq` is a document-order index, reassigned from scratch on every parse and renumbered globally by `mergeAggregateRoot` whenever the per-file trees are re-interleaved. It addresses a *position in the current tree*, not a note.
+
+**The rule:** the moment a `seq` outlives a re-parse, it is wrong. If a value crosses an update boundary - cached in a `useMemo`, written to view-managed state, stashed in a ref, or emitted into the DOM to be looked up by a later effect - it must be a `stable_id` (identity) or a source offset (position), never a `seq`. Resolve it back to a `seq` on read, against the tree you are about to render.
+
+Same-pass use is fine and is the cheapest option: derive a `seq`, use it, discard it. `focused_seqs`, `resolveCaretTarget`'s `v<view>-n<seq>` element id, and `renderBodyItems`' React key are all correct because the derivation and the consumption happen in one render.
+
+There is no mechanical check for this. The tell is a `seq` on the right-hand side of an assignment that outlives the render: a dependency array, a `setViewManagedState` payload, a `useRef`, a `data-` attribute paired with a stored lookup key.
+
+**Why this rule exists.** It has been rediscovered three times.
+
+1. Persisted focus/selection stored raw seqs, so a drag-reorder made the highlight jump to whichever note inherited the number. Fixed by storing `stable_id`s (`view_focused_ids` / `view_selected_ids`, see `writeViewInteractionState`).
+2. `useMarkdownNoteBodyScroll` cached the first-incomplete-task `seq` behind a `body_raw` key. `seq` is not a function of `body_raw`, so an edit to *any other file* in a folder-mode board renumbered the tree and left the card framing an arbitrary completed item further up the story. Fixed by deriving it per render.
+3. `parent_context_seq` was persisted as the view's note-hierarchy scope, so an edit above the scoped heading silently re-rooted the view on a different note. Fixed by persisting `parent_context_id` and re-resolving it through `resolveParentContextNote`.
+
+Each was a real user-visible bug, each looked like a caching or scrolling problem rather than an identity problem, and each cost far more to diagnose than to fix.
+
 ## Import Organization
 
 ### Import Placement

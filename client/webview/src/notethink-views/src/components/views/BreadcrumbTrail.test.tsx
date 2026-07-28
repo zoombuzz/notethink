@@ -61,36 +61,36 @@ describe('BreadcrumbTrail', () => {
         expect(separators).toHaveLength(1);
     });
 
-    it('calls setParentContextSeq when a breadcrumb is clicked', () => {
-        const set_parent_context_seq = jest.fn();
-        const parent1 = makeNote({ seq: 0, headline_raw: '# Doc' });
-        const parent2 = makeNote({ seq: 5, headline_raw: '## Section' });
+    it('calls setParentContextId with the clicked note stable_id', () => {
+        const set_parent_context_id = jest.fn();
+        const parent1 = makeNote({ seq: 0, stable_id: 'doc:__root__', headline_raw: '# Doc' });
+        const parent2 = makeNote({ seq: 5, stable_id: 'doc:section', headline_raw: '## Section' });
         const current = makeNote({
             seq: 10,
             parent_notes: [parent1, parent2],
             handlers: {
-                setParentContextSeq: set_parent_context_seq,
+                setParentContextId: set_parent_context_id,
             },
         });
         render(<BreadcrumbTrail {...current} />);
         fireEvent.click(screen.getByText('# Doc'));
-        expect(set_parent_context_seq).toHaveBeenCalledWith(0);
+        expect(set_parent_context_id).toHaveBeenCalledWith('doc:__root__');
     });
 
-    it('calls setParentContextSeq with correct seq for non-first breadcrumb', () => {
-        const set_parent_context_seq = jest.fn();
-        const parent1 = makeNote({ seq: 0, headline_raw: '# Doc' });
-        const parent2 = makeNote({ seq: 5, headline_raw: '## Section' });
+    it('calls setParentContextId with the stable_id for a non-first breadcrumb, never the seq', () => {
+        const set_parent_context_id = jest.fn();
+        const parent1 = makeNote({ seq: 0, stable_id: 'doc:__root__', headline_raw: '# Doc' });
+        const parent2 = makeNote({ seq: 5, stable_id: 'doc:section', headline_raw: '## Section' });
         const current = makeNote({
             seq: 10,
             parent_notes: [parent1, parent2],
             handlers: {
-                setParentContextSeq: set_parent_context_seq,
+                setParentContextId: set_parent_context_id,
             },
         });
         render(<BreadcrumbTrail {...current} />);
         fireEvent.click(screen.getByText('## Section'));
-        expect(set_parent_context_seq).toHaveBeenCalledWith(5);
+        expect(set_parent_context_id).toHaveBeenCalledWith('doc:section');
     });
 
     it('does not render separator before first item', () => {

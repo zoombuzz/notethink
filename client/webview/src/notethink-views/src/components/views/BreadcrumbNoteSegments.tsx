@@ -10,7 +10,7 @@ const debug = Debug("nodejs:notethink-views:BreadcrumbNoteSegments");
 
 interface BreadcrumbNoteSegmentsProps {
     notes: NoteProps[];
-    onNoteClick?: (seq: number) => void;
+    onNoteClick?: (id: string | undefined) => void;
 }
 
 /**
@@ -43,7 +43,7 @@ export default function BreadcrumbNoteSegments(props: BreadcrumbNoteSegmentsProp
                     <button className={item.display_options?.additional_classes?.join(' ')}
                             aria-label={stripHeadlineLinetags(item.headline_raw)}
                             onClick={(event: MouseEvent<HTMLElement>) => {
-                                props.onNoteClick?.(item.seq);
+                                props.onNoteClick?.(item.stable_id);
                             }}
                     >
                         <span>{item.headline}</span>

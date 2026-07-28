@@ -324,6 +324,47 @@ describe('useViewHandlers setViewInteractionState', () => {
     });
 });
 
+describe('useViewHandlers setParentContextId', () => {
+    // the payload must carry the id and never a seq: a persisted seq is exactly the bug this key replaced
+    it('persists the scope as parent_context_id on the view own id', () => {
+        const set_view_managed_state = jest.fn();
+        const props = makeProps({
+            handlers: {
+                setViewManagedState: set_view_managed_state,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: jest.fn(),
+            },
+        });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.setParentContextId!('doc:story');
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: props.id,
+            type: props.type,
+            display_options: { parent_context_id: 'doc:story' },
+        }]);
+    });
+
+    it('persists undefined to re-root the view at the document root', () => {
+        const set_view_managed_state = jest.fn();
+        const props = makeProps({
+            handlers: {
+                setViewManagedState: set_view_managed_state,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: jest.fn(),
+            },
+        });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.setParentContextId!(undefined);
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: props.id,
+            type: props.type,
+            display_options: { parent_context_id: undefined },
+        }]);
+    });
+});
+
 describe('useViewHandlers handle_folder_click congruence', () => {
     function folderClick(file_declared_integration: ViewProps['file_declared_integration']): { set_view_managed_state: jest.Mock; post_message: jest.Mock } {
         const set_view_managed_state = jest.fn();

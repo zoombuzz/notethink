@@ -123,7 +123,7 @@ describe('docops.resolveFileIntegrationDeclaration', () => {
         expect(decl.integration_path).toBe('/repo/portfolio');
     });
 
-    it('resolves an nt_breadcrumb_last epic label to a parent_context_seq in current_file mode', () => {
+    it('resolves an nt_breadcrumb_last epic label to a parent_context_label in current_file mode', () => {
         const decl = resolveFileIntegrationDeclaration(
             parsedDoc([
                 { line: '# Atlas [](?nt_breadcrumb_last=Backend)', depth: 1 },
@@ -134,11 +134,11 @@ describe('docops.resolveFileIntegrationDeclaration', () => {
         );
         expect(decl.mode).toBe('current_file');
         expect(decl.integration_path).toBeUndefined();
-        // seq is assigned in document order by convertMdastToNoteHierarchy: root=0, H1=1, ## Backend=2
-        expect(decl.parent_context_seq).toBe(2);
+        // the authored label is carried through, not the seq it resolved to
+        expect(decl.parent_context_label).toBe('Backend');
     });
 
-    it('gives a folder-segment match precedence over a same-label heading (folder wins, no parent_context_seq)', () => {
+    it('gives a folder-segment match precedence over a same-label heading (folder wins, no parent_context_label)', () => {
         const decl = resolveFileIntegrationDeclaration(
             parsedDoc([
                 { line: '# Atlas [](?nt_breadcrumb_last=portfolio)', depth: 1 },
@@ -149,7 +149,7 @@ describe('docops.resolveFileIntegrationDeclaration', () => {
         // the default parsedDoc path is /repo/portfolio/atlas.md, so "portfolio" matches a folder segment
         expect(decl.mode).toBe('folder');
         expect(decl.integration_path).toBe('/repo/portfolio');
-        expect(decl.parent_context_seq).toBeUndefined();
+        expect(decl.parent_context_label).toBeUndefined();
     });
 
     it('degrades to the default scope with no throw when nt_breadcrumb_last matches nothing', () => {

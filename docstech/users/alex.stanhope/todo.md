@@ -1,6 +1,65 @@
 # Todo [](?nt_view=kanban)
 
 
+### Per-note UI state keyed by identity, not React instance [](?id=note-ui-state-by-identity&status=doing)
+
+Follow-up to [[manual-expand-survives-edits]] (shipped 0.3.32), which closed the body-edit collapse but left the root cause standing. Manual expansion lives in component-instance state (`MarkdownNote.tsx:50`), so its lifetime is decided by the React key, and the two views fail in mirror-image ways: document view keys by `note.seq` (`DocumentView.tsx:43`, `renderops.tsx:141`) so the instance outlives the note and a story inserted above hands its expanded flag to a different note; kanban keys by `stable_id` (`noteops.ts:588`) so the instance dies with the slot and dragging a card to another column loses its expansion. Making document view behave like kanban would swap the leak for the loss - the fix is to stop attaching note state to React instances at all.
+
++ goal
+  + manual expansion is a property of the note, not of a React instance: it survives seq reassignment, remount into a different parent, and reload
+  + no per-note UI flag remains in component-instance state, so this class of bug cannot recur
++ background
+  + the pattern already exists: `writeViewInteractionState` (`viewstateops.ts:200`) stores focus/selection as `view_focused_ids` / `view_selected_ids`, keyed by stable_id, documented as surviving re-parse and drag-reorder
+  + descendant stable_ids are byte offsets - `${story_stable_id}:${relative_offset}` (`mergeAggregateRoot.ts:242,523`) - so any length-changing edit earlier in the same story renumbers every later descendant
+  + that churn already affects the existing focused/selected ids in drilled-in views; it is masked because the editor-derived match usually wins the tiebreak (CODING_STANDARDS > View interaction state)
+  + kanban's collapse-on-column-move is recorded as "(unchanged)" in the shipped story - it is this root cause surfacing, not a design decision
++ phase 1 - stabilise descendant stable_ids
+  + replace the byte-offset suffix with an ordinal child path (`${story_stable_id}:2.1.3`), computed in the same walk
+  + churns only on sibling insert/remove, never on a keystroke earlier in the story
+  + both walks change together: `walkStorySubtree` and `walkSingleFileStableIds`
+  + explicit `[](?id=)` linetags are unaffected; they already win for story roots
++ phase 2 - move expansion into view-managed state
+  + add `view_expanded_ids` to `NoteDisplayOptions` alongside the existing id lists
+  + `MarkdownNote` reads expansion from it; "Show more" / "Show less" become `setViewManagedState` dispatches
+  + delete the local `manually_expanded` state - this is what makes the bug structurally unable to recur
+  + `autoExpandFocusedNote` keeps precedence; the id list is the manual override layer
+  + this phase alone fixes the user-visible bug in both views, without touching either view's keys
++ phase 3 - key document view by identity
+  + `DocumentView.tsx:43` and `renderops.tsx:141` move from `note.seq` to `note.stable_id ?? note.seq`
+  + safe only after phase 1; churning ids would remount the whole tree on every edit
+  + by here it is about reconciliation generally (scroll position, text selection, focus), not expansion
+  + overlaps [[kanban-incremental-merge]]'s "key React and memo comparisons on stable_id" task - fold the two, do not build it twice
++ out of scope
+  + per-note expansion authored in the file (an `nt_expanded` linetag) - no demand for it
+  + virtualization interactions - [[kanban-virtualized-columns]] adds another remount source that phase 2 makes harmless; land in that order
++ files
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` - both stable_id walks
+  + `client/webview/src/notethink-views/src/types/NoteProps.ts` - `view_expanded_ids` on NoteDisplayOptions
+  + `client/webview/src/notethink-views/src/lib/viewstateops.ts` - expansion dispatch beside writeViewInteractionState
+  + `client/webview/src/notethink-views/src/components/notes/MarkdownNote.tsx` - read from state, drop the useState
+  + `client/webview/src/notethink-views/src/components/views/DocumentView.tsx` and `lib/renderops.tsx` - keys
++ [ ] surface the `view_expanded_ids` key name for sign-off before laying it down (persisted setState shape, so the permanent-name check applies)
++ [ ] decide whether expansion carries across a view-type switch on the same doc (`resolveViewStateId` returns the view's own id in current_file mode)
++ [ ] decide the cap on the persisted id list (most recent N, or clear on integration-mode change) so [[webview-state-persistence-diet]] stays honest
++ [ ] phase 1: ordinal child path replaces the byte-offset suffix in both walks
++ [ ] phase 2: `view_expanded_ids` on NoteDisplayOptions plus dispatch; delete the local expand state
++ [ ] phase 3: document view and renderBodyItems key by `stable_id ?? seq` (coordinate with [[kanban-incremental-merge]])
++ [ ] jest: expansion survives a seq reassignment (a story inserted above) in document view
++ [ ] jest: expansion survives a remount into a different parent (the kanban column-move case)
++ [ ] jest: a descendant stable_id is unchanged when an earlier sibling grows by one character
++ [ ] playwright: extend `manual-expand-persists.spec.ts` - drag an expanded card to another column, still expanded on landing
++ [ ] playwright: drill into a story, expand a descendant, edit an earlier sibling, still expanded
++ [ ] `pnpm run check` green
++ manual: expand a card, drag it across columns, confirm it stays expanded
++ manual: expand a card, reload the window, confirm it is still expanded
++ manual: in a drilled-in story, expand a descendant then type in an earlier sibling, confirm no collapse
++ acceptance criteria
+  + no per-note UI flag remains in component-instance state in `MarkdownNote`
+  + expansion survives a column move, a seq reassignment, and a reload
+  + a descendant's stable_id does not change when text earlier in its story changes length
+  + document view and kanban key their cards the same way
+
+
 ### View settings drawer: view tree and inherited settings [](?id=view-settings-tree-drawer)
 
 The deep integration [[drawer-tabs-and-jump-integration]] deliberately left alone (it landed the thin move: the view-type `<select>` into `SettingsCommonControls.tsx:48`, tab titled by resolved type). This is the real thing: the drawer becomes a two-pane selector + settings, per the picked mockup variant (`docstech/plans/view-settings-mockup.html`). FAST-FOLLOW, not in the first build push - it waits on the pane-design pick and on the functional stories landing.

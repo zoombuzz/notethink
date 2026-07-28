@@ -90,7 +90,7 @@ export function useAutoIntegration(deps: UseAutoIntegrationDeps): FileIntegratio
             is_auto: true,
             resolved_mode: action.resolved_mode,
             folder_path: action.folder_path,
-            seed_parent_context_seq: action.resolved_mode === INTEGRATION_MODE_CURRENT_FILE ? decl.parent_context_seq : undefined,
+            seed_parent_context_id: action.resolved_mode === INTEGRATION_MODE_CURRENT_FILE ? decl.parent_context_label : undefined,
             view_id: opened_doc.id,
             view_state_ids: Object.keys(view_states_ref.current ?? {}),
         });

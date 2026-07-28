@@ -424,18 +424,56 @@ export function findFirstIncompleteTaskSeq(items: Array<NoteProps | MdastNode>):
 }
 
 /**
- * Resolve an `nt_breadcrumb_last` epic/story label against a flat note list: return the seq of
- * the first heading note whose stripped headline equals `label`, for seeding
- * `parent_context_seq` so the view opens scoped to that note's subtree. Only heading notes are
- * considered (epics / stories are headings); the synthetic seq-0 root and body items are
- * skipped. Returns undefined when nothing matches (caller leaves the scope at the default).
+ * resolve an `nt_breadcrumb_last` epic/story label against a flat note list: return the first
+ * heading note whose stripped headline equals `label`, for seeding `parent_context_id` so the
+ * view opens scoped to that note's subtree. Only heading notes are considered (epics / stories
+ * are headings); the synthetic seq-0 root and body items are skipped. Returns undefined when
+ * nothing matches (caller leaves the scope at the default). Returns the note rather than its
+ * seq because no caller wants a number that stops being valid after the next parse.
  */
-export function breadcrumbSeqForLabel(label: string, notes: Array<NoteProps> | undefined): number | undefined {
+export function breadcrumbNoteForLabel(label: string, notes: Array<NoteProps> | undefined): NoteProps | undefined {
     if (!label || !notes?.length) { return undefined; }
     for (const note of notes) {
         if (note.type !== 'heading') { continue; }
-        if (stripHeadlineLinetags(note.headline_raw ?? '') === label) { return note.seq; }
+        if (stripHeadlineLinetags(note.headline_raw ?? '') === label) { return note; }
     }
+    return undefined;
+}
+
+/**
+ * look a note up by its seq in the flat note list a view receives.
+ *
+ * Use this rather than `notes.at(seq)`. The two agree for a plain parse, where seqs are assigned
+ * in the same document-order walk that builds the list, but they diverge after
+ * flattenSingleFileStories: it lifts `###` stories out from under their `##` epics and re-links
+ * children_body to the lifted set WITHOUT renumbering, so the dropped epic headings leave gaps and
+ * every note past the first epic sits at an index below its seq. Indexing by seq there silently
+ * returns a different note.
+ */
+export function findNoteBySeq(notes: Array<NoteProps> | undefined, seq: number): NoteProps | undefined {
+    if (!notes?.length) { return undefined; }
+    return notes.find(n => n.seq === seq);
+}
+
+/**
+ * resolve the persisted `parent_context_id` to the note the view should scope to, against the
+ * tree of the current parse. Mirrors resolveFocusedNote's precedence chain, for the same reason:
+ * the stored value outlives the tree it was written against, so it has to be re-derived rather
+ * than trusted.
+ *
+ * Order: an exact `stable_id` match (what a drill-in or a breadcrumb click writes), then the
+ * authored `nt_breadcrumb_last` headline label (the file-declared seed, which has no stable_id
+ * available at the point it is resolved). Returns undefined when the id resolves to nothing - a
+ * renamed or deleted story - so the caller scopes to the root rather than pinning the view to
+ * whichever note inherited the number.
+ */
+export function resolveParentContextNote(parent_context_id: string | undefined, notes: Array<NoteProps> | undefined): NoteProps | undefined {
+    if (!parent_context_id || !notes?.length) { return undefined; }
+    const by_stable_id = notes.find(n => n.stable_id === parent_context_id);
+    if (by_stable_id) { return by_stable_id; }
+    const by_label = breadcrumbNoteForLabel(parent_context_id, notes);
+    if (by_label) { return by_label; }
+    debug('parent_context_id %s matched no note in the current parse, scoping to the root', parent_context_id);
     return undefined;
 }
 

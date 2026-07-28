@@ -28,7 +28,7 @@ export interface ViewProps {
     file_declared_integration?: {
         mode: ConcreteIntegrationMode;
         integration_path?: string;
-        parent_context_seq?: number;
+        parent_context_label?: string;
     };
     display_options?: NoteDisplayOptions;
     nested?: {
@@ -53,7 +53,7 @@ export interface ViewProps {
 
 /**
  * ViewApi, the handler surface a view exposes.
- * - setParentContextSeq and below are injected by functional components in certain situations
+ * - setParentContextId and below are injected by functional components in certain situations; the id is a note stable_id (undefined re-roots the view at the document root), never a seq, because it is persisted and re-resolved after the next re-parse
  * - postMessage: extension communication (view→host dispatch channel)
  * - descendToFolder: switch the view into folder integration mode at the given absolute folder path; same gesture the breadcrumb uses, exposed here so the origin pill can descend into its project subfolder
  * - setViewInteractionState: write view-driven focused/selected stable_ids (and the optional virtual caret offset) to the canonical view-state key (FOLDER_VIEW_STATE_ID in folder mode, view's own id in current_file mode); used by click handler, getClearHandler, and keyboard navigation so any path that moves focus also updates the view-driven state (view-driven-wins policy in useViewContext means an editor-side revealRange alone cannot move view focus). the virtual caret is the board-as-editor caret used when no editor is live
@@ -64,7 +64,7 @@ export interface ViewApi {
     setViewManagedState: (updates: Array<Record<string, unknown>>) => void;
     deleteViewFromManagedState: (view_id?: string) => void;
     revertAllViewsToDefaultState: () => void;
-    setParentContextSeq?: (seq: number) => void;
+    setParentContextId?: (id: string | undefined) => void;
     getClearHandler?: (focused_notes?: NoteProps[]) => ((event: MouseEvent<HTMLElement>) => void);
     setCaretPosition?: (position: number) => void;
     click?: NoteHandlers['click'];

@@ -113,6 +113,32 @@ describe('vscodeops', () => {
             expect(result?.viewStates).toHaveProperty('__aggregate__');
         });
 
+        /*
+         * a persisted seq outlives the parse that produced it, and handleSetViewManagedState merges by
+         * spread, so without this drop a legacy value would survive forever and win useViewContext's
+         * scope ternary whenever parent_context_id is cleared - making drill-out-to-root a no-op
+         */
+        it('drops a legacy persisted parent_context_seq', () => {
+            const input: VSCodeState = {
+                viewStates: {
+                    'v1': { display_options: { parent_context_seq: 7, integration_mode: 'current_file' } },
+                },
+            };
+            const result = migrateSavedState(input);
+            expect(result?.viewStates?.['v1'].display_options).not.toHaveProperty('parent_context_seq');
+            expect(result?.viewStates?.['v1'].display_options?.integration_mode).toBe('current_file');
+        });
+
+        it('leaves parent_context_id intact', () => {
+            const input: VSCodeState = {
+                viewStates: {
+                    'v1': { display_options: { parent_context_id: 'doc:story' } },
+                },
+            };
+            const result = migrateSavedState(input);
+            expect(result?.viewStates?.['v1'].display_options?.parent_context_id).toBe('doc:story');
+        });
+
         it('migrates integration_mode "directory" → "folder"', () => {
             const input: VSCodeState = {
                 viewStates: {

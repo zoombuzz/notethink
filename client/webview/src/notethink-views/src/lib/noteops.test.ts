@@ -30,7 +30,9 @@ import {
     formatColumnLabel,
     findStableIdCollisions,
     collisionNoteLocation,
-    breadcrumbSeqForLabel,
+    breadcrumbNoteForLabel,
+    findNoteBySeq,
+    resolveParentContextNote,
 } from './noteops';
 import type { NoteProps, NoteOrigin, TextSelection, LineTag } from '../types/NoteProps';
 
@@ -51,7 +53,7 @@ function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
     };
 }
 
-describe('breadcrumbSeqForLabel', () => {
+describe('breadcrumbNoteForLabel', () => {
     // the matching paragraph (seq 1) precedes the matching heading (seq 2) so the heading-only guard is load-bearing: without it, first-match iteration would return the paragraph's seq 1 instead of 2
     const notes: NoteProps[] = [
         makeNote({ seq: 0, type: 'root', headline_raw: '' }),
@@ -60,19 +62,81 @@ describe('breadcrumbSeqForLabel', () => {
         makeNote({ seq: 3, type: 'heading', headline_raw: '### Wire alerts' }),
     ];
 
-    it('returns the seq of the heading whose stripped headline matches the label', () => {
-        expect(breadcrumbSeqForLabel('Backend', notes)).toBe(2);
-        expect(breadcrumbSeqForLabel('Wire alerts', notes)).toBe(3);
+    it('returns the heading whose stripped headline matches the label', () => {
+        expect(breadcrumbNoteForLabel('Backend', notes)?.seq).toBe(2);
+        expect(breadcrumbNoteForLabel('Wire alerts', notes)?.seq).toBe(3);
     });
 
     it('ignores non-heading notes that happen to match (heading at seq 2 wins over paragraph at seq 1)', () => {
-        expect(breadcrumbSeqForLabel('Backend', notes)).toBe(2);
+        expect(breadcrumbNoteForLabel('Backend', notes)?.seq).toBe(2);
     });
 
     it('returns undefined for an unmatched label, empty label, or empty list', () => {
-        expect(breadcrumbSeqForLabel('Missing', notes)).toBeUndefined();
-        expect(breadcrumbSeqForLabel('', notes)).toBeUndefined();
-        expect(breadcrumbSeqForLabel('Backend', undefined)).toBeUndefined();
+        expect(breadcrumbNoteForLabel('Missing', notes)).toBeUndefined();
+        expect(breadcrumbNoteForLabel('', notes)).toBeUndefined();
+        expect(breadcrumbNoteForLabel('Backend', undefined)).toBeUndefined();
+    });
+});
+
+describe('findNoteBySeq', () => {
+    /*
+     * the gap flattenSingleFileStories leaves: it lifts ### stories out from under their ## epics
+     * and re-links the walked tree to the lifted set without renumbering, so the dropped epic
+     * heading (seq 1) is absent and every note after it sits at an index one below its seq
+     */
+    const gapped: NoteProps[] = [
+        makeNote({ seq: 0, type: 'root', headline_raw: '' }),
+        makeNote({ seq: 2, type: 'heading', headline_raw: '### Story A' }),
+        makeNote({ seq: 5, type: 'heading', headline_raw: '### Story B' }),
+    ];
+
+    it('matches on seq rather than position, so a gapped list still resolves', () => {
+        expect(findNoteBySeq(gapped, 5)?.headline_raw).toBe('### Story B');
+        // what notes.at(5) would have done instead
+        expect(gapped.at(5)).toBeUndefined();
+    });
+
+    it('returns undefined for an unmatched seq or an empty list', () => {
+        expect(findNoteBySeq(gapped, 4)).toBeUndefined();
+        expect(findNoteBySeq(undefined, 0)).toBeUndefined();
+    });
+});
+
+describe('resolveParentContextNote', () => {
+    const notes: NoteProps[] = [
+        makeNote({ seq: 0, type: 'root', headline_raw: '' }),
+        makeNote({ seq: 1, type: 'heading', stable_id: 'doc:backend', headline_raw: '## Backend' }),
+        makeNote({ seq: 2, type: 'heading', stable_id: 'doc:wire-alerts', headline_raw: '### Wire alerts' }),
+    ];
+
+    it('resolves a stable_id to the note holding it in this parse', () => {
+        expect(resolveParentContextNote('doc:wire-alerts', notes)?.seq).toBe(2);
+    });
+
+    /*
+     * the point of the whole change: the persisted id addresses the note, so a renumber that moves
+     * "Wire alerts" from seq 2 to seq 7 must follow it rather than scoping to whatever now holds 2
+     */
+    it('follows the note when a re-parse renumbers it', () => {
+        const renumbered: NoteProps[] = [
+            makeNote({ seq: 0, type: 'root', headline_raw: '' }),
+            ...Array.from({ length: 6 }, (_unused, i) => makeNote({ seq: i + 1, type: 'heading', stable_id: `doc:filler-${i}`, headline_raw: `## Filler ${i}` })),
+            makeNote({ seq: 7, type: 'heading', stable_id: 'doc:wire-alerts', headline_raw: '### Wire alerts' }),
+        ];
+        expect(resolveParentContextNote('doc:wire-alerts', renumbered)?.seq).toBe(7);
+    });
+
+    it('falls back to the authored nt_breadcrumb_last headline label when no stable_id matches', () => {
+        expect(resolveParentContextNote('Backend', notes)?.seq).toBe(1);
+    });
+
+    it('returns undefined when the id matches nothing, rather than whatever inherited the number', () => {
+        expect(resolveParentContextNote('doc:deleted-story', notes)).toBeUndefined();
+    });
+
+    it('returns undefined for an absent id or an empty note list', () => {
+        expect(resolveParentContextNote(undefined, notes)).toBeUndefined();
+        expect(resolveParentContextNote('doc:backend', undefined)).toBeUndefined();
     });
 });
 

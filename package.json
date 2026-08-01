@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.33",
+  "version": "0.3.34",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -285,8 +285,8 @@
     "util": "^0.12.5"
   },
   "devDependencies": {
-    "@eslint/js": "9.39.4",
-    "@playwright/test": "^1.61.1",
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "^1.62.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/debug": "^4.1.13",
     "@types/mocha": "^10.0.10",
@@ -301,23 +301,23 @@
     "copy-webpack-plugin": "14.0.0",
     "css-loader": "^7.1.4",
     "debug": "^4.4.3",
-    "eslint": "9.39.4",
+    "eslint": "10.8.0",
     "mdast-util-from-markdown": "^2.0.3",
     "mdast-util-frontmatter": "^2.0.1",
     "mdast-util-gfm": "^3.1.0",
     "micromark-extension-frontmatter": "^2.0.0",
     "micromark-extension-gfm": "^3.0.0",
     "mocha": "^11.7.6",
-    "npm-check-updates": "^22.2.9",
+    "npm-check-updates": "^23.0.0",
     "path-browserify": "^1.0.1",
     "process": "^0.11.10",
-    "sass": "^1.101.6",
+    "sass": "^1.102.0",
     "sass-loader": "^17.0.0",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.6.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
-    "webpack": "^5.108.4",
-    "webpack-cli": "^7.2.1"
+    "webpack": "^5.109.2",
+    "webpack-cli": "^7.2.2"
   }
 }

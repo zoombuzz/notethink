@@ -4153,3 +4153,50 @@ One root cause wearing three hats. A `seq` is a document-order index reassigned 
 + follow-ups not taken here
   + `keyboard-navigation.spec.ts`'s drillIn / drillOut tests assert only that `[data-parent-content-seq]` exists and compare nothing across the action, so neither can fail; the new jest cases cover the same paths deterministically, but the specs want repairing
   + `useMarkdownNoteBodyScroll` still has no jest coverage; the framing precedence is proven only through playwright
+
+
+### Upgrade NPM packages for notethink (Wave 1 minor/patch + ncu 23 + eslint 10 unpin trial)
+
+The eslint 9 pin is gone. The unpin trial succeeded, both reject entries are removed from `.ncurc.json`, and notethink now runs eslint 10.8.0 with lint green and 1674 jest green. `.ncurc.json`'s reject list is empty for the first time in this repo's dependency-wave history.
+
++ minor/patch applied
+  + `@playwright/test` ^1.61.1 -> ^1.62.1
+  + `sass` ^1.101.6 -> ^1.102.0
+  + `webpack` ^5.108.4 -> ^5.109.2, the 5.109 line held by cooldown last wave
+  + `webpack-cli` ^7.2.1 -> ^7.2.2
++ approved major applied
+  + `npm-check-updates` ^22.2.9 -> ^23.0.0
++ eslint 10 unpin trial - PASSED, both pins removed
+  + the inherited rationale was wrong and is now retired. `eslint-plugin-react` has zero hits in `pnpm-lock.yaml`, so it was never in this repo's tree and "eslint-plugin-react has no eslint-10 release" could never have been notethink's blocker
+  + `eslint.config.mjs` imports exactly two packages, `@typescript-eslint/eslint-plugin` and `@typescript-eslint/parser`, both 8.65.0 and both peering `eslint ^8.57.0 || ^9.0.0 || ^10.0.0`
+  + the two eslint-adjacent devDeps the flat config does not import are eslint-10-ready too: `typescript-eslint@8.65.0` peers `^8.57.0 || ^9.0.0 || ^10.0.0`, `@stylistic/eslint-plugin@5.10.0` peers `^9.0.0 || ^10.0.0`
+  + the legacy `eslintConfig: {extends: ["react-app", "react-app/jest"]}` block in `client/webview/package.json` is inert under flat config and pulls nothing into the tree; `eslint-config-react-app` is absent from the lockfile as well
+  + `eslint` 9.39.4 -> 10.8.0 and `@eslint/js` 9.39.4 -> 10.0.1, both kept as exact pins with no caret, as they were before
+  + `pnpm install` resolved with no peer conflict and no unmet-peer warning
+  + lint green on eslint 10: 0 errors and the same 6 pre-existing warnings as last wave, with all three tsc projects clean
+  + jest 1674 green (248 extension + 136 webview + 1290 notethink-views), matching the recorded baseline exactly
++ verified the local eslint rule did not go silently inert under eslint 10
+  + `local/no-consecutive-line-comments` resolves its source via `context.sourceCode ?? context.getSourceCode()`, and eslint 10 removed `context.getSourceCode()`. The `??` covers it, but a green lint run cannot by itself distinguish "the rule passed" from "the rule never fired"
+  + proved it still fires by linting a throwaway `.ts` file holding two consecutive standalone `//` comments: reported `local/no-consecutive-line-comments` and exited 1. Probe file deleted afterwards
+
+Pins in effect after this wave (snapshot):
+- typescript @^6.0.3 (caret, no reject entry) - structural - held by peer ranges. `@typescript-eslint/parser@8.65.0` and `@typescript-eslint/eslint-plugin@8.65.0` both peer `typescript >=4.8.4 <6.1.0` (re-verified 2026-08-01 against the installed tree) and ts-jest peers `<7`. TS7 stays piloted in ledger only. Revisit when both peer ranges admit 7.x
+- nothing else. The `.ncurc.json` reject list is now empty
+
+Unpinned this wave:
+- eslint 9.39.4 -> 10.8.0 - reject entry REMOVED from `.ncurc.json`. The blocker was re-derived from this repo rather than inherited, and it does not exist here: no `eslint-plugin-react` anywhere in the tree, and every eslint consumer notethink actually has already peers `^10.0.0`
+- @eslint/js 9.39.4 -> 10.0.1 - reject entry REMOVED, same rationale. `@eslint/js` declares no peer dependencies at all, so it was only ever pinned to stay in lockstep with eslint
+
++ [X] run npm-check-updates
++ [X] revisit prior pins (trial the eslint 9 -> 10 unpin)
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
++ toolchain divergence re-noted, still deliberately NOT changed
+  + notethink's package.json declares no `packageManager` field and no `engines.node` field, while every other workspace project pins pnpm 11.x and node >=22.18.0
+  + left alone for the same reason as last wave: a VS Code extension publishes through vsce, which reads `engines.vscode`, and the marketplace does not consume `engines.node`. Adding either is the user's call
++ commit message draft
+  + notethink 0.3.34
+  + upgrade npm packages (wave 1, minor/patch) and unpin eslint 9 -> 10 after re-deriving the blocker
+  + ncu 23, webpack 5.109, playwright 1.62, sass 1.102
+  + tests 1674 jest

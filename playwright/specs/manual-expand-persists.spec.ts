@@ -29,7 +29,8 @@ test.describe('Manual expand survives content edits', () => {
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
     });
 
-    async function setupExpandedCard(page: Page): Promise<void> {
+    // expand the tall card and return the doc path it was injected under
+    async function setupExpandedCard(page: Page): Promise<string> {
         const { path: doc_path } = await injectDocsFromFixture(page, 'manual-expand.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
         await simulateSelectionChanged(page, doc_path, 2);
@@ -39,6 +40,7 @@ test.describe('Manual expand survives content edits', () => {
         await expect(show_more).toBeVisible();
         await show_more.click();
         await expect(page.getByRole('button', { name: /show less/i })).toBeVisible();
+        return doc_path;
     }
 
     test('a ticked checkbox does not collapse the expanded card', async ({ page }) => {
@@ -68,6 +70,35 @@ test.describe('Manual expand survives content edits', () => {
         await expect(doing_column.getByRole('heading', { name: 'Long Story' })).toHaveCount(0);
 
         // the fresh instance mounted under the destination column is still expanded
+        await expect(page.getByRole('button', { name: /show less/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /show more/i })).toHaveCount(0);
+    });
+
+    /*
+     * refresh-resilience test: the reload IS the behaviour under test, not a workaround. Expansion is
+     * keyed by stable_id and stable_id is re-derived from the same file content, so the id the reloaded
+     * view looks up is the id the persisted list already holds. The caret has to be replayed afterwards
+     * because AutoView resolves kanban from a selectionChanged and the harness has no editor to re-send
+     * one; a real host still has the document open and does. Docs themselves come back from the
+     * persisted state, so only the selection needs replaying.
+     */
+    test('an expanded card is still expanded after a reload', async ({ page }) => {
+        const doc_path = await setupExpandedCard(page);
+
+        // wait until the expansion has reached the (sessionStorage-backed) webview state before the reload
+        await expect.poll(() => page.evaluate(() => {
+            try {
+                const s = JSON.parse(sessionStorage.getItem('__vsCodeState') || '{}');
+                const states: Array<{ display_options?: { view_expanded_ids?: string[] } }> = Object.values(s.viewStates || {});
+                return states.flatMap((v) => v.display_options?.view_expanded_ids ?? []).length;
+            } catch { return 0; }
+        }), { timeout: 5000 }).toBeGreaterThan(0);
+
+        await page.reload();
+        await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
+        await simulateSelectionChanged(page, doc_path, 2);
+        await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
+
         await expect(page.getByRole('button', { name: /show less/i })).toBeVisible();
         await expect(page.getByRole('button', { name: /show more/i })).toHaveCount(0);
     });

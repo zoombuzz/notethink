@@ -1,7 +1,6 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { fixtureText } from '../helpers/fixtures';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
 import { pointerDrag } from '../helpers/pointer-drag';
 import { sendCommand } from '../helpers/send-command';
@@ -25,7 +24,6 @@ const REL_B = 'beta/docstech/board.md';
 const REPRO_DRAG_SETTLE = { pre_release_settle_ms: 120, post_release_settle_ms: 450 };
 
 function sha16(s: string): string { return crypto.createHash('sha256').update(s).digest('hex').slice(0, 16); }
-function fixtureText(fixture: string): string { return fs.readFileSync(path.join(__dirname, '..', 'fixtures', fixture), 'utf-8'); }
 
 async function setupFolderKanban(page: Page): Promise<void> {
     await injectMultipleDocsFromFixtures(page, [

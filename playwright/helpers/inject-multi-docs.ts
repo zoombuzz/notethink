@@ -1,7 +1,6 @@
 import { expect, type Page } from '@playwright/test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { fixtureText } from './fixtures';
 import { parse } from './parse-markdown';
 
 interface DocSpec {
@@ -20,8 +19,7 @@ export async function injectMultipleDocsFromFixtures(
     options: { workspace_root?: string } = {},
 ): Promise<Array<{ id: string; path: string; relative_path?: string }>> {
     const built = docs.map((d) => {
-        const fixture_path = path.join(__dirname, '..', 'fixtures', d.fixture);
-        const text = fs.readFileSync(fixture_path, 'utf-8');
+        const text = fixtureText(d.fixture);
         const id = crypto.createHash('sha256').update(d.doc_path).digest('hex').slice(0, 16);
         const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
         const mdast = parse(text);

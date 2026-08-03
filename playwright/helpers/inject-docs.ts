@@ -1,7 +1,6 @@
 import type { Page } from '@playwright/test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { fixtureText } from './fixtures';
 import { parse } from './parse-markdown';
 
 interface InjectOptions {
@@ -17,8 +16,7 @@ interface FixtureDoc {
 
 // read a fixture file and parse its markdown server-side (same mdast libraries as the extension) into the wire-format doc the extension would post
 function readFixtureDoc(fixture_name: string, doc_path?: string, workspace_root_or_options?: string | InjectOptions): FixtureDoc {
-    const fixture_path = path.join(__dirname, '..', 'fixtures', fixture_name);
-    const text = fs.readFileSync(fixture_path, 'utf-8');
+    const text = fixtureText(fixture_name);
     const resolved_path = doc_path || `/workspace/${fixture_name}`;
     const id = crypto.createHash('sha256').update(resolved_path).digest('hex').slice(0, 16);
     const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);

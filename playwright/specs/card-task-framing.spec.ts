@@ -1,6 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { fixtureOffsetOf } from '../helpers/fixtures';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
 import { sendCommand } from '../helpers/send-command';
 import { simulateSelectionChanged, simulateSelectionCleared } from '../helpers/simulate-selection';
@@ -23,15 +22,12 @@ import { simulateSelectionChanged, simulateSelectionCleared } from '../helpers/s
 const WORKSPACE_ROOT = '/mnt/workspace/active_development';
 const STORY_DOC = `${WORKSPACE_ROOT}/zulu/todo.md`;
 const OTHER_DOC = `${WORKSPACE_ROOT}/alpha/board.md`;
+const STORY_FIXTURE = 'task-framing.md';
+// the story's own headline, so a simulated caret lands on the story and not on one of its body items
+const STORY_HEADLINE = 'Release a video blog update';
 const FIRST_INCOMPLETE = 'work up ideas for simpler, shorter videos';
 // matches SCROLL_CONTEXT_PX in useMarkdownNoteBodyScroll
 const SCROLL_CONTEXT_PX = 40;
-
-// offset of the story headline text in the fixture, so a selection lands on the story but not on a body item
-function storyHeadlineOffset(): number {
-    const text = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'task-framing.md'), 'utf-8');
-    return text.indexOf('Release a video blog update');
-}
 
 // distance from the top of the clipped body to the top of the first incomplete task, in px
 async function taskOffsetFromBodyTop(page: Page, task_text: string): Promise<number | null> {
@@ -51,7 +47,7 @@ async function taskOffsetFromBodyTop(page: Page, task_text: string): Promise<num
 
 async function setupFolderBoard(page: Page, other_fixture: string): Promise<void> {
     await injectMultipleDocsFromFixtures(page, [
-        { fixture: 'task-framing.md', doc_path: STORY_DOC, relative_path: 'zulu/todo.md' },
+        { fixture: STORY_FIXTURE, doc_path: STORY_DOC, relative_path: 'zulu/todo.md' },
         { fixture: other_fixture, doc_path: OTHER_DOC, relative_path: 'alpha/board.md' },
     ], { workspace_root: WORKSPACE_ROOT });
 }
@@ -82,7 +78,7 @@ test.describe('Clipped card frames the first incomplete task', () => {
         await expect(page.locator('[role="rowheader"]', { hasText: 'a note added while the other file sat untouched' })).toHaveCount(1);
 
         // move the caret onto the story headline and off again: focus transitions re-run the framing, which is where a seq cached from before the renumber gets spent
-        await simulateSelectionChanged(page, STORY_DOC, storyHeadlineOffset());
+        await simulateSelectionChanged(page, STORY_DOC, fixtureOffsetOf(STORY_FIXTURE, STORY_HEADLINE));
         await simulateSelectionCleared(page, STORY_DOC);
 
         await expect.poll(() => taskOffsetFromBodyTop(page, FIRST_INCOMPLETE)).toBeCloseTo(SCROLL_CONTEXT_PX, -1);

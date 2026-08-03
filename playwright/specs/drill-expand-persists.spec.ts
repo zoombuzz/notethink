@@ -1,6 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { fixtureOffsetOf } from '../helpers/fixtures';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { sendCommand } from '../helpers/send-command';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
@@ -20,14 +19,6 @@ import { simulateSelectionChanged } from '../helpers/simulate-selection';
 
 const FIXTURE = 'drill-expand.md';
 const DOC_PATH = `/workspace/${FIXTURE}`;
-
-// locate a heading in a fixture so the simulated caret lands inside it without a hand-counted offset
-function fixtureOffsetOf(fixture: string, needle: string): number {
-    const text = fs.readFileSync(path.join(__dirname, '..', 'fixtures', fixture), 'utf-8');
-    const offset = text.indexOf(needle);
-    if (offset < 0) { throw new Error(`fixture ${fixture} contains no ${needle}`); }
-    return offset;
-}
 
 test.describe('Manual expand survives an edit to an earlier sibling', () => {
 

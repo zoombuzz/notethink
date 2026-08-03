@@ -1,4 +1,4 @@
-import { isInternalAttribute, renderMarkdownNoteHeadline, renderNodeUnified } from './renderops';
+import { isInternalAttribute, renderBodyItems, renderMarkdownNoteHeadline, renderNodeUnified } from './renderops';
 import type { NoteProps, MdastNode } from '../types/NoteProps';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -208,6 +208,41 @@ describe('renderMarkdownNoteHeadline', () => {
             expect(html).toBe('');
             expect(html).not.toContain('Root');
         });
+    });
+});
+
+describe('renderBodyItems keying', () => {
+
+    function childNote(seq: number, stable_id: string | undefined): NoteProps {
+        return {
+            seq,
+            level: 3,
+            type: 'markdown',
+            children: [],
+            children_body: [],
+            position: { start: { offset: seq * 10, line: seq }, end: { offset: seq * 10 + 8, line: seq } },
+            headline_raw: '### Child',
+            body_raw: '',
+            stable_id,
+        };
+    }
+
+    it('keys child notes by stable_id so a renumber cannot hand a card the previous occupant instance', () => {
+        const parent = headingNote([]);
+        const items = renderBodyItems(parent, [childNote(3, 'doc:child-a'), childNote(4, 'doc:child-b')]);
+        expect(items.map((item) => item.key)).toEqual(['doc:child-a', 'doc:child-b']);
+    });
+
+    it('falls back to seq for a child note carrying no stable_id', () => {
+        const parent = headingNote([]);
+        const items = renderBodyItems(parent, [childNote(3, undefined)]);
+        expect(items[0].key).toBe('3');
+    });
+
+    it('keys raw body nodes by source offset, which is a position rather than a re-derived index', () => {
+        const parent = headingNote([]);
+        const items = renderBodyItems(parent, [mdastText('body text', 40, 49)]);
+        expect(items[0].key).toBe('body-40');
     });
 });
 

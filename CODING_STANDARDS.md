@@ -125,7 +125,9 @@ Every note has a `stable_id` field (the field name is fixed). Its value has two 
 
 **The rule:** the moment a `seq` outlives a re-parse, it is wrong. If a value crosses an update boundary - cached in a `useMemo`, written to view-managed state, stashed in a ref, or emitted into the DOM to be looked up by a later effect - it must be a `stable_id` (identity) or a source offset (position), never a `seq`. Resolve it back to a `seq` on read, against the tree you are about to render.
 
-Same-pass use is fine and is the cheapest option: derive a `seq`, use it, discard it. `focused_seqs`, `resolveCaretTarget`'s `v<view>-n<seq>` element id, and `renderBodyItems`' React key are all correct because the derivation and the consumption happen in one render.
+Same-pass use is fine and is the cheapest option: derive a `seq`, use it, discard it. `focused_seqs` and `resolveCaretTarget`'s `v<view>-n<seq>` element id are correct because the derivation and the consumption happen in one render.
+
+A React key only *looks* same-pass. Reconciliation matches this render's key against the **previous** render's, so a key crosses an update boundary like any other stored value: a bare `seq` key hands a renumbered note the previous occupant's component instance, and with it that instance's state. `DocumentView` and `renderBodyItems` therefore key by `stable_id ?? seq` - the `?? seq` is unreachable defensive cover, since both stamping walks in `mergeAggregateRoot` reach every note, and it must not be read as licence to key by `seq`. The raw mdast body nodes in `renderBodyItems` are the exception that proves the rule - they have no `stable_id`, so they key by source offset, which is a position rather than a re-derived index.
 
 There is no mechanical check for this. The tell is a `seq` on the right-hand side of an assignment that outlives the render: a dependency array, a `setViewManagedState` payload, a `useRef`, a `data-` attribute paired with a stored lookup key.
 

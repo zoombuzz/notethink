@@ -1,10 +1,13 @@
 import {
     FOLDER_VIEW_STATE_ID,
+    MAX_EXPANDED_IDS,
     anyViewInFolderMode,
     buildIntegrationDispatch,
+    nextExpandedIds,
     reconcileAutoIntegrationMode,
     resolveIntegrationMode,
     resolveViewStateId,
+    writeViewExpandedIds,
     writeViewInteractionState,
     findFolderViewState,
     type ViewStateLike,
@@ -159,6 +162,76 @@ describe('writeViewInteractionState', () => {
     });
 });
 
+describe('nextExpandedIds', () => {
+    it('appends an expanded id to an empty or absent list', () => {
+        expect(nextExpandedIds(undefined, 'doc:a', true)).toEqual(['doc:a']);
+        expect(nextExpandedIds([], 'doc:a', true)).toEqual(['doc:a']);
+    });
+
+    it('removes a collapsed id and leaves the rest in order', () => {
+        expect(nextExpandedIds(['doc:a', 'doc:b', 'doc:c'], 'doc:b', false)).toEqual(['doc:a', 'doc:c']);
+    });
+
+    it('is a no-op transition when collapsing an id that is not listed', () => {
+        expect(nextExpandedIds(['doc:a'], 'doc:z', false)).toEqual(['doc:a']);
+    });
+
+    it('re-expanding a listed id moves it to the newest slot rather than duplicating it', () => {
+        expect(nextExpandedIds(['doc:a', 'doc:b'], 'doc:a', true)).toEqual(['doc:b', 'doc:a']);
+    });
+
+    it('caps the list at MAX_EXPANDED_IDS, evicting the oldest first', () => {
+        const full_list = Array.from({ length: MAX_EXPANDED_IDS }, (_unused, i) => `doc:${i}`);
+        const next_ids = nextExpandedIds(full_list, 'doc:new', true);
+        expect(next_ids).toHaveLength(MAX_EXPANDED_IDS);
+        expect(next_ids[0]).toBe('doc:1');
+        expect(next_ids[next_ids.length - 1]).toBe('doc:new');
+        expect(next_ids).not.toContain('doc:0');
+    });
+
+    it('does not evict when the list is at the cap and an already-listed id is re-expanded', () => {
+        const full_list = Array.from({ length: MAX_EXPANDED_IDS }, (_unused, i) => `doc:${i}`);
+        const next_ids = nextExpandedIds(full_list, 'doc:0', true);
+        expect(next_ids).toHaveLength(MAX_EXPANDED_IDS);
+        expect(next_ids[0]).toBe('doc:1');
+        expect(next_ids[next_ids.length - 1]).toBe('doc:0');
+    });
+});
+
+describe('writeViewExpandedIds', () => {
+    it('dispatches to the view id in current_file mode carrying only view_expanded_ids', () => {
+        const props = makeProps({ id: 'view-cf' });
+        const { handlers, set_view_managed_state } = makeHandlers();
+        writeViewExpandedIds(props, handlers, ['doc:a', 'doc:b']);
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: 'view-cf',
+            type: props.type,
+            display_options: { view_expanded_ids: ['doc:a', 'doc:b'] },
+        }]);
+    });
+
+    it('dispatches to FOLDER_VIEW_STATE_ID in folder mode regardless of props.id', () => {
+        const props = makeProps({
+            id: '/repo/a.md',
+            display_options: { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo' },
+        });
+        const { handlers, set_view_managed_state } = makeHandlers();
+        writeViewExpandedIds(props, handlers, []);
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: FOLDER_VIEW_STATE_ID,
+            type: props.type,
+            display_options: { view_expanded_ids: [] },
+        }]);
+    });
+
+    it('carries no focused/selected keys, so the merge cannot clobber them', () => {
+        const { handlers, set_view_managed_state } = makeHandlers();
+        writeViewExpandedIds(makeProps(), handlers, ['doc:a']);
+        const dispatched = set_view_managed_state.mock.calls[0][0][0].display_options;
+        expect(Object.keys(dispatched)).toEqual(['view_expanded_ids']);
+    });
+});
+
 describe('findFolderViewState', () => {
     it('returns undefined for undefined or empty view states', () => {
         expect(findFolderViewState<ViewStateLike>(undefined)).toBeUndefined();
@@ -263,6 +336,23 @@ describe('buildIntegrationDispatch', () => {
             view_state_ids: ['doc-1'],
         });
         expect(updates).toContainEqual({ id: 'doc-1', display_options: { parent_context_id: 'Backend' } });
+    });
+
+    it('clears view_expanded_ids on the canonical key and on every other key', () => {
+        // folder and current_file address different id spaces, so manual expansion cannot survive the flip
+        const { updates } = buildIntegrationDispatch({
+            is_auto: true,
+            resolved_mode: INTEGRATION_MODE_CURRENT_FILE,
+            folder_path: undefined,
+            view_id: 'doc-1',
+            view_state_ids: [FOLDER_VIEW_STATE_ID, 'doc-1', '/repo/a.md'],
+        });
+        expect(updates).toHaveLength(3);
+        for (const update of updates) {
+            const dopts = update.display_options as Record<string, unknown>;
+            expect('view_expanded_ids' in dopts).toBe(true);
+            expect(dopts.view_expanded_ids).toBeUndefined();
+        }
     });
 
     it('folder with no resolvable scope path posts no setIntegration message', () => {

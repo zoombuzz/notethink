@@ -36,11 +36,12 @@ export default React.memo(function DocumentView(props: ViewProps) {
         setCaretPosition: props.handlers?.setCaretPosition,
         postMessage: props.handlers?.postMessage,
         descendToFolder: props.handlers?.descendToFolder,
-    }), [props.handlers?.click, props.handlers?.setCaretPosition, props.handlers?.postMessage, props.handlers?.descendToFolder]);
+        setNoteExpanded: props.handlers?.setNoteExpanded,
+    }), [props.handlers?.click, props.handlers?.setCaretPosition, props.handlers?.postMessage, props.handlers?.descendToFolder, props.handlers?.setNoteExpanded]);
 
     const renderNote = (note: NoteProps, index: number): React.ReactElement => (
         <GenericNote
-            key={note.seq}
+            key={note.stable_id ?? note.seq}
             {...note}
             display_options={buildChildNoteDisplayOptions(display_options, note, props)}
             selection={props.selection}

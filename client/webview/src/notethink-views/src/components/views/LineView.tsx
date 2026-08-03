@@ -53,6 +53,7 @@ const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, dis
             setCaretPosition: view.handlers?.setCaretPosition,
             postMessage: view.handlers?.postMessage,
             descendToFolder: view.handlers?.descendToFolder,
+            setNoteExpanded: view.handlers?.setNoteExpanded,
         }}
     />;
 };

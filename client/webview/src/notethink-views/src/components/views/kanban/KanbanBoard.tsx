@@ -123,6 +123,7 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                                                         setCaretPosition: view.handlers?.setCaretPosition,
                                                         postMessage: view.handlers?.postMessage,
                                                         descendToFolder: view.handlers?.descendToFolder,
+                                                        setNoteExpanded: view.handlers?.setNoteExpanded,
                                                     }}
                                                 />
                                             )}

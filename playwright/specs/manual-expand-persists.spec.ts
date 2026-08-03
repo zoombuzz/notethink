@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
+import { pointerDrag } from '../helpers/pointer-drag';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
 
 /*
@@ -9,6 +10,11 @@ import { simulateSelectionChanged } from '../helpers/simulate-selection';
  * shut a beat after the click - reading as if the click had scrolled the note. "Show less" is the only
  * in-place collapse; a different note arriving in the slot still starts collapsed because views key cards
  * by note identity and React mounts a fresh instance.
+ *
+ * Expansion is view-managed state (the note's stable_id in the view's view_expanded_ids), not component
+ * state, so it also survives the card being dropped into another kanban column - a move that unmounts the
+ * card from one Droppable and mounts a fresh instance under another, which is exactly what a local
+ * useState could not survive.
  *
  * The edit is delivered the way the extension delivers it - a full doc update carrying the ticked source -
  * rather than by clicking the checkbox, because the harness has no extension host to apply the editText and
@@ -42,6 +48,26 @@ test.describe('Manual expand survives content edits', () => {
         await expect(page.locator('[role="rowheader"]', { hasText: 'first task on the expanded card' }).locator('input[type="checkbox"]')).toBeChecked();
 
         // the card must still be expanded: Show less present, no Show more bar, no clip on the body
+        await expect(page.getByRole('button', { name: /show less/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /show more/i })).toHaveCount(0);
+    });
+
+    test('dragging the expanded card to another column lands it still expanded', async ({ page }) => {
+        await setupExpandedCard(page);
+
+        const doing_column = page.locator('[role="region"][aria-label="doing"]');
+        const backlog_column = page.locator('[role="region"][aria-label="backlog"]');
+        await expect(doing_column.getByRole('heading', { name: 'Long Story' })).toBeVisible();
+
+        const long_story_handle = doing_column.locator('[data-rfd-drag-handle-draggable-id]').first();
+        // press near the card's top edge: an expanded card is taller than the viewport, so its centre is off-screen
+        await pointerDrag(page, long_story_handle, backlog_column, { max_press_offset: 24 });
+
+        // the drag completed: the card sits in the destination column and has left the source one
+        await expect(backlog_column.getByRole('heading', { name: 'Long Story' })).toBeVisible({ timeout: 3000 });
+        await expect(doing_column.getByRole('heading', { name: 'Long Story' })).toHaveCount(0);
+
+        // the fresh instance mounted under the destination column is still expanded
         await expect(page.getByRole('button', { name: /show less/i })).toBeVisible();
         await expect(page.getByRole('button', { name: /show more/i })).toHaveCount(0);
     });

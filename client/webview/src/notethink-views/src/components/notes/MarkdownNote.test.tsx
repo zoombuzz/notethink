@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import MarkdownNote from './MarkdownNote';
+import { nextExpandedIds } from '../../lib/viewstateops';
 import type { NoteProps } from '../../types/NoteProps';
 
 // mock GenericNote to avoid circular lazy-load issues
@@ -88,20 +89,53 @@ function simulateOverflow(el: HTMLElement, scrollHeight: number, offsetWidth: nu
 }
 
 /*
- * render an overflowing top-level note and expand it via "Show more", returning the handles a caller
- * needs to drive the collapse rules: the body element (its inline maxHeight is the clip) and rerender.
+ * stand-in for a real view: owns view_expanded_ids and supplies the setNoteExpanded handler that adds
+ * and removes a stable_id, so the card's expansion is driven the way DocumentView and KanbanBoard drive
+ * it rather than by component-instance state. The card is keyed by identity the way the views key it, and
+ * the column wrapper is the kanban lane - changing it unmounts the card and remounts it in the new lane.
+ * keyBySeq keys the card by seq rather than identity, so a renumber hands it a fresh instance and
+ * only a view-owned expansion list can survive; without it the identity key hides that handover.
  */
-function renderExpandedNote(): { body: HTMLElement; rerender: (ui: React.ReactElement) => void; note: NoteProps } {
+function ExpansionHost(props: { note: NoteProps; column?: string; keyBySeq?: boolean }): React.ReactElement {
+    const [expanded_ids, setExpandedIds] = React.useState<string[]>([]);
+    const setNoteExpanded = (stable_id: string, expanded: boolean): void => {
+        setExpandedIds((prev) => nextExpandedIds(prev, stable_id, expanded));
+    };
+    const card_key = props.keyBySeq ? props.note.seq : (props.note.stable_id ?? props.note.seq);
+    return (
+        <div key={props.column ?? 'todo'}>
+            <MarkdownNote
+                key={card_key}
+                {...props.note}
+                display_options={{ ...props.note.display_options, view_expanded_ids: expanded_ids }}
+                handlers={{ setNoteExpanded }}
+            />
+        </div>
+    );
+}
+
+// query the note body and establish the overflow a freshly mounted ResizeObserver has not measured yet
+function remeasuredBody(container: HTMLElement): HTMLElement {
+    const body = container.querySelector('[class*="body"]') as HTMLElement;
+    simulateOverflow(body, 500, 200);
+    return body;
+}
+
+/*
+ * render an overflowing top-level note inside the host and expand it via "Show more", returning the
+ * handles a caller needs to drive the collapse rules: the body element (its inline maxHeight is the
+ * clip), the container to re-query it from after a remount, the note, and rerender.
+ */
+function renderExpandedNote(key_by_seq = false): { body: HTMLElement; container: HTMLElement; rerender: (ui: React.ReactElement) => void; note: NoteProps } {
     const note = makeNote({
         stable_id: 'story-a',
         children_body: [makeList(2, [makeListItem(3, true), makeListItem(4, false)])],
     });
-    const { container, rerender } = render(<MarkdownNote {...note} />);
-    const body = container.querySelector('[class*="body"]') as HTMLElement;
-    simulateOverflow(body, 500, 200);
+    const { container, rerender } = render(<ExpansionHost note={note} keyBySeq={key_by_seq} />);
+    const body = remeasuredBody(container);
     fireEvent.click(screen.getAllByRole('button', { name: /show more/i })[0]);
     expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
-    return { body, rerender, note };
+    return { body, container, rerender, note };
 }
 
 describe('MarkdownNote', () => {
@@ -254,17 +288,22 @@ describe('MarkdownNote', () => {
 
     it('stays expanded when a checkbox tick rewrites the body', () => {
         const { body, rerender, note } = renderExpandedNote();
-        rerender(<MarkdownNote {...note} body_raw={'+ [X] done\n+ [X] todo'} />);
+        rerender(<ExpansionHost note={{ ...note, body_raw: '+ [X] done\n+ [X] todo' }} />);
         expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
         expect(body.style.maxHeight).toBe('');
     });
 
-    it('stays expanded when the headline is edited', () => {
-        // stable_id tracks the headline slug, so a rename must not be mistaken for a slot handover
-        const { body, rerender, note } = renderExpandedNote();
-        rerender(<MarkdownNote {...note} headline_raw="### Story title renamed" stable_id="story-title-renamed" />);
-        expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
-        expect(body.style.maxHeight).toBe('');
+    it('collapses when the headline is edited', () => {
+        /*
+         * the implicit stable_id is the headline slug, so retitling mints an id nothing ever put in the
+         * list and the card falls back to clipped. Document view and kanban behave alike here; carrying
+         * an id across a rename is a re-parse concern, not this layer's.
+         */
+        const { container, rerender, note } = renderExpandedNote();
+        rerender(<ExpansionHost note={{ ...note, headline_raw: '### Story title renamed', stable_id: 'story-title-renamed' }} />);
+        const body = remeasuredBody(container);
+        expect(screen.queryByRole('button', { name: /show less/i })).not.toBeInTheDocument();
+        expect(body).toHaveStyle({ maxHeight: '200px', overflow: 'hidden' });
     });
 
     it('collapses when "Show less" is clicked', () => {
@@ -274,10 +313,41 @@ describe('MarkdownNote', () => {
         expect(body).toHaveStyle({ maxHeight: '200px', overflow: 'hidden' });
     });
 
-    it('resets to collapsed when a different note remounts into the slot', () => {
-        // views key cards by note identity, so a handover mounts a fresh instance with the flag cleared
-        const { rerender, note } = renderExpandedNote();
-        rerender(<MarkdownNote key="story-b" {...note} stable_id="story-b" headline_raw="### Another story" />);
+    it('collapses when a different note takes the slot, and re-expands when the original returns', () => {
+        // expansion is per stable_id, so the flag belongs to the note the user expanded and not to the slot it sat in
+        const { container, rerender, note } = renderExpandedNote();
+        rerender(<ExpansionHost note={{ ...note, stable_id: 'story-b', headline_raw: '### Another story' }} />);
+        expect(remeasuredBody(container)).toHaveStyle({ maxHeight: '200px', overflow: 'hidden' });
         expect(screen.queryByRole('button', { name: /show less/i })).not.toBeInTheDocument();
+        rerender(<ExpansionHost note={note} />);
+        expect(remeasuredBody(container).style.maxHeight).toBe('');
+        expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
+    });
+
+    it('stays expanded when a story inserted above reassigns its seq', () => {
+        /*
+         * a global renumber moves every seq, and the card is deliberately keyed by seq here so the
+         * renumber costs it its instance. The expanded list holds stable_ids and lives in the view,
+         * so expansion survives the handover an identity key would have avoided in the first place.
+         */
+        const { container, rerender, note } = renderExpandedNote(true);
+        rerender(<ExpansionHost keyBySeq note={{
+            ...note,
+            seq: note.seq + 4,
+            parent_notes: [{ seq: PARENT_SEQ + 4 } as NoteProps],
+            display_options: { parent_context_seq: PARENT_SEQ + 4 },
+        }} />);
+        const body = remeasuredBody(container);
+        expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
+        expect(body.style.maxHeight).toBe('');
+    });
+
+    it('stays expanded when it remounts under a different parent (kanban column move)', () => {
+        // dragging a card to another column unmounts it and remounts it in the new lane's Droppable, killing the instance
+        const { container, rerender, note } = renderExpandedNote();
+        rerender(<ExpansionHost note={note} column="doing" />);
+        const body = remeasuredBody(container);
+        expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
+        expect(body.style.maxHeight).toBe('');
     });
 });

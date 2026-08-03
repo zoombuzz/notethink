@@ -1,5 +1,6 @@
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
+import { pointerDrag } from '../helpers/pointer-drag';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
 import { clearCapturedMessages } from '../helpers/capture-messages';
 
@@ -30,25 +31,6 @@ test.describe('Kanban drag round-trip - own echo never re-animates the dropped c
         return doc_path;
     }
 
-    async function pointerDrag(page: Page, handle: Locator, destination: Locator): Promise<void> {
-        const start = await handle.boundingBox();
-        const end = await destination.boundingBox();
-        if (!start || !end) { throw new Error('pointerDrag: missing bounding box'); }
-        const fx = start.x + start.width / 2;
-        const fy = start.y + start.height / 2;
-        const tx = end.x + end.width / 2;
-        const ty = end.y + 60;
-        await page.mouse.move(fx, fy);
-        await page.mouse.down();
-        await page.mouse.move(fx, fy + 8, { steps: 5 });
-        await page.waitForTimeout(150);
-        await page.mouse.move(tx, ty, { steps: 25 });
-        await page.waitForTimeout(150);
-        await page.mouse.move(tx, ty, { steps: 5 });
-        await page.waitForTimeout(100);
-        await page.mouse.up();
-    }
-
     async function probeMoves(page: Page): Promise<Array<{ kind: string; id?: string }>> {
         const events = await page.evaluate(() => (window as unknown as { __notethinkAnimationEvents?: Array<{ kind: string; id?: string }> }).__notethinkAnimationEvents ?? []);
         return events.filter(e => e.kind === 'move' || e.kind === 'enter');
@@ -64,7 +46,8 @@ test.describe('Kanban drag round-trip - own echo never re-animates the dropped c
 
         const task_a_handle = backlog.locator('[data-rfd-drag-handle-draggable-id]').first();
         await clearCapturedMessages(page);
-        await pointerDrag(page, task_a_handle, doing);
+        // this spec times the echo against the drop itself, so the release must not be settled for it
+        await pointerDrag(page, task_a_handle, doing, { post_release_settle_ms: 0 });
         await expect(doing.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 3000 });
 
         if (gate_delay_ms > 0) { await page.waitForTimeout(gate_delay_ms); }

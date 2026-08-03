@@ -4,7 +4,7 @@ import type { MouseEvent } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { calculateTextChangesForCheckbox, focusedChainIdsFor, resolveCaretPosition } from "../../../lib/noteops";
 import { isAlreadyFocusedClick } from "../../../lib/noteui";
-import { FOLDER_VIEW_STATE_ID, reconcileAutoIntegrationMode, writeViewInteractionState } from "../../../lib/viewstateops";
+import { FOLDER_VIEW_STATE_ID, nextExpandedIds, reconcileAutoIntegrationMode, writeViewExpandedIds, writeViewInteractionState } from "../../../lib/viewstateops";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { ClickPositionInfo, NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
@@ -53,6 +53,11 @@ export function useViewHandlers(
 
         setViewInteractionState: (focused_ids: string[], selected_ids: string[], view_caret?: number) => {
             writeViewInteractionState(props, handlers, focused_ids, selected_ids, view_caret);
+        },
+
+        setNoteExpanded: (stable_id: string, expanded: boolean) => {
+            const expanded_ids = nextExpandedIds(props.display_options?.view_expanded_ids, stable_id, expanded);
+            writeViewExpandedIds(props, handlers, expanded_ids);
         },
 
         click: (event: MouseEvent<HTMLElement>, note: NoteProps, click_profile: ClickPositionInfo) => {

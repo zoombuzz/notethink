@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
+import { pointerDrag } from '../helpers/pointer-drag';
 import { sendCommand } from '../helpers/send-command';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 import { parse } from '../helpers/parse-markdown';
@@ -20,6 +21,8 @@ const PATH_A = `${WORKSPACE_ROOT}/alpha/docstech/board.md`;
 const PATH_B = `${WORKSPACE_ROOT}/beta/docstech/board.md`;
 const REL_A = 'alpha/docstech/board.md';
 const REL_B = 'beta/docstech/board.md';
+// this repro drags a little slower either side of the release than the shared defaults, to give the collapse room to show
+const REPRO_DRAG_SETTLE = { pre_release_settle_ms: 120, post_release_settle_ms: 450 };
 
 function sha16(s: string): string { return crypto.createHash('sha256').update(s).digest('hex').slice(0, 16); }
 function fixtureText(fixture: string): string { return fs.readFileSync(path.join(__dirname, '..', 'fixtures', fixture), 'utf-8'); }
@@ -119,25 +122,6 @@ async function liftAndMeasure(page: Page, handle: Locator): Promise<{ rest: Reco
     return { rest, lifted };
 }
 
-// full pointer drag from a card handle onto a destination column region, then drop
-async function fullDrag(page: Page, handle: Locator, dest: Locator): Promise<void> {
-    const sb = await handle.boundingBox();
-    const db = await dest.boundingBox();
-    if (!sb || !db) { throw new Error('no box for fullDrag'); }
-    const fx = sb.x + sb.width / 2, fy = sb.y + sb.height / 2;
-    const tx = db.x + db.width / 2, ty = db.y + 60;
-    await page.mouse.move(fx, fy);
-    await page.mouse.down();
-    await page.mouse.move(fx, fy + 8, { steps: 5 });
-    await page.waitForTimeout(150);
-    await page.mouse.move(tx, ty, { steps: 25 });
-    await page.waitForTimeout(150);
-    await page.mouse.move(tx, ty, { steps: 5 });
-    await page.waitForTimeout(120);
-    await page.mouse.up();
-    await page.waitForTimeout(450);
-}
-
 test.describe('kanban drag collapse repro', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto('/playwright/harness/index.html');
@@ -154,7 +138,7 @@ test.describe('kanban drag collapse repro', () => {
         for (let cycle = 1; cycle <= 2; cycle++) {
             await clearCapturedMessages(page);
             const handle = doing.locator('[data-rfd-drag-handle-draggable-id]').filter({ hasText: 'Alpha Task Two' }).first();
-            await fullDrag(page, handle, done);
+            await pointerDrag(page, handle, done, REPRO_DRAG_SETTLE);
             const msgs = await getCapturedMessages(page);
             const edit = msgs.find((m) => m.type === 'editText') as Record<string, unknown> | undefined;
             // every drag - including ones that follow a passive card glide - must register with dnd and post an edit. before the fill:'backwards' fix, cycle 2 posted nothing (dnd stalled on a filling FLIP transform)

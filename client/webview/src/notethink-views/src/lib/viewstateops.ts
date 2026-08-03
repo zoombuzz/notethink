@@ -27,6 +27,12 @@ export interface ViewStateLike {
 export const FOLDER_VIEW_STATE_ID = '__folder__';
 
 /**
+ * cap on the persisted manual-expansion list. The list rides in the vscode.setState shape, so it
+ * cannot grow with every card the user has ever opened; past this many ids the oldest evict first.
+ */
+export const MAX_EXPANDED_IDS = 50;
+
+/**
  * resolve a (possibly auto) persisted integration_mode down to the concrete mode the renderer
  * and toolbar act on. Concrete folder / current_file pass through unchanged. `auto` (and an
  * undefined / absent value, which is treated as auto for back-compat - untouched views need no
@@ -95,11 +101,12 @@ export interface IntegrationDispatch {
  * editor-follow reconcile (useAutoIntegration) so the two paths cannot drift.
  *
  * The integration tag always lands on the canonical FOLDER_VIEW_STATE_ID (so the folder viewState's
- * other settings survive a flip and a flip-back). Per-view click-driven focused/selected state is
- * transient and cleared on every change. On a resolve-to-current_file the per-state-id loop also
- * clears stranded folder tags on non-canonical (doc-path) keys so the fallback scans no longer pin
- * folder. The setIntegration message is posted for a concrete folder scope, or for any resolve to
- * current_file (so the extension disposes the folder watcher and re-sends just the active doc).
+ * other settings survive a flip and a flip-back). Per-view click-driven focused/selected/expanded
+ * state is cleared on every change, because folder and current_file address different id spaces. On a
+ * resolve-to-current_file the per-state-id loop also clears stranded folder tags on non-canonical
+ * (doc-path) keys so the fallback scans no longer pin folder. The setIntegration message is posted for
+ * a concrete folder scope, or for any resolve to current_file (so the extension disposes the folder
+ * watcher and re-sends just the active doc).
  */
 export function buildIntegrationDispatch(req: IntegrationDispatchRequest): IntegrationDispatch {
     const { is_auto, resolved_mode, folder_path, seed_parent_context_id, view_id, view_state_ids, target_file_path } = req;
@@ -110,6 +117,7 @@ export function buildIntegrationDispatch(req: IntegrationDispatchRequest): Integ
         integration_path: resolved_mode === INTEGRATION_MODE_FOLDER ? folder_path : undefined,
         view_focused_ids: undefined,
         view_selected_ids: undefined,
+        view_expanded_ids: undefined,
         view_caret: undefined,
     };
     const updates: Array<Record<string, unknown>> = [{ id: FOLDER_VIEW_STATE_ID, display_options: canonical_display_options }];
@@ -118,6 +126,7 @@ export function buildIntegrationDispatch(req: IntegrationDispatchRequest): Integ
         const non_canonical_display_options: Record<string, unknown> = {
             view_focused_ids: undefined,
             view_selected_ids: undefined,
+            view_expanded_ids: undefined,
             view_caret: undefined,
         };
         if (clear_stranded_folder_tag) {
@@ -213,6 +222,43 @@ export function writeViewInteractionState(
     if (view_caret !== undefined) {
         display_options.view_caret = view_caret;
     }
+    handlers.setViewManagedState([{
+        id: resolveViewStateId(props),
+        type: props.type,
+        display_options,
+    }]);
+}
+
+/**
+ * apply one expand/collapse to the manual-expansion id list, newest last. Expanding an id already
+ * in the list moves it to the newest slot, so a card the user keeps reopening is the last to be
+ * evicted; past MAX_EXPANDED_IDS the oldest ids drop off the front. Collapsing removes the id and
+ * never evicts anything else. Pure, so the transition can be tested without a view.
+ */
+export function nextExpandedIds(current_ids: string[] | undefined, stable_id: string, expanded: boolean): string[] {
+    const without_id = (current_ids ?? []).filter((id) => id !== stable_id);
+    if (!expanded) { return without_id; }
+    const next_ids = [...without_id, stable_id];
+    return next_ids.length > MAX_EXPANDED_IDS ? next_ids.slice(next_ids.length - MAX_EXPANDED_IDS) : next_ids;
+}
+
+/**
+ * write the per-view manual-expansion stable_ids to the view-managed state, targeting the same
+ * canonical key as writeViewInteractionState (FOLDER_VIEW_STATE_ID in folder mode, the view's own
+ * id in current_file mode), so expansion shares the slot the focused/selected ids live in. A flip
+ * between integration modes does not carry it: buildIntegrationDispatch clears view_expanded_ids on
+ * every key, because folder and current_file address different id spaces. The payload carries
+ * view_expanded_ids alone: handleSetViewManagedState merges display_options one level deep, so the
+ * focused/selected ids sharing the slot are left untouched.
+ */
+export function writeViewExpandedIds(
+    props: ViewProps,
+    handlers: ViewApi,
+    expanded_ids: string[],
+): void {
+    const display_options: NoteDisplayOptions = {
+        view_expanded_ids: expanded_ids,
+    };
     handlers.setViewManagedState([{
         id: resolveViewStateId(props),
         type: props.type,

@@ -649,7 +649,7 @@ export function storyStableIdSlug(story: NoteProps): string {
 /**
  * a note participates in slug-based stable_id stamping when it is a real story-level
  * heading: a heading note with a positive seq (excludes the synthetic seq-0/level-0/type-'root'
- * root) and a non-empty stripped headline. offset-keyed descendants never reach here because
+ * root) and a non-empty stripped headline. path-keyed descendants never reach here because
  * they are not headings with their own slug; mirrors the set mergeAggregateRoot stamps as
  * `${doc_id}:${slug}`.
  */

@@ -324,6 +324,69 @@ describe('useViewHandlers setViewInteractionState', () => {
     });
 });
 
+describe('useViewHandlers setNoteExpanded', () => {
+    it('appends to the ids already in view_expanded_ids and writes them to the canonical key', () => {
+        const set_view_managed_state = jest.fn();
+        // folder mode routes the write to FOLDER_VIEW_STATE_ID rather than the view own id, the slot the focused/selected ids share
+        const props = makeProps({
+            display_options: { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo', view_expanded_ids: ['doc:a'] },
+            handlers: {
+                setViewManagedState: set_view_managed_state,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: jest.fn(),
+            },
+        });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.setNoteExpanded!('doc:b', true);
+        // the prior list is read back off display_options, so a second expand adds a card rather than replacing the first
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: FOLDER_VIEW_STATE_ID,
+            type: props.type,
+            display_options: { view_expanded_ids: ['doc:a', 'doc:b'] },
+        }]);
+    });
+
+    it('drops only the collapsed id and leaves the other expanded cards alone', () => {
+        const set_view_managed_state = jest.fn();
+        const props = makeProps({
+            display_options: { integration_mode: INTEGRATION_MODE_CURRENT_FILE, view_expanded_ids: ['doc:a', 'doc:b'] },
+            handlers: {
+                setViewManagedState: set_view_managed_state,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: jest.fn(),
+            },
+        });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.setNoteExpanded!('doc:a', false);
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: props.id,
+            type: props.type,
+            display_options: { view_expanded_ids: ['doc:b'] },
+        }]);
+    });
+
+    it('starts a list when the view has never had an expanded card', () => {
+        const set_view_managed_state = jest.fn();
+        const props = makeProps({
+            handlers: {
+                setViewManagedState: set_view_managed_state,
+                deleteViewFromManagedState: jest.fn(),
+                revertAllViewsToDefaultState: jest.fn(),
+                postMessage: jest.fn(),
+            },
+        });
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
+        result.current.handlers.setNoteExpanded!('doc:a', true);
+        expect(set_view_managed_state).toHaveBeenCalledWith([{
+            id: props.id,
+            type: props.type,
+            display_options: { view_expanded_ids: ['doc:a'] },
+        }]);
+    });
+});
+
 describe('useViewHandlers setParentContextId', () => {
     // the payload must carry the id and never a seq: a persisted seq is exactly the bug this key replaced
     it('persists the scope as parent_context_id on the view own id', () => {

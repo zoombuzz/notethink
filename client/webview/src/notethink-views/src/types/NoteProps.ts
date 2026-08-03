@@ -16,6 +16,7 @@ export type NoteClickHandler = (event: MouseEvent<HTMLElement>, note: NoteProps 
  * - integration_mode_selection: the persisted integration-mode choice (auto / current_file / folder), carried alongside the composer-resolved concrete integration_mode so the toolbar selector can render "Auto (…)" vs the concrete label; never persisted itself - the composer re-stamps it from the canonical folder view-state each render
  * - view_caret: the view's own caret offset when no editor is live, in in-tree (merged-tree) offset space so it resolves via findDeepestNote in both single-file and folder mode; augmented state only, never text - files stay master
  * - parent_context_id / parent_context_seq: the note-hierarchy scope this view opens at. The id is the persisted half (a stable_id from a drill-in or breadcrumb click, else the authored nt_breadcrumb_last headline label) and is re-resolved against the current tree by resolveParentContextNote on every render; the seq is the resolved result, derived per render and never persisted
+ * - view_expanded_ids: stable_ids of the notes the user manually expanded past their clip height, newest last and capped by nextExpandedIds so the persisted list cannot grow without bound; the manual override layer under autoExpandFocusedNote, and the reason expansion outlives a remount
  */
 export interface NoteDisplayOptions {
     id?: string;
@@ -52,6 +53,7 @@ export interface NoteDisplayOptions {
     // --- per-view interaction state (view-driven, persisted on display_options); these hold note stable_ids (invariant across re-parse), unlike the per-render focused_seqs/selected_seqs above which stay seq-based ---
     view_focused_ids?: string[];
     view_selected_ids?: string[];
+    view_expanded_ids?: string[];
     view_caret?: number;
     integration_mode?: string;
     integration_mode_selection?: string;
@@ -73,6 +75,7 @@ export interface NoteDisplayOptions {
 /**
  * NoteHandlers, the per-note handler surface threaded from a view down to each rendered note.
  * - descendToFolder: switch the view into folder integration mode at the given absolute folder path; used by the origin pill click to descend the folder view into the pill's project subfolder
+ * - setNoteExpanded: add or remove the note's stable_id from the view's view_expanded_ids; the "Show more" / "Show less" bars dispatch through it, which is what keeps expansion out of component-instance state
  */
 export interface NoteHandlers {
     click?: NoteClickHandler;
@@ -80,6 +83,7 @@ export interface NoteHandlers {
     doubleClick?: NoteClickHandler;
     setCaretPosition?: (position: number) => void;
     setParentContextId?: (id: string | undefined) => void;
+    setNoteExpanded?: (stable_id: string, expanded: boolean) => void;
     postMessage?: (message: unknown) => void;
     descendToFolder?: (folder_path: string) => void;
     [key: string]: unknown;
@@ -115,15 +119,19 @@ export interface NoteHandlers {
  *   present (canonical and author-controlled), otherwise the stripped headline
  *   plus a same-headline duplicate-occurrence ordinal (`#N` for the N-th
  *   duplicate in the file). For descendant notes inside a story's subtree it
- *   is `${story_stable_id}:${note_offset_minus_story_offset}` - a relative
- *   offset within the story body, which is invariant under sibling story
- *   insertions OUTSIDE the story (those shift both offsets by the same delta)
- *   and changes only when the story's own body changes. In single-file mode
- *   the composer stamps it without an origin so `doc_id` is the active doc id
- *   instead. Byte offsets / `seq` / `file_rank` are deliberately NOT in the
- *   derivation: those churn under merge re-shuffles, global seq renumbering,
- *   and unrelated sibling additions, and using them would defeat the whole
- *   point.
+ *   is `${story_stable_id}:${child_path}`, where `child_path` is the
+ *   dot-joined 0-based ordinal of each step from the story root down to the
+ *   note (`0.2` is the third child of the first child). That is invariant
+ *   under every length-changing edit, inside the story or outside it, and
+ *   churns only when a sibling is inserted or removed on the path down to the
+ *   note, which shifts each later sibling's ordinal. In single-file mode the
+ *   composer stamps it without an origin so `doc_id` is the active doc id
+ *   instead, and a note ahead of the file's first heading has no enclosing
+ *   story, so it hangs off the synthetic root as
+ *   `${doc_id}:__root__:${child_path}`. Byte offsets / `seq` / `file_rank`
+ *   are deliberately NOT in the derivation: those churn under merge
+ *   re-shuffles, global seq renumbering, and unrelated sibling additions, and
+ *   using them would defeat the whole point.
  */
 export interface NoteProps {
     seq: number;

@@ -4200,3 +4200,85 @@ Unpinned this wave:
   + upgrade npm packages (wave 1, minor/patch) and unpin eslint 9 -> 10 after re-deriving the blocker
   + ncu 23, webpack 5.109, playwright 1.62, sass 1.102
   + tests 1674 jest
+
+
+### Per-note UI state keyed by identity, not React instance [](?id=note-ui-state-by-identity)
+
+Follow-up to [[manual-expand-survives-edits]] (shipped 0.3.32), which closed the body-edit collapse but left the root cause standing. Manual expansion lives in component-instance state (`MarkdownNote.tsx:50`), so its lifetime is decided by the React key, and the two views fail in mirror-image ways: document view keys by `note.seq` (`DocumentView.tsx:43`, `renderops.tsx:141`) so the instance outlives the note and a story inserted above hands its expanded flag to a different note; kanban keys by `stable_id` (`noteops.ts:588`) so the instance dies with the slot and dragging a card to another column loses its expansion. Making document view behave like kanban would swap the leak for the loss - the fix is to stop attaching note state to React instances at all.
+
++ goal
+  + manual expansion is a property of the note, not of a React instance: it survives seq reassignment, remount into a different parent, and reload
+  + no per-note UI flag remains in component-instance state, so this class of bug cannot recur
++ background
+  + the pattern already exists: `writeViewInteractionState` (`viewstateops.ts:200`) stores focus/selection as `view_focused_ids` / `view_selected_ids`, keyed by stable_id, documented as surviving re-parse and drag-reorder
+  + descendant stable_ids are byte offsets - `${story_stable_id}:${relative_offset}` (`mergeAggregateRoot.ts:242,523`) - so any length-changing edit earlier in the same story renumbers every later descendant
+  + that churn already affects the existing focused/selected ids in drilled-in views; it is masked because the editor-derived match usually wins the tiebreak (CODING_STANDARDS > View interaction state)
+  + kanban's collapse-on-column-move is recorded as "(unchanged)" in the shipped story - it is this root cause surfacing, not a design decision
++ phase 1 - stabilise descendant stable_ids
+  + replace the byte-offset suffix with an ordinal child path (`${story_stable_id}:2.1.3`), computed in the same walk
+  + churns only on sibling insert/remove, never on a keystroke earlier in the story
+  + both walks change together: `walkStorySubtree` and `walkSingleFileStableIds`
+  + explicit `[](?id=)` linetags are unaffected; they already win for story roots
++ phase 2 - move expansion into view-managed state
+  + add `view_expanded_ids` to `NoteDisplayOptions` alongside the existing id lists
+  + `MarkdownNote` reads expansion from it; "Show more" / "Show less" become `setViewManagedState` dispatches
+  + delete the local `manually_expanded` state - this is what makes the bug structurally unable to recur
+  + `autoExpandFocusedNote` keeps precedence; the id list is the manual override layer
+  + this phase alone fixes the user-visible bug in both views, without touching either view's keys
++ phase 3 - key document view by identity
+  + `DocumentView.tsx:43` and `renderops.tsx:141` move from `note.seq` to `note.stable_id ?? note.seq`
+  + safe only after phase 1; churning ids would remount the whole tree on every edit
+  + by here it is about reconciliation generally (scroll position, text selection, focus), not expansion
+  + overlaps [[kanban-incremental-merge]]'s "key React and memo comparisons on stable_id" task - fold the two, do not build it twice
++ out of scope
+  + per-note expansion authored in the file (an `nt_expanded` linetag) - no demand for it
+  + virtualization interactions - [[kanban-virtualized-columns]] adds another remount source that phase 2 makes harmless; land in that order
++ files
+  + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` - both stable_id walks
+  + `client/webview/src/notethink-views/src/types/NoteProps.ts` - `view_expanded_ids` on NoteDisplayOptions
+  + `client/webview/src/notethink-views/src/lib/viewstateops.ts` - expansion dispatch beside writeViewInteractionState
+  + `client/webview/src/notethink-views/src/components/notes/MarkdownNote.tsx` - read from state, drop the useState
+  + `client/webview/src/notethink-views/src/components/views/DocumentView.tsx` and `lib/renderops.tsx` - keys
++ [X] surface the `view_expanded_ids` key name for sign-off before laying it down (persisted setState shape, so the permanent-name check applies)
+  + signed off as `view_expanded_ids`: same grammar and same stable_id-keyed semantics as its two neighbours, and nothing in the name is expansion-mechanism-specific, so it survives the scope growth that forced the `notethink.folderView.*` rename
++ [X] decide whether expansion carries across a view-type switch on the same doc (`resolveViewStateId` returns the view's own id in current_file mode)
+  + per-view, no carry: expansion sits in the same per-view slot as the focused/selected ids, which already do not carry; a view-type switch is a deliberate re-framing and starts clean, and no doc-scoped slot or folder-mode spanning rule is needed
++ [X] decide the cap on the persisted id list (most recent N, or clear on integration-mode change) so [[webview-state-persistence-diet]] stays honest
+  + most-recent 50, evicting oldest first, plus a clear on integration-mode change alongside the existing `view_focused_ids` / `view_selected_ids` clears in `buildIntegrationDispatch` - folder and current_file are different id spaces, and 50 ids is negligible against that story's 100KB setState target
++ a headline rename collapses the card, and the 0.3.32 guard `stays expanded when the headline is edited` is rewritten to assert it: the implicit stable_id is the headline slug, so retitling mints an id absent from `view_expanded_ids`. kanban already behaves this way (it keys cards by stable_id); this makes document view match rather than keeping one view immune. carrying ids across a re-parse is [[kanban-incremental-merge]]'s job, not this story's
++ [X] phase 1: ordinal child path replaces the byte-offset suffix in both walks
+  + `${story_stable_id}:${child_path}`, dot-joined 0-based ordinals from the story root (`0.2` is the third child of the first child); the now-dead `story_start_offset` parameter is gone from both walks
+  + the walk's third id form, `${doc_id}:offset:${offset}` for a note ahead of the file's first heading, had the same defect and was free to fix once the path was threaded: it is now `${doc_id}:__root__:${child_path}`, hanging off the synthetic single-file root
++ [X] phase 2: `view_expanded_ids` on NoteDisplayOptions plus dispatch; delete the local expand state
+  + `setNoteExpanded(stable_id, expanded)` on `ViewApi` / `NoteHandlers`, implemented beside `setViewInteractionState`; the list transition is the pure `nextExpandedIds` so the cap and eviction are unit-testable without a view
+  + `writeViewExpandedIds` dispatches `view_expanded_ids` alone, relying on `handleSetViewManagedState`'s one-level-deep merge to leave the focused/selected ids in the slot untouched
+  + the memo comparator compares the whole `view_expanded_ids` array, not just this note's own membership: a descendant renders through its parent's `renderBodyItems`, so a parent that saw no change to its own membership blocked the child's repaint and the card never opened. caught by the drilled-in playwright spec, and it is the same reason `focused_seqs` / `selected_seqs` are compared as arrays directly below
+  + `useSyncedBodyClip` is fed the same derived value so the layout-effect clip and React cannot disagree for a frame
++ [X] phase 3: document view and renderBodyItems key by `stable_id ?? seq` (coordinate with [[kanban-incremental-merge]])
+  + CODING_STANDARDS' seq-lifetime rule cited `renderBodyItems`' key as a correct same-pass seq use; amended, because reconciliation matches this render's key against the previous render's, so a key crosses an update boundary like any other stored value
++ [X] jest: expansion survives a seq reassignment (a story inserted above) in document view
+  + the first attempt was vacuous: the `ExpansionHost` double hardcoded the identity key, so the case passed against the old `useState` implementation too. the double now takes `keyBySeq`, and this case renders under the pre-fix seq key so the renumber really does cost the card its instance
++ [X] jest: expansion survives a remount into a different parent (the kanban column-move case)
++ [X] jest: document view keys cards by stable_id, so a renumber preserves the instance
+  + acceptance criterion 4 had no test behind it at all - reverting both key changes left the suite green at 1305. three cases now cover it across `DocumentView.test.tsx` and `renderops.test.tsx`, verified to fail when the keys go back to `note.seq`
++ [X] jest: `setNoteExpanded` composes the read and the write, so a second expand appends rather than replacing
+  + both driven through an `ExpansionHost` test double that owns `view_expanded_ids` and supplies the handler, so the card is expanded the way a real view expands it rather than by poking component state
++ [X] jest: a descendant stable_id is unchanged when an earlier sibling grows by one character
+  + covered for both walks, each asserting the offset really did shift so the fixture cannot silently stop exercising the case; a third test pins the orphan `__root__` path form
++ [X] playwright: extend `manual-expand-persists.spec.ts` - drag an expanded card to another column, still expanded on landing
++ [X] playwright: drill into a story, expand a descendant, edit an earlier sibling, still expanded
+  + new `drill-expand-persists.spec.ts` plus the `drill-expand` / `drill-expand-grown` fixtures; this is the spec that caught the memo-comparator bug above, which no jest test had reached
++ [X] `pnpm run check` green
+  + 1698 jest, 121 playwright, lint 0 errors
++ [X] the drag gesture is one shared `playwright/helpers/pointer-drag.ts`, not a copy per spec
+  + there were four pre-existing copies, not three, and they were not identical: `kanban-drag-roundtrip` deliberately does not settle after the release because it times the echo against the drop, and the collapse repro uses 120/450 rather than 100/400. each caller's timings are preserved through an options bag, so the extraction is behaviour-preserving by construction rather than by hope
++ [X] jest: LineView threads `setNoteExpanded`, so no view can silently lose manual expansion
+  + the three views build their own handler bags; DocumentView and KanbanBoard were covered end to end, LineView by nothing, and deleting its line left the suite green
++ manual: expand a card, drag it across columns, confirm it stays expanded
++ manual: expand a card, reload the window, confirm it is still expanded
++ manual: in a drilled-in story, expand a descendant then type in an earlier sibling, confirm no collapse
++ acceptance criteria
+  + no per-note UI flag remains in component-instance state in `MarkdownNote`
+  + expansion survives a column move, a seq reassignment, and a reload
+  + a descendant's stable_id does not change when text earlier in its story changes length
+  + document view and kanban key their cards the same way

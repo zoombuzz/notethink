@@ -35,10 +35,16 @@ jest.mock('./kanban/KanbanColumn', () => ({
     ),
 }));
 
+// handlers each rendered card received, keyed by seq, so a test can assert the view threaded them down
+const mock_note_handlers: Record<number, NoteProps['handlers']> = {};
+
 // mock GenericNote to expose each note by seq
 jest.mock('../notes/GenericNote', () => ({
     __esModule: true,
-    default: (props: NoteProps) => <div data-testid={`note-${props.seq}`} data-seq={props.seq}>{props.headline_raw}</div>,
+    default: (props: NoteProps) => {
+        mock_note_handlers[props.seq] = props.handlers;
+        return <div data-testid={`note-${props.seq}`} data-seq={props.seq}>{props.headline_raw}</div>;
+    },
 }));
 
 function tag(key: string, value: string, note_seq: number): LineTag {
@@ -167,5 +173,16 @@ describe('LineView group-by resolution (no axis preset)', () => {
         expect(screen.getByTestId('column-low')).toBeInTheDocument();
         const cards = container.querySelectorAll('[data-testid^="draggable-"]');
         cards.forEach(card => expect(card.getAttribute('data-drag-disabled')).toBe('false'));
+    });
+});
+
+describe('LineView note handlers', () => {
+    it('threads setNoteExpanded to the parent-context card so its manual expansion reaches the view', () => {
+        // the three views build their own note-handler bags, so each one has to be pinned separately or a view silently loses expansion
+        const parent_context = makeNote(9, 0);
+        const setNoteExpanded = jest.fn();
+        const props = makeViewProps([makeNote(1, 60)]);
+        render(<LineView {...props} handlers={{ ...props.handlers, setNoteExpanded }} nested={{ parent_context }} />);
+        expect(mock_note_handlers[9]?.setNoteExpanded).toBe(setNoteExpanded);
     });
 });

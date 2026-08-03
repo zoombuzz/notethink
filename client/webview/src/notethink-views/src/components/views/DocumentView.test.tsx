@@ -5,12 +5,16 @@ import GenericNoteAttributes from '../notes/GenericNoteAttributes';
 import type { ViewProps } from '../../types/ViewProps';
 import type { NoteProps } from '../../types/NoteProps';
 
+// handed out once per mounted card and stamped into the DOM, so a test can tell a preserved instance from a remount
+let mock_next_mount_id = 0;
+
 // mock GenericNote so the document-strip tests render with a parent_context without pulling in the lazy MarkdownNote/CodeNote renderers; GenericNoteAttributes stays real (under test)
 jest.mock('../notes/GenericNote', () => ({
     __esModule: true,
-    default: (props: NoteProps) => (
-        <div data-testid={`note-${props.seq}`} role="row" data-seq={props.seq}>{props.headline_raw}</div>
-    ),
+    default: (props: NoteProps) => {
+        const [mount_id] = React.useState(() => `mount-${++mock_next_mount_id}`);
+        return <div data-testid={`note-${props.seq}`} role="row" data-seq={props.seq} data-mount-id={mount_id}>{props.headline_raw}</div>;
+    },
 }));
 
 // mock IntersectionObserver
@@ -75,6 +79,55 @@ describe('DocumentView', () => {
         render(<DocumentView {...props_with_context_bar} />);
         const container = screen.getByTestId('document-test-doc-inner');
         expect(container).toBeInTheDocument();
+    });
+});
+
+/*
+ * card keying: a seq is only valid within the render pass that derived it, and a React key crosses an
+ * update boundary because reconciliation matches this render's key against the previous render's. Keying
+ * a card by seq therefore hands a renumbered note the previous occupant's component instance along with
+ * its state. Document view and kanban must key alike, by identity.
+ */
+describe('DocumentView card keying', () => {
+    function makeCard(seq: number, stable_id: string): NoteProps {
+        return {
+            seq,
+            level: 2,
+            type: 'markdown',
+            children: [],
+            children_body: [],
+            position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 }, end_body: { offset: 50, line: 5 } },
+            headline_raw: '## Story',
+            body_raw: '',
+            stable_id,
+        };
+    }
+
+    function renderCard(note: NoteProps): React.ReactElement {
+        return <DocumentView id="test-doc" type="document" nested={{ parent_context: note }} />;
+    }
+
+    function mountIdOfCard(): string {
+        return screen.getByRole('row').getAttribute('data-mount-id') ?? '';
+    }
+
+    it('preserves the card instance when a story inserted above renumbers its seq', () => {
+        const note = makeCard(5, 'doc:story-a');
+        const { rerender } = render(renderCard(note));
+        const first_mount_id = mountIdOfCard();
+        rerender(renderCard({ ...note, seq: 9 }));
+        // same note, new seq: the card takes the new props without losing the instance behind them
+        expect(screen.getByRole('row')).toHaveAttribute('data-seq', '9');
+        expect(mountIdOfCard()).toBe(first_mount_id);
+    });
+
+    it('remounts the card when a different note inherits the seq it was rendered under', () => {
+        const note = makeCard(5, 'doc:story-a');
+        const { rerender } = render(renderCard(note));
+        const first_mount_id = mountIdOfCard();
+        rerender(renderCard(makeCard(5, 'doc:story-b')));
+        // a reordered tree can reuse a seq for another note, which must not inherit the previous occupant's state
+        expect(mountIdOfCard()).not.toBe(first_mount_id);
     });
 });
 

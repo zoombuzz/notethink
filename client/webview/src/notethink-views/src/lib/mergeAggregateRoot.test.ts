@@ -67,6 +67,33 @@ function simpleFile(id: string, relative_path: string, title: string, stories: s
     return makeDoc(id, relative_path, text, children);
 }
 
+/**
+ * Build "# Todo\n### Story A\n+ <first_bullet>\n+ second bullet\n": one story owning a two-item
+ * bullet list, with the length of the item AHEAD of the one under test under the caller's control.
+ */
+function twoBulletStoryDoc(id: string, first_bullet: string): AggregatedDocInput {
+    const h1_line = '# Todo';
+    const story_line = '### Story A';
+    const first_line = `+ ${first_bullet}`;
+    const second_line = '+ second bullet';
+    const text = `${h1_line}\n${story_line}\n${first_line}\n${second_line}\n`;
+    const story_start = h1_line.length + 1;
+    const list_start = story_start + story_line.length + 1;
+    const second_start = list_start + first_line.length + 1;
+    const list_end = second_start + second_line.length;
+    const children: MdastNode[] = [
+        mdastNode('heading', 0, h1_line.length, { depth: 1 }),
+        mdastNode('heading', story_start, story_start + story_line.length, { depth: 3 }),
+        mdastNode('list', list_start, list_end, {
+            children: [
+                mdastNode('listItem', list_start, list_start + first_line.length),
+                mdastNode('listItem', second_start, list_end),
+            ],
+        }),
+    ];
+    return makeDoc(id, 'x/todo.md', text, children);
+}
+
 describe('mergeAggregateRoot', () => {
 
     it('empty docs map produces synthetic root with no children', () => {
@@ -914,6 +941,18 @@ describe('mergeAggregateRoot', () => {
             expect(after_existing.stable_id).toBe(before_existing.stable_id);
         });
 
+        it('a descendant stable_id is unchanged when an earlier sibling grows by one character', () => {
+            const before = mergeAggregateRoot({ 'id-a': twoBulletStoryDoc('id-a', 'first bullet') }, '/repo/');
+            const after = mergeAggregateRoot({ 'id-a': twoBulletStoryDoc('id-a', 'first bulletX') }, '/repo/');
+            const before_second = before.all_notes.find(n => n.headline_raw === '+ second bullet')!;
+            const after_second = after.all_notes.find(n => n.headline_raw === '+ second bullet')!;
+            // the id is an ordinal path from the story root: second item (1) of the story's first child (0)
+            expect(before_second.stable_id).toBe('id-a:story-a:0.1');
+            // sanity check: the extra character really did shift the later sibling, so the fixture still exercises the case
+            expect(after_second.position.start.offset).toBe(before_second.position.start.offset + 1);
+            expect(after_second.stable_id).toBe(before_second.stable_id);
+        });
+
         it('duplicate same-headline stories within a file are disambiguated', () => {
             // two stories share the stripped headline "Dup" - the second must get a `#1` suffix so stable_ids remain unique within the file
             const doc = simpleFile('id-a', 'a/todo.md', 'A', ['Dup', 'Dup']);
@@ -1065,7 +1104,7 @@ describe('stampSingleFileStableIds', () => {
     }
 
     // single-file mode tree shape: root → H1 → [Story1, Story2, ...]. The H1 sits in root.child_notes and the depth-3 stories are H1's child_notes.
-    function findStoryByHeadline(root: ReturnType<typeof convertMdastToNoteHierarchy>, headline: string): ReturnType<typeof convertMdastToNoteHierarchy> | undefined {
+    function findNoteByHeadline(root: ReturnType<typeof convertMdastToNoteHierarchy>, headline: string): ReturnType<typeof convertMdastToNoteHierarchy> | undefined {
         const stack = [...(root.child_notes ?? [])];
         while (stack.length > 0) {
             const top = stack.pop()!;
@@ -1094,22 +1133,61 @@ describe('stampSingleFileStableIds', () => {
     it('keeps a story\'s stable_id when an earlier sibling is inserted in the same file', () => {
         const { root: before_root } = buildSingleFile(['Existing']);
         stampSingleFileStableIds(before_root, 'doc-1');
-        const before_existing = findStoryByHeadline(before_root, '### Existing')!;
+        const before_existing = findNoteByHeadline(before_root, '### Existing')!;
         const { root: after_root } = buildSingleFile(['Inserted Before', 'Existing']);
         stampSingleFileStableIds(after_root, 'doc-1');
-        const after_existing = findStoryByHeadline(after_root, '### Existing')!;
+        const after_existing = findNoteByHeadline(after_root, '### Existing')!;
         expect(after_existing.position.start.offset).toBeGreaterThan(before_existing.position.start.offset);
         expect(after_existing.stable_id).toBe(before_existing.stable_id);
+    });
+
+    it('a descendant stable_id is unchanged when an earlier sibling grows by one character', () => {
+        const before_doc = twoBulletStoryDoc('doc-1', 'first bullet');
+        const before_root = convertMdastToNoteHierarchy(before_doc.content, before_doc.text);
+        stampSingleFileStableIds(before_root, 'doc-1');
+        const after_doc = twoBulletStoryDoc('doc-1', 'first bulletX');
+        const after_root = convertMdastToNoteHierarchy(after_doc.content, after_doc.text);
+        stampSingleFileStableIds(after_root, 'doc-1');
+        const before_second = findNoteByHeadline(before_root, '+ second bullet')!;
+        const after_second = findNoteByHeadline(after_root, '+ second bullet')!;
+        // the id is an ordinal path from the story root: second item (1) of the story's first child (0)
+        expect(before_second.stable_id).toBe('doc-1:story-a:0.1');
+        // sanity check: the extra character really did shift the later sibling, so the fixture still exercises the case
+        expect(after_second.position.start.offset).toBe(before_second.position.start.offset + 1);
+        expect(after_second.stable_id).toBe(before_second.stable_id);
+    });
+
+    it('a note ahead of the first heading hangs off the synthetic root by ordinal path', () => {
+        // the bullet precedes the H1, so it has no enclosing story to namespace against
+        const bullet_line = '+ orphan bullet';
+        const h1_line = '# Doc';
+        const story_line = '### Story A';
+        const text = `${bullet_line}\n${h1_line}\n${story_line}\n`;
+        const h1_start = bullet_line.length + 1;
+        const story_start = h1_start + h1_line.length + 1;
+        const children: MdastNode[] = [
+            mdastNode('list', 0, bullet_line.length, { children: [mdastNode('listItem', 0, bullet_line.length)] }),
+            mdastNode('heading', h1_start, h1_start + h1_line.length, { depth: 1 }),
+            mdastNode('heading', story_start, story_start + story_line.length, { depth: 3 }),
+        ];
+        const doc = makeDoc('doc-1', 'x/todo.md', text, children);
+        const root = convertMdastToNoteHierarchy(doc.content, doc.text);
+        stampSingleFileStableIds(root, 'doc-1');
+        const ids = flattenAllNotes(root).map(n => n.stable_id);
+        // the list is the root's first child and the item is its own first child, so the paths read 0 and 0.0
+        expect(ids).toContain('doc-1:__root__:0');
+        expect(ids).toContain('doc-1:__root__:0.0');
+        expect(new Set(ids).size).toBe(ids.length);
     });
 
     it('is idempotent - calling twice produces the same stable_ids', () => {
         const { root } = buildSingleFile(['Alpha', 'Beta']);
         stampSingleFileStableIds(root, 'doc-1');
-        const first_a = findStoryByHeadline(root, '### Alpha')!.stable_id;
-        const first_b = findStoryByHeadline(root, '### Beta')!.stable_id;
+        const first_a = findNoteByHeadline(root, '### Alpha')!.stable_id;
+        const first_b = findNoteByHeadline(root, '### Beta')!.stable_id;
         stampSingleFileStableIds(root, 'doc-1');
-        const second_a = findStoryByHeadline(root, '### Alpha')!.stable_id;
-        const second_b = findStoryByHeadline(root, '### Beta')!.stable_id;
+        const second_a = findNoteByHeadline(root, '### Alpha')!.stable_id;
+        const second_b = findNoteByHeadline(root, '### Beta')!.stable_id;
         expect(second_a).toBe(first_a);
         expect(second_b).toBe(first_b);
     });
@@ -1119,8 +1197,8 @@ describe('stampSingleFileStableIds', () => {
         const { root: root_b } = buildSingleFile(['Same']);
         stampSingleFileStableIds(root_a, 'doc-a');
         stampSingleFileStableIds(root_b, 'doc-b');
-        const id_a = findStoryByHeadline(root_a, '### Same')!.stable_id;
-        const id_b = findStoryByHeadline(root_b, '### Same')!.stable_id;
+        const id_a = findNoteByHeadline(root_a, '### Same')!.stable_id;
+        const id_b = findNoteByHeadline(root_b, '### Same')!.stable_id;
         expect(id_a).not.toBe(id_b);
         expect(id_a).toBe('doc-a:same');
         expect(id_b).toBe('doc-b:same');

@@ -1,5 +1,6 @@
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
+import { pointerDrag } from '../helpers/pointer-drag';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 
@@ -24,35 +25,6 @@ test.describe('Kanban Pointer Drag and Drop', () => {
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
         return { id, path: doc_path };
-    }
-
-    /**
-     * Drive @hello-pangea/dnd's pointer sensor with a real mouse gesture: press on the card, nudge past
-     * the drag threshold, move over the destination column in steps, settle, then release. The settle
-     * waits give dnd's rAF-driven lift/drop phases time to run.
-     */
-    async function pointerDrag(page: Page, handle: Locator, destination: Locator): Promise<void> {
-        const start = await handle.boundingBox();
-        const end = await destination.boundingBox();
-        if (!start || !end) { throw new Error('pointerDrag: missing bounding box'); }
-
-        const from_x = start.x + start.width / 2;
-        const from_y = start.y + start.height / 2;
-        const to_x = end.x + end.width / 2;
-        const to_y = end.y + 60;
-
-        await page.mouse.move(from_x, from_y);
-        await page.mouse.down();
-        // nudge past dnd's start threshold, then let the lift settle
-        await page.mouse.move(from_x, from_y + 8, { steps: 5 });
-        await page.waitForTimeout(150);
-        // travel to the destination column in steps so dnd tracks the move
-        await page.mouse.move(to_x, to_y, { steps: 25 });
-        await page.waitForTimeout(150);
-        await page.mouse.move(to_x, to_y, { steps: 5 });
-        await page.waitForTimeout(100);
-        await page.mouse.up();
-        await page.waitForTimeout(400);
     }
 
     test('pointer-dragging a card to another column sends editText and lands the card', async ({ page }) => {

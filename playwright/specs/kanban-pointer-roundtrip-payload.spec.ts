@@ -1,5 +1,6 @@
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
+import { pointerDrag } from '../helpers/pointer-drag';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 
@@ -36,27 +37,6 @@ test.describe('Kanban pointer drag round-trip - payload, hold, and no fling on e
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
         return doc_path;
-    }
-
-    // drive dnd's pointer sensor with a real mouse gesture; the settle waits give dnd's rAF lift/drop phases time to run
-    async function pointerDrag(page: Page, handle: Locator, destination: Locator): Promise<void> {
-        const start = await handle.boundingBox();
-        const end = await destination.boundingBox();
-        if (!start || !end) { throw new Error('pointerDrag: missing bounding box'); }
-        const from_x = start.x + start.width / 2;
-        const from_y = start.y + start.height / 2;
-        const to_x = end.x + end.width / 2;
-        const to_y = end.y + 60;
-        await page.mouse.move(from_x, from_y);
-        await page.mouse.down();
-        await page.mouse.move(from_x, from_y + 8, { steps: 5 });
-        await page.waitForTimeout(150);
-        await page.mouse.move(to_x, to_y, { steps: 25 });
-        await page.waitForTimeout(150);
-        await page.mouse.move(to_x, to_y, { steps: 5 });
-        await page.waitForTimeout(100);
-        await page.mouse.up();
-        await page.waitForTimeout(400);
     }
 
     async function probeMoves(page: Page): Promise<Array<AnimationProbeEvent>> {

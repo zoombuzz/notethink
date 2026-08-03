@@ -204,21 +204,30 @@ function buildFileEpicRegistries(walk_children: NoteProps[]): { file_epic_by_id:
 }
 
 /**
+ * extend an ordinal child path by one level. A subtree root's own path is '', so its first child is
+ * '0' and that child's third child is '0.2'.
+ */
+function extendChildPath(child_path: string, index: number): string {
+    return child_path === '' ? `${index}` : `${child_path}.${index}`;
+}
+
+/**
  * walk a story subtree: assign sequential seqs, rewrite parent_notes/level, stamp
  * origin (including the pre-merge `source_position` copy of `position` so the
  * editor-caret matcher can resolve folder-mode focus in source-file offsets), and
- * keep linetag.note_seq in sync with the renumbered seq. The story root takes
- * `story_stable_id` verbatim; descendants derive `${story_stable_id}:${relative_offset}`
- * against the story's own start offset so sibling-story insertions elsewhere in the
- * file don't churn their ids. Mutates the notes and `ctx` (seq counter + all_notes list) in place.
+ * keep linetag.note_seq in sync with the renumbered seq. `child_path` is the note's
+ * ordinal position under the story root, '' at the root itself: the root takes
+ * `story_stable_id` verbatim and descendants derive `${story_stable_id}:${child_path}`,
+ * so a length-changing edit anywhere in the file leaves their ids alone and only a
+ * sibling insert or remove within the story renumbers them. Mutates the notes and
+ * `ctx` (seq counter + all_notes list) in place.
  */
 function walkStorySubtree(
     note: NoteProps,
     new_ancestors: NoteProps[],
     origin: NoteOrigin,
     story_stable_id: string,
-    story_start_offset: number,
-    is_story_root: boolean,
+    child_path: string,
     ctx: SeqWalkContext,
 ): void {
     note.seq = ctx.next_seq++;
@@ -236,15 +245,10 @@ function walkStorySubtree(
             note.linetags[key].note_seq = note.seq;
         }
     }
-    if (is_story_root) {
-        note.stable_id = story_stable_id;
-    } else {
-        const relative_offset = (note.position?.start?.offset ?? 0) - story_start_offset;
-        note.stable_id = `${story_stable_id}:${relative_offset}`;
-    }
+    note.stable_id = child_path === '' ? story_stable_id : `${story_stable_id}:${child_path}`;
     ctx.all_notes.push(note);
-    for (const child of (note.child_notes || [])) {
-        walkStorySubtree(child, [...new_ancestors, note], origin, story_stable_id, story_start_offset, false, ctx);
+    for (const [index, child] of (note.child_notes || []).entries()) {
+        walkStorySubtree(child, [...new_ancestors, note], origin, story_stable_id, extendChildPath(child_path, index), ctx);
     }
 }
 
@@ -435,8 +439,7 @@ export function mergeAggregateRoot(
         const prior_count = stable_id_slug_counts.get(slug_key) ?? 0;
         stable_id_slug_counts.set(slug_key, prior_count + 1);
         const story_stable_id = prior_count === 0 ? slug_key : `${slug_key}#${prior_count}`;
-        const story_start_offset = c.story.position?.start?.offset ?? 0;
-        walkStorySubtree(c.story, [synthetic_root], c.origin, story_stable_id, story_start_offset, true, ctx);
+        walkStorySubtree(c.story, [synthetic_root], c.origin, story_stable_id, '', ctx);
         synthetic_root.child_notes!.push(c.story);
         synthetic_root.children_body.push(c.story);
     }
@@ -479,10 +482,10 @@ export function firstIntegrationPath(
  * a candidate "story root" using the same slug derivation as folder mode
  * (linetags.id when present, else stripped headline). Depth-3 headings act as
  * story roots (matching the kanban card grouping); their descendants get
- * `${story_stable_id}:${relative_offset}` so sibling-story insertions outside
- * the story don't churn descendant ids. Notes shallower than depth-3 (the
- * file's H1 and ## epic wrappers) get their own slug-based stable_id so view
- * code that keys on them remains stable across re-parse too.
+ * `${story_stable_id}:${child_path}`, an ordinal path that only a sibling
+ * insert or remove disturbs. Notes shallower than depth-3 (the file's H1 and
+ * ## epic wrappers) get their own slug-based stable_id so view code that keys
+ * on them remains stable across re-parse too.
  *
  * Mutates the passed root tree in place. Idempotent - safe to call twice.
  */
@@ -490,43 +493,44 @@ export function stampSingleFileStableIds(root: NoteProps, doc_id: string): void 
     // synthetic root keys off doc_id so single-file view-state survives a flip to/from folder mode
     root.stable_id = `${doc_id}:__root__`;
     const slug_counts = new Map<string, number>();
-    for (const child of (root.child_notes ?? [])) {
-        walkSingleFileStableIds(child, doc_id, slug_counts, null, null);
+    for (const [index, child] of (root.child_notes ?? []).entries()) {
+        walkSingleFileStableIds(child, doc_id, slug_counts, null, extendChildPath('', index));
     }
 }
 
 /**
  * recursively stamp `stable_id` down one subtree. A story-candidate note (depth ≤ 3)
  * mints a fresh slug-based id (deduplicated within the file via `slug_counts`) and
- * becomes the story root passed to its descendants; deeper notes derive
- * `${story_stable_id}:${relative_offset}` against that root's offset so they survive
- * sibling-story insertions elsewhere in the file. Notes with no enclosing story fall
- * back to a doc-relative offset id.
+ * becomes the story root passed to its descendants, which resets `child_path` to ''
+ * so ordinals count from that root; deeper notes derive
+ * `${story_stable_id}:${child_path}` and so survive any length-changing edit,
+ * churning only when a sibling on the path is inserted or removed. A note ahead of
+ * the file's first heading has no enclosing story and hangs off the synthetic root
+ * as `${doc_id}:__root__:${child_path}` instead.
  */
 function walkSingleFileStableIds(
     note: NoteProps,
     doc_id: string,
     slug_counts: Map<string, number>,
     story_stable_id: string | null,
-    story_start_offset: number | null,
+    child_path: string,
 ): void {
     let next_story_stable_id = story_stable_id;
-    let next_story_start_offset = story_start_offset;
+    let next_parent_path = child_path;
     if (note.depth !== undefined && note.depth <= 3) {
         const slug_key = `${doc_id}:${storyStableIdSlug(note)}`;
         const prior_count = slug_counts.get(slug_key) ?? 0;
         slug_counts.set(slug_key, prior_count + 1);
         note.stable_id = prior_count === 0 ? slug_key : `${slug_key}#${prior_count}`;
         next_story_stable_id = note.stable_id;
-        next_story_start_offset = note.position?.start?.offset ?? 0;
+        next_parent_path = '';
     } else if (story_stable_id !== null) {
-        const relative_offset = (note.position?.start?.offset ?? 0) - (story_start_offset ?? 0);
-        note.stable_id = `${story_stable_id}:${relative_offset}`;
+        note.stable_id = `${story_stable_id}:${child_path}`;
     } else {
-        note.stable_id = `${doc_id}:offset:${note.position?.start?.offset ?? 0}`;
+        note.stable_id = `${doc_id}:__root__:${child_path}`;
     }
-    for (const child of (note.child_notes ?? [])) {
-        walkSingleFileStableIds(child, doc_id, slug_counts, next_story_stable_id, next_story_start_offset);
+    for (const [index, child] of (note.child_notes ?? []).entries()) {
+        walkSingleFileStableIds(child, doc_id, slug_counts, next_story_stable_id, extendChildPath(next_parent_path, index));
     }
 }
 

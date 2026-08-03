@@ -138,7 +138,7 @@ export function renderBodyItems(note: NoteProps, items: (NoteProps | MdastNode)[
         if (isChildNote(child)) {
             const child_note = child as NoteProps;
             return <GenericNote
-                key={child_note.seq}
+                key={child_note.stable_id ?? child_note.seq}
                 {...child_note}
                 {...additional_props}
                 display_options={{

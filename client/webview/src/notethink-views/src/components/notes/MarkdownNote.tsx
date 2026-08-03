@@ -1,5 +1,5 @@
 import Debug from 'debug';
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import type { ReactElement } from "react";
 import { arraysEqual } from "../../lib/noteops";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
@@ -14,6 +14,19 @@ import { useMarkdownNoteBodyScroll } from "./markdown/useMarkdownNoteBodyScroll"
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:MarkdownNote");
+
+// membership of this note's own stable_id in the view's manual-expansion list; a note with no stable_id can never be listed
+function isManuallyExpanded(note: NoteProps): boolean {
+    const stable_id = note.stable_id;
+    if (stable_id === undefined) { return false; }
+    return note.display_options?.view_expanded_ids?.includes(stable_id) ?? false;
+}
+
+// hand the view that owns the id list one expand/collapse; a note with no stable_id has no identity to key expansion on
+function dispatchNoteExpanded(note: NoteProps, expanded: boolean): void {
+    if (note.stable_id === undefined) { return; }
+    note.handlers?.setNoteExpanded?.(note.stable_id, expanded);
+}
 
 export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     const note_ref = useRef<HTMLDivElement>(null);
@@ -42,12 +55,13 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     const overflow_state = useMarkdownNoteOverflow(body_ref, is_top_level);
 
     /*
-     * manual expand state: tracks the user's "Show more" click when auto-expand is off. Nothing resets it
-     * on a content change - the card is keyed by note identity, so a slot handover remounts with a fresh
-     * flag, and "Show less" is the only in-place collapse. An earlier body_raw-keyed reset collapsed the
-     * card on every edit (a checkbox tick rewrites the body), which read as the click scrolling the note.
+     * manual expand state is the view's, not this component's: "Show more" / "Show less" add and remove
+     * this note's stable_id from view_expanded_ids, and the flag is derived from that list every render.
+     * Expansion therefore belongs to the note, so it outlives a seq reassignment, a remount into another
+     * kanban column, and a reload. A headline rename mints a new implicit stable_id and so collapses the
+     * card - the id list is the note's identity and nothing re-derives it across the rename.
      */
-    const [manually_expanded, setManuallyExpanded] = useState(false);
+    const manually_expanded = isManuallyExpanded(props);
     const auto_expand = props.display_options?.settings?.autoExpandFocusedNote;
 
     /*
@@ -108,13 +122,13 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
                 max_height={overflow_state.max_height}
                 scrolled_top={scrolled_top}
                 at_bottom={at_bottom}
-                onExpand={() => setManuallyExpanded(true)}
+                onExpand={() => dispatchNoteExpanded(props, true)}
             />
             {!should_clip && is_top_level && overflow_state.overflows && (
                 <div className={view_specific_styles.showLessBar}>
                     <span
                         className={view_specific_styles.readMoreToggle}
-                        onClick={(e) => { e.stopPropagation(); setManuallyExpanded(false); }}
+                        onClick={(e) => { e.stopPropagation(); dispatchNoteExpanded(props, false); }}
                         role="button"
                     >Show less</span>
                 </div>
@@ -144,6 +158,8 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
     if (prev.display_options?.settings?.autoExpandFocusedNote !== next.display_options?.settings?.autoExpandFocusedNote) { return false; }
     // caret offset drives body scroll in clipped notes - only re-render focused notes
     if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
+    // one id list covers this note and the descendants it renders, so a parent repaints even when its own membership is unchanged
+    if (!arraysEqual(prev.display_options?.view_expanded_ids, next.display_options?.view_expanded_ids)) { return false; }
     // children's focused/selected status flows through display_options.focused_seqs / selected_seqs; when those change, child notes need to re-render even if this note's own focused/selected didn't
     if (!arraysEqual(prev.display_options?.focused_seqs, next.display_options?.focused_seqs)) { return false; }
     if (!arraysEqual(prev.display_options?.selected_seqs, next.display_options?.selected_seqs)) { return false; }

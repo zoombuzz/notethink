@@ -406,49 +406,6 @@ Systemic findings from a deep multi-agent optimisation review (scout + 5 dimensi
   + impact: eliminates redundant parse and post work on every save and for hidden panels; effort: S
 
 
-### Log-source eslint rules are not rolled out here [](?id=log-source-eslint-rules&time_estimated=180)
-
-Six sibling projects in the same private workspace carry an identical shared `restrictedSyntax` const in their `eslint.config.mjs`, enforcing the log-source convention with two selectors. notethink has the structured logger (54 `writeTo*` lines in production files, 89 including tests; 48 are call sites rather than imports or definitions) and neither selector, and `PanelSession.ts` shows exactly the drift they exist to prevent.
-
-+ background:
-  + a 2026-08-03 review in a sibling project described these rules as newly rolled out there, and the workspace agent rulebook as scoping them to a single project. Both readings were wrong: the block was already in six projects. That rulebook line has since been corrected and now names this story by title; notethink and two sibling services are the genuine holdouts, and the other half is tracked in its own repo.
-  + the two selectors are: `writeToErrorLog` called with fewer than three arguments, and a bare HTTP method used as the source. Copy the `restrictedSyntax` const whole from any sibling that already carries it.
-  + `writeToErrorLog` here is variadic (`client/extension/src/lib/errorops.ts:178`, `...data: Array<unknown>`), so the arity convention has no type-level backstop and eslint is the only enforcement available
-  + notethink's config has one main block for `**/*.ts` / `**/*.tsx` plus a test override for `max-lines-per-function`. `no-restricted-syntax` goes in the main `rules` block alongside `local/no-consecutive-line-comments`.
-  + notethink has no `eslint-rules/` directory, unlike the Next.js siblings. None is needed: `no-restricted-syntax` is a built-in.
-  + the bare-HTTP-method selector has zero possible hits here - a VS Code extension has no route handlers. Copy it anyway so the const stays byte-identical across the seven projects; it is a guard, not a migration.
-+ the real value was the mangled source field, not the arity
-  + `formatFirstArg` (`errorops.ts:144`) keeps only the LAST `LOG_SOURCE_MAX_LEN` (24) characters of the source, so the old sentence sources were truncated mid-phrase in the winston column
-  + six sites (623, 710, 1082, 1089, 1134, 1167) collapsed to the identical source `"side workspace, refusing]"`, which is precisely the failure `AGENTS.md:632` describes - one identifier covering many distinct operations, useless to grep on
-  + only the winston column truncates: `writeToLogAtLevel` copies `raw_data` BEFORE the shift, so `appendToFileLog` writes the full untruncated source to `notethink-extension.log`. The cap is column alignment, not data loss, which is why the five sources longer than 24 chars are left at their full method names rather than abbreviated to fit - the siblings do the same against the same cap.
-+ the selector enforces arity, not source quality - a known blind spot, accepted
-  + `:539` has three arguments and a sentence source, so it PASSES the selector while still violating `AGENTS.md:626`
-  + decided 2026-08-04: do NOT author a third notethink-only selector for sentence-shaped sources. It would break the copy-identical `restrictedSyntax` const the other six projects share. Source quality stays enforced by review, as in the two remaining holdouts.
-+ do NOT copy the loop-safety block that sits next to it in those six configs
-  + each of the six also declares a *separate* file-scoped config object banning `WhileStatement` and `DoWhileStatement` in production code
-  + notethink has exactly 17 `while (` in production sources (`lib/noteui.ts` alone has 6), so copying it would turn lint red for reasons unrelated to logging
-  + it is a different standard with its own migration cost; if it is wanted here, it is a separate story
-+ the main block covers test files, so the arity selector will flag the suite
-  + `client/extension/src/lib/errorops.test.ts` calls `writeToErrorLog` with fewer than three arguments at lines 20, 47, 53, 59, 74 and 79, deliberately, to prove the variadic path does not throw
-  + the workspace precedent is a targeted disable, not scoping the selector away from tests: `// eslint-disable-next-line no-restricted-syntax -- deliberately exercises the <3-arg path`, applied per call site in the siblings' own errorops tests
-+ [X] reshape every production call site to `(source, message[, error])` - all 42 in `client/extension/src/vscode/PanelSession.ts` plus `extension.ts:54`
-  + scope decided 2026-08-04: widened from the 13 the arity selector reaches to all 43, because ALL 42 PanelSession sources were sentence-shaped and fixing only the lint-visible subset would have left the file half-converted
-  + the rule applied, mechanically and without per-site judgement: the source is the **enclosing method name verbatim** (`handleOpenFile`, `applyEditTextToDoc`, `discoverViaReadDirectoryWalk`), the description of what went wrong is the second argument, and any path / url / setting detail is interpolated into that description. Matches the sibling pattern (`writeToErrorLog('fetchCalendarEvent', \`fetch failed for event=${id}\`, error)`) and the one site notethink already had right, `editops.ts:58`.
-  + shape split by whether an error object exists (option C of three considered): sites with a real `err` stay `writeToErrorLog(source, message, err)`; the refusal / validation paths with no error become `writeToLogAtLevel('error', source, message)`. This is the answer the shared rule's own message gives, and the dominant workspace pattern - the largest sibling runs a near 1:1 split between the two calls.
-  + accepted consequence: `writeToErrorLog` also calls `sendClientError` (`errorops.ts:180`) and `writeToLogAtLevel` does not, so the refusals leave client-error reporting. This costs nothing today - `NOTETHINK_CLIENT_ERROR_REPORTING` is only ever true when `process.env.NOTETHINK_CLIENT_ERROR_REPORTING === '1'` and nothing sets it (not `package.json`, not `publish.yml`, not `release.yml`). If reporting is ever switched on and path-traversal refusals are wanted in it, broaden `sendClientError` rather than reverting these call sites.
-  + `notethinkEditor.test.ts:533` asserted the old two-argument shape via `stringContaining`; it now spies `writeToLogAtLevel` and asserts source and message separately, so the convention is pinned by a test
-  + 29 distinct sources now, zero collisions after the 24-char truncation (was: six sites sharing one)
-+ [X] add the six deliberate `eslint-disable-next-line` comments to `errorops.test.ts`, matching the siblings' wording
-+ [X] add the two-selector `no-restricted-syntax` block to the main `rules` object in `eslint.config.mjs`
-+ [X] run `pnpm lint` and confirm the six test disables are the only suppressions needed - production was already clean, so no production suppression was added
-  + both selectors verified to bite: a temporary `writeToErrorLog('boom', 'two args only')` and `writeToErrorLog('GET', 'x', new Error('y'))` each raised the expected error before being removed
-+ acceptance criteria
-  + `pnpm lint` clean with both selectors active
-  + a new `writeToErrorLog('GET', ...)` or two-argument call fails lint
-  + every production log source is a bare camelCase identifier naming its enclosing function, with no space or colon, and no two sources collide after the 24-char truncation
-  + no `WhileStatement` rule was added, and no third notethink-only selector was added
-
-
 ### l10n bundles are not checked for untranslated values [](?id=l10n-untranslated-check&time_estimated=45)
 
 `client/extension/src/l10n/l10n-bundles.test.ts` is thorough: key parity in both directions, non-empty values, and placeholder preservation, over both `bundle.l10n.*.json` (68 keys) and `package.nls.*.json` (26 keys) for de/es/fr/it. The one check it lacks is whether a value was ever translated, and it is the check that catches a new string shipped as English in four languages.

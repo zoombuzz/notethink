@@ -154,7 +154,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + MutationObserver syncs attribute on live theme changes
 + [X] CSS variable bridge (vscode-mantine-bridge.css)
   + maps 7 --mantine-* variables to --vscode-* equivalents
-  + ViewRenderer.module.scss works unchanged in both NoteGit and NoteThink
+  + ViewRenderer.module.scss works unchanged in both notegit and NoteThink
   + index.css uses --vscode-font-family, --vscode-editor-foreground, --vscode-editor-background
 
 
@@ -257,7 +257,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 ### Install notethink-dev to get using it all the time
 
 + symlink
-  + `ln -s /mnt/secure/home/alex/git/github.com/active_development/notethink ~/.vscode/extensions/notethink-dev`
+  + `ln -s ~/git/github.com/in_development/notethink ~/.vscode/extensions/notethink-dev`
 + can remove that once we've got a deployed version out
 + goal is to establish what I use this for
   + how useful is it
@@ -338,7 +338,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + MutationObserver syncs attribute on live theme changes
 + [X] CSS variable bridge (vscode-mantine-bridge.css)
   + maps 7 --mantine-* variables to --vscode-* equivalents
-  + ViewRenderer.module.scss works unchanged in both NoteGit and NoteThink
+  + ViewRenderer.module.scss works unchanged in both notegit and NoteThink
   + index.css uses --vscode-font-family, --vscode-editor-foreground, --vscode-editor-background
 + [X] verify high-contrast themes
   + test with "High Contrast" and "High Contrast Light" themes
@@ -410,7 +410,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 ### Performance: large file rendering
 
 + problem
-  + NoteThink UI sluggish for big files (shopify-uncomplicated todo.md: 2761 lines, 274 headings)
+  + NoteThink UI sluggish for big files (sierra todo.md: 2761 lines, 274 headings)
 + [X] phase 1: algorithmic fixes
   + pre-computed line-offset index for O(log n) binary search in makePosition
   + replaced nestChildNotes O(n²) backward scan with O(n) ancestor stack
@@ -449,41 +449,41 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + removed 5 descendant_note_count tests
 
 
-### Publish NoteThink as npm package for dulcet
+### Publish NoteThink as npm package for hostapp
 
 + goal
-  + publish `@zoombuzz/notethink` to GitHub Packages so dulcet can consume it as an npm dependency
-  + follows the `@zoombuzz/calfam-shared` pattern: push to main → GitHub Actions → `npm publish`
-  + eliminates manual `COPY notethink-extension/` step in dulcet's Dockerfile
+  + publish `@zoombuzz/notethink` to GitHub Packages so hostapp can consume it as an npm dependency
+  + follows the `@zoombuzz/carbon-shared` pattern: push to main → GitHub Actions → `npm publish`
+  + eliminates manual `COPY notethink-extension/` step in hostapp's Dockerfile
 + [X] add `publishConfig` to root `package.json`
 + [X] add `prepublishOnly` script to root `package.json`
 + [X] update `repository.url` casing (`ZoomBuzz` → `zoombuzz`)
-+ [X] remove dulcet-specific code from NoteThink
-  + removed `dulcet.saveToGitHub`, `dulcet.openFromGitHub` commands, keybinding, and `dulcet.openFile` config from `package.json`
-  + deleted `dulcetSaveToGitHub.ts`, `dulcetOpenFromGitHub.ts`, `githubFileSystemProvider.ts` and their 3 test files
-  + removed `isDulcetContext()`, `dulcetStartup()`, and dulcet activation block from `extension.ts`
++ [X] remove hostapp-specific code from NoteThink
+  + removed `hostapp.saveToGitHub`, `hostapp.openFromGitHub` commands, keybinding, and `hostapp.openFile` config from `package.json`
+  + deleted `hostAppSaveToGitHub.ts`, `hostAppOpenFromGitHub.ts`, `githubFileSystemProvider.ts` and their 3 test files
+  + removed `isHostAppContext()`, `hostAppStartup()`, and hostapp activation block from `extension.ts`
 + [X] create `.github/workflows/publish.yml`
-  + follows calfam-shared pattern: check version → pnpm install → npm publish
+  + follows carbon-shared pattern: check version → pnpm install → npm publish
   + dynamically injects scoped name (`@zoombuzz/notethink`) and `files` array before `npm publish`
   + needed because vsce rejects scoped names and `files` alongside `.vscodeignore`
 + [X] fix release.yml version extraction
   + swapped quote nesting in `node -p` to avoid GitHub Actions escaping backslash-quotes
 + [X] test locally with `npm pack` (2.5MB tarball, 14 files, no source maps or test bundles)
 + first published version: `@zoombuzz/notethink@0.1.29`
-+ consumers: dulcet adds `"@zoombuzz/notethink": "^0.1.29"` with `@zoombuzz:registry=https://npm.pkg.github.com` in `.npmrc`
++ consumers: hostapp adds `"@zoombuzz/notethink": "^0.1.29"` with `@zoombuzz:registry=https://npm.pkg.github.com` in `.npmrc`
 
 
 ### Test engines.vscode lower bound against vscode-web and VS Code desktop
 
-+ `engines.vscode` was lowered from `^1.109.0` to `^1.91.1` for dulcet compatibility
++ `engines.vscode` was lowered from `^1.109.0` to `^1.91.1` for hostapp compatibility
   + `vscode-web` npm package tops out at 1.91.1 - NoteThink must be compatible with it
   + VS Code desktop is currently ~1.96+ - the `^1.91.1` range covers both
 + risk: NoteThink may use VS Code APIs introduced after 1.91
   + quick audit found only standard APIs (commands, window, workspace, Uri)
   + `window.tabGroups` (introduced 1.77) used only in test code
   + but a deeper audit is needed to be certain
-+ [X] test NoteThink in dulcet (vscode-web 1.91.1)
-  + install `@zoombuzz/notethink` in dulcet, load in browser
++ [X] test NoteThink in hostapp (vscode-web 1.91.1)
+  + install `@zoombuzz/notethink` in hostapp, load in browser
   + verify: extension activates, Auto/Document/Kanban views render, keyboard nav works
   + verify: no "Extension is not compatible" errors in console
 + [X] test NoteThink in VS Code desktop (latest stable)
@@ -930,7 +930,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
 + goal
   + in Directory mode, show one merged visualisation of all matching files rather than N stacked copies of the single-file view
   + each merged story carries an origin tag so the user can see which file it came from
-  + foundation for a project-plan Kanban that aggregates stories from every `todo.md` under `active_development/*/` into one board
+  + foundation for a project-plan Kanban that aggregates stories from every `todo.md` under `in_development/*/` into one board
 
 + design (locked in 2026-05-14)
   + synthetic root in the webview (not on the extension side): `mergeAggregateRoot(docs, integration_path)` parses every doc via `convertMdastToNoteHierarchy` then surfaces depth-3 headings under a single seq=0 root, renumbering globally
@@ -938,7 +938,7 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + per-file `ng_view` on the H1 is captured as `origin.file_view_type` so `AutoView` can majority-vote view type across files (one vote per file, ties fall back to `document`)
   + breadcrumb in Directory mode segments the aggregation path itself, not any one file
   + edits/clicks attach `docPath: note.origin?.doc_path` so the per-doc routing survives the merge; in single-file mode `note.origin` is undefined and behaviour is unchanged
-  + origin pill: single uppercase first letter of project name (`oma` → `O`, `notegit` → `N`), deterministic colour from djb2 hash of full project name, theme-adaptive lightness (dark 32%, light 72%, saturation 65%); optional second epic pill when `origin.epic` is set
+  + origin pill: single uppercase first letter of project name (a project named `atlas` renders `A`), deterministic colour from djb2 hash of full project name, theme-adaptive lightness (dark 32%, light 72%, saturation 65%); optional second epic pill when `origin.epic` is set
   + extension watcher: phase-1 `findFiles` bulk update then a `FileSystemWatcher` streams incremental upserts (`merge_strategy: 'merge'`) and `docDeleted` removals; tear-down on dispose / mode switch
   + naming: the per-doc and per-directory components inside `NoteRenderer.tsx` are tree-composers (`NoteTreeComposer`, `AggregateTreeComposer`), one layer above leaf views (Document/Kanban/Auto)
 
@@ -976,8 +976,8 @@ mocked vscode unit tests; add integration tests via `@vscode/test-web` as a foll
   + [X] switching the aggregated view to Kanban keeps origin pills and produces ≥2 columns
 
 + deferred / follow-up
-  + cross-project aggregation (`active_development/*/docstech/...`) - current `setIntegration` accepts a single directory only; multi-root integration is a later story
-  + `calfam/docstech/users/alex.stanhope/done.md` historical-context `##` dividers (lines 1367-1368 at the time of writing) interpret as epics; user cleaned these up after this story
+  + cross-project aggregation (`in_development/*/docstech/...`) - current `setIntegration` accepts a single directory only; multi-root integration is a later story
+  + `carbon/docstech/users/alex.stanhope/done.md` historical-context `##` dividers (lines 1367-1368 at the time of writing) interpret as epics; user cleaned these up after this story
   + `linetagops` round-trip tests for `%26` / `+` encoding were not added - encoding works via existing `URLSearchParams` decoding; add when a real edge case appears
 
 + tests 527, playwright 40, lint clean
@@ -1334,28 +1334,28 @@ The 0.2.9 work added `active_file_watcher` for single-file mode and the existing
 
 ### Origin-pill color collisions across projects
 
-Aggregate view origin pills colour-code each story by its source file's first letter (project initial). Two pairs of projects observed to hash to the same colour: CalFam ("C") and Shopify Uncomplicated ("S") both render the same red; notegit ("N") and countingsheet ("C") both render the same green. The bucket is too small / the hash isn't spreading the input space - first-letter-only collapses many projects to ~26 inputs, and even those don't fan out evenly.
+Aggregate view origin pills colour-code each story by its source file's first letter (project initial). Two pairs of sibling projects observed to hash to the same colour: one pair both render the same red, another pair both render the same green. The bucket is too small / the hash isn't spreading the input space - first-letter-only collapses many projects to ~26 inputs, and even those don't fan out evenly.
 
-Investigation: the pill colour used `djb2(project_name) % 360`. The input was already the full project name, not the first letter - but `djb2 % 360` happens to alias for our real-world names. Empirically: calfam→hue 7, shopify-uncomplicated→hue 4 (3° apart); notegit→hue 87, countingsheet→hue 83 (4° apart). Tried FNV-1a, SHA-256, and hash×irrational multipliers - every hash function produces *some* close pair for our 8-project set because 8 random points on a 360-bucket ring are statistically prone to clustering. Only a sorted-index assignment with a golden-angle multiplier guarantees a minimum gap.
+Investigation: the pill colour used `djb2(project_name) % 360`. The input was already the full project name, not the first letter - but `djb2 % 360` happens to alias for our real-world names. Empirically the first colliding pair landed on hues 7 and 4 (3° apart), the second on hues 87 and 83 (4° apart). Tried FNV-1a, SHA-256, and hash×irrational multipliers - every hash function produces *some* close pair for our 8-project set because 8 random points on a 360-bucket ring are statistically prone to clustering. Only a sorted-index assignment with a golden-angle multiplier guarantees a minimum gap.
 
 + [X] `hueForProjectIndex(i)` returns `(i * 137.508) % 360` (golden angle) - adjacent indices land far apart on the wheel; deterministic per index
 + [X] `mergeAggregateRoot` enumerates distinct project names from `parsed` (already sorted by `relative_path`), assigns each its sorted-position hue via `hueForProjectIndex`, stamps `origin.project_hue` on every story
 + [X] `OriginPill` prefers `origin.project_hue` when present; falls back to the djb2 hash for single-file mode and legacy callers
 + [X] `pillColourForHue(hue, theme)` factored out so both paths share the final HSL build
 + [X] tests: index spread ≥30° pairwise for the workspace 8-project set; precomputed-hue path takes precedence over the hash; existing djb2 coverage retained for the fallback path
-+ manual: open the workspace folder in aggregate mode and verify calfam/shopify-uncomplicated pills are now visually distinct, and notegit/countingsheet pills are too
++ manual: open the workspace folder in aggregate mode and verify carbon/sierra pills are now visually distinct, and notegit/cobalt pills are too
 
 
 ### Two-character origin pills with prefix disambiguation
 
-The aggregate origin pill currently renders a single uppercase letter (the project's initial). A second letter would make pills more legible - `C` becomes `CO` for countingsheet - and let prefix-colliding projects differentiate visually: notegit→`NG`, notethink→`NT` (earliest divergent character chosen per project against the merged aggregate's project list).
+The aggregate origin pill currently renders a single uppercase letter (the project's initial). A second letter would make pills more legible, and let prefix-colliding projects differentiate visually - two projects both starting `N` render `NG` and `NT` (earliest divergent character chosen per project against the merged aggregate's project list).
 
 + [X] add `projectAbbreviation(name)` fallback (first + second char, uppercased) and `buildProjectLabels(names)` (divergence-rule labeller) in `client/webview/src/notethink-views/src/components/notes/OriginPill.tsx`
 + [X] stamp `origin.project_label` in `mergeAggregateRoot` alongside `project_hue`, fed from the same sorted distinct-project-names enumeration
 + [X] add `project_label?: string` to `NoteOrigin` and render it in `OriginPill`, falling back to the single-project abbreviation when absent (single-file/legacy origins)
 + [X] tests: OriginPill suites for `projectAbbreviation` and `buildProjectLabels` (spec examples + 3-way collision + strict-prefix edge case + workspace project list); mergeAggregateRoot test asserting `origin.project_label` matches the divergence rule
 + [X] update existing OriginPill test expectations (`O` → `OM`) and the Playwright spec's comment for clarity
-+ manual: open the workspace folder in aggregate mode and verify notegit/notethink pills now read `NG`/`NT` and countingsheet reads `CO`
++ manual: open the workspace folder in aggregate mode and verify the two `N`-prefixed projects now read `NG`/`NT` and a two-letter pill renders for every other project
 
 
 ### Relevance ordering: surface recently-edited files within equal rank
@@ -2143,7 +2143,7 @@ When the caret moves to a note in folder or current-file view, `useScrollToCaret
 
 ### Folder → current-file flip leaves toolbar selector and breadcrumb stuck on folder [](?id=integration-flip-toolbar-stale)
 
-Repro: open a folder-mode view, then pick **Current file** in the integration selector. The note list correctly switches to the active file's content, but the integration selector dropdown still shows **Folder** and the breadcrumb still shows the workspace folder name (e.g. `active_development`) instead of the active file's path. Reload of the window clears it. Symptoms imply `FolderTreeComposer` is still the chosen composer post-flip (both `integration_mode` and the breadcrumb's folder path are values that only `FolderTreeComposer` stamps - `NoteTreeComposer` leaves `integration_mode` undefined and `useViewToolbar` defaults it to `'current_file'`). The single doc shows because `enterCurrentFileMode` already replaced the docs map down to the active doc; the *composer* selection never updated.
+Repro: open a folder-mode view, then pick **Current file** in the integration selector. The note list correctly switches to the active file's content, but the integration selector dropdown still shows **Folder** and the breadcrumb still shows the workspace folder name (e.g. `in_development`) instead of the active file's path. Reload of the window clears it. Symptoms imply `FolderTreeComposer` is still the chosen composer post-flip (both `integration_mode` and the breadcrumb's folder path are values that only `FolderTreeComposer` stamps - `NoteTreeComposer` leaves `integration_mode` undefined and `useViewToolbar` defaults it to `'current_file'`). The single doc shows because `enterCurrentFileMode` already replaced the docs map down to the active doc; the *composer* selection never updated.
 
 + delivery notes
   + root cause #1 - stranded per-doc viewState entries tagged `integration_mode === 'folder'` were dragging the fallback scan in `anyViewInFolderMode` / `firstIntegrationPath`, keeping the composer in folder mode after the canonical `__folder__` key had flipped to `current_file`. #2 (shallow-merge race) and #3 (persistence rehydrate) deliberately not pursued - the new unit tests demonstrate #1 is sufficient
@@ -2218,7 +2218,7 @@ Three small, independent webview-viewer polish fixes spotted in browser context 
 
 ### Origin pill click descends the folder root to the pill's project subfolder [](?id=pill-click-descends-folder-root)
 
-The origin pill (project label on each note in folder/aggregate mode) currently posts `revealRange` on click. Behaviour change: a pill click should **stay in folder mode** and **descend the folder root** to the subfolder the pill represents, exactly as if the user had clicked a deeper segment in the breadcrumb (`BreadcrumbTrail.tsx`). For my workspace where the VS Code root is `active_development/`, clicking the `NT` pill makes the breadcrumb read `active_development › notethink` and the view re-rendered against `active_development/notethink/**`. To go back up, the user clicks `active_development` in the breadcrumb (existing behaviour, no new affordance). This is **not** a filter - it is a folder-root change, the same `setIntegration { mode: 'folder', path }` message the breadcrumb already sends.
+The origin pill (project label on each note in folder/aggregate mode) currently posts `revealRange` on click. Behaviour change: a pill click should **stay in folder mode** and **descend the folder root** to the subfolder the pill represents, exactly as if the user had clicked a deeper segment in the breadcrumb (`BreadcrumbTrail.tsx`). For my workspace where the VS Code root is `in_development/`, clicking the `NT` pill makes the breadcrumb read `in_development › notethink` and the view re-rendered against `in_development/notethink/**`. To go back up, the user clicks `in_development` in the breadcrumb (existing behaviour, no new affordance). This is **not** a filter - it is a folder-root change, the same `setIntegration { mode: 'folder', path }` message the breadcrumb already sends.
 
 + goal
   + a pill click invokes the existing breadcrumb-folder-click pipeline (`useViewHandlers.ts:144-159`, `handle_folder_click`) with a target folder path computed from the pill's `origin`
@@ -2234,7 +2234,7 @@ The origin pill (project label on each note in folder/aggregate mode) currently 
   + extend `OriginPill.tsx`'s click handler to compute the target folder path from `origin.doc_path` + `origin.relative_path` + `projectNameFromRelativePath(origin.relative_path)`, then call the existing folder-click handler (threaded in via the same `handlers` prop the headline already passes)
   + thread `descendToPillFolder(origin)` (a thin wrapper around `handle_folder_click`) from `useViewHandlers.ts` through `GenericView.tsx` → `MarkdownNoteHeadline.tsx` → `OriginPill.tsx` - the only plumbing the story adds
   + **drop the pill's current `revealRange` post.** The note's source file still lives inside the new folder root, so the note remains visible after the descent; opening the file in the editor is a separate gesture (note-body click already does that). Pill click is now purely a navigation lever
-  + breadcrumb behaviour, "click `active_development` to go back up" behaviour, breadcrumb rendering - **all unchanged**. The pill click is just a new way to feed `handle_folder_click`
+  + breadcrumb behaviour, "click `in_development` to go back up" behaviour, breadcrumb rendering - **all unchanged**. The pill click is just a new way to feed `handle_folder_click`
 + files
   + `client/webview/src/notethink-views/src/components/notes/OriginPill.tsx` - replace the pill `onClick` post (currently `revealRange`) with a call to `descendToPillFolder(origin)`
   + `client/webview/src/notethink-views/src/components/notes/markdown/MarkdownNoteHeadline.tsx` - pass `descendToPillFolder` from `note.handlers` down to `OriginPill`
@@ -2255,8 +2255,8 @@ The origin pill (project label on each note in folder/aggregate mode) currently 
 + [X] jest: `projectFolderFromOrigin` returns `''` when relative_path is missing
 + [X] jest: `projectFolderFromOrigin` returns `''` defensively when doc_path doesn't end with relative_path
 + [X] playwright: pill click in folder mode posts `setIntegration { mode: 'folder', path: <workspace>/<project> }` and does NOT post `revealRange` (`folder-view.spec.ts:53`)
-+ [ ] playwright: click `active_development` in the breadcrumb - folder root returns to the workspace root, all projects visible again (not implemented; covered indirectly by existing breadcrumb-segment-click test)
-+ [ ] playwright: click the `OM` pill while at `active_development/notethink` - breadcrumb becomes `active_development › oma`, view shows oma notes only (descent rebases from workspace root, not from current root, so the click is symmetric across pills) (not implemented)
++ [ ] playwright: click `in_development` in the breadcrumb - folder root returns to the workspace root, all projects visible again (not implemented; covered indirectly by existing breadcrumb-segment-click test)
++ [ ] playwright: click another project's pill while at `in_development/notethink` - breadcrumb becomes `in_development › <that project>`, view shows that project's notes only (descent rebases from workspace root, not from current root, so the click is symmetric across pills) (not implemented)
 + [ ] playwright: open a single-folder workspace pointing directly at the `notethink/` repo (so files have `relative_path = 'README.md'`) - pill click is a no-op (not implemented)
 + [ ] playwright: clicking the note body (not the pill) is unchanged - still posts `revealRange` (covered by existing click-interaction tests)
 + [X] `pnpm run check` green (lint clean, 750 jest tests pass, 51 playwright pass)
@@ -2277,7 +2277,7 @@ The origin pill (project label on each note in folder/aggregate mode) currently 
 The user needs a consistent signal that *something is happening* whenever notethink is doing work they're waiting on - not just settings changes. Two classes of slow work today:
 
 1. **Settings round-trips.** A drawer-driven settings change (boolean toggle or filter edit) posts a message and waits for the echo back. Filter changes additionally trigger a workspace glob + re-aggregation, which can take seconds.
-2. **Navigation that triggers file discovery + load.** Clicking up the breadcrumb (e.g. `notethink/` → `active_development/`) calls `enterFolderMode(new_path)` which clears `integration_docs`, re-runs `findFiles`, fires per-file `loadFolderDoc` calls via `Promise.allSettled`, and emits a bulk replace once they settle. With 50+ markdown files in a workspace this is the most user-visible slow path - 4-5 seconds, with no UI feedback at all today.
+2. **Navigation that triggers file discovery + load.** Clicking up the breadcrumb (e.g. `notethink/` → `in_development/`) calls `enterFolderMode(new_path)` which clears `integration_docs`, re-runs `findFiles`, fires per-file `loadFolderDoc` calls via `Promise.allSettled`, and emits a bulk replace once they settle. With 50+ markdown files in a workspace this is the most user-visible slow path - 4-5 seconds, with no UI feedback at all today.
 
 Things that are **fast** and should NOT show the spinner:
 
@@ -2292,10 +2292,10 @@ Show an SVG spinner whenever the extension reports it's doing work that will act
   + fast operations (mode flips, no-op breadcrumb clicks, instant settings toggles) do NOT flash the spinner
   + the user never has to wonder "did my change take? is it still loading?"
 + reference pattern
-  + `oma/nodejs/aawai/src/components/Loader.tsx` and `calfam/nodejs/calfam-nextjs/src/components/Loader.tsx` - both wrap `react-spinners`' `SyncLoader` in a small `<Loader>` component driven by a `useLoading()` hook (`{loading, setLoading}`), with positioning via a `positionClass` prop and a CSS module
+  + `orbit/src/components/Loader.tsx` and `carbon/src/components/Loader.tsx` - both wrap `react-spinners`' `SyncLoader` in a small `<Loader>` component driven by a `useLoading()` hook (`{loading, setLoading}`), with positioning via a `positionClass` prop and a CSS module
   + notethink should match the pattern's *shape* (small component + hook + position class), not the implementation library - inline SVG keeps `notethink-views` dep-free
 + scope (v1 - both slow-work classes, drawer + toolbar mounts)
-  + add `<Spinner>` - small inline SVG component (no runtime dep), with a CSS `@keyframes rotate` and a `@media (prefers-reduced-motion: reduce)` fallback that disables the rotation. `positionClass` prop matching `oma`/`calfam`'s precedent (`InlineLoader`, `TopRightLoader`, etc.)
+  + add `<Spinner>` - small inline SVG component (no runtime dep), with a CSS `@keyframes rotate` and a `@media (prefers-reduced-motion: reduce)` fallback that disables the rotation. `positionClass` prop matching `orbit`/`carbon`'s precedent (`InlineLoader`, `TopRightLoader`, etc.)
   + add `usePendingWork()` hook exposing `{ pending, markPending(key), clearPending(key), clearAll() }` - broader than the original settings-specific framing. Keyed by string so the same hook serves multiple distinct slow-work sources. State value `pending` is snake_compatible; function handles use camelCase per `CODING_STANDARDS.md > Hook Return Values`. Hook + spinner are internal symbols (not stored externally), so no permanent-name sign-off needed
   + well-known keys (sentinel strings the hook treats specially): `'folderDiscovery'` (extension-driven), `'settingsCascade'` (settings round-trip), `'<SettingKey>'` (one per cascade key for fine-grained per-setting tracking)
   + extension emits a new wire-format message **`pendingChange`** with `{ key: string, on: boolean }`:
@@ -2315,7 +2315,7 @@ Show an SVG spinner whenever the extension reports it's doing work that will act
   + animation/easing tuning to match the kanban FLIP transitions story [[animated-passive-transitions]]
 + files
   + new `client/webview/src/notethink-views/src/components/Spinner.tsx` - inline-SVG component
-  + new `client/webview/src/notethink-views/src/components/Spinner.module.scss` - class names follow `oma`'s naming where applicable: `Spinner`, `InlineLoader`, `TopRightLoader`; `@media (prefers-reduced-motion: reduce)` disables the rotation keyframes
+  + new `client/webview/src/notethink-views/src/components/Spinner.module.scss` - class names follow `orbit`'s naming where applicable: `Spinner`, `InlineLoader`, `TopRightLoader`; `@media (prefers-reduced-motion: reduce)` disables the rotation keyframes
   + new `client/webview/src/notethink-views/src/hooks/usePendingWork.ts` - hook with the mark/clear API and the delay-then-show policy
   + `client/webview/src/notethink-views/src/components/views/SettingsCommonControls.tsx` - render `<Spinner positionClass="InlineLoader" />` in the drawer header when `pending` is true
   + `client/webview/src/notethink-views/src/components/views/FilesDrawer.tsx` - render `<Spinner positionClass="InlineLoader" />` in the drawer header when `pending` is true
@@ -2373,7 +2373,7 @@ Show an SVG spinner whenever the extension reports it's doing work that will act
 
 **Additional symptoms confirmed 2026-05-27** - same root cause, both directions of the editor↔view selection sync are broken in folder mode:
 
-1. **Editor caret → note focus is also broken in folder mode.** Move the editor caret into a story (e.g. open `oma/docstech/users/alex.stanhope/todo.md` and place the caret inside the headline `Refresh Menus Uncomplicated app - replace ScriptTag delivery + close competitive feature gap`). In `current_file` mode the matching card in the kanban view immediately shows the dashed focused outline. In `folder` mode the caret moves but **no note is highlighted** - the dashed outline never appears, even though the source doc is one of the aggregated set and the rendered card is right there in the Doing column.
+1. **Editor caret → note focus is also broken in folder mode.** Move the editor caret into a story (e.g. open `orbit/docstech/users/alex.stanhope/todo.md` and place the caret inside the headline `Refresh Menus Uncomplicated app - replace ScriptTag delivery + close competitive feature gap`). In `current_file` mode the matching card in the kanban view immediately shows the dashed focused outline. In `folder` mode the caret moves but **no note is highlighted** - the dashed outline never appears, even though the source doc is one of the aggregated set and the rendered card is right there in the Doing column.
 2. **Note click → editor caret *does* work in folder mode.** Clicking a card correctly opens the source file in the editor and moves the caret to the start of the story headline. This proves the click → `revealRange` round-trip is intact and the extension is correctly routing per-doc reveals; the broken direction is purely the **view-side state derivation that lights up the focused/selected note**.
 
 Together these two new observations narrow the bug to exactly what the Diagnosis below predicts: the `useViewContext` derivation that maps `(active editor's doc, caret offset)` → `focused note seq` is the only thing that doesn't work across integration modes. The forward direction (`view click → editor reveal`) and the renderer's outline classes are both fine. The fix must therefore make `useViewContext` produce a non-empty `focused_seqs` in folder mode whenever the active editor's caret is inside a note that exists in the aggregated tree, AND make click-driven focus work without depending on the editor round-trip at all (the per-view state-of-truth direction below).
@@ -2476,7 +2476,7 @@ NoteThink namespaces its internal/directive linetags with the `ng_` prefix (`ng_
     + render directives - `nt_view` (how to render this story), `nt_level`
     + view-specific metadata - the `<viewname>_<attribute>` pattern, e.g. ordering weight used only by the kanban view
   + `isInternalAttribute()` at `lib/renderops.tsx:109` encodes the gate today: a key starting `ng_` is internal, everything else is content
-  + the letters are almost certainly `ng_` = **n**ote**g**it (the sibling/predecessor project - `nextjs/tannyca` plus `notethink-mast`) where this linetag vocabulary originated, and `nt_` = **n**ote**t**hink, this project - an inference from project history, not stated in any doc
+  + the letters are almost certainly `ng_` = **n**ote**g**it (the sibling/notegit project - `nextjs/tannyca` plus `notethink-mast`) where this linetag vocabulary originated, and `nt_` = **n**ote**t**hink, this project - an inference from project history, not stated in any doc
 + decision (confirmed): write `nt_` going forward; `isInternalAttribute` accepts both `nt_` and `ng_`; external content attributes stay unprefixed by design
 + key insight: the parser is already generic, so this is not a parsing change
   + `parseLineTags()` at `lib/linetagops.ts:32` builds the linetags map via `URLSearchParams`; every key is stored as-authored with no prefix logic, so `nt_view` already lands in `note.linetags` as `nt_view`
@@ -2782,7 +2782,7 @@ When a folder integration view first loads, every origin pill paints in one colo
 
 Folder mode assumes the workspace lives on the `file:` scheme. It builds discovery/watch URIs with `vscode.Uri.file(folder_path)` and matches excludes against `uri.fsPath`. On desktop VS Code the workspace *is* `file:`, so it works - but in **VS Code Web with a custom `FileSystemProvider`** (a non-`file:` workspace scheme - e.g. `vscode-vfs:` like github.dev, or any host that mounts content under its own scheme) discovery searches the wrong scheme: `findFiles` returns nothing, the breadcrumb shows **"0 in 0 files"**, and the folder watcher throws `No file system handle registered (file:///…)`. Net effect: **folder mode is unusable on any web host whose workspace isn't `file:`** - current-file mode is unaffected (it uses the active document's own URI).
 
-**Second symptom - same root cause (new):** clicking a **relative `.md` link** in the rendered view (e.g. `[project-board.md](project-board.md)` or `[web-store.md](portfolio/web-store.md)`) does nothing. `useLinkInterceptor` only intercepts `http(s)`/`mailto`; relative links fall through to a dead webview-iframe navigation. Even if forwarded, the host's open-file path (`handleOpenFile` → `revealByOpening`) re-wraps the path as `vscode.Uri.file` - the **same scheme-discarding bug** - so on a `notegit:` (dulcet virtual repo) / `vscode-vfs:` workspace it would open nothing. **Desired behaviour:** clicking such a link opens the target file in an editor column beside the panel; the viewer auto-follows the new active editor (`onDidChangeActiveTextEditor`, ~`:317`), so it "pops" to display that note - no new viewer command needed. This unlocks the dulcet welcome tour, where `intro.md` links to every demo file (paired content change below).
+**Second symptom - same root cause (new):** clicking a **relative `.md` link** in the rendered view (e.g. `[project-board.md](project-board.md)` or `[web-store.md](portfolio/web-store.md)`) does nothing. `useLinkInterceptor` only intercepts `http(s)`/`mailto`; relative links fall through to a dead webview-iframe navigation. Even if forwarded, the host's open-file path (`handleOpenFile` → `revealByOpening`) re-wraps the path as `vscode.Uri.file` - the **same scheme-discarding bug** - so on a `notegit:` (hostapp virtual repo) / `vscode-vfs:` workspace it would open nothing. **Desired behaviour:** clicking such a link opens the target file in an editor column beside the panel; the viewer auto-follows the new active editor (`onDidChangeActiveTextEditor`, ~`:317`), so it "pops" to display that note - no new viewer command needed. This unlocks the hostapp welcome tour, where `intro.md` links to every demo file (paired content change below).
 
 + symptom (reproducible on a custom-scheme web workspace)
   + open a file in a `<scheme>:`-mounted folder, switch View integration → **Folder**: breadcrumb scopes correctly but reports "0 in 0 files", Files drawer says "No files match the current filters"
@@ -2807,7 +2807,7 @@ Folder mode assumes the workspace lives on the `file:` scheme. It builds discove
 + scope
   + `client/extension/src/vscode/PanelSession.ts` - scheme-preserving URI construction in `enterFolderMode`, `discoverFolderDocs`, `computeWorkspaceProjects`, `armFolderWatcher`, `isExcludedByIntegrationFilter`, **and `revealByOpening`/`handleOpenFile`**
   + `client/webview/src/hooks/useLinkInterceptor.ts` + `Messages.ts` - relative-link interception + new `openRelative` message
-  + **dulcet repo (paired content change):** `nodejs/dulcet/content/notegit/welcome/main/intro.md` - convert the example references from backtick code spans to relative markdown links, **link text = the filename** (decision: `[project-board.md](project-board.md)`, `[web-store.md](portfolio/web-store.md)`, etc.). Do this only when the NoteThink side lands so the live demo never ships dead-looking links.
+  + **hostapp repo (paired content change):** `nodejs/hostapp/content/notegit/welcome/main/intro.md` - convert the example references from backtick code spans to relative markdown links, **link text = the filename** (decision: `[project-board.md](project-board.md)`, `[web-store.md](portfolio/web-store.md)`, etc.). Do this only when the NoteThink side lands so the live demo never ships dead-looking links.
   + keep current-file mode untouched (already uses the active document URI)
 + out of scope
   + any redesign of the discovery/merge pipeline - this is purely making the existing pipeline scheme-agnostic
@@ -2818,7 +2818,7 @@ Folder mode assumes the workspace lives on the `file:` scheme. It builds discove
   + `client/extension/src/__mocks__/vscode.ts` - `findFiles`/`readDirectory`/`RelativePattern` mocks need to capture the URI scheme so the test can assert it
   + `client/webview/src/hooks/useLinkInterceptor.ts` - relative-link interception (+ its test, if present)
   + `client/webview/src/notethink-views/src/types/Messages.ts` - `OpenRelativeMessage` + union member
-  + **dulcet repo:** `nodejs/dulcet/content/notegit/welcome/main/intro.md` - references → relative links (filename link text); the dulcet `welcome-content.test.ts` / `route.test.ts` may need updating if they assert the prose
+  + **hostapp repo:** `nodejs/hostapp/content/notegit/welcome/main/intro.md` - references → relative links (filename link text); the hostapp `welcome-content.test.ts` / `route.test.ts` may need updating if they assert the prose
 + [X] rebuild folder-mode URIs on the active workspace folder's scheme (preserve scheme via `base_uri.with({ path })`); drop all `vscode.Uri.file(folder_path)` in the folder-mode path
 + [X] make `isExcludedByIntegrationFilter` use scheme-safe `uri.path` relative math instead of `uri.fsPath`
 + [X] confirm `findFiles` works for a custom-scheme `RelativePattern` in web; if not, add the `readDirectory`-walk fallback - scheme-branched: `file:` uses `findFiles`, any other scheme uses a recursive `readDirectory` walk (`discoverViaReadDirectoryWalk`) with probe-based dir pruning, bounded by `MAX_WALK_ENTRIES`; jest covers walk discovery + node_modules prune on a `vscode-vfs:` workspace
@@ -2826,12 +2826,12 @@ Folder mode assumes the workspace lives on the `file:` scheme. It builds discove
 + [X] generalise `revealByOpening`/`handleOpenFile` off `vscode.Uri.file` to a scheme-preserving opener (shared by the jump drawer and relative-link open)
 + [X] webview: intercept relative `.md` link clicks (exclude `http(s)`/`mailto`/`?`-linetags/`#`-fragments) → post `openRelative`
 + [X] host: dispatch `openRelative`, resolve href against the active doc URI (`Uri.joinPath`), validate within-workspace + `.md`, open beside the panel; viewer auto-follows
-+ [ ] dulcet: convert `intro.md` references to relative links (filename link text); update any prose-asserting dulcet tests - deferred to the paired dulcet change (separate repo), land only after this notethink side ships
++ [ ] hostapp: convert `intro.md` references to relative links (filename link text); update any prose-asserting hostapp tests - deferred to the paired hostapp change (separate repo), land only after this notethink side ships
 + [X] jest (notethink): folder discovery with a `vscode-vfs:`-style (non-`file:`) workspace resolves the expected files and exclude-filters correctly; watcher arm does not throw
 + [X] jest (notethink): relative-link click on a non-`file:` active doc resolves to the scheme-preserved sibling/sub-path URI and opens it (and a `..`-escape / non-`.md` href is refused)
 + [X] `pnpm run check` green - 1261 jest; fixed the lockfile's missing rollup native dep (`pnpm update rollup`, 4.60.1 → 4.61.1)
 + manual: on a custom-scheme web workspace, open a file in a subfolder and switch to Folder mode - the merged board shows every file in the folder with origin pills and cross-file epics resolved (no "0 in 0 files", no `file://` watcher error)
-+ manual (relative-link open): in dulcet (`notegit:` scheme), open the welcome `intro.md`, click an example link (e.g. `project-board.md`, `portfolio/web-store.md`) - the file opens in the editor column beside the viewer and the NoteThink viewer switches to render it; verify a nested `portfolio/*.md` link resolves correctly and an external `http(s)` link still opens in the system browser
++ manual (relative-link open): in hostapp (`notegit:` scheme), open the welcome `intro.md`, click an example link (e.g. `project-board.md`, `portfolio/web-store.md`) - the file opens in the editor column beside the viewer and the NoteThink viewer switches to render it; verify a nested `portfolio/*.md` link resolves correctly and an external `http(s)` link still opens in the system browser
 + acceptance
   + folder mode discovers and aggregates files on any workspace scheme, not just `file:`
   + no `file://`-scheme watcher error is emitted for a non-`file:` workspace
@@ -2840,7 +2840,7 @@ Folder mode assumes the workspace lives on the `file:` scheme. It builds discove
 + commit message draft
   + notethink 0.3.11: make NoteThink scheme-agnostic on non-`file:` workspaces - preserve the workspace/active-doc URI scheme through folder discovery, exclude-matching, the watcher, and the open-file path instead of hardcoding `vscode.Uri.file`; add relative-link interception so a relative `.md` link in the rendered view opens its target on the workspace's own scheme (folder aggregation previously found 0 files; relative links did nothing) in VS Code Web with a custom FileSystemProvider
   + tests 1261 jest
-  + (paired) dulcet x.y.z: welcome intro.md links each example file as a relative markdown link so the NoteThink tour opens demos on click
+  + (paired) hostapp x.y.z: welcome intro.md links each example file as a relative markdown link so the NoteThink tour opens demos on click
 
 
 ### Dragging a card into an all-unweighted kanban column sinks it to the bottom [](?id=kanban-unweighted-drop-restraint)
@@ -2985,7 +2985,7 @@ Two new file-root linetags let a document declare the view it should open into, 
 
 + naming - permanent-name check (CODING_STANDARDS.md "Permanent name check")
   + `nt_integration_mode` and `nt_breadcrumb_last` are linetag keys written into users' markdown - externally-persisted names, frozen once shipped; operator has chosen these exact keys (sign-off recorded here)
-  + author as `nt_` only - `ng_` is legacy-read for predecessor keys; new keys are `nt_`-only per AUTHORING_GUIDE
+  + author as `nt_` only - `ng_` is legacy-read for notegit keys; new keys are `nt_`-only per AUTHORING_GUIDE
   + the authored value vocabulary for `nt_integration_mode` stays `current_file` / `folder`; `auto` is NOT an authored linetag value, only a webview view-state value
   + `auto` joins `INTEGRATION_MODES` as a persisted view-state value (`vscode.setState` shape) - a permanent-name-check item; treat undefined `integration_mode` as `auto` so existing persisted states need no migration; the extension constants mirror does NOT gain `auto` (the extension only ever receives resolved `current_file` / `folder` via `setIntegration`)
   + `nt_breadcrumb_last` value is a free-form segment label matched at runtime - no persisted enum
@@ -3222,7 +3222,7 @@ Fix: settle the clip GEOMETRY synchronously. New `useSyncedBodyClip` applies `ma
 + [X] pinpoint that the clip is applied after the FLIP measures, and that the moved card remounts tall on a column change
 + [X] fix via `useSyncedBodyClip` (synchronous child layout-effect clip; writes only on change); the FLIP then measures one-slot deltas (`maxAbs` 15000px -> ~500px = one card height)
 + [X] revert the now-redundant baseline-chasing machinery: FLIP host back to a `[signature]`-keyed effect (no every-render measure); kept board-anchored measurement + the cheap ResizeObserver as a window-resize defense
-+ [X] before/after evidence captured (videos + frames in `/home/alex/flip-evidence/`); 141 jest + 26 Playwright kanban E2E green; lint clean; dev bundle rebuilt
++ [X] before/after evidence captured (videos + frames in `~/flip-evidence/`); 141 jest + 26 Playwright kanban E2E green; lint clean; dev bundle rebuilt
 + manual: reload the window and do a folder-mode status edit on the real 131-card board to confirm the displaced cards now slide one slot.
 
 Change is uncommitted on branch `staging`: `useSyncedBodyClip.ts` (new), `MarkdownNote.tsx`, `useFlipTransition.ts` (+ test), `flipMath.ts`.
@@ -3559,7 +3559,7 @@ Applied (minor/patch): `@typescript-eslint/eslint-plugin` + `@typescript-eslint/
 Pins in effect after this wave (snapshot):
 - eslint @9.39.4 (.ncurc reject) - structural - held - eslint-plugin-react is still 7.37.5 (latest) with no eslint-10 release; revisit when it ships eslint-10 compat
 - @eslint/js @9.39.4 (.ncurc reject) - structural - same
-- typescript @^6.0.3 (caret, no reject entry) - structural - held by peer ranges - @typescript-eslint/* peer `<6.1.0` and ts-jest peer `<7`; TS7 is being piloted in ledger only. Revisit when both peer ranges admit 7.x
+- typescript @^6.0.3 (caret, no reject entry) - structural - held by peer ranges - @typescript-eslint/* peer `<6.1.0` and ts-jest peer `<7`; TS7 is being piloted in lumen only. Revisit when both peer ranges admit 7.x
 Unpinned this wave: none - the last wave recorded no transient holds, and both live pins are structural with their clear-conditions still unmet
 
 Note for the next wave: ncu reads `.ncurc.json` from the shell's cwd, NOT from `--cwd`. Invoking it as `ncu --cwd <notethink>` from the workspace root silently bypasses the reject list (it offered eslint/@eslint/js 9.39.4 -> 9.39.5). `--target minor` still held eslint 10 back, but do not rely on the reject list surviving a `--cwd` invocation - always diff package.json afterwards and re-assert the pins.
@@ -3569,14 +3569,14 @@ Note for the next wave: ncu reads `.ncurc.json` from the shell's cwd, NOT from `
 + [X] pnpm install
 + [X] verify lint passes
 + [X] verify jest tests pass
-+ verified: lint clean (0 errors, 6 pre-existing warnings); 1517 jest green (229 extension + 128 webview + 1160 notethink-views); webpack build clean on 5.108.4 (both bundles emit, so the output dulcet vendors stays sane)
++ verified: lint clean (0 errors, 6 pre-existing warnings); 1517 jest green (229 extension + 128 webview + 1160 notethink-views); webpack build clean on 5.108.4 (both bundles emit, so the output hostapp vendors stays sane)
 + commit message draft
   + notethink 0.3.25: upgrade npm packages (wave 1, minor/patch) - typescript-eslint 8.64, webpack 5.108, memfs 4.64; eslint held at 9.39.4; tests 1517 jest
 
 
 ### Multi-segment excludes fail below the workspace root [](?id=exclude-base-workspace-relative)
 
-With the board rooted on `notegit`, the demo boards under `notegit/nodejs/dulcet/content/notegit/welcome/ai-board/*/todo.md` appear alongside notegit's real stories, even though the default exclude names `notegit/nodejs`. The glob matcher is correct; the base path it was handed was not. `isExcludedByIntegrationFilter` matched the exclude against the path relative to the *integration folder*, so a file presented as `nodejs/dulcet/...`, the `notegit/` segment was gone, and the only multi-segment entry in the list stopped matching. Single-segment entries (node_modules, dist, .git) hid the defect because the pattern's leading globstar matches them at any depth from any base.
+With the board rooted on `notegit`, the demo boards under `notegit/nodejs/hostapp/content/notegit/welcome/ai-board/*/todo.md` appear alongside notegit's real stories, even though the default exclude names `notegit/nodejs`. The glob matcher is correct; the base path it was handed was not. `isExcludedByIntegrationFilter` matched the exclude against the path relative to the *integration folder*, so a file presented as `nodejs/hostapp/...`, the `notegit/` segment was gone, and the only multi-segment entry in the list stopped matching. Single-segment entries (node_modules, dist, .git) hid the defect because the pattern's leading globstar matches them at any depth from any base.
 
 + background
   + the same entry failed a second way: the directory-prune probes built `${name}/dummy.md` from a BARE directory name, which a two-segment entry can never match, so `nodejs` was always offered as a descendable child of notegit
@@ -3585,7 +3585,7 @@ With the board rooted on `notegit`, the demo boards under `notegit/nodejs/dulcet
   + match every exclude against the workspace-root-relative path, the same base VS Code uses for `files.exclude` / `search.exclude` / findFiles
   + out of scope: opening `notegit` as its own workspace root, where `nodejs/...` is genuinely the workspace-relative path and the default glob cannot match it
 + acceptance criteria
-  + board rooted on `notegit` shows notegit's own stories and none of the `nodejs/dulcet` demo boards
+  + board rooted on `notegit` shows notegit's own stories and none of the `nodejs/hostapp` demo boards
   + board rooted on the workspace root behaves exactly as before
   + `nodejs` is not offered as a child folder when descending into notegit
 + [X] add `toWorkspaceRelative` as the single origin for exclude matching (`PanelSession.ts`)
@@ -3627,7 +3627,7 @@ The toolbar's four drawers share no affordance. Only Settings has a real button 
   + tab-ify each trigger where it already sits rather than gathering them into a group elsewhere
   + every tab is titled with its own current state, which is the rule the whole toolbar now follows
 + scope - tab placement and titles (decided 2026-07-17, revising the first pass which grouped them right)
-  + the breadcrumb's terminal leaf becomes the Jump to tab, titled with the leaf itself, so the trail reads `oma > docstech > [todo.md v]` and the leaf is never rendered twice
+  + the breadcrumb's terminal leaf becomes the Jump to tab, titled with the leaf itself, so the trail reads `orbit > docstech > [todo.md v]` and the leaf is never rendered twice
   + the file count becomes the Files tab, titled `(X in Y files)`
   + the collisions alert becomes the Warnings tab, titled "Warnings" followed by the `&#9888;` glyph
   + those three sit on the left, in the breadcrumb, because that is where their content already lives
@@ -3641,7 +3641,7 @@ The toolbar's four drawers share no affordance. Only Settings has a real button 
   + the baseline runs the full width of the header bar, not just under each tab, and the active tab breaks it
   + a `border-bottom` on the tab cannot do this, and a border on `.viewToolbar` cannot be painted over because `overflow: hidden` clips children at the padding box; an absolutely-positioned `::after` on the toolbar plus `z-index` on the active tab is the shape that works
   + tabs are a little taller, with consistent spacing above and below
-  + that spacing must not depend on ancestor segments being present: with `oma > docstech >` the ancestor text sets the row height, but rooted at the workspace root there are no ancestors and the row collapses
+  + that spacing must not depend on ancestor segments being present: with `orbit > docstech >` the ancestor text sets the row height, but rooted at the workspace root there are no ancestors and the row collapses
   + `.drawerGrid`'s sticky `top: 26px` is hand-tuned to the toolbar height and must move with it, ideally via a shared variable rather than two hand-synced magic numbers
 + scope - hide the insert button
   + hide the `+` button behind a flag rather than deleting it; it returns later as a menu item
@@ -4058,7 +4058,7 @@ Passing `--configFilePath` fixed the reject-list bypass recorded last wave. ncu 
 Pins in effect after this wave (snapshot):
 - eslint @9.39.4 (.ncurc reject) - structural - held - no majors were approved for notethink this wave. Worth flagging for the next one: the recorded rationale (eslint-plugin-react has no eslint-10 release) does not hold in THIS repo - notethink has no eslint-plugin-react dependency, and its flat config imports only `@typescript-eslint/eslint-plugin` and `@typescript-eslint/parser`, both of which peer `eslint ^8.57.0 || ^9.0.0 || ^10.0.0` as of 8.65.0. The eslint-10 blocker for notethink needs re-deriving before the pin is carried forward again
 - @eslint/js @9.39.4 (.ncurc reject) - structural - same
-- typescript @^6.0.3 (caret, no reject entry) - structural - held by peer ranges - `@typescript-eslint/parser@8.65.0` still peers `typescript >=4.8.4 <6.1.0` (re-verified 2026-07-24) and ts-jest peers `<7`; TS7 is being piloted in ledger only. Revisit when both peer ranges admit 7.x
+- typescript @^6.0.3 (caret, no reject entry) - structural - held by peer ranges - `@typescript-eslint/parser@8.65.0` still peers `typescript >=4.8.4 <6.1.0` (re-verified 2026-07-24) and ts-jest peers `<7`; TS7 is being piloted in lumen only. Revisit when both peer ranges admit 7.x
 Unpinned this wave: none - the last wave's snapshot recorded no transient holds, and all three live pins are structural with their clear-conditions still unmet
 
 + [X] run npm-check-updates
@@ -4066,14 +4066,14 @@ Unpinned this wave: none - the last wave's snapshot recorded no transient holds,
 + [X] pnpm install
 + [X] verify lint passes
 + [X] verify jest tests pass
-+ [X] verify webpack build emits both bundles (dulcet vendors these)
++ [X] verify webpack build emits both bundles (hostapp vendors these)
 + [X] exclude the generated lockfile from the em-dash guardrail
   + `sh/check-no-emdash.sh` now skips `pnpm-lock.yaml`, propagated across the workspace this wave
-  + a lockfile embeds registry-authored strings that cannot be durably edited, since the next install rewrites them. The trigger was the `@rescale/nemo` deprecation notice, which carries a literal em dash and failed the guard in calfam
+  + a lockfile embeds registry-authored strings that cannot be durably edited, since the next install rewrites them. The trigger was the `@rescale/nemo` deprecation notice, which carries a literal em dash and failed the guard in carbon
   + notethink has no nemo dependency, so nothing was failing here; the exclusion is a durable guard against any future dep whose registry metadata carries a dash
-  + notethink runs the newer `git grep` implementation, so the exclusion is written as `:(exclude)` pathspecs. calfam runs an older filesystem-`grep` variant using `--exclude=pnpm-lock.yaml`. Two implementations exist across the workspace and that is expected, not drift
+  + notethink runs the newer `git grep` implementation, so the exclusion is written as `:(exclude)` pathspecs. carbon runs an older filesystem-`grep` variant using `--exclude=pnpm-lock.yaml`. Two implementations exist across the workspace and that is expected, not drift
 + verified: lint clean (0 errors, 6 pre-existing warnings); 1651 jest green (248 extension + 134 webview + 1269 notethink-views); webpack build clean on 5.108.4
-  + both bundles emit fresh: `client/extension/dist/extension.js` (2.2 MiB) and `client/webview/dist/index.js` (11.4 MiB), so the output dulcet vendors via `copy-extensions` is current
+  + both bundles emit fresh: `client/extension/dist/extension.js` (2.2 MiB) and `client/webview/dist/index.js` (11.4 MiB), so the output hostapp vendors via `copy-extensions` is current
 + toolchain divergence raised with the team lead, deliberately NOT changed here
   + notethink's package.json declares no `packageManager` field and no `engines.node` field, while every other workspace project pins `pnpm@11.x` and `node >=22.18.0`
   + left as-is because a VS Code extension has different publishing constraints (vsce reads `engines.vscode`, and the marketplace does not consume `engines.node`); adding either is the user's call
@@ -4180,7 +4180,7 @@ The eslint 9 pin is gone. The unpin trial succeeded, both reject entries are rem
   + proved it still fires by linting a throwaway `.ts` file holding two consecutive standalone `//` comments: reported `local/no-consecutive-line-comments` and exited 1. Probe file deleted afterwards
 
 Pins in effect after this wave (snapshot):
-- typescript @^6.0.3 (caret, no reject entry) - structural - held by peer ranges. `@typescript-eslint/parser@8.65.0` and `@typescript-eslint/eslint-plugin@8.65.0` both peer `typescript >=4.8.4 <6.1.0` (re-verified 2026-08-01 against the installed tree) and ts-jest peers `<7`. TS7 stays piloted in ledger only. Revisit when both peer ranges admit 7.x
+- typescript @^6.0.3 (caret, no reject entry) - structural - held by peer ranges. `@typescript-eslint/parser@8.65.0` and `@typescript-eslint/eslint-plugin@8.65.0` both peer `typescript >=4.8.4 <6.1.0` (re-verified 2026-08-01 against the installed tree) and ts-jest peers `<7`. TS7 stays piloted in lumen only. Revisit when both peer ranges admit 7.x
 - nothing else. The `.ncurc.json` reject list is now empty
 
 Unpinned this wave:

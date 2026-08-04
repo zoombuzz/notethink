@@ -22,7 +22,7 @@ interface BreadcrumbPathSegmentsProps {
  * terminal leaf itself rendered as the Jump to tab. The leaf is a tab rather than a plain segment
  * because it is the one segment that opens a drawer instead of re-narrowing the aggregation, and it
  * is rendered here - not gathered into a tab group elsewhere - so the trail reads
- * `oma > docstech > [todo.md v]` and the leaf appears exactly once.
+ * `orbit > docstech > [todo.md v]` and the leaf appears exactly once.
  */
 export default function BreadcrumbPathSegments(props: BreadcrumbPathSegmentsProps): ReactElement {
     debug("segments=%d active=%s", props.segments.length, props.activeDrawer);

@@ -3,7 +3,7 @@ import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inj
 import { sendCommand } from '../helpers/send-command';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 const PATH_A = `${WORKSPACE_ROOT}/alpha/docstech/board.md`;
 const PATH_B = `${WORKSPACE_ROOT}/beta/docstech/board.md`;
 const PATH_C = `${WORKSPACE_ROOT}/gamma/docstech/board.md`;

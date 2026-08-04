@@ -3,7 +3,7 @@ import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inj
 import { sendCommand } from '../helpers/send-command';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
 // keyboard-based drag (@hello-pangea/dnd: Space to lift, arrows to move lanes, Space to drop) - the same wire boundary the kanban drag specs use
 async function keyboardDrag(page: Page, handle: Locator, direction: 'right' | 'left', moves: number): Promise<void> {

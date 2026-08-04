@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, NOTETHINK_VIEW_TYPE } from '../constants';
 import { generateIdentifier } from '../lib/cryptoops';
 import { type TextChange, firstInvalidChange, logEditTextChanges, offsetDeltaBefore } from '../lib/editops';
-import { debug, writeToLog, writeToErrorLog } from '../lib/errorops';
+import { debug, writeToLog, writeToLogAtLevel, writeToErrorLog } from '../lib/errorops';
 import { globMatches } from '../lib/globMatch';
 import { parse } from '../lib/parseops';
 import { isPathWithin, isWithinWorkspace } from '../lib/pathops';
@@ -93,7 +93,7 @@ export class PanelSession {
 	private change_timer: ReturnType<typeof setTimeout> | undefined;
 	private selection_timer: ReturnType<typeof setTimeout> | undefined;
 	private readonly workspace_root: string;
-	// scheme+authority carrier for every folder-mode and open-by-path URI; preserves the real workspace scheme (file:, vscode-vfs:, notegit:, …) so discovery and opens work on non-file: hosts
+	// scheme+authority carrier for every folder-mode and open-by-path URI; preserves the real workspace scheme (file:, vscode-vfs:, notegit: and other custom provider schemes) so discovery and opens work on non-file: hosts
 	private readonly base_uri: vscode.Uri;
 	private readonly extension_version: string;
 
@@ -247,7 +247,7 @@ export class PanelSession {
 		try {
 			this.active_doc = await this.buildDoc(initialDocument);
 		} catch (err) {
-			writeToErrorLog('failed to build initial document', initialDocument.uri.path, err);
+			writeToErrorLog('buildInitialDoc', `failed to build initial document ${initialDocument.uri.path}`, err);
 		}
 		this.syncActiveFileWatcher();
 	}
@@ -290,14 +290,14 @@ export class PanelSession {
 					this.active_doc = await this.buildDocFromUriAndText(changed_uri, text, 'fsWatcher');
 					this.sendDoc(this.active_doc);
 				} catch (err) {
-					writeToErrorLog('active-file watcher: re-parse failed', changed_uri.path, err);
+					writeToErrorLog('armActiveFileWatcher', `re-parse failed for ${changed_uri.path}`, err);
 				}
 			};
 			this.active_file_watcher.onDidChange(onChange);
 			this.active_file_watcher.onDidCreate(onChange);
 			debug('active-file watcher armed for %s', this.active_path);
 		} catch (err) {
-			writeToErrorLog('syncActiveFileWatcher: failed to create watcher', this.active_path, err);
+			writeToErrorLog('armActiveFileWatcher', `failed to create watcher for ${this.active_path}`, err);
 		}
 	}
 
@@ -360,7 +360,7 @@ export class PanelSession {
 				// send selection after doc update so the webview never has stale MDAST with fresh caret
 				this.sendCurrentSelection();
 			} catch (err) {
-				writeToErrorLog('failed to process document change', e.document.uri.path, err);
+				writeToErrorLog('onDidChangeTextDocument', `failed to process document change for ${e.document.uri.path}`, err);
 			}
 		}, CHANGE_DEBOUNCE_MS);
 	}
@@ -378,7 +378,7 @@ export class PanelSession {
 			this.sendSelection(this.active_path, head, anchor);
 			this.syncActiveFileWatcher();
 		} catch (err) {
-			writeToErrorLog('failed to switch active document', editor?.document.uri.path, err);
+			writeToErrorLog('onDidChangeActiveTextEditor', `failed to switch active document to ${editor?.document.uri.path}`, err);
 		}
 	}
 
@@ -406,7 +406,7 @@ export class PanelSession {
 			e.affectsConfiguration('notethink.settings.files.excludeFilter');
 		if (filter_settings_changed && this.integration_path) {
 			void this.enterFolderMode(this.integration_path, {}).catch(err =>
-				writeToErrorLog('re-enter folder mode on filter change failed', this.integration_path ?? '', err)
+				writeToErrorLog('onDidChangeConfiguration', `re-enter folder mode on filter change failed for ${this.integration_path ?? ''}`, err)
 			);
 		}
 	}
@@ -446,12 +446,16 @@ export class PanelSession {
 				case 'editText': return this.handleEditText(e);
 				case 'openExternal': return this.handleOpenExternal(e);
 				case 'openRelative': return this.handleOpenRelative(e);
-				case 'renderError':
-					writeToErrorLog('webview render error', e.message as string, e.stack as string);
+				case 'renderError': {
+					// rebuild an Error from the webview's payload so the log carries a real error object and the client-error report keeps its stack
+					const render_error = new Error(e.message as string);
+					render_error.stack = e.stack as string;
+					writeToErrorLog('handleMessage', 'webview render error', render_error);
 					return;
+				}
 			}
 		} catch (err) {
-			writeToErrorLog('onDidReceiveMessage failed', e?.type, err);
+			writeToErrorLog('handleMessage', `dispatch failed for message type ${String(e?.type)}`, err);
 		}
 	}
 
@@ -472,7 +476,7 @@ export class PanelSession {
 			this.syncActiveFileWatcher();
 			await this.openFolderAtWorkspaceRootIfDocless();
 		} catch (err) {
-			writeToErrorLog('requestInitialState failed', '', err);
+			writeToErrorLog('handleRequestInitialState', 'failed to send initial state', err);
 		}
 	}
 
@@ -525,18 +529,18 @@ export class PanelSession {
 		const value = e.value as unknown;
 		try {
 			if (!isSettingKey(setting) || SETTINGS[setting].inCascade) {
-				writeToErrorLog('updateGlobalSetting: unknown or not-global setting', String(setting));
+				writeToLogAtLevel('error', 'handleUpdateGlobalSetting', `unknown or not-global setting ${String(setting)}`);
 				return;
 			}
 			const target = this.GLOBAL_SETTING_TARGETS[setting];
 			if (!target) {
-				writeToErrorLog('updateGlobalSetting: no per-setting target configured', setting);
+				writeToLogAtLevel('error', 'handleUpdateGlobalSetting', `no per-setting target configured for ${String(setting)}`);
 				return;
 			}
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- writeSetting's generic narrows on the key; the value's union widens to unknown at this boundary because e.value is untyped
 			await writeSetting(setting, value as any, target);
 		} catch (err) {
-			writeToErrorLog('updateGlobalSetting failed', String(setting), err);
+			writeToErrorLog('handleUpdateGlobalSetting', `writeSetting failed for ${String(setting)}`, err);
 		}
 	}
 
@@ -547,14 +551,14 @@ export class PanelSession {
 		const scope = (e.scope as 'workspace' | 'global' | undefined) ?? 'workspace';
 		try {
 			if (!isSettingKey(setting) || !SETTINGS[setting].inCascade) {
-				writeToErrorLog('updateSetting: unknown or not-cascade setting', String(setting));
+				writeToLogAtLevel('error', 'handleUpdateSetting', `unknown or not-cascade setting ${String(setting)}`);
 				return;
 			}
 			const target = scope === 'global' ? vscode.ConfigurationTarget.Global : vscode.ConfigurationTarget.Workspace;
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- value's union widens to unknown at the wire boundary
 			await writeSetting(setting, value as any, target);
 		} catch (err) {
-			writeToErrorLog('updateSetting failed', String(setting), err);
+			writeToErrorLog('handleUpdateSetting', `writeSetting failed for ${String(setting)}`, err);
 		}
 	}
 
@@ -576,7 +580,7 @@ export class PanelSession {
 				}
 			}
 		} catch (err) {
-			writeToErrorLog('promoteSettingsToUser failed', '', err);
+			writeToErrorLog('handlePromoteSettings', 'failed to promote cascade settings to user scope', err);
 		}
 	}
 
@@ -589,7 +593,7 @@ export class PanelSession {
 				}
 			}
 		} catch (err) {
-			writeToErrorLog('resetSettingsToDefault failed', '', err);
+			writeToErrorLog('handleResetSettings', 'failed to clear workspace cascade overrides', err);
 		}
 	}
 
@@ -602,7 +606,7 @@ export class PanelSession {
 				await writeSetting(key, undefined, vscode.ConfigurationTarget.Global);
 			}
 		} catch (err) {
-			writeToErrorLog('restoreSettingsToBuiltinDefault failed', '', err);
+			writeToErrorLog('handleRestoreBuiltinDefaults', 'failed to clear workspace and user cascade overrides', err);
 		}
 	}
 
@@ -620,7 +624,7 @@ export class PanelSession {
 			if (!doc_path) { return; }
 			// gate both the visible-editor fast path and the openTextDocument path: webview-supplied paths are untrusted
 			if (!this.isRevealTargetAllowed(doc_path)) {
-				writeToErrorLog(`${e.type}: path outside workspace, refusing`, doc_path);
+				writeToLogAtLevel('error', 'handleRevealRange', `${String(e.type)}: path outside workspace, refusing ${doc_path}`);
 				return;
 			}
 			// switching to the editor on click is hardcoded on: focus transfers with the caret under the single-caret model. the switch_editor parameter stays plumbed through so a passive-mirror mode is a one-line reintroduction later
@@ -631,7 +635,7 @@ export class PanelSession {
 			const force_open = e.forceOpen === true;
 			await this.revealByOpening(doc_path, from, to, force_open || readSetting('openNewEditorIfNoneOpen'));
 		} catch (err) {
-			writeToErrorLog(`${e.type} failed`, doc_path, err);
+			writeToErrorLog('handleRevealRange', `${String(e.type)} failed for ${doc_path}`, err);
 		}
 	}
 
@@ -707,7 +711,7 @@ export class PanelSession {
 		if (mode === INTEGRATION_MODE_FOLDER && folder_path) {
 			// validate before any teardown so a poisoned path can't dismantle a legitimate integration (folder, so no extension requirement)
 			if (!isWithinWorkspace(folder_path)) {
-				writeToErrorLog('setIntegration: folder outside workspace, refusing', folder_path);
+				writeToLogAtLevel('error', 'handleSetIntegration', `folder outside workspace, refusing ${folder_path}`);
 				return;
 			}
 			await this.enterFolderMode(folder_path, e);
@@ -740,7 +744,7 @@ export class PanelSession {
 			await this.discoverFolderDocs(pattern, folder_path, previous_docs);
 			this.armFolderWatcher(pattern);
 		} catch (err) {
-			writeToErrorLog('setIntegration folder failed', folder_path, err);
+			writeToErrorLog('enterFolderMode', `failed to enter folder mode at ${folder_path}`, err);
 		}
 	}
 
@@ -820,7 +824,7 @@ export class PanelSession {
 			const filtered = dir_names.filter(name => !this.isExcludedDirectory(path.posix.join(this.workspace_root, name)));
 			this.workspace_projects = filtered.sort();
 		} catch (err) {
-			writeToErrorLog('computeWorkspaceProjects failed', this.workspace_root, err);
+			writeToErrorLog('computeWorkspaceProjects', `failed to read workspace root ${this.workspace_root}`, err);
 			this.workspace_projects = [];
 		}
 	}
@@ -844,7 +848,7 @@ export class PanelSession {
 			try {
 				entries = await vscode.workspace.fs.readDirectory(dir);
 			} catch (err) {
-				writeToErrorLog('folder walk: readDirectory failed', dir.path, err);
+				writeToErrorLog('discoverViaReadDirectoryWalk', `readDirectory failed for ${dir.path}`, err);
 				continue;
 			}
 			for (const [name, type] of entries) {
@@ -860,7 +864,7 @@ export class PanelSession {
 			}
 		}
 		if (visited >= MAX_WALK_ENTRIES) {
-			writeToLog('folder walk cap hit', `stopped after ${MAX_WALK_ENTRIES} directories under ${folder_path}`);
+			writeToLog('discoverViaReadDirectoryWalk', `walk cap hit: stopped after ${MAX_WALK_ENTRIES} directories under ${folder_path}`);
 		}
 		return results;
 	}
@@ -893,7 +897,7 @@ export class PanelSession {
 		const uris = sorted_uris.slice(0, MAX_AGGREGATE_FILES);
 		debug('setIntegration folder: %d discovered, loading %d (cap %d, truncated=%s) in %s', this.integration_total_discovered, uris.length, MAX_AGGREGATE_FILES, this.integration_truncated, folder_path);
 		if (this.integration_truncated) {
-			writeToLog('setIntegration folder cap hit', `discovered ${this.integration_total_discovered}, loading first ${MAX_AGGREGATE_FILES} of ${folder_path}`);
+			writeToLog('discoverFolderDocs', `cap hit: discovered ${this.integration_total_discovered}, loading first ${MAX_AGGREGATE_FILES} of ${folder_path}`);
 		}
 		const cache_hit = await this.discoveredSetMatchesCache(uris, previous_docs);
 		if (cache_hit) {
@@ -964,7 +968,7 @@ export class PanelSession {
 	 */
 	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean } = {}): Promise<void> {
 		try {
-			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them - when the user descends folders (e.g. pill click from active_development → calfam), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the isExcludedByIntegrationFilter check below never rejects a sibling project (nothing in the exclude list names it, so its path passes the filter cleanly)
+			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them - when the user descends folders (e.g. pill click from in_development → carbon), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the isExcludedByIntegrationFilter check below never rejects a sibling project (nothing in the exclude list names it, so its path passes the filter cleanly)
 			if (!this.isWithinIntegrationPath(uri.path)) {
 				return;
 			}
@@ -1005,7 +1009,7 @@ export class PanelSession {
 				exclude_filter: this.integration_exclude,
 			});
 		} catch (err) {
-			writeToErrorLog('setIntegration: failed to load doc', uri.path, err);
+			writeToErrorLog('loadFolderDoc', `failed to load ${uri.path}`, err);
 		}
 	}
 
@@ -1019,7 +1023,7 @@ export class PanelSession {
 			this.integration_watcher.onDidDelete(uri => this.handleFolderDocDeleted(uri));
 		} catch (err) {
 			this.integration_watcher = undefined;
-			writeToErrorLog('armFolderWatcher: watcher unavailable (static provider?), continuing without live updates', pattern.pattern, err);
+			writeToErrorLog('armFolderWatcher', `watcher unavailable (static provider?), continuing without live updates for ${pattern.pattern}`, err);
 		}
 	}
 
@@ -1032,7 +1036,7 @@ export class PanelSession {
 				this.webviewPanel.webview.postMessage({ type: 'docDeleted', docId: id, docPath: uri.path });
 			}
 		} catch (err) {
-			writeToErrorLog('setIntegration watcher: delete failed', uri.path, err);
+			writeToErrorLog('handleFolderDocDeleted', `failed to drop deleted doc ${uri.path}`, err);
 		}
 	}
 
@@ -1062,7 +1066,7 @@ export class PanelSession {
 				this.sendCurrentSelection();
 			}
 		} catch (err) {
-			writeToErrorLog('setIntegration current_file failed', '', err);
+			writeToErrorLog('enterCurrentFileMode', 'failed to enter current-file mode', err);
 		}
 	}
 
@@ -1079,21 +1083,21 @@ export class PanelSession {
 		try {
 			if (mode === INTEGRATION_MODE_FOLDER) {
 				if (!isWithinWorkspace(jump_path)) {
-					writeToErrorLog('requestJumpTargets: folder outside workspace, refusing', jump_path);
+					writeToLogAtLevel('error', 'handleRequestJumpTargets', `folder outside workspace, refusing ${jump_path}`);
 					return;
 				}
 				const entries = await this.listChildFolders(jump_path);
 				this.webviewPanel.webview.postMessage({ type: 'jumpTargets', mode, path: jump_path, entries });
 			} else if (mode === INTEGRATION_MODE_CURRENT_FILE) {
 				if (!isWithinWorkspace(jump_path, { requireExtension: '.md' })) {
-					writeToErrorLog('requestJumpTargets: file outside workspace, refusing', jump_path);
+					writeToLogAtLevel('error', 'handleRequestJumpTargets', `file outside workspace, refusing ${jump_path}`);
 					return;
 				}
 				const entries = await this.listSiblingMdFiles(jump_path);
 				this.webviewPanel.webview.postMessage({ type: 'jumpTargets', mode, path: jump_path, entries });
 			}
 		} catch (err) {
-			writeToErrorLog('requestJumpTargets failed', jump_path, err);
+			writeToErrorLog('handleRequestJumpTargets', `failed to list jump targets for ${jump_path}`, err);
 		}
 	}
 
@@ -1131,12 +1135,12 @@ export class PanelSession {
 		const file_path = e.path as string;
 		try {
 			if (!isWithinWorkspace(file_path, { requireExtension: '.md' })) {
-				writeToErrorLog('openFile: path outside workspace, refusing', file_path);
+				writeToLogAtLevel('error', 'handleOpenFile', `path outside workspace, refusing ${file_path}`);
 				return;
 			}
 			await this.revealByOpening(file_path, 0, 0, true);
 		} catch (err) {
-			writeToErrorLog('openFile failed', file_path, err);
+			writeToErrorLog('handleOpenFile', `failed to open ${file_path}`, err);
 		}
 	}
 
@@ -1164,19 +1168,19 @@ export class PanelSession {
 		try {
 			// webview-supplied paths are untrusted: only allow edits to .md files inside the workspace
 			if (!doc_path || !isWithinWorkspace(doc_path, { requireExtension: '.md' })) {
-				writeToErrorLog('editText: path outside workspace, refusing', doc_path);
+				writeToLogAtLevel('error', 'applyEditTextToDoc', `path outside workspace, refusing ${doc_path}`);
 				return;
 			}
 			if (!Array.isArray(changes) || changes.length === 0) {
-				writeToErrorLog('editText: no changes supplied for doc, skipping', doc_path);
+				writeToLogAtLevel('error', 'applyEditTextToDoc', `no changes supplied for ${doc_path}, skipping`);
 				return;
 			}
 			const uri = this.resolveWorkspaceUri(doc_path);
 			const document = await vscode.workspace.openTextDocument(uri);
 			const invalid = firstInvalidChange(changes, document.getText().length);
 			if (invalid) {
-				writeToErrorLog('editText: invalid offsets, skipping',
-					`from=${invalid.from} to=${invalid.to ?? invalid.from} len=${document.getText().length} insert="${invalid.insert}" doc=${doc_path}`);
+				writeToLogAtLevel('error', 'applyEditTextToDoc',
+					`invalid offsets, skipping: from=${invalid.from} to=${invalid.to ?? invalid.from} len=${document.getText().length} insert="${invalid.insert}" doc=${doc_path}`);
 				return;
 			}
 			logEditTextChanges(document, doc_path, changes);
@@ -1191,7 +1195,7 @@ export class PanelSession {
 				this.sendDoc(edited_doc);
 			}
 		} catch (err) {
-			writeToErrorLog('editText failed', doc_path, err);
+			writeToErrorLog('applyEditTextToDoc', `failed to apply changes to ${doc_path}`, err);
 		}
 	}
 
@@ -1202,12 +1206,12 @@ export class PanelSession {
 			// host-side scheme allow-list: only open http/https/mailto, refuse everything else (file:, vscode:, etc.)
 			const parsed = vscode.Uri.parse(url);
 			if (!(ALLOWED_EXTERNAL_SCHEMES as readonly string[]).includes(parsed.scheme.toLowerCase())) {
-				writeToErrorLog('openExternal: refused scheme', url);
+				writeToLogAtLevel('error', 'handleOpenExternal', `refused scheme for ${url}`);
 				return;
 			}
 			await vscode.env.openExternal(parsed);
 		} catch (err) {
-			writeToErrorLog('openExternal failed', url, err);
+			writeToErrorLog('handleOpenExternal', `failed to open ${url}`, err);
 		}
 	}
 
@@ -1225,12 +1229,12 @@ export class PanelSession {
 			const target = this.resolveRelativeTarget(href);
 			if (!target) { return; }
 			if (!isPathWithin(target.path, [this.workspace_root], { requireExtension: '.md' })) {
-				writeToErrorLog('openRelative: target outside workspace or not .md, refusing', target.path);
+				writeToLogAtLevel('error', 'handleOpenRelative', `target outside workspace or not .md, refusing ${target.path}`);
 				return;
 			}
 			await this.revealByOpening(target, 0, 0, true);
 		} catch (err) {
-			writeToErrorLog('openRelative failed', href, err);
+			writeToErrorLog('handleOpenRelative', `failed to open relative link ${href}`, err);
 		}
 	}
 

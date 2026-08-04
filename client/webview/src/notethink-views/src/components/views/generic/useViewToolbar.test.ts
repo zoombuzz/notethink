@@ -52,8 +52,8 @@ describe('useViewToolbar.handle_integration_change', () => {
         const { result } = renderHook(() =>
             useViewToolbar(makeProps({ view_state_ids: [FOLDER_VIEW_STATE_ID] }), handlers, display_options, notes),
         );
-        act(() => { result.current.handle_integration_change('current_file', '/ws/oma/docstech/done.md'); });
-        expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file', path: '/ws/oma/docstech/done.md' });
+        act(() => { result.current.handle_integration_change('current_file', '/ws/orbit/docstech/done.md'); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file', path: '/ws/orbit/docstech/done.md' });
     });
 
     it('flipping integration mode clears per-view focused/selected interaction state on every persisted view key', () => {

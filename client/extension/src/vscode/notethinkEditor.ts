@@ -104,7 +104,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 						// a single commit, and either throws DataCloneError mid-commit or drives the
 						// renderer into OOM. A previous attempt wrapped measure() with catch+retry, but
 						// React's diff-build ran anyway and the renderer still crashed with the same
-						// heap-saturated content from oma's done.md. The only effective fix is to turn
+						// heap-saturated content from a large done.md. The only effective fix is to turn
 						// the feature off at source. reportWebVitals() in this webview is a no-op (no
 						// callback is passed from index.tsx) and no other bundle code depends on
 						// performance.measure for correctness.

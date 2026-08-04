@@ -61,12 +61,12 @@ describe('enumerateGroupByCandidates', () => {
     it('enumerates the implicit first-level-folder key from origins as a read-only implicit candidate', () => {
         const notes = [
             noteWith({}, { doc_id: 'a', doc_path: '/ws/notethink/todo.md', relative_path: 'notethink/docstech/todo.md' }),
-            noteWith({}, { doc_id: 'b', doc_path: '/ws/oma/todo.md', relative_path: 'oma/docstech/todo.md' }),
+            noteWith({}, { doc_id: 'b', doc_path: '/ws/orbit/todo.md', relative_path: 'orbit/docstech/todo.md' }),
             noteWith({}, { doc_id: 'c', doc_path: '/ws/notethink/done.md', relative_path: 'notethink/docstech/done.md' }),
         ];
         const candidates = enumerateGroupByCandidates(notes);
         expect(candidates.find(c => c.key === FIRST_LEVEL_FOLDER_KEY)).toEqual({
-            key: FIRST_LEVEL_FOLDER_KEY, values: ['notethink', 'oma'], kind: 'categorical', writable: false, implicit: true,
+            key: FIRST_LEVEL_FOLDER_KEY, values: ['notethink', 'orbit'], kind: 'categorical', writable: false, implicit: true,
         });
     });
 

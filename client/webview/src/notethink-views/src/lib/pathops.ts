@@ -68,9 +68,9 @@ export function parentFolderOf(file_path: string | undefined): string | undefine
  * (selecting it re-narrows to the whole opened workspace folder, not just the
  * first child).
  *
- * Given `absolute_path = "/abs/active_development/notethink/docs/todo.md"` and
- * `workspace_root = "/abs/active_development/notethink"`, returns segments for
- * `active_development`, `notethink`, `docs`, `todo.md` (i.e. the workspace
+ * Given `absolute_path = "/abs/in_development/notethink/docs/todo.md"` and
+ * `workspace_root = "/abs/in_development/notethink"`, returns segments for
+ * `in_development`, `notethink`, `docs`, `todo.md` (i.e. the workspace
  * root's own label is included). The `path` on each segment is the absolute
  * path that segment represents.
  *
@@ -152,7 +152,7 @@ export function resolveBreadcrumbFolderSegment(
  * falls back again to segmenting from `/` when neither is available.
  *
  * The opened workspace folder itself is kept as the first clickable breadcrumb
- * segment (so clicking `active_development` re-roots there rather than starting
+ * segment (so clicking `in_development` re-roots there rather than starting
  * at its first child).
  */
 export function splitPathSegments(doc_path: string, workspace_root?: string, doc_relative_path?: string): PathSegment[] {

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { injectMultipleDocsFromFixtures, selectFolderMode, selectIntegrationMode } from '../helpers/inject-multi-docs';
 import { sendCommand } from '../helpers/send-command';
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
 // emit a pendingChange message into the webview as if the extension had sent it
 async function emitPendingChange(page: Page, key: string, on: boolean): Promise<void> {
@@ -24,7 +24,7 @@ test.describe('Pending-work spinner', () => {
 
     test('a fast settings toggle (resolves under 150 ms) shows no visible spinner', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         // a toggleSetting command is purely a webview-side state change - no markPending is involved
@@ -37,7 +37,7 @@ test.describe('Pending-work spinner', () => {
 
     test('a slow folder-discovery (pendingChange on) shows the toolbar spinner; clearing it hides the spinner after min-visibility', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
         await selectFolderMode(page);
@@ -54,7 +54,7 @@ test.describe('Pending-work spinner', () => {
 
     test('integration-mode flip (folder ↔ current_file) does not flash the spinner', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await selectFolderMode(page);
@@ -66,7 +66,7 @@ test.describe('Pending-work spinner', () => {
 
     test('with the Files drawer open during an apply, only the breadcrumb spinner shows (no redundant in-drawer spinner)', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -91,7 +91,7 @@ test.describe('Pending-work spinner', () => {
             await page.goto('/playwright/harness/index.html');
             await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
             await injectMultipleDocsFromFixtures(page, [
-                { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+                { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             ], { workspace_root: WORKSPACE_ROOT });
 
             await emitPendingChange(page, 'folderDiscovery', true);

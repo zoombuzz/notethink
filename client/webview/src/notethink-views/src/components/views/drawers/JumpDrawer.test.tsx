@@ -77,10 +77,10 @@ describe('JumpDrawer', () => {
         const jump_targets: JumpTargetsMessage = {
             type: 'jumpTargets',
             mode: INTEGRATION_MODE_FOLDER,
-            path: '/ws/oma/docstech',
-            entries: [{ label: 'specs', path: '/ws/oma/docstech/specs', kind: 'folder' }],
+            path: '/ws/orbit/docstech',
+            entries: [{ label: 'specs', path: '/ws/orbit/docstech/specs', kind: 'folder' }],
         };
-        renderWith(jump_targets, '/ws/oma/docstech');
+        renderWith(jump_targets, '/ws/orbit/docstech');
         expect(screen.getByTestId('jump-drawer-root')).toHaveTextContent('docstech');
     });
 
@@ -88,10 +88,10 @@ describe('JumpDrawer', () => {
         const jump_targets: JumpTargetsMessage = {
             type: 'jumpTargets',
             mode: INTEGRATION_MODE_FOLDER,
-            path: '/ws/oma/docstech',
+            path: '/ws/orbit/docstech',
             entries: [],
         };
-        const { onReturn } = renderWith(jump_targets, '/ws/oma/docstech');
+        const { onReturn } = renderWith(jump_targets, '/ws/orbit/docstech');
         fireEvent.click(screen.getByTestId('jump-drawer-root'));
         expect(onReturn).toHaveBeenCalledTimes(1);
     });

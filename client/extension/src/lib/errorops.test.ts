@@ -17,6 +17,7 @@ describe('errorops', () => {
 
 	describe('writeToErrorLog()', () => {
 		it('does not throw when called with a string', () => {
+			// eslint-disable-next-line no-restricted-syntax -- deliberately exercises the <3-arg path
 			expect(() => writeToErrorLog('error message')).not.toThrow();
 		});
 
@@ -44,18 +45,21 @@ describe('errorops', () => {
 		});
 
 		it('issues NO fetch when the define is unset', () => {
+			// eslint-disable-next-line no-restricted-syntax -- deliberately exercises the <3-arg path
 			writeToErrorLog('source', 'boom');
 			expect(fetch_mock).not.toHaveBeenCalled();
 		});
 
 		it('issues NO fetch when the define is false', () => {
 			(globalThis as { NOTETHINK_CLIENT_ERROR_REPORTING?: boolean }).NOTETHINK_CLIENT_ERROR_REPORTING = false;
+			// eslint-disable-next-line no-restricted-syntax -- deliberately exercises the <3-arg path
 			writeToErrorLog('source', 'boom');
 			expect(fetch_mock).not.toHaveBeenCalled();
 		});
 
 		it('issues exactly one POST to the receiver when the define is true', () => {
 			(globalThis as { NOTETHINK_CLIENT_ERROR_REPORTING?: boolean }).NOTETHINK_CLIENT_ERROR_REPORTING = true;
+			// eslint-disable-next-line no-restricted-syntax -- deliberately exercises the <3-arg path
 			writeToErrorLog('source', 'boom');
 			expect(fetch_mock).toHaveBeenCalledTimes(1);
 			const [url, init] = fetch_mock.mock.calls[0];
@@ -71,11 +75,13 @@ describe('errorops', () => {
 		it('does not throw when fetch rejects', () => {
 			(globalThis as { NOTETHINK_CLIENT_ERROR_REPORTING?: boolean }).NOTETHINK_CLIENT_ERROR_REPORTING = true;
 			fetch_mock.mockRejectedValue(new Error('network down'));
+			// eslint-disable-next-line no-restricted-syntax -- deliberately exercises the <3-arg path
 			expect(() => writeToErrorLog('source', 'boom')).not.toThrow();
 		});
 
 		it('includes the stack in the body when passed an Error', () => {
 			(globalThis as { NOTETHINK_CLIENT_ERROR_REPORTING?: boolean }).NOTETHINK_CLIENT_ERROR_REPORTING = true;
+			// eslint-disable-next-line no-restricted-syntax -- deliberately exercises the <3-arg path
 			writeToErrorLog('source', new Error('exploded'));
 			const body = JSON.parse(fetch_mock.mock.calls[0][1].body);
 			expect(body.stack).toContain('exploded');

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
 import { findRevealMessage, clearCapturedMessages } from '../helpers/capture-messages';
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
 test.describe('Duplicate stable_id collision detection', () => {
 
@@ -14,7 +14,7 @@ test.describe('Duplicate stable_id collision detection', () => {
     test('no Warnings tab when every headline resolves to a unique stable_id', async ({ page }) => {
         // collision-b has all-unique story headlines, so nothing collides
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         await page.waitForSelector('[data-testid="NoteRenderer"]');
@@ -24,7 +24,7 @@ test.describe('Duplicate stable_id collision detection', () => {
     test('within-file duplicate headlines raise the Warnings tab; the drawer lists the group', async ({ page }) => {
         // collision-a has two '### Plan release' stories in one file
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'collision-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'collision-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
         const warnings_tab = page.getByTestId('breadcrumb-collision-alert');
@@ -43,7 +43,7 @@ test.describe('Duplicate stable_id collision detection', () => {
     test('cross-file collisions in folder mode list both origins in the drawer', async ({ page }) => {
         // 'Shared milestone' appears in both files; 'Plan release' is duplicated within collision-a
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'collision-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'collision-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -56,13 +56,13 @@ test.describe('Duplicate stable_id collision detection', () => {
 
         const list = page.getByTestId('collisions-drawer-list');
         await expect(list).toContainText('shared-milestone');
-        await expect(list).toContainText('oma/docstech/todo.md');
+        await expect(list).toContainText('orbit/docstech/todo.md');
         await expect(list).toContainText('notebook/docstech/todo.md');
     });
 
     test('clicking a colliding title posts a revealRange so the editor jumps to that story', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'collision-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'collision-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 

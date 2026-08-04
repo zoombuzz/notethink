@@ -19,7 +19,7 @@ import { simulateSelectionChanged, simulateSelectionCleared } from '../helpers/s
  * stale seq still lands near scrollTop 0 and the assertion passes for the wrong reason.
  */
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 const STORY_DOC = `${WORKSPACE_ROOT}/zulu/todo.md`;
 const OTHER_DOC = `${WORKSPACE_ROOT}/alpha/board.md`;
 const STORY_FIXTURE = 'task-framing.md';

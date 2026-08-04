@@ -55,8 +55,8 @@ export function originPillColour(project_name: string, theme: 'dark' | 'light'):
 }
 
 /**
- * Extract the project name from a relative_path. For `oma/docstech/users/alex/todo.md`
- * the project is `oma`. Falls back to the full relative_path if no `/` is present.
+ * Extract the project name from a relative_path. For `orbit/docstech/users/alex/todo.md`
+ * the project is `orbit`. Falls back to the full relative_path if no `/` is present.
  */
 export function projectNameFromRelativePath(relative_path: string | undefined): string {
     if (!relative_path) { return ''; }
@@ -68,9 +68,9 @@ export function projectNameFromRelativePath(relative_path: string | undefined): 
  * Compute the absolute folder path to descend the folder view into when this pill is clicked.
  *
  * Returns the workspace-folder root joined with the pill's project segment - the folder
- * whose contents the pill represents (e.g. `/path/to/active_development/notethink` for a
+ * whose contents the pill represents (e.g. `/path/to/in_development/notethink` for a
  * pill whose origin sits at `notethink/docstech/users/alex/todo.md` inside the
- * `active_development` workspace folder). Derives the root by stripping the
+ * `in_development` workspace folder). Derives the root by stripping the
  * `relative_path` suffix from `doc_path`, so the rule works for any workspace layout
  * without assuming a particular root name.
  *

@@ -203,7 +203,7 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('empty file (H1 but no stories) contributes zero entries', () => {
-        const empty = simpleFile('id-empty', 'oma/todo.md', 'Todo', []);
+        const empty = simpleFile('id-empty', 'orbit/todo.md', 'Todo', []);
         const nonempty = simpleFile('id-other', 'a/todo.md', 'Todo', ['Real']);
         const { root, all_notes } = mergeAggregateRoot({ 'id-empty': empty, 'id-other': nonempty }, '/repo/');
         expect(root.child_notes).toHaveLength(1);
@@ -456,8 +456,8 @@ describe('mergeAggregateRoot', () => {
 
     it('integration_path is exposed on the synthetic root', () => {
         const doc = simpleFile('id-a', 'a/todo.md', 'Todo', ['One']);
-        const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/active_development');
-        expect((root as { integration_path?: string }).integration_path).toBe('/repo/active_development');
+        const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/in_development');
+        expect((root as { integration_path?: string }).integration_path).toBe('/repo/in_development');
     });
 
     it('stamps origin.source_position on every merged story carrying its pre-merge source-file offsets', () => {
@@ -523,7 +523,7 @@ describe('mergeAggregateRoot', () => {
     it('stamps origin.project_label using the aggregate divergence rule', () => {
         const docNb = simpleFile('id-nb', 'notebook/todo.md', 'Notebook', ['Nb1']);
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
-        const docCs = simpleFile('id-cs', 'countingsheet/todo.md', 'Countingsheet', ['Cs1']);
+        const docCs = simpleFile('id-cs', 'cobalt/todo.md', 'Cobalt', ['Cs1']);
         const { root } = mergeAggregateRoot(
             { 'id-nb': docNb, 'id-nt': docNt, 'id-cs': docCs },
             '/repo/',
@@ -537,9 +537,9 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('keeps pill labels stable across folder descents when workspace_projects is provided', () => {
-        // simulates: at workspace root we see notethink + notebook + countingsheet (label NT, NB, CO). After descending into notethink/ only the notethink doc is visible. Without workspace_projects, the disambiguation collapses and notethink's label flips to "NO" (next char). With workspace_projects, the universe is fixed and the label stays "NT"
+        // simulates: at workspace root we see notethink + notebook + cobalt (label NT, NB, CO). After descending into notethink/ only the notethink doc is visible. Without workspace_projects, the disambiguation collapses and notethink's label flips to "NO" (next char). With workspace_projects, the universe is fixed and the label stays "NT"
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
-        const workspace_universe = ['countingsheet', 'notebook', 'notethink'];
+        const workspace_universe = ['cobalt', 'notebook', 'notethink'];
         const { root } = mergeAggregateRoot(
             { 'id-nt': docNt },
             '/repo/notethink',
@@ -552,10 +552,10 @@ describe('mergeAggregateRoot', () => {
     it('keeps pill hues stable across folder descents when workspace_projects is provided', () => {
         // hue is an identity hash of the project name, so it is always stable - with or without workspace_projects
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
-        const workspace_universe = ['countingsheet', 'notebook', 'notethink'];
+        const workspace_universe = ['cobalt', 'notebook', 'notethink'];
         const root_alone = mergeAggregateRoot({ 'id-nt': docNt }, '/repo/notethink', undefined, workspace_universe).root;
         const docNb = simpleFile('id-nb', 'notebook/todo.md', 'Notebook', ['Nb1']);
-        const docCs = simpleFile('id-cs', 'countingsheet/todo.md', 'Countingsheet', ['Cs1']);
+        const docCs = simpleFile('id-cs', 'cobalt/todo.md', 'Cobalt', ['Cs1']);
         const root_full = mergeAggregateRoot({ 'id-nt': docNt, 'id-nb': docNb, 'id-cs': docCs }, '/repo', undefined, workspace_universe).root;
         const nt_hue_alone = root_alone.child_notes![0].origin?.project_hue;
         const nt_hue_full = root_full.child_notes!.find(n => n.headline_raw === '### Nt1')?.origin?.project_hue;
@@ -566,7 +566,7 @@ describe('mergeAggregateRoot', () => {
     it('project_hue is identical regardless of workspace_projects being provided, empty, or omitted (regression lock)', () => {
         // hue is now a pure identity hash of the project name - the workspace universe must not affect it
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
-        const workspace_universe = ['countingsheet', 'notebook', 'notethink'];
+        const workspace_universe = ['cobalt', 'notebook', 'notethink'];
         const hue_with_universe = mergeAggregateRoot({ 'id-nt': docNt }, '/repo/notethink', undefined, workspace_universe)
             .root.child_notes![0].origin?.project_hue;
         const hue_with_empty = mergeAggregateRoot({ 'id-nt': docNt }, '/repo/notethink', undefined, [])

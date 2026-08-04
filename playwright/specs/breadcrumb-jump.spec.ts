@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
 // the harness has no real extension, so echo a jumpTargets response back to the webview for the exact path the leaf-click requested - that path-match is what the drawer waits for before rendering
 async function injectJumpTargets(
@@ -33,7 +33,7 @@ test.describe('Terminal breadcrumb leaf jump drawer', () => {
 
     test('folder mode: leaf click opens the drawer and lists child subfolders; clicking one descends', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
         await selectFolderMode(page);
         await page.waitForSelector('[data-folder-mode="true"]');
@@ -75,9 +75,9 @@ test.describe('Terminal breadcrumb leaf jump drawer', () => {
     });
 
     test('current-file mode: leaf click lists sibling files; clicking one posts openFile', async ({ page }) => {
-        const doc_path = `${WORKSPACE_ROOT}/oma/docstech/todo.md`;
+        const doc_path = `${WORKSPACE_ROOT}/orbit/docstech/todo.md`;
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'collision-b.md', doc_path, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'collision-b.md', doc_path, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
         await page.waitForSelector('[data-testid="NoteRenderer"]');
 
@@ -92,7 +92,7 @@ test.describe('Terminal breadcrumb leaf jump drawer', () => {
         const leaf_path = request?.path as string;
         expect(leaf_path).toBe(doc_path);
 
-        const sibling_path = `${WORKSPACE_ROOT}/oma/docstech/done.md`;
+        const sibling_path = `${WORKSPACE_ROOT}/orbit/docstech/done.md`;
         await injectJumpTargets(page, 'current_file', leaf_path, [
             { label: 'done.md', path: sibling_path, kind: 'file' },
         ]);
@@ -111,7 +111,7 @@ test.describe('Terminal breadcrumb leaf jump drawer', () => {
 
     test('empty-state row when the folder has no jump targets', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'collision-b.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
         await selectFolderMode(page);
         await page.waitForSelector('[data-folder-mode="true"]');

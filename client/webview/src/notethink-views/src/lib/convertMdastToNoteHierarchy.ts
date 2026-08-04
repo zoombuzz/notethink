@@ -172,7 +172,7 @@ function findChildNotes(
             body_raw,
         };
 
-        // parse linetags from headline (port of Note.parseForLinetags)
+        // parse linetags from the headline
         const linetags_str = findLineTags(headline_raw);
         if (linetags_str) {
             note.linetags_from = child.position.start.offset + headline_raw.length - linetags_str.length;

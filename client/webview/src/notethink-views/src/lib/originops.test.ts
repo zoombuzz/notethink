@@ -50,7 +50,7 @@ describe('hueForProjectName', () => {
         // calling with no context vs calling after building a universe for other projects must give the same hue
         const hue_alone = hueForProjectName('notethink');
         // simulate "other projects have been processed first" by calling hueForProjectName for them
-        hueForProjectName('countingsheet');
+        hueForProjectName('cobalt');
         hueForProjectName('notebook');
         const hue_after = hueForProjectName('notethink');
         expect(hue_alone).toBe(hue_after);

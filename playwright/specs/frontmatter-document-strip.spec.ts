@@ -3,7 +3,7 @@ import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { selectFolderMode } from '../helpers/inject-multi-docs';
 import { sendCommand } from '../helpers/send-command';
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
 test.describe('Document-level front-matter strip', () => {
 

@@ -15,7 +15,7 @@ import { parse } from '../helpers/parse-markdown';
  * height / zeros the placeholder and the remaining cards concertina up. no hand-testing in DevTools.
  */
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 const PATH_A = `${WORKSPACE_ROOT}/alpha/docstech/board.md`;
 const PATH_B = `${WORKSPACE_ROOT}/beta/docstech/board.md`;
 const REL_A = 'alpha/docstech/board.md';

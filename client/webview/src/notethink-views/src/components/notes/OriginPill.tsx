@@ -21,7 +21,7 @@ interface OriginPillProps {
  * first path segment) followed by an optional epic pill (epic.name) when origin.epic
  * is set. The first letter is always the project name's initial; the second is the
  * earliest character that disambiguates this project from every other one visible in
- * the folder view (e.g. `notethink`→`NT`, `notebook`→`NB`, countingsheet→`CO`). Project pill
+ * the folder view (e.g. `notethink`→`NT`, `notebook`→`NB`, cobalt→`CO`). Project pill
  * colour is deterministic per project name; theme-adaptive for dark/light. With `epicOnly`
  * the project pill is suppressed (single-file story cards have an epic but no project).
  *

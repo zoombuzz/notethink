@@ -17,9 +17,9 @@ interface SpinnerProps {
  * disables the animation but keeps the SVG visible so the "something is happening"
  * affordance is preserved for users with reduced-motion preferences.
  *
- * positionClass picks a position helper class (InlineLoader, TopRightLoader)
- * matching the oma/calfam Loader precedent. Callers that need different positioning
- * can wrap the spinner in their own container instead.
+ * positionClass picks a position helper class (InlineLoader, TopRightLoader).
+ * Callers that need different positioning can wrap the spinner in their own
+ * container instead.
  */
 export default function Spinner(props: SpinnerProps): React.ReactElement {
     const position_class = props.positionClass ? styles[props.positionClass] : '';

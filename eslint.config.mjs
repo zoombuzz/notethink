@@ -42,6 +42,31 @@ const noConsecutiveLineComments = {
 
 const localPlugin = { rules: { "no-consecutive-line-comments": noConsecutiveLineComments } };
 
+/*
+ * shared selectors enforcing the log-source convention: the first argument to the structured logger
+ * is a source IDENTIFIER (the camelCase name of the enclosing function), never a sentence, and
+ * writeToErrorLog carries an error object as its third argument. Winston indexes on the source
+ * field, so a sentence there is unsearchable and a source shared by many call sites matches them
+ * all at once. Kept byte-identical to the same const in the sibling projects that share this
+ * logger - copy it whole, do not edit one copy in isolation.
+ */
+const restrictedSyntax = [
+    {
+        selector:
+            "CallExpression[callee.name='writeToErrorLog'][arguments.length<3]",
+        message:
+            'writeToErrorLog needs (source, message, error): pass the error object, or use ' +
+            "writeToLogAtLevel('error', ...) when there is no error to attach.",
+    },
+    {
+        selector:
+            "CallExpression[callee.name=/^(writeToErrorLog|writeToLogAtLevel)$/] > Literal.arguments[value=/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/]",
+        message:
+            "a bare HTTP-method log source loses route context: build a 'route/METHOD' source const " +
+            "(e.g. const source = 'admin/family/status/POST').",
+    },
+];
+
 export default [
     {
         ignores: [
@@ -77,6 +102,7 @@ export default [
             "no-throw-literal": "warn",
             semi: "warn",
             "local/no-consecutive-line-comments": "error",
+            "no-restricted-syntax": ["error", ...restrictedSyntax],
             /*
              * automated audit checks (coding-standards-audit-remediation) - kept at "warn" not "error".
              * error-level would fail the gate on the test-side backlog (173 test `any`, ~1330 test missing

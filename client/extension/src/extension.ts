@@ -7,7 +7,7 @@ const PANEL_VIEWTYPE = 'notethink';
 /*
  * on window reload a webview panel can be deserialized before its source editor finishes restoring, and the persisted
  * state carries only a path (no scheme) - a plain file:// reconstruction of that bare path then fails for virtual-FS docs
- * (notegit:/github:), which disposed the panel and made the viewer vanish on a returning-user reload. poll a short window
+ * (notegit:/github: and other custom FileSystemProvider schemes), which disposed the panel and made the viewer vanish on a returning-user reload. poll a short window
  * for an open/visible/active .md editor matching the saved path and reuse its full uri so the doc resolves with the right scheme.
  */
 async function waitForRestorableMdUri(preferred_path?: string): Promise<vscode.Uri | undefined> {
@@ -51,7 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
 				await provider.myWebviewPanel(panel, document);
 			} catch (err) {
 				// document may have been deleted since last session
-				writeToErrorLog('deserializeWebviewPanel: failed to restore doc', uri.toString(), err);
+				writeToErrorLog('deserializeWebviewPanel', `failed to restore doc ${uri.toString()}`, err);
 				panel.dispose();
 			}
 		}
@@ -70,7 +70,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		const panel = vscode.window.createWebviewPanel(
 			PANEL_VIEWTYPE,
 			'NoteThink',
-			// open the viewer in column One (viewer-left); the notegit source opens in column Two. read-only viewer can't take focus, so preserveFocus (mirrors "Open Preview to the Side")
+			// open the viewer in column One (viewer-left); the markdown source opens in column Two. read-only viewer can't take focus, so preserveFocus (mirrors "Open Preview to the Side")
 			{ viewColumn: vscode.ViewColumn.One, preserveFocus: true },
 			{ enableScripts: true, retainContextWhenHidden: true },
 		);

@@ -1,4 +1,4 @@
-// inline spinner driven by a CSS rotate keyframe. Class names follow the oma/calfam Loader precedent (Spinner, InlineLoader, TopRightLoader) so consumers can pick a position via positionClass without re-styling
+// inline spinner driven by a CSS rotate keyframe. Three classes (Spinner, InlineLoader, TopRightLoader) so consumers can pick a position via positionClass without re-styling
 
 @keyframes notethinkSpinnerRotate {
   from { transform: rotate(0deg); }

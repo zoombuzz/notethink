@@ -19,7 +19,7 @@ import { clearCapturedMessages } from '../helpers/capture-messages';
  * contract) and the rendered folder board the webview produces from the injected docs.
  */
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 const PORTFOLIO = `${WORKSPACE_ROOT}/portfolio`;
 const DECLARING_PATH = `${PORTFOLIO}/atlas/todo.md`;
 const DECLARING_REL = 'portfolio/atlas/todo.md';
@@ -77,7 +77,7 @@ test.describe('Auto integration mode (H1 linetags)', () => {
         await expect(renderer(page)).toHaveAttribute('data-folder-mode', 'true', { timeout: 5000 });
         await clearCapturedMessages(page);
 
-        // click the ancestor "active_development" breadcrumb segment to re-narrow the aggregation
+        // click the ancestor "in_development" breadcrumb segment to re-narrow the aggregation
         await page.locator(`nav[aria-label="Breadcrumb"] button[data-path="${WORKSPACE_ROOT}"]`).click();
 
         // destination is folder, the file declares folder → congruent → stays Auto (Folder)
@@ -112,7 +112,7 @@ test.describe('Auto integration mode (H1 linetags)', () => {
 
     // manual item 3
     test('Auto (Current file) + a folder breadcrumb click pins concrete Folder', async ({ page }) => {
-        await injectDocsFromFixture(page, 'basic.md', `${WORKSPACE_ROOT}/oma/docstech/todo.md`, { workspace_root: WORKSPACE_ROOT, relative_path: 'oma/docstech/todo.md' });
+        await injectDocsFromFixture(page, 'basic.md', `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, { workspace_root: WORKSPACE_ROOT, relative_path: 'orbit/docstech/todo.md' });
 
         // a file that declares nothing resolves to Auto (Current file)
         await expect(renderer(page)).not.toHaveAttribute('data-folder-mode', 'true');
@@ -120,10 +120,10 @@ test.describe('Auto integration mode (H1 linetags)', () => {
         await expect(selector(page).locator('option[value="auto"]')).toHaveText('Auto (Current file)');
         await clearCapturedMessages(page);
 
-        // click the "oma" folder segment - diverges from a current_file-declaring file → pin concrete Folder
-        await page.locator(`nav[aria-label="Breadcrumb"] button[data-path="${WORKSPACE_ROOT}/oma"]`).click();
+        // click the "orbit" folder segment - diverges from a current_file-declaring file → pin concrete Folder
+        await page.locator(`nav[aria-label="Breadcrumb"] button[data-path="${WORKSPACE_ROOT}/orbit"]`).click();
         await expect(selector(page)).toHaveValue('folder');
-        await expect.poll(() => lastSetIntegrationPath(page, 'folder'), { timeout: 5000 }).toBe(`${WORKSPACE_ROOT}/oma`);
+        await expect.poll(() => lastSetIntegrationPath(page, 'folder'), { timeout: 5000 }).toBe(`${WORKSPACE_ROOT}/orbit`);
     });
 
     // manual item 4

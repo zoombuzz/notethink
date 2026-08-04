@@ -205,14 +205,14 @@ describe('NotethinkEditorProvider', () => {
 	describe('workspace_root with real workspace folder', () => {
 		it('sends workspace_root from getWorkspaceFolder when available', async () => {
 			// set up getWorkspaceFolder to return a workspace folder
-			const workspaceRoot = '/mnt/secure/home/alex/git/github.com/active_development';
+			const workspaceRoot = '/mnt/secure/home/dev/git/github.com/in_development';
 			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({
 				uri: Uri.file(workspaceRoot),
-				name: 'active_development',
+				name: 'in_development',
 				index: 0,
 			});
 
-			const docPath = workspaceRoot + '/countingsheet/nodejs/ledger/docs/todo.md';
+			const docPath = workspaceRoot + '/cobalt/nodejs/lumen/docs/todo.md';
 			const doc = mockTextDocument('# Todo', docPath);
 			const editor = mockTextEditor(doc);
 			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
@@ -231,16 +231,16 @@ describe('NotethinkEditorProvider', () => {
 		});
 
 		it('sets relative_path on doc when asRelativePath returns a relative path', async () => {
-			const workspaceRoot = '/mnt/secure/home/alex/git/github.com/active_development';
+			const workspaceRoot = '/mnt/secure/home/dev/git/github.com/in_development';
 			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({
 				uri: Uri.file(workspaceRoot),
-				name: 'active_development',
+				name: 'in_development',
 				index: 0,
 			});
 			// simulate asRelativePath returning a relative path (no leading /)
-			(vscode.workspace.asRelativePath as jest.Mock).mockReturnValue('countingsheet/nodejs/ledger/docs/todo.md');
+			(vscode.workspace.asRelativePath as jest.Mock).mockReturnValue('cobalt/nodejs/lumen/docs/todo.md');
 
-			const docPath = workspaceRoot + '/countingsheet/nodejs/ledger/docs/todo.md';
+			const docPath = workspaceRoot + '/cobalt/nodejs/lumen/docs/todo.md';
 			const doc = mockTextDocument('# Todo', docPath);
 			const editor = mockTextEditor(doc);
 			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
@@ -253,7 +253,7 @@ describe('NotethinkEditorProvider', () => {
 			const updates = getUpdates(newPanel.postedMessages);
 			expect(updates.length).toBeGreaterThanOrEqual(1);
 			const doc_entries = Object.values(updates[0].partial.docs) as UpdateDocEntry[];
-			expect(doc_entries[0].relative_path).toBe('countingsheet/nodejs/ledger/docs/todo.md');
+			expect(doc_entries[0].relative_path).toBe('cobalt/nodejs/lumen/docs/todo.md');
 
 			// restore mocks
 			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue(undefined);
@@ -530,7 +530,8 @@ describe('NotethinkEditorProvider', () => {
 			const bad_path = '/etc/shadow';
 			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editorA];
 			rigOpenByPath({ [docPathA]: docA });
-			const errorLogSpy = jest.spyOn(require('../lib/errorops'), 'writeToErrorLog');
+			// the refusal carries no error object, so it logs via writeToLogAtLevel('error', source, message) - see AGENTS.md > Log source convention
+			const errorLogSpy = jest.spyOn(require('../lib/errorops'), 'writeToLogAtLevel');
 
 			await panelHelper.simulateMessage({
 				type: 'editText',
@@ -549,8 +550,9 @@ describe('NotethinkEditorProvider', () => {
 				expect(called_path).not.toBe(bad_path);
 			}
 			expect(errorLogSpy).toHaveBeenCalledWith(
-				expect.stringContaining('path outside workspace'),
-				bad_path,
+				'error',
+				'applyEditTextToDoc',
+				expect.stringContaining(`path outside workspace, refusing ${bad_path}`),
 			);
 			errorLogSpy.mockRestore();
 		});
@@ -884,7 +886,7 @@ describe('NotethinkEditorProvider', () => {
 
 		it('drops a multi-segment excluded path (notegit/nodejs) when the board is rooted inside notegit, not at the workspace root', async () => {
 			const story_path = '/workspace/notegit/docstech/users/alex/todo.md';
-			const demo_path = '/workspace/notegit/nodejs/dulcet/content/notegit/welcome/ai-board/budget/todo.md';
+			const demo_path = '/workspace/notegit/nodejs/hostapp/content/notegit/welcome/ai-board/budget/todo.md';
 			// findFiles' brace-expanded exclude is unreliable, so assume it hands both back: the host-side post-filter is the deterministic gate and must match workspace-relative, or the notegit/ segment is missing and notegit/nodejs stops matching
 			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(story_path), Uri.file(demo_path)]);
 			// distinct body per file: identical text hashes to one doc id, which would collapse the two entries and mask a leak

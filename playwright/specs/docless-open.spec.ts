@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { injectMultipleDocsFromFixtures } from '../helpers/inject-multi-docs';
 import { sendCommand } from '../helpers/send-command';
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
 /*
  * Open Viewer with no .md file active opens the board in folder mode at the workspace root. The host
@@ -22,7 +22,7 @@ test.describe('Docless open (no .md file active)', () => {
 
     test('a host-seeded folder scope renders the folder board rooted at the workspace root', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
         await page.waitForSelector('[data-testid="NoteRenderer"]');
@@ -36,7 +36,7 @@ test.describe('Docless open (no .md file active)', () => {
 
     test('the seeded board scopes to the workspace root, so every project merges in', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
         await page.waitForSelector('[data-testid="NoteRenderer"]');
@@ -50,7 +50,7 @@ test.describe('Docless open (no .md file active)', () => {
 
     test('a malformed seed is ignored rather than half-applying a scope', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
         await page.waitForSelector('[data-testid="NoteRenderer"]');
 

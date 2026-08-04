@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { injectMultipleDocsFromFixtures, selectFolderMode, selectIntegrationMode } from '../helpers/inject-multi-docs';
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
 async function selectCurrentFileMode(page: Parameters<typeof selectFolderMode>[0]): Promise<void> {
     await selectIntegrationMode(page, 'current_file');
@@ -16,7 +16,7 @@ test.describe('Integration flip (folder ↔ current-file)', () => {
 
     test('folder → current_file flips the selector value and drops the folder breadcrumb file-count in one render', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -33,7 +33,7 @@ test.describe('Integration flip (folder ↔ current-file)', () => {
 
     test('round-trip folder → current_file → folder → current_file leaves no stale toolbar state', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 

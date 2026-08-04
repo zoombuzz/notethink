@@ -3,7 +3,7 @@ import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inj
 import { sendCommand } from '../helpers/send-command';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 
-const WORKSPACE_ROOT = '/mnt/workspace/active_development';
+const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
 test.describe('Aggregate (Folder) view', () => {
 
@@ -14,7 +14,7 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('folder mode shows a single NoteRenderer with folder flag and single toolbar', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -34,7 +34,7 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('origin pills appear on each merged story showing the project first letter', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -44,16 +44,16 @@ test.describe('Aggregate (Folder) view', () => {
         const pills = page.locator('[data-testid="origin-project-pill"]');
         await expect(pills).toHaveCount(4, { timeout: 5000 }); // 2 stories per file × 2 files
 
-        // project labels: 'OM' for oma, 'NO' for notebook (no prefix collisions in this fixture set)
+        // project labels: 'OR' for orbit, 'NO' for notebook (no prefix collisions in this fixture set)
         const project_attrs = await pills.evaluateAll((nodes) =>
             nodes.map((n) => n.getAttribute('data-project'))
         );
-        expect(project_attrs).toEqual(expect.arrayContaining(['oma', 'oma', 'notebook', 'notebook']));
+        expect(project_attrs).toEqual(expect.arrayContaining(['orbit', 'orbit', 'notebook', 'notebook']));
     });
 
     test('click on an origin pill descends the folder root to the project subfolder AND opens the clicked story in the editor', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -63,8 +63,8 @@ test.describe('Aggregate (Folder) view', () => {
         // clear any messages from the mode-switch handshake
         await page.evaluate(() => { (window as unknown as { __captured_messages: unknown[] }).__captured_messages = []; });
 
-        // click the first oma origin pill - pill click is ADDITIVE: descend the folder root to `${WORKSPACE_ROOT}/oma` via setIntegration AND open the clicked story in the editor via revealRange (the underlying headline click fires alongside the descend because the pill no longer stopPropagates)
-        const pill = page.locator('[data-testid="origin-project-pill"][data-project="oma"]').first();
+        // click the first orbit origin pill - pill click is ADDITIVE: descend the folder root to `${WORKSPACE_ROOT}/orbit` via setIntegration AND open the clicked story in the editor via revealRange (the underlying headline click fires alongside the descend because the pill no longer stopPropagates)
+        const pill = page.locator('[data-testid="origin-project-pill"][data-project="orbit"]').first();
         await expect(pill).toBeVisible({ timeout: 5000 });
         await pill.click({ force: true });
 
@@ -75,7 +75,7 @@ test.describe('Aggregate (Folder) view', () => {
                 return descend ? descend.path : undefined;
             }),
             { timeout: 5000 }
-        ).toBe(`${WORKSPACE_ROOT}/oma`);
+        ).toBe(`${WORKSPACE_ROOT}/orbit`);
 
         // pill click ALSO posts a revealRange routed to the clicked story's source doc - the headline click fires after the pill click via event bubbling
         await expect.poll(async () =>
@@ -84,12 +84,12 @@ test.describe('Aggregate (Folder) view', () => {
                 return msgs.find((m) => m.type === 'revealRange')?.docPath;
             }),
             { timeout: 5000 }
-        ).toBe(`${WORKSPACE_ROOT}/oma/docstech/todo.md`);
+        ).toBe(`${WORKSPACE_ROOT}/orbit/docstech/todo.md`);
     });
 
     test('breadcrumb segment click in folder mode sends setIntegration', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -120,7 +120,7 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('breadcrumb shows the merged "(X in Y files)" count only in folder mode', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -138,7 +138,7 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('clicking the breadcrumb count opens the Files drawer; editing the include glob re-filters the list', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -153,12 +153,12 @@ test.describe('Aggregate (Folder) view', () => {
 
         // both source files are listed under the default filters
         const list = page.getByTestId('files-drawer-list');
-        await expect(list).toContainText('oma/docstech/todo.md');
+        await expect(list).toContainText('orbit/docstech/todo.md');
         await expect(list).toContainText('notebook/docstech/todo.md');
 
         // narrowing the include glob re-filters the list client-side after the debounce
-        await page.getByTestId('files-drawer-include').fill('**/oma/**');
-        await expect(list).toContainText('oma/docstech/todo.md');
+        await page.getByTestId('files-drawer-include').fill('**/orbit/**');
+        await expect(list).toContainText('orbit/docstech/todo.md');
         await expect(list).not.toContainText('notebook/docstech/todo.md');
 
         // Escape closes the drawer
@@ -168,7 +168,7 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('clicking a file in the Files drawer switches to current_file mode for that file and closes the drawer', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -193,7 +193,7 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('outside-click dismisses the toolbar drawer; clicks inside or on the trigger do not double-toggle', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
@@ -222,7 +222,7 @@ test.describe('Aggregate (Folder) view', () => {
 
     test('switching folder mode to Kanban shows stories grouped by status linetag with origin pills', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
-            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/oma/docstech/todo.md`, relative_path: 'oma/docstech/todo.md' },
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
             { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 

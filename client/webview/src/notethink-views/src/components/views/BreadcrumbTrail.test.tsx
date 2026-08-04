@@ -215,10 +215,10 @@ describe('BreadcrumbTrail', () => {
         expect(screen.getByText('todo.md')).toBeInTheDocument();
     });
 
-    it('keeps the realistic workspace root (active_development) as the first segment', () => {
+    it('keeps the realistic workspace root (in_development) as the first segment', () => {
         const current = makeNote({ seq: 0 });
-        const workspace_root = '/mnt/secure/home/alex/git/github.com/active_development';
-        const doc_path = workspace_root + '/countingsheet/nodejs/ledger/docs/todo.md';
+        const workspace_root = '/mnt/secure/home/dev/git/github.com/in_development';
+        const doc_path = workspace_root + '/cobalt/nodejs/lumen/docs/todo.md';
         render(<BreadcrumbTrail {...current} doc_path={doc_path} workspace_root={workspace_root} />);
         // everything ABOVE the opened folder stays hidden
         expect(screen.queryByText('mnt')).not.toBeInTheDocument();
@@ -228,8 +228,8 @@ describe('BreadcrumbTrail', () => {
         expect(screen.queryByText('git')).not.toBeInTheDocument();
         expect(screen.queryByText('github.com')).not.toBeInTheDocument();
         // the opened folder itself is the first segment, project sits below it
-        expect(screen.getByText('active_development')).toBeInTheDocument();
-        expect(screen.getByText('countingsheet')).toBeInTheDocument();
+        expect(screen.getByText('in_development')).toBeInTheDocument();
+        expect(screen.getByText('cobalt')).toBeInTheDocument();
         expect(screen.getByText('nodejs')).toBeInTheDocument();
         expect(screen.getByText('todo.md')).toBeInTheDocument();
     });
@@ -247,7 +247,7 @@ describe('BreadcrumbTrail', () => {
 
     it('preserves full paths in data-path with realistic workspace root', () => {
         const current = makeNote({ seq: 0 });
-        const workspace_root = '/mnt/secure/home/alex/git/github.com/active_development';
+        const workspace_root = '/mnt/secure/home/dev/git/github.com/in_development';
         const doc_path = workspace_root + '/notethink/docstech/users/alex.stanhope/todo.md';
         const { container } = render(<BreadcrumbTrail {...current} doc_path={doc_path} workspace_root={workspace_root} />);
         const path_items = container.querySelectorAll('[data-path]');
@@ -342,20 +342,20 @@ describe('BreadcrumbTrail', () => {
     it('uses doc_relative_path when provided (handles symlinks)', () => {
         const current = makeNote({ seq: 0 });
         /*
-         * Simulate: workspace opened via symlink /home/alex/github.com/active_development
-         * but doc path resolves via /mnt/secure/home/alex/git/github.com/active_development
+         * simulate: workspace opened via symlink /home/dev/github.com/in_development
+         * but doc path resolves via /mnt/secure/home/dev/git/github.com/in_development
          * The extension computes relative_path via asRelativePath which handles this correctly
          */
         render(<BreadcrumbTrail {...current}
-            doc_path="/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs/todo.md"
-            doc_relative_path="countingsheet/docs/todo.md"
+            doc_path="/mnt/secure/home/dev/git/github.com/in_development/cobalt/docs/todo.md"
+            doc_relative_path="cobalt/docs/todo.md"
         />);
         // absolute prefix above the opened folder stays hidden
         expect(screen.queryByText('mnt')).not.toBeInTheDocument();
         expect(screen.queryByText('secure')).not.toBeInTheDocument();
         // the opened folder is derived from doc_path minus the relative suffix
-        expect(screen.getByText('active_development')).toBeInTheDocument();
-        expect(screen.getByText('countingsheet')).toBeInTheDocument();
+        expect(screen.getByText('in_development')).toBeInTheDocument();
+        expect(screen.getByText('cobalt')).toBeInTheDocument();
         expect(screen.getByText('docs')).toBeInTheDocument();
         expect(screen.getByText('todo.md')).toBeInTheDocument();
     });
@@ -363,25 +363,25 @@ describe('BreadcrumbTrail', () => {
     it('data-path attributes use full paths when doc_relative_path is provided', () => {
         const current = makeNote({ seq: 0 });
         const { container } = render(<BreadcrumbTrail {...current}
-            doc_path="/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs/todo.md"
-            doc_relative_path="countingsheet/docs/todo.md"
+            doc_path="/mnt/secure/home/dev/git/github.com/in_development/cobalt/docs/todo.md"
+            doc_relative_path="cobalt/docs/todo.md"
         />);
         const path_items = container.querySelectorAll('[data-path]');
         expect(path_items).toHaveLength(4);
         // first segment is the opened folder, then full paths reconstructed from doc_path minus relative suffix
-        expect(path_items[0]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development');
-        expect(path_items[1]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development/countingsheet');
-        expect(path_items[2]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs');
-        expect(path_items[3]).toHaveAttribute('data-path', '/mnt/secure/home/alex/git/github.com/active_development/countingsheet/docs/todo.md');
+        expect(path_items[0]).toHaveAttribute('data-path', '/mnt/secure/home/dev/git/github.com/in_development');
+        expect(path_items[1]).toHaveAttribute('data-path', '/mnt/secure/home/dev/git/github.com/in_development/cobalt');
+        expect(path_items[2]).toHaveAttribute('data-path', '/mnt/secure/home/dev/git/github.com/in_development/cobalt/docs');
+        expect(path_items[3]).toHaveAttribute('data-path', '/mnt/secure/home/dev/git/github.com/in_development/cobalt/docs/todo.md');
     });
 
     it('doc_relative_path takes precedence over workspace_root', () => {
         const current = makeNote({ seq: 0 });
         // Even with mismatched workspace_root (symlink), doc_relative_path wins
         render(<BreadcrumbTrail {...current}
-            doc_path="/mnt/secure/home/alex/git/github.com/active_development/notethink/README.md"
+            doc_path="/mnt/secure/home/dev/git/github.com/in_development/notethink/README.md"
             doc_relative_path="notethink/README.md"
-            workspace_root="/home/alex/github.com/active_development"
+            workspace_root="/home/dev/github.com/in_development"
         />);
         expect(screen.queryByText('mnt')).not.toBeInTheDocument();
         expect(screen.getByText('notethink')).toBeInTheDocument();
@@ -408,14 +408,14 @@ describe('BreadcrumbTrail', () => {
 
         it('keeps the opened workspace folder as the first segment', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
             />);
-            // one level up: active_development is now the root, calfam below it
-            expect(screen.getByText('active_development')).toBeInTheDocument();
-            expect(screen.getByText('calfam')).toBeInTheDocument();
+            // one level up: in_development is now the root, carbon below it
+            expect(screen.getByText('in_development')).toBeInTheDocument();
+            expect(screen.getByText('carbon')).toBeInTheDocument();
             // nothing above the workspace folder leaks in
             expect(screen.queryByText('github.com')).not.toBeInTheDocument();
             expect(screen.queryByText('home')).not.toBeInTheDocument();
@@ -423,47 +423,47 @@ describe('BreadcrumbTrail', () => {
 
         it('data-path on the workspace-folder segment is the workspace root itself', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             const { container } = render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
             />);
             const path_items = container.querySelectorAll('[data-path]');
             expect(path_items).toHaveLength(2);
             expect(path_items[0]).toHaveAttribute('data-path', workspace_root);
-            expect(path_items[1]).toHaveAttribute('data-path', workspace_root + '/calfam');
+            expect(path_items[1]).toHaveAttribute('data-path', workspace_root + '/carbon');
         });
 
         it('clicking the workspace-folder segment re-discovers the whole opened folder', () => {
             const on_folder_click = jest.fn();
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
                 onFolderClick={on_folder_click}
             />);
-            fireEvent.click(screen.getByText('active_development'));
+            fireEvent.click(screen.getByText('in_development'));
             expect(on_folder_click).toHaveBeenCalledWith(workspace_root);
         });
 
         it('segments deeper subdirectories below the workspace folder', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             const { container } = render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam/docstech'}
+                integration_path={workspace_root + '/carbon/docstech'}
             />);
             const path_items = container.querySelectorAll('[data-path]');
             expect(path_items).toHaveLength(3);
             expect(path_items[0]).toHaveAttribute('data-path', workspace_root);
-            expect(path_items[1]).toHaveAttribute('data-path', workspace_root + '/calfam');
-            expect(path_items[2]).toHaveAttribute('data-path', workspace_root + '/calfam/docstech');
+            expect(path_items[1]).toHaveAttribute('data-path', workspace_root + '/carbon');
+            expect(path_items[2]).toHaveAttribute('data-path', workspace_root + '/carbon/docstech');
         });
 
         it('when integration_path is the workspace root, shows just the workspace folder', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             const { container } = render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
                 integration_path={workspace_root}
@@ -471,13 +471,13 @@ describe('BreadcrumbTrail', () => {
             const path_items = container.querySelectorAll('[data-path]');
             expect(path_items).toHaveLength(1);
             expect(path_items[0]).toHaveAttribute('data-path', workspace_root);
-            expect(screen.getByText('active_development')).toBeInTheDocument();
+            expect(screen.getByText('in_development')).toBeInTheDocument();
         });
 
         it('falls back to absolute segments when integration_path is outside workspace_root', () => {
             const current = makeNote({ seq: 0 });
             const { container } = render(<BreadcrumbTrail {...current}
-                workspace_root="/home/alex/github.com/active_development"
+                workspace_root="/home/dev/github.com/in_development"
                 integration_path="/tmp/elsewhere/notes"
             />);
             const path_items = container.querySelectorAll('[data-path]');
@@ -488,10 +488,10 @@ describe('BreadcrumbTrail', () => {
 
         it('shows "(X in Y files)" after the path in folder mode', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
                 file_count={17}
                 note_count={214}
             />);
@@ -500,7 +500,7 @@ describe('BreadcrumbTrail', () => {
 
         it('shows "(X in Y of M files)" when the discovery cap truncated the set', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
                 integration_path={workspace_root}
@@ -513,10 +513,10 @@ describe('BreadcrumbTrail', () => {
 
         it('shows the plain form when discovered total is not greater than loaded', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
                 file_count={17}
                 note_count={214}
                 aggregate_total_discovered={17}
@@ -527,10 +527,10 @@ describe('BreadcrumbTrail', () => {
 
         it('treats a missing note_count as 0', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
                 file_count={17}
             />);
             expect(screen.getByText('(0 in 17 files)')).toBeInTheDocument();
@@ -538,11 +538,11 @@ describe('BreadcrumbTrail', () => {
 
         it('calls onFileCountClick with the count element when the count is clicked', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             const onFileCountClick = jest.fn();
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
                 file_count={17}
                 note_count={214}
                 onFileCountClick={onFileCountClick}
@@ -555,10 +555,10 @@ describe('BreadcrumbTrail', () => {
 
         it('renders the count as the Files tab, titled with the count itself', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
                 view_id="v1"
                 active_drawer="files"
                 file_count={17}
@@ -573,10 +573,10 @@ describe('BreadcrumbTrail', () => {
 
         it('does not render a count when file_count is undefined', () => {
             const current = makeNote({ seq: 0 });
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             const { container } = render(<BreadcrumbTrail {...current}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
             />);
             expect(container.textContent).not.toMatch(/\(\d/);
         });
@@ -606,10 +606,10 @@ describe('BreadcrumbTrail', () => {
         }
 
         function folderModeTrail(): React.ReactElement {
-            const workspace_root = '/home/alex/github.com/active_development';
+            const workspace_root = '/home/dev/github.com/in_development';
             return <BreadcrumbTrail {...makeNote({ seq: 0 })}
                 workspace_root={workspace_root}
-                integration_path={workspace_root + '/calfam'}
+                integration_path={workspace_root + '/carbon'}
                 file_count={17}
                 note_count={214}
             />;

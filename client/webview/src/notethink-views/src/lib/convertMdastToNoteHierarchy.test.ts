@@ -592,7 +592,7 @@ describe('benchmark: large file parsing', () => {
 
     /**
      * Generate a synthetic markdown string and MDAST tree simulating a large file
-     * (similar to shopify-uncomplicated todo.md: ~274 headings across 2700+ lines).
+     * (~274 headings across 2700+ lines, matching the worst real file observed).
      */
     function generateLargeMdast(headingCount: number): { text: string; mdast: MdastNode } {
         const lines: string[] = [];

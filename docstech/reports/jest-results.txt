@@ -1,10 +1,10 @@
 # Jest Test Results
-# Version: 0.3.36
-# Date: 2026-08-03T19:07:13+01:00
+# Version: 0.3.38
+# Date: 2026-08-04T14:57:54+01:00
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 
-> notethink@0.3.36 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
+> notethink@0.3.37 test-jest /mnt/secure/home/alex/git/github.com/active_development/notethink
 > bash scripts/test-jest.sh
 
 
@@ -15,7 +15,7 @@
 [1mTest Suites: [22m[1m[32m11 passed[39m[22m, 11 total
 [1mTests:       [22m[1m[32m248 passed[39m[22m, 248 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        2.574 s
+[1mTime:[22m        2.83 s, estimated 3 s
 [2mRan all test suites[22m[2m.[22m
 [1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -27,7 +27,7 @@
 [1mTest Suites: [22m[1m[32m10 passed[39m[22m, 10 total
 [1mTests:       [22m[1m[32m136 passed[39m[22m, 136 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        0.841 s, estimated 1 s
+[1mTime:[22m        0.899 s, estimated 1 s
 [2mRan all test suites[22m[2m.[22m
 [1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -40,7 +40,7 @@
 [1mTest Suites: [22m[1m[32m62 passed[39m[22m, 62 total
 [1mTests:       [22m[1m[32m1314 passed[39m[22m, 1314 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        3.315 s
+[1mTime:[22m        [1m[33m3.103 s[39m[22m
 [2mRan all test suites[22m[2m.[22m
 [1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -48,9 +48,9 @@
 [1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
 [1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │    11 │ [32m   248[0m │ [2m     0[0m │ 2.574 s │
-│ webview          │    10 │ [32m   136[0m │ [2m     0[0m │ 0.841 s │
-│ notethink-views  │    62 │ [32m  1314[0m │ [2m     0[0m │ 3.315 s │
+│ extension        │    11 │ [32m   248[0m │ [2m     0[0m │  2.83 s │
+│ webview          │    10 │ [32m   136[0m │ [2m     0[0m │ 0.899 s │
+│ notethink-views  │    62 │ [32m  1314[0m │ [2m     0[0m │ 3.103 s │
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
 [1m│ TOTAL            │    83 │[0m [32m  1698[0m [1m│[0m [2m     0[0m [1m│         │[0m
 [1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

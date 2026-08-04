@@ -7,17 +7,17 @@ import type { NoteOrigin } from '../../types/NoteProps';
 describe('OriginPill rendering', () => {
 
     const makeOrigin = (overrides: Partial<NoteOrigin> = {}): NoteOrigin => ({
-        doc_id: 'id-oma',
-        doc_path: '/repo/oma/docstech/users/alex/todo.md',
-        relative_path: 'oma/docstech/users/alex/todo.md',
+        doc_id: 'id-orbit',
+        doc_path: '/repo/orbit/docstech/users/alex/todo.md',
+        relative_path: 'orbit/docstech/users/alex/todo.md',
         ...overrides,
     });
 
     it('renders project pill with two uppercase letters from the project name', () => {
         render(<OriginPill origin={makeOrigin()} />);
         const pill = screen.getByTestId('origin-project-pill');
-        expect(pill).toHaveTextContent('OM');
-        expect(pill).toHaveAttribute('data-project', 'oma');
+        expect(pill).toHaveTextContent('OR');
+        expect(pill).toHaveAttribute('data-project', 'orbit');
     });
 
     it('prefers origin.project_label over the single-project fallback', () => {
@@ -28,7 +28,7 @@ describe('OriginPill rendering', () => {
     it('full relative_path is exposed as tooltip', () => {
         render(<OriginPill origin={makeOrigin()} />);
         const pill = screen.getByTestId('origin-project-pill');
-        expect(pill).toHaveAttribute('title', 'oma/docstech/users/alex/todo.md');
+        expect(pill).toHaveAttribute('title', 'orbit/docstech/users/alex/todo.md');
     });
 
     it('click handler fires when the pill is clicked', () => {
@@ -56,7 +56,7 @@ describe('OriginPill rendering', () => {
     });
 
     it('uses origin.project_hue directly when present, overriding the hueForProjectName fallback', () => {
-        // pick a hue that hueForProjectName('oma') would not produce so we can prove which path ran
+        // pick a hue that hueForProjectName('orbit') would not produce so we can prove which path ran
         const explicit_hue = 200;
         render(<OriginPill origin={makeOrigin({ project_hue: explicit_hue })} />);
         const pill = screen.getByTestId('origin-project-pill');
@@ -68,7 +68,7 @@ describe('OriginPill rendering', () => {
         const origin = makeOrigin({ project_hue: undefined });
         render(<OriginPill origin={origin} />);
         const pill = screen.getByTestId('origin-project-pill');
-        const project_name = 'oma';
+        const project_name = 'orbit';
         const expected_colour = pillColourForHue(hueForProjectName(project_name), 'dark');
         expect(pill).toHaveStyle({ backgroundColor: expected_colour });
     });

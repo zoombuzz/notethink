@@ -2,7 +2,24 @@
 
 This document defines the coding standards for the NoteThink project. **It is the authoritative rulebook: read it end-to-end at the start of any session that touches `notethink`, and re-read the relevant section before any high-consequence action (commit, push, merge, version bump, refactor, new-file placement) rather than recalling from memory.** Don't grep for keywords mid-task in place of reading it, and don't fall back to training-data defaults when a rule seems missing - if an expected rule is absent, flag the gap and ask whether to add it here. Memory files are thin pointers into this document; if a rule belongs anywhere, it belongs here.
 
-**Workspace-wide rules** (story state machine, story tracking format, version bumps, commit policy, git workflow, releaseable-state gate, test-failure discipline, edit verification, dev-server lifecycle, browser-snapshot cleanup) live in [`../AGENTS.md`](../AGENTS.md). This file documents only NoteThink-specific overrides and coding standards.
+**Workspace-wide process** (story state machine and tracking format, version bumps, commit policy, git workflow, who drives shipping, the never-write-with-git rule, releaseable-state gate, test-failure discipline, edit verification, browser-snapshot cleanup) lives in [`../AGENTS.md`](../AGENTS.md).
+
+**Shared coding standards** live in `lightenna-iac/docstech/standards/` ([index](../lightenna-iac/docstech/standards/README.md)). Read the one that matches the work:
+
+| Doing | Read |
+|---|---|
+| naming anything | [`NAMING.md`](../lightenna-iac/docstech/standards/NAMING.md) |
+| placing imports / types / constants, structuring a file | [`CODE_LAYOUT.md`](../lightenna-iac/docstech/standards/CODE_LAYOUT.md) |
+| writing types or props | [`TYPESCRIPT.md`](../lightenna-iac/docstech/standards/TYPESCRIPT.md) |
+| adding a log line, debug statement, or error path | [`LOGGING.md`](../lightenna-iac/docstech/standards/LOGGING.md) |
+| writing or changing a test | [`TESTING.md`](../lightenna-iac/docstech/standards/TESTING.md) |
+| verifying before handback | [`VERIFICATION.md`](../lightenna-iac/docstech/standards/VERIFICATION.md) |
+
+**notethink is a VS Code extension**, so [`NEXTJS.md`](../lightenna-iac/docstech/standards/NEXTJS.md), [`SECURITY.md`](../lightenna-iac/docstech/standards/SECURITY.md) and [`DATABASE.md`](../lightenna-iac/docstech/standards/DATABASE.md) do **not** apply: no App Router, no server actions, no `lib/lib-client` split, no database. It also has no dev server - see Pre-Push Verification below.
+
+**notethink holds the workspace's worked examples for `<noun>ops.ts` library organisation** and is the reference write-up for that rule. The rule itself is in [`../AGENTS.md`](../AGENTS.md#library-organisation-nounopsts).
+
+Where this file restates a shared rule below, the shared document is canonical and this file keeps only notethink's scope carve-outs - of which there are several real ones, because the extension host and the webview are different runtimes with different logging stacks.
 
 ## Naming Conventions
 
@@ -108,7 +125,7 @@ The check applies because the names below land in a store this codebase can't un
 
 Before introducing or renaming anything in those categories, surface the candidate to the user and get explicit sign-off.
 
-**Why this rule exists.** The `notethink.folderView.*` workspace-config namespace was originally introduced when the only place those settings lived was the folder view; the scope later grew to cover all view-type settings but the namespace name didn't, forcing a rename pass (and would have required a user-facing migration if there had been external users). A 30-second naming check at the moment of introduction would have prevented the whole episode. When in doubt, default to asking - the question is cheap, the rename is expensive.
+**Why this rule exists.** A config namespace named for the single view its settings happen to serve (`notethink.folderView.*`) stops describing them the moment the scope grows to every view type - and by then the name is already on disk in users' `settings.json`, so correcting it costs a rename pass across the codebase plus a user-facing migration wherever there are external users. A 30-second naming check at the moment of introduction is what prevents it. When in doubt, default to asking - the question is cheap, the rename is expensive.
 
 ### `stable_id` field: implicit vs explicit provenance
 
@@ -147,10 +164,10 @@ Each was a real user-visible bug, each looked like a caching or scrolling proble
 
 ### Import Grouping
 
-Organize imports in this order. **`import Debug from "debug"` always comes first** (the Debug Logger Pattern rule overrides grouping - it sits above React even though `debug` is otherwise an "external dependency"):
+Organize imports in this order. Where a webview file carries `import Debug from "debug"`, it conventionally leads the list, above React, even though `debug` is otherwise an external dependency; [`LOGGING.md`](../lightenna-iac/docstech/standards/LOGGING.md) imposes no position mandate, so this is house convention rather than a requirement:
 
 ```typescript
-// 0. Debug (first import in every webview file - see Debug Logger Pattern)
+// 0. Debug, where the file carries one
 import Debug from 'debug';
 // 1. React and framework imports
 import React, { useState, useEffect, useCallback } from 'react';
@@ -339,15 +356,13 @@ import { NoteComponent, type NoteProps } from '@/components';
 - Do not declare the same constant inline within multiple functions - hoist it to module level
 
 ### Debug Logger Pattern
-**Always include the debug import and constant in webview production files**, even if not currently used. This serves as a placeholder for adding debug statements during development. This applies to webview production source files (`.ts`, `.tsx`), not test files (`.test.ts`, `.test.tsx`).
 
-**Rules:**
-- `import Debug from "debug"` must be the **first import** in every file
-- `const debug = Debug("nodejs:...")` should appear after imports, before the component/function
-- **Never remove** the debug constant, even if ESLint reports it as unused
-- The debug namespace is `nodejs:<area>:<File>` where `<area>` is the bundle/package the file belongs to (`notethink` for the webview app, `notethink-views` for the component library) and `<File>` is the source basename - e.g. `Debug("nodejs:notethink-views:KanbanView")`. It is **area-based, not a literal directory path**.
+Canonical: [`LOGGING.md`](../lightenna-iac/docstech/standards/LOGGING.md). `debug` is an optional development aid: put it where it earns its place, leave it out everywhere else, and never add or remove one as a review action. notethink carries one deviation from the shared rule and one local enforcement gap:
 
-**Scope - webview only.** This pattern (the npm `debug` library + `nodejs:` namespace) is the convention for the **webview / notethink-views** bundles. The **extension host** (`client/extension/**`) does not use it: extension code logs through `writeToLog` / `writeToErrorLog` (winston, in `lib/errorops.ts`). Extension files therefore do **not** carry an `import Debug from "debug"` placeholder - adding one would introduce an unused dependency that doesn't match the extension's logging stack. Pure type-definition modules (files containing only `interface` / `type` declarations, e.g. `types/NoteProps.ts`) are also exempt: they have no statements to instrument and a runtime import would defeat their erasability.
+- **Deviation - the namespace is area-based, not a directory path.** `nodejs:<area>:<File>`, where `<area>` is the bundle or package the file belongs to (`notethink` for the webview app, `notethink-views` for the component library) and `<File>` is the source basename - e.g. `Debug("nodejs:notethink-views:KanbanView")`. The shared rule's `nodejs:{path}:{filename}` form does not fit a repo whose source tree and bundle boundaries differ.
+- **Gap - `@typescript-eslint/no-unused-vars` is not configured in this repo**, so an unused `const debug` is ordinary dead code that nothing flags mechanically. Remove it on sight, like any other unused binding.
+
+**Scope - webview only.** This pattern (the npm `debug` library + `nodejs:` namespace) is the convention for the **webview / notethink-views** bundles. The **extension host** (`client/extension/**`) does not use it: extension code logs through `writeToLog` / `writeToErrorLog` (winston, in `lib/errorops.ts`), so an `import Debug from "debug"` there is an unused dependency that doesn't match the extension's logging stack. Pure type-definition modules (files containing only `interface` / `type` declarations, e.g. `types/NoteProps.ts`) carry no `debug` either: they have no statements to instrument and a runtime import would defeat their erasability.
 
 ### Extension Points
 
@@ -358,6 +373,7 @@ See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Extension poin
 ### Component Structure
 
 ```typescript
+import Debug from 'debug';
 import React, { useState, useEffect } from 'react';
 import type { ComponentProps } from './types';
 import styles from './Component.module.scss';
@@ -511,7 +527,7 @@ Files under `lib/` group **pure utility functions by domain**, named `<noun>ops.
 1. **Group by the noun the operations act on, not by where the code is called from.** A function that walks notes goes in `noteops.ts` regardless of which component imports it. A function that builds a view-state payload goes in `viewstateops.ts` even if only one site calls it today.
 2. **Pure functions only.** No React hooks, no JSX, no `useState`/`useEffect`/`useRef`. Closures over component state belong in the component or a custom hook.
 3. **Prefer extending an existing `*ops.ts` over creating a new one.** A new helper that operates on `Note` extends `noteops.ts`; create `notetreeops.ts` only when the existing file's domain genuinely splits.
-4. **Aim for ≥ 4 exports per `*ops.ts` file. Rationalise periodically.** A standalone file with one or two exports is usually over-engineered - fold it into a closely-related `*ops.ts` that shares the same noun cluster or consumes/produces the same type. Worked examples from this codebase: a generic `arraysEqual<T>` helper folded into `noteops.ts` because its two consumers were both note-adjacent (with a docstring noting it would lift back out if a non-note caller appeared); a `stateops.ts` holding `VSCodeState` + `migrateSavedState` folded into `vscodeops.ts` because the wrappers there produce and consume the type. **When you finish a refactor that leaves any `*ops.ts` with fewer than 4 exports, do the merge pass in the same session** - small files accumulate fast and the rationalisation cost grows with every new contributor who imports them. The target is guidance, not a hard floor: a 1-export file with a genuinely distinct noun and plausible future growth (e.g. `docops.ts` holding only `pickMostRecentlySentDoc`) can stay if you can name the second function that's coming.
+4. **Aim for ≥ 4 exports per `*ops.ts` file. Rationalise periodically.** A standalone file with one or two exports is usually over-engineered - fold it into a closely-related `*ops.ts` that shares the same noun cluster or consumes/produces the same type. Worked examples from this codebase: the generic `arraysEqual<T>` helper lives in `noteops.ts` because both its consumers are note-adjacent, and its docstring records that it lifts back out the moment a non-note caller appears; `VSCodeState` + `migrateSavedState` live in `vscodeops.ts` because the wrappers there produce and consume the type. **When you finish a refactor that leaves any `*ops.ts` with fewer than 4 exports, do the merge pass in the same session** - small files accumulate fast and the rationalisation cost grows with every new contributor who imports them. The target is guidance, not a hard floor: a 1-export file with a genuinely distinct noun and plausible future growth (e.g. `docops.ts` holding only `pickMostRecentlySentDoc`) can stay if you can name the second function that's coming.
 5. **One domain per file.** A "junk drawer" `utils.ts` is the anti-pattern this convention exists to prevent - when you find one, split it by the noun each export operates on (`crypto.ts` + `getNonce` from `utils.ts` → one `cryptoops.ts`; `abbrevDoc` from `utils.ts` → `docops.ts`).
 6. **Mirrored constants across bundle boundaries are the documented exception.** If two bundles (e.g. extension host + webview) cannot share a module graph, a small set of constants may be byte-identical-duplicated in two `constants.ts` files. Don't `*ops.ts`-ify either side; the duplication is the wire contract. See [Avoid Duplication](#avoid-duplication) below.
 7. **Component-local helpers stay under `components/`**, not under `lib/`. If a pure helper is genuinely only ever used by one component family and lifting to `lib/` would imply general reusability that doesn't exist, leave it co-located with the component. The path is the signal.
@@ -716,7 +732,7 @@ Always rebuild the extension after each code change so the developer can preview
 4. The user must **reload the VS Code window** for an already-open webview to pick up the new bundle.
 5. Never report a UI change as done from a source edit alone - verify the bundle and ask the user to reload.
 
-**Webview bundle caching (dev):** webview resources are cached by URL. Historically a rebuilt `index.js` could be served **stale** across reloads (the bundle URL never changed), so a webview fix appeared not to take effect. `getHtmlForWebview` now appends a per-load `?v=<timestamp>` cache-buster **when `NOTETHINK_DEV`**, so a dev reload always fetches the fresh bundle (production keeps the cacheable URL). If a webview change still seems not to apply, confirm the running build via the file log and that the window was actually reloaded - don't assume the bundle is fresh.
+**Webview bundle caching (dev):** webview resources are cached by URL, so a rebuilt `index.js` served from an unchanged URL comes back **stale** across reloads and the fix appears not to take effect. `getHtmlForWebview` appends a per-load `?v=<timestamp>` cache-buster **when `NOTETHINK_DEV`**, so a dev reload always fetches the fresh bundle (production keeps the cacheable URL). If a webview change still seems not to apply, confirm the running build via the file log and that the window was actually reloaded - don't assume the bundle is fresh.
 
 ### Individual commands
 

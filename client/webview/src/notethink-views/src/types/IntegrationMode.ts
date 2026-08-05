@@ -1,7 +1,3 @@
-import Debug from "debug";
-
-const debug = Debug("nodejs:notethink-views:IntegrationMode");
-
 export const INTEGRATION_MODE_AUTO = 'auto' as const;
 export const INTEGRATION_MODE_CURRENT_FILE = 'current_file' as const;
 export const INTEGRATION_MODE_FOLDER = 'folder' as const;

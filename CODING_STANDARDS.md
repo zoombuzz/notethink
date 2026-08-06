@@ -362,7 +362,9 @@ Canonical: [`LOGGING.md`](../lightenna-iac/docstech/standards/LOGGING.md). `debu
 - **Deviation - the namespace is area-based, not a directory path.** `nodejs:<area>:<File>`, where `<area>` is the bundle or package the file belongs to (`notethink` for the webview app, `notethink-views` for the component library) and `<File>` is the source basename - e.g. `Debug("nodejs:notethink-views:KanbanView")`. The shared rule's `nodejs:{path}:{filename}` form does not fit a repo whose source tree and bundle boundaries differ.
 - **Gap - `@typescript-eslint/no-unused-vars` is not configured in this repo**, so an unused `const debug` is ordinary dead code that nothing flags mechanically. Remove it on sight, like any other unused binding.
 
-**Scope - webview only.** This pattern (the npm `debug` library + `nodejs:` namespace) is the convention for the **webview / notethink-views** bundles. The **extension host** (`client/extension/**`) does not use it: extension code logs through `writeToLog` / `writeToErrorLog` (winston, in `lib/errorops.ts`), so an `import Debug from "debug"` there is an unused dependency that doesn't match the extension's logging stack. Pure type-definition modules (files containing only `interface` / `type` declarations, e.g. `types/NoteProps.ts`) carry no `debug` either: they have no statements to instrument and a runtime import would defeat their erasability.
+**Scope - primarily the webview.** This pattern (the npm `debug` library + `nodejs:` namespace) is the convention for the **webview / notethink-views** bundles. The **extension host** (`client/extension/**`) logs through `writeToLog` / `writeToErrorLog` (winston, in `lib/errorops.ts`) instead, so reaching for `Debug` there generally means reaching for the wrong stack.
+
+**One live exception:** `client/extension/src/lib/pathops.ts:1` does `import Debug from "debug"`. Either it should move to `writeToLog`, or this rule is narrower than "webview only" - decide rather than leaving the doc asserting a clean state the tree contradicts. (Found 2026-08-06; the rule previously stated the extension host does **not** use `debug`, as an absolute.) Pure type-definition modules (files containing only `interface` / `type` declarations, e.g. `types/NoteProps.ts`) carry no `debug` either: they have no statements to instrument and a runtime import would defeat their erasability.
 
 ### Extension Points
 
@@ -475,8 +477,18 @@ The recurring regression is the ring being cropped on the left edge when a card 
 
 ### Directory Structure
 
+**notethink has no root `src/`.** It has three source roots, and knowing which one you are in is the first thing to establish:
+
+| Root | What it is |
+|---|---|
+| `client/extension/src/` | the extension host - winston logging, VS Code API, no DOM |
+| `client/webview/src/` | the webview app - React, `debug` logging, no `fs` |
+| `client/webview/src/notethink-views/src/` | a **nested package** with its own `package.json`, `rollup.config.js`, tsconfig and `node_modules` |
+
+The tree below is **`client/webview/src/notethink-views/src/`** specifically - `components/views/DocumentView.tsx`, `components/notes/GenericNote.tsx`, `types/NoteProps.ts` and `types/ViewProps.ts` exist there and nowhere else. (An earlier version headed this block a bare `src/`, which matches no directory in the repo.)
+
 ```
-src/
+client/webview/src/notethink-views/src/
 ├── components/
 │   ├── views/           # view-level components
 │   │   ├── DocumentView.tsx
@@ -543,7 +555,11 @@ Files under `lib/` group **pure utility functions by domain**, named `<noun>ops.
 - Extract repeated code into shared utility functions
 - Use shared constants instead of hardcoding values
 - Create shared components for repeated UI patterns
-- **Exception - mirrored constants across the extension/webview bundle boundary.** A small set of folder-view defaults (include/exclude globs, default column order, max-notes-per-file) is intentionally duplicated in `client/extension/src/constants.ts` and `client/webview/src/constants.ts`. The two run as **separate webpack bundles with no shared module graph**, so there is no import path to a single source; the duplication is the wire contract (both sides must agree on the same defaults). Keep the two copies byte-identical and cross-reference them in a comment rather than trying to share a module.
+- **Exception - mirrored constants across the extension/webview bundle boundary.** A small set of folder-view defaults is intentionally duplicated in `client/extension/src/constants.ts` and `client/webview/src/constants.ts`. The two run as **separate webpack bundles with no shared module graph**, so there is no import path to a single source; the duplication is the wire contract.
+
+  **The contract is that the *shared subset* agrees, not that the files are identical.** Shared and required to match: the include/exclude glob defaults and `DEFAULT_COLUMN_ORDER`. Deliberately one-sided: `MAX_AGGREGATE_FILES`, `INTEGRATION_MODE_CURRENT_FILE` / `_FOLDER` and `NOTETHINK_VIEW_TYPE` are **extension-only**; `DEFAULT_MAX_NOTES_PER_FILE` is **webview-only** and its own comment says it is "not round-tripped to the extension". Cross-reference the shared ones in a comment on both sides.
+
+> **Correction, 2026-08-06.** This previously said "keep the two copies byte-identical" and listed `max-notes-per-file` among the mirrored constants. `diff` shows the files are not close to identical, and `max-notes-per-file` exists **only** in the webview copy. Following the old instruction literally would have pushed four constants across a boundary each was deliberately kept on one side of.
 
 ### Remove Unused Code
 - Remove unused imports
@@ -557,14 +573,30 @@ Files under `lib/` group **pure utility functions by domain**, named `<noun>ops.
 **Extension host** logs through `writeToLog` / `writeToErrorLog` (winston, `client/extension/src/lib/errorops.ts`). **Webview** has no winston/output-channel access, so it logs through the `debug` library instance (`const debug = Debug("nodejs:...")`) and, for render failures that should reach the host, posts a `renderError` message to the extension. Either way, **`console.*` is not the error utility** - see "No `console.log` in committed code" in the workspace `AGENTS.md`. A caught error that is intentionally non-fatal must still be logged (`debug('… %O', err)` in the webview, `writeToErrorLog(...)` in the extension), never silently swallowed.
 
 ```typescript
-import { createError, handleError } from '@/lib/errorops';
+// extension host
+import {writeToErrorLog} from '@/lib/errorops';
 
 try {
     await riskyOperation();
 } catch (error) {
-    handleError(error, 'Failed to perform operation');
+    writeToErrorLog('pathops', 'riskyOperation failed', error);
 }
 ```
+
+```typescript
+// webview - no winston here, so log through the debug instance
+const debug = Debug("nodejs:notethink-views:DocumentView");
+
+try {
+    await riskyOperation();
+} catch (error) {
+    debug('riskyOperation failed %O', error);
+}
+```
+
+The real exports of `client/extension/src/lib/errorops.ts` are `initLogDir`, `isRedirect`, `fatalError`, `nonFatalErrorReport`, `nonFatalErrorInternally`, `writeToLogAtLevel`, `writeToLog`, `writeToErrorLog` and `debug`.
+
+> **Correction, 2026-08-06.** The sample here previously imported `createError` and `handleError` from `@/lib/errorops`. **Neither function exists**, so the snippet in the section titled "Use Error Utilities" did not compile - while the prose directly above it correctly named `writeToLog` / `writeToErrorLog`. A copy-paste-ready sample that does not compile is the most directly harmful kind of doc error; found by adversarial verification.
 
 ### Reading VS Code logs
 

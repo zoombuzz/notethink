@@ -45,19 +45,28 @@ case "${1:-}" in
     *)          echo "usage: $(basename "$0") [--branch|--all]" >&2; exit 2 ;;
 esac
 
-# the banned glyphs are built from raw bytes so this script never contains them itself.
-# $'\xHH' is byte-literal and identical in every locale; printf '\uXXXX' is NOT - in a C/POSIX
-# locale bash emits the literal text \u2014, which silently disarms every check below.
-EM_DASH=$'\xe2\x80\x94'
-EN_DASH=$'\xe2\x80\x93'
+# the one place the banned set is written down: both search paths below derive from this array,
+# so adding a glyph is a single edit here rather than a coordinated edit per call site.
+# the glyphs are raw bytes so this script never contains them itself, and because $'\xHH' is
+# byte-literal in every locale; printf '\uXXXX' is NOT - in a C/POSIX locale bash emits the
+# literal text \u2014, which silently disarms every check below.
+BANNED_GLYPHS=(
+    $'\xe2\x80\x94'
+    $'\xe2\x80\x93'
+)
 
 # git grep exits 1 for "no match" and >=2 for a real failure. conflating them is precisely how a
 # broken guardrail reports success, so anything above 1 is loud and non-zero.
+# -I skips binary files: git reports those as "Binary file X matches" with no line number, so a
+# pdf or font whose bytes happen to contain e2 80 94 would otherwise block the push as a hit.
+# stderr is deliberately NOT folded into the output; a git warning emitted alongside exit 0 or 1
+# would land in the hit list and read as a phantom violation.
 run_git_grep() {
-    local out status
-    out="$(git grep -n -F -e "$EM_DASH" -e "$EN_DASH" "$@" 2>&1)" && status=0 || status=$?
+    local out status glyph needles=()
+    for glyph in "${BANNED_GLYPHS[@]}"; do needles+=(-e "$glyph"); done
+    out="$(git grep -n -I -F "${needles[@]}" "$@")" && status=0 || status=$?
     if [ "$status" -gt 1 ]; then
-        echo "ERROR: git grep failed (exit $status) - the check did NOT run: $out" >&2
+        echo "ERROR: git grep failed (exit $status) - the check did NOT run (git's error is above)" >&2
         exit 2
     fi
     printf '%s' "$out"
@@ -92,17 +101,32 @@ resolve_base_branch() {
 # added lines in a diff against $1, reported as file:line to match git grep -n output.
 # awk tracks the +++ header and hunk start; index() on the literal glyph sidesteps awk's
 # inconsistent handling of multibyte escapes in regex character classes.
+# the prefixes are pinned because the awk keys on '+++ b/': a user carrying diff.noprefix or
+# diff.mnemonicPrefix otherwise loses the filename from every reported hit, leaving a bare line
+# number, and the unmatched header then falls through to be scanned as though it were content.
+# set -e does NOT apply inside the $( ) each helper is called from, so a failure here has to be an
+# explicit exit; errexit and pipefail cannot carry it. leaving git diff behind 2>/dev/null || true
+# was the same silent-false-pass shape as the swallowed git grep: a repo with no commits yet fatals
+# on 'git diff HEAD', and every glyph in that first commit would sail through a green OK.
 added_line_hits() {
-    git diff --unified=0 --no-color --no-ext-diff "$1" -- "${PATHSPECS[@]}" 2>/dev/null \
-        | awk -v em="$EM_DASH" -v en="$EN_DASH" '
+    local out status
+    out="$(git diff --unified=0 --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ "$1" -- "${PATHSPECS[@]}")" && status=0 || status=$?
+    if [ "$status" -ne 0 ]; then
+        echo "ERROR: git diff failed (exit $status) - the check did NOT run (git's error is above)" >&2
+        exit 2
+    fi
+    printf '%s' "$out" \
+        | awk -v glyphs="$(printf '%s\n' "${BANNED_GLYPHS[@]}")" '
+            BEGIN { count = split(glyphs, banned, "\n") }
             /^\+\+\+ b\// { file = substr($0, 7); next }
             /^@@ / { split($3, hunk, ","); line = substr(hunk[1], 2) + 0; next }
             /^\+/ {
                 body = substr($0, 2)
-                if (index(body, em) || index(body, en)) { print file ":" line ": " body }
+                for (i = 1; i <= count; i++)
+                    if (banned[i] != "" && index(body, banned[i])) { print file ":" line ": " body; break }
                 line++
             }
-        ' || true
+        '
 }
 
 # a brand-new file is untracked until it is staged, so no diff can see it. /prod-ready runs
@@ -114,8 +138,16 @@ added_line_hits() {
 # codepoint escapes, which is not a safe assumption across machines (a ugrep shim, busybox, or a
 # non-UTF-8 locale each silently match nothing, and a guardrail that silently matches nothing is
 # worse than no guardrail).
+# a process substitution's exit status is invisible to both set -e and pipefail, so git is probed
+# explicitly first: without that, a failing ls-files leaves the array empty and this whole pass
+# returns 0 having scanned nothing, which is the failure mode the comment above warns about.
 untracked_hits() {
-    local files=() f
+    local files=() f status
+    git ls-files --others --exclude-standard -- "${PATHSPECS[@]}" >/dev/null && status=0 || status=$?
+    if [ "$status" -ne 0 ]; then
+        echo "ERROR: git ls-files failed (exit $status) - the new-file check did NOT run" >&2
+        exit 2
+    fi
     while IFS= read -r -d '' f; do files+=("$f"); done \
         < <(git ls-files --others --exclude-standard -z -- "${PATHSPECS[@]}")
     [ ${#files[@]} -eq 0 ] && return 0

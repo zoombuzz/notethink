@@ -45,9 +45,23 @@ case "${1:-}" in
     *)          echo "usage: $(basename "$0") [--branch|--all]" >&2; exit 2 ;;
 esac
 
-# the banned glyphs are built with printf escapes so this script never contains them itself
-EM_DASH="$(printf '\u2014')"
-EN_DASH="$(printf '\u2013')"
+# the banned glyphs are built from raw bytes so this script never contains them itself.
+# $'\xHH' is byte-literal and identical in every locale; printf '\uXXXX' is NOT - in a C/POSIX
+# locale bash emits the literal text \u2014, which silently disarms every check below.
+EM_DASH=$'\xe2\x80\x94'
+EN_DASH=$'\xe2\x80\x93'
+
+# git grep exits 1 for "no match" and >=2 for a real failure. conflating them is precisely how a
+# broken guardrail reports success, so anything above 1 is loud and non-zero.
+run_git_grep() {
+    local out status
+    out="$(git grep -n -F -e "$EM_DASH" -e "$EN_DASH" "$@" 2>&1)" && status=0 || status=$?
+    if [ "$status" -gt 1 ]; then
+        echo "ERROR: git grep failed (exit $status) - the check did NOT run: $out" >&2
+        exit 2
+    fi
+    printf '%s' "$out"
+}
 
 PATHSPECS=(
     ':(exclude)**/.env.*' ':(exclude).env.*'
@@ -101,13 +115,16 @@ added_line_hits() {
 # non-UTF-8 locale each silently match nothing, and a guardrail that silently matches nothing is
 # worse than no guardrail).
 untracked_hits() {
-    git ls-files --others --exclude-standard -z -- "${PATHSPECS[@]}" 2>/dev/null \
-        | xargs -0 --no-run-if-empty git grep -nP --no-index -e '[\x{2014}\x{2013}]' -- 2>/dev/null || true
+    local files=() f
+    while IFS= read -r -d '' f; do files+=("$f"); done \
+        < <(git ls-files --others --exclude-standard -z -- "${PATHSPECS[@]}")
+    [ ${#files[@]} -eq 0 ] && return 0
+    run_git_grep --no-index -- "${files[@]}"
 }
 
 case "$MODE" in
     all)
-        hits="$(git grep -nP '[\x{2014}\x{2013}]' -- "${PATHSPECS[@]}" 2>/dev/null || true)"
+        hits="$(run_git_grep -- "${PATHSPECS[@]}")"
         scope="every tracked file"
         ;;
     branch)

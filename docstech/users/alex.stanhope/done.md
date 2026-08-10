@@ -4325,3 +4325,48 @@ Six sibling projects in the same private workspace carry an identical shared `re
   + a new `writeToErrorLog('GET', ...)` or two-argument call fails lint
   + every production log source is a bare camelCase identifier naming its enclosing function, with no space or colon, and no two sources collide after the 24-char truncation
   + no `WhileStatement` rule was added, and no third notethink-only selector was added
+
+
+### Upgrade NPM packages for notethink (Wave 1 minor/patch) [](?time_taken=0)
+
+Seven packages, every one minor or patch, no majors taken and no new pins created. `typescript-eslint` 8.65.0 -> 8.66.0 is the headline and `memfs`, `mocha`, `eslint` and `npm-check-updates` came along behind it. Lint clean and 1698 jest green, both matching the baseline the previous wave recorded exactly, so nothing in the wave moved observable behaviour.
+
++ minor applied
+  + `@typescript-eslint/eslint-plugin` + `@typescript-eslint/parser` + `typescript-eslint` ^8.65.0 -> ^8.66.0
+  + `memfs` ^4.64.0 -> ^4.68.0, the only runtime `dependencies` entry in the wave (it is one of the webpack browser polyfills the extension bundle vendors, not application code)
+  + `mocha` ^11.7.6 -> ^11.8.0
++ patch applied
+  + `eslint` 10.8.0 -> 10.8.1, still written as an exact pin with no caret, as it has been since it was introduced
+  + `npm-check-updates` ^23.0.0 -> ^23.0.2
++ typescript 7 was offered and correctly excluded
+  + ncu reported `typescript` ^6.0.3 -> ^7.0.2, which is a major and was not authorized for this wave. `--target minor` filtered it before it reached package.json, and the post-run diff confirms the specifier is byte-unchanged. `@eslint/js` likewise stayed at its exact 10.0.1
++ reject list stayed empty, and the config was actually read
+  + `.ncurc.json` still reads `"reject": []`, unchanged since the eslint 10 unpin two waves ago. ncu logged `Using config file .../notethink/.ncurc.json`, so the `--configFilePath` fix from the earlier bypass is still holding
++ no transient pins to revisit, and none created
+  + the previous wave's snapshot recorded one structural hold and no transient ones, so there was nothing to trial-unpin. Nothing new needed pinning either: every upgrade cleared the 24h `--cooldown` on its own, the deps-check gate passed on the first install, and no dependency had to be walked back or have its lockfile reset
++ this wave was root-only, and the three nested package.json files have updates waiting
+  + notethink carries four package.json / pnpm-lock.yaml pairs: the root, `client/extension`, `client/webview` and `client/webview/src/notethink-views`. The ncu run was scoped by `--cwd` to the root, so only the root's seven packages moved
+  + a read-only ncu pass over the other three found 39 minor/patch upgrade line items pending, none of them applied here: `jest` + `babel-jest` + `jest-environment-jsdom` 30.3 -> 30.4 and `ts-jest` 29.4.9 -> 29.4.12 recur across all three; `react` + `react-dom` 19.2.5 -> 19.2.8, `@types/node` 25.6 -> 25.9, `postcss` 8.5.10 -> 8.5.26 and `mermaid` 11.14 -> 11.16 sit in `client/webview`; storybook 10.3.5 -> 10.5.7 across five packages, `rollup` 4.61.1 -> 4.62.4, `rollup-plugin-dts` 6.4.1 -> 6.5.1 and the `@babel/preset-*` 7.28.5 -> 7.29.7 group sit in notethink-views
+  + this is a deliberate scope narrowing rather than drift, and is recorded only because the wider read has precedent: the "root + workspace jest 30 + storybook 10" wave explicitly ran "minor/patch across all 4 package.json paths". Recent waves have all been root-only
+  + whoever picks these up must regenerate every lockfile they touch in the same commit. CI installs with `CI=true`, which pnpm treats as `--frozen-lockfile`, and the root `postinstall` cascades into all three nested packages, so a specifier that disagrees with its lockfile in any one of the four fails every workflow at the install step
++ verified
+  + lint clean: 0 errors and the same 6 pre-existing warnings as the last two waves (one in `extension.ts`, two in `useAutoIntegration.test.ts`, the `SettingsKanbanDrawer` max-lines warning, two in playwright specs), with all three tsc projects clean under eslint 10.8.1
+  + jest 1698 green (248 extension + 136 webview + 1314 notethink-views), matching the last recorded baseline exactly
+  + no build and no dev server run here: the team lead builds centrally in this wave, and notethink has no dev server to start
++ toolchain divergence re-noted, still deliberately NOT changed
+  + notethink's package.json declares no `packageManager` field and no `engines.node` field, while every other workspace project pins pnpm 11.x and node >=22.18.0. Unchanged for the third wave running
+  + left alone for the same reason as before: a VS Code extension publishes through vsce, which reads `engines.vscode`, and the marketplace does not consume `engines.node`. Adding either remains the user's call
+
+Pins in effect after this wave (snapshot):
+- typescript @^6.0.3 (caret specifier, no `.ncurc.json` reject entry) - structural - held by peer ranges. Re-verified against the freshly installed tree on 2026-08-10: `@typescript-eslint/parser@8.66.0` and `@typescript-eslint/eslint-plugin@8.66.0` both still peer `typescript >=4.8.4 <6.1.0`, and `ts-jest@29.4.9` peers `>=4.3 <7`. The 8.66.0 bump moved neither bound, so TS7 stays piloted in lumen only. Clear-condition unchanged: revisit when both peer ranges admit 7.x. Worth knowing for that revisit - `ts-jest` is not a root dependency at all; it is installed separately in each of the three nested packages, so the ts-jest half of this hold clears through the nested package.json files rather than the root one
+- nothing else. The `.ncurc.json` reject list is empty and has been since the eslint 10 unpin
+
+Unpinned this wave: none - the sole live pin is structural with its clear-condition still unmet, and the previous wave's snapshot recorded no transient holds to trial
+
++ [X] run npm-check-updates
++ [X] revisit prior pins (try to unpin transient holds recorded in the last done.md story)
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
++ commit message draft
+  + notethink 0.3.40: upgrade npm packages (wave 1, minor/patch) - typescript-eslint 8.66.0 plus memfs, mocha, eslint and ncu patches; typescript held at 6 by peer ranges; lint clean, 1698 jest

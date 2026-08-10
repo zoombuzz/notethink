@@ -25,13 +25,13 @@
 		"winston-transport-vscode": "^0.1.0"
 	},
 	"devDependencies": {
-		"@babel/core": "^7.29.0",
-		"@babel/preset-env": "^7.29.2",
+		"@babel/core": "^7.29.7",
+		"@babel/preset-env": "^7.29.7",
 		"@types/jest": "^30.0.0",
 		"@types/mdast": "^4.0.4",
-		"babel-jest": "^30.3.0",
-		"jest": "^30.3.0",
+		"babel-jest": "^30.4.1",
+		"jest": "^30.4.2",
 		"logform": "^2.7.0",
-		"ts-jest": "^29.4.9"
+		"ts-jest": "^29.4.12"
 	}
 }

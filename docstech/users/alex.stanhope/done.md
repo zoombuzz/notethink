@@ -4370,3 +4370,122 @@ Unpinned this wave: none - the sole live pin is structural with its clear-condit
 + [X] verify jest tests pass
 + commit message draft
   + notethink 0.3.40: upgrade npm packages (wave 1, minor/patch) - typescript-eslint 8.66.0 plus memfs, mocha, eslint and ncu patches; typescript held at 6 by peer ranges; lint clean, 1698 jest
+
+
+### Upgrade NPM packages for notethink (lockfile refresh - transitive currency across all four manifests) [](?time_taken=0)
+
+The first wave to regenerate lockfiles rather than only bump manifests, and the first to run ncu over all four package.json files instead of the root alone. The root manifest was already current so ncu moved nothing there; the three nested manifests took 39 minor/patch items the previous wave had left pending. The real work was throwing away all four `pnpm-lock.yaml` files and re-resolving, which advanced roughly forty transitive packages that every previous `pnpm install` had left frozen inside ranges that already permitted newer versions. Lint clean and 1698 jest green, both matching the baseline exactly.
+
++ ncu, root: nothing to do
+  + `--target minor` reported "All dependencies match the minor package versions". `typescript` stayed at `^6.0.3` and the root package.json is byte-unchanged apart from the version bump, confirming the TS7 structural hold was excluded rather than merely unoffered
++ ncu, `client/extension`: 5 items
+  + `@babel/core` + `@babel/preset-env` ^7.29.0/^7.29.2 -> ^7.29.7, `ts-jest` ^29.4.9 -> ^29.4.12, `babel-jest` ^30.3.0 -> ^30.4.1, `jest` ^30.3.0 -> ^30.4.2
++ ncu, `client/webview`: 14 items
+  + `mermaid` ^11.14.0 -> ^11.16.1 and `postcss` ^8.5.10 -> ^8.5.26 are the two that matter for security; also `react` + `react-dom` 19.2.5 -> 19.2.8, `@types/node` 25.6 -> 25.9.5, `@types/react` 19.2.14 -> 19.2.18, `@types/react-dom` 19.2.3 -> 19.2.4, `@testing-library/user-event` 14.6.1 -> 14.6.3, `postcss-selector-parser` 7.1.1 -> 7.1.5, `web-vitals` 5.2.0 -> 5.3.0, `jest` 30.4.2, `jest-environment-jsdom` 30.4.1, `ts-jest` 29.4.12
++ ncu, `client/webview/src/notethink-views`: 20 items
+  + the storybook 10.3.5 -> 10.5.7 group across five packages, the `@babel/preset-*` 7.28.5 -> 7.29.7 group, `rollup` 4.61.1 -> 4.62.4, `rollup-plugin-dts` 6.4.1 -> 6.5.1, `@chromatic-com/storybook` 5.1.2 -> 5.3.0, `@rollup/plugin-commonjs` 29.0.2 -> 29.0.3, `mermaid` ^11.16.1, plus the jest/ts-jest group. `typescript` stayed `^6.0.3` here too
++ none of the three nested manifests has its own `.ncurc.json`, and none needs one
+  + ncu searches upward for config, and logged `Using config file .../notethink/.ncurc.json` on all three runs, so the root reject list governs every manifest. Adding per-directory configs would fragment a list that currently works by inheritance
+
+NEW PIN this wave - `@testing-library/jest-dom` held at exactly `6.9.1` in `client/webview` and notethink-views.
+
++ ncu offered `^6.9.1 -> ^6.10.0` in both manifests, and 6.10.0 is deprecated by its own maintainer: "Incorrect minor release with breaking changes (Node >=22 and required @testing-library/dom peer). Use 6.9.1 for the 6.x line, or upgrade to 7.0.0". A minor release that ships breaking changes and then withdraws itself is not a minor
++ reverting the caret to `^6.9.1` was not enough, and this is the part worth remembering. `^6.9.1` still admits 6.10.0, so the regenerated lockfile pulled it straight back in - pnpm printed the deprecation warning during install and resolved `@testing-library/jest-dom 6.10.0 deprecated`. Only an exact specifier holds it
++ so both manifests now read `"@testing-library/jest-dom": "6.9.1"` with no caret, matching the exact-pin style the repo already uses for `eslint`, `@eslint/js`, `copy-webpack-plugin`, `@hello-pangea/dnd` and `vscode-languageclient`. Re-resolution then reported `@testing-library/jest-dom 6.9.1` with no warning
++ `.ncurc.json` gained its first reject entry since the eslint 10 unpin, `"@testing-library/jest-dom"`, so ncu stops re-offering 6.10.0 every wave. The two levers are complementary and both are needed: the reject stops the manifest being raised, the exact pin stops the resolver climbing inside the range. Rejecting the whole name costs nothing under `--target minor`, because 6.10.0 is the only minor/patch candidate above 6.9.1
++ clear-condition: drop both the reject entry and the exact pin when `@testing-library/jest-dom` 7.x is taken deliberately as a major. 7.0.1 is current
+
+Regeneration mechanics - deleting `pnpm-lock.yaml` alone is NOT enough, and this cost most of the wave.
+
++ pnpm keeps a second copy of the lockfile at `node_modules/.pnpm/lock.yaml` describing what is currently installed. With `pnpm-lock.yaml` deleted but that copy present, pnpm treats the installed state as the wanted state: it re-resolves only the subtrees whose manifest entries changed and restores everything else verbatim
++ the root made this obvious because its manifest had not changed at all - `pnpm install` printed "Already up to date" and rewrote a byte-identical 216999-byte lockfile. The nested three were the dangerous case: they printed convincing progress and real version bumps, so they looked like full regenerations, but every one of their watched transitives came back unchanged
++ `client/extension` is the cleanest proof. After deleting only `pnpm-lock.yaml` it re-resolved to `brace-expansion 1.1.12, 2.0.2, 5.0.3`, `js-yaml 3.14.2`, `minimatch 3.1.3, 5.1.6, 9.0.6`, `picomatch 2.3.1, 4.0.3` - identical to before, not one package moved. After also deleting `node_modules/.pnpm/lock.yaml` the same command produced `brace-expansion 1.1.18, 2.1.4`, `js-yaml 3.15.1`, `minimatch 3.1.5, 5.1.9, 9.0.9`, `picomatch 2.3.2, 4.0.5`
++ the root was the control that made the diagnosis rather than a guess: same repo, same store, same day, and once it got the double delete it moved fourteen transitives while the nested three had moved none
++ so the procedure is delete BOTH files in each manifest directory, then install. `unrs-resolver` 1.11.1 -> 1.12.2 and `esbuild` 0.25.12 -> 0.28.2 appearing in the install output are the tell that a real re-resolution happened
++ the skill's step 4b should say this unconditionally rather than making the second delete conditional on seeing "Already up to date". That message only appears when the manifest is unchanged, which is exactly the case where the stale lockfile matters least
+
+No manifest range moved during regeneration, verified mechanically.
+
++ the package.json diff was captured immediately after the ncu edits and again after all four regenerations, and `diff` of the two showed only the two deliberate jest-dom exact-pin lines. Nothing else in any of the four manifests shifted by a character
++ this is the property that makes regeneration safe to run unattended, and it held
+
+Before/after resolved transitive versions. `-` means the package is absent from that manifest's tree.
+
+| Package | root | client/extension | client/webview | notethink-views |
+|---|---|---|---|---|
+| brace-expansion | 2.0.2, 5.0.5 -> 2.1.4, 5.0.9 | 1.1.12, 2.0.2, 5.0.3 -> 1.1.18, 2.1.4 | 1.1.12, 2.1.0 -> 1.1.18, 2.1.4 | 1.1.12, 2.0.2, 5.0.5 -> 1.1.18, 2.1.4, 5.0.9 |
+| dompurify | - | - | 3.3.1 -> 3.4.13 | 3.3.1 -> 3.4.13 |
+| fast-uri | 3.1.0 -> 3.1.5 | - | 3.1.0 -> 3.1.5 | - |
+| flatted | 3.3.3 -> 3.4.4 | - | - | - |
+| form-data | 4.0.5 -> 4.0.6 | - | - | - |
+| immutable | 5.1.5 -> 5.1.9 | - | - | - |
+| js-yaml | 4.1.1 -> 4.3.1 | 3.14.2 -> 3.15.1 | 3.14.2 -> 3.15.1 | 3.14.2 -> 3.15.1 |
+| linkify-it | 5.0.0 -> 5.0.2 | - | - | - |
+| lodash | 4.17.23 -> 4.18.1 | - | - | 4.17.23 -> 4.18.1 |
+| markdown-it | 14.1.1 -> 14.3.0 | - | - | - |
+| mermaid | - | - | 11.14.0 -> 11.16.1 | 11.14.0 -> 11.16.1 |
+| minimatch | 9.0.5, 10.2.5 -> 9.0.9, 10.2.6 | 3.1.3, 5.1.6, 9.0.6 -> 3.1.5, 5.1.9, 9.0.9 | 3.1.2, 9.0.9 -> 3.1.5, 9.0.9 | 3.1.2, 9.0.5, 10.2.5 -> 3.1.5, 9.0.9, 10.2.6 |
+| morgan | 1.10.1 -> 1.11.0 | - | - | - |
+| picomatch | 2.3.1, 4.0.3, 4.0.5 -> 2.3.2, 4.0.5 | 2.3.1, 4.0.3 -> 2.3.2, 4.0.5 | 2.3.1, 4.0.4 -> 2.3.2, 4.0.5 | 2.3.1, 4.0.3, 4.0.4 -> 2.3.2, 4.0.5 |
+| postcss | 8.5.6 -> 8.5.26 | - | 8.5.10 -> 8.5.26 | 8.5.6 -> 8.5.26 |
+| qs | 6.14.1 -> 6.15.3 | - | - | - |
+| serialize-javascript | 6.0.2, 7.0.5 -> 6.0.2, 7.1.0 | - | 6.0.2 -> dropped | 7.0.5 -> 7.1.0 |
+| svgo | - | - | - | 2.8.0 -> 2.8.3 |
+| tmp | 0.2.5 -> 0.2.7 | - | - | - |
+| undici | 7.22.0 -> 7.29.0 | - | - | - |
+| uuid | 8.3.2 -> dropped | - | 11.1.0 -> 14.0.1 | 9.0.1, 11.1.0 -> 9.0.1, 14.0.1 |
+| vite | - | - | - | 6.4.1 -> 8.2.1 |
+| ws | - | - | 8.19.0 -> 8.21.3 | 8.19.0 -> 8.21.3 |
+
++ now clear of the known Dependabot patch thresholds, everywhere they appear
+  + `dompurify` (>=3.4.12), `mermaid` (>=11.16.1), `postcss` (>=8.5.23), `brace-expansion` (>=1.1.16 / 2.1.2 / 5.0.7), `js-yaml` (>=3.15.0 / 4.3.0), `minimatch` (>=3.1.3 / 9.0.7), `undici` (>=7.29.0), `ws` (>=8.21.0), `svgo` (>=2.8.3), `vite` (>=6.4.3), `lodash` (>=4.18.0), `tmp` (>=0.2.6), `form-data` (>=4.0.6), `picomatch` (>=2.3.2 / 4.0.4), `flatted` (>=3.4.2), `immutable` (>=5.1.8), `linkify-it` (>=5.0.2), `markdown-it` (>=14.2.0), `morgan` (>=1.11.0), `qs` (>=6.15.2), `fast-uri` (>=3.1.5)
+  + `dompurify` is the headline: the webview lockfile pinned 3.3.1 while its parent `mermaid` declared `^3.3.1` and 3.4.13 was available, which is the exact stale-transitive case this wave exists to fix
+  + two packages left the tree entirely rather than moving - root `uuid@8.3.2` and webview `serialize-javascript@6.0.2`
++ still below threshold, all three pinned by a parent's declared range, none actioned
+  + root `serialize-javascript@6.0.2` - parent `mocha@11.8.0` declares `^6.0.2`, and the advisory is patched only at 7.0.5, so no fix exists on the 6.x line. The root also carries 7.1.0 via the webpack terser plugin, so both lines coexist. Clear-condition: mocha widens to `^7`, or a `pnpm.overrides` entry forces it. Devtool-only, never bundled
+  + `client/extension` `minimatch@5.1.9` - parent `vscode-languageclient@9.0.1` declares `^5.1.0`, and 5.1.9 is the top of that line. The advisories name 3.1.3 and 9.0.7 with nothing published for 5.x. `vscode-languageclient` is itself exact-pinned at 9.0.1 in the extension manifest, so this only clears by taking a `vscode-languageclient` major
+  + notethink-views `uuid@9.0.1` - parent `@storybook/addon-actions@8.6.18` declares `^9.0.0`; pnpm also flags 9.0.1 as deprecated. Clears with the storybook 8.x addon group below. Storybook-only, never bundled
+
+A minor bump of a parent can still move a transitive across a major, and two did.
+
++ `vite` 6.4.1 -> 8.2.1 in notethink-views and `uuid` 11.1.0 -> 14.0.1 in the webview are both two-and-three-major jumps on transitives, which looks alarming against the "regeneration cannot cross a major" expectation
++ both are legitimate and neither came from a range we control. `@storybook/builder-vite` declares `vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0` and `mermaid@11.16.1` declares `uuid: ^11.1.0 || ^12 || ^13 || ^14.0.0`. A from-scratch resolution takes the highest version satisfying the parent, and for a multi-major OR-range that is a different major
++ worth being precise about the cause, because the obvious explanation is wrong. The vite jump is NOT a consequence of the storybook 10.3.5 -> 10.5.7 bump: the old lockfile shows `@storybook/builder-vite@10.3.5` already declaring the identical `^5 || ^6 || ^7 || ^8` peer range. vite 6.4.1 was simply stale inside a range that had permitted 8.x all along, and regeneration alone would have moved it
++ so the accurate form of the safety property is that regeneration stays inside each parent's declared range - not that transitives keep their major. Where a parent declares a multi-major OR-range, they will not
++ residual risk is confined to storybook. vite is a devDependency reached only through `@storybook/react-vite`; the shipped bundles are built by webpack (extension and webview) and rollup (notethink-views), neither of which sees vite. Lint and jest do not exercise `pnpm run storybook` or `build-storybook`, so a vite 6 -> 8 regression there would not have been caught here and has not been verified either way
+
++ pre-existing storybook peer split, unchanged by this wave and not introduced by it
+  + `@storybook/addon-essentials`, `addon-interactions`, `blocks` and `test` sit on 8.6.18 while storybook core is on 10.5.7, so pnpm reports 17 unmet `storybook@^8.6.18` peers. This predates the wave - core was already 10.3.5 against the same 8.x addons - and the 8.x packages have no 10.x successors because storybook 9 folded most of them into core
+  + it is the same root cause as the `uuid@9.0.1` hold above, so both clear together whenever the storybook addon set is migrated. That is a real piece of work, not a version bump, and is left for the user to schedule
+
++ verified
+  + lint ✅ clean: 0 errors, and the same 6 pre-existing warnings as the last three waves (one in `extension.ts`, two in `useAutoIntegration.test.ts`, the `SettingsKanbanDrawer` max-lines warning, two in playwright specs). All three tsc projects clean, which is the meaningful signal here given `@types/react` and `@types/node` both moved
+  + jest ✅ 1698 green across 83 suites (248 extension + 136 webview + 1314 notethink-views), matching the recorded baseline exactly. Nothing in roughly forty moved transitives changed observable behaviour
+  + no build and no dev server run: the team lead builds centrally, and notethink has no dev server
+  + not covered: `pnpm run storybook` / `build-storybook` under vite 8, and `vsce package`. Neither is in lint or jest
+
++ open question for the user, recorded and deliberately NOT acted on - notethink has no `packageManager` field, so it installs under a different pnpm than every other project
+  + every install in this wave ran under **pnpm 10.33.3**. Every other workspace project pins `packageManager` to pnpm 11.20.0, so notethink alone gets none of pnpm 11's install-time supply-chain gating
+  + the case for leaving it: the field was omitted deliberately, and notethink is the one project that publishes through `vsce`, which reads `engines.vscode`. Changing packaging inputs on the project with the most fragile publish path is not something to do as a side effect of a dependency wave
+  + the case for adding it: that reasoning is about *publishing*, but `packageManager` decides *which pnpm runs the install*. vsce does not read it and `package:vsix` uses `--no-dependencies`, so adding it would not change what ships to the marketplace - it would only align the install toolchain and pick up the newer resolver's gating. The project with 162 open Dependabot alerts is the worst one to leave outside that gate
+  + not changed here. It is the user's call, and it wants its own commit so it can be reverted independently if CI disagrees - the workflows pin `pnpm/action-setup` to v9, which is a separate axis again
++ a green supply-chain policy line is not a vulnerability check
+  + `✓ Lockfile passes supply-chain policies` verifies publication *age*, not known vulnerabilities. The webview lockfile reported 655 entries passing while carrying 49 Dependabot alerts. Worth stating because the two lines look interchangeable in install output and are not
+
+Pins in effect after this wave (snapshot):
+- `typescript` @^6.0.3 in the root and in notethink-views (caret specifier, no `.ncurc.json` reject entry) - structural - held by peer ranges. Re-verified against the freshly regenerated trees on 2026-08-10: `@typescript-eslint/parser@8.66.0` and `@typescript-eslint/eslint-plugin@8.66.0` both still peer `typescript >=4.8.4 <6.1.0`, and `ts-jest`, now 29.4.12 in all three nested packages, still peers `>=4.3 <7`. `--target minor` excluded 7.x on both manifests without needing a reject entry. Clear-condition unchanged: revisit when both peer ranges admit 7.x. The ts-jest half clears through the three nested manifests, not the root
+- `@testing-library/jest-dom` @6.9.1 exact, in `client/webview` and notethink-views, plus a `"@testing-library/jest-dom"` entry in `.ncurc.json` reject - structural - 6.10.0 is deprecated by its maintainer as an incorrect minor carrying breaking changes. Structural rather than transient because it does not clear by retrying: 6.10.0 is permanently withdrawn, so a trial-unpin every wave would only re-take a known-bad release. The general rule this instance teaches: **semver-safe is not quality-safe** - a known-bad release can sit inside a perfectly valid declared range, and an `.ncurc.json` reject alone does not stop it, because rejects bind ncu and not `pnpm install`. The exact pin is the lever that does the work; the reject only stops the manifest being re-raised. Clear-condition: remove both when 7.x is taken deliberately as a major
+- `vscode-languageclient` @9.0.1 exact in `client/extension`, `eslint` @10.8.1, `@eslint/js` @10.0.1, `copy-webpack-plugin` @14.0.0, `@hello-pangea/dnd` @18.0.1 - pre-existing exact pins, none touched this wave and none blocking anything measured here
+- not pinned but recorded as blocked: root `serialize-javascript@6.0.2` (mocha `^6.0.2`), extension `minimatch@5.1.9` (vscode-languageclient `^5.1.0`), notethink-views `uuid@9.0.1` (`@storybook/addon-actions@8.6.18` `^9.0.0`). Each needs a parent bump or a `pnpm.overrides` entry, which are decisions rather than wave work
+
+Unpinned this wave: none. The typescript hold is structural with its clear-condition still unmet, and the previous wave's snapshot recorded no transient holds to trial. One pin was added rather than removed.
+
++ [X] run npm-check-updates (root + three nested manifests)
++ [X] regenerate all four lockfiles and verify no manifest range moved
++ [X] measure the transitive security delta
++ [X] verify lint passes
++ [X] verify jest tests pass
++ commit message draft
+  + notethink 0.3.41: regenerate all four lockfiles for transitive currency - dompurify, mermaid, postcss, undici, ws and ~35 more advance; jest-dom pinned to 6.9.1 against a deprecated 6.10.0; lint clean, 1698 jest
+
+

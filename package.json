@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.42",
+  "version": "0.3.43",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -269,6 +269,12 @@
     "publish:marketplace": ": \"${TF_VAR_notethink_vsce_alex_publishonly_pat:?missing - provisioned via puppet-managed ~/.bash_envvars}\" && VSCE_PAT=\"$TF_VAR_notethink_vsce_alex_publishonly_pat\" vsce publish --no-dependencies",
     "test-playwright-with-ui": "pnpm run build && playwright test --ui",
     "chrome": "pnpm run build && vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ./docstech"
+  },
+  "COMMENT-overrides-mocha-pins-serialize-javascript-caret-6-which-can-never-reach-the-patched-7-x": "",
+  "pnpm": {
+    "overrides": {
+      "serialize-javascript": "^7.1.0"
+    }
   },
   "COMMENT-dependencies-are-webpack-browser-polyfills-for-extension": "",
   "dependencies": {

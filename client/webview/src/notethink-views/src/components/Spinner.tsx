@@ -1,8 +1,5 @@
-import Debug from "debug";
 import React from "react";
 import styles from "./Spinner.module.scss";
-
-const debug = Debug("nodejs:notethink-views:Spinner");
 
 export type SpinnerPositionClass = 'InlineLoader' | 'TopRightLoader';
 

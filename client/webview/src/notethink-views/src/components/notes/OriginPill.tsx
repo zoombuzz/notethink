@@ -1,10 +1,7 @@
-import Debug from "debug";
 import React, { useEffect, useState, type MouseEvent } from "react";
 import { detectThemeAttribute, originPillColour, pillColourForHue, projectAbbreviation, projectNameFromRelativePath } from "../../lib/originops";
 import type { NoteOrigin } from "../../types/NoteProps";
 import styles from "./OriginPill.module.scss";
-
-const debug = Debug("nodejs:notethink-views:OriginPill");
 
 interface OriginPillProps {
     origin: NoteOrigin;

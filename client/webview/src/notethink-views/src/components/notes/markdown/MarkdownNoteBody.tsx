@@ -1,11 +1,8 @@
-import Debug from "debug";
 import type { ReactElement } from "react";
 import { renderBodyItems } from "../../../lib/renderops";
 import { bodyClickPosition, createNoteClickHandler } from "../../../lib/noteui";
 import type { NoteProps } from "../../../types/NoteProps";
 import view_specific_styles from "../../../components/ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:MarkdownNoteBody");
 
 interface MarkdownNoteBodyProps {
     note: NoteProps;

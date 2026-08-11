@@ -1,5 +1,5 @@
-import React, { Suspense } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import React from 'react';
+import { render, screen } from '@testing-library/react';
 import AutoView from './AutoView';
 import type { ViewProps } from '../../types/ViewProps';
 import type { NoteProps } from '../../types/NoteProps';

@@ -1,12 +1,9 @@
-import Debug from "debug";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import inserts from "../inserts/en";
 import type { Insert } from "../inserts/types";
 import styles from "./ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:InsertModal");
 
 type InsertPoint = 'currentCaret' | 'startOfLine' | 'endOfLine' | 'endOfNote';
 

@@ -1,7 +1,4 @@
-import Debug from "debug";
 import * as l10n from "@vscode/l10n";
-
-const debug = Debug("nodejs:notethink-views:viewTypeLabel");
 
 function capitalize(value: string): string {
     return value.charAt(0).toUpperCase() + value.slice(1);

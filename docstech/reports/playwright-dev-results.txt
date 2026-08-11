@@ -1,13 +1,6 @@
 # Playwright Test Results
-# Version: 0.3.39
-# Date: 2026-08-05
-# Command: npx playwright test
+# Version: 0.3.42
+# Date: 2026-08-11T19:05:00+01:00
+# Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-playwright
 # ---
-  ✓  120 [chromium] › playwright/specs/view-switching.spec.ts:12:9 › View Switching › defaults to auto view which resolves to document for plain markdown (1.2s)
-  ✓  118 [chromium] › playwright/specs/settings-toggle.spec.ts:68:9 › Settings Toggle › toggling contextBars shows and hides context bar elements (1.8s)
-  ✓  108 [chromium] › playwright/specs/manual-expand-persists.spec.ts:57:9 › Manual expand survives content edits › dragging the expanded card to another column lands it still expanded (4.8s)
-  ✓  119 [chromium] › playwright/specs/settings-toggle.spec.ts:89:9 › Settings Toggle › settings survive view type switch (2.0s)
-  ✓  121 [chromium] › playwright/specs/view-switching.spec.ts:22:9 › View Switching › switches to kanban view and back to document (2.0s)
-  ✓  122 [chromium] › playwright/specs/view-switching.spec.ts:39:9 › View Switching › switches to auto view (2.0s)
-
-  122 passed (24.0s)
+122 passed (24.4s)

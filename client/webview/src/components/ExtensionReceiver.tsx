@@ -1,4 +1,3 @@
-import Debug from 'debug';
 import React, { useRef } from 'react';
 import * as l10n from '@vscode/l10n';
 import { useVscodeMessages } from '../hooks/useVscodeMessages';
@@ -13,8 +12,6 @@ import type { UsePendingWorkApi } from '../notethink-views/src/hooks/usePendingW
 import type { UseJumpTargetsApi } from '../notethink-views/src/hooks/useJumpTargets';
 import type { ViewState } from '../hooks/usePersistedViewStates';
 import NoteRenderer from './NoteRenderer';
-
-const debug = Debug("nodejs:notethink:ExtensionReceiver");
 
 // re-exported so NoteRenderer (and any other consumer) keeps importing ViewState from this module
 export type { ViewState };

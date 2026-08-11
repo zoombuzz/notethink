@@ -1,10 +1,7 @@
-import Debug from "debug";
 import type { ChangeEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import { formatColumnLabel } from "../../lib/noteops";
 import { viewTypeLabel } from "./viewTypeLabel";
-
-const debug = Debug("nodejs:notethink-views:GroupBySelector");
 
 /**
  * a group-by key's display label: strip the internal nt_/ng_ prefix, turn underscores into words, and

@@ -128,7 +128,6 @@ describe('KanbanView', () => {
         });
         const { container } = render(<KanbanView {...props} />);
         const columns = container.querySelectorAll('[data-testid^="column-"]');
-        const column_names = Array.from(columns).map(el => el.getAttribute('data-testid')?.replace('column-', '').replace('-notes', '').replace('-count', ''));
         // filter to unique top-level column testids
         const top_level = Array.from(columns)
             .filter(el => !el.getAttribute('data-testid')?.includes('-notes') && !el.getAttribute('data-testid')?.includes('-count'))

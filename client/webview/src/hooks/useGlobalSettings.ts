@@ -1,8 +1,5 @@
-import Debug from 'debug';
 import { useState } from 'react';
 import type { GlobalSettingsPayload } from '../notethink-views/src/types/Messages';
-
-const debug = Debug("nodejs:notethink:useGlobalSettings");
 
 interface GlobalSettingsState {
     global_settings: GlobalSettingsPayload;

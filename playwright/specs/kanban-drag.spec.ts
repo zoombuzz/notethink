@@ -132,7 +132,7 @@ test.describe('Kanban Drag and Drop', () => {
     });
 
     test('card appears in destination column after extension sends updated doc', async ({ page }) => {
-        const { id, path: doc_path } = await setupKanbanView(page);
+        const { path: doc_path } = await setupKanbanView(page);
 
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });

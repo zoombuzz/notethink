@@ -1,4 +1,3 @@
-import Debug from "debug";
 import { type ReactElement, useMemo } from "react";
 import { GenericView } from "../../notethink-views/src/components";
 import { convertMdastToNoteHierarchy } from "../../notethink-views/src/lib/convertMdastToNoteHierarchy";
@@ -9,8 +8,6 @@ import { INTEGRATION_MODE_CURRENT_FILE } from "../../notethink-views/src/types/I
 import type { Doc } from "../../types/general";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
 import type { NoteRendererProps } from "../NoteRenderer";
-
-const debug = Debug("nodejs:notethink:NoteTreeComposer");
 
 /**
  * NoteTreeComposer composes a NoteProps tree from a single Doc and renders GenericView.

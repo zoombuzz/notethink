@@ -5,8 +5,6 @@ import App from './components/base/App';
 import reportWebVitals from './reportWebVitals';
 import './index.css';
 
-const debug = Debug("nodejs:notethink:index");
-
 declare const NOTETHINK_DEV: boolean | undefined;
 
 // enable debug logging in dev mode; the webview iframe has its own localStorage so setting localStorage.debug in the VS Code dev tools 'top' frame has no effect

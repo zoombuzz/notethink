@@ -1,11 +1,8 @@
-import Debug from "debug";
 import { FOLDER_VIEW_STATE_ID } from "../notethink-views/src/lib/viewstateops";
 import { INTEGRATION_MODE_AUTO, type IntegrationMode } from "../notethink-views/src/types/IntegrationMode";
 import type { ViewState } from "../hooks/usePersistedViewStates";
 import type { NoteDisplayOptions } from "../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../components/NoteRenderer";
-
-const debug = Debug("nodejs:notethink:composerops");
 
 /**
  * BuildViewDisplayOptionsResult is the bundle the composers consume.

@@ -1,4 +1,3 @@
-import Debug from "debug";
 import { useCallback, useMemo } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { buildIntegrationDispatch, resolveIntegrationMode } from "../../../lib/viewstateops";
@@ -9,8 +8,6 @@ import type { GlobalSettingKey } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import type { CommonSettingKey } from "../SettingsCommonControls";
 import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
-
-const debug = Debug("nodejs:notethink-views:useViewToolbar");
 
 export interface ViewToolbar {
     // integration-mode dropdown: persisted selection (may be auto), resolved concrete mode, change handler

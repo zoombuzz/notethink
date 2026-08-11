@@ -357,10 +357,10 @@ import { NoteComponent, type NoteProps } from '@/components';
 
 ### Debug Logger Pattern
 
-Canonical: [`LOGGING.md`](../lightenna-iac/docstech/standards/LOGGING.md). `debug` is an optional development aid: put it where it earns its place, leave it out everywhere else, and never add or remove one as a review action. notethink carries one deviation from the shared rule and one local enforcement gap:
+Canonical: [`LOGGING.md`](../lightenna-iac/docstech/standards/LOGGING.md). `debug` is an optional development aid: put it where it earns its place, leave it out everywhere else, and never add or remove one as a review action. notethink carries one deviation from the shared rule, and enforces unused bindings mechanically:
 
 - **Deviation - the namespace is area-based, not a directory path.** `nodejs:<area>:<File>`, where `<area>` is the bundle or package the file belongs to (`notethink` for the webview app, `notethink-views` for the component library) and `<File>` is the source basename - e.g. `Debug("nodejs:notethink-views:KanbanView")`. The shared rule's `nodejs:{path}:{filename}` form does not fit a repo whose source tree and bundle boundaries differ.
-- **Gap - `@typescript-eslint/no-unused-vars` is not configured in this repo**, so an unused `const debug` is ordinary dead code that nothing flags mechanically. Remove it on sight, like any other unused binding.
+- **Enforcement - `@typescript-eslint/no-unused-vars` is configured at `"error"`** in `eslint.config.mjs`, with `^_` ignore patterns for arguments, variables and caught errors, matching the shape `LOGGING.md` prescribes. An unused `const debug` therefore fails lint like any other unused binding, rather than needing to be spotted by eye.
 
 **Scope - primarily the webview.** This pattern (the npm `debug` library + `nodejs:` namespace) is the convention for the **webview / notethink-views** bundles. The **extension host** (`client/extension/**`) logs through `writeToLog` / `writeToErrorLog` (winston, in `lib/errorops.ts`) instead, so reaching for `Debug` there generally means reaching for the wrong stack.
 
@@ -567,6 +567,7 @@ Files under `lib/` group **pure utility functions by domain**, named `<noun>ops.
 - Remove unused imports
 - Remove unused variables (check compiler warnings)
 - Remove commented-out code that's no longer needed
+- **Exception - a leading underscore marks a binding that is deliberately unused.** `@typescript-eslint/no-unused-vars` is configured with `^_` ignore patterns for arguments, variables and caught errors, so `_name` opts out of the rule. Use it only where the binding is evidence of something - an unwired format, a captured value whose missing assertion is a tracked bug, a parameter kept as an extension point - and always with a comment saying what it is evidence of and which story tracks it. Everything else still gets deleted.
 
 ## Error Handling
 
@@ -748,6 +749,12 @@ This runs, in order:
 4. **Jest** - all unit/component tests across extension, webview, and notethink-views
 
 CI only runs lint and build (no tests). Tests are the developer's responsibility before push.
+
+Two shell guards sit outside `pnpm run check` and are run by `/prod-ready`:
+
+- Em-dash guardrail: `bash sh/check-no-emdash.sh`
+- Em-dash guardrail regression harness: `bash sh/tests/check-no-emdash.test.sh` - 30 assertions covering the guard itself. Run it whenever `sh/check-no-emdash.sh` changes. The guard has false-passed silently twice, and a gate whose failure mode is reporting success has no other feedback signal. Byte-identical in all seven repos, like the guard: **fix it in all of them or none**.
+- ESLint dash-rule coverage: `node sh/tests/no-dash-glyphs.rule.test.mjs` - RuleTester cases for `local/no-dash-glyphs`, which had none in any of its six copies. It finds every copy under `nodejs/*/eslint-rules/` and tests each, so a repo that grows a second copy has both checked. It sits here rather than beside the rule because each app's jest testMatch is scoped to its own source tree, so a test next to the rule would never be collected.
 
 ### No web dev server
 notethink is a VS Code extension - there is no `pnpm run dev` and no HTTP server to start. The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host. Per the `/open-dev` skill's special cases, this project is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`).

@@ -1,8 +1,5 @@
-import Debug from "debug";
 import { noteOrder } from "./noteops";
 import type {LineTag, NoteProps} from "../types/NoteProps";
-
-const debug = Debug("nodejs:notethink-views:linetagops");
 
 type HashMapOf<S> = { [key: string]: S };
 

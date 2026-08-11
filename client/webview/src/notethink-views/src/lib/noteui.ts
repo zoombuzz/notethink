@@ -1,10 +1,7 @@
-import Debug from "debug";
 import type { MouseEvent } from "react";
 import type { NoteProps, ClickPositionInfo, NoteDisplayOptions } from "../types/NoteProps";
 import type { ViewProps } from "../types/ViewProps";
 import view_specific_styles from "../components/ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:noteui");
 
 /**
  * build the standard CSS class list for a note element

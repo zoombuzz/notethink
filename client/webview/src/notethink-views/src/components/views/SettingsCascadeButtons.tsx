@@ -1,9 +1,6 @@
-import Debug from "debug";
 import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import styles from "../ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:SettingsCascadeButtons");
 
 interface SettingsCascadeButtonsProps {
     onMakeDefault: () => void;

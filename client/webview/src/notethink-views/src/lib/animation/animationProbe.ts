@@ -11,9 +11,6 @@
  *
  * kept DOM-free on purpose: it is a pure in-memory event buffer.
  */
-import Debug from 'debug';
-
-const debug = Debug("nodejs:notethink-views:animationProbe");
 
 /**
  * AnimationProbeEvent: one scheduled animation, as the FLIP hook planned it (independent of whether

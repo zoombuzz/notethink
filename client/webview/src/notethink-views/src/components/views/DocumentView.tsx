@@ -39,7 +39,7 @@ export default React.memo(function DocumentView(props: ViewProps) {
         setNoteExpanded: props.handlers?.setNoteExpanded,
     }), [props.handlers?.click, props.handlers?.setCaretPosition, props.handlers?.postMessage, props.handlers?.descendToFolder, props.handlers?.setNoteExpanded]);
 
-    const renderNote = (note: NoteProps, index: number): React.ReactElement => (
+    const renderNote = (note: NoteProps, _index: number): React.ReactElement => (
         <GenericNote
             key={note.stable_id ?? note.seq}
             {...note}

@@ -1,7 +1,4 @@
-import Debug from "debug";
 import type { NoteOrigin } from "../types/NoteProps";
-
-const debug = Debug("nodejs:notethink-views:originops");
 
 /**
  * Pure helpers backing the OriginPill JSX component. Lifted out of OriginPill.tsx

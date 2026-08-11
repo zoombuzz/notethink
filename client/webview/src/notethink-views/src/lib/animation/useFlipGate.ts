@@ -1,8 +1,5 @@
-import Debug from 'debug';
 import { useEffect, useRef } from 'react';
 import { createPassiveUpdateGate, type PassiveUpdateGate } from './passiveUpdateGate';
-
-const debug = Debug("nodejs:notethink-views:useFlipGate");
 
 /**
  * own the FLIP passive-update gate's lifecycle for a kanban view. The gate exists to tell the FLIP

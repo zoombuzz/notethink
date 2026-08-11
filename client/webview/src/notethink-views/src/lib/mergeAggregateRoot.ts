@@ -1,4 +1,3 @@
-import Debug from "debug";
 import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNoteHierarchy";
 import { stripHeadlineLinetags, storyStableIdSlug } from "./noteops";
 import { resolveNamespacedTag } from "./linetagops";
@@ -6,8 +5,6 @@ import { FOLDER_VIEW_STATE_ID, resolveIntegrationMode } from "./viewstateops";
 import { buildProjectLabels, hueForProjectName, projectNameFromRelativePath } from "./originops";
 import { INTEGRATION_MODE_FOLDER } from "../types/IntegrationMode";
 import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NoteProps";
-
-const debug = Debug("nodejs:notethink-views:mergeAggregateRoot");
 
 /**
  * Aggregate (Folder) mode entry point.

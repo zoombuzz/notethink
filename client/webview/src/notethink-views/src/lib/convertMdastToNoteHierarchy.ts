@@ -1,10 +1,7 @@
-import Debug from "debug";
 import type { Root as MdastRoot } from "mdast";
 import { findLineTags, parseLineTags } from "./linetagops";
 import { findFrontmatterNode, parseFrontmatterLinetags } from "./frontmatterops";
 import type { LineTag, MdastNode, NoteProps, TextPosition } from "../types/NoteProps";
-
-const debug = Debug("nodejs:notethink-views:convertMdastToNoteHierarchy");
 
 export type MdastInput = MdastNode | MdastRoot;
 

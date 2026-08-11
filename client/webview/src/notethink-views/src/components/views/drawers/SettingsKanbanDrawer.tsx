@@ -1,4 +1,3 @@
-import Debug from "debug";
 import React, { useCallback } from "react";
 import * as l10n from "@vscode/l10n";
 import { formatColumnLabel } from "../../../lib/noteops";
@@ -7,8 +6,6 @@ import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } fr
 import SettingsCascadeButtons from "../SettingsCascadeButtons";
 import GroupBySelector, { type GroupBySelectorProps } from "../GroupBySelector";
 import type { GlobalSettingKey } from "../../../types/Messages";
-
-const debug = Debug("nodejs:notethink-views:SettingsKanbanDrawer");
 
 declare const NOTETHINK_VERSION: string | undefined;
 

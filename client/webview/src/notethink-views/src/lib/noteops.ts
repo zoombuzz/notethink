@@ -329,7 +329,7 @@ export function noteIsVisible(note_element: HTMLElement, view_element: HTMLEleme
 /**
  * Work out where the caret position is based on a ClickPositionInfo.
  */
-export function resolveCaretPosition(ncp: ClickPositionInfo, note?: NoteProps): number {
+export function resolveCaretPosition(ncp: ClickPositionInfo, _note?: NoteProps): number {
     return ncp.from;
 }
 
@@ -372,7 +372,7 @@ export function findBodyItemElement(note_element: HTMLElement, caret_offset: num
  * All three GFM unordered-list markers are accepted because this repo's todo files
  * use `+` bullets while standard markdown uses `-`.
  */
-export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check: boolean, match_text: string, match_context: Array<string>): Array<{ from: number; to: number; insert: string }> {
+export function calculateTextChangesForCheckbox(note: NoteProps, action_is_check: boolean, match_text: string, _match_context: Array<string>): Array<{ from: number; to: number; insert: string }> {
     const content = note.body_raw;
     if (!content) { return []; }
     let content_start_position = note.position.end;

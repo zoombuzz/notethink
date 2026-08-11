@@ -1,4 +1,3 @@
-import Debug from "debug";
 import React from "react";
 import * as l10n from "@vscode/l10n";
 import type { ReactElement } from "react";
@@ -21,8 +20,6 @@ import ToolbarDrawer from "../drawers/ToolbarDrawer";
 import ToolbarTab from "../drawers/ToolbarTab";
 import { viewTypeLabel } from "../viewTypeLabel";
 import master_view_styles from "../../ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:GenericViewToolbar");
 
 // the + trigger is hidden while it waits to return as a menu item; typed as boolean so the wiring below stays live code rather than a branch TS narrows away
 const SHOW_INSERT_BUTTON: boolean = false;

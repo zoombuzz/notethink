@@ -1,7 +1,4 @@
-import Debug from 'debug';
 import type { Metric } from 'web-vitals';
-
-const debug = Debug("nodejs:notethink:reportWebVitals");
 
 const reportWebVitals = (onPerfEntry?: (metric: Metric) => void): void => {
   if (onPerfEntry && onPerfEntry instanceof Function) {

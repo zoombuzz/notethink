@@ -1,10 +1,7 @@
-import Debug from "debug";
 import type { ChangeEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import { selectableViewTypes } from "./GenericView";
 import { viewTypeLabel } from "./viewTypeLabel";
-
-const debug = Debug("nodejs:notethink-views:ViewTypeSelector");
 
 interface ViewTypeSelectorProps {
     // the persisted selection: drives the <select> value (auto / document / kanban)

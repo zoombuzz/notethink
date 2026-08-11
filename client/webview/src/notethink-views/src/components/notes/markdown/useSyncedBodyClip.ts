@@ -1,7 +1,4 @@
-import Debug from "debug";
 import { useLayoutEffect } from "react";
-
-const debug = Debug("nodejs:notethink-views:useSyncedBodyClip");
 
 // mirror useMarkdownNoteOverflow: clip when rendered height exceeds this multiple of width
 const HEIGHT_RATIO = 1;

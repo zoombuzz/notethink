@@ -1,4 +1,4 @@
-import { convertMdastToNoteHierarchy, applyChildAttributeInheritance } from './convertMdastToNoteHierarchy';
+import { convertMdastToNoteHierarchy } from './convertMdastToNoteHierarchy';
 import type { MdastNode, NoteProps } from '../types/NoteProps';
 import { calculateTextChangesForNewLinetagValue } from './linetagops';
 

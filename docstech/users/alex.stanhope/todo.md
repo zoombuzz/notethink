@@ -425,3 +425,40 @@ Systemic findings from a deep multi-agent optimisation review (scout + 5 dimensi
 + acceptance criteria
   + assertion green with every exception named and commented
   + a new key added to `bundle.l10n.json` and copied verbatim into the four locale bundles fails the test
+
+
+### The extension logger's format is built and never wired to it [](?id=errorops-logger-format-unwired&time_estimated=45)
+
+`client/extension/src/lib/errorops.ts` composes a full winston format into `_default_format`, then calls `winston.createLogger({level, transports})` and never passes it. The extension's Output Channel therefore shows none of what that format was written to add.
+
++ surfaced 2026-08-11 by the `@typescript-eslint/no-unused-vars` rollout, which is the third time in this workspace that rule has found a wiring gap rather than dead code
++ what is actually lost, reading the composed format at `errorops.ts:87-96`
+  + `winston.format.timestamp` - no timestamp on any line
+  + `winston.format.errors({stack: true})` - no stack on a logged Error
+  + `winston.format(combineTransform)()` - **this is the significant one.** `combineTransform` (`errorops.ts:72`) reads the winston `splat` symbol and interpolates a multi-argument call's extra arguments into the message. Without it, `writeToLog('thing %s', value)` renders the raw `%s` and silently discards `value`
+  + `winston.format.printf` - the level-prefixed line shape
+  + `winston.format.colorize`
++ `combineTransform` has exactly one reference, inside the unwired format, so it has never run
++ [ ] confirm the loss against a real log line before changing anything: call the logger with an extra argument and read the Output Channel
++ [ ] wire the format into `createLogger`, or delete both it and `combineTransform` if the current bare output is what is wanted
+  + the comment says "different format is used for some transports", which suggests a second format was planned and only one transport exists. Decide which is true before wiring
++ [ ] cover the splat interpolation with a test, since nothing would have caught this
++ acceptance criteria
+  + a multi-argument log call renders its arguments, verified by reading the output, not by reading the format
++ the binding is underscored rather than deleted, so the intent stays visible until this is decided
+
+
+### Two playwright specs capture a value and never assert on it [](?id=keyboard-nav-drill-assertions&time_estimated=60)
+
+Both were found by the same lint rollout on 2026-08-11. Each computes exactly the value its title implies it checks, then never compares it, so neither spec can fail on the behaviour it names.
+
++ `playwright/specs/keyboard-navigation.spec.ts:113` captures `_parent_after_drill`, drills out, captures `parent_after_out`, and asserts only `expect(parent_after_out).toBeDefined()`
+  + `getAttribute` returns `string | null`, and `toBeDefined()` passes on `null`, so the one assertion that does run holds even when the attribute is absent entirely
+  + [ ] assert the drill-in value differs from the pre-drill value, and that drill-out restores it
++ `playwright/specs/settings-toggle.spec.ts:12` is titled "toggling lineNumbers shows and hides line number elements" and asserts neither
+  + it counts line-number spans into `_lineno_count`, toggles on, asserts only that a row is visible - which was already true before the toggle - toggles off, and ends
+  + the two comment blocks at `:18` and `:42` describe the assertions that were never written
+  + [ ] assert the count is zero at baseline, non-zero after toggling on, and back to zero after toggling off
++ acceptance criteria
+  + each spec fails when its behaviour is deliberately broken, verified by breaking it once
++ both bindings are underscored rather than deleted, so the intent stays visible

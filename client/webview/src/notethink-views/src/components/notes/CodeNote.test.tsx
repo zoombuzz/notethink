@@ -6,7 +6,7 @@ import type { NoteProps } from '../../types/NoteProps';
 // mock GenericNoteAttributes
 jest.mock('./GenericNoteAttributes', () => ({
     __esModule: true,
-    default: (props: NoteProps) => <div data-testid="note-attributes">attributes</div>,
+    default: (_props: NoteProps) => <div data-testid="note-attributes">attributes</div>,
 }));
 
 function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {

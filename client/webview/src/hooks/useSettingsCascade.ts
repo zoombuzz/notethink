@@ -1,9 +1,6 @@
-import Debug from 'debug';
 import { useState } from 'react';
 import type { SettingsCascadePayload } from '../notethink-views/src/types/Messages';
 import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE, DEFAULT_COLUMN_ORDER } from '../constants';
-
-const debug = Debug("nodejs:notethink:useSettingsCascade");
 
 interface SettingsCascadeState {
     settings_cascade: SettingsCascadePayload;

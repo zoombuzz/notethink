@@ -1,7 +1,3 @@
-import Debug from "debug";
-
-const debug = Debug("nodejs:notethink-views:pathops");
-
 /**
  * Pure path-segmentation helpers used by breadcrumb rendering and origin-pill
  * navigation. All functions are deterministic string operations - no IO, no DOM,

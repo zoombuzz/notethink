@@ -1,4 +1,3 @@
-import Debug from "debug";
 import { useMemo } from "react";
 import { GenericView } from "../../notethink-views/src/components";
 import { mergeAggregateRoot, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from "../../notethink-views/src/lib/mergeAggregateRoot";
@@ -10,8 +9,6 @@ import type { HashMapOf, Doc } from "../../types/general";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
 import type { TextSelection } from "../../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../NoteRenderer";
-
-const debug = Debug("nodejs:notethink:FolderTreeComposer");
 
 /**
  * FolderTreeComposer merges every loaded Doc into a single synthetic-root tree and

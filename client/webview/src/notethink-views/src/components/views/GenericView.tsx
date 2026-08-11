@@ -1,4 +1,3 @@
-import Debug from "debug";
 import React, { lazy } from "react";
 import { documentRootForStrip } from "../../lib/noteops";
 import { selectableViewIds } from "../../lib/viewregistryops";
@@ -9,8 +8,6 @@ import InsertModal from "../InsertModal";
 import GenericViewBreadcrumb from "./generic/GenericViewBreadcrumb";
 import GenericViewToolbar from "./generic/GenericViewToolbar";
 import { useGenericView } from "./generic/useGenericView";
-
-const debug = Debug("nodejs:notethink-views:GenericView");
 
 /*
  * component per concrete view id, keyed by the same ids the view registry declares. dynamic import() is

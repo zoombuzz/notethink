@@ -1,12 +1,9 @@
-import Debug from "debug";
 import React from "react";
 import * as l10n from "@vscode/l10n";
 import styles from "../../ViewRenderer.module.scss";
 import SettingsCommonControls, { type CommonSettings, type CommonSettingKey } from "../SettingsCommonControls";
 import SettingsCascadeButtons from "../SettingsCascadeButtons";
 import type { GlobalSettingKey } from "../../../types/Messages";
-
-const debug = Debug("nodejs:notethink-views:SettingsDocumentDrawer");
 
 declare const NOTETHINK_VERSION: string | undefined;
 

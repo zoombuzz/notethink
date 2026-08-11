@@ -1,10 +1,7 @@
-import Debug from "debug";
 import type { ReactElement, ReactNode } from "react";
 import { getStandardNoteDataProps } from "../../../lib/renderops";
 import { buildNoteStyles } from "../../../lib/noteui";
 import type { NoteProps } from "../../../types/NoteProps";
-
-const debug = Debug("nodejs:notethink-views:MarkdownNoteContainer");
 
 interface MarkdownNoteContainerProps {
     note: NoteProps;

@@ -1,8 +1,5 @@
-import Debug from "debug";
 import React, { createContext, useContext } from "react";
 import { usePendingWork, type UsePendingWorkApi } from "./usePendingWork";
-
-const debug = Debug("nodejs:notethink-views:PendingWorkContext");
 
 // default ctx-value: a no-op markPending/clearPending and `pending=false`. Lets consumers call markPending unconditionally even when no provider is mounted (tests, isolated component renders); the spinner just stays hidden
 const NOOP_API: UsePendingWorkApi = {

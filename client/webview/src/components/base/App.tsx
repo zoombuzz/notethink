@@ -1,4 +1,3 @@
-import Debug from 'debug';
 import React, { type ReactElement } from 'react';
 import ErrorBoundary from '../../notethink-views/src/components/ErrorBoundary';
 import { usePendingWork } from '../../notethink-views/src/hooks/usePendingWork';
@@ -6,8 +5,6 @@ import { PendingWorkProvider } from '../../notethink-views/src/hooks/PendingWork
 import { useJumpTargets } from '../../notethink-views/src/hooks/useJumpTargets';
 import { JumpTargetsProvider } from '../../notethink-views/src/hooks/JumpTargetsContext';
 import ExtensionReceiver from '../ExtensionReceiver';
-
-const debug = Debug("nodejs:notethink:App");
 
 // owns the single usePendingWork instance so the extension-message reducer (inside ExtensionReceiver) and every downstream consumer (toolbar spinner, drawer spinners, view handlers' markPending calls) all observe and mutate the same state. Pass the hook explicitly into ExtensionReceiver and via PendingWorkProvider for the rest of the tree
 function App(): ReactElement {

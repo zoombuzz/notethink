@@ -1,12 +1,9 @@
-import Debug from "debug";
 import React from "react";
 import type { NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import { INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { ActiveDrawer } from "./useToolbarDrawers";
 import BreadcrumbTrail from "../BreadcrumbTrail";
-
-const debug = Debug("nodejs:notethink-views:GenericViewBreadcrumb");
 
 interface GenericViewBreadcrumbProps {
     props: ViewProps;

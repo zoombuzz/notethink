@@ -1,4 +1,3 @@
-import Debug from 'debug';
 import { memo, useCallback, useMemo, useRef } from "react";
 import type { ReactElement } from "react";
 import { arraysEqual } from "../../lib/noteops";
@@ -12,8 +11,6 @@ import { useMarkdownNoteOverflow } from "./markdown/useMarkdownNoteOverflow";
 import { useSyncedBodyClip } from "./markdown/useSyncedBodyClip";
 import { useMarkdownNoteBodyScroll } from "./markdown/useMarkdownNoteBodyScroll";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:MarkdownNote");
 
 // membership of this note's own stable_id in the view's manual-expansion list; a note with no stable_id can never be listed
 function isManuallyExpanded(note: NoteProps): boolean {

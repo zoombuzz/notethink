@@ -1,4 +1,3 @@
-import Debug from "debug";
 import type { ReactElement } from "react";
 import { isInternalAttribute } from "../../../lib/renderops";
 import { headlineClickPosition, createNoteClickHandler } from "../../../lib/noteui";
@@ -6,8 +5,6 @@ import type { NoteProps } from "../../../types/NoteProps";
 import OriginPill from "../../../components/notes/OriginPill";
 import { projectFolderFromOrigin } from "../../../lib/originops";
 import view_specific_styles from "../../../components/ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:MarkdownNoteHeadline");
 
 interface MarkdownNoteHeadlineProps {
     note: NoteProps;
@@ -47,7 +44,7 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
                 <OriginPill
                     origin={note.origin!}
                     epicOnly={!has_project}
-                    onClick={(event) => {
+                    onClick={() => {
                         // pill click is ADDITIVE on top of the headline click: it descends the folder view into the pill's project subfolder, AND the bubbling click also fires the headline's createNoteClickHandler so the editor opens the story at its position and the matching note gets highlighted (editor-derived match in useViewContext finds the story by origin.doc_path + source_position in the descended view, even though seq numbers are renumbered by mergeAggregateRoot). A file living directly at the workspace-folder root has no sub-project to descend into - projectFolderFromOrigin returns '' and the descend becomes a no-op, but the headline click still fires
                         const target_folder = projectFolderFromOrigin(note.origin!);
                         if (target_folder) {

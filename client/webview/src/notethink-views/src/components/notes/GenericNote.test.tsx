@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import GenericNote from './GenericNote';
-import type { NoteProps, MdastNode } from '../../types/NoteProps';
+import type { NoteProps } from '../../types/NoteProps';
 
 // capture enriched props from the mock
 let last_markdown_props: NoteProps | undefined;

@@ -1,9 +1,6 @@
-import Debug from "debug";
 import type { ChangeEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import { INTEGRATION_MODE_AUTO, INTEGRATION_MODES, type ConcreteIntegrationMode, type IntegrationMode } from "../../types/IntegrationMode";
-
-const debug = Debug("nodejs:notethink-views:ViewIntegrationSelector");
 
 // concrete-mode labels; the 'auto' option's label is composed from the resolved mode ("Auto (Folder)")
 function getConcreteModeLabels(): Record<ConcreteIntegrationMode, string> {

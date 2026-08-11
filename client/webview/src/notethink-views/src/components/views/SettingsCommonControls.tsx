@@ -1,10 +1,7 @@
-import Debug from "debug";
 import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import type { GlobalSettingKey } from "../../types/Messages";
 import ViewTypeSelector from "./ViewTypeSelector";
-
-const debug = Debug("nodejs:notethink-views:SettingsCommonControls");
 
 export interface CommonSettings {
     showLinetagsInHeadlines?: boolean;

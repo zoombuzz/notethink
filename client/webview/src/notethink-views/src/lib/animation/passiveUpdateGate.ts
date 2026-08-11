@@ -1,7 +1,4 @@
-import Debug from 'debug';
 import { KANBAN_ANIMATION_DRAG_GATE_MS } from './flipMath';
-
-const debug = Debug("nodejs:notethink-views:passiveUpdateGate");
 
 /**
  * PassiveUpdateGate: a tiny stateful gate shared between KanbanView (which drives it from the drag

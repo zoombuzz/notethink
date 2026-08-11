@@ -1,8 +1,5 @@
-import Debug from "debug";
 import React, { useCallback, useEffect, useState, type MouseEvent } from "react";
 import mermaid, { type RenderResult } from 'mermaid';
-
-const debug = Debug("nodejs:notethink-views:MermaidDiagram");
 
 export interface MermaidDiagramProps {
     children: string;

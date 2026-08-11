@@ -50,7 +50,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-MODE="uncommitted"
+# a second positional argument used to be ignored, so `--all --nonsense` exited 0 having silently
+# scanned the narrower default scope. a guard that quietly narrows its own scope on a typo is the
+# same class of failure as one that swallows an error: it reports success for work it never looked
+# at. there is also deliberately no MODE initialiser here - every branch below either assigns it or
+# exits, so a future branch that forgets fails loudly under set -u rather than defaulting to the
+# narrowest scope.
+if [ "$#" -gt 1 ]; then
+    echo "usage: $(basename "$0") [--branch|--all]" >&2
+    echo "       (got $# arguments; this check takes at most one)" >&2
+    exit 2
+fi
 case "${1:-}" in
     "")         MODE="uncommitted" ;;
     --branch)   MODE="branch" ;;
@@ -74,10 +84,12 @@ BANNED_GLYPHS=(
 # pdf or font whose bytes happen to contain e2 80 94 would otherwise block the push as a hit.
 # stderr is deliberately NOT folded into the output; a git warning emitted alongside exit 0 or 1
 # would land in the hit list and read as a phantom violation.
+# core.quotePath is pinned off because it defaults to ON: a path with any byte above 0x7f is
+# emitted C-quoted ("caf\303\251.md"), which is unreadable and cannot be pasted back into an editor.
 run_git_grep() {
     local out status glyph needles=()
     for glyph in "${BANNED_GLYPHS[@]}"; do needles+=(-e "$glyph"); done
-    out="$(git grep -n -I -F "${needles[@]}" "$@")" && status=0 || status=$?
+    out="$(git -c core.quotePath=false grep -n -I -F "${needles[@]}" "$@")" && status=0 || status=$?
     if [ "$status" -gt 1 ]; then
         echo "ERROR: git grep failed (exit $status) - the check did NOT run (git's error is above)" >&2
         exit 2
@@ -116,25 +128,46 @@ resolve_base_branch() {
 # added lines in a diff against $1, reported as file:line to match git grep -n output.
 # awk tracks the +++ header and hunk start; index() on the literal glyph sidesteps awk's
 # inconsistent handling of multibyte escapes in regex character classes.
-# the prefixes are pinned because the awk keys on '+++ b/': a user carrying diff.noprefix or
-# diff.mnemonicPrefix otherwise loses the filename from every reported hit, leaving a bare line
+# the prefixes are pinned because the awk keys on the '+++ b/' header: a user carrying diff.noprefix
+# or diff.mnemonicPrefix otherwise loses the filename from every reported hit, leaving a bare line
 # number, and the unmatched header then falls through to be scanned as though it were content.
 # set -e does NOT apply inside the $( ) each helper is called from, so a failure here has to be an
 # explicit exit; errexit and pipefail cannot carry it. leaving git diff behind 2>/dev/null || true
 # was the same silent-false-pass shape as the swallowed git grep: a repo with no commits yet fatals
 # on 'git diff HEAD', and every glyph in that first commit would sail through a green OK.
+#
+# three flags carry a defect each, all found by adversarial review 2026-08-06 and fixed 2026-08-11:
+#   - core.quotePath=false: it defaults ON, so a non-ASCII filename arrives as +++ "b/caf\303\251.md"
+#     and the header match fails, losing the filename exactly as an unpinned prefix does.
+#   - --text: .gitattributes marks *.psm1 and *.mof binary in this workspace, so git prints
+#     "Binary files differ" and their added lines were never scanned at all. a file the author
+#     types into is in scope whatever git's diff machinery calls it.
+#   - --no-textconv: a configured textconv filter would otherwise diff a rendered form of the file
+#     rather than the bytes being committed, so the guard would judge text nobody is authoring.
 added_line_hits() {
     local out status
-    out="$(git diff --unified=0 --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ "$1" -- "${PATHSPECS[@]}")" && status=0 || status=$?
+    out="$(git -c core.quotePath=false diff --unified=0 --no-color --no-ext-diff --text --no-textconv --src-prefix=a/ --dst-prefix=b/ "$1" -- "${PATHSPECS[@]}")" && status=0 || status=$?
     if [ "$status" -ne 0 ]; then
         echo "ERROR: git diff failed (exit $status) - the check did NOT run (git's error is above)" >&2
         exit 2
     fi
+    # header recognition is gated on diff state rather than on the '+++' text, because an ADDED
+    # LINE that itself begins '++ b/' reaches awk as '+++ b/...' and is indistinguishable from a
+    # header by shape alone. a doc quoting a patch fragment therefore lost that line's glyph AND
+    # clobbered the reported filename for every later hit in the same file. in_hdr is set by
+    # 'diff --git' and cleared by the first '@@', so '+++' is only ever read as a header inside the
+    # header block, where content cannot appear.
     printf '%s' "$out" \
         | awk -v glyphs="$(printf '%s\n' "${BANNED_GLYPHS[@]}")" '
             BEGIN { count = split(glyphs, banned, "\n") }
-            /^\+\+\+ b\// { file = substr($0, 7); next }
-            /^@@ / { split($3, hunk, ","); line = substr(hunk[1], 2) + 0; next }
+            /^diff --git / { in_hdr = 1; next }
+            in_hdr && /^\+\+\+ / {
+                file = substr($0, 5)
+                sub(/^b\//, "", file)
+                if (file ~ /^".*"$/) file = substr(file, 2, length(file) - 2)
+                next
+            }
+            /^@@ / { in_hdr = 0; split($3, hunk, ","); line = substr(hunk[1], 2) + 0; next }
             /^\+/ {
                 body = substr($0, 2)
                 for (i = 1; i <= count; i++)

@@ -1,20 +1,10 @@
 # Jest Test Results
-# Version: 0.3.39
-# Date: 2026-08-05
-# Command: pnpm run test-jest
+# Version: 0.3.42
+# Date: 2026-08-11T19:05:00+01:00
+# Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
-[1mSnapshots:   [22m0 total
-[1mTime:[22m        [1m[33m3.268 s[39m[22m
-[2mRan all test suites[22m[2m.[22m
-[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
-
-
-[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
-[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
-[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │    11 │ [32m   248[0m │ [2m     0[0m │ 2.643 s │
-│ webview          │    10 │ [32m   136[0m │ [2m     0[0m │ 0.884 s │
-│ notethink-views  │    62 │ [32m  1314[0m │ [2m     0[0m │ 3.268 s │
-[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-[1m│ TOTAL            │    83 │[0m [32m  1698[0m [1m│[0m [2m     0[0m [1m│         │[0m
-[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m
+Suite            Files  Passed  Failed
+extension           11     248       0
+webview             10     136       0
+notethink-views     62    1314       0
+TOTAL               83    1698       0

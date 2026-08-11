@@ -1,4 +1,3 @@
-import Debug from "debug";
 import type { ReactElement } from "react";
 import { aggregateNoteLinetags, findNoteBySeq, isAggregateRoot, majorityNgView } from "../../lib/noteops";
 import { resolveNamespacedTag } from "../../lib/linetagops";
@@ -6,8 +5,6 @@ import type { ViewProps } from "../../types/ViewProps";
 import type { LineTag } from "../../types/NoteProps";
 import GenericView from "./GenericView";
 import view_specific_styles from "../ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:AutoView");
 
 export default function AutoView(props: ViewProps): ReactElement {
 

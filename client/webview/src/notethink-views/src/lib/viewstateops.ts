@@ -1,9 +1,6 @@
-import Debug from "debug";
 import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../types/IntegrationMode";
 import type { NoteDisplayOptions } from "../types/NoteProps";
 import type { ViewApi, ViewProps } from "../types/ViewProps";
-
-const debug = Debug("nodejs:notethink-views:viewstateops");
 
 /**
  * shared shape for the persisted view-state map this module inspects. Mirrors

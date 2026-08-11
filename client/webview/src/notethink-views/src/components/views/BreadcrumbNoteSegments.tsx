@@ -42,7 +42,7 @@ export default function BreadcrumbNoteSegments(props: BreadcrumbNoteSegmentsProp
                     {index > 0 && <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>}
                     <button className={item.display_options?.additional_classes?.join(' ')}
                             aria-label={stripHeadlineLinetags(item.headline_raw)}
-                            onClick={(event: MouseEvent<HTMLElement>) => {
+                            onClick={(_event: MouseEvent<HTMLElement>) => {
                                 props.onNoteClick?.(item.stable_id);
                             }}
                     >

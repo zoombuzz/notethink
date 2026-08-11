@@ -137,7 +137,7 @@ describe('ExtensionReceiver', () => {
     });
 
     it('skips setState when doc hash_sha256 is unchanged', () => {
-        const { rerender } = render(<ExtensionReceiver />);
+        render(<ExtensionReceiver />);
         // send initial doc with hash
         act(() => {
             window.dispatchEvent(new MessageEvent('message', {

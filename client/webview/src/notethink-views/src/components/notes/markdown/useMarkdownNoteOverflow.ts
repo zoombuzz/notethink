@@ -1,7 +1,4 @@
-import Debug from "debug";
 import { useEffect, useState } from "react";
-
-const debug = Debug("nodejs:notethink-views:useMarkdownNoteOverflow");
 
 // abridge when rendered height exceeds this multiple of width (top-level notes only)
 const HEIGHT_RATIO = 1;

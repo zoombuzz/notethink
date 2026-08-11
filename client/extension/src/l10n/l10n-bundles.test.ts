@@ -29,7 +29,7 @@ describe('l10n bundle completeness', () => {
             });
 
             it('has non-empty string values for every key', () => {
-                for (const [key, value] of Object.entries(bundle)) {
+                for (const [_key, value] of Object.entries(bundle)) {
                     expect(typeof value).toBe('string');
                     expect(value.length).toBeGreaterThan(0);
                 }
@@ -66,7 +66,7 @@ describe('package.nls completeness', () => {
             });
 
             it('has non-empty string values for every key', () => {
-                for (const [key, value] of Object.entries(nls)) {
+                for (const [_key, value] of Object.entries(nls)) {
                     expect(typeof value).toBe('string');
                     expect(value.length).toBeGreaterThan(0);
                 }

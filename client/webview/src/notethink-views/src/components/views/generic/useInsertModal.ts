@@ -1,8 +1,5 @@
-import Debug from "debug";
 import { useCallback, useState } from "react";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
-
-const debug = Debug("nodejs:notethink-views:useInsertModal");
 
 export interface InsertModalState {
     insert_modal_open: boolean;

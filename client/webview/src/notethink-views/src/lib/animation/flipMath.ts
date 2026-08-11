@@ -3,9 +3,6 @@
  * no DOM access and no React: every export takes plain values and returns plain values
  * (the Keyframe / KeyframeAnimationOptions types are object shapes only - no DOM call is made).
  */
-import Debug from 'debug';
-
-const debug = Debug("nodejs:notethink-views:flipMath");
 
 // --- timing budget ---
 

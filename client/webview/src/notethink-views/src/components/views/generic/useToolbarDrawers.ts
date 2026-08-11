@@ -1,7 +1,4 @@
-import Debug from "debug";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-
-const debug = Debug("nodejs:notethink-views:useToolbarDrawers");
 
 type DrawerKind = 'settings' | 'files' | 'collisions' | 'jump';
 export type ActiveDrawer = 'none' | DrawerKind;

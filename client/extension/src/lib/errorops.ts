@@ -76,13 +76,20 @@ const combineTransform: TransformFunction = (info) => {
     return output;
 };
 
-// default is full-fat comprehensive logging, but different format is used for some transports
-const default_format = winston.format.combine(
+/*
+ * default is full-fat comprehensive logging, but different format is used for some transports.
+ * UNWIRED: createLogger passes only `level` and `transports`, so none of this reaches the output
+ * channel - no timestamp, no error stacks, and combineTransform never runs, which is what
+ * interpolates a multi-argument log call's extra args into the message. The underscore marks the
+ * binding as deliberately unused while the gap is open; see `errorops-logger-format-unwired` in
+ * docstech/users/alex.stanhope/todo.md.
+ */
+const _default_format = winston.format.combine(
     winston.format.timestamp({format: 'YYYY-MM-DD HH:mm:ss.SSS'}),
     winston.format.errors({stack: true}),
     winston.format(combineTransform)(),
     winston.format.printf(
-        ({ level, message, timestamp, label }) =>
+        ({ level, message }) =>
             `${level.toUpperCase().slice(-5).padEnd(5, ' ')} ${message}`,
     ),
     winston.format.colorize(),
@@ -125,13 +132,16 @@ export function nonFatalErrorReport(field: string, type: string, tone: string, s
 }
 
 /**
- * Internally thrown errors should be caught (server-side) and processed
+ * Internally thrown errors should be caught (server-side) and processed.
+ * Takes no status, deliberately: the returned shape carries no status field, so a status parameter
+ * here would be a silent no-op. nonFatalErrorReport is the one that applies a status, to the
+ * Response it throws, and its absence here makes `nonFatalErrorInternally(f, t, tone, 404)` a
+ * compile error rather than a call that quietly discards the 404.
  * @param field
  * @param type
  * @param tone
- * @param status
  */
-export function nonFatalErrorInternally(field: string, type: string, tone: string, status = 500): { errors: { field: string; type: string; tone: string } } {
+export function nonFatalErrorInternally(field: string, type: string, tone: string): { errors: { field: string; type: string; tone: string } } {
     return {
         errors: {
             'field': field,

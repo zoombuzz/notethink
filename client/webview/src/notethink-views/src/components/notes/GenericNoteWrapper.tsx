@@ -1,9 +1,6 @@
-import Debug from "debug";
 import React from "react";
 import { getStandardNoteDataProps, renderBodyItems } from "../../lib/renderops";
 import type { NoteProps } from "../../types/NoteProps";
-
-const debug = Debug("nodejs:notethink-views:GenericNoteWrapper");
 
 export default function GenericNoteWrapper(props: NoteProps): React.ReactElement | undefined {
     const note = props;

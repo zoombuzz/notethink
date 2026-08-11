@@ -1,9 +1,6 @@
-import Debug from "debug";
 import { useEffect, useRef } from 'react';
 import { findBodyItemElement } from './noteops';
 import type { NoteDisplayOptions, TextSelection } from '../types/NoteProps';
-
-const debug = Debug("nodejs:notethink-views:viewhooks");
 
 // small extra so the story sits clear of the sticky header rather than flush against it
 const SCROLL_OCCLUDER_BUFFER_PX = 8;

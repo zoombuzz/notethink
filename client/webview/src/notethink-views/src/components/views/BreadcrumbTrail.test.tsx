@@ -7,7 +7,7 @@ import type { NoteProps } from '../../types/NoteProps';
 
 // mock renderops to avoid ESM dependencies in test
 jest.mock('../../lib/renderops', () => ({
-    renderMarkdownNoteHeadline: (note: NoteProps, options?: { output_type?: string }) => {
+    renderMarkdownNoteHeadline: (note: NoteProps, _options?: { output_type?: string }) => {
         return <span>{note.headline_raw}</span>;
     },
 }));

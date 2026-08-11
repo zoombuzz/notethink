@@ -101,6 +101,17 @@ export default [
             eqeqeq: "warn",
             "no-throw-literal": "warn",
             semi: "warn",
+            /*
+             * a leading underscore is the opt-out marker for an argument, a variable or a caught error that is
+             * deliberately unused. notethink registers '@typescript-eslint' itself rather than inheriting it from
+             * eslint-config-next, so the rule goes in this block directly: the separate scoped block the five Next
+             * siblings need exists only to dodge that config's plugin registration, and there is nothing to dodge here.
+             */
+            "@typescript-eslint/no-unused-vars": ["error", {
+                argsIgnorePattern: "^_",
+                varsIgnorePattern: "^_",
+                caughtErrorsIgnorePattern: "^_",
+            }],
             "local/no-consecutive-line-comments": "error",
             "no-restricted-syntax": ["error", ...restrictedSyntax],
             /*

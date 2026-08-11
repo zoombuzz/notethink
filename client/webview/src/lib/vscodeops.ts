@@ -1,9 +1,6 @@
-import Debug from "debug";
 import { INTEGRATION_MODE_FOLDER } from "../notethink-views/src/types/IntegrationMode";
 import type { HashMapOf, Doc } from "../types/general";
 import type { ViewState } from "../hooks/usePersistedViewStates";
-
-const debug = Debug("nodejs:notethink:vscodeops");
 
 /**
  * VSCodeState is the persisted shape held under vscode.setState(...) for the NoteThink

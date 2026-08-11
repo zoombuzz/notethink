@@ -1,11 +1,8 @@
-import Debug from "debug";
 import React, { type MouseEvent } from "react";
 import { isInternalAttribute } from "../../lib/renderops";
 import { HIDDEN_ATTRIBUTES } from "../../lib/linetagops";
 import type { LineTag, NoteProps } from "../../types/NoteProps";
 import view_specialised_styles from "../../components/ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:GenericNoteAttributes");
 
 export default function GenericNoteAttributes(props: NoteProps): React.ReactElement {
     const note = props;

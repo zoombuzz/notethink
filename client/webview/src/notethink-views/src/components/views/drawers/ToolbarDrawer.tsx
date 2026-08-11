@@ -1,9 +1,6 @@
-import Debug from "debug";
 import React from "react";
 import * as l10n from "@vscode/l10n";
 import styles from "../../ViewRenderer.module.scss";
-
-const debug = Debug("nodejs:notethink-views:ToolbarDrawer");
 
 interface ToolbarDrawerProps {
     open: boolean;

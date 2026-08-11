@@ -29,6 +29,19 @@
 # trees, binary image types, and the pnpm lockfile (registry-authored strings such as npm
 # deprecation notices can carry either dash, and any hand edit is undone by the next install).
 #
+# two more exclusions exist for exactly the lockfile reason, both carrying text we do not author
+# and cannot keep fixed:
+#   - AGENTS.md / CLAUDE.md under nodejs/. `next dev` (16.3+) writes a managed block into them
+#     containing two em dashes and re-adds it whenever it runs, comparing the installed block byte
+#     for byte, so hand editing the glyph out is undone the next time it starts. see
+#     node_modules/next/dist/server/lib/generate-agent-files.js. note the pathspec is matched in
+#     git's default mode where * crosses /, so this covers any depth under nodejs/, not just the
+#     app level. hand-authored text in these files therefore goes UNCHECKED - dulcet's copy is a
+#     real project doc, not a generated stub - which is the accepted cost.
+#   - docstech/reports/**. these are regenerated captures of jest and playwright output, and the
+#     tools write their own dashes into them (pnpm's .npmrc credential warning is one), so the
+#     guard would fail every run that refreshed a report it had just been asked to write.
+#
 # run from anywhere; resolves the repo root from its own location. wired into /prod-ready and
 # intended for pre-commit / CI use. exits non-zero on any hit.
 set -euo pipefail
@@ -77,6 +90,8 @@ PATHSPECS=(
     ':(exclude)**/prisma/migrations/**'
     ':(exclude)**/generated/**'
     ':(exclude)**/pnpm-lock.yaml' ':(exclude)pnpm-lock.yaml'
+    ':(exclude)nodejs/*/AGENTS.md' ':(exclude)nodejs/*/CLAUDE.md'
+    ':(exclude)docstech/reports/**' ':(exclude)**/docstech/reports/**'
     ':(exclude)**/deprecated/**' ':(exclude)deprecated/**'
     ':(exclude)*.svg' ':(exclude)*.png' ':(exclude)*.jpg' ':(exclude)*.jpeg'
     ':(exclude)*.gif' ':(exclude)*.webp' ':(exclude)*.ico'

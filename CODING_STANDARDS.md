@@ -485,6 +485,8 @@ The recurring regression is the ring being cropped on the left edge when a card 
 | `client/webview/src/` | the webview app - React, `debug` logging, no `fs` |
 | `client/webview/src/notethink-views/src/` | a **nested package** with its own `package.json`, `rollup.config.js`, tsconfig and `node_modules` |
 
+> **Correction, verified 2026-08-11.** The `lib/` listing below carried `parseops.ts`, which is **not** in this tree - it is at `client/extension/src/lib/parseops.ts`, the other source root. That is the same root-confusion this block's own note says was already fixed once, so it is now marked explicitly as a sample rather than an inventory: `ls` the directory, which currently holds `axisops`, `convertMdastToNoteHierarchy`, `frontmatterops`, `globMatch`, `groupbyops`, `linetagops` and more besides the four named.
+
 The tree below is **`client/webview/src/notethink-views/src/`** specifically - `components/views/DocumentView.tsx`, `components/notes/GenericNote.tsx`, `types/NoteProps.ts` and `types/ViewProps.ts` exist there and nowhere else. (An earlier version headed this block a bare `src/`, which matches no directory in the repo.)
 
 ```
@@ -500,8 +502,8 @@ client/webview/src/notethink-views/src/
 │   ├── noteops.ts       # note traversal, position, classification
 │   ├── originops.ts     # origin / project identification + colour
 │   ├── pathops.ts       # path segmentation, workspace-root derivation
-│   ├── viewstateops.ts  # view-managed-state operations
-│   └── parseops.ts      # parsing
+│   └── viewstateops.ts  # view-managed-state operations
+│                        # (this listing is a sample, not an inventory - run `ls` on the directory)
 ├── types/               # shared types
 │   ├── NoteProps.ts
 │   └── ViewProps.ts

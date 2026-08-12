@@ -750,12 +750,6 @@ This runs, in order:
 
 CI only runs lint and build (no tests). Tests are the developer's responsibility before push.
 
-Two shell guards sit outside `pnpm run check` and are run by `/prod-ready`:
-
-- Em-dash guardrail: `bash sh/check-no-emdash.sh`
-- Em-dash guardrail regression harness: `bash sh/tests/check-no-emdash.test.sh` - 30 assertions covering the guard itself. Run it whenever `sh/check-no-emdash.sh` changes. The guard has false-passed silently twice, and a gate whose failure mode is reporting success has no other feedback signal. Byte-identical in all seven repos, like the guard: **fix it in all of them or none**.
-- ESLint dash-rule coverage: `node sh/tests/no-dash-glyphs.rule.test.mjs` - RuleTester cases for `local/no-dash-glyphs`, which had none in any of its six copies. It finds every copy under `nodejs/*/eslint-rules/` and tests each, so a repo that grows a second copy has both checked. It sits here rather than beside the rule because each app's jest testMatch is scoped to its own source tree, so a test next to the rule would never be collected.
-
 ### No web dev server
 notethink is a VS Code extension - there is no `pnpm run dev` and no HTTP server to start. The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host. Per the `/open-dev` skill's special cases, this project is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`).
 

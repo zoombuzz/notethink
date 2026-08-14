@@ -120,10 +120,11 @@ import styles from './Component.module.scss';
 
 ## Comment Style
 
-See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style for the full rules (lowercase-first, one comment is exactly one line and never two `//` in a row, ~100-char inline, no back-reference comments, no PM version numbers, TODO format). The single-line rule is enforced here by the local `local/no-consecutive-line-comments` ESLint rule. notethink-specific extras and the section-divider exception live in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Comments.
+See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style for the full rules (single-line comments are lowercase-first while multi-line and header blocks take normal capitalisation, one comment is exactly one line and never two `//` in a row, ~100-char inline, no back-reference comments, no PM version numbers, TODO format). The single-line rule is enforced here by the local `local/no-consecutive-line-comments` ESLint rule. notethink-specific extras and the section-divider exception live in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Comments.
 
 - no period at the end unless multiple sentences
 - inline comments are allowed but kept short; use `//` for single-line, `/* */` for multi-line
+- lowercase-first applies to the `//` form; a `/* */` multi-line or header block is prose and takes normal capitalisation
 - never use the em or en dash character anywhere in this repo - see workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Dashes
 
 ```typescript
@@ -131,8 +132,8 @@ See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style 
 const total_with_tax = subtotal * (1 + tax_rate);
 
 /*
- * this function handles the complex logic for
- * determining note visibility based on multiple factors
+ * This function handles the complex logic for
+ * determining note visibility based on multiple factors.
  */
 function determineVisibility(note: NoteProps): boolean {
     // ...

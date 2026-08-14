@@ -247,12 +247,13 @@ function complexProcess(data: Data) {
 
 ### Comments
 
-See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style for the full rules: lowercase-first, one comment is exactly one line and never two `//` lines in a row, keep inline comments short (~100 chars), no back-reference comments, no project-management version numbers, and the TODO format (`// TODO: description`, `// TODO(#123): description`). The no-consecutive-line-comments rule is mechanically enforced in this repo by the local `local/no-consecutive-line-comments` ESLint rule.
+See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style for the full rules: single-line comments are lowercase-first while multi-line and header blocks take normal capitalisation, one comment is exactly one line and never two `//` lines in a row, keep inline comments short (~100 chars), no back-reference comments, no project-management version numbers, and the TODO format (`// TODO: description`, `// TODO(#123): description`). The no-consecutive-line-comments rule is mechanically enforced in this repo by the local `local/no-consecutive-line-comments` ESLint rule.
 
 notethink-specific extras:
 
 - never use the em or en dash character anywhere in this repo - see workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Dashes
 - no period at end (unless multiple sentences)
+- the lowercase-first and no-trailing-period rules are about the `//` single-line form; a `/* */` or `/** */` function-header block is prose and takes normal capitalisation and punctuation
 - **No per-field comments inside data structures.** See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > No per-field comments inside data structures.
   - **Exception - section dividers.** Short comments that group related fields by purpose (e.g. `// --- identity ---`, `// --- mdast passthrough ---`, `// --- tree links ---`, `// --- runtime decoration added at React render stage ---`) are explicitly permitted and load-bearing as visual structure in long interfaces. Don't strip these when sweeping a data structure for comment violations. Classify each inline comment: a per-single-field explanation gets removed (lift to the type's header comment if useful); a comment that introduces ≥2 conceptually-grouped fields with a single purpose stays. A comment grouping the *absence* of related fields (e.g. `// doc_path/doc_relative_path/doc_text intentionally undefined for the merged view` above three `undefined` assignments) still qualifies as a section divider.
 
@@ -268,6 +269,11 @@ const result = processItems(items);
 // incorrect
 const tax_amount = calculateTax(subtotal, region); // Calculate tax
 const result = processItems(items); // This handles edge cases
+
+/**
+ * Correct - a function-header block is prose, so it takes normal capitalisation.
+ */
+function processItems(items: ItemList): ItemResult {}
 ```
 
 ### Braces and Blocks

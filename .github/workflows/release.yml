@@ -22,10 +22,9 @@ jobs:
         with:
           node-version: '24'
 
+      # no version input: package.json pins packageManager, and action-setup v4 errors if both are set
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Install dependencies
         run: pnpm install

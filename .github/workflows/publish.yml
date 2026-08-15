@@ -35,11 +35,10 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # no version input: package.json pins packageManager, and action-setup v4 errors if both are set
       - name: Install pnpm
         if: steps.check.outputs.published == 'false'
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Install dependencies
         if: steps.check.outputs.published == 'false'

@@ -1,0 +1,39 @@
+# package.json pins pnpm@11.21.0, and pnpm 11 no longer reads the "pnpm" field in package.json at all -
+# it warns once and ignores every key under it. This file is where those settings now live, so the
+# override below is the same one that used to sit in package.json under pnpm.overrides.
+#
+# mocha declares serialize-javascript ^6.0.2 and the advisory is patched only from 7.0.5, so no fix
+# exists anywhere on the 6.x line and the range can never reach one. Forcing ^7.1.0 is what closes it.
+# Devtool-only either way: serialize-javascript is reached through mocha and the webpack terser plugin,
+# neither of which is bundled into the published extension. The nested three do not need the override -
+# extension and webview never resolve the package, and notethink-views already reaches 7.1.0 unaided.
+#
+# The mere existence of this file makes notethink a pnpm workspace root, so each of the three nested
+# install roots carries its own pnpm-workspace.yaml to stop `pnpm install` there walking up to this
+# one. Without that, a nested install resolves this root instead of itself and re-runs the postinstall
+# below, which installs the nested directory again - unbounded, a fork bomb rather than a slow install.
+# The three nested manifests pin packageManager for the same reason: they are separate install roots
+# and do not inherit this one's pin.
+#
+# There is deliberately no `packages:` key. The four manifests stay four independent install roots with
+# four lockfiles, exactly as before; folding them into one real workspace is a separate piece of work.
+overrides:
+  serialize-javascript: ^7.1.0
+
+# allowBuilds is the only build-approval key pnpm 11 reads. Every entry is false because none of these
+# build scripts has ever run in this repo: under pnpm 10 no approval key existed, so all were skipped,
+# and lint, jest and the vsix package have been green that way for many waves. pnpm 11 turns an
+# unapproved build script into a hard error rather than a warning, so what was implicit now has to be
+# stated. This is a record of existing behaviour, not a new decision.
+#
+# @playwright/browser-chromium must stay false. Its build script downloads roughly 167MB of Chrome,
+# which is exactly the failure the skip-playwright guard in .github/workflows/release.yml exists to
+# avoid - unskipped it hangs the job to the 6h timeout. keytar and @vscode/vsce-sign are vsce's native
+# credential store and signing helper; publishing passes VSCE_PAT and packages with --no-dependencies,
+# so neither is reached. @parcel/watcher resolves a prebuild on linux-x64-gnu and only falls back to
+# compiling on platforms without one.
+allowBuilds:
+  '@parcel/watcher': false
+  '@playwright/browser-chromium': false
+  '@vscode/vsce-sign': false
+  keytar: false

@@ -27,6 +27,7 @@ CODING_STANDARDS.md
 **/setupEnv.*
 **/*.test.*
 **/pnpm-lock.yaml
+**/pnpm-workspace.yaml
 .npmrc
 client/webview/src/**
 client/webview/public/**

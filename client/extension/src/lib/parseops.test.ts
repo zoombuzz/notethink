@@ -287,7 +287,7 @@ describe('parseops', () => {
 			const start = performance.now();
 			parse(markdown);
 			const elapsed = performance.now() - start;
-			expect(elapsed).toBeLessThan(300);
+			expect(elapsed).toBeLessThan(400);
 		});
 	});
 

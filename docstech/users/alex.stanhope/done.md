@@ -4665,3 +4665,130 @@ Unpinned this wave: `@testing-library/jest-dom`, taken from a deliberate 6.9.1 e
 + [X] verify playwright passes
 + commit message draft
   + notethink 0.3.46: take the deferred majors across the three nested manifests - babel 8, jest-dom 7, vscode-languageclient 10, web-vitals 6 and @types/node 26 - retiring the jest-dom 6.9.1 pin with its ncurc reject and the minimatch advisory hold; tests 1698 jest, 122 playwright
+
+
+### Upgrade NPM packages for notethink (minor/patch + pnpm 11.25.0 + mocha 12 + lockfile refresh) [](?time_taken=0)
+
+A minor/patch wave across all four manifests plus one approved major, mocha 11 -> 12. The dependency
+half is reported first; the parts worth reading are the mocha major, which cleared a structural pin
+that has been maintained for several waves, and jest 30.5.0, which quietly added a native build script
+to all three nested install roots.
+
++ ncu, root: 13 items
+  + patch: `css-loader` ^7.1.5, `memfs` ^4.68.2, `sass-loader` ^17.0.1, `webpack-cli` ^7.2.3
+  + minor: `@types/vscode` ^1.134.0, `eslint` 10.9.1, `npm-check-updates` ^23.1.0, `sass` ^1.103.1, `webpack` ^5.110.2
+  + the `@typescript-eslint` trio moved ^8.67.0 -> ^8.68.0, not 8.69.0, which `--cooldown 24h` withheld
+  + `pnpm` 11.21.0 -> 11.25.0 in `packageManager`, written by ncu rather than by hand
++ ncu, `client/extension`: 4 items
+  + `vscode-languageclient` 10.1.0 -> 10.1.1, `babel-jest` and `jest` ^30.4.x -> ^30.5.0, `pnpm` 11.25.0
++ ncu, `client/webview`: 10 items
+  + `@testing-library/react` ^16.3.3, `@testing-library/user-event` ^14.6.6, `@types/react-dom` ^19.2.5, `css-loader` ^7.1.5
+  + `@types/node` ^26.4.0, `jest` and `jest-environment-jsdom` ^30.5.0, `mermaid` ^11.17.2, `web-vitals` ^6.2.1, `pnpm` 11.25.0
++ ncu, notethink-views: 7 items
+  + `@testing-library/react` ^16.3.3, `babel-jest`, `jest` and `jest-environment-jsdom` ^30.5.0, `mermaid` ^11.17.2, `rollup` ^4.63.1, `pnpm` 11.25.0
++ all four runs logged `Using config file .../notethink/.ncurc.json`
+  + the three nested directories have no config of their own, so this was checked rather than assumed. The file is still just `{"upgrade": true}` with no reject list
++ cooldown ceilings this wave, both of which clear by themselves next time
+  + `@typescript-eslint/*` 8.69.0 and `jest` / `babel-jest` / `jest-environment-jsdom` 30.5.1
+
+mocha 12, and the pin it finally cleared.
+
++ the breaking changes that matter here are the node floor rising to ^20.19.0, yargs being replaced by node's `util.parseArgs`, and the root package.json becoming `"type": "module"`. The `--forbid-only` default now keys off `process.env.CI`, `--compilers` is gone, and `bin/_mocha` is removed
+  + the node floor is satisfied twice over: the repo runs node v24.15.0 and `engines.node` already declares `>=22.18.0`
+  + the CLI changes reach nothing. mocha is never invoked as a binary here; the only entry point is `require('mocha/mocha')` in `client/extension/src/test/suite/index.ts:2`, the prebuilt browser bundle, driven by `vscode-test-web`
++ **`"type": "module"` was the real risk and it is the one a green jest run cannot speak to.** `client/extension/jest.config.cjs:56` excludes the mocha suite, so jest never loads mocha at all. What exercises it is webpack, because `test/suite/index` is a build entry (`webpack.config.js:32`)
+  + verified by building rather than by reasoning: `test/suite/index.js` emits at 675 KiB and the sourcemap resolves `.pnpm/mocha@12.0.0`, so mocha 12 is genuinely bundled rather than silently dropped. The `ignoreWarnings` entry for mocha's dynamic `require()` still covers it unchanged
++ **`serialize-javascript` is unpinned, and this is the wave's one genuine unpin.** The override is removed because its rationale EXPIRED, not to tidy the file up and not as a risk taken: mocha 12 declares `^7.0.2` where mocha 11 declared `^6.0.2`, and mocha's `^6.0.2` was the whole reason the override existed. Nothing here should reinstate it defensively, and the evidence for that is in the bullet below rather than in this one
+  + the override was checked against every consumer, not just mocha. The root tree reaches serialize-javascript through exactly two parents, and `copy-webpack-plugin@14.0.0` already declared `^7.0.3`. `terser-webpack-plugin@5.6.1` dropped the dependency outright and no longer appears as a consumer, so the "webpack terser plugin" half of the old rationale is obsolete
+  + the `overrides:` block is gone from the root `pnpm-workspace.yaml` and from the regenerated lockfile header. All four lockfiles resolve `serialize-javascript@7.1.1` and nothing else, a single version, above the 7.0.5 advisory floor, with no 6.x anywhere
++ mocha 12 took its dependency stack with it: `diff` 7 -> 9, `workerpool` 9 -> 10, `strip-json-comments` 3.1.1 -> 5.0.3 and a second `js-yaml` at 5.4.1, while `camelcase`, `decamelize`, `is-plain-obj`, `log-symbols` and `yargs-unparser` left the root tree
+  + `yargs`, `yargs-parser` and `he` did NOT leave, despite mocha dropping both. Another root consumer still pulls them at the same versions, so this is a partial removal rather than the clean sweep the changelog implies
+
+eslint 10.9.1: notethink is the fleet's eslint 10 canary and it landed clean.
+
++ every other project in the workspace is held at eslint 9.39.4 because `eslint-plugin-react@7.37.5` ceilings at `^9.7` and `eslint-config-next` depends on it. notethink uses neither, so it carries no reject entry and takes eslint 10 unaided
++ 10.9.1 produced 0 errors and the same 6 pre-existing warnings as the last several waves. `@typescript-eslint/parser@8.68.0` peers `eslint ^8.57.0 || ^9.0.0 || ^10.0.0`, so the plugin side is explicitly ready
+
+`@types/vscode` 1.125 -> 1.134 is not a bump on its own, and `engines.vscode` moved with it.
+
++ `CODING_STANDARDS.md:793` requires the pair to move together: `vsce package` rejects a build whose `@types/vscode` exceeds `engines.vscode`, and it fails only at publish time, after `merge-main.sh` has already fast-forwarded `main`. Lint, jest, playwright and `/prod-ready` all miss it
++ the repo has been caught by exactly this three times (`358e44b`, `cb5192b`, `e786e14`) and resolved it the same way every time, by raising `engines.vscode`. `engines.vscode` is now `^1.134.0`, matching the types
++ **the cost is a raised support floor**: users below VS Code 1.134 can no longer install the extension. 1.134 is the current release, so the floor is now "current", which is a product consequence of the types bump rather than of anything in the code
++ **operator decision 2026-09-01: keep the raise.** `engines.vscode` is `^1.134.0` and `@types/vscode` was NOT pinned back down. The reach cost above was put to the operator and accepted deliberately rather than absorbed as a routine dependency edit
+  + the deciding factors were the lockstep rule at `CODING_STANDARDS.md:793`, the three prior commits that resolved the same mismatch the same way (`358e44b`, `cb5192b`, `e786e14`), and that a mismatch fails only at `vsce publish` - after `merge-main.sh` has already fast-forwarded `main`, which is the worst place to discover it
+  + verified before the decision rather than after: `vsce package --no-dependencies` clean at 35 files, no version-mismatch error, no pnpm config packaged
+  + anyone revisiting the extension's minimum supported version should start here. The floor was chosen, not inherited
++ checked rather than assumed this time: `vsce package --no-dependencies` runs clean, 35 files, no version-mismatch error and no pnpm config among the packaged files
++ `client/extension/package.json` still declares `engines.vscode: ^1.99.0`. It is a nested install root that vsce never reads, and it has sat below the root's floor through several waves, so it is left alone
+
+jest 30.5.0 added a native build script to all three nested install roots.
+
++ `jest-haste-map@30.5.0` now depends on `@parcel/watcher@2.6.0` where it previously used `fsevents` as a darwin-only optional. pnpm 11 turns an unapproved build script into a hard error, so the install failed three times in a row, once per nested root, each time writing a `'@parcel/watcher': set this to true or false` placeholder into that root's `pnpm-workspace.yaml`
++ all three are set `false`, matching the root's existing entry and its reasoning: `@parcel/watcher` resolves a prebuild on linux-x64-gnu and only falls back to compiling where none exists. The accompanying comment in each file now covers both entries rather than only `unrs-resolver`
++ `fsevents@2.3.3` correspondingly left `client/extension` and `client/webview`
++ **this applied to the three nested manifests here and nowhere else in the fleet.** The mechanism is general to jest 30.5.0 under pnpm 11, but every other manifest already carried a verdict when the wave checked: calfam, zooey, ledger, aawai and zahara are `true`; the notethink root, turbine and river are `false`. dulcet had no verdict and is now `false` too, so all nine packages are decided and a future wave has nothing left to find here. Do not read this entry as an outstanding fleet-wide action
+
+Regeneration: all four lockfiles, deletes before any install.
+
++ both lockfiles were removed for every root before any install ran, and the whole `node_modules` tree with them. Deleting the directory is a strict superset of deleting `node_modules/.pnpm/lock.yaml` and it sidesteps pnpm 11's `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` prompt, which has no usable non-interactive escape here
++ **gated on the diff, not on the install message.** `git diff --numstat` was non-empty for all four: root 391/446, extension 643/560, webview 763/684, notethink-views 876/761 lines added/removed
++ each of the three `@parcel/watcher` failures aborted the cascade part-way, so the roots that had already written a lockfile under the wrong config had it deleted again before the retry. No lockfile in the final tree was produced by a short-circuited install
++ `install --frozen-lockfile --ignore-scripts` passes on all four roots independently, run unpiped so the exit status is the install's own
++ no manifest range moved. Each package.json was diffed against a snapshot taken immediately after the ncu edits and all four came back byte-identical
+
+Security-relevant transitives after regeneration.
+
+| Package | root | client/extension | client/webview | notethink-views |
+|---|---|---|---|---|
+| dompurify | - | - | 3.4.14 | 3.4.14 |
+| mermaid | - | - | 11.17.2 | 11.17.2 |
+| postcss | 8.5.26 | - | 8.5.26 | 8.5.26 |
+| ws | - | - | 8.21.3 | 8.21.3 |
+| brace-expansion | 2.1.4, 5.0.9 | 2.1.4, 5.0.9 | 2.1.4, 5.0.9 | 2.1.4, 5.0.9 |
+| js-yaml | 4.3.2, 5.4.1 | 3.15.2 | 3.15.2 | 3.15.2 |
+| serialize-javascript | 7.1.1 | - | - | 7.1.1 |
+
++ `dompurify@3.4.14` is well clear of the stale `3.3.1` that carried 36 Dependabot alerts on this repo's webview lockfile, and `brace-expansion@1.1.18` has left every tree
++ pnpm 11.25 prints `Lockfile passes supply-chain policies` on install. That verifies publication AGE against the cooldown, not known vulnerabilities, and it is not a substitute for an advisory scan
+
+Transitive delta: 194 newly-taken versions across 191 distinct package names, and unlike the last two waves this one crosses majors.
+
++ root: 69 changed, 1 entered, 5 left, entries 749 -> 743. Majors are all mocha's own stack, listed above
++ `client/extension`: 68 changed, 19 entered, 13 left, entries 515 -> 520
++ `client/webview`: 88 changed, 20 entered, 15 left, entries 636 -> 640
++ notethink-views: 108 changed, 20 entered, 11 left, entries 858 -> 868
++ the nested majors are one cluster with one cause, jest 30.5.0's coverage and file-walking stack: `glob` 7.2.3 -> 13.0.6, `test-exclude` 6 -> 7, `babel-plugin-istanbul` 7 -> 8, `path-scurry` +2.0.2, `minimatch` 3.1.5 -> 10.2.6, `brace-expansion` 1.1.18 -> 5.0.9, `balanced-match` +4.0.4, `lru-cache` +11.5.2
+  + all of it is exercised: the three jest suites run 1698 tests through exactly this stack, and the webview and notethink-views bundles are additionally built by webpack and rollup
++ `@azure/core-process@1.0.0` is the root's one genuinely new package name, a new dependency of `@azure/identity@4.13.2` reached through `@vscode/vsce`. It entered because `@azure/identity` moved inside its existing caret range, not because anything here asked for it
++ `inflight@1.0.6` and `glob@7.2.3`, both flagged as deprecated transitives in the previous wave, have left all three nested trees outright
++ deprecation warnings during install named `glob@10.5.0`, `prebuild-install@7.1.3`, `whatwg-encoding@3.1.1` and `stable@0.1.8`. All four are present at the SAME version before and after, so none is a version this wave took
+  + checked positively rather than inferred from the warning text: all 194 newly-taken versions were queried against the registry and none carries a `deprecated` field. This is the check that caught `@testing-library/jest-dom@6.10.0` two waves ago
+
++ verified
+  + lint clean: 0 errors and the same 6 pre-existing warnings as the last several waves (one in `extension.ts`, two in `useAutoIntegration.test.ts`, the `SettingsKanbanDrawer` max-lines warning, two in playwright specs). All three tsc projects clean, which matters because both `@typescript-eslint` and `@types/vscode` moved
+  + jest 1698 green across 83 suites (248 extension + 136 webview + 1314 notethink-views), matching the recorded baseline exactly
+  + playwright 122 passed, which also clears the webpack build a second time since `test-playwright` builds before it runs
+  + `webpack` build clean and `rollup` clean. Both were run deliberately rather than as routine wave work: webpack is the ONLY thing that exercises mocha 12, and rollup moved a minor under a shifted babel and typescript stack
+  + `vsce package --no-dependencies` clean, 35 files, no `@types/vscode` mismatch and no pnpm config packaged
+  + not covered: a CI run. The workflows are untouched this wave and remain untested by anything local
+
+Pins in effect after this wave (snapshot):
+- `typescript` @^6.0.3 in the root and in notethink-views - structural - carried forward unchanged and re-verified against the live registry. `@typescript-eslint/parser@8.68.0` still peers `typescript >=4.8.4 <6.1.0` and `ts-jest@29.4.12` still peers `>=4.3 <7`, while TypeScript latest is 7.0.2. `--target minor` excludes 7.x on both manifests without needing a reject entry. Clear-condition unchanged: revisit when both peer ranges admit 7.x. The ts-jest half clears through the three nested manifests, not the root
+- `vscode-languageclient` @10.1.1 exact in `client/extension`, `eslint` @10.9.1, `@eslint/js` @10.0.1, `copy-webpack-plugin` @14.0.0, `@hello-pangea/dnd` @18.0.1 - pre-existing exact pins, all still exact, none blocking anything measured here. `eslint` and `vscode-languageclient` took their offered updates within the pin style they already had
+- `eslint` @10.9.1 - NOT a pin here, and worth stating because every other repo in the workspace is held at 9.39.4. The whole eslint 9 line is end-of-support, 9.39.5 included, so 10 is the only supported line and notethink is the only repo on it. The fleet is blocked by `eslint-config-next`, not by `eslint-plugin-react` as the older records claimed: it lints through `next/dist/compiled/babel/eslint-parser`, whose scopeManager comes from eslint-scope 8.4.0 and has no `addGlobals`, which eslint 10's `SourceCode.finalize` calls, so linting dies on every file before a single rule runs. notethink uses neither package, which is why it is ahead of the fleet by construction rather than by luck, and why a green run here is not evidence the others can follow
+- `@parcel/watcher`, `@playwright/browser-chromium`, `@vscode/vsce-sign`, `keytar` in the root, and `@parcel/watcher` + `unrs-resolver` in each of the three nested roots - all `allowBuilds: false` - structural. `@playwright/browser-chromium` must stay false permanently, since its build script pulls roughly 167MB of Chrome and hangs CI to the 6h timeout. The three nested `@parcel/watcher` entries are new this wave, added because jest 30.5.0 introduced the dependency; they clear only if a platform without a prebuild ever needs them
+- `engines.vscode` @^1.134.0 - not a dependency pin but a paired constraint, and the one that breaks a release rather than a build. It must be raised to match on every `@types/vscode` bump, or `@types/vscode` pinned back down. See `CODING_STANDARDS.md:793`. Raised this wave by operator decision on 2026-09-01, knowingly accepting that the minimum supported VS Code is now the current release
+- `@typescript-eslint/*` @8.68.0 and `jest` / `babel-jest` / `jest-environment-jsdom` @30.5.0 - not pins, cooldown ceilings. 8.69.0 and 30.5.1 both exist and were withheld by `--cooldown 24h`; both clear by themselves on the next wave
+- retired this wave: the `web-vitals` @6.1.0 cooldown ceiling, cleared to 6.2.1 exactly as its recorded clear-condition predicted
+
+Unpinned this wave: `serialize-javascript`, whose `^7.1.0` override is removed from the root `pnpm-workspace.yaml`. It was recorded as a pin to be MAINTAINED rather than removed, with the clear-condition "mocha widens to ^7", and mocha 12 is that widening. Every consumer was re-checked rather than only the one named in the clear-condition, which turned up a second reason it was already safe: `terser-webpack-plugin` has dropped the dependency entirely and `copy-webpack-plugin@14.0.0` had already moved to `^7.0.3`. Three new `allowBuilds: false` entries were added, one `@parcel/watcher` per nested root, and one cooldown ceiling was retired.
+
++ [X] run npm-check-updates across all four manifests
++ [X] revisit prior pins (try to unpin transient holds recorded in the last done.md story)
++ [X] upgrade mocha 11 to 12
++ [X] pnpm install
++ [X] regenerate all four lockfiles and verify no manifest range moved
++ [X] verify lint passes
++ [X] verify jest tests pass
++ commit message draft
+  + notethink 0.3.47: minor/patch wave across all four manifests, all four lockfiles regenerated, taking mocha 12, eslint 10.9.1, pnpm 11.25.0 and jest 30.5.0; mocha 12 retires the serialize-javascript override, engines.vscode raised to ^1.134.0 to match @types/vscode, @parcel/watcher approvals added; tests 1698 jest, 122 playwright

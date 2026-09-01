@@ -1,24 +1,19 @@
-# package.json pins pnpm@11.21.0, and pnpm 11 no longer reads the "pnpm" field in package.json at all -
-# it warns once and ignores every key under it. This file is where those settings now live, so the
-# override below is the same one that used to sit in package.json under pnpm.overrides.
+# pnpm 11 does not read the "pnpm" field in package.json at all - it warns once and ignores every key
+# beneath it - so every pnpm setting this repo needs lives here instead.
 #
-# mocha declares serialize-javascript ^6.0.2 and the advisory is patched only from 7.0.5, so no fix
-# exists anywhere on the 6.x line and the range can never reach one. Forcing ^7.1.0 is what closes it.
-# Devtool-only either way: serialize-javascript is reached through mocha and the webpack terser plugin,
-# neither of which is bundled into the published extension. The nested three do not need the override -
-# extension and webview never resolve the package, and notethink-views already reaches 7.1.0 unaided.
+# There are no `overrides`. The only consumers of serialize-javascript in this tree are mocha, which
+# declares ^7.0.2, and copy-webpack-plugin, which declares ^7.0.3, so both reach a patched 7.x without
+# being forced. Re-add an override only if a dependency reintroduces a range that cannot reach one.
 #
 # The mere existence of this file makes notethink a pnpm workspace root, so each of the three nested
 # install roots carries its own pnpm-workspace.yaml to stop `pnpm install` there walking up to this
-# one. Without that, a nested install resolves this root instead of itself and re-runs the postinstall
-# below, which installs the nested directory again - unbounded, a fork bomb rather than a slow install.
-# The three nested manifests pin packageManager for the same reason: they are separate install roots
-# and do not inherit this one's pin.
+# one. Without that, a nested install resolves this root instead of itself and re-runs the root
+# postinstall, which installs the nested directory again - unbounded, a fork bomb rather than a slow
+# install. The three nested manifests pin packageManager for the same reason: they are separate
+# install roots and do not inherit this one's pin.
 #
-# There is deliberately no `packages:` key. The four manifests stay four independent install roots with
-# four lockfiles, exactly as before; folding them into one real workspace is a separate piece of work.
-overrides:
-  serialize-javascript: ^7.1.0
+# There is deliberately no `packages:` key. The four manifests are four independent install roots with
+# four lockfiles; folding them into one real workspace is a separate piece of work.
 
 # allowBuilds is the only build-approval key pnpm 11 reads. Every entry is false because none of these
 # build scripts has ever run in this repo: under pnpm 10 no approval key existed, so all were skipped,

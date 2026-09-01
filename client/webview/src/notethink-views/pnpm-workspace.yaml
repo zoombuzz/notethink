@@ -4,11 +4,12 @@
 # postinstall - which installs this directory again, unbounded. pnpm stops the upward walk at the
 # nearest workspace file, so this one ends it here.
 #
-# allowBuilds is the only build-approval key pnpm 11 reads. unrs-resolver is listed false because its
-# build script has never run in this repo: under pnpm 10 no approval key existed, so every build was
-# skipped and lint and jest have been green that way for many waves. On linux-x64-gnu the prebuilt
-# optional dependency is used and the build script is only a fallback. pnpm 11 turns an unapproved
+# allowBuilds is the only build-approval key pnpm 11 reads. Both entries are false because neither
+# build script has ever run in this repo: under pnpm 10 no approval key existed, so every build was
+# skipped and lint and jest have been green that way for many waves. On linux-x64-gnu each resolves a
+# prebuilt optional dependency and the build script is only a fallback. pnpm 11 turns an unapproved
 # build script into a hard error rather than a warning, so the existing behaviour now has to be stated
-# rather than left implicit. Flip it to true if a platform without a prebuild ever needs it.
+# rather than left implicit. Flip one to true if a platform without a prebuild ever needs it.
 allowBuilds:
+  '@parcel/watcher': false
   unrs-resolver: false

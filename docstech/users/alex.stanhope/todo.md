@@ -3,22 +3,31 @@
 
 ### View settings drawer: view tree and inherited settings [](?id=view-settings-tree-drawer)
 
-The deep integration [[drawer-tabs-and-jump-integration]] deliberately left alone (it landed the thin move: the view-type `<select>` into `SettingsCommonControls.tsx:48`, tab titled by resolved type). This is the real thing: the drawer becomes a two-pane selector + settings, per the picked mockup variant (`docstech/plans/view-settings-mockup.html`). FAST-FOLLOW, not in the first build push - it waits on the pane-design pick and on the functional stories landing.
+The deep integration [[drawer-tabs-and-jump-integration]] deliberately left alone (it landed the thin move: the view-type `<select>` into `SettingsCommonControls.tsx:48`, tab titled by resolved type). This is the real thing: the drawer becomes a two-pane view tree + settings. FAST-FOLLOW, not in the first build push - it waits on the pane-design pick and on the functional stories landing.
 
 + goal
   + the drawer presents the view hierarchy as a selector (left) and the selected view's settings (right)
-  + selecting a view switches to it; settings are organised by what they do, with inherited/fixed as quiet signals, not by owner
+  + the tree is the selector and the settings pane separates what the selected view owns from what it inherits
   + a setting a view inherits and pins reads as fixed, naming the view that unlocks it (kanban group-by -> Line)
 + background
-  + selecting a view IS switching to it, so selected == active and the right pane keys off `props.type` as today
+  + clicking a node and switching to it are now two different acts: `root` and `grouped` own settings but cannot render, so clicking them focuses their settings while the board keeps rendering
+  + `selectable` is doing both jobs today and wants splitting into `selectable` (switchable) and `configurable` (has settings to show); `unlockingViewOnChain` assumes the conflated meaning
+  + `root` is where the settings that reach every view belong - the six generic ones - so it needs a display label; "All views" is the working name
+  + `orientation` homes at line and the board honours it (`LineView.tsx:77`), but no drawer renders it for kanban, so it is currently unreachable
   + the settings drawer already dispatches per view type (`GenericViewToolbar.tsx:142,161`) with a shared `SettingsCommonControls` - the tiering exists, it is only flat
   + `role="tree"` appears exactly ONCE in the webview (`JumpDrawer.tsx:48`): hand-rolled inline, root plus one level, CSS-only indent, no recursion - there is no reusable tree, it has to be extracted
   + `.drawerLink` / `.drawerList` ARE already shared; only the tree glyph/indent pattern is unique to Jump
-  + the four candidate pane layouts are in `docstech/plans/view-settings-mockup.html`; pick one before building
+  + the pane must distinguish settings owned by the selected view from settings owned by an ancestor
+    + four candidates, differing only in how inherited settings appear
+    + A hidden: the pane shows only what this node owns, with a footer naming the owners and counts
+    + B read-only: inherited settings shown below in an owner-grouped block, disabled, each with a jump to its owner
+    + C editable: same block, live controls, headed by a line stating that a change reaches other views
+    + D side by side: owned settings left, inherited right, so neither pushes the other down
+    + B and D separate most clearly; A buries the six most-used settings; C is the weakest separation
 + scope
   + extract the `jumpTree*` glyph + indent pattern into a shared recursive tree component
   + repoint JumpDrawer at it with no behaviour change
-  + render the registry's selectable views in the left pane; abstract nodes (grouped) appear as category labels, not clickable rows; future rungs dimmed
+  + render the whole registry in the left pane, `root` and `grouped` included and clickable for their settings; future rungs dimmed
   + move the view-type selector out of `SettingsCommonControls`
   + render the selected view's effective settings in the picked organisation; inherited-and-fixed settings read as fixed with the unlocking view named, editable the instant that view is selected
 + out of scope
@@ -30,10 +39,10 @@ The deep integration [[drawer-tabs-and-jump-integration]] deliberately left alon
   + `client/webview/src/notethink-views/src/components/views/SettingsCommonControls.tsx` - selector leaves
   + `client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx` - two-pane drawer body
   + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` - tree + two-pane classes
-+ [ ] pick the pane variant from the mockup and record it here
++ [ ] pick how inherited settings appear (A to D in background) and record the choice here
 + [ ] extract the shared recursive tree component from JumpDrawer's inline markup
 + [ ] repoint JumpDrawer at it with no behaviour change
-+ [ ] render the registry's selectable views in the left pane; grouped as a label, future rungs dimmed
++ [ ] render the whole registry in the left pane, root and grouped clickable for their settings, future rungs dimmed
 + [ ] move the view-type selector out of `SettingsCommonControls`
 + [ ] render inherited-and-fixed settings as fixed, naming the unlocking view
 + [ ] jest: the tree renders the registry hierarchy; abstract nodes are non-selectable

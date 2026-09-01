@@ -140,6 +140,20 @@ function determineVisibility(note: NoteProps): boolean {
 }
 ```
 
+## Cruft that only makes sense on one machine
+
+`zoombuzz/notethink` is public and ships as a VS Code extension, so the people reading it next are contributors and users who have none of the tooling any given author happened to be using. A reference that resolves only in one person's setup does not fail loudly for them - it reads as noise, or worse as a lead they follow and lose time on. This is not a hard rule and nothing here wants auditing or sweeping. It is a category of clutter that accumulates one harmless-looking line at a time, and the cost lands on whoever reads the file a year later.
+
+**The test is one question: would this line still mean something to someone who has just cloned the repo?**
+
+Three tiers, roughly in order of what they cost:
+
+- **Pointers nobody else can follow.** A link to a hosted page only the author's account can open, a path under `~/.claude/`, a session scratchpad directory, a workstation hostname, an absolute path out of one person's home directory. The reader hits a wall, or more often quietly concludes the project is missing a document. **The fix is nearly always to say the thing rather than point at it**: where a design exploration or a scratch document produced a decision, the decision belongs in the story or the comment, written out in full, and the exploration can live wherever it lives without being named here.
+- **Residue of how the work got done.** Prose describing the process rather than the outcome: which tool ran what, that a copy was made somewhere to check something, how many attempts it took. Individually harmless, and it reads oddly in a repo where every other line is about the product. Record what was decided and what it means; the method earns its place only when a future reader would have to repeat it.
+- **Naming the tooling as a fact of the world, which is fine.** `DEFAULT_EXCLUDE_FILTER` in `client/extension/src/constants.ts` excludes `.claude` because agent worktrees mirror the repo tree and would otherwise duplicate every story in a folder view. That is product behaviour serving a real user, explained in terms of what the user sees, and it should stay exactly as it is. Naming a tool is not the problem; depending on the reader having it is.
+
+Two things this deliberately does not cover. **Agent instruction files are agent instruction files** - this file, `CLAUDE.md` and `CODING_STANDARDS.md` exist to describe how the work gets done, and a contributor who ignores them loses nothing. And **the sanitised absolute paths in the tests are the pattern working**: `playwright/specs/breadcrumb.spec.ts` and `BreadcrumbTrail.test.tsx` use `/mnt/secure/home/dev/git/github.com/in_development`, realistic enough to exercise the path logic and belonging to nobody. A fixture path should look like a real path without being anyone's real path.
+
 ## Debug Logging
 
 Use the `debug` library for logging. Each module should create its own debug instance:

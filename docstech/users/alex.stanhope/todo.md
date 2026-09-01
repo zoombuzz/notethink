@@ -374,7 +374,7 @@ The view-hierarchy half of this story was split out to [[line-view]] on 2026-07-
   + parent_context and breadcrumb_trail for navigation
 
 
-### Optimisation review 2026-07
+### Optimisation review 2026-07 for notethink
 
 Systemic findings from a deep multi-agent optimisation review (scout + 5 dimension reviewers + synthesis + per-item adversarial verification against the code, 2026-07). The review independently converged on the existing kanban perf cycle and verified its premises at specific sites; the tasks below are the additional findings not already scoped there.
 

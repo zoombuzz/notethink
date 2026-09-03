@@ -2,7 +2,7 @@
 
 This document defines the coding standards for the NoteThink project. **It is the authoritative rulebook: read it end-to-end at the start of any session that touches `notethink`, and re-read the relevant section before any high-consequence action (commit, push, merge, version bump, refactor, new-file placement) rather than recalling from memory.** Don't grep for keywords mid-task in place of reading it, and don't fall back to training-data defaults when a rule seems missing - if an expected rule is absent, flag the gap and ask whether to add it here. Memory files are thin pointers into this document; if a rule belongs anywhere, it belongs here.
 
-**Workspace-wide process** (story state machine and tracking format, version bumps, commit policy, git workflow, who drives shipping, the never-write-with-git rule, releaseable-state gate, test-failure discipline, edit verification, browser-snapshot cleanup) lives in [`../AGENTS.md`](../AGENTS.md).
+**Workspace-wide process** (story state machine and tracking format, version bumps, commit policy, git workflow, who drives shipping, the never-write-with-git rule, releaseable-state gate, test-failure discipline, edit verification, dev-server lifecycle, browser-snapshot cleanup) lives in [`../AGENTS.md`](../AGENTS.md).
 
 **Shared coding standards** live in `lightenna-iac/docstech/standards/` ([index](../lightenna-iac/docstech/standards/README.md)). Read the one that matches the work:
 
@@ -164,30 +164,11 @@ Each was a real user-visible bug, each looked like a caching or scrolling proble
 
 ### Import Grouping
 
-Organize imports in this order. Where a webview file carries `import Debug from "debug"`, it conventionally leads the list, above React, even though `debug` is otherwise an external dependency; [`LOGGING.md`](../lightenna-iac/docstech/standards/LOGGING.md) imposes no position mandate, so this is house convention rather than a requirement:
+Import grouping is **freeform** workspace-wide (operator decision 2026-06-10). Only the positional rules hold: a directive first, then `import 'server-only';`, then everything else, with one `import` statement per module. See [`CODE_LAYOUT.md`](../lightenna-iac/docstech/standards/CODE_LAYOUT.md) > Import organisation, which also says why a prescribed grouping order must not be reintroduced here.
 
-```typescript
-// 0. Debug, where the file carries one
-import Debug from 'debug';
-// 1. React and framework imports
-import React, { useState, useEffect, useCallback } from 'react';
-// 2. External dependencies (alphabetized)
-import { marked } from 'marked';
-// 3. UI framework / component library
-import { Button, Modal } from '@zoombuzz/notethink-views';
-// 4. Internal utilities and libraries
-import { generateIdentifier } from '@/lib/crypto';
-import { parseMarkdown } from '@/lib/parseops';
-// 5. Types (prefer type-only imports)
-import type { NoteProps } from '@/types/NoteProps';
-import type { ViewProps } from '@/types/ViewProps';
-// 6. Components (local, relative paths)
-import DocumentView from './DocumentView';
-import GenericNote from '../notes/GenericNote';
-// 7. Styles
-import styles from './Component.module.scss';
-import './global.css';
-```
+One house convention, not a requirement: where a webview file carries `import Debug from "debug"`, it leads the list, and [`LOGGING.md`](../lightenna-iac/docstech/standards/LOGGING.md) imposes no position mandate either way.
+
+> **Correction, 2026-09-02.** This section prescribed an eight-tier grouping order with a worked example, which CODE_LAYOUT.md retired on 2026-06-10 and asks project docs not to reintroduce.
 
 ## Code Style
 
@@ -667,6 +648,10 @@ function parseConfig(json: string): Config | null {
     }
 }
 ```
+
+## Security
+
+notethink has no server-side component, no database and no user accounts, so the auth, server-action and RLS sections of [`SECURITY.md`](../lightenna-iac/docstech/standards/SECURITY.md) do not apply. Its environment-variable rules do, for the build and publish scripts: never put a secret in `argv` or in a committed file. Anything the extension writes to a user's `settings.json` is public by construction (see Naming Conventions > config keys).
 
 ## Testing Standards
 

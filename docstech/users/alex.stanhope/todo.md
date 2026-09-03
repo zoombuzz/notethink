@@ -1,64 +1,156 @@
 # Todo [](?nt_view=kanban)
 
 
-### View settings drawer: view tree and inherited settings [](?id=view-settings-tree-drawer)
+### Unify how settings persist [](?id=settings-persistence-unify&status=doing)
 
-The deep integration [[drawer-tabs-and-jump-integration]] deliberately left alone (it landed the thin move: the view-type `<select>` into `SettingsCommonControls.tsx:48`, tab titled by resolved type). This is the real thing: the drawer becomes a two-pane view tree + settings. FAST-FOLLOW, not in the first build push - it waits on the pane-design pick and on the functional stories landing.
+Three mechanisms sit behind controls that look identical, so the drawer cannot honestly say how many settings differ from their defaults. This gates [[view-settings-tree-drawer]]: the diverged marker, the count and both default actions all need one comparison and one write path.
 
 + goal
-  + the drawer presents the view hierarchy as a selector (left) and the selected view's settings (right)
-  + the tree is the selector and the settings pane separates what the selected view owns from what it inherits
-  + a setting a view inherits and pins reads as fixed, naming the view that unlocks it (kanban group-by -> Line)
+  + every setting the settings drawer renders reads and writes through one mechanism
+  + "diverged from its default" is computable for every one of them
+  + promote and revert act on everything the drawer shows, not on a subset
 + background
-  + clicking a node and switching to it are now two different acts: `root` and `grouped` own settings but cannot render, so clicking them focuses their settings while the board keeps rendering
-  + `selectable` is doing both jobs today and wants splitting into `selectable` (switchable) and `configurable` (has settings to show); `unlockingViewOnChain` assumes the conflated meaning
-  + `root` is where the settings that reach every view belong - the six generic ones - so it needs a display label; "All views" is the working name
-  + `orientation` homes at line and the board honours it (`LineView.tsx:77`), but no drawer renders it for kanban, so it is currently unreachable
-  + the settings drawer already dispatches per view type (`GenericViewToolbar.tsx:142,161`) with a shared `SettingsCommonControls` - the tiering exists, it is only flat
-  + `role="tree"` appears exactly ONCE in the webview (`JumpDrawer.tsx:48`): hand-rolled inline, root plus one level, CSS-only indent, no recursion - there is no reusable tree, it has to be extracted
-  + `.drawerLink` / `.drawerList` ARE already shared; only the tree glyph/indent pattern is unique to Jump
-  + the pane must distinguish settings owned by the selected view from settings owned by an ancestor
-    + four candidates, differing only in how inherited settings appear
-    + A hidden: the pane shows only what this node owns, with a footer naming the owners and counts
-    + B read-only: inherited settings shown below in an owner-grouped block, disabled, each with a jump to its owner
-    + C editable: same block, live controls, headed by a line stating that a change reaches other views
-    + D side by side: owned settings left, inherited right, so neither pushes the other down
-    + B and D separate most clearly; A buries the six most-used settings; C is the weakest separation
+  + `client/extension/src/lib/settings.ts` holds `SETTINGS`, the canonical map of path, default, `inCascade` and owning registry `node`
+  + `handlePromoteSettings` iterates `cascadeKeys()`, so only `inCascade: true` keys are ever promoted
+  + `inCascade: false` keys write straight to a fixed target from `GLOBAL_SETTING_TARGETS`
+    + `showLineNumbers` writes to Workspace
+    + `watchUnopenedFilesInViewer`, `kanbanAnimateTransitions` and `openNewEditorIfNoneOpen` write to Global
+  + `showLinetagsInHeadlines`, `scrollNoteIntoView` and `autoExpandFocusedNote` are absent from `SETTINGS` and live only in per-session viewState
+  + precedence today is viewState override, then the extension cascade, then the webview built-in default
+  + so three drawer controls can never be promoted or reverted, and four more already sit at their final layer
 + scope
-  + extract the `jumpTree*` glyph + indent pattern into a shared recursive tree component
-  + repoint JumpDrawer at it with no behaviour change
-  + render the whole registry in the left pane, `root` and `grouped` included and clickable for their settings; future rungs dimmed
-  + move the view-type selector out of `SettingsCommonControls`
-  + render the selected view's effective settings in the picked organisation; inherited-and-fixed settings read as fixed with the unlocking view named, editable the instant that view is selected
+  + declare the three viewState-only settings in `SETTINGS` with a default and an owning node
+  + settle one write-target policy and apply it to every key rather than per key
+  + widen promote and revert to every `SETTINGS` key the drawer renders
+  + expose a per-key diverged result the webview can render
 + out of scope
-  + changing which settings exist, or their values
-  + the other drawers' contents
+  + the drawer's layout, which is [[view-settings-tree-drawer]]
+  + changing any setting's default value
+  + the include and exclude filters, which the Files drawer owns
++ delivered in passing
+  + `notethink.toggleLineNumbers` was writing `notethink.showLineNumbers`, an undeclared key nothing reads; it now goes through `writeSetting`
+  + `showContextBars` is retired entirely - no renderer ever consumed it, so its config key, command, menu entry and orphaned `.contextBar` CSS are gone
+  + the webview no longer holds an optimistic copy of a setting, so a control shows its old value for the frame between the click and the extension's echo; the specs assert with a retrying expect rather than `.check()`
++ files
+  + `client/extension/src/lib/settings.ts` - the map, plus a diverged-from-default helper
+  + `client/extension/src/vscode/PanelSession.ts` - promote, reset, and the per-setting write target
+  + `client/webview/src/lib/composerops.ts` - precedence, once viewState is no longer a separate tier
+  + `client/webview/src/notethink-views/src/types/Messages.ts` - cascade payload carries the per-key diverged flags
++ [X] declare the three viewState-only settings in `SETTINGS` with defaults and owning nodes
+  + `groupBy` was a fourth control with the same defect, so it went in too, and the drawer's `?? false` for `scrollNoteIntoView` was correcting a default the running code already had as `true`
+  + `orientation`, `kanbanGroupBy` and `cardType` joined at the same time, since the drawer renders them in [[view-settings-tree-drawer]] and [[view-hierarchy-and-card-types]]
++ [X] settle and apply one write-target policy across every key
+  + every key writes Workspace as the user changes it and promotes to User on save; `editTarget()` falls back to User in a folderless window, where a Workspace write throws
+  + `inCascade`, `cascadeKeys()`, `GLOBAL_SETTING_TARGETS`, `updateGlobalSetting` and the `globalSettings` message are all gone - one message each way
++ [X] widen promote and revert to every key the drawer renders
++ [X] add a diverged-from-default helper and carry its result in the cascade payload
+  + diverged means "differs from the saved default", the User value when set and the built-in otherwise, so both default actions drive the count to zero
++ [X] jest: every key the drawer renders reports a diverged flag
++ [X] jest: a key at its default reports not diverged, and an override reports diverged
++ [X] jest: promote covers every drawer key and the diverged count falls to zero afterwards
++ [X] jest: revert clears the override and restores the default for each kind of key
++ [X] jest: no `SETTINGS` key lacks a default, and no key the drawer renders is unreachable by promote
+  + written as jest, not mocha: `client/extension/src/test/suite/**` is excluded by `jest.config.cjs` and run by no script in the repo, so a mocha test would never execute
++ [X] `pnpm run check` green
+  + 1809 jest across three projects and 129 playwright, lint 0 errors
++ manual: toggle each control, reload the window, and confirm each value survives as the settled policy says
++ acceptance criteria
+  + one write path and one comparison serve every setting the drawer shows
+  + a count of diverged settings is derivable with no special cases
+  + no drawer control is silently excluded from promote or revert
+
+
+### View settings tab: type tree and aligned rows [](?id=view-settings-tree-drawer&status=doing)
+
+The drawer becomes two panes: the view-type tree on the left, that type's settings on the right in four aligned columns. Depends on [[settings-persistence-unify]] for the diverged marker and the default actions. The card half is [[view-hierarchy-and-card-types]].
+
++ goal
+  + the view-type registry renders as a tree, and the tree is how a view type is chosen
+  + settings read most-specific-first, so the nearest and most-used sit at the top
+  + a setting's owning type is visible without being loud, and decides whether changing it offers a new type
++ background
+  + `role="tree"` appears once in the webview (`JumpDrawer.tsx`), hand-rolled with no recursion, so a shared tree has to be extracted
+  + `viewregistryops.ts` already carries the hierarchy, each setting's home node, and the fixed and open override modes
+  + `settings.ts` already carries an owning `node` per key, which is what the right-hand pill renders - no second table is needed
+  + `orientation` homes at line and the board honours it (`LineView.tsx:77`), but no drawer renders it, so it is unreachable today
+  + `showContextBars` is declared in `SETTINGS` with node root and likewise has no control anywhere
+  + clicking a node and switching to it are two different acts, since `root` and `grouped` own settings but cannot render
+  + `selectable` is doing both jobs and wants splitting into `selectable` (switchable) and `configurable` (has settings)
++ scope - the tree
+  + extract the `jumpTree*` glyph and indent pattern into a shared recursive component, and repoint JumpDrawer at it
+  + render the whole registry, `root` labelled "All views" and `grouped` included, both clickable for their settings
+  + carry two independent marks per row: a radio for the type the board renders, a highlight for the type whose settings show
+  + give a radio only to types that can render, so abstract nodes read as settings-only
+  + show a per-node count of the settings that node owns, and keep future rungs dimmed
++ scope - the settings pane
+  + lay every row out as four aligned columns: marker, name, control, owning-type pill
+  + order rows most-specific-first - Kanban, then Line, then Grouped, then All views
+  + head the columns "View settings" and "View type"
+  + group settings belonging to no view type under a "Global settings" heading, and give them no pill
+  + mark a diverged row with an M in `gitDecoration.modifiedResourceForeground`, light `#895503` and dark `#E2C08D`
+  + tint the diverged row's label to the same colour, matching how the VS Code explorer treats a modified filename
+  + retire the view-type `<select>` from `SettingsCommonControls`, since the tree is the selector
+  + add the missing controls for `orientation` and `showContextBars`
+  + make Group by editable here by writing a kanban-level open override rather than changing the ancestor
++ scope - defaults and divergence
+  + replace the three cascade buttons with a collapsed "Change defaults" holding "Save as default" and "Revert to defaults"
+  + state the count as "N settings diverged from the defaults and already saved"
+  + offer "Save as a new view type" only when the changed setting's pill names a type above the selected one
+    + resolved 2026-09-03: this bullet and the jest bullet below contradicted each other over All views, and the jest bullet won - root owns the generic settings every view inherits, so changing one is a preference rather than a new type. Root is exempt; every other ancestor offers
+  + prompt for a name on save, pre-filled with the type plus what changed, for example "Kanban by Assignee"
++ out of scope
+  + the card-type tab and card settings, which are [[view-hierarchy-and-card-types]]
+  + one write path for every setting, which is [[settings-persistence-unify]]
+  + moving the Global settings into the Files drawer
 + files
   + new `client/webview/src/notethink-views/src/components/views/drawers/DrawerTree.tsx` - shared, recursive
   + `client/webview/src/notethink-views/src/components/views/drawers/JumpDrawer.tsx` - repoint at it
-  + `client/webview/src/notethink-views/src/components/views/SettingsCommonControls.tsx` - selector leaves
-  + `client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx` - two-pane drawer body
-  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` - tree + two-pane classes
-+ [ ] pick how inherited settings appear (A to D in background) and record the choice here
-+ [ ] extract the shared recursive tree component from JumpDrawer's inline markup
-+ [ ] repoint JumpDrawer at it with no behaviour change
-+ [ ] render the whole registry in the left pane, root and grouped clickable for their settings, future rungs dimmed
-+ [ ] move the view-type selector out of `SettingsCommonControls`
-+ [ ] render inherited-and-fixed settings as fixed, naming the unlocking view
-+ [ ] jest: the tree renders the registry hierarchy; abstract nodes are non-selectable
-+ [ ] jest: selecting a tree node switches the view
-+ [ ] jest: kanban shows group-by fixed to status; selecting Line unlocks it
-+ [ ] playwright: the jump drawer's tree is unchanged after the extraction
-+ [ ] playwright: open View settings, select Line, group-by becomes editable
-+ [ ] `pnpm run check` green
-+ manual: confirm the view tree reads consistently with the jump drawer's tree
-+ manual: in kanban, confirm group-by shows status fixed and it is obvious Line unlocks it
-+ manual: select Line and confirm the board does not change until an option is changed
+  + `client/webview/src/notethink-views/src/components/views/drawers/SettingsKanbanDrawer.tsx` - the two-pane body
+  + `client/webview/src/notethink-views/src/components/views/SettingsCommonControls.tsx` - selector leaves, rows become four-column
+  + `client/webview/src/notethink-views/src/lib/viewregistryops.ts` - split `selectable` from `configurable`
+  + `client/webview/src/notethink-views/src/components/ViewRenderer.module.scss` - tree, pane and row classes
++ [X] extract the shared recursive tree component from JumpDrawer's inline markup
++ [X] repoint JumpDrawer at it with no behaviour change
+  + `JumpDrawer.test.tsx` was not edited and its 8 tests still pass, which is the proof the extraction preserved behaviour
++ [X] split `selectable` from `configurable` in the registry and update `unlockingViewOnChain`
+  + `unlockingViewOnChain` reads `configurable`: it answers where a setting is editable, and the tree offers a node's settings whether or not the board can render it
++ [X] render the whole registry in the left pane with per-node owned-setting counts
++ [X] carry the radio and the highlight as two independent marks
+  + the radio switches the board, the highlight moves the pane; clicking an abstract node moves only the highlight, which is what makes root and grouped usable
++ [X] lay the settings pane out as four aligned columns with the owning-type pill
++ [X] order rows most-specific-first and head the columns "View settings" and "View type"
++ [X] group pill-less settings under a "Global settings" heading
++ [X] render the M marker and the label tint for a diverged setting
+  + the count is of M-marked rows rather than of `diverged.length`, so a diverged Files-drawer setting that renders no row here is not counted
++ [X] remove the view-type select and add the control for `orientation`
+  + `showContextBars` was the other half of this task and is retired instead: no renderer ever consumed it, so a checkbox would have done nothing
++ [X] make Group by editable via a kanban-level open override
+  + the row is one setting spelled by two keys, collapsing to whichever is homed deepest, so it writes `kanbanGroupBy` from a kanban board and the ancestor's key from anywhere above
++ [X] replace the cascade buttons with the collapsed "Change defaults" pair
+  + the Files drawer keeps `SettingsCascadeButtons` untouched, which is where the built-in restore stays reachable
++ [X] offer "Save as a new view type" on an ancestor-owned change, with a pre-filled name prompt
+  + saving mints a real selectable type: it persists to `view.userTypes`, the registry merges it into the tree, and GenericView resolves its component by walking the minted node's chain
++ [X] jest: the tree renders the registry hierarchy and abstract nodes carry no radio
++ [X] jest: clicking an abstract node shows its settings and leaves the rendered view alone
++ [X] jest: rows sort most-specific-first and each carries its owning type
++ [X] jest: an ancestor-owned setting offers a new view type, and one owned by the node or by All views does not
++ [X] jest: changing Group by from kanban writes a kanban override and leaves Line alone
++ [X] jest: the diverged count equals the number of M-marked rows
++ [X] playwright: the jump drawer's tree is unchanged after the extraction
+  + `breadcrumb-jump.spec.ts` and `JumpDrawer.test.tsx` both pass unedited, which is the evidence the extraction preserved behaviour
++ [X] playwright: open the view settings tab, change Group by, and the new-view-type offer appears
++ [X] playwright: change Column order and confirm no offer appears
++ [X] playwright: toggle a Global setting and confirm no offer appears
++ [X] playwright: expand "Change defaults", save as default, and the diverged count falls to zero
++ [X] `pnpm run check` green
+  + 1844 jest across three projects and 133 playwright, lint 0 errors
++ manual: compare the M colour against a modified file in the VS Code explorer side by side
++ manual: confirm the name and control columns stay aligned at the narrowest usable drawer width
 + acceptance criteria
-  + no view-type `<select>` remains; the selector is the tree
+  + no view-type `<select>` remains, and the tree is the selector
   + the view tree and the jump tree render from one component
-  + a fixed setting names the view that unlocks it, and unlocks on selecting it
-  + settings read by what they do, not by which node owns them
+  + every row shows its owning type, or no pill when it belongs to none
+  + the new-view-type offer follows the pill and needs no per-setting list
 
 
 ### Kanban perf harness and budgets [](?id=kanban-perf-harness)
@@ -274,7 +366,7 @@ mdast parse costs 0.6ms/KB on the extension host: each debounced keystroke on a 
 + [ ] write the markdown-rs/WASM spike task with go/no-go criteria (mdast position-compatibility, payload parity, measured speedup >= 3x) as a follow-up candidate for the user to green-light
 
 
-### Per-view card-type axis [](?id=view-hierarchy-and-card-types)
+### Per-view card-type axis [](?id=view-hierarchy-and-card-types&status=doing)
 
 The view-hierarchy half of this story was split out to [[line-view]] on 2026-07-17: it gates the view programme, this card axis does not, and bundling them was blocking the gate. What remains is the orthogonal card-type axis, which now stands alone and can run any time after [[view-registry]] (each view declares its default card type, which is a registry entry).
 
@@ -314,16 +406,34 @@ The view-hierarchy half of this story was split out to [[line-view]] on 2026-07-
   + `client/webview/src/notethink-views/src/components/views/AutoView.tsx` - majority-vote card type alongside view type
   + `client/webview/src/notethink-views/src/lib/mergeAggregateRoot.ts` - capture `nt_card` from file H1 → `origin.file_card_type`
   + `client/webview/src/notethink-views/src/types/NoteProps.ts` - `card_type?: string` on `NoteDisplayOptions`; `file_card_type?: string` on `NoteOrigin`
-+ [ ] introduce `CardRegistry` with `card` (existing `MarkdownNote`) + `sticky` (new `StickyNote`)
-+ [ ] add `nt_card` linetag parsing in `mergeAggregateRoot`; capture on `origin.file_card_type`
-+ [ ] add card-type auto-resolution in `AutoView` mirroring the view-type majority vote
-+ [ ] add second toolbar selector - "Auto (Card)" / "Card" / "Sticky" - dispatch to `setViewManagedState`
-+ [ ] each view declares its default card type (kanban → `'card'`); auto picks the default when no `nt_card` votes are present
-+ [ ] jest: `CardRegistry` returns `MarkdownNote` for `'card'`, `StickyNote` for `'sticky'`, falls back to view default for `'auto'`
-+ [ ] jest: `nt_card` on a file H1 is captured into `origin.file_card_type`
-+ [ ] jest: `AutoView` majority-votes card type independently of view type
++ scope - card settings tab
+  + add a second settings tab beside the view settings tab, titled by the resolved card type
+  + render the card-type registry as a tree with `All cards` as the parent and "Card types" as the list heading
+  + reuse `DrawerTree` and the four-column row layout from [[view-settings-tree-drawer]] rather than forking them
+  + head the columns "Card settings" and "Card type"
+  + move `showLinetagsInHeadlines`, `showLineNumbers`, `showContextBars` and `autoExpandFocusedNote` onto the card side, owned by `All cards`
+  + apply the same new-type rule, so an ancestor-owned card setting offers "Save as a new card type"
++ [X] introduce `CardRegistry` with `card` (existing `MarkdownNote`) + `sticky` (new `StickyNote`)
+  + built as a registry mirroring `viewregistryops`, not a flat `SELECTABLE_CARDTYPES` array, so the card axis is queried the same way the view axis already is
++ [X] add `nt_card` linetag parsing in `mergeAggregateRoot`; capture on `origin.file_card_type`
++ [X] add card-type auto-resolution in `AutoView` mirroring the view-type majority vote
++ [ ] add the card-type selector - "Auto (Card)" / "Card" / "Sticky"
+  + operator decision 2026-09-02: delivered as the card tab's tree rather than a second `<select>`, symmetric with the view axis, since [[view-settings-tree-drawer]] retires the view-type `<select>` and makes its tree the selector
+  + the tab is titled by the resolved card type, so the toolbar states the current card and the drawer holds the control that changes it - the same split the view tab already uses
++ [X] each view declares its default card type (kanban → `'card'`); auto picks the default when no `nt_card` votes are present
+  + declared as `view_defaults` data walked against the view registry's own chain, so a new default is one row rather than a dispatch-site edit
++ [ ] add the card settings tab beside the view settings tab, titled by resolved card type
++ [ ] render the card-type tree with `All cards` as parent, reusing `DrawerTree`
++ [ ] move the four card-owned settings off the view tab and onto the card tab
++ [ ] apply the four-column layout, the diverged marker and the new-card-type offer rule
++ [ ] jest: the card tree renders from the card registry and reuses the shared tree component
++ [ ] jest: the four migrated settings render on the card tab and no longer on the view tab
++ [ ] playwright: change a card-type-owned setting and the new-card-type offer appears
++ [X] jest: `CardRegistry` returns `MarkdownNote` for `'card'`, `StickyNote` for `'sticky'`, falls back to view default for `'auto'`
++ [X] jest: `nt_card` on a file H1 is captured into `origin.file_card_type`
++ [X] jest: `AutoView` majority-votes card type independently of view type
 + [ ] playwright: switch second selector from "Auto" to "Sticky" - note cards collapse to compact form
-+ [ ] playwright: file with `nt_card=sticky` on H1 in folder mode - auto-resolved card type is sticky for that file's notes
++ [X] playwright: file with `nt_card=sticky` on H1 in folder mode - auto-resolved card type is sticky for that file's notes
 + [ ] `pnpm run check` green
 + manual: open a folder with mixed `nt_card` values across files - toolbar shows "Auto (...)" with the majority-voted card type
 + manual: explicitly set card type to "Sticky" - all notes render compactly across columns
@@ -334,7 +444,7 @@ The view-hierarchy half of this story was split out to [[line-view]] on 2026-07-
   + `StickyNote` renders pill + title only; switching back to `card` restores the full card
 + open questions for the implementing agent
   + per-note `nt_card` override (currently file-level only) - defer to a follow-up unless trivial
-  + whether the two selectors share a single composite control or stay as two siblings - leaning two siblings for symmetry with "Auto (Kanban)"
+  + whether the two selectors share a single composite control or stay as two siblings - settled 2026-09-02: neither, both axes are chosen from their tab's tree
 + commit message draft
   + introduce `nt_card` linetag and `CardRegistry` - second selector "Auto (Card)" picks between `card` (full) and `sticky` (compact summary); `nt_card` on file H1 cascades into auto-resolution
   + tests N jest, N playwright

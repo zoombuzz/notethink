@@ -145,6 +145,17 @@ export function fileDeclaredViewType(root: NoteProps): string | undefined {
 }
 
 /**
+ * The card type a single file declares: its H1 `nt_card` (legacy `ng_card`) over the front-matter
+ * value (most-specific wins) - the card-axis analogue of fileDeclaredViewType, orthogonal to it. Every
+ * story of the file carries it on origin.file_card_type, and AutoView majority-votes it across the
+ * merged tree exactly as it votes the view type. undefined when the file declares no card type.
+ */
+export function fileDeclaredCardType(root: NoteProps): string | undefined {
+    const h1 = findFileH1(root);
+    return resolveNamespacedTag(h1?.linetags, 'card')?.value ?? resolveNamespacedTag(root.linetags, 'card')?.value;
+}
+
+/**
  * The group-by key a single file declares: its H1 `nt_group_by` over the front-matter value
  * (most-specific wins) - the per-file analogue of file_group_by, majority-voted across the merged tree
  * to auto-resolve the Line view's group key exactly as fileDeclaredViewType feeds view-type auto. Value
@@ -332,6 +343,9 @@ export function mergeAggregateRoot(
         // file-level view type: an H1 nt_view overrides the front-matter value (most-specific wins)
         const file_view_type = fileDeclaredViewType(root);
 
+        // file-level card type: the orthogonal axis, read from an H1 nt_card over the front-matter value
+        const file_card_type = fileDeclaredCardType(root);
+
         // file-level group-by key + lane order: an H1 nt_group_by / nt_group_order overrides the front-matter value
         const file_group_by = fileDeclaredGroupBy(root);
         const file_group_order = fileDeclaredGroupOrder(root);
@@ -345,6 +359,7 @@ export function mergeAggregateRoot(
             doc_path: doc.path,
             relative_path: doc.relative_path,
             file_view_type,
+            file_card_type,
             file_group_by,
             file_group_order,
             file_mtime: doc.mtime,

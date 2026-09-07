@@ -1,13 +1,11 @@
 import React, { lazy } from 'react';
+import { DEFAULT_CARD_TYPE, cardComponentFor, resolveCardType } from "./cardregistryops";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteWrapper from "../../components/notes/GenericNoteWrapper";
 
 // dynamic import() is required by React.lazy for per-note-type code-splitting; static imports would pull every renderer into the initial bundle
-const MarkdownNote = lazy(() => import('./MarkdownNote'));
 const CodeNote = lazy(() => import('./CodeNote'));
 const MermaidNote = lazy(() => import('./MermaidNote'));
-
-export const SELECTABLE_NOTETYPES = ['markdown'];
 
 export default React.memo(function GenericNote(props: NoteProps) {
     const note = props;
@@ -67,5 +65,21 @@ export default React.memo(function GenericNote(props: NoteProps) {
                     return <CodeNote {...enriched_props} />;
             }
     }
-    return <MarkdownNote {...enriched_props} />;
+    /*
+     * everything the mdast switch above did not claim renders as a card, and which card is the second,
+     * orthogonal axis: the registry answers it from the resolved selection, falling back to the card type
+     * the rendered view declares. Code blocks, lists and list items are not on that axis - their renderer
+     * is decided by what the node IS, not by how the user wants notes drawn.
+     *
+     * The one note the axis must not reach is the view's own container - the note the view opens at, which
+     * DocumentView renders as its single child and whose BODY is where every note below it appears. Drawing
+     * that as a compact card would take the whole document with it, so it always renders the full card
+     * whatever the user picked; the cards inside it are the ones the choice is about.
+     */
+    const is_view_container = props.seq === props.display_options?.parent_context_seq;
+    const card_type = is_view_container
+        ? DEFAULT_CARD_TYPE
+        : resolveCardType(props.display_options?.settings?.cardType, props.display_options?.settings?.viewType);
+    const CardComponent = cardComponentFor(card_type);
+    return <CardComponent {...enriched_props} />;
 });

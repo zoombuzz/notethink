@@ -104,6 +104,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
         excludeFilter,
         settingsCascadeHasWorkspaceOverrides: cascade?.hasWorkspaceOverrides,
         settingsCascadeHasAnyOverrides: cascade?.hasAnyOverrides,
+        settingsCascadeDiverged: cascade?.diverged,
         // --- view state + the opened file's declared integration intent ---
         view_state_ids,
         file_declared_integration: props.fileDeclaredIntegration,

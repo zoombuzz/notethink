@@ -15,7 +15,6 @@ function renderMessages(initial_view_states: Record<string, ViewState> = {}): Vi
             saved_view_states: undefined,
             postMessage: jest.fn(),
             markConnected: jest.fn(),
-            setGlobalSettings: jest.fn(),
             setSettingsCascade: jest.fn(),
             updateAllViewStates: persisted.updateAllViewStates,
             setViewManagedState: persisted.handleSetViewManagedState,

@@ -9,7 +9,7 @@ For coding standards (TypeScript, React, file naming), see
 [CODING_STANDARDS.md](./CODING_STANDARDS.md). For agent-facing project
 guidance, see [AGENTS.md](./AGENTS.md).
 
-**This guide is versioned. Current version: `1.2.0`.** See
+**This guide is versioned. Current version: `1.3.0`.** See
 [Versioning](#versioning) for what patch / minor / major changes mean and how a
 file can pin itself to an older version.
 
@@ -19,7 +19,9 @@ file can pin itself to an older version.
 
 The grammar this guide describes is versioned with [semantic
 versioning](https://semver.org/) - `MAJOR.MINOR.PATCH`. The current version is
-**`1.2.0`**. `1.2.0` added the optional `nt_view=line`, `nt_group_by`, and
+**`1.3.0`**. `1.3.0` added the optional `nt_card` card-type linetag
+(backward-compatible - files that don't use it are unaffected);
+`1.2.0` added the optional `nt_view=line`, `nt_group_by`, and
 `nt_group_order` view-configuration linetags (backward-compatible - files that
 don't use them are unaffected); `1.1.0` added the optional `nt_integration_mode`
 and `nt_breadcrumb_last` view-configuration linetags (backward-compatible - files
@@ -51,7 +53,7 @@ keep a file on the old behaviour by pinning it on the file root (`#`):
 
 `nt_authoring_version` accepts `MAJOR` or `MAJOR.MINOR` (e.g. `1` or `1.2`).
 It is **reserved and documented now for forward-compatibility** - only versions
-`1.0.0`, `1.1.0`, and `1.2.0` exist today (no major bump yet), so the flag
+`1.0.0`, `1.1.0`, `1.2.0`, and `1.3.0` exist today (no major bump yet), so the flag
 currently has no effect. It exists so that files authored today keep working unchanged the day
 a `2.0.0` ships.
 
@@ -267,7 +269,7 @@ distinct from your content attributes:
 
 - **`nt_`** is the canonical prefix (short for **n**ote**t**hink). It is what
   NoteThink **writes** going forward, and the form you should author -
-  `nt_view`, `nt_level`, `nt_child_status`, `nt_kanban_ordering_weight`.
+  `nt_view`, `nt_card`, `nt_level`, `nt_child_status`, `nt_kanban_ordering_weight`.
 - **`ng_`** is the legacy prefix inherited from the predecessor project. It is
   still **accepted on read** as an equal synonym for the directive keys
   (`ng_view` ≡ `nt_view`, `ng_level` ≡ `nt_level`, …) so older files keep
@@ -288,13 +290,14 @@ renders.
 | Key | Effect |
 |---|---|
 | `nt_view` | View type for this subtree: `auto`, `document`, `kanban`, `line`. Legacy `ng_view` is still accepted on read. See [The Line view and grouping](#the-line-view-and-grouping) |
+| `nt_card` | How each note is drawn, independently of the view: `auto`, `card` (the full card - pill, title, attributes, body) or `sticky` (a compact summary - pill and title only). Set on the file root (`#`). In Folder mode it is majority-voted across files, same as `nt_view`. Legacy `ng_card` is accepted on read. See [Card types](#card-types) |
 | `nt_group_by` | The attribute the **Line** view groups its lanes by: an attribute key present on your stories (e.g. `assignee`) or the implicit key `nt_first_level_folder` (each file's first path segment / project folder). Defaults to `nt_first_level_folder` when unset. Set on the file root (`#`). In Folder mode it is majority-voted across files, same as `nt_view`. See [The Line view and grouping](#the-line-view-and-grouping) |
 | `nt_group_order` | The order the lanes appear in on the Line view's grouped axis (optional). Set on the file root (`#`) - the same idea as Kanban's column order |
 | `nt_integration_mode` | The integration mode this file opens into while the view is in **auto**: `current_file` or `folder`. In auto the view follows it; changing the mode or navigating away from the file's intent pins your own choice. Set on the file root (`#`). `nt_`-only - no `ng_` form |
 | `nt_breadcrumb_last` | The breadcrumb segment this file opens scoped to while in **auto** - a folder name (narrows folder-mode aggregation to that subfolder, implying folder mode) or an epic/story headline (scopes the note hierarchy). Seeds the initial position; navigate away freely. Set on the file root (`#`). `nt_`-only |
 | `nt_level` | Render level (advanced; usually leave unset). Legacy `ng_level` is still accepted on read |
 | `order` | Which end of the file holds the **newest** stories: `newest-at-top` (default) or `newest-at-bottom`. Read off the file root (`#`) only. Tells Folder mode which end to keep when the per-file note cap truncates the file - see [Per-file note cap](#per-file-note-cap-and-the-order-linetag) |
-| `nt_authoring_version` | Pin this file to an older Authoring Guide version (`MAJOR` or `MAJOR.MINOR`, e.g. `1` or `1.2`) instead of the latest. Set on the file root (`#`). Reserved for forward-compatibility - only `1.0.0`, `1.1.0`, and `1.2.0` exist today (no major bump), so it has no effect yet. See [Versioning](#versioning) |
+| `nt_authoring_version` | Pin this file to an older Authoring Guide version (`MAJOR` or `MAJOR.MINOR`, e.g. `1` or `1.2`) instead of the latest. Set on the file root (`#`). Reserved for forward-compatibility - only `1.0.0`, `1.1.0`, `1.2.0`, and `1.3.0` exist today (no major bump), so it has no effect yet. See [Versioning](#versioning) |
 
 #### The Line view and grouping
 
@@ -340,6 +343,38 @@ would mean moving the file on disk.
 **Ordering the lanes with `nt_group_order`.** `nt_group_order` (optional) sets
 the order the lanes appear in on the grouped axis, following the same idea as
 Kanban's column order. Set it on the file root.
+
+#### Card types
+
+`nt_view` chooses how notes are **laid out**; `nt_card` chooses how each one is
+**drawn**. The two axes are independent, so any card type works in any view.
+
+The one note it does not reach is the view's own container - the note a Document
+view opens at, whose body is where every note below it appears. That always
+renders as the full card, whatever you pick, because drawing it compact would
+take the whole document with it. The cards inside it are the ones the choice is
+about.
+
+| Value | What you get |
+|---|---|
+| `card` | The full card: origin pill, title, attribute chips, body |
+| `sticky` | A compact summary: origin pill and title only, in a tighter card |
+| `auto` | Resolve it rather than pin it (the default) |
+
+Set it on the file root (`#`), alongside the view if you want both:
+
+```markdown
+# Board [](?nt_view=kanban&nt_card=sticky)
+```
+
+In Folder mode the card type is majority-voted across the files' top-level
+`nt_card` linetags, exactly as `nt_view` is, and one vote is counted per file.
+When the vote ties, or no file declares a card type, the view's own default card
+applies - which is the full `card` for every view today.
+
+`auto` is the default, so a file that says nothing about cards renders exactly as
+it always has. Use `sticky` when a board is for scanning titles rather than
+reading detail; the notes are unchanged on disk, only their rendering differs.
 
 ### Story status
 

@@ -3,7 +3,6 @@ import * as l10n from '@vscode/l10n';
 import { useVscodeMessages } from '../hooks/useVscodeMessages';
 import { useAutoIntegration } from '../hooks/useAutoIntegration';
 import { usePersistedViewStates, useVscodeStatePersistence } from '../hooks/usePersistedViewStates';
-import { useGlobalSettings } from '../hooks/useGlobalSettings';
 import { useSettingsCascade } from '../hooks/useSettingsCascade';
 import { useLinkInterceptor } from '../hooks/useLinkInterceptor';
 import { useConnectionTimeout } from '../hooks/useConnectionTimeout';
@@ -29,7 +28,6 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
     const { connected, timed_out, markConnected } = useConnectionTimeout(
         !!saved_state?.docs && Object.keys(saved_state.docs).length > 0,
     );
-    const { global_settings, setGlobalSettings } = useGlobalSettings();
     const { settings_cascade, setSettingsCascade } = useSettingsCascade();
     const {
         view_states,
@@ -52,7 +50,6 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         saved_view_states: saved_state?.viewStates,
         postMessage: postMessageToExtension,
         markConnected,
-        setGlobalSettings,
         setSettingsCascade,
         updateAllViewStates,
         setViewManagedState: handleSetViewManagedState,
@@ -102,7 +99,6 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         aggregate_total_discovered={aggregate_total_discovered}
         includeFilter={includeFilter}
         excludeFilter={excludeFilter}
-        globalSettings={global_settings}
         settingsCascade={settings_cascade}
         fileDeclaredIntegration={file_declared_integration}
     />;

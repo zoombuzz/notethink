@@ -13,6 +13,25 @@ $off_grey: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-edit
  */
 $toolbar_height: 26px;
 
+/*
+ * One level of drawer-tree indent, split the way .drawerTreeChildren spends it: a left margin, the
+ * one-pixel indent guide, then a left padding. The current row's highlight bleeds back by exactly
+ * $tree_indent_step per level to reach the tree's left edge, so the two can never drift apart.
+ */
+$tree_indent_margin: 0.9em;
+$tree_indent_padding: 0.4em;
+$tree_indent_step: calc(#{$tree_indent_margin} + 1px + #{$tree_indent_padding});
+
+/*
+ * The room the shell's close button needs in a drawer's top-right corner. Every right-aligned heading in
+ * a settings drawer reserves it, not just the title the X actually sits beside, so the headings line up
+ * on one edge rather than the lower ones hanging a button's width further right than the top one.
+ */
+$drawer_close_gutter: 1.4em;
+
+// the space either side of the rule dividing a settings drawer's two panes; the pair replaces the flex gap, so the rule sits midway between the tree and the rows
+$settings_pane_gutter: 12px;
+
 @mixin themed-checkbox {
   appearance: none;
   width: 1em;
@@ -505,11 +524,6 @@ body.disableAddressBarHidingOnScroll {
 // Settings drawer - specialises the shared drawer shell
 //
 
-// keep the column-order arrow buttons compact - they're icon glyphs, not text actions
-.settingsDrawerColumnOrder li button {
-  padding: 1px 6px;
-}
-
 // breathing room around the cascade action buttons so they read as a distinct action area
 .cascadeControls {
   margin-top: 1.25em;
@@ -519,24 +533,52 @@ body.disableAddressBarHidingOnScroll {
   gap: 0.75em;
 }
 
+/*
+ * The lane order editor: one chip per lane, stacked down the page in board order. Side by side is what
+ * the order means, but it does not fit - five lanes already overflow the control column and a sixth is
+ * off the end of a scrollbar - so the list runs vertically, which also gives the drag one unambiguous
+ * axis to reason about however many lanes the board has.
+ */
 .settingsDrawerColumnOrder {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 0.4em;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2em;
+  min-width: 0;
+  padding: 1px 0;
+}
 
-  li {
-    display: flex;
-    align-items: center;
-    margin-bottom: 0.25em;
+.settingsDrawerColumnChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  flex: none;
+  background: var(--vscode-dropdown-background, var(--vscode-input-background, rgba(128, 128, 128, 0.14)));
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35))));
+  border-radius: 4px;
+  padding: 0 0.5em;
+  color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+  white-space: nowrap;
+  cursor: grab;
+  user-select: none;
 
-    span {
-      margin-left: 0.5em;
-    }
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 1px;
   }
 }
 
-.settingsDrawerVersion {
-  margin: 0;
+// the drag affordance: two dotted columns, drawn small and only slightly tightened - closed up any further and the two glyphs land on top of each other and read as one
+.settingsDrawerColumnGrip {
+  font-size: 0.85em;
+  letter-spacing: -0.06em;
+  opacity: 0.55;
+}
+
+// the drawer's closing line, right-aligned under the title; compounded with the body class to outrank the shell's blanket paragraph margin
+.settingsDrawerBody .settingsDrawerVersion {
+  margin: 0.8em 0 0;
+  text-align: right;
   opacity: 0.5;
   font-size: 0.85em;
 }
@@ -623,19 +665,22 @@ body.disableAddressBarHidingOnScroll {
 
 
 //
-// Jump drawer - a compact folder tree consistent with the VS Code Explorer: a root folder
-// row (the breadcrumb folder that opened the drawer) with its child subfolders / sibling
-// files indented beneath, drawn with a tree indent-guide.
+// Drawer tree - the shared recursive tree behind the jump drawer's folder list and the view
+// settings tree, consistent with the VS Code Explorer: a root row with its children indented
+// beneath, drawn with a tree indent-guide.
 //
 
-.jumpTree {
+// a stacking context, so the current row's band can be painted UNDERNEATH the indent guides its ancestors draw
+.drawerTree {
   list-style: none;
   margin: 0;
   padding: 0;
+  position: relative;
+  z-index: 0;
 }
 
-// root folder row: the breadcrumb folder name, shown expanded as a non-interactive header
-.jumpTreeRoot {
+// root row (depth 0): the tree's top row, shown expanded and weighted as a header
+.drawerTreeRoot {
   display: flex;
   align-items: center;
   gap: 0.3em;
@@ -643,8 +688,27 @@ body.disableAddressBarHidingOnScroll {
   font-weight: 600;
 }
 
+// one row is the clickable link plus an optional trailing slot (a radio, an owned-setting count), which sits outside the button so an interactive control never nests inside one
+.drawerTreeRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+
+  > button {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.drawerTreeTrailing {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
 // leading glyph slot - an outline chevron (›) on the root + child folders, a blank spacer on files - so labels align, matching the VS Code Explorer twisties
-.jumpTreeGlyph {
+.drawerTreeGlyph {
   flex: none;
   display: inline-block;
   width: 1em;
@@ -653,29 +717,65 @@ body.disableAddressBarHidingOnScroll {
 }
 
 // the expanded root's chevron points down (rotate the same › glyph so its weight matches the collapsed child chevrons)
-.jumpTreeGlyphOpen {
+.drawerTreeGlyphOpen {
   transform: rotate(90deg);
 }
 
 // children indented under the root with an Explorer-style indent guide
-.jumpTreeChildren {
+.drawerTreeChildren {
   list-style: none;
-  margin: 0 0 0 0.9em;
-  padding: 0 0 0 0.4em;
+  margin: 0 0 0 $tree_indent_margin;
+  padding: 0 0 0 $tree_indent_padding;
   border-left: 1px solid var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, rgba(128, 128, 128, 0.25)));
 }
 
 // a child row (shared .drawerLink) lays out as glyph + label
-.jumpTreeEntry {
+.drawerTreeEntry {
   display: flex;
   align-items: center;
   gap: 0.3em;
 }
 
-.jumpTreeLabel {
+.drawerTreeLabel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * The row the caller marks as current, tinted the way the Explorer tints the file it is showing: the
+ * band runs the tree's whole width and the indent guides stay visible across it, exactly as they do over
+ * a selected file in the Explorer.
+ *
+ * The row box begins one $tree_indent_step per level in from the tree's left edge, so the band is a
+ * pseudo-element stretched back over that gutter rather than the row's own background. It is painted at
+ * z-index -1 inside .drawerTree's stacking context, which puts it behind the guide borders the ancestor
+ * lists draw - a background on the row itself, or an offset shadow, would cover them instead.
+ * The caller supplies --drawer-tree-depth; a row without one starts at the row box, right for depth 0.
+ */
+.drawerTreeRowCurrent {
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: calc(var(--drawer-tree-depth, 0) * -1 * #{$tree_indent_step});
+    background: var(--vscode-list-inactiveSelectionBackground, rgba(128, 128, 128, 0.18));
+  }
+
+  .drawerLink {
+    font-weight: 600;
+  }
+}
+
+// a rung the hierarchy knows about but which cannot be chosen yet
+.drawerTreeDimmed {
+  opacity: 0.5;
+  cursor: default;
 }
 
 
@@ -836,23 +936,6 @@ body.disableAddressBarHidingOnScroll {
 
   > * {
     direction: ltr;
-  }
-}
-
-.contextBar {
-  height: 2.3rem;
-  //background: darken(var(--vscode-editor-background), 2%);
-  background: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 2%);
-  //background: linear-gradient(0deg, darken($note_default_colour, 5%) 0%, $note_default_colour 40%);
-  background: linear-gradient(0deg, $off_grey 0%, var(--vscode-editor-background) 70%);
-
-  > * {
-    text-align: left;
-    position: relative;
-    top: 50%;
-    -ms-transform: translateY(-50%);
-    -webkit-transform: translateY(-50%);
-    transform: translateY(-50%);
   }
 }
 
@@ -1350,13 +1433,6 @@ body.disableAddressBarHidingOnScroll {
   // support indenting on wide screens
   text-align: center;
 
-  .contextBar {
-    padding: 0 0 0 1.2em;
-    // offset view's padding
-    margin-left: -0.8em;
-    margin-right: -0.8em;
-  }
-
   .centredPane {
     text-align: left;
 
@@ -1404,35 +1480,105 @@ body.disableAddressBarHidingOnScroll {
   padding: 8px 0 0 0;
   color: var(--vscode-editor-foreground);
 
-  .contextBar {
-    padding: 0 0.8em 0 1.2em;
-    // offset view's padding
-    margin-left: -0.8em;
-    margin-right: -0.8em;
-  }
-
   .note {
     &.parentContext {
       margin: 0.5em;
     }
   }
 
+  /*
+   * Orientation transposes the board, and both axes are transposed together or the flip is only half done.
+   * The lanes swap direction, and so do the cards inside each lane - a lane laid out as a row whose cards
+   * still stack downwards is a column wearing a row's shape, which is what the first cut of this shipped.
+   *
+   * Either way round the board is the horizontal scroller and the card is the thing the ratio sizes. Side
+   * by side, the ratio sets the LANE width and the lanes overflow to the right. Stacked, the ratio sets
+   * the CARD width directly, each lane is as wide as its own cards need, and the lanes overflow to the
+   * right together - so a stacked board scrolls a long way sideways and barely at all downwards, which is
+   * the shape that makes the orientation worth having.
+   */
   .board {
     display: flex;
     gap: 8px;
     margin-top: 0.8em;
     overflow-x: auto;
 
-    // orientation is one flex-direction flip: columns (default) lay lanes side by side, rows stack them
+    &[data-orientation="columns"] {
+      flex-direction: row;
+
+      .column {
+        flex: 1 1 var(--nt-column-width, 17.0em);
+        min-width: var(--nt-column-width, 17.0em);
+      }
+    }
+
+    /*
+     * Every rule here is nested one level deeper than it needs to be, under `.column`. The generic lane
+     * rules below are `.board .column .notes`, which ties this block's specificity exactly, and a tie is
+     * settled by source order - so a shallower override would silently lose to the rules it is overriding.
+     */
     &[data-orientation="rows"] {
       flex-direction: column;
-      overflow-x: hidden;
+
+      .column {
+        // as wide as its own cards, floored at the board so a one-card lane still draws a full-width band
+        flex: 0 0 auto;
+        width: max-content;
+        min-width: 100%;
+        // the name sits BESIDE the cards rather than above them, so no part of the row's height is spent on chrome. A lane is a plain block side by side, so it has to be made a flex container here before a direction means anything
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        padding: 12px 12px 12px 0;
+
+        .notes {
+          flex: 1 1 auto;
+          min-width: 0;
+          flex-direction: row;
+          // stretch, so every card in the row is drawn the same height even where its own text runs short
+          align-items: stretch;
+          gap: 8px;
+          padding-top: 0;
+
+          > * {
+            // min-width: 0 so a card holding something unbreakable - a wide table, a long path - takes the width it was solved for rather than its own min-content
+            flex: 0 0 var(--nt-card-width, 15.0em);
+            min-width: 0;
+          }
+        }
+
+        /*
+         * Turned on its side and pinned to the left edge: a lane name reading across the top would cost
+         * every row a line of height it does not otherwise need, and the whole point of the stacked layout
+         * is that a row is exactly one card tall. Sticky keeps it identifiable partway along a long row.
+         */
+        .heading {
+          position: sticky;
+          left: 0;
+          z-index: 2;
+          writing-mode: vertical-rl;
+          flex: 0 0 auto;
+          align-self: stretch;
+          padding: 0 6px 0 10px;
+          margin-right: 4px;
+          text-align: left;
+
+          h3 {
+            display: inline;
+          }
+
+          .countBadge {
+            margin: 8px 0 0;
+          }
+        }
+      }
     }
 
     .column {
-      flex: 1;
+      // border-box, so the width the board computes is the width the lane occupies - the solve reasons in
+      // whole lanes against the board's own width, and content-box would land every lane a padding too wide
+      box-sizing: border-box;
       background: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 4%);
-      min-width: 17.0em;
 
       padding: 0 12px 12px 12px;
 
@@ -1461,6 +1607,7 @@ body.disableAddressBarHidingOnScroll {
       }
 
       > div > .note {
+        box-sizing: border-box;
         background: var(--vscode-editor-background);
         border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
         border-radius: 8px;
@@ -1606,4 +1753,279 @@ body.disableAddressBarHidingOnScroll {
   .columnExiting {
     animation: none;
   }
+}
+
+
+//
+// View settings drawer - the two panes and the four-column settings rows. The tree pane reuses the
+// shared .drawerTree* classes above; everything here is the right-hand pane and the row grid.
+//
+
+/*
+ * The settings drawers stack rather than sitting beside a meta column: title, then the two panes, then
+ * the version line. Both of those are one short right-aligned line, so giving them a column of their own
+ * cost the row grid a third of its width and squeezed the controls into each other.
+ */
+.settingsDrawerBody {
+  flex-direction: column;
+  gap: 0;
+}
+
+// the drawer's own title, in the top-right corner where the shell's close button sits beside it, over the rule that separates it from the panes
+/*
+ * Two columns and two rows: the head row names each pane, and the panes sit under it. A grid rather than
+ * two stacked flex rows, because the tree column is sized by its own content and the head above it has to
+ * land on exactly that width - which a grid gives for nothing and a flex row can only be told by hand.
+ *
+ * Stretch is the default, so the tree pane's divider runs the height of the taller pane rather than
+ * stopping under the last tree row. The head cells carry their own rule instead, so the two meet at the
+ * column boundary and read as one line across the drawer.
+ */
+.settingsPanes {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.settingsHeadTree,
+.settingsHeadRows {
+  display: flex;
+  align-items: baseline;
+  gap: 1em;
+  padding-bottom: 0.5em;
+  margin-bottom: 0.6em;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.25)));
+}
+
+.settingsHeadTree {
+  grid-column: 1;
+  padding-right: $settings_pane_gutter;
+}
+
+// the close button lives in this corner, so the title stops a button's width short of the edge
+.settingsHeadRows {
+  grid-column: 2;
+  justify-content: space-between;
+  padding-left: $settings_pane_gutter;
+  padding-right: $drawer_close_gutter;
+}
+
+.settingsHeadLabel {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.settingsDrawerTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settingsTreePane {
+  grid-column: 1;
+  min-width: 11em;
+  max-width: 18em;
+  padding-right: $settings_pane_gutter;
+  border-right: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.25)));
+}
+
+.settingsRowsPane {
+  grid-column: 2;
+  min-width: 0;
+  padding-left: $settings_pane_gutter;
+}
+
+// count of the settings a tree node owns, dimmed so the label still leads the row
+.settingsTreeCount {
+  opacity: 0.55;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The four aligned columns: marker, name, control, owning-type pill. Rows are display:contents so every
+ * cell joins this grid and the columns stay aligned down the whole pane rather than per row.
+ *
+ * Baseline rather than centre, because one control is several lines tall. Column order stacks a chip per
+ * lane, and centring set its name halfway down that stack, level with the third lane for no reason a
+ * reader could infer; on a baseline the name sits on the first chip's own line. Every other row is one
+ * line high, where the two are the same thing.
+ */
+.settingsRowGrid {
+  display: grid;
+  grid-template-columns: 1.2em auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 0.8em;
+  row-gap: 0.25em;
+}
+
+.settingsRow {
+  display: contents;
+}
+
+.settingsRowMarker {
+  text-align: center;
+  font-weight: 600;
+}
+
+.settingsRowName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsRowControl {
+  min-width: 0;
+}
+
+// the owning type, stated quietly in the last column so it reads as provenance rather than a control
+.settingsRowPill {
+  justify-self: end;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+
+// a setting differing from its saved default, tinted the way the VS Code Explorer tints a modified file
+.settingsRowDiverged {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, #895503);
+
+  :global(body.vscode-dark) & {
+    color: var(--vscode-gitDecoration-modifiedResourceForeground, #E2C08D);
+  }
+}
+
+/*
+ * Right-aligned on the same edge as the drawer's own title, and carrying its rule underneath rather than
+ * above, so both headings read the same way round: the heading names what follows, the rule starts it.
+ * The close gutter is padding, so the rule still spans the grid while the words stop where the title's do.
+ */
+/*
+ * "Global settings", heading the rows no view type owns. Left-aligned on the edge the rows start at, so
+ * it lines up under "View settings" in the head row above and the eye reads down one margin rather than
+ * tracking between two.
+ */
+.settingsGroupHeading {
+  grid-column: 1 / -1;
+  margin-top: 1.1em;
+  padding: 0 0 0.4em;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.25)));
+  font-size: 1em;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+/*
+ * The two disclosures under the rows. Held off the last global row by the same gap the Global settings
+ * heading is held off the last view row, so the pane reads as three blocks separated identically rather
+ * than as a list that happens to trail off into some buttons.
+ */
+.settingsDisclosures {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+  margin-top: 1.1em;
+}
+
+/*
+ * Each disclosure is a panel rather than a line of text with a twisty: a bordered card on its own surface,
+ * with the summary as its titlebar and a ruled edge under it once open. The two things behind them - your
+ * defaults across every window, and the view types you have minted - reach past this board, and a control
+ * that does that should look like a thing you have opened rather than like one more row in the list.
+ */
+.settingsChangeDefaults,
+.settingsCustomTypes {
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.3)));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--vscode-editor-background)), var(--vscode-editorWidget-foreground, var(--vscode-foreground)) 4%);
+
+  > summary {
+    padding: 0.5em 0.9em;
+    border-radius: 5px;
+    background: color-mix(in srgb, transparent, var(--vscode-editorWidget-foreground, var(--vscode-foreground)) 5%);
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+      background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+    }
+  }
+
+  &[open] > summary {
+    border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.3)));
+    border-radius: 5px 5px 0 0;
+  }
+}
+
+// the panel's contents, inset from its border on every side
+.settingsDisclosureBody {
+  padding: 0.2em 0.9em 0.9em;
+}
+
+/*
+ * The buttons inside a disclosure panel. Deliberately not `.cascadeControls`, which the Files drawer uses
+ * for the same three actions in a column with nothing around them - the rule and the space above it are
+ * what separate them there, and a panel already does that job with its own border.
+ */
+.settingsDisclosureActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em;
+  margin-top: 0.9em;
+}
+
+// the offer and the rename controls, each a wrapping line of label, field and buttons
+.settingsCustomTypesRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  margin-top: 0.6em;
+}
+
+// why the offer is being made at all: which setting moved, and which type up the tree owns it
+.settingsDrawerBody .settingsCustomTypesNote {
+  margin: 0 0 0.9em;
+  opacity: 0.7;
+}
+
+// held off the disclosure twisty, which otherwise sits hard against the word
+.settingsChangeDefaultsLabel {
+  margin-left: 0.45em;
+}
+
+.settingsDivergedTally {
+  margin-left: 0.5em;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+// the sentence explaining the panel, held clear of the summary above and the controls below
+.settingsDrawerBody .settingsDivergedNote {
+  margin: 0.7em 0 0;
+  opacity: 0.7;
+}
+
+.settingsNewTypeOffer {
+  margin-top: 1em;
+}
+
+.settingsNewTypeName {
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-dropdown-border));
+  border-radius: 2px;
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  padding: 2px 0.3em;
+}
+
+.settingsSelect {
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border);
+  border-radius: 2px;
+  color: var(--vscode-dropdown-foreground);
+  cursor: pointer;
+  font-size: inherit;
+  padding: 2px 0.3em;
 }

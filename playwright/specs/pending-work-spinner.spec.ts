@@ -1,6 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
 import { injectMultipleDocsFromFixtures, selectFolderMode, selectIntegrationMode } from '../helpers/inject-multi-docs';
-import { sendCommand } from '../helpers/send-command';
 
 const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
@@ -27,9 +26,17 @@ test.describe('Pending-work spinner', () => {
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
-        // a toggleSetting command is purely a webview-side state change - no markPending is involved
-        await sendCommand(page, 'toggleSetting', { setting: 'lineNumbers' });
-        // give the show-delay a chance to flip something on if anything were marked
+        /*
+         * a drawer toggle marks the setting key pending and posts updateSetting; the harness answers with
+         * a fresh cascade on the next tick, so the round-trip clears well inside the spinner's show-delay
+         */
+        // showLineNumbers is a card-drawn setting, so it lives on the card tab rather than the view tab
+        await page.getByTestId('card-settings-button').click();
+        const line_numbers_box = page.getByTestId('setting-control-showLineNumbers');
+        // click plus a retrying expect, not .check(): the box is bound to the cascade alone, so it shows its old value for the frame between the click and the extension's echo
+        await line_numbers_box.click();
+        await expect(line_numbers_box).toBeChecked();
+        // give the show-delay a chance to flip something on if anything were still marked
         await page.waitForTimeout(250);
         // no spinner anywhere (toolbar or drawers)
         await expect(page.locator('[data-testid="pending-work-spinner"]')).toHaveCount(0);

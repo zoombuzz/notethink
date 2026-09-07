@@ -77,7 +77,6 @@ suite('Web Extension Test Suite', () => {
 			'notethink.setViewKanban',
 			// Settings toggles
 			'notethink.toggleLineNumbers',
-			'notethink.toggleContextBars',
 			// Navigation
 			'notethink.navigateUp',
 			'notethink.navigateDown',
@@ -123,7 +122,6 @@ suite('Web Extension Test Suite', () => {
 		test('Toggle commands should be registered', async () => {
 			const commands = await vscode.commands.getCommands(true);
 			assert.ok(commands.includes('notethink.toggleLineNumbers'), 'toggleLineNumbers should exist');
-			assert.ok(commands.includes('notethink.toggleContextBars'), 'toggleContextBars should exist');
 		});
 
 		test('No unexpected notethink commands should be registered', async () => {

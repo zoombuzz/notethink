@@ -2,13 +2,13 @@ import Debug from "debug";
 import { HIDDEN_ATTRIBUTES, isNamespacedKey, resolveNamespacedTag } from "./linetagops";
 import { projectNameFromRelativePath } from "./originops";
 import { aggregateNoteLinetags, majorityGroupBy } from "./noteops";
-import { FIRST_LEVEL_FOLDER_KEY, type AxisKind, type AxisSpec } from "./axisops";
+import { FIRST_LEVEL_FOLDER_KEY, KANBAN_AXIS_KEY, type AxisKind, type AxisSpec } from "./axisops";
 import type { LineTag, NoteProps } from "../types/NoteProps";
 
 const debug = Debug("nodejs:notethink-views:groupbyops");
 
 // re-exported from axisops (its neutral home, shared with the lane helpers) so group-by consumers keep one import site
-export { FIRST_LEVEL_FOLDER_KEY };
+export { FIRST_LEVEL_FOLDER_KEY, KANBAN_AXIS_KEY };
 
 /**
  * GroupByCandidate, one key a view can group its notes by, plus everything the axis machinery needs to
@@ -90,6 +90,7 @@ function finaliseAuthoredCandidates(accumulator: Map<string, CandidateAccumulato
 function buildFolderCandidate(notes: Array<NoteProps>): GroupByCandidate | undefined {
     const folders = new Set<string>();
     for (const note of notes) {
+        if (note === undefined) { continue; }
         const folder = projectNameFromRelativePath(note.origin?.relative_path);
         if (folder) { folders.add(folder); }
     }
@@ -109,6 +110,9 @@ function buildFolderCandidate(notes: Array<NoteProps>): GroupByCandidate | undef
  * candidate reports its distinct sorted values, its axis kind (continuous when every value is numeric,
  * categorical otherwise), and its writability (authored attributes writable, the folder key read-only).
  * results are sorted by key for determinism and memoised on the notes array identity.
+ *
+ * The notes list is indexed by seq wherever the drag path has to resolve a draggable id back to a note,
+ * so it is sparse whenever the seqs are not contiguous and every hole has to be skipped rather than read.
  */
 export function enumerateGroupByCandidates(notes: Array<NoteProps> | undefined): GroupByCandidate[] {
     if (!notes || notes.length === 0) { return []; }
@@ -116,6 +120,7 @@ export function enumerateGroupByCandidates(notes: Array<NoteProps> | undefined):
     if (cached) { return cached; }
     const accumulator = new Map<string, CandidateAccumulator>();
     for (const note of notes) {
+        if (note === undefined) { continue; }
         foldNoteLinetags(note, accumulator);
     }
     const candidates = finaliseAuthoredCandidates(accumulator);
@@ -145,6 +150,18 @@ export function resolveGroupByAxisKey(
     const majority = majorityGroupBy(notes);
     if (majority) { return majority; }
     return FIRST_LEVEL_FOLDER_KEY;
+}
+
+/**
+ * resolve which key a kanban board lanes by. Kanban's `auto` is status - the axis is what makes the view
+ * a kanban - so this deliberately does NOT walk the generic auto ladder, which would fall through a
+ * focused-note tag and a majority vote to the first-level-folder default and lane a kanban by project.
+ * An explicit selection still wins, because departing from the pinned axis is exactly what the drawer's
+ * "Save as a new view type" offer is for; honouring it here is what makes that offer mean something.
+ */
+export function resolveKanbanAxisKey(selection: string | undefined): string {
+    if (selection !== undefined && selection !== 'auto') { return selection; }
+    return KANBAN_AXIS_KEY;
 }
 
 /**

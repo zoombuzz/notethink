@@ -1,9 +1,11 @@
 import {
     FIRST_LEVEL_FOLDER_KEY,
+    KANBAN_AXIS_KEY,
     axisForGroupByKey,
     enumerateGroupByCandidates,
     isNumericTag,
     resolveGroupByAxisKey,
+    resolveKanbanAxisKey,
 } from './groupbyops';
 import { isAxisWritable } from './axisops';
 import type { LineTag, NoteOrigin, NoteProps } from '../types/NoteProps';
@@ -122,6 +124,30 @@ describe('isNumericTag', () => {
         expect(isNumericTag(tag('size', '5px', { value_numeric: Number('5px') }))).toBe(false);
     });
 });
+
+describe('resolveKanbanAxisKey', () => {
+    it('auto means status, which is what makes the view a kanban', () => {
+        expect(resolveKanbanAxisKey('auto')).toBe(KANBAN_AXIS_KEY);
+        expect(resolveKanbanAxisKey(undefined)).toBe(KANBAN_AXIS_KEY);
+    });
+
+    it('an explicit selection wins, since honouring it is what the new-view-type offer answers', () => {
+        expect(resolveKanbanAxisKey('assignee')).toBe('assignee');
+        expect(resolveKanbanAxisKey(FIRST_LEVEL_FOLDER_KEY)).toBe(FIRST_LEVEL_FOLDER_KEY);
+    });
+
+    /*
+     * The generic ladder falls through a focused-note tag and a majority vote to the folder default, and
+     * on a kanban that would lane the board by project while the drawer still called it a kanban. Kanban
+     * deliberately skips the ladder, so a document declaring nt_group_by does not re-lane one.
+     */
+    it('skips the auto ladder the generic resolver walks', () => {
+        const notes = [fileNote('a', { file_group_by: 'assignee' })];
+        expect(resolveGroupByAxisKey(notes, undefined, 'auto')).toBe('assignee');
+        expect(resolveKanbanAxisKey('auto')).toBe(KANBAN_AXIS_KEY);
+    });
+});
+
 
 describe('resolveGroupByAxisKey', () => {
     it('an explicit (non-auto) selection wins over everything', () => {

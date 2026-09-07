@@ -62,18 +62,12 @@ export interface OpenRelativeMessage {
     href: string;
 }
 
-export interface UpdateGlobalSettingMessage {
-    type: 'updateGlobalSetting';
-    setting: string;
-    value: unknown;
-}
-
 /**
- * per-key write to a cascade setting. Scope defaults to 'workspace' on the extension side when omitted; 'global' is the promote path.
+ * per-key write to a setting. Scope defaults to 'workspace' on the extension side when omitted (and falls back to the user scope in a folderless window, where a workspace write throws); 'global' is the promote path. This is the ONLY message that writes a setting - there is no second channel for a subset of keys.
  */
 export interface UpdateSettingMessage {
     type: 'updateSetting';
-    setting: keyof SettingsCascadePayload;
+    setting: SettingsCascadeKey;
     value: unknown;
     scope?: 'workspace' | 'global';
 }
@@ -122,7 +116,6 @@ export type WebviewToExtensionMessage =
     | EditTextMessage
     | OpenExternalMessage
     | OpenRelativeMessage
-    | UpdateGlobalSettingMessage
     | UpdateSettingMessage
     | PromoteSettingsToUserMessage
     | ResetSettingsToDefaultMessage
@@ -150,46 +143,60 @@ export interface SelectionChangedMessage {
 
 export interface CommandMessage {
     type: 'command';
-    command: 'setViewType' | 'toggleSetting' | 'navigate';
+    command: 'setViewType' | 'navigate';
     viewType?: string;
-    setting?: string;
     direction?: 'up' | 'down' | 'drillIn' | 'drillOut' | 'clearFocus';
 }
 
-// settings identifiers are camelCase end-to-end (TS keys, wire IDs, payload field names, VS Code config paths) - see client/extension/src/lib/settings.ts. This deviates from the project-wide snake_case-for-wire-data-fields convention because settings have a unique cross-boundary identity, and bridging two cases would mean every setting carries two names
-export interface GlobalSettingsPayload {
-    showLineNumbers: boolean;
-    watchUnopenedFilesInViewer: boolean;
-    kanbanAnimateTransitions: boolean;
-    openNewEditorIfNoneOpen: boolean;
-}
-
-export type GlobalSettingKey = keyof GlobalSettingsPayload;
-
-export interface GlobalSettingsMessage {
-    type: 'globalSettings';
-    settings: GlobalSettingsPayload;
+/**
+ * A view type the user minted by saving a change to a setting an ancestor owns. Mirrored from
+ * UserViewTypeDef in client/extension/src/lib/settings.ts, which the webview cannot import - the two are
+ * separate webpack bundles with no shared module graph, so this duplication is the wire contract.
+ * - id: the registry node id, frozen once written
+ * - label: what the tree shows
+ * - parent: the built-in node it was saved from and inherits from
+ * - overrides: the setting keys and values that distinguish it from that parent
+ */
+export interface UserViewType {
+    id: string;
+    label: string;
+    parent: string;
+    overrides: Record<string, unknown>;
 }
 
 /**
- * resolved values for the settings cascade. The extension reads each key via vscode.workspace.getConfiguration() (built-in default → User → Workspace) under `notethink.settings.*` and sends this payload on requestInitialState and whenever onDidChangeConfiguration fires for any of the underlying keys.
- * - hasWorkspaceOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace; drives whether the "Reset to user default" button is enabled in the UI
- * - hasAnyOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace OR ConfigurationTarget.Global (User); drives whether the "Reset to built-in default" button is enabled (nothing to restore when the cascade is already at built-in defaults)
+ * resolved values for every notethink setting. The extension reads each key via vscode.workspace.getConfiguration() (built-in default → User → Workspace) under `notethink.settings.*` and sends this payload on requestInitialState and whenever onDidChangeConfiguration fires for any of the underlying keys. It is the ONLY channel carrying a setting into the webview - the value the webview renders is this one, with no per-session tier layered over it.
+ * - diverged: the keys whose resolved value differs from their saved default (the user-scope value when one is set, else the built-in default); drives the drawer's M markers and its diverged count, and empties when the user saves or reverts the defaults
+ * - hasWorkspaceOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace; drives whether "Revert to defaults" is enabled
+ * - hasAnyOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace OR ConfigurationTarget.Global (User); drives whether the Files drawer's built-in restore is enabled (nothing to restore when everything is already at built-in defaults)
  *
- * Settings identifiers are camelCase end-to-end (see client/extension/src/lib/settings.ts).
+ * Settings identifiers are camelCase end-to-end (TS keys, wire IDs, payload field names, VS Code config paths) - see client/extension/src/lib/settings.ts. This deviates from the project-wide snake_case-for-wire-data-fields convention because settings have a unique cross-boundary identity, and bridging two cases would mean every setting carries two names.
  */
 export interface SettingsCascadePayload {
-    viewType: 'auto' | 'document' | 'kanban';
+    viewType: string;
+    cardType: string;
+    viewUserTypes: UserViewType[];
+    showLinetagsInHeadlines: boolean;
+    scrollNoteIntoView: boolean;
+    autoExpandFocusedNote: boolean;
+    showLineNumbers: boolean;
+    groupBy: string;
+    orientation: 'columns' | 'rows';
+    kanbanGroupBy: string;
     columnOrder: string[];
+    kanbanCardRatio: number;
+    kanbanAnimateTransitions: boolean;
+    watchUnopenedFilesInViewer: boolean;
+    openNewEditorIfNoneOpen: boolean;
     includeFilter: string;
     excludeFilter: string;
     maxNotesPerFile: number;
-    showContextBars: boolean;
+    diverged: string[];
     hasWorkspaceOverrides: boolean;
     hasAnyOverrides: boolean;
 }
 
-export type SettingsCascadeKey = Exclude<keyof SettingsCascadePayload, 'hasWorkspaceOverrides' | 'hasAnyOverrides'>;
+export type SettingsCascadeKey = Exclude<keyof SettingsCascadePayload, 'diverged' | 'hasWorkspaceOverrides' | 'hasAnyOverrides'>;
 
 export interface SettingsCascadeMessage {
     type: 'settingsCascade';
@@ -229,7 +236,6 @@ export type ExtensionToWebviewMessage =
     | UpdateMessage
     | SelectionChangedMessage
     | CommandMessage
-    | GlobalSettingsMessage
     | SettingsCascadeMessage
     | PendingChangeMessage
     | JumpTargetsMessage;

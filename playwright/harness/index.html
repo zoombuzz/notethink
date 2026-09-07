@@ -12,6 +12,12 @@
             --vscode-panel-border: rgba(128, 128, 128, 0.35);
             --vscode-focusBorder: #007fd4;
             --vscode-errorForeground: #f48771;
+            --vscode-gitDecoration-modifiedResourceForeground: #e2c08d;
+            /* Dark+'s value, and opaque like every real theme's, so the tree's current-row band reads at the contrast a real window gives it */
+            --vscode-list-inactiveSelectionBackground: #37373d;
+            /* the settings drawer's selects and lane chips read these, so a screenshot of the harness looks like a real window */
+            --vscode-dropdown-background: #313131;
+            --vscode-dropdown-border: #3c3c3c;
             --vscode-font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         body {
@@ -40,6 +46,123 @@
             return { docs: {} };
         }
         window.__vsCodeState = window.__vsCodeState || loadPersistedState();
+
+        /*
+         * Minimal extension host for settings.
+         *
+         * Since viewState stopped being a settings tier, a webview settings change has no visible
+         * effect at all unless something plays the extension's part: resolve the value, then echo the
+         * whole cascade back. So the harness keeps the same three layers VS Code configuration has
+         * (built-in default, User, Workspace) and answers the same four messages the real PanelSession
+         * answers, computing `diverged` exactly the way client/extension/src/lib/settings.ts does -
+         * resolved value differs from the saved default, which is the User value when one is set and
+         * the built-in default otherwise.
+         *
+         * NOTETHINK_BUILTIN_SETTINGS mirrors the SETTINGS defaults in that same module. Tests may read
+         * or seed window.__nt_settings to arrange a scenario.
+         */
+        var NOTETHINK_BUILTIN_SETTINGS = {
+            viewType: 'auto',
+            cardType: 'auto',
+            viewUserTypes: [],
+            showLinetagsInHeadlines: false,
+            scrollNoteIntoView: true,
+            autoExpandFocusedNote: false,
+            showLineNumbers: false,
+            groupBy: 'auto',
+            orientation: 'columns',
+            kanbanGroupBy: 'auto',
+            columnOrder: ['untagged', 'doing', 'code-review', 'testing', 'done'],
+            kanbanCardRatio: 1.4,
+            kanbanAnimateTransitions: true,
+            watchUnopenedFilesInViewer: true,
+            openNewEditorIfNoneOpen: false,
+            includeFilter: '**/*.md',
+            excludeFilter: '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**',
+            maxNotesPerFile: 10,
+        };
+        var NOTETHINK_SETTING_KEYS = Object.keys(NOTETHINK_BUILTIN_SETTINGS);
+        window.__nt_settings = window.__nt_settings || { user: {}, workspace: {} };
+
+        // structural comparison, so a fresh columnOrder array reads equal to the stored one
+        function settingValuesEqual(a, b) {
+            if (a === b) { return true; }
+            if (Array.isArray(a) && Array.isArray(b)) {
+                return a.length === b.length && a.every(function(item, index) { return item === b[index]; });
+            }
+            return false;
+        }
+        function readSetting(key) {
+            var store = window.__nt_settings;
+            if (store.workspace[key] !== undefined) { return store.workspace[key]; }
+            if (store.user[key] !== undefined) { return store.user[key]; }
+            return NOTETHINK_BUILTIN_SETTINGS[key];
+        }
+        function savedDefaultOf(key) {
+            var user_value = window.__nt_settings.user[key];
+            return user_value === undefined ? NOTETHINK_BUILTIN_SETTINGS[key] : user_value;
+        }
+        function buildSettingsCascadePayload() {
+            var store = window.__nt_settings;
+            var payload = {};
+            var diverged = [];
+            var has_workspace_overrides = false;
+            var has_any_overrides = false;
+            NOTETHINK_SETTING_KEYS.forEach(function(key) {
+                payload[key] = readSetting(key);
+                if (!settingValuesEqual(payload[key], savedDefaultOf(key))) { diverged.push(key); }
+                if (store.workspace[key] !== undefined) { has_workspace_overrides = true; }
+                if (store.workspace[key] !== undefined || store.user[key] !== undefined) { has_any_overrides = true; }
+            });
+            payload.diverged = diverged;
+            payload.hasWorkspaceOverrides = has_workspace_overrides;
+            payload.hasAnyOverrides = has_any_overrides;
+            return payload;
+        }
+        // deferred so the echo never lands inside the React render that posted the message
+        function sendSettingsCascade() {
+            var payload = buildSettingsCascadePayload();
+            setTimeout(function() {
+                window.dispatchEvent(new MessageEvent('message', {
+                    data: { type: 'settingsCascade', settings: payload },
+                }));
+            }, 0);
+        }
+        // test hook: re-publish the cascade after a spec has seeded __nt_settings directly, which is how a window reopened on an already-diverged workspace arrives
+        window.__nt_publishSettings = sendSettingsCascade;
+        function writeSetting(key, value, scope) {
+            var layer = scope === 'global' ? window.__nt_settings.user : window.__nt_settings.workspace;
+            if (value === undefined) { delete layer[key]; } else { layer[key] = value; }
+        }
+        function handleSettingsMessage(msg) {
+            var store = window.__nt_settings;
+            switch (msg && msg.type) {
+                case 'requestInitialState':
+                    sendSettingsCascade();
+                    return;
+                case 'updateSetting':
+                    if (!(msg.setting in NOTETHINK_BUILTIN_SETTINGS)) { return; }
+                    writeSetting(msg.setting, msg.value, msg.scope);
+                    sendSettingsCascade();
+                    return;
+                case 'promoteSettingsToUser':
+                    // snapshot every resolved value into User, then drop the Workspace layer it came from
+                    NOTETHINK_SETTING_KEYS.forEach(function(key) { store.user[key] = readSetting(key); });
+                    store.workspace = {};
+                    sendSettingsCascade();
+                    return;
+                case 'resetSettingsToDefault':
+                    store.workspace = {};
+                    sendSettingsCascade();
+                    return;
+                case 'restoreSettingsToBuiltinDefault':
+                    store.workspace = {};
+                    store.user = {};
+                    sendSettingsCascade();
+                    return;
+            }
+        }
+
         window.acquireVsCodeApi = function() {
             return {
                 getState: function() { return window.__vsCodeState; },
@@ -47,7 +170,10 @@
                     window.__vsCodeState = s;
                     try { sessionStorage.setItem('__vsCodeState', JSON.stringify(s)); } catch (e) {}
                 },
-                postMessage: function(msg) { window.__captured_messages.push(msg); },
+                postMessage: function(msg) {
+                    window.__captured_messages.push(msg);
+                    handleSettingsMessage(msg);
+                },
             };
         };
         // Required shim for webpack commonjs output

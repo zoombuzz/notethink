@@ -119,6 +119,27 @@ describe('JumpDrawer', () => {
         expect(screen.getByTestId('jump-drawer-empty')).toHaveTextContent('No other files here');
     });
 
+    /*
+     * The extraction's own signal, and the reason this file was previously no evidence for it: the
+     * pre-extraction jump list was hand-rolled markup with no notion of depth, so a row publishing
+     * `--drawer-tree-depth` is something only DrawerTree can have put there. A role or testid assertion
+     * would pass against either implementation, which is exactly what made "both specs pass unedited"
+     * an unfalsifiable claim about a refactor.
+     */
+    it('renders its entries through DrawerTree, which is what gives each row its depth', () => {
+        const jump_targets: JumpTargetsMessage = {
+            type: 'jumpTargets',
+            mode: INTEGRATION_MODE_FOLDER,
+            path: '/ws/docs',
+            entries: [{ label: 'alpha', path: '/ws/docs/alpha', kind: 'folder' }],
+        };
+        renderWith(jump_targets, '/ws/docs');
+        expect(screen.getByTestId('jump-drawer-root').parentElement).toHaveStyle({ '--drawer-tree-depth': '0' });
+        expect(screen.getByTestId('jump-drawer-entry').parentElement).toHaveStyle({ '--drawer-tree-depth': '1' });
+        // the tree also nests its children as treeitems, which the flat list it replaced never did
+        expect(screen.getAllByRole('treeitem')).toHaveLength(2);
+    });
+
     it('shows the loading row when no response has arrived yet', () => {
         renderWith(undefined, '/ws/docs');
         expect(screen.getByTestId('jump-drawer-loading')).toBeInTheDocument();

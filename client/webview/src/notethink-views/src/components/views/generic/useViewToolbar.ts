@@ -1,41 +1,95 @@
 import { useCallback, useMemo } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { buildIntegrationDispatch, resolveIntegrationMode } from "../../../lib/viewstateops";
-import { arraysEqual, deriveNaturalColumnOrder } from "../../../lib/noteops";
+import { arraysEqual, deriveNaturalColumnOrder, isAggregateRoot, majorityCardType } from "../../../lib/noteops";
+import { isGroupedViewType, registryWithUserTypes } from "../../../lib/viewregistryops";
+import { CARD_AUTO, resolveCardType } from "../../notes/cardregistryops";
 import { parentFolderOf } from "../../../lib/pathops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
-import type { GlobalSettingKey } from "../../../types/Messages";
+import type { SettingsCascadeKey, UserViewType } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
-import type { CommonSettingKey } from "../SettingsCommonControls";
 import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 
+// one frozen empty list, so a cascade carrying no saved types keeps the same identity across renders and the memo below does not re-run
+const EMPTY_USER_TYPES: UserViewType[] = [];
+
+/**
+ * What the toolbar and its drawers are driven by.
+ * - handle_setting_change: the one write path every drawer control dispatches down, whatever node owns
+ *   the setting it changed
+ */
 export interface ViewToolbar {
     // integration-mode dropdown: persisted selection (may be auto), resolved concrete mode, change handler
     integration_selection: IntegrationMode;
     integration_mode: ConcreteIntegrationMode;
     handle_integration_change: (mode: IntegrationMode, target_file_path?: string) => void;
-    // view-type dropdown: same shape - persisted selection (may be auto), auto-resolved concrete type, change handler
+    // view-type tree: same shape - persisted selection (may be auto), auto-resolved concrete type, change handler
     view_type_selection: string;
     auto_resolved_type: string | undefined;
     handle_view_type_change: (view_type: string) => void;
+    // card-type tab: the same selection / resolved split again, on the axis that decides how one note is drawn
+    card_type_selection: string;
+    resolved_card_type: string;
+    handle_card_type_change: (card_type: string) => void;
     natural_column_order: string[];
-    handle_setting_change: (key: CommonSettingKey, value: boolean) => void;
-    handle_global_setting_change: (key: GlobalSettingKey, value: boolean) => void;
+    handle_setting_change: (key: SettingsCascadeKey, value: unknown) => void;
     handle_column_order_change: (next_order: string[]) => void;
-    handle_group_by_change: (group_by_key: string) => void;
     handle_make_default: () => void;
     handle_reset_to_default: () => void;
     handle_restore_builtin_default: () => void;
 }
 
+type DefaultActions = Pick<ViewToolbar, 'handle_make_default' | 'handle_reset_to_default' | 'handle_restore_builtin_default'>;
+
 /**
- * Owns the toolbar's integration mode, the Kanban natural column order, and the
- * settings/column-order/cascade dispatchers. Per-view setting changes dispatch
- * setViewManagedState immediately; global keys are stripped from per-view state
- * (the extension owns them via VS Code config) and cascading folder-mode writes
- * round-trip to config via updateSetting.
+ * The three default actions, each a bare message the extension acts on with no payload to build here.
+ * Grouped because they move together - all three are whole-cascade operations rather than per-setting
+ * ones, and none of them needs anything from the view.
  */
-// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
+function useDefaultActions(handlers: ViewApi): DefaultActions {
+    const handle_make_default = useCallback((): void => {
+        handlers.postMessage?.({ type: 'promoteSettingsToUser' });
+    }, [handlers]);
+    const handle_reset_to_default = useCallback((): void => {
+        handlers.postMessage?.({ type: 'resetSettingsToDefault' });
+    }, [handlers]);
+    const handle_restore_builtin_default = useCallback((): void => {
+        handlers.postMessage?.({ type: 'restoreSettingsToBuiltinDefault' });
+    }, [handlers]);
+    return { handle_make_default, handle_reset_to_default, handle_restore_builtin_default };
+}
+
+/**
+ * The card tab's persisted selection and the concrete card it resolves to, the same selection / resolved
+ * split the view type uses. AutoView publishes the user's own choice on replaced_attributes because it
+ * has already stamped the RESOLVED card onto settings.cardType for the whole subtree; with no AutoView
+ * in the chain that stamp never happens and the cascade value is the raw selection, so the fallback
+ * reads it straight.
+ *
+ * The vote is repeated here rather than only in AutoView because AutoView is not always mounted: it
+ * renders for `auto` alone, so pinning any view type unmounted the only thing that ran it, and every
+ * sticky on a folder that had voted for one expanded into the view's default card. The two axes are
+ * meant to be independent, so the card answer cannot be a side effect of the view answer being `auto`.
+ */
+function readCardTypeState(props: ViewProps, display_options: NoteDisplayOptions, user_types: UserViewType[]): { selection: string; resolved: string } {
+    const selection = (props.nested?.replaced_attributes?.card_type as string) || display_options.settings?.cardType || CARD_AUTO;
+    if (props.nested?.auto_resolved_card_type !== undefined) {
+        return { selection, resolved: props.nested.auto_resolved_card_type };
+    }
+    const voted = selection === CARD_AUTO && isAggregateRoot(props.nested?.parent_context)
+        ? majorityCardType(props.notes)
+        : undefined;
+    return { selection, resolved: resolveCardType(voted ?? selection, props.type, user_types) };
+}
+
+/**
+ * Owns the toolbar's integration mode, the Kanban natural column order, and the settings dispatchers.
+ *
+ * Every control the drawer renders writes the same way: one updateSetting message per change, which
+ * the extension applies to VS Code configuration and echoes back as a fresh settingsCascade. There is
+ * no second channel for a subset of keys and no per-view settings copy, so what the user sees after a
+ * change is what configuration actually resolved.
+ */
 export function useViewToolbar(
     props: ViewProps,
     handlers: ViewApi,
@@ -43,12 +97,15 @@ export function useViewToolbar(
     notes_within_parent_context: Array<NoteProps>,
 ): ViewToolbar {
     const { markPending } = usePendingWorkContext();
-    // integration-mode dropdown state - selection (persisted, may be auto) + resolved concrete mode, mirroring the view-type dropdown below
+    // integration-mode dropdown state - selection (persisted, may be auto) + resolved concrete mode, mirroring the view-type tree below
     const integration_selection: IntegrationMode = (props.display_options?.integration_mode_selection as IntegrationMode) || INTEGRATION_MODE_AUTO;
     const integration_mode: ConcreteIntegrationMode = resolveIntegrationMode(props.display_options);
-    // view-type dropdown state - selection (persisted, may be auto) + the type AutoView resolved auto to; same selection/resolved split as integration mode
+    // view-type tree state - selection (persisted, may be auto) + the type AutoView resolved auto to; same selection/resolved split as integration mode
     const view_type_selection: string = (props.nested?.replaced_attributes?.type as string) || props.type;
     const auto_resolved_type: string | undefined = props.nested?.auto_resolved_type;
+    // the user's minted view types, read from the cascade so a type saved from a kanban is still recognised as a lane view
+    const user_view_types = display_options.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
+    const { selection: card_type_selection, resolved: resolved_card_type } = readCardTypeState(props, display_options, user_view_types);
 
     /*
      * handle_integration_change - change the view's integration selection.
@@ -86,22 +143,21 @@ export function useViewToolbar(
         if (message) { handlers.postMessage?.(message); }
     }, [handlers, props.doc_path, props.view_state_ids, props.id, props.file_declared_integration]);
 
-    // natural column order for the Kanban drawer (alphabetical + 'untagged' last)
+    // natural column order for the drawer's lane-order row (alphabetical + 'untagged' last); derived for any lane view, because the drawer renders that row from the node the user selected rather than from the board
     const natural_column_order = useMemo<string[]>(() => {
-        if (props.type !== 'kanban') { return []; }
+        if (!isGroupedViewType(props.type, registryWithUserTypes(user_view_types))) { return []; }
         return deriveNaturalColumnOrder(notes_within_parent_context);
-    }, [props.type, notes_within_parent_context]);
+    }, [props.type, notes_within_parent_context, user_view_types]);
 
     /*
-     * cascade_write_setting - write a view-type setting to VS Code config (Workspace
-     * scope on the extension side) under notethink.settings.*. View-type members
-     * (columnOrder, viewType, showLinetagsInHeadlines, scrollNoteIntoView,
-     * autoExpandFocusedNote, showContextBars) cascade-write in any integration mode so a
-     * setting changed in current_file mode is visible in folder mode and vice versa. Marks
-     * the per-setting key + the 'settingsCascade' sentinel so the spinner appears if the
-     * round-trip is non-instantaneous; the echo reducer clears both keys on arrival.
+     * cascade_write_setting - write one setting to VS Code config under notethink.settings.*, at the
+     * scope the extension picks (Workspace, falling back to User in a folderless window). This is the
+     * only way any setting is written, in any integration mode, so a change made in current_file mode
+     * is visible in folder mode and vice versa. Marks the per-setting key plus the 'settingsCascade'
+     * sentinel so the spinner appears if the round-trip is non-instantaneous; the echo reducer clears
+     * both keys when the new cascade arrives.
      */
-    const cascade_write_setting = useCallback((setting: string, value: unknown): void => {
+    const cascade_write_setting = useCallback((setting: SettingsCascadeKey, value: unknown): void => {
         markPending(setting);
         markPending('settingsCascade');
         handlers.postMessage?.({
@@ -123,89 +179,24 @@ export function useViewToolbar(
     }, [handlers, props.id, cascade_write_setting]);
 
     /*
-     * handle_group_by_change - real-time apply for the Line group-by selection (a per-view
-     * display_options setting, like columnOrder). 'auto' clears the pin so the view auto-resolves
-     * nt_group_by again; a concrete candidate key pins the group axis. Global keys are stripped so they
-     * don't get baked into per-view state.
+     * handle_card_type_change - pin the card type, or return it to auto. One cascade write and nothing
+     * else: the card reaches every note through the view's display_options, rebuilt from the cascade.
      */
-    const handle_group_by_change = useCallback((group_by_key: string): void => {
-        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, kanbanAnimateTransitions: _kat, openNewEditorIfNoneOpen: _oneno, ...per_view_settings } = display_options.settings || {};
-        const persisted_group_by = group_by_key === 'auto' ? undefined : group_by_key;
-        handlers.setViewManagedState([{
-            id: props.id,
-            display_options: {
-                settings: {
-                    ...per_view_settings,
-                    groupBy: persisted_group_by,
-                },
-            },
-        }]);
-    }, [handlers, props.id, display_options.settings]);
+    const handle_card_type_change = useCallback((card_type: string): void => {
+        cascade_write_setting('cardType', card_type);
+    }, [cascade_write_setting]);
 
-    const handle_make_default = useCallback((): void => {
-        handlers.postMessage?.({ type: 'promoteSettingsToUser' });
-    }, [handlers]);
-
-    const handle_reset_to_default = useCallback((): void => {
-        handlers.postMessage?.({ type: 'resetSettingsToDefault' });
-    }, [handlers]);
-
-    const handle_restore_builtin_default = useCallback((): void => {
-        handlers.postMessage?.({ type: 'restoreSettingsToBuiltinDefault' });
-    }, [handlers]);
+    const default_actions = useDefaultActions(handlers);
 
     /*
-     * handle_setting_change - real-time apply for a per-view (display_options-owned)
-     * setting. Dispatches setViewManagedState immediately. Global keys are stripped from
-     * the persisted shape so they don't get baked into per-view state - the extension
-     * owns them via vscode workspace config.
-     */
-    const handle_setting_change = useCallback((key: CommonSettingKey, value: boolean): void => {
-        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, kanbanAnimateTransitions: _kat, openNewEditorIfNoneOpen: _oneno, ...per_view_settings } = display_options.settings || {};
-        handlers.setViewManagedState([{
-            id: props.id,
-            display_options: {
-                settings: {
-                    ...per_view_settings,
-                    [key]: value,
-                },
-            },
-        }]);
-    }, [handlers, props.id, display_options.settings]);
-
-    /*
-     * handle_global_setting_change - real-time apply for a global (vscode-owned) setting.
-     * The extension writes it to vscode workspace/user config and echoes back via
-     * globalSettings. Marks the setting key as pending; the echo reducer clears it when
-     * globalSettings arrives.
-     */
-    const handle_global_setting_change = useCallback((key: GlobalSettingKey, value: boolean): void => {
-        markPending(key);
-        handlers.postMessage?.({ type: 'updateGlobalSetting', setting: key, value });
-    }, [handlers, markPending]);
-
-    /*
-     * handle_column_order_change - real-time apply for the Kanban column order. Normalises
-     * the persisted shape: if next_order matches the natural order, store undefined
-     * locally (so future natural-order changes propagate); the cascade payload always
-     * carries an explicit array, with empty == natural.
+     * handle_column_order_change - apply the Kanban column order. The cascade spells "natural order"
+     * as an empty array rather than an absent value, matching the package.json default's shape, so a
+     * board reordered back to natural stops pinning an order and picks up future natural-order changes.
      */
     const handle_column_order_change = useCallback((next_order: string[]): void => {
-        const { showLineNumbers: _sln, watchUnopenedFilesInViewer: _wu, kanbanAnimateTransitions: _kat, openNewEditorIfNoneOpen: _oneno, ...per_view_settings } = display_options.settings || {};
         const matches_natural = arraysEqual(next_order, natural_column_order);
-        const persisted_order = matches_natural ? undefined : next_order;
-        handlers.setViewManagedState([{
-            id: props.id,
-            display_options: {
-                settings: {
-                    ...per_view_settings,
-                    columnOrder: persisted_order,
-                },
-            },
-        }]);
-        // cascade payload uses [] (not undefined) for "natural order" to match the package.json default's shape
         cascade_write_setting('columnOrder', matches_natural ? [] : next_order);
-    }, [handlers, props.id, display_options.settings, natural_column_order, cascade_write_setting]);
+    }, [natural_column_order, cascade_write_setting]);
 
     return {
         integration_selection,
@@ -214,13 +205,12 @@ export function useViewToolbar(
         view_type_selection,
         auto_resolved_type,
         handle_view_type_change,
+        card_type_selection,
+        resolved_card_type,
+        handle_card_type_change,
         natural_column_order,
-        handle_setting_change,
-        handle_global_setting_change,
+        handle_setting_change: cascade_write_setting,
         handle_column_order_change,
-        handle_group_by_change,
-        handle_make_default,
-        handle_reset_to_default,
-        handle_restore_builtin_default,
+        ...default_actions,
     };
 }

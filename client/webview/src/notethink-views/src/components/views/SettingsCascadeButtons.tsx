@@ -11,11 +11,11 @@ interface SettingsCascadeButtonsProps {
 }
 
 /**
- * Workspace ↔ user cascade controls, rendered in the bottom-right meta column of
- * every drawer for visual consistency. All three actions affect every folder-view
- * setting (not just the drawer the buttons happen to sit in) - they are global
- * to the folder-view cascade, intentionally separated from per-setting controls
- * (e.g. column-order reset) that live on the left.
+ * Workspace to user cascade controls, mounted in the Files drawer's meta column. All three actions
+ * reach EVERY NoteThink setting rather than the drawer they sit in: each posts a bare message the
+ * extension applies over settingKeys(), so a view setting and a card setting move with the file
+ * filters. That whole-cascade scope is what separates them from the per-setting controls (the
+ * per-row revert, the group-order reset) that live beside the rows themselves.
  *
  * "Reset to user default" clears Workspace overrides only (falls back to the User
  * value); "Reset to built-in default" clears Workspace AND User overrides (falls
@@ -28,7 +28,7 @@ export default function SettingsCascadeButtons(props: SettingsCascadeButtonsProp
             <button
                 type="button"
                 onClick={props.onMakeDefault}
-                title={l10n.t('Save your current folder view settings as your user default across every VS Code window.')}
+                title={l10n.t('Save every current NoteThink setting as your user default across every VS Code window.')}
             >
                 {l10n.t('Make user default')}
             </button>
@@ -36,7 +36,7 @@ export default function SettingsCascadeButtons(props: SettingsCascadeButtonsProp
                 type="button"
                 onClick={props.onResetToDefault}
                 disabled={!props.canResetToDefault}
-                title={l10n.t("Clear this workspace's folder view overrides and fall back to your user default.")}
+                title={l10n.t("Clear this workspace's NoteThink overrides and fall back to your user defaults.")}
             >
                 {l10n.t('Reset to user default')}
             </button>
@@ -44,7 +44,7 @@ export default function SettingsCascadeButtons(props: SettingsCascadeButtonsProp
                 type="button"
                 onClick={props.onRestoreBuiltinDefault}
                 disabled={!props.canRestoreBuiltinDefault}
-                title={l10n.t("Clear both this workspace's and your user folder view overrides and restore NoteThink's built-in defaults.")}
+                title={l10n.t("Clear both this workspace's and your user overrides for every NoteThink setting and restore the built-in defaults.")}
             >
                 {l10n.t('Reset to built-in default')}
             </button>

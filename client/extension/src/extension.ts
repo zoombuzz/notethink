@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { initLogDir, writeToErrorLog } from './lib/errorops';
+import { editTarget, readSetting, writeSetting } from './lib/settings';
 import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 
 const PANEL_VIEWTYPE = 'notethink';
@@ -86,16 +87,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		}));
 	}
 
-	// line numbers: persisted to workspace config
+	// line numbers: one write path, so onDidChangeConfiguration pushes the change to every open board
 	context.subscriptions.push(vscode.commands.registerCommand('notethink.toggleLineNumbers', async () => {
-		const config = vscode.workspace.getConfiguration('notethink');
-		const current = config.get<boolean>('showLineNumbers', false);
-		await config.update('showLineNumbers', !current, vscode.ConfigurationTarget.Workspace);
-	}));
-
-	// context bars: ephemeral toggle via webview state
-	context.subscriptions.push(vscode.commands.registerCommand('notethink.toggleContextBars', () => {
-		provider.sendCommandToActiveWebview('toggleSetting', { setting: 'contextBars' });
+		await writeSetting('showLineNumbers', !readSetting('showLineNumbers'), editTarget());
 	}));
 
 	// navigation commands

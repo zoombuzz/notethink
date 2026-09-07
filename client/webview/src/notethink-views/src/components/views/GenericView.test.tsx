@@ -42,20 +42,6 @@ jest.mock('../../lib/renderops', () => ({
     renderMarkdownNoteHeadline: (note: NoteProps) => <span>{note.headline_raw}</span>,
 }));
 
-// mock ViewTypeSelector - capture onChange for view-type testing
-let capturedOnViewTypeChange: ((view_type: string) => void) | undefined;
-jest.mock('./ViewTypeSelector', () => ({
-    __esModule: true,
-    default: (props: { currentSelection: string; resolvedType?: string; onChange?: (view_type: string) => void }) => {
-        capturedOnViewTypeChange = props.onChange;
-        return (
-            <select data-testid="view-type-selector" data-auto-resolved={props.resolvedType || ''}>
-                <option value={props.currentSelection}>{props.currentSelection}</option>
-            </select>
-        );
-    },
-}));
-
 // mock ViewIntegrationSelector - capture onChange for integration-mode testing
 let capturedOnIntegrationChange: ((mode: string) => void) | undefined;
 jest.mock('./ViewIntegrationSelector', () => ({
@@ -139,12 +125,45 @@ beforeEach(() => {
     mockKanbanViewRender.mockClear();
     mockAutoViewRender.mockClear();
     capturedOnIntegrationChange = undefined;
-    capturedOnViewTypeChange = undefined;
     capturedFilesDrawerProps = undefined;
     capturedOnApplyFilters = undefined;
 });
 
 describe('GenericView', () => {
+
+    it('renders a minted view type with the board it inherits from, so selecting one is not a no-op', async () => {
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'user-kanban-by-assignee',
+                    display_options: {
+                        settings: {
+                            viewUserTypes: [{ id: 'user-kanban-by-assignee', label: 'Kanban by Assignee', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' } }],
+                        },
+                    },
+                })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('kanban-view')).toBeInTheDocument());
+    });
+
+    it('renders no board for a saved type whose parent has gone, rather than throwing on untrusted config', async () => {
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'user-orphan',
+                    display_options: {
+                        settings: {
+                            viewUserTypes: [{ id: 'user-orphan', label: 'Orphan', parent: 'gone', overrides: {} }],
+                        },
+                    },
+                })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('view-toolbar')).toBeInTheDocument());
+        expect(screen.queryByTestId('kanban-view')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('document-view')).not.toBeInTheDocument();
+    });
 
     it('renders DocumentView for type "document"', async () => {
         render(
@@ -208,16 +227,16 @@ describe('GenericView', () => {
         await waitFor(() => expect(screen.getByTestId('document-view')).toBeInTheDocument());
     });
 
-    it('renders the view type selector inside the View settings drawer, not the toolbar', async () => {
+    it('renders the view-type tree inside the View settings drawer, not the toolbar', async () => {
         render(
             <Suspense fallback={<div>loading</div>}>
                 <GenericView {...makeViewProps({ type: 'document' })} />
             </Suspense>
         );
         await waitFor(() => expect(screen.getByTestId('view-toolbar')).toBeInTheDocument());
-        const selector = screen.getByTestId('view-type-selector');
-        expect(within(screen.getByTestId('settings-drawer-grid')).getByTestId('view-type-selector')).toBe(selector);
-        expect(within(screen.getByTestId('view-toolbar')).queryByTestId('view-type-selector')).not.toBeInTheDocument();
+        const tree = screen.getByTestId('settings-type-tree');
+        expect(within(screen.getByTestId('settings-drawer-grid')).getByTestId('settings-type-tree')).toBe(tree);
+        expect(within(screen.getByTestId('view-toolbar')).queryByTestId('settings-type-tree')).not.toBeInTheDocument();
     });
 
     it('leaves no dropdown at all on the toolbar row', async () => {
@@ -251,7 +270,7 @@ describe('GenericView', () => {
         expect(within(screen.getByTestId('view-toolbar')).queryByTestId('view-integration-selector')).not.toBeInTheDocument();
     });
 
-    it('passes auto_resolved_type to view type selector when set', async () => {
+    it('names the auto-resolved type on the tree root radio, which is where auto now lives', async () => {
         render(
             <Suspense fallback={<div>loading</div>}>
                 <GenericView {...makeViewProps({
@@ -260,12 +279,11 @@ describe('GenericView', () => {
                 })} />
             </Suspense>
         );
-        await waitFor(() => expect(screen.getByTestId('view-type-selector')).toBeInTheDocument());
-        const selector = screen.getByTestId('view-type-selector');
-        expect(selector).toHaveAttribute('data-auto-resolved', 'kanban');
+        await waitFor(() => expect(screen.getByTestId('view-radio-auto')).toBeInTheDocument());
+        expect(screen.getByTestId('view-radio-auto')).toHaveAttribute('aria-label', 'Auto (Kanban)');
     });
 
-    it('dispatches a view-type change from the selector inside the View settings drawer', async () => {
+    it('dispatches a view-type change from the tree radio inside the View settings drawer', async () => {
         const set_view_managed_state = jest.fn();
         render(
             <Suspense fallback={<div>loading</div>}>
@@ -280,9 +298,9 @@ describe('GenericView', () => {
                 })} />
             </Suspense>
         );
-        await waitFor(() => expect(screen.getByTestId('view-type-selector')).toBeInTheDocument());
-        // the selector's onChange is the same handle_view_type_change the toolbar used to drive
-        capturedOnViewTypeChange!('kanban');
+        await waitFor(() => expect(screen.getByTestId('view-radio-kanban')).toBeInTheDocument());
+        // the radio drives the same handle_view_type_change the retired select used to
+        fireEvent.click(screen.getByTestId('view-radio-kanban'));
         expect(set_view_managed_state).toHaveBeenCalledWith([{ id: 'test-view', type: 'kanban' }]);
     });
 
@@ -1067,16 +1085,16 @@ describe('GenericView navigation callback', () => {
             expect(grid).toHaveAttribute('data-open', 'true');
         });
 
-        it('renders SettingsDocumentDrawer when view type is document', async () => {
+        it('renders the one settings drawer for a document view, with the whole type tree in it', async () => {
             renderWithToolbar({ type: 'document' });
-            expect(await screen.findByTestId('settings-drawer-document')).toBeInTheDocument();
-            expect(screen.queryByTestId('settings-drawer-kanban')).not.toBeInTheDocument();
+            expect(await screen.findByTestId('settings-drawer-view')).toBeInTheDocument();
+            expect(screen.getByTestId('view-node-kanban')).toBeInTheDocument();
         });
 
-        it('renders SettingsKanbanDrawer when view type is kanban', async () => {
+        it('renders that same drawer for a kanban board', async () => {
             renderWithToolbar({ type: 'kanban' });
-            expect(await screen.findByTestId('settings-drawer-kanban')).toBeInTheDocument();
-            expect(screen.queryByTestId('settings-drawer-document')).not.toBeInTheDocument();
+            expect(await screen.findByTestId('settings-drawer-view')).toBeInTheDocument();
+            expect(screen.getByTestId('view-node-document')).toBeInTheDocument();
         });
 
         it('does not render the drawer for type "auto" (toolbar suppressed)', async () => {
@@ -1084,31 +1102,66 @@ describe('GenericView navigation callback', () => {
             await waitFor(() => expect(screen.queryByTestId('auto-view')).toBeInTheDocument());
             expect(screen.queryByTestId('view-settings-button')).not.toBeInTheDocument();
             expect(screen.queryByTestId('settings-drawer-grid')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('card-settings-button')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('card-settings-drawer-grid')).not.toBeInTheDocument();
         });
 
-        it('toggling a per-view checkbox dispatches setViewManagedState immediately', async () => {
+        it('titles the card tab by the card the notes draw as, and opens its own drawer', async () => {
+            renderWithToolbar({ type: 'document' });
+            const card_tab = await screen.findByTestId('card-settings-button');
+            expect(screen.getByTestId('card-settings-button-label')).toHaveTextContent('Auto (Card)');
+            expect(screen.getByTestId('card-settings-drawer-grid')).toHaveAttribute('data-open', 'false');
+            fireEvent.click(card_tab);
+            expect(screen.getByTestId('card-settings-drawer-grid')).toHaveAttribute('data-open', 'true');
+            // the two tabs are independent drawers, so opening one closes the other rather than stacking
+            expect(screen.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'false');
+        });
+
+        it('picking a card type from the card tree cascade-writes cardType and nothing else', async () => {
             const set_state = jest.fn();
+            const post_message = jest.fn();
             renderWithToolbar({
                 type: 'document',
                 handlers: {
                     setViewManagedState: set_state,
                     deleteViewFromManagedState: jest.fn(),
                     revertAllViewsToDefaultState: jest.fn(),
-                    postMessage: jest.fn(),
+                    postMessage: post_message,
                 },
             });
-            fireEvent.click(await screen.findByTestId('view-settings-button'));
-            const linetags_cb = screen.getAllByRole('checkbox').find(
-                cb => cb.closest('label')?.textContent?.includes('linetag')
-            )!;
-            fireEvent.click(linetags_cb);
-            expect(set_state).toHaveBeenCalledTimes(1);
-            const update = set_state.mock.calls[0][0][0];
-            expect(update.id).toBe('test-view');
-            expect(update.display_options.settings.showLinetagsInHeadlines).toBe(true);
+            fireEvent.click(await screen.findByTestId('card-settings-button'));
+            fireEvent.click(screen.getByTestId('card-radio-sticky'));
+            expect(post_message).toHaveBeenCalledWith({
+                type: 'updateSetting',
+                setting: 'cardType',
+                value: 'sticky',
+            });
+            expect(set_state).not.toHaveBeenCalled();
         });
 
-        it('toggling the line-numbers checkbox dispatches postMessage updateGlobalSetting', async () => {
+        it('toggling a card-drawn checkbox dispatches updateSetting and writes no per-view state', async () => {
+            const set_state = jest.fn();
+            const post_message = jest.fn();
+            renderWithToolbar({
+                type: 'document',
+                handlers: {
+                    setViewManagedState: set_state,
+                    deleteViewFromManagedState: jest.fn(),
+                    revertAllViewsToDefaultState: jest.fn(),
+                    postMessage: post_message,
+                },
+            });
+            fireEvent.click(await screen.findByTestId('card-settings-button'));
+            fireEvent.click(screen.getByTestId('setting-control-showLinetagsInHeadlines'));
+            expect(post_message).toHaveBeenCalledWith({
+                type: 'updateSetting',
+                setting: 'showLinetagsInHeadlines',
+                value: true,
+            });
+            expect(set_state).not.toHaveBeenCalled();
+        });
+
+        it('toggling the line-numbers checkbox dispatches the same updateSetting message, not a second channel', async () => {
             const post_message = jest.fn();
             renderWithToolbar({
                 type: 'document',
@@ -1119,20 +1172,37 @@ describe('GenericView navigation callback', () => {
                     postMessage: post_message,
                 },
             });
-            fireEvent.click(await screen.findByTestId('view-settings-button'));
-            const line_cb = screen.getAllByRole('checkbox').find(
-                cb => cb.closest('label')?.textContent?.includes('line numbers')
-            )!;
-            fireEvent.click(line_cb);
+            fireEvent.click(await screen.findByTestId('card-settings-button'));
+            fireEvent.click(screen.getByTestId('setting-control-showLineNumbers'));
             expect(post_message).toHaveBeenCalledWith({
-                type: 'updateGlobalSetting',
+                type: 'updateSetting',
                 setting: 'showLineNumbers',
                 value: true,
             });
         });
 
-        it('Kanban column reorder dispatches setViewManagedState with columnOrder; reset persists undefined', async () => {
+        /*
+         * The label has to name the axis the board will actually lane by. The generic auto ladder ends at
+         * the first-level folder, so before kanban had its own resolver this row read "Auto (First Level
+         * Folder)" over lanes that were statuses - the drawer describing a board it was not driving.
+         */
+        it('reads Auto (Status) on a kanban board, not the generic folder default', async () => {
+            const status_note = makeNote({
+                seq: 1, level: 2,
+                position: { start: { offset: 10, line: 2 }, end: { offset: 20, line: 2 }, end_body: { offset: 30, line: 3 } },
+                linetags: { 'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 } },
+                origin: { doc_id: 'doc-a', doc_path: '/repo/alpha/todo.md', relative_path: 'alpha/todo.md' },
+            });
+            const root = makeNote({ seq: 0, level: 1, child_notes: [status_note] });
+            renderWithToolbar({ type: 'kanban', notes: [root, status_note] });
+            fireEvent.click(await screen.findByTestId('view-settings-button'));
+            const axis = screen.getByTestId('group-by-selector');
+            expect(within(axis).getByRole('option', { name: 'Auto (Status)' })).toBeInTheDocument();
+        });
+
+        it('the lane-order control lists the lanes derived from the board\'s own notes', async () => {
             const set_state = jest.fn();
+            const post_message = jest.fn();
             const status_note_a = makeNote({
                 seq: 1, level: 2,
                 position: { start: { offset: 10, line: 2 }, end: { offset: 20, line: 2 }, end_body: { offset: 30, line: 3 } },
@@ -1151,23 +1221,25 @@ describe('GenericView navigation callback', () => {
                     setViewManagedState: set_state,
                     deleteViewFromManagedState: jest.fn(),
                     revertAllViewsToDefaultState: jest.fn(),
-                    postMessage: jest.fn(),
+                    postMessage: post_message,
                 },
             });
             fireEvent.click(await screen.findByTestId('view-settings-button'));
             /*
-             * natural order is ['doing', 'done', 'untagged']; clicking move-up on 'done' produces ['done', 'doing', 'untagged']
-             * labels are formatted (title-cased) - the raw slug is still what's stored
+             * the natural order the two status notes produce is ['doing', 'done', 'untagged'], and the chips
+             * carry the raw slug while their labels are formatted - which is what proves the toolbar derived
+             * the order from these notes rather than from a stored value.
              */
-            fireEvent.click(screen.getByLabelText('Move Done up'));
-            expect(set_state).toHaveBeenCalledTimes(1);
-            const reorder_update = set_state.mock.calls[0][0][0];
-            expect(reorder_update.display_options.settings.columnOrder).toEqual(['done', 'doing', 'untagged']);
-            // resetting to natural order persists undefined
-            set_state.mockClear();
-            fireEvent.click(screen.getByText('Reset order'));
-            const reset_update = set_state.mock.calls[0][0][0];
-            expect(reset_update.display_options.settings.columnOrder).toBeUndefined();
+            const chips = screen.getAllByTestId(/^column-order-chip-/);
+            expect(chips.map(el => el.getAttribute('data-testid'))).toEqual([
+                'column-order-chip-doing',
+                'column-order-chip-done',
+                'column-order-chip-untagged',
+            ]);
+            expect(screen.getByLabelText('Reorder Done')).toBeInTheDocument();
+            // opening the drawer writes nothing at all: the order lives in config, and no per-view state backs it
+            expect(post_message).not.toHaveBeenCalledWith(expect.objectContaining({ setting: 'columnOrder' }));
+            expect(set_state).not.toHaveBeenCalled();
         });
 
         it('Escape closes the drawer and returns focus to the gear button', async () => {
@@ -1200,7 +1272,7 @@ describe('GenericView navigation callback', () => {
             renderWithToolbar();
             fireEvent.click(await screen.findByTestId('view-settings-button'));
             const grid = await screen.findByTestId('settings-drawer-grid');
-            const inside = await screen.findByTestId('settings-drawer-document');
+            const inside = await screen.findByTestId('settings-drawer-view');
             act(() => {
                 inside.dispatchEvent(new Event('pointerdown', { bubbles: true }));
             });
@@ -1495,12 +1567,12 @@ describe('GenericView drawer tabs', () => {
         expect(await screen.findByTestId('view-settings-button')).toHaveTextContent('Kanban');
     });
 
-    it('opens the View settings drawer, which is where the view-type selector now lives', async () => {
+    it('opens the View settings drawer, which is where the view-type tree now lives', async () => {
         renderTabs();
         const grid = await screen.findByTestId('settings-drawer-grid');
         fireEvent.click(screen.getByTestId('view-settings-button'));
         expect(grid).toHaveAttribute('data-open', 'true');
-        expect(within(grid).getByTestId('view-type-selector')).toBeInTheDocument();
+        expect(within(grid).getByTestId('settings-type-tree')).toBeInTheDocument();
     });
 
     it('dispatches an integration change from the selector inside the open Jump to drawer', async () => {

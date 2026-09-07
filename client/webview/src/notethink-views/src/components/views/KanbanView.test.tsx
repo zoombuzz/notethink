@@ -135,6 +135,58 @@ describe('KanbanView', () => {
         expect(top_level[top_level.length - 1]).toBe('untagged');
     });
 
+    /*
+     * kanban's axis is a default, not a constant: `auto` means status, and its own group-by overrides it.
+     * These three cases are the whole contract - the drawer writes kanbanGroupBy, so a board that ignored
+     * it would leave the setting inert and the "Save as a new view type" offer meaningless.
+     */
+    it('lanes by status when its own group-by is auto or unset', () => {
+        const doing = makeNote({
+            seq: 1,
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+                'assignee': { key: 'assignee', value: 'ada', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const { unmount } = render(<KanbanView {...makeViewProps({ notes: [doing], notes_within_parent_context: [doing] })} />);
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        expect(screen.queryByTestId('column-ada')).not.toBeInTheDocument();
+        unmount();
+
+        render(<KanbanView {...makeViewProps({
+            notes: [doing],
+            notes_within_parent_context: [doing],
+            display_options: { settings: { kanbanGroupBy: 'auto' } },
+        })} />);
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+    });
+
+    it('lanes by its own group-by when one is chosen, so the setting is not written and ignored', () => {
+        const ada = makeNote({
+            seq: 1,
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+                'assignee': { key: 'assignee', value: 'ada', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const grace = makeNote({
+            seq: 2,
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+                'assignee': { key: 'assignee', value: 'grace', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        render(<KanbanView {...makeViewProps({
+            notes: [ada, grace],
+            notes_within_parent_context: [ada, grace],
+            display_options: { settings: { kanbanGroupBy: 'assignee' } },
+        })} />);
+        expect(screen.getByTestId('column-ada')).toBeInTheDocument();
+        expect(screen.getByTestId('column-grace')).toBeInTheDocument();
+        expect(screen.queryByTestId('column-doing')).not.toBeInTheDocument();
+    });
+
     it('derives columns from note status linetags', () => {
         const doing_note = makeNote({
             seq: 1,

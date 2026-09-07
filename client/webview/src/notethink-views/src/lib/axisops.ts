@@ -115,6 +115,14 @@ export const INTRA_CELL_RANK_KEY = 'nt_kanban_ordering_weight';
  */
 export const FIRST_LEVEL_FOLDER_KEY = 'nt_first_level_folder';
 
+/*
+ * The axis kanban lanes by unless its own group-by says otherwise. It is kanban's identity rather than a
+ * preference, which is why `auto` on a kanban board means this and not the first-level-folder default
+ * every other grouped view falls back to. Several lane helpers still spell it as a default parameter -
+ * that is the same value, kept as sugar so a caller grouping a kanban needs no import.
+ */
+export const KANBAN_AXIS_KEY = 'status';
+
 /** expand the string-sugar form of an axis into a full categorical AxisSpec */
 export function normalizeAxis(axis: Axis): AxisSpec {
     if (typeof axis === 'string') { return { field: axis, kind: 'categorical' }; }

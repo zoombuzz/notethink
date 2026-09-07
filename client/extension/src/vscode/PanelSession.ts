@@ -7,7 +7,7 @@ import { debug, writeToLog, writeToLogAtLevel, writeToErrorLog } from '../lib/er
 import { globMatches } from '../lib/globMatch';
 import { parse } from '../lib/parseops';
 import { isPathWithin, isWithinWorkspace } from '../lib/pathops';
-import { SETTINGS, type SettingKey, isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, hasOverride, cascadeKeys, buildSettingsCascadePayload } from '../lib/settings';
+import { isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, hasOverride, settingKeys, editTarget, buildSettingsCascadePayload } from '../lib/settings';
 import type { HashMapOf, Doc } from '../types/general';
 
 const CHANGE_DEBOUNCE_MS = 250;
@@ -303,19 +303,6 @@ export class PanelSession {
 
 	// --- settings ---
 
-	private readGlobalSettings(): { showLineNumbers: boolean; watchUnopenedFilesInViewer: boolean; kanbanAnimateTransitions: boolean; openNewEditorIfNoneOpen: boolean } {
-		return {
-			showLineNumbers: readSetting('showLineNumbers'),
-			watchUnopenedFilesInViewer: readSetting('watchUnopenedFilesInViewer'),
-			kanbanAnimateTransitions: readSetting('kanbanAnimateTransitions'),
-			openNewEditorIfNoneOpen: readSetting('openNewEditorIfNoneOpen'),
-		};
-	}
-
-	private sendGlobalSettings(): void {
-		this.webviewPanel.webview.postMessage({ type: 'globalSettings', settings: this.readGlobalSettings() });
-	}
-
 	private sendSettingsCascade(): void {
 		this.webviewPanel.webview.postMessage({ type: 'settingsCascade', settings: buildSettingsCascadePayload() });
 	}
@@ -383,20 +370,11 @@ export class PanelSession {
 	}
 
 	private onDidChangeConfiguration(e: vscode.ConfigurationChangeEvent): void {
-		if (e.affectsConfiguration('notethink.settings.view.generic.showLineNumbers')) {
-			this.sendGlobalSettings();
-		}
+		// the active-file watcher is armed off this setting, so a change re-evaluates whether it should exist
 		if (e.affectsConfiguration('notethink.settings.view.generic.watchUnopenedFilesInViewer')) {
-			this.sendGlobalSettings();
 			this.syncActiveFileWatcher();
 		}
-		if (e.affectsConfiguration('notethink.settings.view.specific.kanban.animateTransitions')) {
-			this.sendGlobalSettings();
-		}
-		if (e.affectsConfiguration('notethink.settings.view.generic.openNewEditorIfNoneOpen')) {
-			this.sendGlobalSettings();
-		}
-		// catch-all for any cascade setting change (covers the two above and the cascade keys)
+		// one payload carries every setting, so one catch-all covers every key
 		if (e.affectsConfiguration('notethink.settings')) {
 			this.sendSettingsCascade();
 		}
@@ -433,7 +411,6 @@ export class PanelSession {
 		try {
 			switch (e.type) {
 				case 'requestInitialState': return this.handleRequestInitialState();
-				case 'updateGlobalSetting': return this.handleUpdateGlobalSetting(e);
 				case 'updateSetting': return this.handleUpdateSetting(e);
 				case 'promoteSettingsToUser': return this.handlePromoteSettings();
 				case 'resetSettingsToDefault': return this.handleResetSettings();
@@ -471,7 +448,6 @@ export class PanelSession {
 				this.sendDoc(this.active_doc);
 				this.sendCurrentSelection();
 			}
-			this.sendGlobalSettings();
 			this.sendSettingsCascade();
 			this.syncActiveFileWatcher();
 			await this.openFolderAtWorkspaceRootIfDocless();
@@ -516,45 +492,17 @@ export class PanelSession {
 		});
 	}
 
-	// per-setting storage target preference for the non-cascade globals: showLineNumbers persists per-workspace; the rest are personal preferences that follow the user across projects (matching each key's window/resource scope in package.json)
-	private readonly GLOBAL_SETTING_TARGETS: Partial<Record<SettingKey, vscode.ConfigurationTarget>> = {
-		showLineNumbers: vscode.ConfigurationTarget.Workspace,
-		watchUnopenedFilesInViewer: vscode.ConfigurationTarget.Global,
-		kanbanAnimateTransitions: vscode.ConfigurationTarget.Global,
-		openNewEditorIfNoneOpen: vscode.ConfigurationTarget.Global,
-	};
-
-	private async handleUpdateGlobalSetting(e: Record<string, unknown>): Promise<void> {
-		const setting = e.setting as unknown;
-		const value = e.value as unknown;
-		try {
-			if (!isSettingKey(setting) || SETTINGS[setting].inCascade) {
-				writeToLogAtLevel('error', 'handleUpdateGlobalSetting', `unknown or not-global setting ${String(setting)}`);
-				return;
-			}
-			const target = this.GLOBAL_SETTING_TARGETS[setting];
-			if (!target) {
-				writeToLogAtLevel('error', 'handleUpdateGlobalSetting', `no per-setting target configured for ${String(setting)}`);
-				return;
-			}
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- writeSetting's generic narrows on the key; the value's union widens to unknown at this boundary because e.value is untyped
-			await writeSetting(setting, value as any, target);
-		} catch (err) {
-			writeToErrorLog('handleUpdateGlobalSetting', `writeSetting failed for ${String(setting)}`, err);
-		}
-	}
-
 	private async handleUpdateSetting(e: Record<string, unknown>): Promise<void> {
-		// scope defaults to workspace so user edits stay local; promote-to-default uses scope='global'
+		// scope defaults to the ordinary edit target so a change stays local; "Save as default" sends scope='global'
 		const setting = e.setting as unknown;
 		const value = e.value as unknown;
 		const scope = (e.scope as 'workspace' | 'global' | undefined) ?? 'workspace';
 		try {
-			if (!isSettingKey(setting) || !SETTINGS[setting].inCascade) {
-				writeToLogAtLevel('error', 'handleUpdateSetting', `unknown or not-cascade setting ${String(setting)}`);
+			if (!isSettingKey(setting)) {
+				writeToLogAtLevel('error', 'handleUpdateSetting', `unknown setting ${String(setting)}`);
 				return;
 			}
-			const target = scope === 'global' ? vscode.ConfigurationTarget.Global : vscode.ConfigurationTarget.Workspace;
+			const target = scope === 'global' ? vscode.ConfigurationTarget.Global : editTarget();
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- value's union widens to unknown at the wire boundary
 			await writeSetting(setting, value as any, target);
 		} catch (err) {
@@ -563,9 +511,9 @@ export class PanelSession {
 	}
 
 	private async handlePromoteSettings(): Promise<void> {
-		// snapshot every currently-resolved cascade value first (workspace may shadow user), promote each to Global, then clear Workspace so the cascade reads from User next time
+		// snapshot every currently-resolved value first (workspace may shadow user), promote each to Global, then clear Workspace so the user scope is the only home for the value
 		try {
-			const keys = cascadeKeys();
+			const keys = settingKeys();
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- per-key value types are heterogeneous; the snapshot is opaque
 			const resolved: Record<string, any> = {};
 			for (const key of keys) {
@@ -574,39 +522,40 @@ export class PanelSession {
 			for (const key of keys) {
 				await writeSetting(key, resolved[key], vscode.ConfigurationTarget.Global);
 			}
+			// Workspace, not editTarget(): a folderless window has nothing at that scope to clear anyway
 			for (const key of keys) {
 				if (hasWorkspaceOverride(key)) {
 					await writeSetting(key, undefined, vscode.ConfigurationTarget.Workspace);
 				}
 			}
 		} catch (err) {
-			writeToErrorLog('handlePromoteSettings', 'failed to promote cascade settings to user scope', err);
+			writeToErrorLog('handlePromoteSettings', 'failed to promote settings to user scope', err);
 		}
 	}
 
 	private async handleResetSettings(): Promise<void> {
-		// clear every Workspace-scope cascade override so the cascade falls back to User then built-in
+		// clear every Workspace-scope override so each setting falls back to User then built-in
 		try {
-			for (const key of cascadeKeys()) {
+			for (const key of settingKeys()) {
 				if (hasWorkspaceOverride(key)) {
 					await writeSetting(key, undefined, vscode.ConfigurationTarget.Workspace);
 				}
 			}
 		} catch (err) {
-			writeToErrorLog('handleResetSettings', 'failed to clear workspace cascade overrides', err);
+			writeToErrorLog('handleResetSettings', 'failed to clear workspace overrides', err);
 		}
 	}
 
 	private async handleRestoreBuiltinDefaults(): Promise<void> {
-		// clear both Workspace- and User-scope cascade overrides so every cascade setting falls back to the built-in (package.json) default. The recovery path when even the user default has been edited away (e.g. a wiped exclude filter) - "Reset to user default" cannot help once the user default itself is gone
+		// clear both the Workspace- and the User-scope override so every setting falls back to the built-in (package.json) default. The recovery path when even the user default has been edited away (e.g. a wiped exclude filter) - "Revert to defaults" cannot help once the user default itself is gone
 		try {
-			for (const key of cascadeKeys()) {
+			for (const key of settingKeys()) {
 				if (!hasOverride(key)) { continue; }
 				await writeSetting(key, undefined, vscode.ConfigurationTarget.Workspace);
 				await writeSetting(key, undefined, vscode.ConfigurationTarget.Global);
 			}
 		} catch (err) {
-			writeToErrorLog('handleRestoreBuiltinDefaults', 'failed to clear workspace and user cascade overrides', err);
+			writeToErrorLog('handleRestoreBuiltinDefaults', 'failed to clear workspace and user overrides', err);
 		}
 	}
 
@@ -750,7 +699,7 @@ export class PanelSession {
 
 	// resolve folder-mode filters with cascade precedence: built-in default → User config → Workspace config → explicit message override. The previous behaviour (only adopt explicit fields) left stale defaults in place when transitioning from current_file mode via a breadcrumb click, loading the whole workspace before the user's saved filter was applied
 	private adoptFolderFilters(e: Record<string, unknown>): void {
-		// cascade as the base; the settings module funnels every read through one place so this cannot drift from readSettingsCascade
+		// the resolved settings are the base; every read funnels through the settings module, so this cannot drift from what the webview is shown
 		this.integration_include = readSetting('includeFilter');
 		this.integration_exclude = readSetting('excludeFilter');
 		// explicit message override wins so the Files drawer's Apply can re-narrow without round-tripping through config first; empty include is degenerate so falls back to the default, empty exclude legitimately means "exclude nothing"

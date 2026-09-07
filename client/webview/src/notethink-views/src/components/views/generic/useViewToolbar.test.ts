@@ -16,6 +16,18 @@ function makeHandlers(): { handlers: ViewApi; set_view_managed_state: jest.Mock;
     return { handlers, set_view_managed_state, post_message };
 }
 
+// two lane values plus the untagged bucket deriveNaturalColumnOrder always appends
+function makeStatusNote(seq: number, status: string): NoteProps {
+    return {
+        seq, level: 1, children_body: [], children: [],
+        position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } },
+        headline_raw: '', body_raw: '',
+        linetags: { status: { key: 'status', key_offset: 0, value: status, value_offset: 0, linktext_offset: 0, note_seq: seq } },
+    };
+}
+
+const LANE_NOTES: NoteProps[] = [makeStatusNote(1, 'doing'), makeStatusNote(2, 'done')];
+
 function makeProps(overrides: Partial<ViewProps> = {}): ViewProps {
     return {
         id: 'doc-id-1',
@@ -234,6 +246,37 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'viewType', value: 'kanban' });
     });
 
+    it('handle_setting_change posts one updateSetting for the key it was handed, whatever node owns it', () => {
+        const { handlers, set_view_managed_state, post_message } = makeHandlers();
+        const props = makeProps();
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
+        act(() => { result.current.handle_setting_change('showLinetagsInHeadlines', true); });
+        act(() => { result.current.handle_setting_change('showLineNumbers', true); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'showLinetagsInHeadlines', value: true });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'showLineNumbers', value: true });
+        // no per-view settings copy survives: config is the only place a setting lands
+        expect(set_view_managed_state).not.toHaveBeenCalled();
+    });
+
+    it('handle_column_order_change cascade-writes only, and spells natural order as an empty array', () => {
+        const { handlers, set_view_managed_state, post_message } = makeHandlers();
+        const props = makeProps();
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
+        act(() => { result.current.handle_column_order_change(['done', 'doing']); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'columnOrder', value: ['done', 'doing'] });
+        // natural_column_order is [] for a non-kanban view, so an empty next_order matches natural
+        act(() => { result.current.handle_column_order_change([]); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'columnOrder', value: [] });
+        expect(set_view_managed_state).not.toHaveBeenCalled();
+    });
+
+    it('natural_column_order is derived for every lane view, not only kanban, so the drawer can offer the row from any node', () => {
+        const { handlers } = makeHandlers();
+        const line_props = makeProps({ type: 'line' });
+        const { result } = renderHook(() => useViewToolbar(line_props, handlers, line_props.display_options!, LANE_NOTES));
+        expect(result.current.natural_column_order).toEqual(['doing', 'done', 'untagged']);
+    });
+
     it('handle_make_default / handle_reset_to_default / handle_restore_builtin_default each post their cascade message', () => {
         const { handlers, post_message } = makeHandlers();
         const props = makeProps();
@@ -246,4 +289,73 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         expect(post_message).toHaveBeenCalledWith({ type: 'restoreSettingsToBuiltinDefault' });
     });
 
+});
+
+/*
+ * One note per originating file, carrying that file's nt_card vote. majorityFileVote counts one vote per
+ * doc_id, so the notes only have to differ by origin for the tally to be over files rather than notes.
+ */
+function makeVotingNote(seq: number, doc_id: string, file_card_type?: string): NoteProps {
+    return {
+        seq, level: 1, children_body: [], children: [],
+        position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } },
+        headline_raw: '', body_raw: '', linetags: {},
+        origin: { doc_id, doc_path: `/ws/${doc_id}.md`, file_card_type },
+    };
+}
+
+/** a parent context isAggregateRoot accepts: two or more distinct originating files under one root */
+function makeAggregateRoot(notes: NoteProps[]): NoteProps {
+    return {
+        seq: 0, level: 0, children_body: [], children: [], child_notes: notes,
+        position: { start: { offset: 0, line: 1 }, end: { offset: 0, line: 1 } },
+        headline_raw: '', body_raw: '', linetags: {},
+    };
+}
+
+describe('useViewToolbar card type', () => {
+
+    /*
+     * The regression this guards was shipped and seen. AutoView runs the vote, and AutoView renders for
+     * `auto` ALONE - so pinning any view type unmounted the only thing voting, and every sticky on a
+     * folder that had voted for one expanded back into the view's default card. The two axes are meant to
+     * be independent, so the card answer cannot be a side effect of the view answer being `auto`.
+     */
+    it('votes for itself on an aggregate root with the view type pinned, since no AutoView is mounted to vote', () => {
+        const { handlers } = makeHandlers();
+        const notes = [
+            makeVotingNote(1, 'alpha', 'sticky'),
+            makeVotingNote(2, 'beta', 'sticky'),
+            makeVotingNote(3, 'gamma'),
+        ];
+        const props = makeProps({ type: 'kanban', notes, nested: { parent_context: makeAggregateRoot(notes) } });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, notes));
+        expect(result.current.card_type_selection).toBe('auto');
+        expect(result.current.resolved_card_type).toBe('sticky');
+    });
+
+    it('takes AutoView\'s answer when one is published, rather than voting a second time', () => {
+        const { handlers } = makeHandlers();
+        const notes = [makeVotingNote(1, 'alpha', 'sticky'), makeVotingNote(2, 'beta', 'sticky')];
+        const props = makeProps({ type: 'kanban', notes, nested: { parent_context: makeAggregateRoot(notes), auto_resolved_card_type: 'card' } });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, notes));
+        expect(result.current.resolved_card_type).toBe('card');
+    });
+
+    it('a pinned card type wins over the vote, which is what pinning means', () => {
+        const { handlers } = makeHandlers();
+        const notes = [makeVotingNote(1, 'alpha', 'sticky'), makeVotingNote(2, 'beta', 'sticky')];
+        const props = makeProps({ type: 'kanban', notes, nested: { parent_context: makeAggregateRoot(notes), replaced_attributes: { card_type: 'card' } } });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, notes));
+        expect(result.current.card_type_selection).toBe('card');
+        expect(result.current.resolved_card_type).toBe('card');
+    });
+
+    it('an even split is a tie and falls back to the view default rather than picking a side', () => {
+        const { handlers } = makeHandlers();
+        const notes = [makeVotingNote(1, 'alpha', 'sticky'), makeVotingNote(2, 'beta', 'card')];
+        const props = makeProps({ type: 'kanban', notes, nested: { parent_context: makeAggregateRoot(notes) } });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, notes));
+        expect(result.current.resolved_card_type).toBe('card');
+    });
 });

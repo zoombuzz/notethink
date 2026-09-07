@@ -24,6 +24,7 @@ export interface ViewProps {
     aggregate_loaded_files?: Array<string>;
     settingsCascadeHasWorkspaceOverrides?: boolean;
     settingsCascadeHasAnyOverrides?: boolean;
+    settingsCascadeDiverged?: string[];
     view_state_ids?: readonly string[];
     file_declared_integration?: {
         mode: ConcreteIntegrationMode;
@@ -39,6 +40,7 @@ export interface ViewProps {
         document_root?: NoteProps;
         replaced_attributes?: Record<string, unknown>;
         auto_resolved_type?: string;
+        auto_resolved_card_type?: string;
     }
     // --- recursive inclusion of parent and child views ---
     child_views?: Array<ViewProps>;

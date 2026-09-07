@@ -1,5 +1,6 @@
 import type {ReactElement, MouseEvent} from "react";
 import type { Nodes as MdastNodesImport } from "mdast";
+import type { UserViewType } from "./Messages";
 
 export interface ClickPositionInfo {
     from: number;
@@ -16,6 +17,9 @@ export type NoteClickHandler = (event: MouseEvent<HTMLElement>, note: NoteProps 
  * - integration_mode_selection: the persisted integration-mode choice (auto / current_file / folder), carried alongside the composer-resolved concrete integration_mode so the toolbar selector can render "Auto (…)" vs the concrete label; never persisted itself - the composer re-stamps it from the canonical folder view-state each render
  * - view_caret: the view's own caret offset when no editor is live, in in-tree (merged-tree) offset space so it resolves via findDeepestNote in both single-file and folder mode; augmented state only, never text - files stay master
  * - parent_context_id / parent_context_seq: the note-hierarchy scope this view opens at. The id is the persisted half (a stable_id from a drill-in or breadcrumb click, else the authored nt_breadcrumb_last headline label) and is re-resolved against the current tree by resolveParentContextNote on every render; the seq is the resolved result, derived per render and never persisted
+ * - settings: the resolved settings cascade, stamped by the composer from the single settingsCascade message the extension pushes; field names and value shapes mirror SETTINGS in client/extension/src/lib/settings.ts one for one, minus that payload's three aggregate fields. No per-view settings tier is layered over it, so a value read here is the value VS Code configuration resolved
+ * - groupBy / kanbanGroupBy: the same lane-axis choice homed at two registry nodes, so a kanban board can carry an override the ancestor grouped view does not see; read whichever matches the rendered view type
+ * - columnOrder: absent means the natural (derived) order, which is how the cascade's empty array arrives here
  * - view_expanded_ids: stable_ids of the notes the user manually expanded past their clip height, newest last and capped by nextExpandedIds so the persisted list cannot grow without bound; the manual override layer under autoExpandFocusedNote, and the reason expansion outlives a remount
  */
 export interface NoteDisplayOptions {
@@ -25,18 +29,24 @@ export interface NoteDisplayOptions {
     parent_context_id?: string;
     parent_context_seq?: number;
     settings?: {
-        showContextBars?: boolean;
+        viewType?: string;
         showLinetagsInHeadlines?: boolean;
-        showLineNumbers?: boolean;
-        watchUnopenedFilesInViewer?: boolean;
-        kanbanAnimateTransitions?: boolean;
-        openNewEditorIfNoneOpen?: boolean;
-        scrollTextIntoView?: boolean;
         scrollNoteIntoView?: boolean;
         autoExpandFocusedNote?: boolean;
-        columnOrder?: string[];
-        orientation?: 'columns' | 'rows';
+        showLineNumbers?: boolean;
         groupBy?: string;
+        orientation?: 'columns' | 'rows';
+        kanbanGroupBy?: string;
+        columnOrder?: string[];
+        kanbanCardRatio?: number;
+        kanbanAnimateTransitions?: boolean;
+        watchUnopenedFilesInViewer?: boolean;
+        openNewEditorIfNoneOpen?: boolean;
+        includeFilter?: string;
+        excludeFilter?: string;
+        maxNotesPerFile?: number;
+        cardType?: string;
+        viewUserTypes?: UserViewType[];
     };
     deepest?: {
         selectable_level?: number;
@@ -62,7 +72,7 @@ export interface NoteDisplayOptions {
     excludeFilter?: string;
     maxNotesPerFile?: number;
     additional_classes?: string[];
-    total_columns?: number;
+    card_target_height?: number;
     provided?: {
         draggableProps?: Record<string, unknown>;
         dragHandleProps?: Record<string, unknown>;
@@ -181,6 +191,7 @@ export interface NoteProps {
  * descendants by mergeAggregateRoot; lets callers route edits back to the
  * source file and drives implicit cross-file ordering.
  * - file_view_type: the nt_view (legacy ng_view) value declared on the originating file's H1, if any; used by AutoView to majority-vote view type across the merged tree (one vote per file)
+ * - file_card_type: the nt_card (legacy ng_card) value declared on the originating file's H1 (front-matter fallback), if any; majority-voted across files to auto-resolve the card type, the orthogonal axis to file_view_type
  * - file_group_by: the nt_group_by value declared on the originating file's H1 (front-matter fallback), if any; majority-voted across files to auto-resolve the Line view's group-by key, mirroring file_view_type
  * - file_group_order: the nt_group_order value declared on the originating file's H1 (front-matter fallback), if any; the authored per-axis lane order that seeds grouped's group order
  * - file_rank: 0-based index of this story within its source file's selected story list (after the per-file cap + `order` reversal); the implicit ordering weight - equal across files means equal priority, which relevance ordering then breaks by file_mtime (newer first)
@@ -198,6 +209,7 @@ export interface NoteOrigin {
         id?: string;
     };
     file_view_type?: string;
+    file_card_type?: string;
     file_group_by?: string;
     file_group_order?: string;
     file_rank?: number;

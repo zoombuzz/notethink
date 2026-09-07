@@ -39,7 +39,7 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
              data-offset-end={note.position.end.offset}
              onClick={createNoteClickHandler(note, headlineClickPosition(note))}
         >
-            {show_lineno && (<span className={view_specific_styles.lineno}><span>{note.position.start.line}</span></span>)}
+            {show_lineno && (<span className={view_specific_styles.lineno} data-testid="note-lineno"><span>{note.position.start.line}</span></span>)}
             {show_origin && (
                 <OriginPill
                     origin={note.origin!}

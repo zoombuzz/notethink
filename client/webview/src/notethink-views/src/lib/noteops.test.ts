@@ -1,6 +1,8 @@
 import {
     arraysEqual,
     deriveNaturalColumnOrder,
+    mergeSavedColumnOrder,
+    moveInOrder,
     withinNoteHeadlineOrBody,
     withinNoteHeadlineOrBodyUpTo,
     findDeepestNote,
@@ -9,6 +11,7 @@ import {
     findSelectedNotesByOriginPosition,
     flattenAllNotes,
     isAggregateRoot,
+    majorityCardType,
     majorityGroupBy,
     majorityNgView,
     navigateToNeighbour,
@@ -1127,6 +1130,49 @@ describe('majorityGroupBy', () => {
     });
 });
 
+describe('majorityCardType', () => {
+    function noteFrom(seq: number, doc_id: string, card_type: string | undefined): NoteProps {
+        return makeNote({ seq, origin: { doc_id, doc_path: doc_id, file_card_type: card_type } });
+    }
+
+    it('returns the majority nt_card winner across distinct files', () => {
+        const notes = [
+            noteFrom(1, 'a', 'sticky'),
+            noteFrom(2, 'b', 'sticky'),
+            noteFrom(3, 'c', 'card'),
+        ];
+        expect(majorityCardType(notes)).toBe('sticky');
+    });
+
+    it('returns undefined on a tie so the caller falls back to the view default', () => {
+        const notes = [noteFrom(1, 'a', 'sticky'), noteFrom(2, 'b', 'card')];
+        expect(majorityCardType(notes)).toBeUndefined();
+    });
+
+    it('counts one vote per file and ignores notes without a file_card_type', () => {
+        const notes = [
+            noteFrom(1, 'a', 'sticky'),
+            noteFrom(2, 'a', 'sticky'),
+            noteFrom(3, 'b', undefined),
+        ];
+        expect(majorityCardType(notes)).toBe('sticky');
+    });
+
+    it('votes independently of the view axis on the same notes', () => {
+        const notes = [
+            makeNote({ seq: 1, origin: { doc_id: 'a', doc_path: 'a', file_view_type: 'kanban', file_card_type: 'sticky' } }),
+            makeNote({ seq: 2, origin: { doc_id: 'b', doc_path: 'b', file_view_type: 'kanban', file_card_type: 'sticky' } }),
+        ];
+        expect(majorityNgView(notes)).toBe('kanban');
+        expect(majorityCardType(notes)).toBe('sticky');
+    });
+
+    it('returns undefined for empty or missing input', () => {
+        expect(majorityCardType([])).toBeUndefined();
+        expect(majorityCardType(undefined)).toBeUndefined();
+    });
+});
+
 describe('navigateToNeighbour', () => {
     const a = makeNote({ seq: 1 });
     const b = makeNote({ seq: 2 });
@@ -1238,6 +1284,48 @@ describe('arraysEqual', () => {
         expect(arraysEqual([1, 2, 3], [3, 2, 1])).toBe(false);
     });
 });
+
+describe('mergeSavedColumnOrder', () => {
+
+    it('falls through to the natural order when nothing is saved', () => {
+        expect(mergeSavedColumnOrder(undefined, ['doing', 'done'])).toEqual(['doing', 'done']);
+        expect(mergeSavedColumnOrder([], ['doing', 'done'])).toEqual(['doing', 'done']);
+    });
+
+    it('leads with the saved order and appends a lane the saved order never named', () => {
+        expect(mergeSavedColumnOrder(['done', 'doing'], ['doing', 'done', 'untagged']))
+            .toEqual(['done', 'doing', 'untagged']);
+    });
+
+    it('keeps a saved lane no note currently uses, so a pinned order survives an empty lane', () => {
+        expect(mergeSavedColumnOrder(['done', 'blocked'], ['done', 'untagged']))
+            .toEqual(['done', 'blocked', 'untagged']);
+    });
+});
+
+
+describe('moveInOrder', () => {
+
+    it('moves an entry later, closing the gap it left', () => {
+        expect(moveInOrder(['a', 'b', 'c'], 0, 2)).toEqual(['b', 'c', 'a']);
+    });
+
+    it('moves an entry earlier', () => {
+        expect(moveInOrder(['a', 'b', 'c'], 2, 0)).toEqual(['c', 'a', 'b']);
+    });
+
+    it('returns the same array identity when the move is a no-op, so a caller can skip the write', () => {
+        const order = ['a', 'b', 'c'];
+        expect(moveInOrder(order, 1, 1)).toBe(order);
+    });
+
+    it('returns the order untouched for an index outside the list', () => {
+        const order = ['a', 'b', 'c'];
+        expect(moveInOrder(order, -1, 1)).toBe(order);
+        expect(moveInOrder(order, 0, 3)).toBe(order);
+    });
+});
+
 
 describe('deriveNaturalColumnOrder', () => {
 

@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 
 export interface PointerDragOptions {
     max_press_offset?: number;
+    destination_inset_y?: number;
     pre_release_settle_ms?: number;
     post_release_settle_ms?: number;
 }
@@ -9,7 +10,7 @@ export interface PointerDragOptions {
 /*
  * gesture defaults. The settle waits give dnd's rAF-driven lift and drop phases time to run; a drag
  * driven without them races the sensor and drops on the source. Only the two either side of the
- * release are overridable, because they are the only ones a caller has ever needed to move.
+ * release, and the drop point's vertical inset, are overridable; nothing else has needed to move.
  */
 const PRE_RELEASE_SETTLE_MS = 100;
 const POST_RELEASE_SETTLE_MS = 400;
@@ -28,6 +29,8 @@ const TRAVEL_SETTLE_MS = 150;
  * `max_press_offset` caps how far below the handle's top edge the press lands, for a card taller
  * than the viewport whose centre would be off-screen. `post_release_settle_ms` of 0 skips the wait
  * entirely, for a spec that measures the echo itself and must not have the drop settled for it.
+ * `destination_inset_y` overrides the drop point's offset below the destination's top edge; the default
+ * aims well inside a tall kanban lane, which overshoots a target only a line high.
  */
 export async function pointerDrag(page: Page, handle: Locator, destination: Locator, options: PointerDragOptions = {}): Promise<void> {
     const start = await handle.boundingBox();
@@ -38,11 +41,12 @@ export async function pointerDrag(page: Page, handle: Locator, destination: Loca
     const press_offset = options.max_press_offset === undefined
         ? start.height / 2
         : Math.min(start.height / 2, options.max_press_offset);
+    const destination_inset_y = options.destination_inset_y ?? DESTINATION_INSET_Y;
 
     const from_x = start.x + start.width / 2;
     const from_y = start.y + press_offset;
     const to_x = end.x + end.width / 2;
-    const to_y = end.y + DESTINATION_INSET_Y;
+    const to_y = end.y + destination_inset_y;
 
     await page.mouse.move(from_x, from_y);
     await page.mouse.down();

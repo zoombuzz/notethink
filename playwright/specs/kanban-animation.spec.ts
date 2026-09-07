@@ -289,13 +289,12 @@ test.describe('Kanban Passive Transition Animations', () => {
         const backlog_column = page.locator('[role="region"][aria-label="backlog"]');
         await expect(backlog_column.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 3000 });
 
-        // turn the global setting off via a globalSettings message
-        await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', {
-            data: {
-                type: 'globalSettings',
-                settings: { showLineNumbers: false, watchUnopenedFilesInViewer: true, kanbanAnimateTransitions: false },
-            },
-        })));
+        // turn the setting off through the harness store, so what it republishes is the whole cascade - a hand-built payload REPLACES the cascade and silently drops every key it forgets, which is how this spec was wiping kanbanCardRatio
+        await page.evaluate(() => {
+            const harness = window as unknown as { __nt_settings: { workspace: Record<string, unknown> }; __nt_publishSettings?: () => void };
+            harness.__nt_settings.workspace.kanbanAnimateTransitions = false;
+            harness.__nt_publishSettings?.();
+        });
         await page.waitForTimeout(500);
 
         await clearAnimationEvents(page);

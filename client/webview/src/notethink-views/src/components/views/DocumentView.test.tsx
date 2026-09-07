@@ -68,18 +68,6 @@ describe('DocumentView', () => {
         const container = screen.getByTestId('document-test-doc-inner');
         expect(container).toHaveAttribute('data-level', '2');
     });
-
-    it('renders context bar when setting enabled', () => {
-        const props_with_context_bar: ViewProps = {
-            ...default_props,
-            display_options: {
-                settings: { showContextBars: true },
-            },
-        };
-        render(<DocumentView {...props_with_context_bar} />);
-        const container = screen.getByTestId('document-test-doc-inner');
-        expect(container).toBeInTheDocument();
-    });
 });
 
 /*

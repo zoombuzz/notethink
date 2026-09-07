@@ -49,7 +49,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         && props.display_options?.provided?.draggableProps?.style !== null
         && (props.display_options.provided.draggableProps.style as Record<string, unknown>).position === 'fixed';
 
-    const overflow_state = useMarkdownNoteOverflow(body_ref, is_top_level);
+    const overflow_state = useMarkdownNoteOverflow(body_ref, is_top_level, props.display_options?.card_target_height);
 
     /*
      * manual expand state is the view's, not this component's: "Show more" / "Show less" add and remove
@@ -75,7 +75,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     const should_clip = is_dragging ? clip_lock_ref.current : should_clip_base;
 
     // settle the clip geometry synchronously, before the kanban FLIP host samples positions
-    useSyncedBodyClip(body_ref, { is_top_level, is_dragging, auto_expand, focused: props.focused, manually_expanded });
+    useSyncedBodyClip(body_ref, { is_top_level, is_dragging, auto_expand, focused: props.focused, manually_expanded, card_target_height: props.display_options?.card_target_height });
 
     const { scrolled_top, at_bottom } = useMarkdownNoteBodyScroll({
         body_ref,
@@ -160,6 +160,8 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
     // children's focused/selected status flows through display_options.focused_seqs / selected_seqs; when those change, child notes need to re-render even if this note's own focused/selected didn't
     if (!arraysEqual(prev.display_options?.focused_seqs, next.display_options?.focused_seqs)) { return false; }
     if (!arraysEqual(prev.display_options?.selected_seqs, next.display_options?.selected_seqs)) { return false; }
+    // a stacked lane hands every card the height it is aiming at, and the card clips its own body to reach it; the number lands after the first measurement, so a card that ignored the change would keep the unclipped body it first rendered
+    if (prev.display_options?.card_target_height !== next.display_options?.card_target_height) { return false; }
     // DnD: provided changes during drag (draggableProps.style contains transform)
     if (prev.display_options?.provided?.draggableProps !== next.display_options?.provided?.draggableProps) { return false; }
     if (prev.display_options?.provided?.dragHandleProps !== next.display_options?.provided?.dragHandleProps) { return false; }

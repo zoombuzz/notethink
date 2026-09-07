@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, act } from '@testing-library/react';
 import Debug from 'debug';
 import ExtensionReceiverImpl from './ExtensionReceiver';
+import { DEFAULT_SETTINGS_CASCADE } from '../constants';
 
 // most tests render the receiver without caring about the pending-work plumbing; inject a no-op api so every render() in the suite stays terse
 const NOOP_PENDING_WORK_API = {
@@ -34,14 +35,13 @@ const mockNoteRendererProps = jest.fn();
 jest.mock('./NoteRenderer', () => {
     return {
         __esModule: true,
-        default: (props: { notes: Record<string, unknown>; selections?: Record<string, unknown>; postMessage?: unknown; viewStates?: Record<string, unknown>; setViewManagedState?: unknown; onNavigationCommand?: unknown; globalSettings?: Record<string, unknown>; settingsCascade?: Record<string, unknown> }) => {
+        default: (props: { notes: Record<string, unknown>; selections?: Record<string, unknown>; postMessage?: unknown; viewStates?: Record<string, unknown>; setViewManagedState?: unknown; onNavigationCommand?: unknown; settingsCascade?: Record<string, unknown> }) => {
             mockNoteRendererProps(props);
             return <div
                 data-testid="NoteRenderer"
                 data-note-count={Object.keys(props.notes).length}
                 data-has-selections={props.selections ? 'true' : 'false'}
                 data-view-states={JSON.stringify(props.viewStates || {})}
-                data-global-settings={JSON.stringify(props.globalSettings || {})}
                 data-settings-cascade={JSON.stringify(props.settingsCascade || {})}
             />;
         },
@@ -248,19 +248,19 @@ describe('ExtensionReceiver', () => {
         expect(view_states['view-1']?.type).toBe('kanban');
     });
 
-    it('globalSettings message updates globalSettings state', () => {
+    it('a settingsCascade message carries a former global-only key through to NoteRenderer', () => {
         render(<ExtensionReceiver />);
         act(() => {
             window.dispatchEvent(new MessageEvent('message', {
                 data: {
-                    type: 'globalSettings',
+                    type: 'settingsCascade',
                     settings: { showLineNumbers: true },
                 },
             }));
         });
         const renderer = screen.getByTestId('NoteRenderer');
-        const global_settings = JSON.parse(renderer.getAttribute('data-global-settings') || '{}');
-        expect(global_settings.showLineNumbers).toBe(true);
+        const settings = JSON.parse(renderer.getAttribute('data-settings-cascade') || '{}');
+        expect(settings.showLineNumbers).toBe(true);
     });
 
     describe('pendingChange message', () => {
@@ -309,45 +309,18 @@ describe('ExtensionReceiver', () => {
             expect(api.clearPending).not.toHaveBeenCalled();
         });
 
-        it('a settingsCascade echo clears every cascade setting key', () => {
+        it('a settingsCascade echo clears the sentinel and every key the payload names', () => {
             const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
             render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
 
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {
-                    data: {
-                        type: 'settingsCascade',
-                        settings: {
-                            viewType: 'kanban',
-                            columnOrder: [],
-                            includeFilter: '',
-                            excludeFilter: '',
-                            maxNotesPerFile: 10,
-                            showContextBars: true,
-                            hasWorkspaceOverrides: false,
-                            hasAnyOverrides: false,
-                        },
-                    },
+                    data: { type: 'settingsCascade', settings: DEFAULT_SETTINGS_CASCADE },
                 }));
             });
             const cleared = api.clearPending.mock.calls.map(c => c[0]);
-            expect(cleared).toEqual(expect.arrayContaining(['settingsCascade', 'viewType', 'columnOrder', 'includeFilter', 'excludeFilter', 'maxNotesPerFile', 'showContextBars']));
-        });
-
-        it('a globalSettings echo clears every global setting key', () => {
-            const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
-            render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
-
-            act(() => {
-                window.dispatchEvent(new MessageEvent('message', {
-                    data: {
-                        type: 'globalSettings',
-                        settings: { showLineNumbers: false, watchUnopenedFilesInViewer: true },
-                    },
-                }));
-            });
-            const cleared = api.clearPending.mock.calls.map(c => c[0]);
-            expect(cleared).toEqual(expect.arrayContaining(['showLineNumbers', 'watchUnopenedFilesInViewer']));
+            // one echo now clears every setting there is, because one channel carries every setting there is
+            expect(cleared).toEqual(expect.arrayContaining(['settingsCascade', ...Object.keys(DEFAULT_SETTINGS_CASCADE)]));
         });
 
         it('a bulk-replace aggregate update clears the integrationFilters sentinel', () => {
@@ -568,12 +541,11 @@ describe('ExtensionReceiver', () => {
                     data: {
                         type: 'settingsCascade',
                         settings: {
+                            ...DEFAULT_SETTINGS_CASCADE,
                             viewType: 'kanban',
                             columnOrder: ['done', 'doing'],
                             includeFilter: '**/notes/**',
-                            excludeFilter: '',
                             maxNotesPerFile: 5,
-                            showContextBars: false,
                             hasWorkspaceOverrides: true,
                             hasAnyOverrides: true,
                         },
@@ -588,7 +560,7 @@ describe('ExtensionReceiver', () => {
             expect(settings.hasWorkspaceOverrides).toBe(true);
         });
 
-        it('setViewType command in folder mode round-trips to updateSetting', () => {
+        it('setViewType command round-trips to updateSetting in folder mode', () => {
             render(<ExtensionReceiver />);
             const last_call = mockNoteRendererProps.mock.calls[mockNoteRendererProps.mock.calls.length - 1][0];
             // establish folder mode by writing the canonical viewState's integration_mode tag
@@ -617,9 +589,9 @@ describe('ExtensionReceiver', () => {
             });
         });
 
-        it('setViewType command in single-file mode does NOT round-trip to updateSetting', () => {
+        it('setViewType command round-trips to updateSetting in single-file mode too', () => {
             render(<ExtensionReceiver />);
-            // no folder-tagged viewState exists; firing setViewType should not cascade
+            // one write path means no mode-dependent branch: no folder-tagged viewState exists and the cascade write still happens
             post_message_spy.mockClear();
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {
@@ -629,7 +601,8 @@ describe('ExtensionReceiver', () => {
             const cascade_call = post_message_spy.mock.calls.find(
                 c => c[0]?.type === 'updateSetting'
             );
-            expect(cascade_call).toBeUndefined();
+            expect(cascade_call).toBeDefined();
+            expect(cascade_call![0]).toEqual({ type: 'updateSetting', setting: 'viewType', value: 'document' });
         });
     });
 

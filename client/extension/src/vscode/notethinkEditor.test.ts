@@ -11,6 +11,7 @@
 import * as vscode from 'vscode';
 import { createMockWebviewPanel, Position, Selection, Uri } from '../__mocks__/vscode';
 import { NotethinkEditorProvider } from './notethinkEditor';
+import { SETTINGS, settingKeys } from '../lib/settings';
 import { DEFAULT_EXCLUDE_FILTER } from '../constants';
 
 // ---- helpers ----------------------------------------------------------------
@@ -69,6 +70,10 @@ type SelectionMessage = MessageRecord & {
 	docPath: string;
 	selection: { head: number; anchor: number };
 };
+/** One setting's per-scope state in the settings-store stand-in; an absent scope means no override there. */
+type SettingsConfigEntry = { workspaceValue?: unknown; globalValue?: unknown };
+/** One recorded WorkspaceConfiguration.update() call: config path, written value (undefined clears the scope), target scope. */
+type SettingsUpdateCall = [string, unknown, vscode.ConfigurationTarget];
 
 function getUpdates(msgs: MessageRecord[]): UpdateMessage[] {
 	return msgs.filter(m => m.type === 'update') as UpdateMessage[];
@@ -1059,6 +1064,154 @@ describe('NotethinkEditorProvider', () => {
 			// fast path: no per-file openTextDocument calls beyond the no-ops; the aggregate payload is sent without reloading
 			const aggregate = panelHelper.postedMessages.find(m => m.type === 'update' && (m as Record<string, unknown>).aggregate_total_discovered !== undefined);
 			expect(aggregate).toBeDefined();
+		});
+	});
+
+	// ---- settings write path ------------------------------------------------
+
+	describe('settings write path (updateSetting / promote / reset / restore)', () => {
+		let settings_store: Record<string, SettingsConfigEntry>;
+		let settings_updates: SettingsUpdateCall[];
+
+		// one recording stand-in for the whole notethink.settings section: get() resolves workspace over user over built-in, inspect() reports the two scopes, and update() records instead of mutating so a handler's exact write sequence is assertable
+		function mockSettingsStore(initial: Record<string, SettingsConfigEntry>): void {
+			settings_store = initial;
+			settings_updates = [];
+			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation(() => ({
+				get: (path: string, def: unknown) => settings_store[path]?.workspaceValue ?? settings_store[path]?.globalValue ?? def,
+				inspect: (path: string) => ({
+					workspaceValue: settings_store[path]?.workspaceValue,
+					globalValue: settings_store[path]?.globalValue,
+				}),
+				update: jest.fn(async (path: string, value: unknown, target: vscode.ConfigurationTarget) => {
+					settings_updates.push([path, value, target]);
+				}),
+			}));
+		}
+
+		function pathsWrittenTo(target: vscode.ConfigurationTarget): string[] {
+			return settings_updates.filter(([, , written_target]) => written_target === target).map(([path]) => path);
+		}
+
+		beforeEach(() => {
+			setWorkspaceRoots(['/workspace']);
+			mockSettingsStore({});
+		});
+
+		afterEach(() => {
+			setWorkspaceRoots(undefined);
+			// hand the module mock its default shape back so a later suite is not left driving this store
+			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation(() => ({
+				get: jest.fn(() => undefined),
+				update: jest.fn(async () => {}),
+				inspect: jest.fn(() => undefined),
+			}));
+		});
+
+		it('sends the settings cascade on initial state and no second settings message', () => {
+			expect(findByType(panelHelper.postedMessages, 'settingsCascade')).toBeDefined();
+			expect(findByType(panelHelper.postedMessages, 'globalSettings')).toBeUndefined();
+		});
+
+		it('re-sends only the cascade when a notethink.settings key changes', () => {
+			const on_config_change = (vscode.workspace.onDidChangeConfiguration as jest.Mock).mock.calls.at(-1)?.[0] as (e: { affectsConfiguration: (section: string) => boolean }) => void;
+			panelHelper.postedMessages.length = 0;
+
+			on_config_change({ affectsConfiguration: (section: string) => section.startsWith('notethink.settings') });
+
+			expect(findByType(panelHelper.postedMessages, 'settingsCascade')).toBeDefined();
+			expect(findByType(panelHelper.postedMessages, 'globalSettings')).toBeUndefined();
+		});
+
+		it('writes an updateSetting to the workspace scope by default, whatever the value type', async () => {
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'viewType', value: 'kanban' });
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'showLinetagsInHeadlines', value: true });
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'columnOrder', value: ['done'] });
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'maxNotesPerFile', value: 25 });
+
+			expect(settings_updates).toEqual([
+				[SETTINGS.viewType.path, 'kanban', vscode.ConfigurationTarget.Workspace],
+				[SETTINGS.showLinetagsInHeadlines.path, true, vscode.ConfigurationTarget.Workspace],
+				[SETTINGS.columnOrder.path, ['done'], vscode.ConfigurationTarget.Workspace],
+				[SETTINGS.maxNotesPerFile.path, 25, vscode.ConfigurationTarget.Workspace],
+			]);
+		});
+
+		// every one of the fifteen keys is writable on this message, so a guard narrowing it would silently drop writes
+		it('accepts an updateSetting for every SETTINGS key', async () => {
+			for (const key of settingKeys()) {
+				await panelHelper.simulateMessage({ type: 'updateSetting', setting: key, value: SETTINGS[key].default });
+			}
+
+			expect(settings_updates.map(([path]) => path)).toEqual(settingKeys().map(key => SETTINGS[key].path));
+		});
+
+		it('falls back to the user scope for an updateSetting in a folderless window', async () => {
+			setWorkspaceRoots(undefined);
+
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'viewType', value: 'kanban' });
+
+			expect(settings_updates).toEqual([[SETTINGS.viewType.path, 'kanban', vscode.ConfigurationTarget.Global]]);
+		});
+
+		it('honours an explicit global scope on an updateSetting', async () => {
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'viewType', value: 'kanban', scope: 'global' });
+
+			expect(settings_updates).toEqual([[SETTINGS.viewType.path, 'kanban', vscode.ConfigurationTarget.Global]]);
+		});
+
+		it('ignores an updateSetting naming a key that is not a setting', async () => {
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'notASetting', value: 1 });
+
+			expect(settings_updates).toEqual([]);
+		});
+
+		it('promotes every key to the user scope and clears the workspace overrides it found', async () => {
+			mockSettingsStore({
+				[SETTINGS.viewType.path]: { workspaceValue: 'kanban' },
+				[SETTINGS.showLineNumbers.path]: { workspaceValue: true },
+			});
+
+			await panelHelper.simulateMessage({ type: 'promoteSettingsToUser' });
+
+			expect(pathsWrittenTo(vscode.ConfigurationTarget.Global)).toEqual(settingKeys().map(key => SETTINGS[key].path));
+			// the resolved workspace value is what gets promoted, not the built-in default it was shadowing
+			const promoted_view_type = settings_updates.find(([path, , target]) => path === SETTINGS.viewType.path && target === vscode.ConfigurationTarget.Global);
+			expect(promoted_view_type?.[1]).toBe('kanban');
+			expect(pathsWrittenTo(vscode.ConfigurationTarget.Workspace)).toEqual([SETTINGS.viewType.path, SETTINGS.showLineNumbers.path]);
+		});
+
+		it('clears only the workspace scope on reset, leaving a user default alone', async () => {
+			mockSettingsStore({
+				[SETTINGS.viewType.path]: { workspaceValue: 'kanban', globalValue: 'document' },
+				[SETTINGS.excludeFilter.path]: { globalValue: '**/{vendor}/**' },
+			});
+
+			await panelHelper.simulateMessage({ type: 'resetSettingsToDefault' });
+
+			expect(settings_updates).toEqual([[SETTINGS.viewType.path, undefined, vscode.ConfigurationTarget.Workspace]]);
+		});
+
+		it('clears both scopes on restore, for every key carrying an override', async () => {
+			mockSettingsStore({
+				[SETTINGS.viewType.path]: { workspaceValue: 'kanban' },
+				[SETTINGS.excludeFilter.path]: { globalValue: '**/{vendor}/**' },
+			});
+
+			await panelHelper.simulateMessage({ type: 'restoreSettingsToBuiltinDefault' });
+
+			expect(settings_updates).toEqual([
+				[SETTINGS.viewType.path, undefined, vscode.ConfigurationTarget.Workspace],
+				[SETTINGS.viewType.path, undefined, vscode.ConfigurationTarget.Global],
+				[SETTINGS.excludeFilter.path, undefined, vscode.ConfigurationTarget.Workspace],
+				[SETTINGS.excludeFilter.path, undefined, vscode.ConfigurationTarget.Global],
+			]);
+		});
+
+		it('writes nothing on restore when no key carries an override', async () => {
+			await panelHelper.simulateMessage({ type: 'restoreSettingsToBuiltinDefault' });
+
+			expect(settings_updates).toEqual([]);
 		});
 	});
 

@@ -4,7 +4,7 @@ import { anyViewInFolderMode, resolveIntegrationMode, FOLDER_VIEW_STATE_ID } fro
 import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { TextSelection } from '../notethink-views/src/types/NoteProps';
-import type { GlobalSettingsPayload, SettingsCascadePayload, JumpTargetsMessage } from '../notethink-views/src/types/Messages';
+import type { SettingsCascadePayload, JumpTargetsMessage } from '../notethink-views/src/types/Messages';
 import type { ViewState } from './usePersistedViewStates';
 
 const debug = Debug("nodejs:notethink:useVscodeMessages");
@@ -18,7 +18,6 @@ interface VscodeMessagesDeps {
     saved_view_states: Record<string, ViewState> | undefined;
     postMessage: (message: unknown) => void;
     markConnected: () => void;
-    setGlobalSettings: (settings: GlobalSettingsPayload) => void;
     setSettingsCascade: (settings: SettingsCascadePayload) => void;
     updateAllViewStates: (updater: (view_state: ViewState) => ViewState) => void;
     setViewManagedState: (updates: Array<Record<string, unknown>>) => void;
@@ -70,12 +69,6 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
     if (message.type === 'command') {
         if (typeof message.command !== 'string') {
             debug('discarding command message with invalid command %O', message);
-            return false;
-        }
-    }
-    if (message.type === 'globalSettings') {
-        if (message.settings === null || message.settings === undefined || typeof message.settings !== 'object') {
-            debug('discarding globalSettings message with invalid settings %O', message);
             return false;
         }
     }
@@ -149,11 +142,11 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial
 
 /*
  * own the core doc/selection/workspace state, the host message listener, and the dispatch
- * the message-type string literals ('update', 'activeEditorDoc', 'selectionChanged', 'command', 'globalSettings', 'settingsCascade', 'jumpTargets') are the on-the-wire contract and must stay exactly as-is
+ * the message-type string literals ('update', 'activeEditorDoc', 'selectionChanged', 'command', 'settingsCascade', 'jumpTargets') are the on-the-wire contract and must stay exactly as-is
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState {
-    const { postMessage, markConnected, setGlobalSettings, setSettingsCascade, updateAllViewStates, setViewManagedState, view_states_ref, navigation_callback_ref, saved_view_states, markPending, clearPending, setJumpTargets } = deps;
+    const { postMessage, markConnected, setSettingsCascade, updateAllViewStates, setViewManagedState, view_states_ref, navigation_callback_ref, saved_view_states, markPending, clearPending, setJumpTargets } = deps;
     const [docs_state, setDocsState] = useState<{ docs?: HashMapOf<Doc> }>({ docs: deps.initial_docs || {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [active_editor_doc_path, setActiveEditorDocPath] = useState<string | undefined>(undefined);
@@ -168,7 +161,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     const [excludeFilter, setExcludeFilter] = useState<string | undefined>(undefined);
 
     // dispatch a validated command message to the appropriate viewState mutation / navigation
-    const handleCommand = useCallback((message: { command: string; viewType?: string; setting?: string; direction?: string; mode?: string; path?: string }) => {
+    const handleCommand = useCallback((message: { command: string; viewType?: string; direction?: string; mode?: string; path?: string }) => {
         debug('received command %s', message.command);
         switch (message.command) {
             case 'setIntegrationScope':
@@ -187,39 +180,9 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 return;
             case 'setViewType':
                 updateAllViewStates(view_state => ({ ...view_state, type: message.viewType }));
-                // cascade: if folder mode is currently active, persist the new view type
-                if (anyViewInFolderMode(view_states_ref.current)) {
-                    postMessage({ type: 'updateSetting', setting: 'viewType', value: message.viewType });
-                }
+                // one write path: the cascade owns viewType in every integration mode, so this never branches on the current mode
+                postMessage({ type: 'updateSetting', setting: 'viewType', value: message.viewType });
                 return;
-            case 'toggleSetting': {
-                const setting_map: Record<string, string> = {
-                    contextBars: 'showContextBars',
-                };
-                const setting_key = setting_map[message.setting as string];
-                if (!setting_key) {return;}
-                let next_value: boolean | undefined;
-                updateAllViewStates(view_state => {
-                    const current_settings = view_state?.display_options?.settings || {};
-                    const flipped = !current_settings[setting_key as keyof typeof current_settings];
-                    next_value = flipped;
-                    return {
-                        ...view_state,
-                        display_options: {
-                            ...view_state?.display_options,
-                            settings: {
-                                ...current_settings,
-                                [setting_key]: flipped,
-                            },
-                        },
-                    };
-                });
-                // cascade: only showContextBars is in the settings cascade today
-                if (setting_key === 'showContextBars' && anyViewInFolderMode(view_states_ref.current) && next_value !== undefined) {
-                    postMessage({ type: 'updateSetting', setting: 'showContextBars', value: next_value });
-                }
-                return;
-            }
             case 'navigate':
                 if (navigation_callback_ref.current && message.direction) {
                     navigation_callback_ref.current(message.direction);
@@ -306,14 +269,6 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 // the doc whose selection just changed is the active editor - folder mode's per-doc matcher reads this to scope the caret-to-note resolution
                 setActiveEditorDocPath(message.docPath);
                 return;
-            case 'globalSettings':
-                debug('received globalSettings %O', message.settings);
-                setGlobalSettings(message.settings as GlobalSettingsPayload);
-                // echo confirms the global-setting round-trip completed; clear any marks for those keys
-                for (const key of Object.keys((message.settings as GlobalSettingsPayload) ?? {})) {
-                    clearPending(key);
-                }
-                return;
             case 'settingsCascade':
                 debug('received settingsCascade %O', message.settings);
                 setSettingsCascade(message.settings as SettingsCascadePayload);
@@ -339,7 +294,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 handleCommand(message);
                 return;
         }
-    }, [markConnected, setGlobalSettings, setSettingsCascade, handleCommand, markPending, clearPending, setJumpTargets]);
+    }, [markConnected, setSettingsCascade, handleCommand, markPending, clearPending, setJumpTargets]);
 
     // listen for messages sent from the extension to the webview
     useEffect(() => {
@@ -369,7 +324,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
             }
         }
         /*
-         * request initial state - this is what triggers the extension to send the active doc (and selection + global settings)
+         * request initial state - this is what triggers the extension to send the active doc (and selection + the settings cascade)
          * sent after setIntegration so the extension has integration_path set by the time it runs sendDoc here
          */
         postMessage({

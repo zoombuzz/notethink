@@ -78,11 +78,6 @@ export default function LineView(props: LineViewProps): ReactElement {
 
     const display_options: NoteDisplayOptions = {
         ...props.display_options,
-        settings: {
-            scrollNoteIntoView: true,
-            showLinetagsInHeadlines: false,
-            ...props.display_options?.settings,
-        },
     };
 
     /*

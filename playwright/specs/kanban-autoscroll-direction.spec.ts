@@ -4,11 +4,15 @@ import { simulateSelectionChanged } from '../helpers/simulate-selection';
 
 /*
  * Regression guard for @hello-pangea/dnd's fluid auto-scroller under the drag-clone portal fix. The kanban board
- * root ([data-flip-root], overflow-x:auto) is the horizontal scroll container. With enough fixed-min-width columns
- * to overflow the viewport, holding a drag near the far edge must auto-scroll the board TOWARD that edge so the user
- * can reach off-screen columns, and releasing the drop must NOT snap the scroll position backward toward the start.
+ * root ([data-flip-root], overflow-x:auto) is the horizontal scroll container. With more columns than the viewport
+ * holds, holding a drag near the far edge must auto-scroll the board TOWARD that edge so the user can reach
+ * off-screen columns, and releasing the drop must NOT snap the scroll position backward toward the start.
  * This drags a card from the leftmost column, holds the pointer at the board's right edge, polls scrollLeft to prove
  * it advances, then drops and proves the scroll offset holds.
+ *
+ * The narrow viewport is what creates the scroll axis, and it has to be stated rather than assumed. The board used
+ * to guarantee its own overflow through a fixed `min-width: 17em` per column; a column is now as wide as its cards
+ * ask for, so seven one-line cards fit a default viewport comfortably and there would be nothing to scroll.
  */
 const AUTOSCROLL_MIN_PX = 24;
 
@@ -16,6 +20,8 @@ const AUTOSCROLL_MIN_PX = 24;
 const BACKWARD_TOLERANCE_PX = 24;
 
 test.describe('Kanban drag auto-scroll follows the drag direction', () => {
+
+    test.use({ viewport: { width: 700, height: 800 } });
 
     test.beforeEach(async ({ page }) => {
         await page.goto('/playwright/harness/index.html');

@@ -209,6 +209,15 @@ export function majorityNgView(notes: NoteProps[] | undefined): string | undefin
 }
 
 /**
+ * majority-vote nt_card across the originating files (one vote per file from origin.file_card_type,
+ * captured from each file's H1). ties or no votes return undefined; the caller then falls back to the
+ * resolved view's declared default card type.
+ */
+export function majorityCardType(notes: NoteProps[] | undefined): string | undefined {
+    return majorityFileVote(notes, n => n.origin?.file_card_type);
+}
+
+/**
  * majority-vote nt_group_by across the originating files (one vote per file from origin.file_group_by).
  * ties or no votes return undefined; the Line view then falls back to the first level folder default.
  */
@@ -517,6 +526,27 @@ export function deriveNaturalColumnOrder(notes: Array<NoteProps>, axis: Axis = '
         if (value !== ABSENT_VALUE_BUCKET) { lane_values.add(value); }
     }
     return [...Array.from(lane_values).sort(), ABSENT_VALUE_BUCKET];
+}
+
+/**
+ * The lane order the settings drawer edits: the saved order first, then every live lane the saved order
+ * does not name, so a status added since the order was saved is still reachable. This is the same
+ * layering `useKanbanColumns` applies when it builds the board's lanes, so the editor lists exactly what
+ * the board shows, in the order the board shows it.
+ */
+export function mergeSavedColumnOrder(saved: string[] | undefined, natural: string[]): string[] {
+    if (!saved || saved.length === 0) { return natural; }
+    return [...saved, ...natural.filter(value => !saved.includes(value))];
+}
+
+/** the order with one entry moved to another index; an index outside the list returns the order unchanged */
+export function moveInOrder(order: string[], from_index: number, to_index: number): string[] {
+    if (from_index === to_index) { return order; }
+    if (from_index < 0 || to_index < 0 || from_index >= order.length || to_index >= order.length) { return order; }
+    const next = [...order];
+    const [moved] = next.splice(from_index, 1);
+    next.splice(to_index, 0, moved);
+    return next;
 }
 
 /**

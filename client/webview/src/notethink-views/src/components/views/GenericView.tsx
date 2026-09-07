@@ -1,6 +1,7 @@
 import React, { lazy } from "react";
 import { documentRootForStrip } from "../../lib/noteops";
-import { selectableViewIds } from "../../lib/viewregistryops";
+import { chainOf, registryWithUserTypes } from "../../lib/viewregistryops";
+import type { UserViewType } from "../../types/Messages";
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteAttributes from "../notes/GenericNoteAttributes";
@@ -23,12 +24,24 @@ const VIEW_COMPONENTS: Record<string, React.ComponentType<ViewProps>> = {
 };
 
 /**
- * the ordered view types the selector offers: `auto` plus every selectable registry view that has a
- * component wired here. A registry view declared without a component is not offered, so the view tree can
- * grow ahead of its renderers.
+ * The component that draws a view type: its own where one is wired, else the nearest ancestor's, so a
+ * type the user minted ("Kanban by Assignee") draws as the board it was saved from. Only a minted id
+ * ever misses on the first lookup, so the built-in rungs pay nothing for this.
+ *
+ * The chain is walked against the registry with the user's saved types merged in, because a minted id
+ * is absent from the built-in registry and would otherwise have no chain at all. That input comes from
+ * settings.json and is untrusted: a saved type whose parent has since been removed yields a chain that
+ * stops early and a wholly unknown id yields none, and both fall through to undefined, which the caller
+ * renders as no board rather than throwing.
  */
-export function selectableViewTypes(): string[] {
-    return ['auto', ...selectableViewIds().filter(id => id in VIEW_COMPONENTS)];
+function viewComponentFor(view_type: string, user_types: UserViewType[]): React.ComponentType<ViewProps> | undefined {
+    const direct = VIEW_COMPONENTS[view_type];
+    if (direct) { return direct; }
+    for (const node_id of chainOf(view_type, registryWithUserTypes(user_types))) {
+        const inherited = VIEW_COMPONENTS[node_id];
+        if (inherited) { return inherited; }
+    }
+    return undefined;
 }
 
 export default function GenericView(props: ViewProps): React.ReactElement {
@@ -55,11 +68,25 @@ export default function GenericView(props: ViewProps): React.ReactElement {
     );
     // render the toolbar at the leaf level only - when type is 'auto', AutoView delegates to a concrete type that renders GenericView again with the toolbar
     const show_toolbar = props.type !== 'auto';
-    // dispatch to the registry-keyed component for this view type; an unknown type maps to nothing (toolbar still shows)
-    const ViewComponent = VIEW_COMPONENTS[props.type];
+    // dispatch to the registry-keyed component for this view type, inheriting a minted type's renderer from its parent; an unknown type maps to nothing (toolbar still shows)
+    const ViewComponent = viewComponentFor(props.type, display_options.settings?.viewUserTypes ?? []);
+    /*
+     * The props the rendered view component receives.
+     * - display_options.settings.cardType: the resolved card, stamped here rather than in AutoView alone.
+     *   AutoView only mounts for `auto`, so pinning a view type used to take the stamp with it and every
+     *   note fell back to the view's default card. The stamp is skipped at an `auto` level, because the
+     *   AutoView below is about to do its own and reads this same field to recover the user's raw choice -
+     *   stamping over it there costs the card tab its "Auto (Sticky)" label.
+     */
     const enriched_props: ViewProps = {
         ...props,
-        display_options: { ...display_options, deepest },
+        display_options: {
+            ...display_options,
+            deepest,
+            settings: show_toolbar
+                ? { ...display_options.settings, cardType: toolbar.resolved_card_type }
+                : display_options.settings,
+        },
         notes: props.notes as Array<NoteProps>,
         notes_within_parent_context,
         nested: { ...props.nested, parent_context, breadcrumb_trail, auto_resolved_type, document_strip, document_root },
@@ -79,6 +106,9 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     viewTypeSelection={toolbar.view_type_selection}
                     autoResolvedType={toolbar.auto_resolved_type}
                     onViewTypeChange={toolbar.handle_view_type_change}
+                    cardTypeSelection={toolbar.card_type_selection}
+                    resolvedCardType={toolbar.resolved_card_type}
+                    onCardTypeChange={toolbar.handle_card_type_change}
                     naturalColumnOrder={toolbar.natural_column_order}
                     collisions={collisions}
                     activeDrawer={drawers.active_drawer}
@@ -88,11 +118,10 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     gearButtonRef={drawers.gear_button_ref}
                     onCloseDrawer={drawers.close_drawer}
                     onSettingsToggle={drawers.toggle_settings}
+                    onCardsToggle={drawers.toggle_cards}
                     onInsertOpen={insert.open_insert_modal}
                     onSettingChange={toolbar.handle_setting_change}
-                    onGlobalSettingChange={toolbar.handle_global_setting_change}
                     onColumnOrderChange={toolbar.handle_column_order_change}
-                    onGroupByChange={toolbar.handle_group_by_change}
                     onMakeDefault={toolbar.handle_make_default}
                     onResetToDefault={toolbar.handle_reset_to_default}
                     onRestoreBuiltinDefault={toolbar.handle_restore_builtin_default}

@@ -826,6 +826,91 @@ describe('mergeAggregateRoot', () => {
         expect(root.child_notes![0].origin?.file_view_type).toBe('document');
     });
 
+    it('file_card_type from H1 nt_card linetag is captured on every story of that file', () => {
+        /*
+         * # Todo [](?nt_card=sticky)
+         * ### Story
+         */
+        const h1_text = '# Todo [](?nt_card=sticky)';
+        const text = `${h1_text}\n### Story\n`;
+        const h1_end = h1_text.length;
+        const h3_start = h1_end + 1;
+        const h3_end = h3_start + '### Story'.length;
+        const children: MdastNode[] = [
+            mdastNode('heading', 0, h1_end, { depth: 1 }),
+            mdastNode('heading', h3_start, h3_end, { depth: 3 }),
+        ];
+        const doc = makeDoc('id-sticky', 'a/todo.md', text, children);
+        const { root } = mergeAggregateRoot({ 'id-sticky': doc }, '/repo');
+        expect(root.child_notes![0].origin?.file_card_type).toBe('sticky');
+    });
+
+    it('file_card_type still resolves from a legacy ng_card H1 linetag', () => {
+        const h1_text = '# Todo [](?ng_card=sticky)';
+        const text = `${h1_text}\n### Story\n`;
+        const h1_end = h1_text.length;
+        const h3_start = h1_end + 1;
+        const h3_end = h3_start + '### Story'.length;
+        const children: MdastNode[] = [
+            mdastNode('heading', 0, h1_end, { depth: 1 }),
+            mdastNode('heading', h3_start, h3_end, { depth: 3 }),
+        ];
+        const doc = makeDoc('id-card-leg', 'a/todo.md', text, children);
+        const { root } = mergeAggregateRoot({ 'id-card-leg': doc }, '/repo');
+        expect(root.child_notes![0].origin?.file_card_type).toBe('sticky');
+    });
+
+    it('file_card_type falls back to a front-matter nt_card when the H1 has none', () => {
+        const fm = '---\nnt_card: sticky\n---';
+        const h1_text = '# Todo';
+        const story_text = '### Story';
+        const text = `${fm}\n${h1_text}\n${story_text}\n`;
+        const h1_start = fm.length + 1;
+        const h1_end = h1_start + h1_text.length;
+        const story_start = h1_end + 1;
+        const children: MdastNode[] = [
+            mdastNode('yaml', 0, fm.length, { value: 'nt_card: sticky' }),
+            mdastNode('heading', h1_start, h1_end, { depth: 1 }),
+            mdastNode('heading', story_start, story_start + story_text.length, { depth: 3 }),
+        ];
+        const doc = makeDoc('id-fm-card', 'a/todo.md', text, children);
+        const { root } = mergeAggregateRoot({ 'id-fm-card': doc }, '/repo');
+        expect(root.child_notes![0].origin?.file_card_type).toBe('sticky');
+    });
+
+    it('an H1 nt_card overrides the front-matter nt_card (most-specific wins)', () => {
+        const fm = '---\nnt_card: sticky\n---';
+        const h1_text = '# Todo [](?nt_card=card)';
+        const story_text = '### Story';
+        const text = `${fm}\n${h1_text}\n${story_text}\n`;
+        const h1_start = fm.length + 1;
+        const h1_end = h1_start + h1_text.length;
+        const story_start = h1_end + 1;
+        const children: MdastNode[] = [
+            mdastNode('yaml', 0, fm.length, { value: 'nt_card: sticky' }),
+            mdastNode('heading', h1_start, h1_end, { depth: 1 }),
+            mdastNode('heading', story_start, story_start + story_text.length, { depth: 3 }),
+        ];
+        const doc = makeDoc('id-fm-card-override', 'a/todo.md', text, children);
+        const { root } = mergeAggregateRoot({ 'id-fm-card-override': doc }, '/repo');
+        expect(root.child_notes![0].origin?.file_card_type).toBe('card');
+    });
+
+    it('the card axis is captured independently of the view axis on the same file', () => {
+        const h1_text = '# Todo [](?nt_view=kanban&nt_card=sticky)';
+        const text = `${h1_text}\n### Story\n`;
+        const h1_end = h1_text.length;
+        const h3_start = h1_end + 1;
+        const children: MdastNode[] = [
+            mdastNode('heading', 0, h1_end, { depth: 1 }),
+            mdastNode('heading', h3_start, h3_start + '### Story'.length, { depth: 3 }),
+        ];
+        const doc = makeDoc('id-both-axes', 'a/todo.md', text, children);
+        const { root } = mergeAggregateRoot({ 'id-both-axes': doc }, '/repo');
+        expect(root.child_notes![0].origin?.file_view_type).toBe('kanban');
+        expect(root.child_notes![0].origin?.file_card_type).toBe('sticky');
+    });
+
     it('file_order falls back to a front-matter `order` (newest-at-bottom reverses the per-file stories)', () => {
         const fm = '---\norder: newest-at-bottom\n---';
         const h1_text = '# Done';

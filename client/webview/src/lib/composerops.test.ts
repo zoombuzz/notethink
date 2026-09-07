@@ -1,8 +1,15 @@
 import { buildViewDisplayOptions } from "./composerops";
 import { FOLDER_VIEW_STATE_ID } from "../notethink-views/src/lib/viewstateops";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../notethink-views/src/types/IntegrationMode";
+import { DEFAULT_SETTINGS_CASCADE } from "../constants";
+import type { SettingsCascadePayload, UserViewType } from "../notethink-views/src/types/Messages";
+import type { NoteDisplayOptions } from "../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../components/NoteRenderer";
 import type { ViewState } from "../hooks/usePersistedViewStates";
+
+function buildCascade(overrides: Partial<SettingsCascadePayload> = {}): SettingsCascadePayload {
+    return { ...DEFAULT_SETTINGS_CASCADE, ...overrides };
+}
 
 function buildProps(overrides: Partial<NoteRendererProps> = {}): NoteRendererProps {
     return {
@@ -56,106 +63,85 @@ describe('composerops.buildViewDisplayOptions', () => {
 
         it('per-session viewState type wins over the cascade viewType', () => {
             const view_state: ViewState = { type: 'document' };
-            const props = buildProps({
-                settingsCascade: {
-                    viewType: 'kanban',
-                    columnOrder: [],
-                    includeFilter: '',
-                    excludeFilter: '',
-                    maxNotesPerFile: 10,
-                    showContextBars: true,
-                    hasWorkspaceOverrides: false,
-                    hasAnyOverrides: false,
-                },
-            });
+            const props = buildProps({ settingsCascade: buildCascade({ viewType: 'kanban' }) });
             const result = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.viewType).toBe('document');
         });
 
         it('cascade viewType is used when the viewState does not set one', () => {
-            const props = buildProps({
-                settingsCascade: {
-                    viewType: 'kanban',
-                    columnOrder: [],
-                    includeFilter: '',
-                    excludeFilter: '',
-                    maxNotesPerFile: 10,
-                    showContextBars: true,
-                    hasWorkspaceOverrides: false,
-                    hasAnyOverrides: false,
-                },
-            });
+            const props = buildProps({ settingsCascade: buildCascade({ viewType: 'kanban' }) });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.viewType).toBe('kanban');
         });
 
         it('attaches cascade columnOrder to settings.columnOrder when non-empty', () => {
-            const props = buildProps({
-                settingsCascade: {
-                    viewType: 'auto',
-                    columnOrder: ['done', 'doing'],
-                    includeFilter: '',
-                    excludeFilter: '',
-                    maxNotesPerFile: 10,
-                    showContextBars: true,
-                    hasWorkspaceOverrides: false,
-                    hasAnyOverrides: false,
-                },
-            });
+            const props = buildProps({ settingsCascade: buildCascade({ columnOrder: ['done', 'doing'] }) });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.view_display_options.settings?.columnOrder).toEqual(['done', 'doing']);
         });
 
         it('does NOT attach columnOrder to settings when the cascade list is empty', () => {
-            const props = buildProps({
-                settingsCascade: {
-                    viewType: 'auto',
-                    columnOrder: [],
-                    includeFilter: '',
-                    excludeFilter: '',
-                    maxNotesPerFile: 10,
-                    showContextBars: true,
-                    hasWorkspaceOverrides: false,
-                    hasAnyOverrides: false,
-                },
-            });
+            const props = buildProps({ settingsCascade: buildCascade({ columnOrder: [] }) });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.view_display_options.settings?.columnOrder).toBeUndefined();
         });
 
-        it('per-session viewState settings override cascade settings (showContextBars)', () => {
+        it('a stale per-session viewState settings block no longer overrides the cascade', () => {
+            // the write path that produced these values is gone; a state persisted by an earlier build must be ignored rather than shadow config
             const view_state: ViewState = {
-                display_options: { settings: { showContextBars: false } },
+                display_options: { settings: { showLinetagsInHeadlines: true, showLineNumbers: true } },
             };
             const props = buildProps({
-                settingsCascade: {
-                    viewType: 'auto',
-                    columnOrder: [],
-                    includeFilter: '',
-                    excludeFilter: '',
-                    maxNotesPerFile: 10,
-                    showContextBars: true,
-                    hasWorkspaceOverrides: false,
-                    hasAnyOverrides: false,
-                },
+                settingsCascade: buildCascade({ showLinetagsInHeadlines: false, showLineNumbers: false }),
             });
             const result = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
-            expect(result.view_display_options.settings?.showContextBars).toBe(false);
+            expect(result.view_display_options.settings?.showLinetagsInHeadlines).toBe(false);
+            expect(result.view_display_options.settings?.showLineNumbers).toBe(false);
         });
 
-        it('threads globalSettings showLineNumbers + watchUnopenedFilesInViewer through to settings', () => {
+        it('threads every cascade value into settings, whichever node owns it', () => {
             const props = buildProps({
-                globalSettings: { showLineNumbers: true, watchUnopenedFilesInViewer: false },
+                settingsCascade: buildCascade({
+                    showLineNumbers: true,
+                    watchUnopenedFilesInViewer: false,
+                    kanbanAnimateTransitions: false,
+                    openNewEditorIfNoneOpen: true,
+                    scrollNoteIntoView: false,
+                    autoExpandFocusedNote: true,
+                    orientation: 'rows',
+                    groupBy: 'project',
+                    kanbanGroupBy: 'status',
+                    maxNotesPerFile: 4,
+                }),
             });
-            const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
-            expect(result.view_display_options.settings?.showLineNumbers).toBe(true);
-            expect(result.view_display_options.settings?.watchUnopenedFilesInViewer).toBe(false);
+            const settings = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE).view_display_options.settings;
+            expect(settings?.showLineNumbers).toBe(true);
+            expect(settings?.watchUnopenedFilesInViewer).toBe(false);
+            expect(settings?.kanbanAnimateTransitions).toBe(false);
+            expect(settings?.openNewEditorIfNoneOpen).toBe(true);
+            expect(settings?.scrollNoteIntoView).toBe(false);
+            expect(settings?.autoExpandFocusedNote).toBe(true);
+            expect(settings?.orientation).toBe('rows');
+            expect(settings?.groupBy).toBe('project');
+            expect(settings?.kanbanGroupBy).toBe('status');
+            expect(settings?.maxNotesPerFile).toBe(4);
         });
 
-        it('falls back to globalSettings defaults (false / true) when no globalSettings provided', () => {
+        it('keeps the payload aggregates out of the settings block', () => {
+            const props = buildProps({
+                settingsCascade: buildCascade({ diverged: ['showLineNumbers'], hasWorkspaceOverrides: true, hasAnyOverrides: true }),
+            });
+            const settings = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE).view_display_options.settings as Record<string, unknown>;
+            expect(settings.diverged).toBeUndefined();
+            expect(settings.hasWorkspaceOverrides).toBeUndefined();
+            expect(settings.hasAnyOverrides).toBeUndefined();
+        });
+
+        it('falls back to the built-in cascade defaults when no cascade has arrived yet', () => {
             const result = buildViewDisplayOptions(buildProps(), undefined, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.view_display_options.settings?.showLineNumbers).toBe(false);
             expect(result.view_display_options.settings?.watchUnopenedFilesInViewer).toBe(true);
+            expect(result.view_display_options.settings?.scrollNoteIntoView).toBe(true);
         });
 
     });
@@ -218,6 +204,65 @@ describe('composerops.buildViewDisplayOptions', () => {
             // the integration tag wins over the viewState (spread-then-stamp)
             expect(result.view_display_options.integration_mode).toBe('folder');
             expect(result.view_display_options.integration_path).toBe('/repo');
+        });
+
+    });
+
+    describe('minted view types', () => {
+
+        const KANBAN_BY_ASSIGNEE: UserViewType = {
+            id: 'user-kanban-by-assignee',
+            label: 'Kanban by Assignee',
+            parent: 'kanban',
+            overrides: { kanbanGroupBy: 'assignee' },
+        };
+
+        function buildForType(view_type: string, user_types: UserViewType[], cascade_overrides: Partial<SettingsCascadePayload> = {}): NoteDisplayOptions {
+            const props = buildProps({ settingsCascade: buildCascade({ viewUserTypes: user_types, ...cascade_overrides }) });
+            const view_state: ViewState = { type: view_type };
+            return buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE).view_display_options;
+        }
+
+        it("applies a minted type's overrides over the cascade, so selecting the type does something", () => {
+            const settings = buildForType('user-kanban-by-assignee', [KANBAN_BY_ASSIGNEE], { kanbanGroupBy: 'status' }).settings!;
+            expect(settings.kanbanGroupBy).toBe('assignee');
+        });
+
+        it('leaves every other cascade value alone', () => {
+            const settings = buildForType('user-kanban-by-assignee', [KANBAN_BY_ASSIGNEE], { orientation: 'rows' }).settings!;
+            expect(settings.orientation).toBe('rows');
+        });
+
+        it('applies nothing to the parent type the minted one was saved from', () => {
+            const settings = buildForType('kanban', [KANBAN_BY_ASSIGNEE], { kanbanGroupBy: 'status' }).settings!;
+            expect(settings.kanbanGroupBy).toBe('status');
+        });
+
+        it('lets the nearer type win when one minted type inherits from another', () => {
+            const nested: UserViewType = {
+                id: 'user-kanban-by-assignee-rows',
+                label: 'Kanban by Assignee (rows)',
+                parent: 'user-kanban-by-assignee',
+                overrides: { kanbanGroupBy: 'owner', orientation: 'rows' },
+            };
+            const settings = buildForType('user-kanban-by-assignee-rows', [KANBAN_BY_ASSIGNEE, nested]).settings!;
+            expect(settings.kanbanGroupBy).toBe('owner');
+            expect(settings.orientation).toBe('rows');
+        });
+
+        it('ignores a saved type whose parent no longer exists rather than throwing', () => {
+            const orphan: UserViewType = { id: 'user-orphan', label: 'Orphan', parent: 'gone', overrides: { kanbanGroupBy: 'assignee' } };
+            const settings = buildForType('user-orphan', [orphan], { kanbanGroupBy: 'status' }).settings!;
+            expect(settings.kanbanGroupBy).toBe('status');
+        });
+
+        it('ignores a malformed saved type rather than spreading it', () => {
+            const malformed = [
+                { id: '', label: '', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' } },
+                { id: 'user-no-overrides', label: 'No overrides', parent: 'kanban', overrides: null },
+            ] as unknown as UserViewType[];
+            const settings = buildForType('user-no-overrides', malformed, { kanbanGroupBy: 'status' }).settings!;
+            expect(settings.kanbanGroupBy).toBe('status');
         });
 
     });

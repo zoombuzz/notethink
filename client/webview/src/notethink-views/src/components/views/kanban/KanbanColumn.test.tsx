@@ -45,20 +45,17 @@ describe('KanbanColumn', () => {
         expect(column.className).not.toContain('pseudo');
     });
 
-    it('calculates width based on total_columns', () => {
-        const { container } = render(
-            <KanbanColumn seq={0} value="backlog" display_options={{ total_columns: 4 }} />
-        );
+    it('sets no inline width, so the stylesheet owns the lane on whichever axis it is laid out along', () => {
+        const { container } = render(<KanbanColumn seq={0} value="backlog" />);
         const column = container.firstChild as HTMLElement;
-        expect(column.style.width).toBe('calc(25% - 0.5em)');
+        expect(column.style.width).toBe('');
     });
 
-    it('defaults to 100% width when no total_columns', () => {
-        const { container } = render(
-            <KanbanColumn seq={0} value="backlog" />
-        );
+    it('publishes the lane and its card list, which is how the width measurement finds them', () => {
+        const { container } = render(<KanbanColumn seq={0} value="backlog" />);
         const column = container.firstChild as HTMLElement;
-        expect(column.style.width).toBe('calc(100% - 0.5em)');
+        expect(column.hasAttribute('data-column-lane')).toBe(true);
+        expect(column.querySelector('[data-column-cards]')).not.toBeNull();
     });
 
     it('applies draglight class when draglight display option is set', () => {

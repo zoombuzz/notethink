@@ -1,0 +1,10 @@
+/*
+ * Geometry for the compact card. The full card's padding is sized to hold a headline apart from the
+ * body that follows it; a sticky is one row, so the same figures read as dead space above and below a
+ * single line of text. This is the tighter equivalent, applied to the inner wrapper that keeps the
+ * headline out of the lane layouts' direct-child rule.
+ */
+
+.stickyInner {
+  padding: 5px 12px;
+}

@@ -2,20 +2,18 @@ import React from "react";
 import * as l10n from "@vscode/l10n";
 import type { ReactElement } from "react";
 import type { NoteDisplayOptions } from "../../../types/NoteProps";
-import type { GlobalSettingKey } from "../../../types/Messages";
+import type { SettingsCascadeKey, UserViewType } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
-import type { CommonSettingKey } from "../SettingsCommonControls";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 import type { StableIdCollision } from "../../../lib/noteops";
-import { getViewNode, isGroupedViewType, isSettingFixed, resolveSetting, unlockingViewFor } from "../../../lib/viewregistryops";
-import { enumerateGroupByCandidates, resolveGroupByAxisKey } from "../../../lib/groupbyops";
-import type { GroupBySelectorProps } from "../GroupBySelector";
+import { enumerateGroupByCandidates, resolveGroupByAxisKey, resolveKanbanAxisKey } from "../../../lib/groupbyops";
+import { chainOf, registryWithUserTypes } from "../../../lib/viewregistryops";
 import type { ActiveDrawer } from "./useToolbarDrawers";
 import CollisionsDrawer from "../drawers/CollisionsDrawer";
 import FilesDrawer from "../drawers/FilesDrawer";
 import JumpDrawer from "../drawers/JumpDrawer";
-import SettingsDocumentDrawer from "../drawers/SettingsDocumentDrawer";
-import SettingsKanbanDrawer from "../drawers/SettingsKanbanDrawer";
+import SettingsCardDrawer from "../drawers/SettingsCardDrawer";
+import SettingsViewDrawer from "../drawers/SettingsViewDrawer";
 import ToolbarDrawer from "../drawers/ToolbarDrawer";
 import ToolbarTab from "../drawers/ToolbarTab";
 import { viewTypeLabel } from "../viewTypeLabel";
@@ -23,6 +21,9 @@ import master_view_styles from "../../ViewRenderer.module.scss";
 
 // the + trigger is hidden while it waits to return as a menu item; typed as boolean so the wiring below stays live code rather than a branch TS narrows away
 const SHOW_INSERT_BUTTON: boolean = false;
+
+// one frozen empty list, so a cascade carrying no saved types hands the drawer the same identity every render rather than a fresh array that re-memoises the registry
+const EMPTY_USER_TYPES: UserViewType[] = [];
 
 interface GenericViewToolbarProps {
     props: ViewProps;
@@ -37,10 +38,14 @@ interface GenericViewToolbarProps {
     integrationSelection: IntegrationMode;
     integrationMode: ConcreteIntegrationMode;
     onIntegrationChange: (mode: IntegrationMode, target_file_path?: string) => void;
-    // view-type dropdown: same shape - selection (may be auto), auto-resolved concrete type, change handler
+    // view type: the persisted selection (may be auto), the type auto resolved to, and the change handler the settings tree drives
     viewTypeSelection: string;
     autoResolvedType: string | undefined;
     onViewTypeChange: (view_type: string) => void;
+    // card type: the same three, on the axis that decides how one note is drawn rather than how a view lays notes out
+    cardTypeSelection: string;
+    resolvedCardType: string;
+    onCardTypeChange: (card_type: string) => void;
     naturalColumnOrder: string[];
     collisions: StableIdCollision[];
     activeDrawer: ActiveDrawer;
@@ -50,11 +55,10 @@ interface GenericViewToolbarProps {
     gearButtonRef: React.RefObject<HTMLButtonElement | null>;
     onCloseDrawer: () => void;
     onSettingsToggle: () => void;
+    onCardsToggle: (anchor: HTMLElement) => void;
     onInsertOpen: () => void;
-    onSettingChange: (key: CommonSettingKey, value: boolean) => void;
-    onGlobalSettingChange: (key: GlobalSettingKey, value: boolean) => void;
+    onSettingChange: (key: SettingsCascadeKey, value: unknown) => void;
     onColumnOrderChange: (next_order: string[]) => void;
-    onGroupByChange: (group_by_key: string) => void;
     onMakeDefault: () => void;
     onResetToDefault: () => void;
     onRestoreBuiltinDefault: () => void;
@@ -62,12 +66,13 @@ interface GenericViewToolbarProps {
 }
 
 /**
- * Leaf-level view toolbar: the breadcrumb, then the View settings tab, followed by the drawers
- * themselves. Only one tab renders here - the other three live inside the breadcrumb, on the state
- * each of them is titled with. Neither selector is on this row: the view-type selector is in the
- * View settings drawer's body and the integration selector in the Jump to drawer's, each reached
- * through its tab, so the row holds no dropdown at all. Rendered only when the view is a concrete
- * type (the 'auto' view delegates before reaching this).
+ * Leaf-level view toolbar: the breadcrumb, then the view settings tab and the card settings tab,
+ * followed by the drawers themselves. Only those two tabs render here - the other three live inside the
+ * breadcrumb, on the state each of them is titled with. No selector is on this row: each axis is chosen
+ * from the tree in its own drawer and the integration mode from the Jump to drawer, each reached through
+ * its tab, so the row holds no dropdown at all. Each tab is titled by what its axis currently resolves
+ * to, so the row states both answers and the drawers hold the controls that change them.
+ * Rendered only when the view is a concrete type (the 'auto' view delegates before reaching this).
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function GenericViewToolbar(component_props: GenericViewToolbarProps): React.ReactElement {
@@ -80,6 +85,9 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         integrationMode,
         viewTypeSelection,
         autoResolvedType,
+        cardTypeSelection,
+        resolvedCardType,
+        onCardTypeChange,
         naturalColumnOrder,
         collisions,
         activeDrawer,
@@ -89,37 +97,34 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         gearButtonRef,
         onCloseDrawer,
         onSettingsToggle,
+        onCardsToggle,
         onInsertOpen,
         onIntegrationChange,
         onSettingChange,
-        onGlobalSettingChange,
         onColumnOrderChange,
         onMakeDefault,
         onResetToDefault,
         onRestoreBuiltinDefault,
         onApplyFilters,
         onViewTypeChange,
-        onGroupByChange,
     } = component_props;
-    // registry-driven drawer choice, not a hardcoded type list: grouped views take the lane drawer, other concrete views the document drawer
-    const grouped_view = isGroupedViewType(props.type);
-    const document_view = getViewNode(props.type)?.kind === 'concrete' && !grouped_view;
     /*
-     * the group-by control for the lane drawer: the persisted selection resolves against the enumerated
-     * categorical candidates, with the registry lock disabling it for kanban (axes[0] fixed to status,
-     * unlocked by selecting Line). Cheap - the enumeration is memoised on the notes identity.
+     * the group-by control's candidates, enumerated once for whichever row the settings pane renders it
+     * on. The drawer decides which key that row writes from the node the user has selected in its tree,
+     * so nothing here needs to know whether the board is a kanban. Cheap - the enumeration is memoised
+     * on the notes identity.
      */
-    const group_by_axes = resolveSetting(props.type, 'axes').value as string[] | undefined;
-    const group_by_fixed = isSettingFixed(props.type, 'axes');
-    const group_by_control: GroupBySelectorProps = {
-        selection: props.display_options?.settings?.groupBy ?? 'auto',
-        resolvedKey: resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, props.display_options?.settings?.groupBy),
-        candidateKeys: enumerateGroupByCandidates(props.notes).filter(c => c.kind === 'categorical').map(c => c.key),
-        fixed: group_by_fixed,
-        fixedValue: group_by_fixed ? group_by_axes?.[0] : undefined,
-        unlockView: unlockingViewFor(props.type, 'axes'),
-        onChange: onGroupByChange,
-    };
+    const user_view_types = displayOptions.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
+    // a kanban board, or a type minted from one, holds its own axis override at the kanban node; every other lane view reads the ancestor's
+    const on_kanban_chain = chainOf(props.type, registryWithUserTypes(user_view_types)).includes('kanban');
+    const group_by_selection = (on_kanban_chain
+        ? props.display_options?.settings?.kanbanGroupBy
+        : props.display_options?.settings?.groupBy) ?? 'auto';
+    const group_by_candidate_keys = enumerateGroupByCandidates(props.notes).filter(c => c.kind === 'categorical').map(c => c.key);
+    // the "Auto (...)" label has to name the axis the board will actually lane by, and kanban's auto is status rather than the generic ladder's folder default
+    const group_by_resolved_key = on_kanban_chain
+        ? resolveKanbanAxisKey(group_by_selection)
+        : resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, group_by_selection);
     return (
         <>
             <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
@@ -147,6 +152,14 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                     buttonRef={gearButtonRef}
                     onToggle={() => onSettingsToggle()}
                 />
+                <ToolbarTab
+                    label={viewTypeLabel(cardTypeSelection, resolvedCardType)}
+                    testId="card-settings-button"
+                    controls={`v${props.id}-cards-drawer`}
+                    open={activeDrawer === 'cards'}
+                    title={l10n.t('Card settings')}
+                    onToggle={(anchor) => onCardsToggle(anchor)}
+                />
             </div>
             <ToolbarDrawer
                 open={activeDrawer === 'settings'}
@@ -155,55 +168,41 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                 ariaLabel={l10n.t('Settings')}
                 onClose={onCloseDrawer}
             >
-                {document_view && (
-                    <SettingsDocumentDrawer
-                        settings={{
-                            showLinetagsInHeadlines: displayOptions.settings?.showLinetagsInHeadlines,
-                            scrollNoteIntoView: displayOptions.settings?.scrollNoteIntoView,
-                            autoExpandFocusedNote: displayOptions.settings?.autoExpandFocusedNote,
-                        }}
-                        viewTypeSelection={viewTypeSelection}
-                        autoResolvedType={autoResolvedType}
-                        onViewTypeChange={onViewTypeChange}
-                        showLineNumbers={displayOptions.settings?.showLineNumbers}
-                        watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}
-                        openNewEditorIfNoneOpen={displayOptions.settings?.openNewEditorIfNoneOpen}
-                        onSettingChange={onSettingChange}
-                        onGlobalSettingChange={onGlobalSettingChange}
-                        onMakeDefault={onMakeDefault}
-                        onResetToDefault={onResetToDefault}
-                        canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
-                        onRestoreBuiltinDefault={onRestoreBuiltinDefault}
-                        canRestoreBuiltinDefault={props.settingsCascadeHasAnyOverrides ?? false}
-                    />
-                )}
-                {grouped_view && (
-                    <SettingsKanbanDrawer
-                        settings={{
-                            showLinetagsInHeadlines: displayOptions.settings?.showLinetagsInHeadlines,
-                            scrollNoteIntoView: displayOptions.settings?.scrollNoteIntoView,
-                            autoExpandFocusedNote: displayOptions.settings?.autoExpandFocusedNote,
-                            columnOrder: displayOptions.settings?.columnOrder,
-                        }}
-                        viewTypeSelection={viewTypeSelection}
-                        autoResolvedType={autoResolvedType}
-                        onViewTypeChange={onViewTypeChange}
-                        groupBy={group_by_control}
-                        naturalColumnOrder={naturalColumnOrder}
-                        showLineNumbers={displayOptions.settings?.showLineNumbers}
-                        watchUnopenedFilesInViewer={displayOptions.settings?.watchUnopenedFilesInViewer}
-                        openNewEditorIfNoneOpen={displayOptions.settings?.openNewEditorIfNoneOpen}
-                        kanbanAnimateTransitions={displayOptions.settings?.kanbanAnimateTransitions}
-                        onSettingChange={onSettingChange}
-                        onGlobalSettingChange={onGlobalSettingChange}
-                        onColumnOrderChange={onColumnOrderChange}
-                        onMakeDefault={onMakeDefault}
-                        onResetToDefault={onResetToDefault}
-                        canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
-                        onRestoreBuiltinDefault={onRestoreBuiltinDefault}
-                        canRestoreBuiltinDefault={props.settingsCascadeHasAnyOverrides ?? false}
-                    />
-                )}
+                <SettingsViewDrawer
+                    viewId={props.id}
+                    settings={displayOptions.settings ?? {}}
+                    diverged={props.settingsCascadeDiverged ?? []}
+                    userTypes={user_view_types}
+                    currentType={props.type}
+                    viewTypeSelection={viewTypeSelection}
+                    autoResolvedType={autoResolvedType}
+                    onViewTypeChange={onViewTypeChange}
+                    onSettingChange={onSettingChange}
+                    naturalColumnOrder={naturalColumnOrder}
+                    onColumnOrderChange={onColumnOrderChange}
+                    groupByResolvedKey={group_by_resolved_key}
+                    groupByCandidateKeys={group_by_candidate_keys}
+                    onMakeDefault={onMakeDefault}
+                    onResetToDefault={onResetToDefault}
+                    canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
+                />
+            </ToolbarDrawer>
+            <ToolbarDrawer
+                open={activeDrawer === 'cards'}
+                id={`v${props.id}-cards-drawer`}
+                testId="card-settings-drawer-grid"
+                ariaLabel={l10n.t('Card settings')}
+                onClose={onCloseDrawer}
+            >
+                <SettingsCardDrawer
+                    viewId={props.id}
+                    settings={displayOptions.settings ?? {}}
+                    diverged={props.settingsCascadeDiverged ?? []}
+                    resolvedCardType={resolvedCardType}
+                    cardTypeSelection={cardTypeSelection}
+                    onCardTypeChange={onCardTypeChange}
+                    onSettingChange={onSettingChange}
+                />
             </ToolbarDrawer>
             {integrationMode === INTEGRATION_MODE_FOLDER && (
                 <ToolbarDrawer

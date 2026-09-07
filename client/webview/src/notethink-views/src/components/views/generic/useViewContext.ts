@@ -45,7 +45,7 @@ export function useViewContext(props: ViewProps): ViewContext {
     const selection_ref = useRef(props.selection);
     selection_ref.current = props.selection;
 
-    // set up all-view-level (global) default display_options, overridden by props (ViewManager state) and parent view props
+    // last-resort defaults for a view rendered before the first settingsCascade lands; the composer normally stamps every one of these from the cascade, and ancestor views override in tree order
     const display_options: NoteDisplayOptions = {
         parent_context_seq: 0,
         ...props.display_options,
@@ -54,8 +54,6 @@ export function useViewContext(props: ViewProps): ViewContext {
             watchUnopenedFilesInViewer: true,
             kanbanAnimateTransitions: true,
             openNewEditorIfNoneOpen: false,
-            showContextBars: true,
-            scrollTextIntoView: true,
             scrollNoteIntoView: true,
             autoExpandFocusedNote: false,
             ...props.parent_view?.parent_view?.parent_view?.display_options?.settings,

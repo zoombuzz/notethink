@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.47",
+  "version": "0.3.63",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -76,10 +76,6 @@
         "title": "%command.toggleLineNumbers%"
       },
       {
-        "command": "notethink.toggleContextBars",
-        "title": "%command.toggleContextBars%"
-      },
-      {
         "command": "notethink.navigateUp",
         "title": "%command.navigateUp%"
       },
@@ -119,11 +115,6 @@
         },
         {
           "command": "notethink.toggleLineNumbers",
-          "when": "activeCustomEditorId == 'notethink.viewer'",
-          "group": "1_settings"
-        },
-        {
-          "command": "notethink.toggleContextBars",
           "when": "activeCustomEditorId == 'notethink.viewer'",
           "group": "1_settings"
         }
@@ -176,13 +167,23 @@
           "notethink.settings.view.type": {
             "type": "string",
             "scope": "resource",
-            "enum": [
-              "auto",
-              "document",
-              "kanban"
-            ],
             "default": "auto",
             "description": "%config.settings.view.type.description%"
+          },
+          "notethink.settings.view.userTypes": {
+            "type": "array",
+            "scope": "resource",
+            "items": {
+              "type": "object"
+            },
+            "default": [],
+            "description": "%config.settings.view.userTypes.description%"
+          },
+          "notethink.settings.card.type": {
+            "type": "string",
+            "scope": "resource",
+            "default": "auto",
+            "description": "%config.settings.card.type.description%"
           },
           "notethink.settings.view.generic.showLineNumbers": {
             "type": "boolean",
@@ -190,23 +191,57 @@
             "default": false,
             "description": "%config.settings.view.generic.showLineNumbers.description%"
           },
+          "notethink.settings.view.generic.showLinetagsInHeadlines": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": false,
+            "description": "%config.settings.view.generic.showLinetagsInHeadlines.description%"
+          },
+          "notethink.settings.view.generic.scrollNoteIntoView": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": true,
+            "description": "%config.settings.view.generic.scrollNoteIntoView.description%"
+          },
+          "notethink.settings.view.generic.autoExpandFocusedNote": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": false,
+            "description": "%config.settings.view.generic.autoExpandFocusedNote.description%"
+          },
           "notethink.settings.view.generic.watchUnopenedFilesInViewer": {
             "type": "boolean",
             "scope": "window",
             "default": true,
             "description": "%config.settings.view.generic.watchUnopenedFilesInViewer.description%"
           },
-          "notethink.settings.view.generic.showContextBars": {
-            "type": "boolean",
-            "scope": "resource",
-            "default": true,
-            "description": "%config.settings.view.generic.showContextBars.description%"
-          },
           "notethink.settings.view.generic.openNewEditorIfNoneOpen": {
             "type": "boolean",
             "scope": "window",
             "default": false,
             "description": "%config.settings.view.generic.openNewEditorIfNoneOpen.description%"
+          },
+          "notethink.settings.view.specific.grouped.groupBy": {
+            "type": "string",
+            "scope": "resource",
+            "default": "auto",
+            "description": "%config.settings.view.specific.grouped.groupBy.description%"
+          },
+          "notethink.settings.view.specific.line.orientation": {
+            "type": "string",
+            "scope": "resource",
+            "enum": [
+              "columns",
+              "rows"
+            ],
+            "default": "columns",
+            "description": "%config.settings.view.specific.line.orientation.description%"
+          },
+          "notethink.settings.view.specific.kanban.groupBy": {
+            "type": "string",
+            "scope": "resource",
+            "default": "auto",
+            "description": "%config.settings.view.specific.kanban.groupBy.description%"
           },
           "notethink.settings.view.specific.kanban.columnOrder": {
             "type": "array",
@@ -222,6 +257,14 @@
               "done"
             ],
             "description": "%config.settings.view.specific.kanban.columnOrder.description%"
+          },
+          "notethink.settings.view.specific.kanban.cardRatio": {
+            "type": "number",
+            "scope": "resource",
+            "minimum": 0.5,
+            "maximum": 4,
+            "default": 1.4,
+            "description": "%config.settings.view.specific.kanban.cardRatio.description%"
           },
           "notethink.settings.view.specific.kanban.animateTransitions": {
             "type": "boolean",

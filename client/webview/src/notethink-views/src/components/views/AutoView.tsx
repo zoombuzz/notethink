@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
-import { aggregateNoteLinetags, findNoteBySeq, isAggregateRoot, majorityNgView } from "../../lib/noteops";
+import { aggregateNoteLinetags, findNoteBySeq, isAggregateRoot, majorityCardType, majorityNgView } from "../../lib/noteops";
 import { resolveNamespacedTag } from "../../lib/linetagops";
+import { CARD_AUTO, resolveCardType } from "../notes/cardregistryops";
 import type { ViewProps } from "../../types/ViewProps";
 import type { LineTag } from "../../types/NoteProps";
 import GenericView from "./GenericView";
@@ -15,13 +16,15 @@ export default function AutoView(props: ViewProps): ReactElement {
             ...props.display_options
         },
     };
-    const replaced_attributes: { type: string; display_options: Record<string, unknown> } = {
+    const replaced_attributes: { type: string; card_type: string; display_options: Record<string, unknown> } = {
         type: props.type,
+        card_type: props.display_options?.settings?.cardType ?? CARD_AUTO,
         display_options: {},
     };
+    const is_aggregate_root = isAggregateRoot(props.nested?.parent_context);
 
     // folder mode: synthetic root has no single nt_view linetag on a top-level note, so apply a majority vote across originating files (one vote per file)
-    if (isAggregateRoot(props.nested?.parent_context)) {
+    if (is_aggregate_root) {
         const majority = majorityNgView(props.notes);
         if (majority) {
             derived_attributes.type = majority;
@@ -50,8 +53,27 @@ export default function AutoView(props: ViewProps): ReactElement {
         }
     }
 
+    /*
+     * The card axis, resolved independently of the view and by the same rules: an explicit selection is
+     * pinned, and `auto` majority-votes nt_card across the originating files before falling back to the
+     * card type the resolved view declares. The result is stamped onto settings.cardType for the whole
+     * subtree, which is what carries it to every note - buildChildNoteDisplayOptions funnels the view's
+     * display_options onto each one, so no call site has to be taught about cards.
+     */
+    const voted_card_type = replaced_attributes.card_type === CARD_AUTO && is_aggregate_root
+        ? majorityCardType(props.notes)
+        : undefined;
+    const resolved_card_type = resolveCardType(voted_card_type ?? replaced_attributes.card_type, derived_attributes.type, props.display_options?.settings?.viewUserTypes ?? []);
+    derived_attributes.display_options.settings = {
+        ...props.display_options?.settings,
+        cardType: resolved_card_type,
+    };
+
     return (
-        <div className={view_specific_styles.fullheight} data-auto-selected-viewtype={derived_attributes.type}>
+        <div className={view_specific_styles.fullheight}
+             data-auto-selected-viewtype={derived_attributes.type}
+             data-auto-selected-cardtype={resolved_card_type}
+        >
             <GenericView
                 {...props}
                 {...derived_attributes}
@@ -63,6 +85,7 @@ export default function AutoView(props: ViewProps): ReactElement {
                     ...props.nested,
                     replaced_attributes: replaced_attributes,
                     auto_resolved_type: derived_attributes.type,
+                    auto_resolved_card_type: resolved_card_type,
                 }}
             />
         </div>

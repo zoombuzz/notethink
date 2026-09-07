@@ -1,7 +1,5 @@
 import { useLayoutEffect } from "react";
-
-// mirror useMarkdownNoteOverflow: clip when rendered height exceeds this multiple of width
-const HEIGHT_RATIO = 1;
+import { bodyClipHeight } from "./useMarkdownNoteOverflow";
 
 export interface SyncedBodyClipPolicy {
     is_top_level: boolean;
@@ -9,6 +7,7 @@ export interface SyncedBodyClipPolicy {
     auto_expand: boolean | undefined;
     focused: boolean | undefined;
     manually_expanded: boolean;
+    card_target_height: number | undefined;
 }
 
 /**
@@ -28,9 +27,9 @@ export function useSyncedBodyClip(body_ref: React.RefObject<HTMLDivElement | nul
     useLayoutEffect(() => {
         const el = body_ref.current;
         if (!el || !policy.is_top_level || policy.is_dragging) { return; }
-        const width = el.offsetWidth;
-        if (width === 0) { return; }
-        const max_h = width * HEIGHT_RATIO;
+        if (el.offsetWidth === 0) { return; }
+        // the same rule useMarkdownNoteOverflow applies, called rather than copied - a private copy here silently erased the clip the render had just set
+        const max_h = bodyClipHeight(el, policy.card_target_height);
         const clip = el.scrollHeight > max_h && (policy.auto_expand ? !policy.focused : !policy.manually_expanded);
         const max_height = clip ? `${max_h}px` : '';
         const overflow = clip ? 'hidden' : '';

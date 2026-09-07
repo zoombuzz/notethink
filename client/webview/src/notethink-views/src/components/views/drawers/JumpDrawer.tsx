@@ -1,10 +1,11 @@
 import Debug from "debug";
 import React from "react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import * as l10n from "@vscode/l10n";
 import { useJumpTargetsContext } from "../../../hooks/JumpTargetsContext";
 import { INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 import ViewIntegrationSelector from "../ViewIntegrationSelector";
+import DrawerTree, { type DrawerTreeNode } from "./DrawerTree";
 import styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:JumpDrawer");
@@ -39,58 +40,50 @@ function JumpDrawer(props: JumpDrawerProps): ReactElement {
     const is_folder_mode = jump_targets?.mode === INTEGRATION_MODE_FOLDER;
     // root header label = the breadcrumb folder the user clicked, so the tree reads as a subtree of it
     const root_label = props.requestedPath ? (props.requestedPath.split('/').filter(Boolean).pop() ?? props.requestedPath) : '';
+    const entries = is_loading ? [] : jump_targets.entries;
     debug("requestedPath=%s loading=%s entries=%d", props.requestedPath, is_loading, jump_targets?.entries.length ?? -1);
+
+    let placeholder: ReactNode = undefined;
+    if (is_loading) {
+        placeholder = <li className={styles.drawerEmpty} data-testid="jump-drawer-loading">{l10n.t('Loading…')}</li>;
+    } else if (entries.length === 0) {
+        placeholder = (
+            <li className={styles.drawerEmpty} data-testid="jump-drawer-empty">
+                {is_folder_mode ? l10n.t('No subfolders') : l10n.t('No other files here')}
+            </li>
+        );
+    }
+
+    const root_node: DrawerTreeNode = {
+        id: 'jump-root',
+        label: root_label,
+        glyph: '›',
+        expanded: true,
+        testId: 'jump-drawer-root',
+        title: l10n.t('Return to the current view'),
+        ariaLabel: l10n.t('Return to the current view'),
+        placeholder,
+        onSelect: () => props.onReturn?.(),
+        children: entries.map(entry => ({
+            id: entry.path,
+            label: entry.label,
+            glyph: entry.kind === 'folder' ? '›' : '',
+            kind: entry.kind,
+            testId: 'jump-drawer-entry',
+            title: entry.path,
+            onSelect: () => {
+                if (entry.kind === 'folder') { props.onFolderJump(entry.path); } else { props.onFileJump(entry.path); }
+                // every jump-drawer click navigates into a target (descend folder / open file), so dismiss the drawer - unlike the settings/files drawers which stay open while you adjust them
+                props.onReturn?.();
+            },
+        })),
+    };
 
     return (
         <div className={styles.drawerBody} data-testid="jump-drawer">
             <div className={styles.drawerGroups}>
                 <section className={styles.drawerGroup}>
-                    <ul className={styles.jumpTree} role="tree" data-testid="jump-drawer-list">
-                        <li role="treeitem" aria-expanded="true">
-                            <button
-                                type="button"
-                                className={`${styles.drawerLink} ${styles.jumpTreeRoot}`}
-                                data-testid="jump-drawer-root"
-                                aria-label={l10n.t('Return to the current view')}
-                                title={l10n.t('Return to the current view')}
-                                onClick={() => props.onReturn?.()}
-                            >
-                                <span className={`${styles.jumpTreeGlyph} ${styles.jumpTreeGlyphOpen}`}>{'›'}</span>
-                                <span className={styles.jumpTreeLabel}>{root_label}</span>
-                            </button>
-                            <ul className={styles.jumpTreeChildren}>
-                                {is_loading && (
-                                    <li className={styles.drawerEmpty} data-testid="jump-drawer-loading">
-                                        {l10n.t('Loading…')}
-                                    </li>
-                                )}
-                                {!is_loading && jump_targets.entries.length === 0 && (
-                                    <li className={styles.drawerEmpty} data-testid="jump-drawer-empty">
-                                        {is_folder_mode ? l10n.t('No subfolders') : l10n.t('No other files here')}
-                                    </li>
-                                )}
-                                {!is_loading && jump_targets.entries.map(entry => (
-                                    <li key={entry.path} role="treeitem">
-                                        <button
-                                            type="button"
-                                            className={`${styles.drawerLink} ${styles.jumpTreeEntry}`}
-                                            data-testid="jump-drawer-entry"
-                                            data-kind={entry.kind}
-                                            title={entry.path}
-                                            onClick={() => {
-                                                if (entry.kind === 'folder') { props.onFolderJump(entry.path); } else { props.onFileJump(entry.path); }
-                                                // every jump-drawer click navigates into a target (descend folder / open file), so dismiss the drawer - unlike the settings/files drawers which stay open while you adjust them
-                                                props.onReturn?.();
-                                            }}
-                                        >
-                                            <span className={styles.jumpTreeGlyph}>{entry.kind === 'folder' ? '›' : ''}</span>
-                                            <span className={styles.jumpTreeLabel}>{entry.label}</span>
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </li>
-                    </ul>
+                    <DrawerTree nodes={[root_node]} testId="jump-drawer-list" />
                 </section>
 
                 <section className={styles.drawerGroup} data-testid="jump-drawer-integration">

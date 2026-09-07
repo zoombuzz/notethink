@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-type DrawerKind = 'settings' | 'files' | 'collisions' | 'jump';
+type DrawerKind = 'settings' | 'cards' | 'files' | 'collisions' | 'jump';
 export type ActiveDrawer = 'none' | DrawerKind;
 
 export interface ToolbarDrawers {
     active_drawer: ActiveDrawer;
     gear_button_ref: React.RefObject<HTMLButtonElement | null>;
     toggle_settings: () => void;
+    toggle_cards: (anchor: HTMLElement) => void;
     toggle_files: (anchor: HTMLElement) => void;
     toggle_collisions: (anchor: HTMLElement) => void;
     toggle_jump: (anchor: HTMLElement) => void;
@@ -14,7 +15,7 @@ export interface ToolbarDrawers {
 }
 
 /**
- * Owns the at-most-one-open toolbar drawer (settings | files) plus the shared
+ * Owns the at-most-one-open toolbar drawer (settings | cards | files | collisions | jump) plus the shared
  * scroll-anchor, Escape, and outside-click behaviour. The trigger element's
  * viewport position is captured on toggle so the scroll-anchor effect keeps it
  * stable across the 150ms open/close animation; Escape restores focus to it.
@@ -38,6 +39,10 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
 
     const toggle_settings = useCallback((): void => {
         toggleDrawer('settings', gear_button_ref.current);
+    }, [toggleDrawer]);
+
+    const toggle_cards = useCallback((anchor: HTMLElement): void => {
+        toggleDrawer('cards', anchor);
     }, [toggleDrawer]);
 
     const toggle_files = useCallback((anchor: HTMLElement): void => {
@@ -121,5 +126,5 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
         return () => document.removeEventListener('pointerdown', onPointerDown);
     }, [active_drawer, view_id]);
 
-    return { active_drawer, gear_button_ref, toggle_settings, toggle_files, toggle_collisions, toggle_jump, close_drawer };
+    return { active_drawer, gear_button_ref, toggle_settings, toggle_cards, toggle_files, toggle_collisions, toggle_jump, close_drawer };
 }

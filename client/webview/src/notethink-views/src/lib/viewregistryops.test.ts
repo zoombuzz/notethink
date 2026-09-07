@@ -262,13 +262,13 @@ describe('per-node setting counts', () => {
 
 describe('owningNodeFor - the node a settings row pill names', () => {
     it('names Grouped for Group by at kanban and Kanban for Group order', () => {
-        // the pair the offer rule turns on: Group by departs from the axes kanban pins, Group order is a lane preference kanban owns
+        // the pair the offer rule turns on: kanban pins the axis but owns the lane order
         expect(owningNodeFor('kanban', 'kanbanGroupBy')).toBe('grouped');
         expect(owningNodeFor('kanban', 'columnOrder')).toBe('kanban');
     });
 
     it('keys Group by on axes, not on the config key it writes', () => {
-        // both groupBy and kanbanGroupBy carry a kanban OPEN override, so keying the row on either would name Kanban and kill the offer
+        // both keys carry a kanban OPEN override, so keying on either would name Kanban and kill it
         expect(STRUCTURAL_SETTING_KEYS.groupBy).toBe('axes');
         expect(STRUCTURAL_SETTING_KEYS.kanbanGroupBy).toBe('axes');
         expect(STRUCTURAL_SETTING_KEYS.columnOrder).toBe('groupOrder');
@@ -287,7 +287,7 @@ describe('owningNodeFor - the node a settings row pill names', () => {
     });
 
     it('names the card home for a card-drawn setting, which is why the view pane never lists one', () => {
-        // the three moved onto the card tree; the flat home answers whatever tree it names, and no view chain includes allcards
+        // the three moved onto the card tree, and no view chain includes allcards
         expect(owningNodeFor('kanban', 'showLineNumbers')).toBe('allcards');
         expect(owningNodeFor('document', 'showLinetagsInHeadlines')).toBe('allcards');
         expect(owningNodeFor('kanban', 'autoExpandFocusedNote')).toBe('allcards');

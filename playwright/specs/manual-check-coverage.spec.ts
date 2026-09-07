@@ -117,7 +117,7 @@ test.describe('manual check: the drawer columns stay aligned when squeezed', () 
         const controls = new Set(columns.map(c => c.control));
         expect(names.size).toBe(1);
         expect(controls.size).toBe(1);
-        // and the two columns are still distinct, which is what "usable" means - a collapsed grid would align trivially
+        // and the columns are still distinct: a collapsed grid would align trivially
         expect([...controls][0]).toBeGreaterThan([...names][0]);
     });
 });
@@ -140,7 +140,7 @@ test.describe('manual check: the card type follows a mixed folder', () => {
      */
     test('the tab reads Auto with the majority-voted card, not the view default', async ({ page }) => {
         await harness(page);
-        // two files vote sticky and one votes card: a 1-1 split is a tie and falls back by design, so a winner needs three files
+        // two vote sticky and one card: a 1-1 split ties and falls back, so a winner needs three files
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'card-sticky-a.md', doc_path: `${WORKSPACE_ROOT}/alpha/docstech/board.md`, relative_path: 'alpha/docstech/board.md' },
             { fixture: 'card-sticky-b.md', doc_path: `${WORKSPACE_ROOT}/beta/docstech/board.md`, relative_path: 'beta/docstech/board.md' },
@@ -166,9 +166,9 @@ test.describe('manual check: the card type follows a mixed folder', () => {
      */
     test('pinning Sticky draws every note compact, and Auto recovers the voted answer', async ({ page }) => {
         await harness(page);
-        // neither file declares nt_card, so `auto` genuinely resolves to the view's default and the pin is what changes the answer
+        // neither file declares nt_card, so `auto` resolves to the view default and the pin moves it
         await mixedFolder(page, 'settings-drawer-board.md', 'settings-board-b.md');
-        // only the compact card publishes data-card-type, so the full card is asserted as the absence of a sticky one
+        // only the compact card publishes data-card-type, so a full card is the absence of a sticky one
         await expect(page.locator('[data-card-type="sticky"]')).toHaveCount(0);
 
         const tab = page.getByTestId('card-settings-button');
@@ -178,7 +178,7 @@ test.describe('manual check: the card type follows a mixed folder', () => {
         await page.getByTestId('card-radio-sticky').click();
         await expect(page.locator('[data-card-type="sticky"]').first()).toBeVisible();
 
-        // the half the pin test does not reach: unpinning has to return the board to the voted answer, not leave it stuck on the pin
+        // the half the pin test misses: unpinning has to return the board to the voted answer
         await page.getByTestId('card-radio-auto').click();
         await expect.poll(async () => page.locator('[data-card-type="sticky"]').count()).toBe(0);
     });

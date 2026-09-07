@@ -54,7 +54,7 @@ function cardStyle(
 ): DraggableProvidedDraggableProps['style'] {
     const dragged = draggableStyleWithoutDropAnimation(style, snapshot);
     if (card_width === undefined) { return dragged; }
-    // dnd's style union names only its own properties, so the custom one is added through an untyped record
+    // dnd's style union names only its own properties, so the custom one goes in untyped
     const merged: Record<string, unknown> = { ...dragged, '--nt-card-width': `${card_width.toFixed(1)}px` };
     return merged as DraggableProvidedDraggableProps['style'];
 }

@@ -68,7 +68,7 @@ export default function GenericView(props: ViewProps): React.ReactElement {
     );
     // render the toolbar at the leaf level only - when type is 'auto', AutoView delegates to a concrete type that renders GenericView again with the toolbar
     const show_toolbar = props.type !== 'auto';
-    // dispatch to the registry-keyed component for this view type, inheriting a minted type's renderer from its parent; an unknown type maps to nothing (toolbar still shows)
+    // the registry-keyed component for this type, inheriting a minted type's renderer from its parent
     const ViewComponent = viewComponentFor(props.type, display_options.settings?.viewUserTypes ?? []);
     /*
      * The props the rendered view component receives.

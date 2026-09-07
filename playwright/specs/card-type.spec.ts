@@ -55,7 +55,7 @@ test.describe('Card type axis', () => {
         await setupCardFolder(page, 'card-sticky-a.md', 'card-sticky-b.md');
         const sticky_cards = page.locator('[data-card-type="sticky"]');
         await expect(sticky_cards.first()).toBeVisible({ timeout: 5000 });
-        // the title sits in the headline row alongside the origin pill, so match on the card's text rather than a standalone node
+        // the title shares the headline row with the origin pill, so match on the card's text
         await expect(sticky_cards.filter({ hasText: 'Alpha one' })).toHaveCount(1);
         await expect(sticky_cards.filter({ hasText: 'Beta one' })).toHaveCount(1);
         await expect(sticky_cards.first().locator('[role="rowheader"]')).toBeVisible();

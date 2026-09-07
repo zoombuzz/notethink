@@ -28,7 +28,7 @@ export function useSyncedBodyClip(body_ref: React.RefObject<HTMLDivElement | nul
         const el = body_ref.current;
         if (!el || !policy.is_top_level || policy.is_dragging) { return; }
         if (el.offsetWidth === 0) { return; }
-        // the same rule useMarkdownNoteOverflow applies, called rather than copied - a private copy here silently erased the clip the render had just set
+        // called rather than copied: a private copy here erased the clip the render had just set
         const max_h = bodyClipHeight(el, policy.card_target_height);
         const clip = el.scrollHeight > max_h && (policy.auto_expand ? !policy.focused : !policy.manually_expanded);
         const max_height = clip ? `${max_h}px` : '';

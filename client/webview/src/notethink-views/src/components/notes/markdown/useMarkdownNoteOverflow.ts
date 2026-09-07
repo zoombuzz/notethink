@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 // abridge when rendered height exceeds this multiple of width (top-level notes only)
 const HEIGHT_RATIO = 1;
 
-// a card is never clipped below this, so one carrying an unusually tall headline still shows some body
+// a card is never clipped below this, so a tall headline still leaves some body showing
 const MIN_CLIP_HEIGHT = 48;
 
 /**

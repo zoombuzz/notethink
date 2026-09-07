@@ -370,7 +370,7 @@ export class PanelSession {
 	}
 
 	private onDidChangeConfiguration(e: vscode.ConfigurationChangeEvent): void {
-		// the active-file watcher is armed off this setting, so a change re-evaluates whether it should exist
+		// the active-file watcher is armed off this setting, so a change re-evaluates it
 		if (e.affectsConfiguration('notethink.settings.view.generic.watchUnopenedFilesInViewer')) {
 			this.syncActiveFileWatcher();
 		}
@@ -493,7 +493,7 @@ export class PanelSession {
 	}
 
 	private async handleUpdateSetting(e: Record<string, unknown>): Promise<void> {
-		// scope defaults to the ordinary edit target so a change stays local; "Save as default" sends scope='global'
+		// scope defaults to the edit target so a change stays local; "Save as default" sends 'global'
 		const setting = e.setting as unknown;
 		const value = e.value as unknown;
 		const scope = (e.scope as 'workspace' | 'global' | undefined) ?? 'workspace';
@@ -510,8 +510,12 @@ export class PanelSession {
 		}
 	}
 
+	/**
+	 * Promote every resolved setting to the user scope, so this window's choices become the default in
+	 * every other one. Snapshot first, because workspace may shadow user; write each to Global; then clear
+	 * Workspace, so the user scope is the value's only home rather than one of two agreeing copies.
+	 */
 	private async handlePromoteSettings(): Promise<void> {
-		// snapshot every currently-resolved value first (workspace may shadow user), promote each to Global, then clear Workspace so the user scope is the only home for the value
 		try {
 			const keys = settingKeys();
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- per-key value types are heterogeneous; the snapshot is opaque
@@ -546,8 +550,13 @@ export class PanelSession {
 		}
 	}
 
+	/**
+	 * Clear both the Workspace- and the User-scope override, so every setting falls back to the built-in
+	 * default declared in package.json. This is the recovery path for a user default that has itself been
+	 * edited away - a wiped exclude filter, say - where "Revert to defaults" can no longer help, because
+	 * the default it reverts to is the broken one.
+	 */
 	private async handleRestoreBuiltinDefaults(): Promise<void> {
-		// clear both the Workspace- and the User-scope override so every setting falls back to the built-in (package.json) default. The recovery path when even the user default has been edited away (e.g. a wiped exclude filter) - "Revert to defaults" cannot help once the user default itself is gone
 		try {
 			for (const key of settingKeys()) {
 				if (!hasOverride(key)) { continue; }
@@ -699,7 +708,7 @@ export class PanelSession {
 
 	// resolve folder-mode filters with cascade precedence: built-in default → User config → Workspace config → explicit message override. The previous behaviour (only adopt explicit fields) left stale defaults in place when transitioning from current_file mode via a breadcrumb click, loading the whole workspace before the user's saved filter was applied
 	private adoptFolderFilters(e: Record<string, unknown>): void {
-		// the resolved settings are the base; every read funnels through the settings module, so this cannot drift from what the webview is shown
+		// every read funnels through the settings module, so this cannot drift from the webview's view
 		this.integration_include = readSetting('includeFilter');
 		this.integration_exclude = readSetting('excludeFilter');
 		// explicit message override wins so the Files drawer's Apply can re-narrow without round-tripping through config first; empty include is degenerate so falls back to the default, empty exclude legitimately means "exclude nothing"

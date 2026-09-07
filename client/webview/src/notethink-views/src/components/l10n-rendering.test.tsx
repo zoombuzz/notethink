@@ -70,7 +70,7 @@ describe('l10n rendering with French bundle', () => {
 
     it('renders the French tree root label', () => {
         render(<SettingsViewDrawer {...DRAWER_PROPS} />);
-        // the same string also names the owning type on every root-homed row, so bind to the tree row itself
+        // the string also names the owning type on root-homed rows, so bind to the tree row
         expect(screen.getByTestId('view-node-root')).toHaveTextContent('Toutes les vues');
     });
 });

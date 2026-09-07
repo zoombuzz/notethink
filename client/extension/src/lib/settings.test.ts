@@ -36,7 +36,7 @@ function mockConfigStore(store: Record<string, FakeConfigEntry>): void {
     });
 }
 
-// point the mocked workspace at the given roots so editTarget() sees a folder-bearing window; undefined is the folderless case (a loose .md opened with File > Open)
+// point the mocked workspace at the given roots; undefined is the folderless case, a loose .md
 function setWorkspaceRoots(roots: string[] | undefined): void {
     (vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = roots
         ? roots.map((root, index) => ({ uri: vscode.Uri.file(root), name: root, index }))
@@ -60,7 +60,7 @@ describe('SETTINGS is complete enough for the drawer to render and promote every
         }
     });
 
-    // settingKeys() is what promote, reset and restore iterate, so any filter added here would silently strand whatever it excludes
+    // promote, reset and restore all iterate settingKeys(), so a filter here would strand what it drops
     it('settingKeys() excludes nothing, so promote and reset reach every setting', () => {
         expect(settingKeys()).toEqual(Object.keys(SETTINGS) as SettingKey[]);
     });
@@ -200,7 +200,7 @@ describe('savedDefaultOf is the baseline divergence is measured against', () => 
         expect(savedDefaultOf('excludeFilter')).toBe('**/{vendor}/**');
     });
 
-    // a user-scope false has to beat a truthy built-in default, so the check is against undefined rather than falsiness
+    // a user-scope false has to beat a truthy built-in, so the check is against undefined not falsiness
     it('honours a falsy user-scope value over a true built-in default', () => {
         mockConfigStore({ [SETTINGS.scrollNoteIntoView.path]: { globalValue: false } });
         expect(savedDefaultOf('scrollNoteIntoView')).toBe(false);
@@ -235,7 +235,7 @@ describe('isDivergedFromDefault', () => {
         expect(isDivergedFromDefault('viewType')).toBe(false);
     });
 
-    // columnOrder is the array-valued key: a stored array is never === a fresh literal, so equality has to be structural or every board reports it permanently diverged
+    // columnOrder is array-valued, and a stored array is never === a fresh one
     it('compares an array-valued key structurally, not by reference', () => {
         mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: [...SETTINGS.columnOrder.default] } });
         expect(isDivergedFromDefault('columnOrder')).toBe(false);
@@ -269,7 +269,7 @@ describe('divergedKeys and the cascade payload it rides in', () => {
         expect(buildSettingsCascadePayload().diverged).toEqual([]);
     });
 
-    // excludeFilter is the control: a user-scope-only value moves the saved default with it, so it is changed but not diverged
+    // excludeFilter is the control: a user-only value moves the default with it
     it('reports exactly the keys whose resolved value differs from their saved default', () => {
         mockConfigStore({
             [VIEW_TYPE_PATH]: { workspaceValue: 'kanban' },
@@ -340,7 +340,7 @@ describe('buildSettingsCascadePayload override flags', () => {
         expect(payload.hasAnyOverrides).toBe(false);
     });
 
-    // the recovery case: a User-scope override means "Reset to built-in default" must be enabled (hasAnyOverrides) even though "Revert to defaults" stays disabled (no Workspace override)
+    // the recovery case: a User override enables the built-in reset, not Revert
     it('a User-only override sets hasAnyOverrides without setting hasWorkspaceOverrides', () => {
         mockConfigStore({ [EXCLUDE_PATH]: { globalValue: '**/{node_modules}/**' } });
         const payload = buildSettingsCascadePayload();

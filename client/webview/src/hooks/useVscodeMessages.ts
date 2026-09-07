@@ -180,7 +180,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 return;
             case 'setViewType':
                 updateAllViewStates(view_state => ({ ...view_state, type: message.viewType }));
-                // one write path: the cascade owns viewType in every integration mode, so this never branches on the current mode
+                // the cascade owns viewType in every integration mode, so this never branches on mode
                 postMessage({ type: 'updateSetting', setting: 'viewType', value: message.viewType });
                 return;
             case 'navigate':

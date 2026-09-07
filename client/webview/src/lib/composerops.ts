@@ -7,7 +7,7 @@ import type { UserViewType } from "../notethink-views/src/types/Messages";
 import type { NoteDisplayOptions } from "../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../components/NoteRenderer";
 
-// the cascade payload's three aggregate fields describe the cascade rather than name a setting, so they never enter the merged settings block
+// the three aggregate fields describe the cascade, so they never enter the merged settings
 const CASCADE_AGGREGATE_FIELDS: string[] = ['diverged', 'hasWorkspaceOverrides', 'hasAnyOverrides'];
 
 /**
@@ -83,7 +83,7 @@ export function buildViewDisplayOptions(
         cascade_settings[key] = value;
     }
     applyUserTypeOverrides(cascade_settings, viewType, cascade.viewUserTypes);
-    // the cascade spells "natural column order" as an empty array; the kanban view spells it as no columnOrder at all, so a stale saved order never outlives a reset
+    // the cascade spells natural order as an empty array and kanban as no columnOrder at all
     if (Array.isArray(cascade_settings.columnOrder) && cascade_settings.columnOrder.length === 0) {
         delete cascade_settings.columnOrder;
     }

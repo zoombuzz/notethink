@@ -289,7 +289,11 @@ test.describe('Kanban Passive Transition Animations', () => {
         const backlog_column = page.locator('[role="region"][aria-label="backlog"]');
         await expect(backlog_column.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 3000 });
 
-        // turn the setting off through the harness store, so what it republishes is the whole cascade - a hand-built payload REPLACES the cascade and silently drops every key it forgets, which is how this spec was wiping kanbanCardRatio
+        /*
+         * Turn the setting off through the harness store, so what it republishes is the whole cascade. A
+         * hand-built payload REPLACES the cascade rather than merging into it, silently dropping every
+         * key it forgets - which is how this spec was wiping kanbanCardRatio.
+         */
         await page.evaluate(() => {
             const harness = window as unknown as { __nt_settings: { workspace: Record<string, unknown> }; __nt_publishSettings?: () => void };
             harness.__nt_settings.workspace.kanbanAnimateTransitions = false;

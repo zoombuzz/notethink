@@ -16,7 +16,12 @@ import { DEFAULT_COLUMN_ORDER, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER } 
  * Adding a setting = one entry here plus a matching package.json contribution. The read/write helpers stay one-liners; the cascade payload, the override flags, the diverged set, and the promote/reset handlers all iterate this map.
  */
 
-// owning-node sentinels for settings that belong to no view type: NODE_GLOBAL renders under the settings drawer's "Global settings" heading with no owning-type pill, NODE_FILES belongs to the Files drawer, and NODE_INTERNAL is persisted state rather than a control - no drawer lists any of the last two
+/*
+ * Owning-node sentinels, for settings that belong to no view type.
+ * - NODE_GLOBAL: renders under the settings drawer's "Global settings" heading, with no owning-type pill
+ * - NODE_FILES: belongs to the Files drawer
+ * - NODE_INTERNAL: persisted state rather than a control, so no drawer lists it
+ */
 export const NODE_GLOBAL = 'global';
 export const NODE_FILES = 'files';
 export const NODE_INTERNAL = 'internal';
@@ -99,7 +104,10 @@ export function hasWorkspaceOverride<K extends SettingKey>(key: K): boolean {
     return inspected?.workspaceValue !== undefined;
 }
 
-// true when the key has a value at either the Workspace or the Global (User) scope - i.e. anything overrides the built-in default. Drives the "Restore built-in defaults" action, which clears both scopes
+/**
+ * True when the key has a value at either the Workspace or the Global (User) scope, i.e. when anything at
+ * all overrides the built-in default. Drives the "Restore built-in defaults" action, which clears both.
+ */
 export function hasOverride<K extends SettingKey>(key: K): boolean {
     const inspected = vscode.workspace.getConfiguration(CONFIG_ROOT).inspect(SETTINGS[key].path);
     return inspected?.workspaceValue !== undefined || inspected?.globalValue !== undefined;
@@ -134,7 +142,7 @@ export function savedDefaultOf<K extends SettingKey>(key: K): SettingValue<K> {
     return (global_value === undefined ? SETTINGS[key].default : global_value) as SettingValue<K>;
 }
 
-// structural comparison, because two setting values are equal when they read the same - columnOrder is an array and a fresh array literal is never `===` a stored one
+// structural, because columnOrder is an array and a fresh literal is never `===` a stored one
 function settingValuesEqual(a: unknown, b: unknown): boolean {
     if (a === b) { return true; }
     if (Array.isArray(a) && Array.isArray(b)) {

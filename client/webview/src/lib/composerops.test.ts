@@ -87,7 +87,7 @@ describe('composerops.buildViewDisplayOptions', () => {
         });
 
         it('a stale per-session viewState settings block no longer overrides the cascade', () => {
-            // the write path that produced these values is gone; a state persisted by an earlier build must be ignored rather than shadow config
+            // the write path is gone, so a state persisted by an earlier build must not shadow config
             const view_state: ViewState = {
                 display_options: { settings: { showLinetagsInHeadlines: true, showLineNumbers: true } },
             };

@@ -2,7 +2,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { getCapturedMessages } from '../helpers/capture-messages';
 
-// the harness plays the extension host for settings, so its store is what a write is asserted against
+// the harness plays the extension host, so its store is what a write is asserted against
 interface HarnessSettingsStore {
     user: Record<string, unknown>;
     workspace: Record<string, unknown>;
@@ -12,7 +12,7 @@ async function readHarnessSettings(page: Page): Promise<HarnessSettingsStore> {
     return page.evaluate(() => (window as unknown as { __nt_settings: HarnessSettingsStore }).__nt_settings);
 }
 
-// idempotent: a view-type switch remounts the view, and whether the drawer survives that is not what these tests are about
+// idempotent, since a view-type switch remounts the view and drawer survival is not the subject
 /*
  * Open the card settings tab.
  *
@@ -36,7 +36,7 @@ async function openSettingsDrawer(page: Page): Promise<void> {
     await expect(page.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'true');
 }
 
-// the two-pane drawer puts a setting's name in its own grid cell, so a row is addressed by key rather than by walking a label
+// the drawer puts a setting's name in its own grid cell, so a row is addressed by key not label
 function settingControl(page: Page, key: string): Locator {
     return page.getByTestId(`setting-control-${key}`);
 }
@@ -92,7 +92,7 @@ test.describe('Settings Toggle', () => {
         await setCheckbox(page, 'showLinetagsInHeadlines', true);
         await expect.poll(async () => (await readHarnessSettings(page)).workspace.showLinetagsInHeadlines).toBe(true);
 
-        // the view type is written through the same channel, from the view tab; the card setting survives the switch because both read the one cascade
+        // both tabs write one channel and read one cascade, so the card setting survives a view switch
         await openSettingsDrawer(page);
         await page.getByTestId('view-radio-kanban').click();
         await expect.poll(async () => (await readHarnessSettings(page)).workspace.viewType).toBe('kanban');
@@ -126,9 +126,9 @@ test.describe('Settings Toggle', () => {
         await page.getByTestId('change-defaults-summary').click();
         await page.getByTestId('save-as-default').click();
         await expect.poll(async () => (await readHarnessSettings(page)).user.scrollNoteIntoView).toBe(false);
-        // promotion moves the value rather than copying it, so nothing is left overriding at the workspace layer
+        // promotion moves the value rather than copying it, so nothing overrides at the workspace layer
         await expect.poll(async () => Object.keys((await readHarnessSettings(page)).workspace).length).toBe(0);
-        // the checkbox still shows the change, because promotion moved the value between layers rather than altering it
+        // the checkbox still shows the change: promotion moved the value between layers, not altered it
         await expect(settingControl(page, 'scrollNoteIntoView')).not.toBeChecked();
     });
 
@@ -137,7 +137,7 @@ test.describe('Settings Toggle', () => {
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
         await openSettingsDrawer(page);
 
-        // a view-drawn setting again, since Change defaults lives on the view tab; reverting clears every layer regardless of which tab owns the row
+        // a view-drawn setting, since Change defaults sits on the view tab and reverting clears all layers
         await setCheckbox(page, 'scrollNoteIntoView', false);
         await expect(settingControl(page, 'scrollNoteIntoView')).not.toBeChecked();
 
@@ -151,7 +151,7 @@ test.describe('Settings Toggle', () => {
         await injectDocsFromFixture(page, 'basic.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
 
-        // a single-file board always carries three tabs now: View settings and Card settings on the right, and the breadcrumb's terminal leaf, which is the Jump to tab
+        // three tabs now: View settings, Card settings, and the breadcrumb's terminal Jump to leaf
         const settings_tab = page.getByTestId('view-settings-button');
         const card_tab = page.getByTestId('card-settings-button');
         const jump_tab = page.getByTestId('breadcrumb-leaf');

@@ -45,7 +45,10 @@ export function useViewContext(props: ViewProps): ViewContext {
     const selection_ref = useRef(props.selection);
     selection_ref.current = props.selection;
 
-    // last-resort defaults for a view rendered before the first settingsCascade lands; the composer normally stamps every one of these from the cascade, and ancestor views override in tree order
+    /*
+     * Last-resort defaults for a view rendered before the first settingsCascade lands. The composer
+     * normally stamps every one of these from the cascade, and ancestor views override in tree order.
+     */
     const display_options: NoteDisplayOptions = {
         parent_context_seq: 0,
         ...props.display_options,

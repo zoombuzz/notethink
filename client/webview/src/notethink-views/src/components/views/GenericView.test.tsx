@@ -1237,7 +1237,7 @@ describe('GenericView navigation callback', () => {
                 'column-order-chip-untagged',
             ]);
             expect(screen.getByLabelText('Reorder Done')).toBeInTheDocument();
-            // opening the drawer writes nothing at all: the order lives in config, and no per-view state backs it
+            // opening the drawer writes nothing: the order lives in config, with no per-view state
             expect(post_message).not.toHaveBeenCalledWith(expect.objectContaining({ setting: 'columnOrder' }));
             expect(set_state).not.toHaveBeenCalled();
         });

@@ -70,7 +70,7 @@ test.describe('Kanban column width', () => {
      * which is the whole claim the setting makes.
      */
     test('a squarer target card asks for a wider lane, since the text area is fixed', async ({ page }) => {
-        // narrow, so the target width is what the lanes actually take; give them room to all fit and the fill rule sets the width instead and the ratio moves nothing
+        // narrow, so the lanes take their target width; with room to fit, the fill rule decides instead
         await page.setViewportSize({ width: 520, height: 800 });
         await setupKanbanBoard(page);
         await openKanbanSettings(page);
@@ -146,7 +146,7 @@ test.describe('Kanban column width', () => {
         await expect(page.locator('[data-flip-root]')).toHaveAttribute('data-orientation', 'rows');
         await expect.poll(async () => {
             const widths = await page.locator('[data-flip-column-id]').evaluateAll(els => els.map(el => Math.round(el.getBoundingClientRect().width)));
-            // at least the board, because a lane is as wide as its own cards and is floored at the board so a short one still draws a full band
+            // at least the board: a lane is as wide as its cards, floored so a short one still draws a band
             return widths.length > 0 && widths.every(w => w >= board_width - 2);
         }).toBe(true);
     });
@@ -157,13 +157,13 @@ test.describe('Kanban column width', () => {
      * gained no horizontal reach and every lane grew as tall as its own card list.
      */
     test('flipping to rows runs the cards along each lane, not down it', async ({ page }) => {
-        // the one fixture here with a lane holding two cards, which is what makes the two axes distinguishable
+        // the one fixture with a lane holding two cards, which is what distinguishes the two axes
         await setupKanbanBoard(page, 'kanban-reorder.md');
         await openKanbanSettings(page);
         await page.selectOption('[data-testid="setting-control-orientation"]', 'rows');
         await expect(page.locator('[data-flip-root]')).toHaveAttribute('data-orientation', 'rows');
 
-        // a lane with more than one card is the only one that can answer this, since one card sits on every axis at once
+        // only a lane with two cards can answer this, since one card sits on every axis at once
         await expect.poll(async () => page.locator('[data-column-cards]').evaluateAll(lists => {
             const multi = lists.filter(list => list.children.length > 1);
             if (multi.length === 0) { return 'no lane holds two cards'; }
@@ -217,7 +217,7 @@ test.describe('Kanban column width', () => {
      * in the space that card needed.
      */
     test('stacked, every card in a lane is drawn the same height and a wordy one is wider instead', async ({ page }) => {
-        // the one fixture whose lane holds three cards of deliberately different lengths: a two-card lane makes the wordy one its own median, so it lands exactly on the floor and the widths cannot separate
+        // three lengths, since in a two-card lane the wordy one is its own median and lands on the floor
         await setupKanbanBoard(page, 'kanban-ragged.md');
         await openKanbanSettings(page);
         await page.selectOption('[data-testid="setting-control-orientation"]', 'rows');
@@ -232,7 +232,7 @@ test.describe('Kanban column width', () => {
             }) ? 'one height' : 'ragged';
         })).toBe('one height');
 
-        // the other half of the same claim, and the half the title had been asserting on trust: the extra text has to leave as width
+        // the half the title had been asserting on trust: the extra text has to leave as width
         const spread = await page.locator('[data-column-cards]').evaluateAll(lists => {
             const multi = lists.filter(list => list.children.length > 1);
             const widths = multi.map(list => Array.from(list.children).map(card => card.getBoundingClientRect().width));

@@ -33,7 +33,7 @@ test.describe('Pending-work spinner', () => {
         // showLineNumbers is a card-drawn setting, so it lives on the card tab rather than the view tab
         await page.getByTestId('card-settings-button').click();
         const line_numbers_box = page.getByTestId('setting-control-showLineNumbers');
-        // click plus a retrying expect, not .check(): the box is bound to the cascade alone, so it shows its old value for the frame between the click and the extension's echo
+        // click plus a retrying expect, not .check(): the box holds its old value until the echo lands
         await line_numbers_box.click();
         await expect(line_numbers_box).toBeChecked();
         // give the show-delay a chance to flip something on if anything were still marked

@@ -106,7 +106,7 @@ export const NODE_GLOBAL = 'global';
 export const NODE_FILES = 'files';
 export const NODE_INTERNAL = 'internal';
 
-// the tree's root, labelled "All views": it owns the generic settings every view inherits, which is why changing one of them offers no new view type
+// the tree's root: it owns the settings every view inherits, so changing one offers no new type
 export const ROOT_NODE = 'root';
 
 /**

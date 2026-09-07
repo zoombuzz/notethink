@@ -22,7 +22,7 @@ import master_view_styles from "../../ViewRenderer.module.scss";
 // the + trigger is hidden while it waits to return as a menu item; typed as boolean so the wiring below stays live code rather than a branch TS narrows away
 const SHOW_INSERT_BUTTON: boolean = false;
 
-// one frozen empty list, so a cascade carrying no saved types hands the drawer the same identity every render rather than a fresh array that re-memoises the registry
+// one frozen empty list, so a cascade with no saved types hands the drawer one stable identity
 const EMPTY_USER_TYPES: UserViewType[] = [];
 
 interface GenericViewToolbarProps {
@@ -38,11 +38,11 @@ interface GenericViewToolbarProps {
     integrationSelection: IntegrationMode;
     integrationMode: ConcreteIntegrationMode;
     onIntegrationChange: (mode: IntegrationMode, target_file_path?: string) => void;
-    // view type: the persisted selection (may be auto), the type auto resolved to, and the change handler the settings tree drives
+    // view type: persisted selection, the type auto resolved to, and the settings tree's handler
     viewTypeSelection: string;
     autoResolvedType: string | undefined;
     onViewTypeChange: (view_type: string) => void;
-    // card type: the same three, on the axis that decides how one note is drawn rather than how a view lays notes out
+    // card type: the same three, on the axis deciding how a note is drawn rather than laid out
     cardTypeSelection: string;
     resolvedCardType: string;
     onCardTypeChange: (card_type: string) => void;
@@ -115,13 +115,13 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
      * on the notes identity.
      */
     const user_view_types = displayOptions.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
-    // a kanban board, or a type minted from one, holds its own axis override at the kanban node; every other lane view reads the ancestor's
+    // a kanban board, or a type minted from one, overrides the axis at the kanban node
     const on_kanban_chain = chainOf(props.type, registryWithUserTypes(user_view_types)).includes('kanban');
     const group_by_selection = (on_kanban_chain
         ? props.display_options?.settings?.kanbanGroupBy
         : props.display_options?.settings?.groupBy) ?? 'auto';
     const group_by_candidate_keys = enumerateGroupByCandidates(props.notes).filter(c => c.kind === 'categorical').map(c => c.key);
-    // the "Auto (...)" label has to name the axis the board will actually lane by, and kanban's auto is status rather than the generic ladder's folder default
+    // the "Auto (...)" label names the axis the board lanes by, and kanban's auto is status
     const group_by_resolved_key = on_kanban_chain
         ? resolveKanbanAxisKey(group_by_selection)
         : resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, group_by_selection);

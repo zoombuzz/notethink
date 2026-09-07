@@ -160,7 +160,11 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
     // children's focused/selected status flows through display_options.focused_seqs / selected_seqs; when those change, child notes need to re-render even if this note's own focused/selected didn't
     if (!arraysEqual(prev.display_options?.focused_seqs, next.display_options?.focused_seqs)) { return false; }
     if (!arraysEqual(prev.display_options?.selected_seqs, next.display_options?.selected_seqs)) { return false; }
-    // a stacked lane hands every card the height it is aiming at, and the card clips its own body to reach it; the number lands after the first measurement, so a card that ignored the change would keep the unclipped body it first rendered
+    /*
+     * A stacked lane hands every card the height it is aiming at, and the card clips its own body to
+     * reach it. The number lands after the first measurement, so a card that ignored the change would
+     * keep the unclipped body it first rendered.
+     */
     if (prev.display_options?.card_target_height !== next.display_options?.card_target_height) { return false; }
     // DnD: provided changes during drag (draggableProps.style contains transform)
     if (prev.display_options?.provided?.draggableProps !== next.display_options?.provided?.draggableProps) { return false; }

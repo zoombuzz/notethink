@@ -10,7 +10,7 @@ import type { SettingsCascadeKey, UserViewType } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 
-// one frozen empty list, so a cascade carrying no saved types keeps the same identity across renders and the memo below does not re-run
+// one frozen empty list, so a cascade with no saved types keeps its identity and the memo holds
 const EMPTY_USER_TYPES: UserViewType[] = [];
 
 /**
@@ -23,11 +23,11 @@ export interface ViewToolbar {
     integration_selection: IntegrationMode;
     integration_mode: ConcreteIntegrationMode;
     handle_integration_change: (mode: IntegrationMode, target_file_path?: string) => void;
-    // view-type tree: same shape - persisted selection (may be auto), auto-resolved concrete type, change handler
+    // view-type tree: same shape - persisted selection, auto-resolved concrete type, change handler
     view_type_selection: string;
     auto_resolved_type: string | undefined;
     handle_view_type_change: (view_type: string) => void;
-    // card-type tab: the same selection / resolved split again, on the axis that decides how one note is drawn
+    // card-type tab: the same selection / resolved split, on the axis deciding how a note is drawn
     card_type_selection: string;
     resolved_card_type: string;
     handle_card_type_change: (card_type: string) => void;
@@ -97,13 +97,13 @@ export function useViewToolbar(
     notes_within_parent_context: Array<NoteProps>,
 ): ViewToolbar {
     const { markPending } = usePendingWorkContext();
-    // integration-mode dropdown state - selection (persisted, may be auto) + resolved concrete mode, mirroring the view-type tree below
+    // integration-mode state - persisted selection plus resolved mode, mirroring the view-type tree
     const integration_selection: IntegrationMode = (props.display_options?.integration_mode_selection as IntegrationMode) || INTEGRATION_MODE_AUTO;
     const integration_mode: ConcreteIntegrationMode = resolveIntegrationMode(props.display_options);
-    // view-type tree state - selection (persisted, may be auto) + the type AutoView resolved auto to; same selection/resolved split as integration mode
+    // view-type tree state - persisted selection plus the type AutoView resolved auto to
     const view_type_selection: string = (props.nested?.replaced_attributes?.type as string) || props.type;
     const auto_resolved_type: string | undefined = props.nested?.auto_resolved_type;
-    // the user's minted view types, read from the cascade so a type saved from a kanban is still recognised as a lane view
+    // the user's minted view types, read from the cascade so a saved kanban type is still a lane view
     const user_view_types = display_options.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
     const { selection: card_type_selection, resolved: resolved_card_type } = readCardTypeState(props, display_options, user_view_types);
 
@@ -143,7 +143,11 @@ export function useViewToolbar(
         if (message) { handlers.postMessage?.(message); }
     }, [handlers, props.doc_path, props.view_state_ids, props.id, props.file_declared_integration]);
 
-    // natural column order for the drawer's lane-order row (alphabetical + 'untagged' last); derived for any lane view, because the drawer renders that row from the node the user selected rather than from the board
+    /*
+     * Natural lane order for the drawer's lane-order row: alphabetical, with 'untagged' last. Derived for
+     * ANY lane view rather than for kanban alone, because the drawer renders that row from the node the
+     * user selected in its tree rather than from the view the board happens to be showing.
+     */
     const natural_column_order = useMemo<string[]>(() => {
         if (!isGroupedViewType(props.type, registryWithUserTypes(user_view_types))) { return []; }
         return deriveNaturalColumnOrder(notes_within_parent_context);

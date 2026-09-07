@@ -12,7 +12,7 @@ import {
 
 const debug = Debug("nodejs:notethink-views:useColumnWidth");
 
-// the lane gap, mirroring `.board { gap: 8px }` in ViewRenderer.module.scss; a solve needs the number the browser is already using
+// the lane gap, mirroring `.board { gap: 8px }`: a solve needs the number the browser already uses
 const BOARD_GAP = 8;
 
 /*
@@ -26,11 +26,11 @@ const BOARD_GAP = 8;
  */
 const PROBE_COLUMN_WIDTH = 200;
 
-// what a lane and its card list publish themselves as, so the measurement finds them without importing a hashed class name
+// what a lane and its card list publish, so the measurement needs no hashed class name
 const LANE_SELECTOR = '[data-column-lane]';
 const CARDS_SELECTOR = '[data-column-cards]';
 
-// what the board stamps on each card so a per-card measurement can be handed back to the card it came from
+// what the board stamps on each card, so a measurement goes back to the card it came from
 const CARD_ID_ATTRIBUTE = 'data-column-card-id';
 
 /**
@@ -104,14 +104,14 @@ function measureAtProbeWidth(board: HTMLElement): Omit<CardModel, 'signature'> |
         (card as HTMLElement).style.removeProperty('--nt-card-width');
     });
 
-    // the clone order is the query order, so the live card at index i is the one the probe measured at index i
+    // clone order is query order, so the live card at index i is the one probed at index i
     const ids = Array.prototype.map.call(cards, (node: Element) => node.getAttribute(CARD_ID_ATTRIBUTE) ?? undefined) as Array<string | undefined>;
     board.appendChild(probe_lane);
     const boxes: CardBox[] = Array.prototype.map.call(probe_cards.children, (node: Element, index: number) => {
         const rect = node.getBoundingClientRect();
         return { id: ids[index], width: rect.width, height: rect.height };
     }) as CardBox[];
-    // both boxes are read rather than assumed, so the gap between them is whatever the stylesheet actually spends
+    // both boxes are read rather than assumed, so the gap is whatever the stylesheet spends
     const card_width = boxes.reduce((widest, box) => Math.max(widest, box.width), 0);
     const lane_width = probe_lane.getBoundingClientRect().width;
     board.removeChild(probe_lane);
@@ -217,7 +217,7 @@ export function useBoardColumnStyle(
 ): BoardWidths {
     const solved = useColumnWidth(board_ref, ratio ?? DEFAULT_CARD_RATIO, lane_count, signature);
     if (solved === undefined) { return { style: undefined, cardWidths: {}, cardHeight: undefined }; }
-    // a custom property is not in React's CSSProperties, so the record is built untyped and asserted once
+    // a custom property is not in React's CSSProperties, so the record is asserted once
     const custom: Record<string, string> = lanes_side_by_side
         ? { '--nt-column-width': `${solved.column.toFixed(1)}px` }
         : { '--nt-card-width': `${solved.card.toFixed(1)}px` };

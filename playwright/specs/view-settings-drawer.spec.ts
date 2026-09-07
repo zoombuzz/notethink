@@ -78,7 +78,7 @@ test.describe('View settings drawer', () => {
         await page.waitForSelector('[data-folder-mode="true"]');
         await showKanbanSettings(page);
 
-        // the lane axis is homed at grouped, above kanban, so the pill names the ancestor rather than the board
+        // the lane axis homes at grouped, above kanban, so the pill names the ancestor
         await expect(page.getByTestId('setting-pill-kanbanGroupBy')).not.toHaveText('Kanban');
         await expect(page.getByTestId('new-view-type-offer')).toHaveCount(0);
 
@@ -165,7 +165,7 @@ test.describe('View settings drawer', () => {
         await page.getByTestId('change-defaults-summary').click();
         await page.getByTestId('save-as-default').click();
 
-        // scrollNoteIntoView ships on, so the click turned it off; promotion moves that off into the user layer, where it becomes the saved default and stops diverging
+        // the click turned scrollNoteIntoView off, and promotion makes that off the saved default
         await expect.poll(async () => (await readHarnessSettings(page)).user.scrollNoteIntoView).toBe(false);
         await expect(page.getByTestId('setting-row-scrollNoteIntoView')).toHaveAttribute('data-diverged', 'false');
         await expect(page.getByTestId('setting-marker-scrollNoteIntoView')).toHaveCount(0);
@@ -188,7 +188,7 @@ test.describe('View settings drawer', () => {
         await page.getByTestId('new-view-type-save').click();
 
         await expect.poll(async () => String((await readHarnessSettings(page)).workspace.viewType ?? '')).toMatch(/^user-/);
-        // the value moved onto the minted type, so the parent is back at its saved default and no longer diverges
+        // the value moved onto the minted type, so the parent is back at its saved default
         await expect.poll(async () => (await readHarnessSettings(page)).workspace.kanbanGroupBy).toBeUndefined();
         await expect(page.getByTestId('setting-row-kanbanGroupBy')).toHaveAttribute('data-diverged', 'false');
         await expect(page.getByTestId('new-view-type-offer')).toHaveCount(0);
@@ -202,7 +202,7 @@ test.describe('View settings drawer', () => {
      */
     test('a workspace that already diverges offers a new view type before anything is touched', async ({ page }) => {
         await seedWorkspaceSetting(page, 'orientation', 'rows');
-        // the highlight has to be on a node whose chain carries orientation, which is where the row is even rendered
+        // the highlight has to be on a node whose chain carries orientation, or no row renders
         await showKanbanSettings(page);
         await expect(page.getByTestId('setting-row-orientation')).toHaveAttribute('data-diverged', 'true');
         await expect(page.getByTestId('new-view-type-offer')).toBeVisible();

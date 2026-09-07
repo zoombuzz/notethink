@@ -94,7 +94,7 @@ describe('SettingsViewDrawer tree', () => {
         for (const node of VIEW_REGISTRY.nodes) {
             expect(screen.getByTestId(`view-node-${node.id}`)).toBeInTheDocument();
         }
-        // grouped is nested under root, and kanban under line, so the tree is a hierarchy rather than a flat list
+        // grouped nests under root and kanban under line, so the tree is a hierarchy not a flat list
         const grouped_item = screen.getByTestId('view-node-grouped').closest('li')!;
         expect(within(grouped_item).getByTestId('view-node-line')).toBeInTheDocument();
         expect(within(grouped_item).getByTestId('view-node-kanban')).toBeInTheDocument();
@@ -165,7 +165,7 @@ describe('SettingsViewDrawer rows', () => {
 
     it('orders the rows by the type each is pilled to and gives each one that type', () => {
         renderDrawer();
-        // the list reads down the pill column - Kanban, Line, Grouped, All views - which is the tree above it upside down
+        // the list reads down the pill column, which is the tree above it upside down
         expect(renderedRowKeys()).toEqual([
             'columnOrder',
             'kanbanCardRatio',
@@ -193,7 +193,7 @@ describe('SettingsViewDrawer rows', () => {
         renderDrawer();
         expect(screen.getByTestId('view-types-heading')).toHaveTextContent('View types');
         expect(screen.getByTestId('view-settings-heading')).toHaveTextContent('View settings');
-        // the drawer's own title is the short form, so the pane headings are the only place the axis is spelled out
+        // the title is the short form, so the pane headings are where the axis is spelled out
         expect(screen.getAllByText('View settings')).toHaveLength(1);
         expect(screen.queryByText('View type')).not.toBeInTheDocument();
     });
@@ -222,7 +222,7 @@ describe('SettingsViewDrawer rows', () => {
         const marked = screen.getAllByTestId(/^setting-row-/).filter(row => row.getAttribute('data-diverged') === 'true');
         expect(marked.map(row => row.getAttribute('data-testid'))).toEqual(['setting-row-kanbanGroupBy', 'setting-row-scrollNoteIntoView']);
         expect(screen.getAllByTestId(/^setting-marker-/)).toHaveLength(2);
-        // includeFilter diverges but renders no row here, so it is not counted - the tally is of M-marked rows
+        // includeFilter diverges but renders no row here: the tally is of M-marked rows
         expect(screen.getByTestId('diverged-count')).toHaveTextContent('(2 settings diverged)');
     });
 

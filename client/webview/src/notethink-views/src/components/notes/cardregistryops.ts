@@ -58,10 +58,10 @@ export interface CardRegistry {
     view_defaults: CardViewDefault[];
 }
 
-// the meta-selection: resolve the card type from the files (or the view's default) rather than pinning one
+// the meta-selection: resolve the card from the files or the view default, rather than pin one
 export const CARD_AUTO = 'auto';
 
-// the card every view falls back to when nothing else resolves - the full card that has always been the rendering
+// the card every view falls back to when nothing else resolves: the full card
 export const DEFAULT_CARD_TYPE = 'card';
 
 export const CARD_REGISTRY: CardRegistry = {
@@ -172,10 +172,13 @@ export function selectableCardTypes(registry: CardRegistry = CARD_REGISTRY): str
  * the card type a view defaults to: the nearest declaration on the view's own ancestor chain in the VIEW
  * registry, so `kanban` answers for itself and every other view inherits the one declared at `root`. An
  * unknown or absent view type falls back to DEFAULT_CARD_TYPE.
+ *
+ * Minted types are merged in before the walk, so a type the user saved inherits the card its parent
+ * declares rather than falling through to the default. That is the same answer today, because every
+ * declared default is `card`, and the right one the day a view declares something else.
  */
 export function defaultCardTypeForView(view_type: string | undefined, user_types: UserViewType[] = [], registry: CardRegistry = CARD_REGISTRY): string {
     if (!view_type) { return DEFAULT_CARD_TYPE; }
-    // the minted types are merged in before the walk, so a type the user saved inherits the card its parent declares rather than falling through to the default - the same answer today, because every declared default is `card`, and the right one the day a view declares something else
     for (const view_id of chainOf(view_type, registryWithUserTypes(user_types))) {
         const declared = registry.view_defaults.find(d => d.view === view_id);
         if (declared) { return declared.card; }

@@ -128,7 +128,7 @@
                 }));
             }, 0);
         }
-        // test hook: re-publish the cascade after a spec has seeded __nt_settings directly, which is how a window reopened on an already-diverged workspace arrives
+        // test hook: re-publish after a spec seeds __nt_settings, as a reopened diverged window arrives
         window.__nt_publishSettings = sendSettingsCascade;
         function writeSetting(key, value, scope) {
             var layer = scope === 'global' ? window.__nt_settings.user : window.__nt_settings.workspace;

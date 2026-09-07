@@ -1073,7 +1073,11 @@ describe('NotethinkEditorProvider', () => {
 		let settings_store: Record<string, SettingsConfigEntry>;
 		let settings_updates: SettingsUpdateCall[];
 
-		// one recording stand-in for the whole notethink.settings section: get() resolves workspace over user over built-in, inspect() reports the two scopes, and update() records instead of mutating so a handler's exact write sequence is assertable
+		/*
+		 * One recording stand-in for the whole notethink.settings section: get() resolves workspace over
+		 * user over built-in, inspect() reports the two scopes, and update() records rather than mutating,
+		 * so a handler's exact write sequence is assertable.
+		 */
 		function mockSettingsStore(initial: Record<string, SettingsConfigEntry>): void {
 			settings_store = initial;
 			settings_updates = [];
@@ -1137,7 +1141,7 @@ describe('NotethinkEditorProvider', () => {
 			]);
 		});
 
-		// every one of the fifteen keys is writable on this message, so a guard narrowing it would silently drop writes
+		// every key is writable on this message, so a guard narrowing it would drop writes silently
 		it('accepts an updateSetting for every SETTINGS key', async () => {
 			for (const key of settingKeys()) {
 				await panelHelper.simulateMessage({ type: 'updateSetting', setting: key, value: SETTINGS[key].default });

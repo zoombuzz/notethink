@@ -23,7 +23,7 @@ export default function StickyNote(props: NoteProps): ReactElement {
     const note_props = props;
     const provided = note_props.display_options?.provided;
 
-    // same parse as the full card's headline, memoised on the same inputs: the raw text, its checkbox state, and where its linetags start
+    // the full card's headline parse, memoised on the same text, checkbox state and linetag start
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(note_props, {
             render: 'strip_linetags',

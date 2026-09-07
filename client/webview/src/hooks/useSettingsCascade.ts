@@ -7,7 +7,7 @@ interface SettingsCascadeState {
     setSettingsCascade: (settings: SettingsCascadePayload) => void;
 }
 
-// hold the host-pushed settings cascade - every notethink setting, resolved by the extension under notethink.settings.* and the only tier the webview reads
+// the host-pushed cascade, and the only settings tier the webview reads
 export function useSettingsCascade(): SettingsCascadeState {
     const [settings_cascade, setSettingsCascade] = useState<SettingsCascadePayload>(DEFAULT_SETTINGS_CASCADE);
     return { settings_cascade, setSettingsCascade };

@@ -29,7 +29,7 @@ $tree_indent_step: calc(#{$tree_indent_margin} + 1px + #{$tree_indent_padding});
  */
 $drawer_close_gutter: 1.4em;
 
-// the space either side of the rule dividing a settings drawer's two panes; the pair replaces the flex gap, so the rule sits midway between the tree and the rows
+// space either side of a settings drawer's pane rule, so it sits midway between tree and rows
 $settings_pane_gutter: 12px;
 
 @mixin themed-checkbox {
@@ -568,14 +568,14 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
-// the drag affordance: two dotted columns, drawn small and only slightly tightened - closed up any further and the two glyphs land on top of each other and read as one
+// the drag affordance: two dotted columns, barely tightened - closer and the glyphs read as one
 .settingsDrawerColumnGrip {
   font-size: 0.85em;
   letter-spacing: -0.06em;
   opacity: 0.55;
 }
 
-// the drawer's closing line, right-aligned under the title; compounded with the body class to outrank the shell's blanket paragraph margin
+// the drawer's closing line, compounded with the body class to outrank the shell's paragraph margin
 .settingsDrawerBody .settingsDrawerVersion {
   margin: 0.8em 0 0;
   text-align: right;
@@ -670,7 +670,7 @@ body.disableAddressBarHidingOnScroll {
 // beneath, drawn with a tree indent-guide.
 //
 
-// a stacking context, so the current row's band can be painted UNDERNEATH the indent guides its ancestors draw
+// a stacking context, so the row's band paints UNDERNEATH the indent guides its ancestors draw
 .drawerTree {
   list-style: none;
   margin: 0;
@@ -688,7 +688,7 @@ body.disableAddressBarHidingOnScroll {
   font-weight: 600;
 }
 
-// one row is the clickable link plus an optional trailing slot (a radio, an owned-setting count), which sits outside the button so an interactive control never nests inside one
+// the link plus an optional trailing slot, outside the button so a control never nests inside one
 .drawerTreeRow {
   display: flex;
   align-items: center;
@@ -1520,12 +1520,16 @@ body.disableAddressBarHidingOnScroll {
     &[data-orientation="rows"] {
       flex-direction: column;
 
+      /*
+       * A stacked lane is as wide as its own cards, floored at the board so a one-card lane still draws a
+       * full-width band, and its name sits BESIDE the cards rather than above them, so none of the row's
+       * height is spent on chrome. The lane has to be made a flex container here first: it is a plain
+       * block side by side, so a flex-direction on it means nothing until it is one.
+       */
       .column {
-        // as wide as its own cards, floored at the board so a one-card lane still draws a full-width band
         flex: 0 0 auto;
         width: max-content;
         min-width: 100%;
-        // the name sits BESIDE the cards rather than above them, so no part of the row's height is spent on chrome. A lane is a plain block side by side, so it has to be made a flex container here before a direction means anything
         display: flex;
         flex-direction: row;
         align-items: stretch;
@@ -1541,7 +1545,7 @@ body.disableAddressBarHidingOnScroll {
           padding-top: 0;
 
           > * {
-            // min-width: 0 so a card holding something unbreakable - a wide table, a long path - takes the width it was solved for rather than its own min-content
+            // min-width: 0 so an unbreakable child takes the solved width rather than its own min-content
             flex: 0 0 var(--nt-card-width, 15.0em);
             min-width: 0;
           }
@@ -1574,9 +1578,11 @@ body.disableAddressBarHidingOnScroll {
       }
     }
 
+    /*
+     * border-box, so the width the board computes is the width the lane occupies: the solve reasons in
+     * whole lanes against the board's own width, and content-box lands every lane a padding too wide.
+     */
     .column {
-      // border-box, so the width the board computes is the width the lane occupies - the solve reasons in
-      // whole lanes against the board's own width, and content-box would land every lane a padding too wide
       box-sizing: border-box;
       background: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 4%);
 
@@ -1771,7 +1777,7 @@ body.disableAddressBarHidingOnScroll {
   gap: 0;
 }
 
-// the drawer's own title, in the top-right corner where the shell's close button sits beside it, over the rule that separates it from the panes
+// the drawer's own title, top-right beside the close button, over the panes' rule
 /*
  * Two columns and two rows: the head row names each pane, and the panes sit under it. A grid rather than
  * two stacked flex rows, because the tree column is sized by its own content and the head above it has to
@@ -1880,14 +1886,14 @@ body.disableAddressBarHidingOnScroll {
   min-width: 0;
 }
 
-// the owning type, stated quietly in the last column so it reads as provenance rather than a control
+// the owning type, stated quietly so it reads as provenance rather than as a control
 .settingsRowPill {
   justify-self: end;
   opacity: 0.65;
   white-space: nowrap;
 }
 
-// a setting differing from its saved default, tinted the way the VS Code Explorer tints a modified file
+// a diverged setting, tinted the way the Explorer tints a modified file
 .settingsRowDiverged {
   color: var(--vscode-gitDecoration-modifiedResourceForeground, #895503);
 

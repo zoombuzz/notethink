@@ -591,7 +591,7 @@ describe('ExtensionReceiver', () => {
 
         it('setViewType command round-trips to updateSetting in single-file mode too', () => {
             render(<ExtensionReceiver />);
-            // one write path means no mode-dependent branch: no folder-tagged viewState exists and the cascade write still happens
+            // one write path, so no folder-tagged viewState exists and the cascade write still happens
             post_message_spy.mockClear();
             act(() => {
                 window.dispatchEvent(new MessageEvent('message', {

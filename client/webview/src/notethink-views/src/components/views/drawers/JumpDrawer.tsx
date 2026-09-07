@@ -73,7 +73,7 @@ function JumpDrawer(props: JumpDrawerProps): ReactElement {
             title: entry.path,
             onSelect: () => {
                 if (entry.kind === 'folder') { props.onFolderJump(entry.path); } else { props.onFileJump(entry.path); }
-                // every jump-drawer click navigates into a target (descend folder / open file), so dismiss the drawer - unlike the settings/files drawers which stay open while you adjust them
+                // every jump-drawer click navigates somewhere, so dismiss it, unlike the drawers you adjust
                 props.onReturn?.();
             },
         })),

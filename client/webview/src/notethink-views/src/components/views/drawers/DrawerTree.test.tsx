@@ -49,7 +49,7 @@ describe('DrawerTree', () => {
         const grouped_item = screen.getByTestId('view-tree-grouped').closest('li') as HTMLElement;
         const line_item = within(grouped_item).getByTestId('view-tree-line').closest('li') as HTMLElement;
         expect(within(line_item).getByTestId('view-tree-kanban')).toBeInTheDocument();
-        // kanban sits four rungs down, so its row is enclosed by the tree list plus three nested children lists
+        // kanban sits four rungs down, so its row is inside the tree list plus three nested lists
         let enclosing_lists = 0;
         for (let element = screen.getByTestId('view-tree-kanban').parentElement; element; element = element.parentElement) {
             if (element.tagName === 'UL') { enclosing_lists++; }
@@ -94,7 +94,7 @@ describe('DrawerTree', () => {
         const row = screen.getByTestId('view-tree-kanban').parentElement!;
         expect(row).toHaveClass('drawerTreeRowCurrent');
         expect(within(row).getByTestId('view-tree-count-kanban')).toBeInTheDocument();
-        // kanban sits three levels down, and the bleed reads the depth off the row to reach the tree's left edge
+        // kanban sits three levels down, and the bleed reads that depth off the row
         expect(row).toHaveStyle({ '--drawer-tree-depth': '3' });
         expect(screen.getByTestId('view-tree-kanban')).not.toHaveClass('drawerTreeRowCurrent');
     });

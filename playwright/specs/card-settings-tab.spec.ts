@@ -52,13 +52,13 @@ test.describe('Card settings tab', () => {
         ], { workspace_root: '/workspace' });
         await selectFolderMode(page);
         await page.waitForSelector('[data-folder-mode="true"]');
-        // neither file declares nt_card, so the board opens on the view's default card and nothing is sticky
+        // neither file declares nt_card, so the board opens on the view default and nothing is sticky
         await expect(page.locator('[data-card-type="sticky"]')).toHaveCount(0);
 
         await openCardDrawer(page);
         await page.getByTestId('card-radio-sticky').click();
 
-        // three assertions in round-trip order, so a failure names which link broke: the write, the resolution, the render
+        // round-trip order, so a failure names the broken link: write, resolution, render
         await expect.poll(async () => (await readHarnessSettings(page)).workspace.cardType).toBe('sticky');
         await expect(page.locator('[data-auto-selected-cardtype="sticky"]')).toHaveCount(1);
         await expect(page.locator('[data-card-type="sticky"]').first()).toBeVisible();

@@ -27,7 +27,7 @@ const debug = Debug("nodejs:notethink-views:columnwidthops");
  * rather than built.
  */
 
-// the ratios the drawer offers, height as a multiple of width; the band that reads well is roughly 1.2 to 1.5
+// the ratios the drawer offers, height over width; the band that reads well is 1.2 to 1.5
 export const CARD_RATIOS = [1, 1.2, 1.4, 1.6, 2, 2.5, 3];
 
 export const DEFAULT_CARD_RATIO = 1.4;

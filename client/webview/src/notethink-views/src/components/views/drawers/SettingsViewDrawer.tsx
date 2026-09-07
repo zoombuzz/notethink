@@ -31,7 +31,7 @@ const debug = Debug("nodejs:notethink-views:SettingsViewDrawer");
 
 declare const NOTETHINK_VERSION: string | undefined;
 
-// the registry id standing for "no type pinned, resolve one per file"; it is a selection, never a node
+// the id standing for "no type pinned, resolve per file": a selection, never a node
 const AUTO_TYPE = 'auto';
 
 /**
@@ -758,7 +758,7 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
     });
     const selected_label = nodeLabel(getViewNode(selected_node, registry) ?? registry.nodes[0], user_type_ids);
     const offer_rows = useOfferRows(chain_rows, props.diverged, selected_node, registry);
-    // the panel earns its place only when it holds something: an offer to mint, or a minted type to rename or delete
+    // the panel earns its place only with something in it: an offer, or a type to rename or delete
     const selected_user_type = props.userTypes.find(type => type.id === selected_node);
     return (
         <div className={`${styles.drawerBody} ${styles.settingsDrawerBody}`} data-testid="settings-drawer-view">

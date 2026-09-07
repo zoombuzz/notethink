@@ -113,7 +113,7 @@ describe('SettingsCardDrawer rows', () => {
         renderDrawer();
         expect(screen.getByTestId('card-types-heading')).toHaveTextContent('Card types');
         expect(screen.getByTestId('card-settings-heading')).toHaveTextContent('Card settings');
-        // the drawer's own title is the short form, so the pane headings are the only place the axis is spelled out
+        // the title is the short form, so the pane headings are where the axis is spelled out
         expect(screen.getAllByText('Card settings')).toHaveLength(1);
         expect(screen.queryByText('Card type')).not.toBeInTheDocument();
     });

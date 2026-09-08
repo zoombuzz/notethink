@@ -192,6 +192,8 @@ test.describe('View settings drawer', () => {
         await expect.poll(async () => (await readHarnessSettings(page)).workspace.kanbanGroupBy).toBeUndefined();
         await expect(page.getByTestId('setting-row-kanbanGroupBy')).toHaveAttribute('data-diverged', 'false');
         await expect(page.getByTestId('new-view-type-offer')).toHaveCount(0);
+        // the tab states the name the save form offered, not the slugified id that name was stored under
+        await expect(page.getByTestId('view-settings-button')).toHaveText(/Kanban by Assignee/);
     });
 
     /*

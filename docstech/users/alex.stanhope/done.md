@@ -5036,6 +5036,10 @@ The drawer becomes two panes: the view-type tree on the left, that type's settin
 + manual: compare the M colour against a modified file in the VS Code explorer side by side
 + [X] the name and control columns stay aligned at the narrowest usable drawer width
   + automated: `manual-check-coverage.spec.ts` renders the drawer at 480px and asserts every row shares one name column and one control column, and that the two are still distinct
++ [X] title the View settings tab with a minted type's name rather than the id it is stored under
+  + operator review 2026-09-08: the tab read "User-next-up-by-project" over a tree reading "User next up by project", because it capitalised the id instead of looking the label up
+  + the id stays slugified: it is the `nt_view=` linetag value and the settings key, both of which need it URL-legal, so only the display side changed
+  + `viewTypeLabel` now takes the saved types and words a minted id with its label, and the drawer's `nodeLabel` delegates to it, so the tab, the tree and the pills cannot word one type three ways
 + acceptance criteria
   + no view-type `<select>` remains, and the tree is the selector
   + the view tree and the jump tree render from one component

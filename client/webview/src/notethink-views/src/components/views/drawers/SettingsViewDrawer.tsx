@@ -69,22 +69,21 @@ export interface SettingsViewDrawerProps {
 
 /**
  * A node's display name. Root is the whole tree rather than a type anyone would call "Root", so it is
- * relabelled; a minted type carries the name its author typed and is never capitalised for them; every
- * built-in goes through the shared `viewTypeLabel` so the tree, the pills and the toolbar tab can never
- * word the same type differently.
+ * relabelled; every other node goes through the shared `viewTypeLabel` against the merged registry, so
+ * a minted type reads as the name its author typed rather than the slug it is stored under, and the
+ * tree, the pills and the toolbar tab can never word the same type differently.
  */
-function nodeLabel(node: ViewNode, user_type_ids: ReadonlySet<string>): string {
+function nodeLabel(node: ViewNode, registry: ViewRegistry): string {
     if (node.parent === undefined) { return l10n.t('All views'); }
-    if (user_type_ids.has(node.id)) { return node.label; }
-    return viewTypeLabel(node.id);
+    return viewTypeLabel(node.id, undefined, registry);
 }
 
 /** the pill's text for a row, or undefined when the row belongs to no view type and so shows none */
-function ownerLabelFor(selected_node: string, def: SettingRowDef, registry: ViewRegistry, user_type_ids: ReadonlySet<string>): string | undefined {
+function ownerLabelFor(selected_node: string, def: SettingRowDef, registry: ViewRegistry): string | undefined {
     const owner_id = owningNodeFor(selected_node, def.key, registry);
     if (owner_id === undefined) { return undefined; }
     const owner = getViewNode(owner_id, registry);
-    return owner ? nodeLabel(owner, user_type_ids) : owner_id;
+    return owner ? nodeLabel(owner, registry) : owner_id;
 }
 
 /**
@@ -269,7 +268,6 @@ function RowControl(props: RowControlProps): React.ReactElement {
  */
 interface TypeTreeContext {
     registry: ViewRegistry;
-    user_type_ids: ReadonlySet<string>;
     selected_node: string;
     view_type_selection: string;
     auto_resolved_type?: string;
@@ -290,7 +288,7 @@ interface TypeTreeContext {
 function treeRowTrailing(node: ViewNode, ctx: TypeTreeContext): ReactNode {
     const is_root = node.parent === undefined;
     const radio_value = is_root ? AUTO_TYPE : node.id;
-    const label = nodeLabel(node, ctx.user_type_ids);
+    const label = nodeLabel(node, ctx.registry);
     return (
         <>
             {(is_root || node.selectable) && (
@@ -299,7 +297,7 @@ function treeRowTrailing(node: ViewNode, ctx: TypeTreeContext): ReactNode {
                     name={ctx.radio_name}
                     data-testid={`view-radio-${radio_value}`}
                     checked={ctx.view_type_selection === radio_value}
-                    aria-label={is_root ? viewTypeLabel(AUTO_TYPE, ctx.auto_resolved_type) : l10n.t('Switch to {0}', label)}
+                    aria-label={is_root ? viewTypeLabel(AUTO_TYPE, ctx.auto_resolved_type, ctx.registry) : l10n.t('Switch to {0}', label)}
                     onChange={() => ctx.onPickType(radio_value)}
                 />
             )}
@@ -317,7 +315,7 @@ function buildTypeTreeNodes(parent_id: string | undefined, ctx: TypeTreeContext)
         return {
             id: node.id,
             testId: `view-node-${node.id}`,
-            label: nodeLabel(node, ctx.user_type_ids),
+            label: nodeLabel(node, ctx.registry),
             glyph: children.length > 0 ? '›' : '',
             expanded: children.length > 0 ? true : undefined,
             kind: node.selectable ? 'selectable' : 'abstract',
@@ -336,7 +334,6 @@ interface SettingsPaneProps {
     globalRows: SettingRowDef[];
     selectedNode: string;
     registry: ViewRegistry;
-    userTypeIds: ReadonlySet<string>;
     settings: SettingRowValues;
     diverged: string[];
     naturalColumnOrder: string[];
@@ -375,7 +372,7 @@ function SettingsPane(props: SettingsPaneProps): React.ReactElement {
     );
     return (
         <div className={styles.settingsRowGrid} data-testid="settings-rows">
-            {props.rows.map(def => renderRow(def, ownerLabelFor(props.selectedNode, def, props.registry, props.userTypeIds)))}
+            {props.rows.map(def => renderRow(def, ownerLabelFor(props.selectedNode, def, props.registry)))}
             {props.globalRows.length > 0 && (
                 <div className={styles.settingsGroupHeading} data-testid="global-settings-heading">{l10n.t('Global settings')}</div>
             )}
@@ -738,7 +735,6 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
 
 function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement {
     const registry = useMemo(() => registryWithUserTypes(props.userTypes), [props.userTypes]);
-    const user_type_ids = useMemo(() => new Set(props.userTypes.map(t => t.id)), [props.userTypes]);
     const drawer = useSettingsDrawerSelection(props, registry);
     const { selected_node } = drawer;
     const chain_rows = useMemo(() => viewRowsForNode(selected_node, registry), [selected_node, registry]);
@@ -747,7 +743,6 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
     debug('selected=%s rows=%d diverged=%d', selected_node, chain_rows.length, diverged_count);
     const tree_nodes = buildTypeTreeNodes(undefined, {
         registry,
-        user_type_ids,
         selected_node,
         view_type_selection: props.viewTypeSelection,
         auto_resolved_type: props.autoResolvedType,
@@ -756,7 +751,7 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
         onHighlight: drawer.handle_highlight,
         onPickType: drawer.handle_pick_type,
     });
-    const selected_label = nodeLabel(getViewNode(selected_node, registry) ?? registry.nodes[0], user_type_ids);
+    const selected_label = nodeLabel(getViewNode(selected_node, registry) ?? registry.nodes[0], registry);
     const offer_rows = useOfferRows(chain_rows, props.diverged, selected_node, registry);
     // the panel earns its place only with something in it: an offer, or a type to rename or delete
     const selected_user_type = props.userTypes.find(type => type.id === selected_node);
@@ -780,7 +775,6 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
                         globalRows={global_rows}
                         selectedNode={selected_node}
                         registry={registry}
-                        userTypeIds={user_type_ids}
                         settings={props.settings}
                         diverged={props.diverged}
                         naturalColumnOrder={props.naturalColumnOrder}
@@ -800,7 +794,7 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
                             /* a fresh set of reasons is a fresh offer, so the panel reopens and the name form starts over */
                             key={offer_rows.map(def => def.key).join('|') || 'none'}
                             offerRows={offer_rows}
-                            offerOwnerLabel={offer_rows[0] && ownerLabelFor(selected_node, offer_rows[0], registry, user_type_ids)}
+                            offerOwnerLabel={offer_rows[0] && ownerLabelFor(selected_node, offer_rows[0], registry)}
                             nameHint={offer_rows[0] ? newViewTypeNameHint(selected_label, offer_rows[0], props.settings[offer_rows[0].key] ?? offer_rows[0].fallback) : ''}
                             overrides={Object.fromEntries(offer_rows.map(def => [def.key, props.settings[def.key] ?? def.fallback]))}
                             selectedUserType={selected_user_type}

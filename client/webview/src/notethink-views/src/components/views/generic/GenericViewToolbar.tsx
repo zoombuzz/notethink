@@ -115,8 +115,10 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
      * on the notes identity.
      */
     const user_view_types = displayOptions.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
+    // the hierarchy the user's saved types are part of, which both the kanban-chain test and the tab's wording read
+    const registry = registryWithUserTypes(user_view_types);
     // a kanban board, or a type minted from one, overrides the axis at the kanban node
-    const on_kanban_chain = chainOf(props.type, registryWithUserTypes(user_view_types)).includes('kanban');
+    const on_kanban_chain = chainOf(props.type, registry).includes('kanban');
     const group_by_selection = (on_kanban_chain
         ? props.display_options?.settings?.kanbanGroupBy
         : props.display_options?.settings?.groupBy) ?? 'auto';
@@ -144,7 +146,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                     </button>
                 )}
                 <ToolbarTab
-                    label={viewTypeLabel(viewTypeSelection, autoResolvedType)}
+                    label={viewTypeLabel(viewTypeSelection, autoResolvedType, registry)}
                     testId="view-settings-button"
                     controls={`v${props.id}-settings-drawer`}
                     open={activeDrawer === 'settings'}

@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent, act, within, type RenderResult } fr
 import GenericView from './GenericView';
 import type { ViewProps, ViewApi } from '../../types/ViewProps';
 import type { NoteProps, ClickPositionInfo } from '../../types/NoteProps';
+import type { UserViewType } from '../../types/Messages';
 
 // mock lazy-loaded view components - capture props for click handler testing
 const mockDocViewRender = jest.fn();
@@ -1565,6 +1566,29 @@ describe('GenericView drawer tabs', () => {
     it('titles the View settings tab with the plain type when the selection is concrete', async () => {
         renderTabs({ type: 'kanban' });
         expect(await screen.findByTestId('view-settings-button')).toHaveTextContent('Kanban');
+    });
+
+    /*
+     * A minted type's id is slugified so it can be written as an `nt_view=` linetag and saved as a
+     * settings key, so titling the tab with the id would state "User-next-up-by-project" over a tree that
+     * states the name its author typed. The tab reads the label, in both the pinned and the auto form.
+     */
+    const MINTED_TYPE: UserViewType = {
+        id: 'user-next-up-by-project', label: 'User next up by project', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' },
+    };
+
+    it('titles the View settings tab with a minted type\'s name rather than its slugified id', async () => {
+        renderTabs({ type: MINTED_TYPE.id, display_options: { settings: { viewUserTypes: [MINTED_TYPE] } } });
+        expect(await screen.findByTestId('view-settings-button')).toHaveTextContent('User next up by project');
+    });
+
+    it('words a minted type the same way when auto resolved to it', async () => {
+        renderTabs({
+            type: MINTED_TYPE.id,
+            display_options: { settings: { viewUserTypes: [MINTED_TYPE] } },
+            nested: { replaced_attributes: { type: 'auto' }, auto_resolved_type: MINTED_TYPE.id },
+        });
+        expect(await screen.findByTestId('view-settings-button')).toHaveTextContent('Auto (User next up by project)');
     });
 
     it('opens the View settings drawer, which is where the view-type tree now lives', async () => {

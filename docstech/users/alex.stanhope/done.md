@@ -5253,3 +5253,108 @@ The view-hierarchy half of this story was split out to [[line-view]] on 2026-07-
 + commit message draft
   + introduce `nt_card` linetag and `cardregistryops` - second selector "Auto (Card)" picks between `card` (full) and `sticky` (compact summary); `nt_card` on file H1 cascades into auto-resolution
   + tests N jest, N playwright
+
+
+### l10n bundles are not checked for untranslated values [](?id=l10n-untranslated-check&time_estimated=45)
+
+`client/extension/src/l10n/l10n-bundles.test.ts` is thorough: key parity in both directions, non-empty values, and placeholder preservation, over both `bundle.l10n.*.json` (68 keys) and `package.nls.*.json` (26 keys) for de/es/fr/it. The one check it lacks is whether a value was ever translated, and it is the check that catches a new string shipped as English in four languages.
+
++ background:
+  + a sibling project's i18n test has this assertion (`no es values are identical to en (except proper nouns)`) with a flat `allowed_same` key allowlist. It is the only one of the four notethink is missing; conversely notethink's placeholder-preservation check is one that sibling lacks, and a story is filed there for that direction.
+  + counts below were measured 2026-08-03 and re-verified unchanged 2026-08-04
+  + the current state is close to clean: `Auto ({0})` identical in all four bundles, `Position:` in de, `Collisions` in fr, and `displayName` / `editor.displayName` / `config.title` identical in all four `package.nls` files - six bundle exceptions and twelve nls exceptions in total
+  + the three `package.nls` entries are the extension's marketplace identity and are deliberately untranslated; the three bundle entries need a judgement call
+  + note the bundle keys ARE the English strings in `@vscode/l10n`, so "identical to en" here means comparing each value against its own key, not against a separate en file. `bundle.l10n.json` exists and can be used as the baseline, which is what the existing describe block already does - verified: all 68 of its entries have key === value, so the two baselines are equivalent.
++ triage of the three bundle exceptions (assessed 2026-08-04, confirm before acting)
+  + `Position:` (de) is the German word, and es/fr/it already differ (`Posición:`, `Position :`, `Posizione:`) - correct, allowlist it
+  + `Collisions` (fr) is French, and de/es/it already differ (`Kollisionen`, `Colisiones`, `Collisioni`) - correct, allowlist it
+  + `Auto ({0})` is the likely real defect and the reason this check earns its keep: in German and Italian "Auto" means *car*, so de wants "Automatisch" and it wants "Automatico". fr and es "Auto" is a defensible abbreviation of automatique / automático. Used at `ViewIntegrationSelector.tsx:50`.
++ the 2026-08 counts above had drifted by the time this was picked up - fresh scan 2026-09-10
+  + the bundle is 103 keys, not 68, and all 103 still have key === value, so the two baselines remain equivalent
+  + `package.nls` is 33 keys, not 26, and its exceptions are unchanged: `displayName`, `editor.displayName` and `config.title` in all four locales, twelve in total
+  + the bundle exceptions are not the six recorded. `Auto ({0})` in all four and `Position:` in de and `Collisions` in fr are still there, and three more have arrived since: `1 : {0}` in all four, `Name` in de, `Orientation` in fr - twelve in total
+  + this is why the allowlist was rebuilt from a scan rather than transcribed; a list copied from the story would have gone in three entries short and gone green on nothing
++ [X] add an identical-to-en assertion to both describe blocks, with an allowlist
+  + `l10n-bundles.test.ts:102` for the bundles and `:154` for `package.nls`, plus a `:109`/`:159` pair asserting no allowlist entry has gone stale, and a `:122` guard that the en bundle's every value still equals its key - the assumption the whole comparison rests on
+  + the allowlist is split rather than flat, which is the one deviation from the sibling pattern in `countingsheet/nodejs/ledger/src/i18n/i18n.test.ts:86`. That test compares one locale, so a flat list cannot over-permit; here four locales share one list, and a flat one would accept "Collisions" in German because it is right in French
+  + `ALLOWED_SAME_EVERY_LOCALE` holds only strings with nothing translatable in them; `ALLOWED_SAME_BY_LOCALE` holds the rest, keyed by the locale the word actually belongs to. Every entry carries its reason inline
++ [X] decide whether `Position:`, `Collisions` and `Auto ({0})` are correct translations or oversights, then translate or allowlist
+  + `Position:` (de), `Collisions` (fr) and the two found since, `Name` (de) and `Orientation` (fr), are all the right word in that one language and are allowlisted to it alone
+  + `1 : {0}` is the card-ratio option label at `SettingsViewDrawer.tsx:224`, rendered "1 : 1.4" - digits, a colon and a placeholder, so it is allowlisted for every locale
+  + `Auto ({0})` was the real defect the check was expected to find. de and it are translated to `Automatisch ({0})` and `Automatico ({0})`, which is what the rest of each bundle already does ("Fokussierte Notiz automatisch erweitern", "Espandi automaticamente la nota attiva")
+  + es and fr keep `Auto ({0})` as the accepted abbreviation and are allowlisted; used at `viewTypeLabel.ts:35` and `ViewIntegrationSelector.tsx:47`
++ acceptance criteria
+  + assertion green with every exception named and commented
+  + a new key added to `bundle.l10n.json` and copied verbatim into the four locale bundles fails the test
+  + both met - 45 tests green, and adding "Collapse every column" verbatim to all five bundles failed all four locales on the new assertion and nothing else
+
+
+### The extension logger's format is built and never wired to it [](?id=errorops-logger-format-unwired&time_estimated=45)
+
+`client/extension/src/lib/errorops.ts` composes a full winston format into `_default_format`, then calls `winston.createLogger({level, transports})` and never passes it. The extension's Output Channel therefore shows none of what that format was written to add.
+
++ surfaced 2026-08-11 by the `@typescript-eslint/no-unused-vars` rollout, which is the third time in this workspace that rule has found a wiring gap rather than dead code
++ what is actually lost, reading the composed format at `errorops.ts:87-96`
+  + `winston.format.timestamp` - no timestamp on any line
+  + `winston.format.errors({stack: true})` - no stack on a logged Error
+  + `winston.format(combineTransform)()` - **this is the significant one.** `combineTransform` (`errorops.ts:72`) reads the winston `splat` symbol and interpolates a multi-argument call's extra arguments into the message. Without it, `writeToLog('thing %s', value)` renders the raw `%s` and silently discards `value`
+  + `winston.format.printf` - the level-prefixed line shape
+  + `winston.format.colorize`
++ `combineTransform` has exactly one reference, inside the unwired format, so it has never run
++ what was actually lost, measured 2026-09-10 by driving the real winston and the real transport into a recording channel
+  + **the Output Channel received nothing at all.** the loss is not degraded lines, it is no lines
+  + `level: 'trace'` was passed without `levels`, so the logger kept winston's default npm levels, in which `trace` does not exist. `winston-transport`'s gate is `this.levels[level] >= this.levels[info[LEVEL]]`, and `undefined >= 2` is false, so every record was dropped before reaching the transport
+  + winston prints `[winston] Unknown logger level: trace` to the console on each one, which is the only trace the fault left
+  + the file log is untouched by any of this: `writeToLogAtLevel` calls `appendToFileLog` independently of winston, so `notethink-extension.log` kept working, which is why nobody noticed
+  + with `levels` supplied but no format, only the source survives - a record renders as `{"level":"info","message":"            editText]"}` and the description and error are gone
+  + so `CODING_STANDARDS.md` > Reading VS Code logs is wrong where it says "The Output-panel channel below still works in production"; correcting it is a separate edit and is not done here
++ correction to the bullets above, same measurement
+  + `combineTransform` does not interpolate `%s`. `writeToLogAtLevel` shifts the source into winston's `message` slot, so the description reaches `util.format` as an argument rather than as the format string, and placeholders survive literally. What it actually does is append every splat argument, which is the whole difference between a rendered error and a discarded one
+  + no call site uses `%s` anyway - every one in `client/extension/src` passes a template literal, and `no-restricted-syntax` in `eslint.config.mjs` requires `writeToErrorLog(source, message, error)`, so the third argument it mandates was exactly what was being dropped
+  + `winston.format.colorize()` would have **thrown** if the format had been wired as composed: `TypeError: colors[Colorizer.allColors[lookup]] is not a function` on any `trace` record, because nothing calls `winston.addColors` for the custom levels
+  + `winston.format.timestamp` and `winston.format.errors({stack: true})` were both measured to change nothing here - the printf never reads the timestamp, and `errors` only fires when `info.message` is an Error, which it never is. `util.format` already renders an Error's stack
++ [X] confirm the loss against a real log line before changing anything: call the logger with an extra argument and read the Output Channel
+  + the extension host cannot be driven from the CLI (see [[mocha-web-suite-runnable]]), so the reading was taken one layer earlier, at the only place the channel is written: the real `LogOutputChannelTransport` calls `outputChannel.info(info[MESSAGE])`, so a recording channel object reads exactly what the panel would show
+  + as shipped: no lines. after the fix: `info|       discoverFolderDocs] cap hit: discovered 412, loading first 200 of /w/docs` and `error|            loadFolderDoc] failed to load /w/docs/a.md [Error: EntryNotFound (FileSystemError)]`
++ [X] wire the format into `createLogger`, or delete both it and `combineTransform` if the current bare output is what is wanted
+  + the comment says "different format is used for some transports", which suggests a second format was planned and only one transport exists. Decide which is true before wiring
+  + wired, and `levels` with it - `errorops.ts:103-109` now passes `levels: LogOutputChannelTransport.config.levels` and `format: default_format`, which is the wiring the transport package's own README documents and the extension had taken only the `level: 'trace'` line from
+  + `combineTransform` is kept because it is load-bearing: without it the description and the error object are dropped. The binding is no longer underscored
+  + `timestamp`, the level-prefixing `printf` and `colorize` are dropped rather than wired, each for a measured reason above. The channel is a `LogOutputChannel` (`{log: true}`), so it renders its own timestamp and level, and the file log stamps its own
+  + the "different format for some transports" comment described a second transport that does not exist; it is replaced by a header saying what the one format is for
+  + the `any` cast on the transport went with it. Its comment claimed the package exports no nameable Transport type, which the `.d.ts` contradicts, and `tsc --noEmit -p client/extension` is clean without the cast - so it was a stale escape hatch, not a live one
++ [X] cover the splat interpolation with a test, since nothing would have caught this
+  + `errorops.test.ts:117-149` - five expectations on what the channel actually received, replacing the "does not throw" shape that could not see it
+  + nothing could have caught it while `client/extension/src/__mocks__/winston-transport-vscode.ts` existed: its `log()` was a no-op and its `static config.levels` defined `trace`, so the mock masked both halves. Its stated reason - "depends on the vscode module" - is false; `grep` finds no `require("vscode")` anywhere in the package's `dist`, and it takes the channel as a constructor argument
+  + the mock is deleted and the `moduleNameMapper` entry with it, so the real transport now runs in jest against the vscode mock's channel; `createOutputChannel` gained the `error`/`warn`/`info`/`debug`/`trace` methods a `LogOutputChannel` has
++ acceptance criteria
+  + a multi-argument log call renders its arguments, verified by reading the output, not by reading the format
+  + met - and verified by breaking it twice: removing `levels` fails all 5 new tests, removing `format` fails all 5
+
+
+### Two playwright specs capture a value and never assert on it [](?id=keyboard-nav-drill-assertions&time_estimated=60)
+
+Both were found by the same lint rollout on 2026-08-11. Each computes exactly the value its title implies it checks, then never compares it, so neither spec can fail on the behaviour it names.
+
++ `playwright/specs/keyboard-navigation.spec.ts:113` captures `_parent_after_drill`, drills out, captures `parent_after_out`, and asserts only `expect(parent_after_out).toBeDefined()`
+  + `getAttribute` returns `string | null`, and `toBeDefined()` passes on `null`, so the one assertion that does run holds even when the attribute is absent entirely
+  + [X] assert the drill-in value differs from the pre-drill value, and that drill-out restores it
+    + the round trip was measured before anything was asserted, by probing the attribute at all three points: the scope reads "0" at the document root, "1" after drill-in and "0" again after drill-out, with exactly one element carrying it
+    + `keyboard-navigation.spec.ts:106-128` now captures the pre-drill value, asserts the drill-in value is neither null nor equal to it, and asserts drill-out returns it to the captured baseline rather than merely to something defined
+    + `not.toBeNull()` replaces `toBeDefined()` at each read, so a vanished attribute fails where it used to pass
+  + [X] give the neighbouring drillIn spec the same treatment
+    + `:60` is titled "drillIn on nested doc changes parent context" and asserted only that at least one element carried the attribute, so it could not fail on a broken drill-in either. It was not surfaced by the lint rollout because it has no unused binding - it discards the value inline
+    + widened deliberately rather than left: the acceptance criterion below is per spec, and a spec that names a behaviour it cannot test is the defect this story exists to close
+    + `:78-88` now captures the pre-drill value and asserts the post-drill value differs
++ `playwright/specs/settings-toggle.spec.ts:12` is titled "toggling lineNumbers shows and hides line number elements" and asserts neither
+  + it counts line-number spans into `_lineno_count`, toggles on, asserts only that a row is visible - which was already true before the toggle - toggles off, and ends
+  + the two comment blocks at `:18` and `:42` describe the assertions that were never written
+  + [X] assert the count is zero at baseline, non-zero after toggling on, and back to zero after toggling off
+    + delivered in passing by the settings-drawer work: `playwright/specs/settings-toggle.spec.ts:75` asserts `toHaveCount(0)` at baseline, `:80` asserts the first span visible after toggling on, `:84` asserts `toHaveCount(0)` again after toggling off
+    + at the time that landed the keyboard-navigation half was still open; it is closed above
++ acceptance criteria
+  + each spec fails when its behaviour is deliberately broken, verified by breaking it once
+  + met, broken twice in `useViewNavigation.ts` with a rebuild between each
+    + dropping the `setParentContextId` call from the `drillIn` case fails both drill specs. The pre-change specs were run against the same break and both passed green, which is the whole finding
+    + dropping it from the `drillOut` case fails the drillOut spec alone, on `Expected: "0" Received: "1"`, and correctly leaves the drillIn spec green
++ neither binding is underscored any more - both are read by an assertion

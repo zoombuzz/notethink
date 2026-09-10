@@ -73,16 +73,18 @@ test.describe('Keyboard Navigation', () => {
             await page.waitForTimeout(500);
         }
 
+        const data_parent = page.locator('[data-parent-content-seq]');
+        // the view opens scoped to the document root, which is the value drill-in has to move off
+        const parent_before_drill = await data_parent.first().getAttribute('data-parent-content-seq');
+        expect(parent_before_drill).not.toBeNull();
+
         // Drill in
         await sendCommand(page, 'navigate', { direction: 'drillIn' });
         await page.waitForTimeout(500);
 
-        // After drill-in, the parent_context_seq should change
-        const data_parent = page.locator('[data-parent-content-seq]');
-        const parent_seq_values = await data_parent.evaluateAll(
-            els => els.map(el => el.getAttribute('data-parent-content-seq'))
-        );
-        expect(parent_seq_values.length).toBeGreaterThanOrEqual(1);
+        const parent_after_drill = await data_parent.first().getAttribute('data-parent-content-seq');
+        expect(parent_after_drill).not.toBeNull();
+        expect(parent_after_drill).not.toBe(parent_before_drill);
     });
 
     test('drillOut returns to parent context', async ({ page }) => {
@@ -99,26 +101,29 @@ test.describe('Keyboard Navigation', () => {
             await page.waitForTimeout(500);
         }
 
+        const data_parent = page.locator('[data-parent-content-seq]');
+        const parent_before_drill = await data_parent.first().getAttribute('data-parent-content-seq');
+
         // Drill in
         await sendCommand(page, 'navigate', { direction: 'drillIn' });
         await page.waitForTimeout(500);
 
         /*
-         * captured and never compared. The drill-in value is the whole point of the round trip, and
-         * the one assertion that does run (toBeDefined on the drill-out value) passes on null, so
-         * this spec cannot fail on a broken drill-in or a broken drill-out. The underscore marks the
-         * binding as deliberately unused; the missing assertions are tracked as
-         * `keyboard-nav-drill-assertions` in docstech/users/alex.stanhope/todo.md
+         * The drill-in value is the whole point of the round trip, so it is compared rather than
+         * captured. Note getAttribute returns string | null: toBeDefined() holds on null and on a
+         * missing attribute alike, so every check here is an equality against a value read earlier
+         * in the same test.
          */
-        const _parent_after_drill = await page.locator('[data-parent-content-seq]').first().getAttribute('data-parent-content-seq');
+        const parent_after_drill = await data_parent.first().getAttribute('data-parent-content-seq');
+        expect(parent_after_drill).not.toBeNull();
+        expect(parent_after_drill).not.toBe(parent_before_drill);
 
         // Drill out
         await sendCommand(page, 'navigate', { direction: 'drillOut' });
         await page.waitForTimeout(500);
 
-        const parent_after_out = await page.locator('[data-parent-content-seq]').first().getAttribute('data-parent-content-seq');
-
-        // After drill-out, parent_context_seq should be defined
-        expect(parent_after_out).toBeDefined();
+        // drill-out from one level in returns the scope to exactly where drill-in found it
+        const parent_after_out = await data_parent.first().getAttribute('data-parent-content-seq');
+        expect(parent_after_out).toBe(parent_before_drill);
     });
 });

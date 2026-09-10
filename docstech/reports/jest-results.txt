@@ -1,44 +1,44 @@
 # Jest Test Results
-# Version: 0.3.65
-# Date: 2026-09-08T19:23:15+01:00
+# Version: 0.3.66
+# Date: 2026-09-10T18:33:21.459079+01:00
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # ---
 $ bash scripts/test-jest.sh
-[2m$ jest --config jest.config.cjs --forceExit[22m
+$ jest --config jest.config.cjs --forceExit
 
-[1mTest Suites: [22m[1m[32m11 passed[39m[22m, 11 total
-[1mTests:       [22m[1m[32m285 passed[39m[22m, 285 total
-[1mSnapshots:   [22m0 total
-[1mTime:[22m        2.744 s, estimated 3 s
-[2mRan all test suites[22m[2m.[22m
-[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+Test Suites: 11 passed, 11 total
+Tests:       307 passed, 307 total
+Snapshots:   0 total
+Time:        2.762 s, estimated 3 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
-[2m$ jest --config jest.config.cjs --forceExit[22m
+$ jest --config jest.config.cjs --forceExit
 
-[1mTest Suites: [22m[1m[32m10 passed[39m[22m, 10 total
-[1mTests:       [22m[1m[32m142 passed[39m[22m, 142 total
-[1mSnapshots:   [22m0 total
-[1mTime:[22m        0.791 s, estimated 1 s
-[2mRan all test suites[22m[2m.[22m
-[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+Test Suites: 10 passed, 10 total
+Tests:       142 passed, 142 total
+Snapshots:   0 total
+Time:        0.806 s, estimated 1 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
-[2m$ jest --config jest.config.cjs --forceExit[22m
-[33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
+$ jest --config jest.config.cjs --forceExit
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
 
-[1mTest Suites: [22m[1m[32m68 passed[39m[22m, 68 total
-[1mTests:       [22m[1m[32m1544 passed[39m[22m, 1544 total
-[1mSnapshots:   [22m0 total
-[1mTime:[22m        3.384 s
-[2mRan all test suites[22m[2m.[22m
-[1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+Test Suites: 68 passed, 68 total
+Tests:       1544 passed, 1544 total
+Snapshots:   0 total
+Time:        3.477 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
 
-[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
-[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
-[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │    11 │ [32m   285[0m │ [2m     0[0m │ 2.744 s │
-│ webview          │    10 │ [32m   142[0m │ [2m     0[0m │ 0.791 s │
-│ notethink-views  │    68 │ [32m  1544[0m │ [2m     0[0m │ 3.384 s │
-[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-[1m│ TOTAL            │    89 │[0m [32m  1971[0m [1m│[0m [2m     0[0m [1m│         │[0m
-[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m
+┌──────────────────┬───────┬────────┬────────┬─────────┐
+│ Suite            │ Files │ Passed │ Failed │ Time    │
+├──────────────────┼───────┼────────┼────────┼─────────┤
+│ extension        │    11 │    307 │      0 │ 2.762 s │
+│ webview          │    10 │    142 │      0 │ 0.806 s │
+│ notethink-views  │    68 │   1544 │      0 │ 3.477 s │
+├──────────────────┼───────┼────────┼────────┼─────────┤
+│ TOTAL            │    89 │   1993 │      0 │         │
+└──────────────────┴───────┴────────┴────────┴─────────┘

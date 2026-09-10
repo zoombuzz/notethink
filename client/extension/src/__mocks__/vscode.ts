@@ -210,6 +210,12 @@ export enum ConfigurationTarget {
 	WorkspaceFolder = 3,
 }
 
+/*
+ * Stubs for the vscode.window APIs the extension source calls.
+ * - createOutputChannel: errorops opens its channel with {log: true}, so this returns a
+ *   LogOutputChannel shape. The level methods are what winston-transport-vscode calls, and a stub
+ *   without them makes every log line a TypeError rather than an assertable call.
+ */
 export const window = {
 	createOutputChannel: jest.fn(() => ({
 		appendLine: jest.fn(),
@@ -218,6 +224,11 @@ export const window = {
 		show: jest.fn(),
 		hide: jest.fn(),
 		dispose: jest.fn(),
+		error: jest.fn(),
+		warn: jest.fn(),
+		info: jest.fn(),
+		debug: jest.fn(),
+		trace: jest.fn(),
 	})),
 	registerCustomEditorProvider: jest.fn(),
 	showInformationMessage: jest.fn(),

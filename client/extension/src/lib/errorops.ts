@@ -77,33 +77,31 @@ const combineTransform: TransformFunction = (info) => {
 };
 
 /*
- * default is full-fat comprehensive logging, but different format is used for some transports.
- * UNWIRED: createLogger passes only `level` and `transports`, so none of this reaches the output
- * channel - no timestamp, no error stacks, and combineTransform never runs, which is what
- * interpolates a multi-argument log call's extra args into the message. The underscore marks the
- * binding as deliberately unused while the gap is open; see `errorops-logger-format-unwired` in
- * docstech/users/alex.stanhope/todo.md.
+ * The format the LogOutputChannel transport needs, wired into createLogger below.
+ *
+ * combineTransform is the load-bearing half. writeToLogAtLevel shifts the source into winston's
+ * `message` slot, so a call's description and any error object land in splat instead; without this
+ * transform the transport receives the source alone and drops everything after it.
+ *
+ * Nothing composes a timestamp, a level prefix or a colouriser here on purpose. output_channel is
+ * created with {log: true}, so it is a LogOutputChannel that stamps its own timestamp and level, and
+ * the file log adds its own ISO timestamp in writeToLogAtLevel. winston.format.colorize() would also
+ * throw on a `trace` record, whose level has no registered colour.
  */
-const _default_format = winston.format.combine(
-    winston.format.timestamp({format: 'YYYY-MM-DD HH:mm:ss.SSS'}),
-    winston.format.errors({stack: true}),
+const default_format = winston.format.combine(
     winston.format(combineTransform)(),
-    winston.format.printf(
-        ({ level, message }) =>
-            `${level.toUpperCase().slice(-5).padEnd(5, ' ')} ${message}`,
-    ),
-    winston.format.colorize(),
+    LogOutputChannelTransport.format(),
 );
 
-// winston-transport-vscode does not export a public Transport type we can name here; the cast keeps the array element assignable to winston's transports option
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- documented escape hatch: winston-transport-vscode does not export a public Transport type
-type TransportStream = any;
 const transports = [
-    new LogOutputChannelTransport({ outputChannel: output_channel }) as TransportStream,
+    new LogOutputChannelTransport({ outputChannel: output_channel }),
 ];
 
 const logger = winston.createLogger({
     level: 'trace',
+    // winston's npm levels have no `trace`, so without these the transport gate drops every record
+    levels: LogOutputChannelTransport.config.levels,
+    format: default_format,
     transports,
 });
 

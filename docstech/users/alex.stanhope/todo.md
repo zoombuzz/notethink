@@ -289,66 +289,6 @@ Systemic findings from a deep multi-agent optimisation review (scout + 5 dimensi
   + impact: eliminates redundant parse and post work on every save and for hidden panels; effort: S
 
 
-### l10n bundles are not checked for untranslated values [](?id=l10n-untranslated-check&time_estimated=45)
-
-`client/extension/src/l10n/l10n-bundles.test.ts` is thorough: key parity in both directions, non-empty values, and placeholder preservation, over both `bundle.l10n.*.json` (68 keys) and `package.nls.*.json` (26 keys) for de/es/fr/it. The one check it lacks is whether a value was ever translated, and it is the check that catches a new string shipped as English in four languages.
-
-+ background:
-  + a sibling project's i18n test has this assertion (`no es values are identical to en (except proper nouns)`) with a flat `allowed_same` key allowlist. It is the only one of the four notethink is missing; conversely notethink's placeholder-preservation check is one that sibling lacks, and a story is filed there for that direction.
-  + counts below were measured 2026-08-03 and re-verified unchanged 2026-08-04
-  + the current state is close to clean: `Auto ({0})` identical in all four bundles, `Position:` in de, `Collisions` in fr, and `displayName` / `editor.displayName` / `config.title` identical in all four `package.nls` files - six bundle exceptions and twelve nls exceptions in total
-  + the three `package.nls` entries are the extension's marketplace identity and are deliberately untranslated; the three bundle entries need a judgement call
-  + note the bundle keys ARE the English strings in `@vscode/l10n`, so "identical to en" here means comparing each value against its own key, not against a separate en file. `bundle.l10n.json` exists and can be used as the baseline, which is what the existing describe block already does - verified: all 68 of its entries have key === value, so the two baselines are equivalent.
-+ triage of the three bundle exceptions (assessed 2026-08-04, confirm before acting)
-  + `Position:` (de) is the German word, and es/fr/it already differ (`Posición:`, `Position :`, `Posizione:`) - correct, allowlist it
-  + `Collisions` (fr) is French, and de/es/it already differ (`Kollisionen`, `Colisiones`, `Collisioni`) - correct, allowlist it
-  + `Auto ({0})` is the likely real defect and the reason this check earns its keep: in German and Italian "Auto" means *car*, so de wants "Automatisch" and it wants "Automatico". fr and es "Auto" is a defensible abbreviation of automatique / automático. Used at `ViewIntegrationSelector.tsx:50`.
-+ [ ] add an identical-to-en assertion to both describe blocks, with an allowlist
-+ [ ] decide whether `Position:`, `Collisions` and `Auto ({0})` are correct translations or oversights, then translate or allowlist
-+ acceptance criteria
-  + assertion green with every exception named and commented
-  + a new key added to `bundle.l10n.json` and copied verbatim into the four locale bundles fails the test
-
-
-### The extension logger's format is built and never wired to it [](?id=errorops-logger-format-unwired&time_estimated=45)
-
-`client/extension/src/lib/errorops.ts` composes a full winston format into `_default_format`, then calls `winston.createLogger({level, transports})` and never passes it. The extension's Output Channel therefore shows none of what that format was written to add.
-
-+ surfaced 2026-08-11 by the `@typescript-eslint/no-unused-vars` rollout, which is the third time in this workspace that rule has found a wiring gap rather than dead code
-+ what is actually lost, reading the composed format at `errorops.ts:87-96`
-  + `winston.format.timestamp` - no timestamp on any line
-  + `winston.format.errors({stack: true})` - no stack on a logged Error
-  + `winston.format(combineTransform)()` - **this is the significant one.** `combineTransform` (`errorops.ts:72`) reads the winston `splat` symbol and interpolates a multi-argument call's extra arguments into the message. Without it, `writeToLog('thing %s', value)` renders the raw `%s` and silently discards `value`
-  + `winston.format.printf` - the level-prefixed line shape
-  + `winston.format.colorize`
-+ `combineTransform` has exactly one reference, inside the unwired format, so it has never run
-+ [ ] confirm the loss against a real log line before changing anything: call the logger with an extra argument and read the Output Channel
-+ [ ] wire the format into `createLogger`, or delete both it and `combineTransform` if the current bare output is what is wanted
-  + the comment says "different format is used for some transports", which suggests a second format was planned and only one transport exists. Decide which is true before wiring
-+ [ ] cover the splat interpolation with a test, since nothing would have caught this
-+ acceptance criteria
-  + a multi-argument log call renders its arguments, verified by reading the output, not by reading the format
-+ the binding is underscored rather than deleted, so the intent stays visible until this is decided
-
-
-### Two playwright specs capture a value and never assert on it [](?id=keyboard-nav-drill-assertions&time_estimated=60)
-
-Both were found by the same lint rollout on 2026-08-11. Each computes exactly the value its title implies it checks, then never compares it, so neither spec can fail on the behaviour it names.
-
-+ `playwright/specs/keyboard-navigation.spec.ts:113` captures `_parent_after_drill`, drills out, captures `parent_after_out`, and asserts only `expect(parent_after_out).toBeDefined()`
-  + `getAttribute` returns `string | null`, and `toBeDefined()` passes on `null`, so the one assertion that does run holds even when the attribute is absent entirely
-  + [ ] assert the drill-in value differs from the pre-drill value, and that drill-out restores it
-+ `playwright/specs/settings-toggle.spec.ts:12` is titled "toggling lineNumbers shows and hides line number elements" and asserts neither
-  + it counts line-number spans into `_lineno_count`, toggles on, asserts only that a row is visible - which was already true before the toggle - toggles off, and ends
-  + the two comment blocks at `:18` and `:42` describe the assertions that were never written
-  + [X] assert the count is zero at baseline, non-zero after toggling on, and back to zero after toggling off
-    + delivered in passing by the settings-drawer work: `playwright/specs/settings-toggle.spec.ts:75` asserts `toHaveCount(0)` at baseline, `:80` asserts the first span visible after toggling on, `:84` asserts `toHaveCount(0)` again after toggling off
-    + the keyboard-navigation half of this story is untouched and stays open
-+ acceptance criteria
-  + each spec fails when its behaviour is deliberately broken, verified by breaking it once
-+ both bindings are underscored rather than deleted, so the intent stays visible
-
-
 ### Make the mocha web-extension suite runnable [](?id=mocha-web-suite-runnable)
 
 `client/extension/src/test/suite/` is a real suite that no script runs and that cannot currently produce a

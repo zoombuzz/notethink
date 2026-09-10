@@ -1,4 +1,23 @@
+import * as vscode from 'vscode';
 import { writeToLog, writeToErrorLog, writeToLogAtLevel, debug, isRedirect, fatalError, nonFatalErrorInternally, nonFatalErrorReport } from './errorops';
+
+type ChannelSpy = { info: jest.Mock; error: jest.Mock; warn: jest.Mock; debug: jest.Mock; trace: jest.Mock };
+
+/*
+ * The channel errorops opened at module load. createOutputChannel is a jest.fn returning a fresh
+ * object per call, so the handle has to come back off the first recorded result rather than a
+ * second call, which would hand back a different channel.
+ */
+function loggedLines(level: keyof ChannelSpy): Array<string> {
+	const create_mock = vscode.window.createOutputChannel as unknown as jest.Mock;
+	const channel = create_mock.mock.results[0].value as ChannelSpy;
+	return channel[level].mock.calls.map((call: Array<unknown>) => String(call[0]));
+}
+
+// the transport reaches the channel through a stream, so a line is not there on the next statement
+function flushLogger(): Promise<void> {
+	return new Promise(resolve => setTimeout(resolve, 0));
+}
 
 describe('errorops', () => {
 	describe('writeToLog()', () => {
@@ -85,6 +104,47 @@ describe('errorops', () => {
 			writeToErrorLog('source', new Error('exploded'));
 			const body = JSON.parse(fetch_mock.mock.calls[0][1].body);
 			expect(body.stack).toContain('exploded');
+		});
+	});
+
+	/*
+	 * These are the assertions the "does not throw" tests above cannot make. writeToLogAtLevel shifts
+	 * the source into winston's message slot, so every argument after it travels in splat, and both
+	 * the logger's `levels` and its `format` have to be wired for any of it to reach the channel.
+	 * Each expectation below fails against a different half of the gap this covers: drop `levels` and
+	 * the transport gate discards the record entirely, drop `format` and only the source survives.
+	 */
+	describe('what actually reaches the output channel', () => {
+		it('renders the description that follows the source', async () => {
+			writeToLog('editText', '3 changes on /x/a.md');
+			await flushLogger();
+			expect(loggedLines('info')).toContainEqual(expect.stringContaining('3 changes on /x/a.md'));
+		});
+
+		it('renders the source alongside the description rather than in place of it', async () => {
+			writeToLog('discoverFolderDocs', 'cap hit at 200 files');
+			await flushLogger();
+			const line = loggedLines('info').find(l => l.includes('cap hit at 200 files'));
+			expect(line).toContain('discoverFolderDocs');
+		});
+
+		it('renders a third argument, which is where every writeToErrorLog call puts its error', async () => {
+			writeToErrorLog('buildInitialDoc', 'failed to build initial document', new Error('EntryNotFound'));
+			await flushLogger();
+			expect(loggedLines('error')).toContainEqual(expect.stringContaining('EntryNotFound'));
+		});
+
+		it('routes a record to the channel method matching its level', async () => {
+			writeToLogAtLevel('warn', 'settings', 'unknown setting foo');
+			await flushLogger();
+			expect(loggedLines('warn')).toContainEqual(expect.stringContaining('unknown setting foo'));
+			expect(loggedLines('info')).not.toContainEqual(expect.stringContaining('unknown setting foo'));
+		});
+
+		it('reaches the channel at trace, the level winston has no default for', async () => {
+			writeToLogAtLevel('trace', 'caretProbe', 'offset 412');
+			await flushLogger();
+			expect(loggedLines('trace')).toContainEqual(expect.stringContaining('offset 412'));
 		});
 	});
 

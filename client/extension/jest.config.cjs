@@ -21,6 +21,12 @@ const esm_packages = [
   'trim-lines',
 ].join('|');
 
+/*
+ * The vscode module is mocked below; winston-transport-vscode deliberately is not. Its dist requires
+ * only logform, triple-beam and winston-transport, never vscode, and it takes the output channel as a
+ * constructor argument, so the real transport runs here against the vscode mock's channel. The mock it
+ * replaced had a no-op log(), which is why no test could see that createLogger was dropping every record.
+ */
 module.exports = {
   testEnvironment: 'node',
   transform: {
@@ -47,8 +53,6 @@ module.exports = {
   moduleNameMapper: {
     // mock the vscode module
     '^vscode$': '<rootDir>/src/__mocks__/vscode.ts',
-    // mock winston-transport-vscode (depends on vscode)
-    '^winston-transport-vscode$': '<rootDir>/src/__mocks__/winston-transport-vscode.ts',
   },
   testMatch: [
     '<rootDir>/src/**/*.test.ts',

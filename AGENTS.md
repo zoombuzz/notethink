@@ -18,11 +18,15 @@ notethink/
 │   │   │   ├── extension.ts           # extension entry point
 │   │   │   ├── vscode/                # VS Code integration
 │   │   │   │   └── notethinkEditor.ts # custom editor provider
-│   │   │   ├── lib/                   # utilities
-│   │   │   │   ├── crypto.ts          # hashing utilities
-│   │   │   │   ├── parseops.ts        # markdown parsing
+│   │   │   ├── lib/                   # utilities - eight modules, each + a .test.ts
+│   │   │   │   ├── cryptoops.ts       # hashing, nonces, identifiers
+│   │   │   │   ├── docops.ts          # operations on Doc shapes
+│   │   │   │   ├── editops.ts         # text edits, change validation
 │   │   │   │   ├── errorops.ts        # error handling
-│   │   │   │   └── utils.ts           # general utilities
+│   │   │   │   ├── globMatch.ts       # glob matching
+│   │   │   │   ├── parseops.ts        # markdown parsing
+│   │   │   │   ├── pathops.ts         # path string operations
+│   │   │   │   └── settings.ts        # extension settings
 │   │   │   ├── types/                 # TypeScript types
 │   │   │   └── test/                  # extension tests (Mocha)
 │   │   └── dist/                      # compiled extension
@@ -48,6 +52,14 @@ notethink/
 ├── webpack.config.js       # build configuration
 └── package.json            # root package
 ```
+
+> **Correction, 2026-09-09.** The `extension/src/lib/` listing above named `crypto.ts` (the file is
+> `cryptoops.ts`, listed correctly in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Library
+> organisation) and a `utils.ts` "general utilities" that has never existed. The second was the
+> dangerous one: a `utils.ts` junk drawer is precisely the anti-pattern the workspace
+> [`../AGENTS.md`](../AGENTS.md) > Library organisation `*ops.ts` convention exists to prevent, so a doc
+> advertising one invites an agent to create it and land the very file the rule forbids. The four
+> entries are now the full eight-module inventory, so the same gap cannot reopen quietly.
 
 ### Entry Points
 

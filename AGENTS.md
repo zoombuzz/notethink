@@ -107,28 +107,9 @@ function calculateTotal(items: ItemList): number {
 
 ## Import Organization
 
-Order imports as follows:
+All `import` statements go at the top of the file, one statement per module. Ordering and grouping within the import block are **freeform**. Canonical: [`CODE_LAYOUT.md`](../lightenna-iac/docstech/standards/CODE_LAYOUT.md) > Import organisation, which also says why a prescribed grouping order must not be reintroduced into a project doc. notethink's one house habit, which is not a requirement, is in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Import Organization.
 
-```typescript
-// 1. React and framework imports
-import React, { useState, useEffect } from 'react';
-// 2. External dependencies
-import Debug from 'debug';
-import { someUtil } from 'external-package';
-// 3. UI framework / component library
-import { Button, Modal } from '@zoombuzz/notethink-views';
-// 4. Internal utilities and libraries
-import { generateIdentifier } from '@/lib/crypto';
-import { parseMarkdown } from '@/lib/parseops';
-// 5. Types
-import type { NoteProps } from '@/types/NoteProps';
-import type { ViewProps } from '@/types/ViewProps';
-// 6. Components (local)
-import DocumentView from './DocumentView';
-import GenericNote from '../notes/GenericNote';
-// 7. Styles
-import styles from './Component.module.scss';
-```
+> **Correction, 2026-09-11.** This section prescribed a numbered seven-tier import order with a worked example, the order CODE_LAYOUT.md retired on 2026-06-10. The example also imported `generateIdentifier` from `@/lib/crypto`, a module that does not exist (it is `cryptoops.ts`).
 
 ## Comment Style
 
@@ -191,24 +172,26 @@ localStorage.debug = 'nodejs:*'
 
 ### Extension Tests (Mocha)
 
-Located in `client/extension/src/test/`. Run via VS Code launch configuration.
+Located in `client/extension/src/test/`. Run via VS Code launch configuration. The sample below is abridged from `client/extension/src/test/suite/lib/cryptoops.test.ts`:
 
 ```typescript
 import * as assert from 'assert';
-import { generateIdentifier } from '../../lib/crypto';
+import { generateIdentifier } from '../../../lib/cryptoops';
 
-suite('Crypto Utils', () => {
+suite('Crypto ops', () => {
     test('generates consistent hash for same input', async () => {
-        const hash1 = await generateIdentifier('test');
-        const hash2 = await generateIdentifier('test');
+        const hash1 = await generateIdentifier('test message');
+        const hash2 = await generateIdentifier('test message');
         assert.strictEqual(hash1, hash2);
     });
 });
 ```
 
+(Corrected 2026-09-11: the sample imported from `'../../lib/crypto'` in a suite named 'Crypto Utils'. The module is `cryptoops.ts`, and the test sits one directory deeper than that path assumed.)
+
 ### Component Tests (Jest + React Testing Library)
 
-Located in `client/webview/src/notethink-views/`. Run with `npm test`.
+Jest specs sit next to their source in three packages, each with its own `jest.config.cjs`: `client/extension`, `client/webview` (which ignores the nested package) and `client/webview/src/notethink-views`. Run all three from the repo root with `pnpm run test-jest`, which is `scripts/test-jest.sh`; the root has no `test` script. `pnpm test` inside one package runs that package alone. (Corrected 2026-09-11: this placed component tests in `client/webview/src/notethink-views/` alone and said to run them with `npm test`.)
 
 ```typescript
 import { render, screen } from '@testing-library/react';
@@ -234,4 +217,4 @@ added component views including context; added playwright e2e tests; tests 157, 
 
 ## Dev Server
 
-notethink is a VS Code extension - it has no HTTP dev server and is exempt from the workspace dev-server start pattern (see workspace `AGENTS.md`, `## Dev servers`). The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`) and previewed inside the VS Code Extension Development Host.
+notethink is a VS Code extension - it has no HTTP dev server, so there is no port to probe and no browser page to open. It is **not** exempt from the workspace dev-server start pattern: `/open-dev` launches its `webpack --watch` (`pnpm run watch`) with the workspace launcher, `systemd-run --user --scope --slice=devservers.slice`, logging to `test-results/dev.log`, and workspace `AGENTS.md` > Dev servers names zahara as its only exception. (Corrected 2026-09-11: this said notethink was exempt from that pattern.) The webview/extension bundles are produced by webpack (`pnpm run build` or `pnpm run watch`). The `/open-dev` workflow previews them in an ordinary VS Code window, not the Extension Development Host: VS Code loads the working copy through a hand-made `~/.vscode/extensions/notethink-dev` symlink, and **Developer: Reload Window** picks up a rebuild. That symlink is per machine and nothing provisions it, so check `ls ~/.vscode/extensions` first; rainbow-ubuntu had none on 2026-09-11, only marketplace installs. The F5 Extension Development Host in `README.md` is the manual alternative. (Corrected 2026-09-11: this said the bundles were previewed inside the Extension Development Host.)

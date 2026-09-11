@@ -547,7 +547,7 @@ Write an explicit `id=` **only when a durable artifact will reference the note a
 
 **Write an explicit id when:**
 
-1. **The note becomes the target of a `[[…]]` cross-reference.** Pin the target's `id=` and write the reference together - they travel as a pair.
+1. **The note becomes the target of a `[[…]]` cross-reference.** Pin the target's `id=` and write the reference together - they travel as a pair. `[[…]]` is a convention NoteThink does not yet resolve: it renders as literal text, and the reader follows it by searching the file for `?id=slug`, which is why the id must not move. (Corrected 2026-09-11: this read as though NoteThink acted on the reference.)
 2. **You author one directly** (e.g. to keep a short reference slug on a long epic name - the `id=nr` pattern from the example above).
 3. **Disambiguation** - two notes share the same headline and one of them is being referenced. Give the target a distinct authored id.
 

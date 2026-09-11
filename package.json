@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.66",
+  "version": "0.3.67",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -12,10 +12,10 @@
     "url": "https://github.com/zoombuzz/notethink/issues"
   },
   "engines": {
-    "vscode": "^1.134.0",
+    "vscode": "^1.137.0",
     "node": ">=22.18.0"
   },
-  "packageManager": "pnpm@11.25.0",
+  "packageManager": "pnpm@12.3.4",
   "categories": [
     "Visualization",
     "Other"
@@ -321,7 +321,7 @@
     "buffer": "^6.0.3",
     "events": "^3.3.0",
     "https-browserify": "^1.0.0",
-    "memfs": "^4.68.2",
+    "memfs": "^4.73.0",
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",
     "stream-browserify": "^3.0.0",
@@ -331,14 +331,14 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/debug": "^4.1.13",
     "@types/mocha": "^10.0.10",
-    "@types/vscode": "^1.134.0",
+    "@types/vscode": "^1.137.0",
     "@types/webpack-env": "^1.18.8",
-    "@typescript-eslint/eslint-plugin": "^8.68.0",
-    "@typescript-eslint/parser": "^8.68.0",
+    "@typescript-eslint/eslint-plugin": "^8.70.0",
+    "@typescript-eslint/parser": "^8.70.0",
     "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-web": "^0.0.81",
     "@vscode/vsce": "^3.9.2",
@@ -346,7 +346,7 @@
     "copy-webpack-plugin": "14.0.0",
     "css-loader": "^7.1.5",
     "debug": "^4.4.3",
-    "eslint": "10.9.1",
+    "eslint": "10.10.0",
     "mdast-util-from-markdown": "^2.0.3",
     "mdast-util-frontmatter": "^2.0.1",
     "mdast-util-gfm": "^3.1.0",
@@ -356,13 +356,13 @@
     "npm-check-updates": "^23.1.0",
     "path-browserify": "^1.0.1",
     "process": "^0.11.10",
-    "sass": "^1.103.1",
+    "sass": "^1.104.0",
     "sass-loader": "^17.0.1",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.6.2",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.68.0",
-    "webpack": "^5.110.2",
+    "typescript-eslint": "^8.70.0",
+    "webpack": "^5.110.3",
     "webpack-cli": "^7.2.3"
   }
 }

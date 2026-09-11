@@ -9,9 +9,9 @@
 		"url": "https://github.com/zoombuzz/notethink.git"
 	},
 	"engines": {
-		"vscode": "^1.99.0"
+		"vscode": "^1.137.0"
 	},
-	"packageManager": "pnpm@11.25.0",
+	"packageManager": "pnpm@12.3.4",
 	"scripts": {
 		"test": "jest --config jest.config.cjs --forceExit"
 	},
@@ -30,8 +30,8 @@
 		"@babel/preset-env": "^8.0.2",
 		"@types/jest": "^30.0.0",
 		"@types/mdast": "^4.0.4",
-		"babel-jest": "^30.5.0",
-		"jest": "^30.5.0",
+		"babel-jest": "^30.5.1",
+		"jest": "^30.5.1",
 		"logform": "^2.7.0",
 		"ts-jest": "^29.4.12"
 	}

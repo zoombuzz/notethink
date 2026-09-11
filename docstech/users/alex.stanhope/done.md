@@ -5358,3 +5358,154 @@ Both were found by the same lint rollout on 2026-08-11. Each computes exactly th
     + dropping the `setParentContextId` call from the `drillIn` case fails both drill specs. The pre-change specs were run against the same break and both passed green, which is the whole finding
     + dropping it from the `drillOut` case fails the drillOut spec alone, on `Expected: "0" Received: "1"`, and correctly leaves the drillIn spec green
 + neither binding is underscored any more - both are read by an assertion
+
+
+### Upgrade NPM packages for notethink (minor/patch + pnpm 12 + lockfile refresh)
+
+A minor/patch wave across all four manifests plus the operator-approved toolchain major, pnpm 11 -> 12. No app majors this run. `@types/vscode` moved to 1.137.0 with `engines.vscode` raised to match, and taking both together on every wave is now a standing rule.
+
++ ncu, root: 9 items, run with `--target minor --cooldown 24h` and a command-line `--reject @types/vscode`, a hold lifted later in the wave (below)
+  + `@playwright/test` ^1.63.0, `@typescript-eslint/*` and `typescript-eslint` ^8.70.0, `eslint` 10.10.0, `memfs` ^4.73.0
+  + `sass` ^1.104.0, `webpack` ^5.110.3, `pnpm` 11.26.0
+  + `memfs` 4.75.0 was withheld by the cooldown
++ ncu, `client/extension`: `babel-jest` and `jest` ^30.5.1, `pnpm` 11.26.0
++ ncu, `client/webview`: 11 items
+  + `@testing-library/user-event` ^14.6.7, `@types/node` ^26.5.1, `@types/react` and `@types/react-dom` ^19.3.0
+  + `jest` and `jest-environment-jsdom` ^30.5.1, `postcss` ^8.5.28, `postcss-selector-parser` ^7.1.6
+  + `react` and `react-dom` ^19.3.0, `pnpm` 11.26.0
++ ncu, notethink-views: `@types/react` ^19.3.0, `babel-jest`, `jest` and `jest-environment-jsdom` ^30.5.1, `pnpm` 11.26.0
++ all four runs logged `Using config file .../notethink/.ncurc.json`, passed as `--configFilePath` for the three nested roots since they carry none
++ baseline on pnpm 11.26.0 before the toolchain move: install clean, lint 0 errors, jest green apart from the wall-clock test noted under verified
+
+pnpm 12.3.4, taken through ncu and confirmed running.
+
++ `ncu --target latest -f pnpm --cooldown 24h` wrote `pnpm@12.3.4` into all four `packageManager` fields
+  + `pnpm --version` in the repo reports 12.3.4, and every install below ends "using pnpm v12.3.4"
++ breaking-change audit
+  + every `pnpm-workspace.yaml` carries only `allowBuilds`, which pnpm 12 reads, so no key was removed. There was no `ERR_PNPM_UNRECOGNIZED_WORKSPACE_SETTINGS` and no unapproved-build error
+  + no `--frozen-lockfile false` form in any script or workflow, and there is no Dockerfile in this repo
+  + a throwaway manifest showed pnpm 12 still ignores the package.json `pnpm` field with a warning. The workspace files' comments about pnpm 11 behaviour are still accurate, so they were left alone
++ pin sites: the four `packageManager` fields and nothing else
+  + `publish.yml:41` and `release.yml:27` run `pnpm/action-setup@v4` with no `version` input, so CI reads `packageManager` and needed no edit
++ pnpm 12 writes a leading YAML document into every lockfile, recording `packageManagerDependencies`
+  + that is `pnpm@12.3.4` plus its eight `@pnpm/exe.*` platform binaries, with integrity hashes. It accounts for most of the "entered" counts below and is expected diff noise
++ downstream, inferred rather than run: notegit's `service.nextjs.dulcet.Dockerfile` `notethink-source` stage installs this repo through corepack, which honours `packageManager`. It moves to pnpm 12 when `notethink.pin` is bumped past this commit
+
+`@types/vscode` 1.137.0, with `engines.vscode` raised to `^1.137.0`.
+
++ the wave first held `@types/vscode` at an exact 1.134.0, because taking 1.137.0 means raising `engines.vscode` in the same commit and that raise had not been approved
++ **operator decision 2026-09-11: take it, and make it a standing rule.** Every dependency wave takes the latest `@types/vscode` and raises `engines.vscode` to match, with no hold and no question
+  + recorded in `CODING_STANDARDS.md` > `@types/vscode` must not exceed `engines.vscode`, which previously offered "raise `engines.vscode` or pin `@types/vscode` back down" as equal choices. The pin-down option is gone; the invariant that the types never exceed engines stays
+  + that one-line rule edit is already in git: it was swept into the docs checkpoint commit `0bee557` along with the standards pass's own edits, so this wave's commit does not carry it
+  + `AGENTS.md` and `AUTHORING_GUIDE.md` did not restate the old choice, so nothing else needed changing
++ the exact pin was put back to its HEAD caret, then `ncu -f @types/vscode --target minor --cooldown 24h` took it to `^1.137.0`. 1.137.0 was published 2026-09-09 16:05Z, well past the cooldown
++ `engines.vscode` is `^1.137.0` in the root, and in `client/extension/package.json`, raised from `^1.99.0`
+  + vsce never reads the nested one, and it had sat below the root's floor for several waves. It moves with the root now so the two cannot drift
++ the cost, accepted by the operator: users below VS Code 1.137 can no longer install the extension, and the minimum supported version tracks the current release by choice
++ the install changed only `@types/vscode`'s own entries: pnpm reported `+1 -1` with one package resolved, the root lockfile's line count against HEAD grew by exactly 4/4 (version, package key, resolution, snapshot key), and the three nested lockfiles are byte-unchanged
++ vsce's own `validateVSCodeTypesCompatibility` from `@vscode/vsce/out/validation.js`, called directly on the manifest, passes `^1.137.0` against `^1.137.0`, and throws on a `^1.134.0` engines control, so the check is live
++ downstream: dulcet's `notethink-engines` vscode-patch overwrites the copied `engines.vscode` with `^1.91.0` unconditionally, whatever the source says. Run against a copy of this manifest it rewrote `^1.137.0` to `^1.91.0` and its `verify` passed, so the bundled VSCodium 1.121 still loads it. The types bump changes no runtime code, so no API newer than before is called
++ re-verified after the change: lint 0 errors and 5 warnings with all three tsc projects clean against the 1.137 types, jest 1993 green, `build-and-rollup` clean, frozen install passing on the root and `client/extension`
+
+Regeneration: all four lockfiles, under pnpm 12.
+
++ both lockfiles and the whole `node_modules` tree were deleted for all four roots before a single root install, whose postinstall cascaded the three nested installs
++ gated on the diff, lines added/removed: root 515/342, extension 450/343, webview 604/487, notethink-views 669/568
++ no manifest range moved: each package.json diff against HEAD was exactly the ncu edits, the temporary `@types/vscode` pin-down and the version bump
++ `install --frozen-lockfile --ignore-scripts` passes on all four roots in place under 12.3.4
+  + it also passes from scratch, in copies of each root with `CI=true` and an empty `node_modules`
+  + those runs print "verified Nm ago", reusing the regeneration's supply-chain verification rather than repeating it, so the registry check below covers the same ground independently
+
+Transitive delta: 128 newly-taken versions.
+
++ root: 52 changed, 17 entered, 2 left, entries 743 -> 759
++ `client/extension`: 48 changed, 9 entered, 0 left, entries 520 -> 530
++ `client/webview`: 66 changed, 9 entered, 0 left, entries 640 -> 649
++ notethink-views: 60 changed, 9 entered, 0 left, entries 868 -> 877
++ the 9 entered in each root are pnpm 12's own `packageManagerDependencies`
+  + the root's other 8 are the `cacheable` / `hookified` / `qified` / `@keyv/*` stack under eslint 10.10.0's new `file-entry-cache`
++ majors crossed, each traced to its parent
+  + `file-entry-cache` 8 -> 11, `flat-cache` 4 -> 6, `keyv` 4 -> 5: eslint 10.10.0 itself declares `file-entry-cache` `11.1.5 || >11.1.6 <12`. Only `eslint --cache` reaches it, and lint does not pass that flag
+  + `scheduler` 0.27 -> 0.28: react-dom 19.3.0 declares `^0.28.0`, exercised by jest and the webview bundle
+  + `ajv-formats` 2 -> 3: `schema-utils` moved 4.3.3 -> 4.4.0 inside its parents' range, exercised by the webpack build
+  + `@antfu/install-pkg` 1 -> 2: `@iconify/utils` moved 3.1.4 -> 3.1.7 under mermaid. It is mermaid's node-only icon auto-install path
+  + `@types/node` 26.4.0 -> 22.20.2 and `undici-types` 8 -> 6, in root, extension and notethink-views
++ **the `@types/node` jump is a downgrade caused upstream, not by this wave**
+  + the `latest` dist-tag has pointed at 22.20.2 since 2026-09-09 18:10Z, published 80 seconds after 26.5.1, which is tagged `ts5.6` to `ts6.0` only
+  + pnpm resolves a loose range such as jest-worker@27's `@types/node: '*'` to the latest tag, so a fresh resolve lands on 22.20.2
+  + types only: all three tsc projects and jest are green, and the webview's direct `^26.5.1` is unaffected
+  + not pinned. It corrects itself at the first regeneration after upstream retags `latest`
++ `fsevents@2.3.2` left the root because `playwright@1.63.0` dropped it from its optional dependencies
++ all 128 newly-taken versions were queried against the registry: none carries a `deprecated` field and none is younger than 24h
++ install deprecation warnings named `glob@10.5.0`, `prebuild-install@7.1.3`, `whatwg-encoding@3.1.1` and `stable@0.1.8`
+  + the same four at the same versions as the last wave, so none is a version this wave took
++ `pnpm peers check` flags `@babel/core` 8.0.1 against `ts-jest@29.4.12` (`<8`) and jest's babel syntax plugins (`^7`) in `client/extension` and notethink-views
+  + babel 8 predates this wave and the 11.26.0 install printed the same warning. The jest suites that run through that stack are green
+
++ verified
+  + lint: 0 errors, 5 warnings (one in `extension.ts`, two in `useAutoIntegration.test.ts`, two in playwright specs), all three tsc projects clean
+  + jest: 1993 green across 89 suites (307 extension, 142 webview, 1544 notethink-views), matching HEAD's recorded 1993
+  + `build-and-rollup` clean under webpack 5.110.3, the same step CI runs, and the webview bundle carries react 19.3.0
+  + playwright, run centrally after the wave: 154 passed and 1 flaky, the flake being `kanban-drag-collapse.spec.ts`, fixed below. A later full run beside two other projects' suites failed `kanban-autoscroll-direction.spec.ts` on both attempts, also fixed below
+  + playwright after both fixes: 155 of 155 with `--workers=8 --retries=0`
+  + not covered: `vsce package` and a real CI run
++ `parseops.test.ts` "parses a 1500-line file" asserts under 400ms of wall clock
+  + on the 11.26.0 baseline it failed three times, at 550, 630 and 974ms, while the machine's load average sat at 35-43 on 16 threads from parallel wave workers
+  + it passed run alone, and passed inside the full suite on the final pnpm 12 tree
+  + at that point only `jest` / `babel-jest` had moved in `client/extension`; the parse code and its mdast dependencies had not changed, so this was CPU contention, not an upgrade regression
+
+`kanban-drag-collapse.spec.ts` was a race in the spec, not a product bug, and it predates this wave.
+
++ the symptom: 2 of 5 runs failed at the cycle-1 assertion "a finished FLIP move must not hold a transform", with all four gliding cards reading a near-identity matrix such as `matrix(1.00013, 0.0002...`
++ the cause, measured with a temporary probe in the spec reading each card's animations
+  + the undo's passive glide schedules four FLIP moves. They start 50-100ms after the update message, once the render lands and one frame passes, and each runs for 350ms
+  + so a move ends roughly 400-450ms after the message, while the spec read the DOM after a fixed `waitForTimeout(450)`. Passing runs read 10-35ms after the moves had ended, when only the lift class's 200ms box-shadow CSS transition was still running and every transform was `none`
+  + a failing run read the Web Animation with `currentTime` at 349.99ms of 350, still `running`, in the last frames of its ease-out, which is exactly the near-identity matrix reported
+  + the first runs of a batch fail most often because the first renders are the slowest
++ not a product bug: every run that read after the move ended found `transform: none`. `moveTiming()` uses `fill: 'backwards'`, so a finished move releases the transform, which is the guarantee the assertion exists to protect
++ not this wave: the same spec, run against a copy of the repo reinstalled from HEAD's manifests and lockfiles (react 19.2.8, pnpm 11.25.0, rebuilt bundle), failed 1 of 6 in the same way, with a move at `currentTime` 349.99. The react 19.3.0 / scheduler 0.28 tree measured the same 400-450ms dispatch-to-finish window
++ the fix, spec only: the FLIP probe is armed in `beforeEach` and cleared before the undo, and the spec now waits for the glide to settle rather than for a fixed time
+  + settled means the probe recorded at least one move, no card still carries the `flipping` class (removed in the move's `onfinish`), and no Web Animation on a card is running or pending
+  + CSS transitions are ignored. The wait also proves a glide really happened, so the transform check can no longer pass vacuously
++ the fix does not mask the real bug: the fixed spec, run against a scratch bundle with `moveTiming()` switched back to `fill: 'both'`, failed 2 of 2 at the same assertion with the held `matrix(1, 0, 0, 1, 0, 0)`, not by timing out
++ verified: 10 of 10 with `--repeat-each=10 --retries=0 --workers=1`, then 10 of 10 again across 4 parallel workers. Lint and jest unchanged, and no source changed, so the bundle needs no rebuild
+
+`kanban-autoscroll-direction.spec.ts` read the browser clamping scrollLeft as a backward scroll. A spec fault that predates this wave, not a product bug.
+
++ the symptom: under load, "the drop scrolled the board backward toward the start" failed with the post-drop offset at 147 every time, whatever the offset during the drag had been (185 and 266 on the two attempts)
++ the cause, measured by logging the board's scrollLeft, scrollWidth and clientWidth before the drop and on every frame after it
+  + the dragged card is backlog's only card, so dropping it elsewhere empties the backlog column and the column is removed
+  + the board narrows from 990px to 847px inside the 700px viewport, so the largest offset falls from 290 to 147. The browser clamps scrollLeft to 147 in the same frame, with a single scroll event and nothing else moving it
+  + the drag's auto-scroll keeps running until the release. On a loaded machine each poll round takes longer, so the board scrolls past 147 before the drop, and the clamp then reads as a backward move
+  + the old assertion also compared against the offset at the poll's first passing read, not the offset at release, so in isolation it happened to compare against a lower number and passed
++ under 16 workers, 30 of 32 runs released above 147, and every one of them landed exactly on 147
++ not a product bug: no code scrolls the board on drop. Every sample after the drop sits at the lower of the release offset and the new maximum
++ not this wave: the original spec, run against a copy of the repo reinstalled from HEAD's manifests and lockfiles (react 19.2.8, pnpm 11.25.0), failed 24 of 32 under the same 16-worker load, every one at 147
++ the fix, spec only: the spec reads the offset immediately before the release, and after the drop it requires the offset to hold at the lower of that offset and the narrowed board's largest offset, less the existing 24px tolerance. The failure message prints both numbers
++ the fix does not mask a real snap-back: with a scroll to 0 injected after the drop in a scratch copy, the fixed spec failed 8 of 8
++ verified: 32 of 32 with `--repeat-each=32 --retries=0 --workers=16`, where 30 of the runs went through the clamp, plus 5 of 5 serially and the full suite at 155 of 155 on 8 workers. Lint unchanged
+
+Pins in effect after this wave (snapshot):
+- `engines.vscode` @^1.137.0 in the root and `client/extension` - a paired constraint, not a pin. By standing operator decision (2026-09-11) every wave takes the latest `@types/vscode` and raises this to match in the same change; never hold the types down and never ask. See `CODING_STANDARDS.md` > `@types/vscode` must not exceed `engines.vscode`
+- `typescript` @^6.0.3 in the root and notethink-views - structural - carried forward and re-verified today: `@typescript-eslint/parser@8.70.0` still peers `typescript >=4.8.4 <6.1.0`, and `ts-jest@29.4.12`, still its latest, peers `>=4.3 <7`, while TypeScript latest is 7.0.2. `--target minor` holds it without a reject entry. Clear-condition unchanged: both peer ranges admit 7.x
+- `vscode-languageclient` @10.1.1, `@eslint/js` @10.0.1, `copy-webpack-plugin` @14.0.0, `@hello-pangea/dnd` @18.0.1 - pre-existing exact pins. Each still equals its `latest` tag, so none withholds anything
+- `eslint` @10.10.0 exact - not a hold. notethink is the fleet's eslint 10 canary by operator decision (workspace `AGENTS.md`); it took 10.10.0 cleanly while every other project stays on 9.39.4
+- `allowBuilds: false` for `@parcel/watcher`, `@playwright/browser-chromium`, `@vscode/vsce-sign` and `keytar` in the root, and for `@parcel/watcher` and `unrs-resolver` in each nested root - structural, unchanged, honoured by pnpm 12. `@playwright/browser-chromium` must stay false permanently: its ~167MB Chrome download hangs CI to the 6h timeout
+- `memfs` @4.73.0 - not a pin, a cooldown ceiling. 4.75.0 was withheld by `--cooldown 24h` and clears by itself next wave
+- `@types/node` @22.20.2 transitive - not a pin, recorded so the next wave recognises it as the upstream dist-tag artefact described above. Clears when upstream retags `latest` to 26.x and the lockfiles are regenerated
+
+Unpinned this wave: both cooldown ceilings from the last snapshot cleared as predicted, `@typescript-eslint/*` 8.68.0 -> 8.70.0 (past the withheld 8.69.0) and `jest` / `babel-jest` / `jest-environment-jsdom` 30.5.0 -> 30.5.1. `@types/vscode` 1.134.0 -> 1.137.0 with `engines.vscode` raised to `^1.137.0`, a hold that existed only within this wave and was lifted by the operator's standing decision, now written into `CODING_STANDARDS.md`. No structural pin's clear-condition holds, and no new pin was added.
+
++ [X] run npm-check-updates across all four manifests
++ [X] revisit prior pins (try to unpin transient holds recorded in the last done.md story)
++ [X] move pnpm to 12 across all four manifests
++ [X] pnpm install
++ [X] regenerate all four lockfiles and verify no manifest range moved
++ [X] verify lint passes
++ [X] verify jest tests pass
++ [X] take @types/vscode 1.137.0 and raise engines.vscode to ^1.137.0 in the root and client/extension
++ [X] record the standing take-and-raise rule in CODING_STANDARDS.md
++ [X] fix the kanban-drag-collapse spec race by waiting for the FLIP glide to settle
++ [X] fix the kanban-autoscroll-direction spec so a scroll clamped by a narrowed board is not read as a snap-back
++ commit message draft
+  + notethink 0.3.67: minor/patch wave and pnpm 12.3.4 across all four manifests, lockfiles regenerated, taking eslint 10.10.0, react 19.3 and jest 30.5.1; @types/vscode 1.137 with engines.vscode raised to ^1.137.0; two load-sensitive kanban specs de-flaked; tests 1993 jest, 155 playwright

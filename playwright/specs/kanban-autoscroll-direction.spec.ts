@@ -45,6 +45,14 @@ test.describe('Kanban drag auto-scroll follows the drag direction', () => {
         });
     }
 
+    // the board's scroll offset together with the largest offset its current width allows
+    async function getScrollMetrics(page: Page): Promise<{ scroll_left: number; max_scroll_left: number }> {
+        return page.evaluate(() => {
+            const el = document.querySelector<HTMLElement>('[data-flip-root]');
+            return el ? { scroll_left: el.scrollLeft, max_scroll_left: el.scrollWidth - el.clientWidth } : { scroll_left: 0, max_scroll_left: 0 };
+        });
+    }
+
     test('holding a drag near the far edge auto-scrolls the board toward the drag, and the drop does not scroll it back', async ({ page }) => {
         // the wide fixture's fixed-min-width columns overflow the default viewport, creating a horizontal scroll axis
         await setupKanbanView(page);
@@ -97,13 +105,24 @@ test.describe('Kanban drag auto-scroll follows the drag direction', () => {
         // the scroll moved TOWARD the far edge the drag is held against, not away from it
         expect(scrolled_during_drag).toBeGreaterThan(initial_scroll);
 
+        // the fluid scroller keeps ticking until the release, so read the offset the drop actually starts from
+        const scroll_at_release = await getScrollLeft(page);
         // drop where the pointer is holding
         await page.mouse.up();
         // wait-for the drop to settle: the clone leaves the portal host
         await expect(clone).toHaveCount(0, { timeout: 3000 });
 
-        // the drop must not scroll the board backward toward its origin - the auto-scrolled offset holds
-        const scroll_after_drop = await getScrollLeft(page);
-        expect(scroll_after_drop, 'the drop scrolled the board backward toward the start').toBeGreaterThanOrEqual(scrolled_during_drag - BACKWARD_TOLERANCE_PX);
+        /*
+         * The drop must not scroll the board backward toward its origin, but the board is allowed to get narrower. The
+         * dragged card is backlog's only card, so dropping it elsewhere empties the backlog column, the column is
+         * removed, and the board loses a column's width, so the largest offset it allows falls by the same amount.
+         * The browser clamps scrollLeft to that new maximum. A drag held long enough to scroll past it, as it is on a
+         * loaded machine where every poll round takes longer, then reads as a backward move although nothing scrolled
+         * the board. So the offset must hold at whichever is lower, the offset at release or the largest offset the
+         * narrowed board allows.
+         */
+        const { scroll_left: scroll_after_drop, max_scroll_left: max_after_drop } = await getScrollMetrics(page);
+        const expected_floor = Math.min(scroll_at_release, max_after_drop) - BACKWARD_TOLERANCE_PX;
+        expect(scroll_after_drop, `the drop scrolled the board backward toward the start (released at ${scroll_at_release}, largest offset after the drop ${max_after_drop})`).toBeGreaterThanOrEqual(expected_floor);
     });
 });

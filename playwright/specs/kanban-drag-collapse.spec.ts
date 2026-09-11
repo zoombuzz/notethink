@@ -23,6 +23,11 @@ const REL_B = 'beta/docstech/board.md';
 // this repro drags a little slower either side of the release than the shared defaults, to give the collapse room to show
 const REPRO_DRAG_SETTLE = { pre_release_settle_ms: 120, post_release_settle_ms: 450 };
 
+interface ProbeWindow {
+    __NOTETHINK_ANIM_PROBE__?: boolean;
+    __notethinkAnimationEvents?: Array<{ kind: string; id?: string }>;
+}
+
 function sha16(s: string): string { return crypto.createHash('sha256').update(s).digest('hex').slice(0, 16); }
 
 async function setupFolderKanban(page: Page): Promise<void> {
@@ -66,6 +71,35 @@ function changesForDoc(edit: Record<string, unknown> | undefined, doc_path: stri
     const dp = edit.docPath as string | undefined;
     if (dp === undefined || dp === doc_path) { return (edit.changes as Array<{ from: number; to?: number; insert: string }>) || []; }
     return [];
+}
+
+// drop every buffered FLIP probe event so the next passive update's schedule is read on its own
+async function clearAnimationEvents(page: Page): Promise<void> {
+    await page.evaluate(() => { (window as unknown as ProbeWindow).__notethinkAnimationEvents = []; });
+}
+
+/*
+ * Wait for the passive glide an undo triggers to run to its end, instead of guessing a settle time. The FLIP layer
+ * inverts each card in the layout effect of the render that lands the change, plays the move one frame later for
+ * KANBAN_ANIMATION_TRANSITION_MAX_MS (350ms), and drops the card's lift class in the move's onfinish. A move therefore
+ * ends roughly 400-450ms after the message, so a fixed wait of that length reads it in flight whenever the render is
+ * slow, and a near-identity transform from the last frames of the move reads as a card still holding a transform.
+ * Settled means the probe recorded at least one move, no card still carries the flipping class, and no Web Animation
+ * on a card is running or pending. CSS transitions and animations are ignored: the lift's box-shadow fades out over
+ * 200ms after the move ends and never touches transform. A move that ends but keeps a forwards fill still settles
+ * here, so the transform assertion that follows goes on catching that regression.
+ */
+async function waitForGlideToSettle(page: Page): Promise<void> {
+    await page.waitForFunction(() => {
+        const events = (window as unknown as ProbeWindow).__notethinkAnimationEvents ?? [];
+        if (!events.some((e) => e.kind === 'move')) { return false; }
+        const cards = [...document.querySelectorAll('[data-rfd-draggable-id]')] as HTMLElement[];
+        return cards.every((e) => {
+            const lifted = [...e.classList].some((c) => /flipping/i.test(c));
+            const playing = e.getAnimations().some((a) => !(a instanceof CSSTransition) && !(a instanceof CSSAnimation) && (a.playState === 'running' || a.pending));
+            return !lifted && !playing;
+        });
+    }, undefined, { timeout: 5000 });
 }
 
 // dump the FLIP/dnd DOM state that a passive card move can leave behind and that the next drag trips over
@@ -122,6 +156,8 @@ async function liftAndMeasure(page: Page, handle: Locator): Promise<{ rest: Reco
 
 test.describe('kanban drag collapse repro', () => {
     test.beforeEach(async ({ page }) => {
+        // arm the FLIP probe before the bundle runs, so the moves each undo schedules are recorded
+        await page.addInitScript(() => { (window as unknown as ProbeWindow).__NOTETHINK_ANIM_PROBE__ = true; });
         await page.goto('/playwright/harness/index.html');
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
     });
@@ -145,7 +181,9 @@ test.describe('kanban drag collapse repro', () => {
             const newA = applyChangesToText(A0, changesA);
             // reconcile: extension echoes the written doc (card now in done), then undo: editor Ctrl+Z reverts the file (card glides back)
             await reinjectDoc(page, idA, PATH_A, REL_A, newA);
+            await clearAnimationEvents(page);
             await reinjectDoc(page, idA, PATH_A, REL_A, A0);
+            await waitForGlideToSettle(page);
             // no finished FLIP animation may keep owning a card's transform after a glide - that is what stalls the next drag
             const flip = await dumpFlipState(page) as { withTransform: unknown[]; fixed: number };
             expect(flip.withTransform, `cycle ${cycle}: a finished FLIP move must not hold a transform`).toHaveLength(0);

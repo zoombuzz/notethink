@@ -148,6 +148,8 @@ function setWorkspaceRoots(roots: string[] | undefined): void {
 
 const defaultDocPath = '/workspace/initial.md';
 const defaultDocText = '# Initial Document\n\nSome content here.';
+// clearAllMocks keeps implementations, so without restoring this one test's settings stub leaks into every later test
+const defaultGetConfiguration = (vscode.workspace.getConfiguration as jest.Mock).getMockImplementation();
 
 describe('NotethinkEditorProvider', () => {
 	let provider: NotethinkEditorProvider;
@@ -156,6 +158,7 @@ describe('NotethinkEditorProvider', () => {
 
 	beforeEach(async () => {
 		jest.clearAllMocks();
+		(vscode.workspace.getConfiguration as jest.Mock).mockImplementation(defaultGetConfiguration);
 		debugSpy = jest.spyOn(console, 'debug').mockImplementation(() => {});
 
 		// set up a visible editor for the initial document so sendCurrentSelection finds it
@@ -1064,6 +1067,59 @@ describe('NotethinkEditorProvider', () => {
 			// fast path: no per-file openTextDocument calls beyond the no-ops; the aggregate payload is sent without reloading
 			const aggregate = panelHelper.postedMessages.find(m => m.type === 'update' && (m as Record<string, unknown>).aggregate_total_discovered !== undefined);
 			expect(aggregate).toBeDefined();
+		});
+
+		describe('filters gate every route into the aggregate, not just discovery', () => {
+			const todo_path = '/workspace/oma/docstech/users/alex/todo.md';
+			const done_path = '/workspace/oma/docstech/users/alex/done.md';
+
+			// enter folder mode at the workspace root and wait out the bulk load, so assertions see only what the next event posts
+			const enterFolderAndSettle = async (filters: MessageRecord): Promise<void> => {
+				(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(todo_path)]);
+				(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => mockTextDocument(`# story in ${u.path}`, u.path));
+				panelHelper.postedMessages.length = 0;
+				await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace', ...filters });
+				while (!panelHelper.postedMessages.some(m => m.type === 'pendingChange' && m.on === false)) { await flush(); }
+			};
+			const mergedPaths = (): string[] => getUpdates(panelHelper.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+			const activateEditorOn = async (doc_path: string): Promise<void> => {
+				const editor = mockTextEditor(mockTextDocument('# Done\n\n### shipped story', doc_path));
+				(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
+				const onActiveEditor: (editor: MockTextEditor) => Promise<void> = (vscode.window.onDidChangeActiveTextEditor as jest.Mock).mock.calls[0][0];
+				panelHelper.postedMessages.length = 0;
+				await onActiveEditor(editor);
+			};
+
+			it('keeps an active editor doc the include filter rejects out of the aggregate, surfacing it on the activeEditorDoc channel', async () => {
+				await enterFolderAndSettle({ include: '**/{todo}.md', exclude: '' });
+				await activateEditorOn(done_path);
+				expect(mergedPaths()).not.toContain(done_path);
+				expect(findByType(panelHelper.postedMessages, 'activeEditorDoc')).toMatchObject({ doc: { path: done_path } });
+			});
+
+			it('keeps an active editor doc the exclude filter rejects out of the aggregate', async () => {
+				await enterFolderAndSettle({ include: '**/*.md', exclude: '**/done.md' });
+				await activateEditorOn(done_path);
+				expect(mergedPaths()).not.toContain(done_path);
+			});
+
+			it('still merges an active editor doc both filters admit', async () => {
+				await enterFolderAndSettle({ include: '**/{todo}.md', exclude: '' });
+				await activateEditorOn(todo_path);
+				expect(mergedPaths()).toContain(todo_path);
+			});
+
+			it('loads nothing for a folder watcher event on a file the include filter rejects', async () => {
+				await enterFolderAndSettle({ include: '**/{todo}.md', exclude: '' });
+				const folder_watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+				const on_change_cb = folder_watcher.onDidChange.mock.calls[0][0];
+				(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode('# Done\n\n### shipped story'));
+				panelHelper.postedMessages.length = 0;
+				await on_change_cb(Uri.file(done_path));
+				expect(mergedPaths()).not.toContain(done_path);
+			});
 		});
 	});
 

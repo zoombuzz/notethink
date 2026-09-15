@@ -18,7 +18,7 @@ interface UseAutoIntegrationDeps {
     setViewManagedState: (updates: Array<Record<string, unknown>>) => void;
 }
 
-// the opened doc whose H1 declares the integration intent: prefer the active-editor doc - found in the folder aggregate when in-scope, else delivered on the dedicated active_doc channel when the active editor sits OUTSIDE the folder (sendDoc drops it from the aggregate) - then fall back to the most-recently-sent doc (the extension's notion of active). without the active_doc fallback, switching the editor to an out-of-scope file would resolve back to a folder member and the board could never exit; in current_file mode the active doc is always in the map, in folder mode it follows whichever file the editor is in
+// the opened doc whose H1 declares the integration intent: prefer the active-editor doc - found in the folder aggregate when in-scope, else delivered on the dedicated active_doc channel when the active editor sits OUTSIDE the folder or the folder filters reject its file (sendDoc drops it from the aggregate) - then fall back to the most-recently-sent doc (the extension's notion of active). without the active_doc fallback, switching the editor to an out-of-scope file would resolve back to a folder member and the board could never exit; in current_file mode the active doc is always in the map, in folder mode it follows whichever file the editor is in
 function pickOpenedDoc(docs: HashMapOf<Doc> | undefined, active_editor_doc_path: string | undefined, active_doc: Doc | undefined): Doc | undefined {
     if (active_editor_doc_path) {
         const match = docs ? Object.values(docs).find(d => d.path === active_editor_doc_path) : undefined;

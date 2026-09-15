@@ -178,8 +178,8 @@ export class PanelSession {
 	private sendDoc(doc: Doc): void {
 		const timestamped = { ...doc, updateSentAt: new Date().toISOString() };
 		debug('sendDoc %s', doc.path);
-		// in folder mode only docs inside integration_path go into the merged view; the active editor's out-of-scope doc is still surfaced via sendActiveEditorDoc so the webview's auto-integration reconcile can follow the editor out of the folder, and selection updates flow through sendSelection separately
-		if (this.integration_path && !this.isWithinIntegrationPath(doc.path)) {
+		// in folder mode only docs inside integration_path that pass both filters go into the merged view; the active editor's rejected doc is still surfaced via sendActiveEditorDoc so the webview's auto-integration reconcile can follow the editor out of the folder, and selection updates flow through sendSelection separately
+		if (this.integration_path && (!this.isWithinIntegrationPath(doc.path) || !this.isAdmittedByIntegrationFilters(doc.path))) {
 			debug('sendDoc: skipping out-of-integration doc %s', doc.path);
 			if (doc.path === this.active_path) { this.sendActiveEditorDoc(timestamped); }
 			return;
@@ -755,10 +755,25 @@ export class PanelSession {
 		return root_paths.find(root_path => isPathWithin(absolute_path, [root_path])) ?? this.workspace_root;
 	}
 
-	// check whether a discovered or watcher-delivered URI is excluded by the current integration_exclude. Empty exclude => never excluded
-	private isExcludedByIntegrationFilter(uri: vscode.Uri): boolean {
+	// check whether a discovered, watcher-delivered or active-editor path is excluded by the current integration_exclude. Empty exclude => never excluded
+	private isExcludedByIntegrationFilter(target_path: string): boolean {
 		if (this.integration_exclude.trim() === '') { return false; }
-		return !globMatches(this.toWorkspaceRelative(uri.path), '', this.integration_exclude);
+		return !globMatches(this.toWorkspaceRelative(target_path), '', this.integration_exclude);
+	}
+
+	/**
+	 * whether a path passes both folder-mode filters, and so may join integration_docs. Discovery is
+	 * already scoped by the include pattern, but the active editor (sendDoc) and the folder watcher
+	 * reach the aggregate by other routes, and each must apply the same two filters, or a file the
+	 * user filtered out joins the board the moment it is opened or changed.
+	 *
+	 * The include glob is matched relative to integration_path, mirroring the RelativePattern that
+	 * findFiles and the readDirectory walk use; the exclude is matched workspace-relative.
+	 */
+	private isAdmittedByIntegrationFilters(target_path: string): boolean {
+		if (!this.integration_path) { return false; }
+		if (!globMatches(path.posix.relative(this.integration_path, target_path), this.integration_include, '')) { return false; }
+		return !this.isExcludedByIntegrationFilter(target_path);
 	}
 
 	// check whether a directory's whole subtree is excluded, by probing a representative child file against the same workspace-relative gate
@@ -846,7 +861,7 @@ export class PanelSession {
 			? await this.discoverViaFindFiles(pattern)
 			: await this.discoverViaReadDirectoryWalk(base_uri, folder_path);
 		// defense in depth: post-filter against the same exclude using the host-side globMatches helper. findFiles' brace-expanded exclude has had edge cases bite us in practice (a "vendored" segment leaking through despite **/{...,vendored}/**), and the file-system watcher armed below has no exclude at all - applying the filter here AND in loadFolderDoc gives both paths one deterministic gate
-		const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri));
+		const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri.path));
 		// deterministic order so the capped subset is stable across reloads
 		const sorted_uris = [...filtered].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 		// store on the session so later watcher-driven incremental updates re-send the same totals (reproduces the original closure-capture behaviour)
@@ -926,12 +941,12 @@ export class PanelSession {
 	 */
 	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean } = {}): Promise<void> {
 		try {
-			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them - when the user descends folders (e.g. pill click from in_development → carbon), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the isExcludedByIntegrationFilter check below never rejects a sibling project (nothing in the exclude list names it, so its path passes the filter cleanly)
+			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them - when the user descends folders (e.g. pill click from in_development → carbon), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the isAdmittedByIntegrationFilters check below does not reliably reject a sibling project (its folder-relative `../` path still matches a `**/` include, and nothing in the exclude list names it)
 			if (!this.isWithinIntegrationPath(uri.path)) {
 				return;
 			}
-			// the file system watcher armed in armFolderWatcher takes only an include pattern - createFileSystemWatcher has no exclude argument - so a vendored or otherwise-excluded path inside integration_path can fire onDidCreate/onDidChange and reach this loader. Gate every entry here against integration_exclude so the watcher cannot leak excluded files into integration_docs
-			if (this.isExcludedByIntegrationFilter(uri)) {
+			// createFileSystemWatcher has no exclude argument and matches its include pattern by its own rules, so gate every entry here against both integration filters or the watcher can leak a filtered-out file into integration_docs
+			if (!this.isAdmittedByIntegrationFilters(uri.path)) {
 				return;
 			}
 			// respect the cap for watcher-driven adds too: never grow a new path past MAX_AGGREGATE_FILES (re-parses of already-loaded paths still pass)

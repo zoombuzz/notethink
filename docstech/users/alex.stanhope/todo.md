@@ -1,6 +1,25 @@
 # Todo [](?nt_view=kanban)
 
 
+### Remove blank lines between statements [](?id=code-layout-blank-lines&time_estimated=60)
+
++ goal: notethink's function bodies follow CODE_LAYOUT.md > Blank lines, so CODING_STANDARDS.md records no blank-line delta
++ background, measured 2026-09-14
+  + CODING_STANDARDS.md lets a blank line separate commented sections of a function body; no reason was ever recorded
+  + a scratch count of blank lines between two statements in non-test `client/` source: 268 in 53 of 143 files, 14.9 per 1000 lines
+  + siblings on the same count, per 1000 lines: calfam 2.4, zooey 1.9, aawai 1.3, ledger 1.2, dulcet 0.0
+  + the count is a heuristic (a statement-ending line, a blank, a statement-starting line); count again before editing
+  + operator decision 2026-09-14: align notethink rather than sanction the style, from lightenna-iac's docs-consolidation sign-off
++ follows workspace `AGENTS.md` > Bulk edits on a dirty tree: predict the count, do the first file by hand, then apply
++ [ ] write the rule as a jest check over `client/`, since CODE_LAYOUT.md says no eslint rule scopes to inside blocks
++ [ ] remove the blank lines, starting with one file by hand
++ [ ] run lint, jest and Playwright green
++ [ ] drop the blank-line delta from CODING_STANDARDS.md
++ acceptance criteria
+  + the check passes over `client/` with no allowlist
+  + CODING_STANDARDS.md records no blank-line delta
+
+
 ### Kanban perf harness and budgets [](?id=kanban-perf-harness)
 
 Measurement tooling that gates the whole performance cycle (stories [[dev-host-production-react]] through [[extension-parse-offload]]). Every acceptance budget below was baselined 2026-07-07 by driving the real webview bundle in the existing Playwright harness (`playwright/harness/index.html` + mocked VS Code API) with the exact wire-format messages `PanelSession` posts.

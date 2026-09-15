@@ -150,7 +150,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     const [docs_state, setDocsState] = useState<{ docs?: HashMapOf<Doc> }>({ docs: deps.initial_docs || {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [active_editor_doc_path, setActiveEditorDocPath] = useState<string | undefined>(undefined);
-    // folder mode: the active editor's doc when it sits outside integration_path, delivered on the activeEditorDoc channel (sendDoc drops it from the aggregate) so useAutoIntegration can read its declaration and exit the folder
+    // folder mode: the active editor's doc when it sits outside integration_path or the folder filters reject it, delivered on the activeEditorDoc channel (sendDoc drops it from the aggregate) so useAutoIntegration can read its declaration and exit a folder the editor has left
     const [active_doc, setActiveDoc] = useState<Doc | undefined>(undefined);
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
     const [workspace_projects, setWorkspaceProjects] = useState<string[]>([]);

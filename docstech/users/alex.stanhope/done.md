@@ -5509,3 +5509,31 @@ Unpinned this wave: both cooldown ceilings from the last snapshot cleared as pre
 + [X] fix the kanban-autoscroll-direction spec so a scroll clamped by a narrowed board is not read as a snap-back
 + commit message draft
   + notethink 0.3.67: minor/patch wave and pnpm 12.3.4 across all four manifests, lockfiles regenerated, taking eslint 10.10.0, react 19.3 and jest 30.5.1; @types/vscode 1.137 with engines.vscode raised to ^1.137.0; two load-sensitive kanban specs de-flaked; tests 1993 jest, 155 playwright
+
+
+### Folder view shows files its include filter rejects [](?id=folder-filter-admission)
+
++ problem, measured 2026-09-15: a done.md story showed on the board with the include filter set to `**/{todo}.md`
+  + the card was oma's "Settle the alert policy and measure oma against it", status done
+  + that story exists only in `oma/docstech/users/alex.stanhope/done.md:10834`
+  + the include glob compiles to `^(?:.*/)?(?:todo)\.md$`, which cannot match done.md, so discovery did not return it
++ cause: discovery honours both filters, but two other routes into the folder aggregate skip the include
+  + `PanelSession.ts` > `sendDoc` checks only folder containment, so a filtered-out file made active or edited joins the board
+  + once in, it stays until folder discovery reruns
+  + `PanelSession.ts` > `loadFolderDoc` checks the exclude but not the include, leaving the watcher's pattern as the only include gate
+  + reproduced in jest before the fix: 3 of the 4 new tests failed with done.md merged into the aggregate
+  + which route fired in the live window is unmeasured: no `notethink-extension.log` was written after done.md last changed
++ the Files drawer re-filters its list by the include glob client-side (`FilesDrawer.tsx:112`), so it never listed the leaked file
++ no PATTERNS.md entry covers path-filter admission
++ [X] add jest regressions in `notethinkEditor.test.ts` > "filters gate every route into the aggregate, not just discovery"
++ [X] gate `sendDoc` and `loadFolderDoc` on one include-and-exclude check, `isAdmittedByIntegrationFilters`
+  + a rejected active doc still travels on the `activeEditorDoc` channel
+  + `docops.ts` > `decideAutoIntegrationReconcile` keeps folder mode for an active path inside the folder, so the board does not exit
++ [X] restore the default `getConfiguration` mock before each test in `notethinkEditor.test.ts`
+  + the include gate exposed it: "retains the user filters" leaves include `**/users/**` stubbed for every later test
+  + `jest.clearAllMocks` clears calls but keeps implementations
+  + four later folder tests mocked `findFiles` outside that include, and passed only because `loadFolderDoc` ignored it
+  + measured: the tombstone test passes alone and failed in the full file
++ [X] run lint, jest and build green
+  + 1997 jest, lint 0 errors, webpack build compiled
++ manual: reload the VS Code window, open oma's done.md from the Explorer with the board filtered to `**/{todo}.md`, and confirm no done card joins the Oma column

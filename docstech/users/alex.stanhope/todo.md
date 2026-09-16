@@ -1,6 +1,110 @@
 # Todo [](?nt_view=kanban)
 
 
+### Agent activity card [](?id=agent-activity-card)
+
++ goal: a card type showing, live, which AI agents are working on a story and what each is doing
++ goal: one pane across every project, clicking through to the detail of any single activity
++ scope: Claude Code, OpenAI Codex and xAI Grok sessions
++ background: why a card type and not a view type, operator decision 2026-09-16
+  + the story is the key that joins agents, files and status, and a card is what draws one story
+  + every card type works in every view, so this card is designed for all of them, not for one
+  + CODING_STANDARDS.md > Every card type works in every view
+  + the activity join is keyed by document path and story id, neither of which depends on the view
+  + follows the sticky card restyle (`sticky-card` in done.md), which exercised the card axis first
++ background: what the extension host can do, measured 2026-09-16
+  + notethink is a web extension: `package.json:40` declares `browser` with no `main`
+  + both bundles target `webworker` (`webpack.config.js:29` and `:111`), and `fs` resolves to `memfs`
+  + so the host has no `child_process`, cannot run git and cannot listen on a port
+  + the built-in git extension is node-only, so its exported API sits in another host, out of reach
+  + `FileSystem.readFile(uri)` in `vscode.d.ts` takes no offset or length, so every read is of a whole file
+  + agent transcripts measured over 100 MB, so tailing one from the host is unavailable, not merely slow
+  + the webview CSP is `default-src 'none'` with no `connect-src` (`notethinkEditor.ts:89`)
+  + consequence: notethink reads small files that a producer writes, and never watches agents itself
+  + consequence: agents on another machine are invisible to any local read, so only a producer there can show them
++ background: what each vendor exposes, measured 2026-09-16
+  + Claude Code: a per-process session file whose `status` is `busy` or `idle`, and a full hook matrix
+  + Grok: a live session registry, a model-written `last_turn_summary`, and a full hook matrix
+  + Codex: a SQLite thread store and only `notify` and `agent-turn-complete` hooks, so no live tool call
+  + Codex exposes no permission request record at all
+  + only Claude Code has a VS Code extension installed to open a chat in
++ binding an agent to a story, operator decision 2026-09-16
+  + the agent declares which story it is on, including declaring that it is on no story
+  + a working directory names a project, never a story, so the binding cannot come from cwd
+  + file inference is rejected as the binding: matching write calls to file mtimes hit 9 of 12 on a real repo
+  + the misses were files written by shell commands rather than edit tools
+  + preferred declarer: a start-work skill that also sets `status=doing`
+    + it makes the `-> doing` transition structural, where today it is implicit and often missed
+    + PATTERNS.md > Making the gate structural rather than remembered
+  + an external watcher can audit declared bindings against the files a session actually touched
+  + the skill, hooks and watcher are workspace tooling outside this repo
+  + notethink depends only on a documented file contract, so without that tooling the board shows no bindings, honestly
++ card anatomy proposed in the design study, not yet agreed
+  + state owns the colour and vendor is a monospace monogram, so the only saturated mark is the one to act on
+  + one live line per agent showing its current tool call
+  + the conversation opens in a drawer rather than scrolling as bubbles on the card
+  + a pending question renders as a band on the card
+  + changed files show in two bands: uncommitted, and committed on the branch
+  + a file with no matching write call renders as unattributed, never credited to a guessed agent
++ open question: where an agent that declared no story is drawn
+  + a card draws one note (`cardregistryops.ts:11-16`), and an unbound agent has no markdown note to draw
+  + so an own lane for it is out of reach of a card type alone
+  + option: the producer writes a synthetic story note for the agent's card to attach to
+  + option: views admit cards that are not notes, a layout change every view would have to take, not one
+  + the agent declares "no story" in the binding either way; only where that renders is open
++ [ ] define and version the activity contract notethink reads
+  + its files live under `.notethink/` in the repo the agent works in, inside an open workspace folder
+  + the host finds them by a workspace-relative glob, since `workspace.fs` reads nothing outside workspace folders
+  + nothing lives under a vendor's home directory or anywhere else outside the workspace
+  + keep `.notethink/` out of git, so the contract never shows in the uncommitted files band it feeds
+  + a session binding: session id, vendor, project, story id or none, start time
+  + an event line: session id, time, kind, tool name, short argument
+  + a session digest bounded to the last N messages and tool calls, small enough to read whole
+  + working tree state in two bands, written by the producer since the host cannot run git
+  + both sides of each changed file's diff, since the host cannot produce the HEAD side
++ [ ] document the contract beside the linetag format, versioned the same way
++ [ ] add the `agent` card type as a `CARD_REGISTRY` node and a `CARD_COMPONENTS` line
++ [ ] carry activity on its own extension-to-webview message, never on `NoteProps`
+  + `NoteProps` is the mdast contract (`NoteProps.ts:146`) and stays free of agent, git and process fields
+  + join activity to a card at render, keyed by document path and story id
++ [ ] watch the contract files with a dedicated watcher, separate from the folder markdown watcher
+  + `loadFolderDoc` parses whatever it is given into a markdown doc in `integration_docs` (`PanelSession.ts:942-983`)
+  + so contract files never reach it, and `includeFilter` never widens past `**/*.md` (`constants.ts:8`)
++ [ ] render the card: state rail, agent rows, question band and file bands
++ [ ] make agent rows and file rows keyboard operable
+  + PATTERNS.md > Rows that must be clickable
++ [ ] open a file row as a two-column diff through `vscode.diff`
+  + nothing calls `vscode.diff` today
+  + `vscode.diff` needs two URIs, and the host cannot run git to produce the HEAD side
+  + take both sides from the contract, where the producer writes the HEAD copy
+  + verify first whether a `git:` scheme URI resolves from a web host, which would spare the producer that copy
+  + admit a non-markdown path only when the contract lists it and it is within the workspace
+  + keep the `.md` gate on every existing reveal and jump path (`PanelSession.ts:573`, `:1029`, `:1065`, `:1110`, `:1143`)
+  + cover it in Jest: a contract-listed `.ts` path is admitted, and a path outside the workspace is refused
++ [ ] open an agent row's chat in the vendor's own chat panel where one exists
+  + Claude Code registers `claude-vscode.editor.open`, whose first argument is a session id
+  + it is undocumented and has no stability contract, so guard the call and fall back on failure
+  + verify whether a session started in a terminal opens, or only one the extension started
++ [ ] show an agent drawer with the digest's conversation, tool calls and session facts
+  + PATTERNS.md > Bounded lists say they are bounded: the drawer states the digest's window
++ [ ] say plainly when no producer is writing, so an empty board never reads as idle agents
+  + PATTERNS.md > Empty states: fix the error path before the presentation
+  + the copy covers a producer writing outside the workspace, where the host cannot see it
++ [ ] test the card against contract fixtures in the Playwright harness, with no live agent
++ dependencies
+  + a producer that writes the contract from vendor hooks and runs git
+  + a start-work skill that writes the binding
++ acceptance criteria
+  + the agent card draws in document, line and kanban views
+  + a bound, working agent's current tool call shows on its story's card within a second of the event
+  + a question pending on an agent shows on that story's card
+  + clicking a file row opens a two-column diff in an editor column
+  + clicking a Claude Code agent row opens that session's chat, or the drawer when it cannot
+  + an agent that declared no story is never drawn on a guessed story's card
+  + the contract's own files never appear in any card's uncommitted files band
+  + with no producer writing, the board says so
+
+
 ### Remove blank lines between statements [](?id=code-layout-blank-lines&time_estimated=60)
 
 + goal: notethink's function bodies follow CODE_LAYOUT.md > Blank lines, so CODING_STANDARDS.md records no blank-line delta

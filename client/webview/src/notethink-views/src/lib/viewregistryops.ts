@@ -139,6 +139,7 @@ export const SETTING_HOMES = {
     columnOrder:                { node: 'kanban',    path: 'view.specific.kanban.columnOrder' },
     kanbanCardRatio:            { node: 'kanban',    path: 'view.specific.kanban.cardRatio' },
     kanbanAnimateTransitions:   { node: 'kanban',    path: 'view.specific.kanban.animateTransitions' },
+    kanbanDefaultCardType:      { node: 'kanban',    path: 'view.specific.kanban.defaultCardType' },
     watchUnopenedFilesInViewer: { node: NODE_GLOBAL, path: 'view.generic.watchUnopenedFilesInViewer' },
     openNewEditorIfNoneOpen:    { node: NODE_GLOBAL, path: 'view.generic.openNewEditorIfNoneOpen' },
     includeFilter:              { node: NODE_FILES,  path: 'files.includeFilter' },

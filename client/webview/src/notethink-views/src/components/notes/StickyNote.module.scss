@@ -1,10 +1,82 @@
 /*
- * Geometry for the compact card. The full card's padding is sized to hold a headline apart from the
- * body that follows it; a sticky is one row, so the same figures read as dead space above and below a
- * single line of text. This is the tighter equivalent, applied to the inner wrapper that keeps the
- * headline out of the lane layouts' direct-child rule.
+ * The sticky card: a square of paper in its project's hue, with the bottom-right corner curled over.
+ *
+ * The card element itself stays bare. It carries the focus ring as an outline, so nothing on it may clip,
+ * and it clears the lane's card surface by setting the --nt-card-* properties the lane reads, rather than
+ * out-specifying the lane's selector. The paper, its colour and the curl all live on the inner wrapper,
+ * which also keeps the headline out of the lane layouts' direct-child rule.
+ *
+ * The curl clips nothing either. The paper's own background gradient paints the corner transparent, and
+ * the flap is a pseudo-element laid over the fold line, so a line number badge hanging outside the headline
+ * is never cropped. The paper's shadow shows through the transparent corner as the shadow a lifted corner
+ * would cast.
+ *
+ * --nt-sticky-hue arrives inline from StickyNote. Paper is pale in both themes, as paper is, with dark ink;
+ * the light theme takes a paler shade still, so the project pill, drawn lighter in that theme, stays
+ * distinct from the paper it sits on.
  */
 
+.stickyNote {
+  --nt-card-background: transparent;
+  --nt-card-border-width: 0;
+  --nt-card-shadow: none;
+  --nt-card-shadow-hover: none;
+  --nt-card-shadow-lifted: none;
+
+  // room round the paper, so stickies stacked in a document stand apart; inside the card, so the focus ring keeps its geometry
+  padding: 4px;
+
+  &:hover .stickyInner {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  }
+}
+
 .stickyInner {
-  padding: 5px 12px;
+  // the curl's depth, measured square from the corner to the fold line
+  --sticky-curl: 12px;
+  --sticky-paper: hsl(var(--nt-sticky-hue) 55% 70%);
+  --sticky-paper-shade: hsl(var(--nt-sticky-hue) 48% 62%);
+  --sticky-fold: hsl(var(--nt-sticky-hue) 42% 52%);
+  --sticky-fold-light: hsl(var(--nt-sticky-hue) 50% 66%);
+
+  position: relative;
+  padding: 7px 18px 11px 12px;
+  border-radius: 2px;
+  color: #1d1f23;
+  // the lift shading is measured from the corner rather than as a share of the width, so a wide lane is not shaded end to end
+  background: linear-gradient(315deg, transparent var(--sticky-curl), var(--sticky-paper-shade) var(--sticky-curl), var(--sticky-paper) calc(var(--sticky-curl) * 5));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  transition: box-shadow 200ms ease;
+
+  // the flap: the corner folded back over the paper, darkest along the crease and catching light at its tip
+  &::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: calc(var(--sticky-curl) * 1.4142);
+    height: calc(var(--sticky-curl) * 1.4142);
+    background: linear-gradient(315deg, transparent 50%, rgba(0, 0, 0, 0.2) 50%, var(--sticky-fold) 58%, var(--sticky-fold-light) 100%);
+    border-top-left-radius: 70%;
+    pointer-events: none;
+  }
+}
+
+/*
+ * The paper sets its own headline geometry. The document view spaces full cards with a top margin on their
+ * headings (`.viewDocument .note h3`, specificity 0,2,1), which on a sticky would land inside the paper and
+ * push the title to its bottom edge. The doubled class gives this 0,3,1, so it wins by specificity rather
+ * than by whichever stylesheet happened to load last.
+ */
+.stickyNote .stickyInner.stickyInner :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+}
+
+// the classes are VS_CODE_LIGHT_THEME_CLASSES in originops.ts, the same theme signal the project pill reads
+:global(body.vscode-light) .stickyInner,
+:global(body.vscode-high-contrast-light) .stickyInner {
+  --sticky-paper: hsl(var(--nt-sticky-hue) 85% 90%);
+  --sticky-paper-shade: hsl(var(--nt-sticky-hue) 72% 84%);
+  --sticky-fold: hsl(var(--nt-sticky-hue) 58% 75%);
+  --sticky-fold-light: hsl(var(--nt-sticky-hue) 70% 86%);
 }

@@ -3,14 +3,17 @@ import {
     CARD_COMPONENTS,
     CARD_REGISTRY,
     DEFAULT_CARD_TYPE,
+    VIEW_DEFAULT_CARD_TYPE_SETTINGS,
     cardChainOf,
     cardComponentFor,
+    cardRegistryWithViewSettings,
     childCardNodes,
     defaultCardTypeForView,
     getCardNode,
     isCardDescendantOf,
     offersNewCardType,
     owningCardNodeFor,
+    renderableCardIds,
     resolveCardType,
     selectableCardIds,
     selectableCardTypes,
@@ -117,6 +120,55 @@ describe('cardregistryops', () => {
 
         it('a selection with no renderer falls through rather than dispatching to nothing', () => {
             expect(resolveCardType('photo', 'document')).toBe(DEFAULT_CARD_TYPE);
+        });
+    });
+
+    describe('a view default configured through settings', () => {
+
+        it('offers every renderable card and never auto, since auto is what the default answers', () => {
+            expect(renderableCardIds()).toEqual(['card', 'sticky']);
+            expect(renderableCardIds()).not.toContain(CARD_AUTO);
+        });
+
+        it('configures kanban through kanbanDefaultCardType', () => {
+            expect(VIEW_DEFAULT_CARD_TYPE_SETTINGS.kanban).toBe('kanbanDefaultCardType');
+        });
+
+        it('returns the built-in registry untouched when there are no settings or nothing configured', () => {
+            expect(cardRegistryWithViewSettings(undefined)).toBe(CARD_REGISTRY);
+            expect(cardRegistryWithViewSettings({ showLineNumbers: true })).toBe(CARD_REGISTRY);
+        });
+
+        it('makes auto on a kanban board resolve to the configured card', () => {
+            const registry = cardRegistryWithViewSettings({ kanbanDefaultCardType: 'sticky' });
+            expect(resolveCardType(CARD_AUTO, 'kanban', [], registry)).toBe('sticky');
+        });
+
+        it('leaves every other view on the registry default', () => {
+            const registry = cardRegistryWithViewSettings({ kanbanDefaultCardType: 'sticky' });
+            expect(resolveCardType(CARD_AUTO, 'document', [], registry)).toBe('card');
+            expect(resolveCardType(CARD_AUTO, 'line', [], registry)).toBe('card');
+        });
+
+        it('still lets a pinned card type win over the view default', () => {
+            const registry = cardRegistryWithViewSettings({ kanbanDefaultCardType: 'sticky' });
+            expect(resolveCardType('card', 'kanban', [], registry)).toBe('card');
+        });
+
+        it('passes a minted type the default configured on the view it was saved from', () => {
+            const registry = cardRegistryWithViewSettings({ kanbanDefaultCardType: 'sticky' });
+            const user_types = [{ id: 'user-kanban-by-assignee', label: 'Kanban by Assignee', parent: 'kanban', overrides: {} }];
+            expect(resolveCardType(CARD_AUTO, 'user-kanban-by-assignee', user_types, registry)).toBe('sticky');
+        });
+
+        it('ignores a configured value naming no renderable card, keeping the registry default', () => {
+            expect(cardRegistryWithViewSettings({ kanbanDefaultCardType: 'photo' })).toBe(CARD_REGISTRY);
+            expect(cardRegistryWithViewSettings({ kanbanDefaultCardType: 42 })).toBe(CARD_REGISTRY);
+        });
+
+        it('never mutates the built-in registry', () => {
+            cardRegistryWithViewSettings({ kanbanDefaultCardType: 'sticky' });
+            expect(defaultCardTypeForView('kanban')).toBe('card');
         });
     });
 

@@ -3,7 +3,7 @@ import { isInternalAttribute } from "../../../lib/renderops";
 import { headlineClickPosition, createNoteClickHandler } from "../../../lib/noteui";
 import type { NoteProps } from "../../../types/NoteProps";
 import OriginPill from "../../../components/notes/OriginPill";
-import { projectFolderFromOrigin } from "../../../lib/originops";
+import { originHasProject, projectFolderFromOrigin } from "../../../lib/originops";
 import view_specific_styles from "../../../components/ViewRenderer.module.scss";
 
 interface MarkdownNoteHeadlineProps {
@@ -29,7 +29,7 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
     const show_lineno = note.display_options?.settings?.showLineNumbers
         && note.level === note.display_options?.deepest?.selectable_level;
     // folder-mode origins carry project metadata; single-file story cards carry only an epic (epic-chip only, no project pill). Render the pill only when there is something to show, so a single-file story with no epic shows no empty pill
-    const has_project = !!(note.origin && (note.origin.relative_path || note.origin.project_label || note.origin.project_hue !== undefined));
+    const has_project = originHasProject(note.origin);
     const show_origin = !!note.origin && note.level === 1 && (has_project || !!note.origin.epic);
     const show_inline_linetags = note.display_options?.settings?.showLinetagsInHeadlines && note.linetags;
     return (

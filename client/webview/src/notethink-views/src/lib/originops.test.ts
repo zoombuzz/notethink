@@ -1,34 +1,82 @@
-import { buildProjectLabels, hueForProjectName, originPillColour, pillColourForHue, projectAbbreviation, projectFolderFromOrigin, projectNameFromRelativePath } from './originops';
+import { buildProjectLabels, detectVscodeTheme, hueForOrigin, hueForProjectName, originHasProject, pillColourForHue, projectAbbreviation, projectFolderFromOrigin, projectNameFromRelativePath } from './originops';
 import type { NoteOrigin } from '../types/NoteProps';
 
-describe('originPillColour', () => {
+describe('detectVscodeTheme', () => {
 
-    it('returns hsl string with theme-appropriate lightness', () => {
-        const dark = originPillColour('mira', 'dark');
-        const light = originPillColour('mira', 'light');
-        expect(dark).toMatch(/^hsl\(\d+ 65% 32%\)$/);
-        expect(light).toMatch(/^hsl\(\d+ 65% 72%\)$/);
+    afterEach(() => {
+        document.body.className = '';
     });
 
-    it('is deterministic for the same project name', () => {
-        const a = originPillColour('lunagate', 'dark');
-        const b = originPillColour('lunagate', 'dark');
-        expect(a).toBe(b);
+    it('reads a body with no theme class as dark', () => {
+        expect(detectVscodeTheme()).toBe('dark');
     });
 
-    it('produces distinct hues for projects sharing a first letter (lunagate vs lunatide)', () => {
-        const a = originPillColour('lunagate', 'dark');
-        const b = originPillColour('lunatide', 'dark');
-        expect(a).not.toBe(b);
-        const huesA = a.match(/hsl\((\d+)/)![1];
-        const huesB = b.match(/hsl\((\d+)/)![1];
-        expect(huesA).not.toBe(huesB);
+    it('reads the light and high-contrast light body classes as light', () => {
+        document.body.className = 'vscode-light';
+        expect(detectVscodeTheme()).toBe('light');
+        document.body.className = 'vscode-high-contrast-light';
+        expect(detectVscodeTheme()).toBe('light');
     });
 
-    it('hashes are spread across the spectrum across many project names', () => {
+    it('reads the dark and high-contrast body classes as dark', () => {
+        document.body.className = 'vscode-dark';
+        expect(detectVscodeTheme()).toBe('dark');
+        document.body.className = 'vscode-high-contrast';
+        expect(detectVscodeTheme()).toBe('dark');
+    });
+
+    it('ignores the attribute nothing in notethink sets', () => {
+        document.documentElement.setAttribute('data-mantine-color-scheme', 'light');
+        expect(detectVscodeTheme()).toBe('dark');
+        document.documentElement.removeAttribute('data-mantine-color-scheme');
+    });
+});
+
+describe('hueForOrigin', () => {
+
+    it('uses the stamped project_hue when present, ahead of any name hash', () => {
+        const origin: NoteOrigin = { doc_id: 'a', doc_path: '/ws/orbit/todo.md', relative_path: 'orbit/todo.md', project_hue: 7 };
+        expect(hueForOrigin(origin)).toBe(7);
+    });
+
+    it('derives the hue from the project name when no project_hue is stamped', () => {
+        const origin: NoteOrigin = { doc_id: 'a', doc_path: '/ws/sculptor/todo.md', relative_path: 'sculptor/todo.md' };
+        expect(hueForOrigin(origin)).toBe(hueForProjectName('sculptor'));
+    });
+
+    it('falls back to hashing the doc path when there is no project name', () => {
+        const origin: NoteOrigin = { doc_id: 'a', doc_path: '/ws/todo.md' };
+        expect(hueForOrigin(origin)).toBe(hueForProjectName('/ws/todo.md'));
+    });
+
+    it('agrees between a stamped folder origin and an unstamped one for the same project', () => {
+        const stamped: NoteOrigin = { doc_id: 'a', doc_path: '/ws/lunagate/todo.md', relative_path: 'lunagate/todo.md', project_hue: hueForProjectName('lunagate') };
+        const unstamped: NoteOrigin = { doc_id: 'b', doc_path: '/ws/lunagate/done.md', relative_path: 'lunagate/done.md' };
+        expect(hueForOrigin(stamped)).toBe(hueForOrigin(unstamped));
+    });
+
+    it('spreads distinct projects across the spectrum', () => {
         const names = ['mira', 'lunagate', 'lunatide', 'cygnus', 'carina', 'zenith', 'draco'];
-        const hues = new Set(names.map(n => Number(originPillColour(n, 'dark').match(/hsl\((\d+)/)![1])));
-        expect(hues.size).toBeGreaterThanOrEqual(names.length - 1); // allow at most one collision
+        const hues = new Set(names.map(n => hueForOrigin({ doc_id: n, doc_path: `/ws/${n}/todo.md`, relative_path: `${n}/todo.md` })));
+        // allow at most one collision
+        expect(hues.size).toBeGreaterThanOrEqual(names.length - 1);
+    });
+});
+
+describe('originHasProject', () => {
+
+    it('is false with no origin at all', () => {
+        expect(originHasProject(undefined)).toBe(false);
+    });
+
+    it('is false for a single-file origin carrying only an epic', () => {
+        expect(originHasProject({ doc_id: 'a', doc_path: '/ws/todo.md', epic: { name: 'Launch' } })).toBe(false);
+    });
+
+    it('is true for any one of relative_path, project_label or project_hue', () => {
+        expect(originHasProject({ doc_id: 'a', doc_path: '/ws/orbit/todo.md', relative_path: 'orbit/todo.md' })).toBe(true);
+        expect(originHasProject({ doc_id: 'a', doc_path: '/ws/todo.md', project_label: 'OR' })).toBe(true);
+        expect(originHasProject({ doc_id: 'a', doc_path: '/ws/todo.md', project_hue: 0 })).toBe(true);
     });
 });
 
@@ -56,13 +104,6 @@ describe('hueForProjectName', () => {
         expect(hue_alone).toBe(hue_after);
     });
 
-    it('hue embedded in originPillColour matches direct hueForProjectName call', () => {
-        const name = 'sculptor';
-        const expected_hue = hueForProjectName(name);
-        const colour = originPillColour(name, 'dark');
-        const hue_from_colour = Number(colour.match(/hsl\((\d+)/)![1]);
-        expect(hue_from_colour).toBe(expected_hue);
-    });
 });
 
 describe('pillColourForHue', () => {

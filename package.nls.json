@@ -29,6 +29,7 @@
   "config.settings.view.specific.kanban.cardRatio.description": "Target card ratio on a Kanban board, as the card's height divided by its width. The column width is derived from it: NoteThink measures how much text a typical card holds and picks the width that lands the cards near this ratio, so a wider panel shows more lanes rather than wider ones.",
   "config.settings.view.specific.kanban.columnOrder.description": "Group order: the order a Kanban board draws its lanes in (raw status slugs like 'code-review' or 'done'). Lanes not in the list appear after, sorted alphabetically with 'untagged' last.",
   "config.settings.view.specific.kanban.animateTransitions.description": "Animate passive kanban transitions (cards moving as another tool or the editor changes their status) with a brief slide.",
+  "config.settings.view.specific.kanban.defaultCardType.description": "The card type a Kanban board draws its notes as while the card type is Auto. A card type chosen on the card settings tab, or declared with nt_card in the files, still takes precedence.",
   "config.settings.files.includeFilter.description": "Glob of files to include in folder mode.",
   "config.settings.files.excludeFilter.description": "Glob of files to exclude in folder mode.",
   "config.settings.files.maxNotesPerFile.description": "Cap on stories taken from each source file when merging the folder aggregate."

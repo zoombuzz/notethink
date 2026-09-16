@@ -126,7 +126,7 @@ describe('SettingsViewDrawer tree', () => {
         expect(screen.getByTestId('view-node-count-document')).toHaveTextContent('(0)');
         expect(screen.getByTestId('view-node-count-grouped')).toHaveTextContent('(1)');
         expect(screen.getByTestId('view-node-count-line')).toHaveTextContent('(1)');
-        expect(screen.getByTestId('view-node-count-kanban')).toHaveTextContent('(4)');
+        expect(screen.getByTestId('view-node-count-kanban')).toHaveTextContent('(5)');
     });
 
     it('clicking an abstract node shows its settings and leaves the rendered view alone', () => {
@@ -170,6 +170,7 @@ describe('SettingsViewDrawer rows', () => {
             'columnOrder',
             'kanbanCardRatio',
             'kanbanAnimateTransitions',
+            'kanbanDefaultCardType',
             'orientation',
             'kanbanGroupBy',
             'scrollNoteIntoView',
@@ -178,6 +179,7 @@ describe('SettingsViewDrawer rows', () => {
         ]);
         expect(screen.getByTestId('setting-pill-kanbanGroupBy')).toHaveTextContent('Grouped');
         expect(screen.getByTestId('setting-pill-columnOrder')).toHaveTextContent('Kanban');
+        expect(screen.getByTestId('setting-pill-kanbanDefaultCardType')).toHaveTextContent('Kanban');
         expect(screen.getByTestId('setting-pill-orientation')).toHaveTextContent('Line');
         expect(screen.getByTestId('setting-pill-scrollNoteIntoView')).toHaveTextContent('All views');
     });
@@ -249,6 +251,29 @@ describe('SettingsViewDrawer controls', () => {
         renderDrawer({ onSettingChange: on_setting_change });
         fireEvent.change(screen.getByTestId('setting-control-kanbanCardRatio'), { target: { value: '2' } });
         expect(on_setting_change).toHaveBeenCalledWith('kanbanCardRatio', 2);
+    });
+
+    it('offers the default card type as a dropdown of the concrete cards, showing Card until one is chosen', () => {
+        renderDrawer();
+        const control = screen.getByTestId('setting-control-kanbanDefaultCardType') as HTMLSelectElement;
+        expect(control.tagName).toBe('SELECT');
+        expect(control.value).toBe('card');
+        expect(Array.from(control.options).map(option => option.value)).toEqual(['card', 'sticky']);
+        expect(screen.getByTestId('setting-row-kanbanDefaultCardType')).toHaveTextContent('Default card type');
+    });
+
+    it('writes a chosen default card type to the kanban setting', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ onSettingChange: on_setting_change });
+        fireEvent.change(screen.getByTestId('setting-control-kanbanDefaultCardType'), { target: { value: 'sticky' } });
+        expect(on_setting_change).toHaveBeenCalledWith('kanbanDefaultCardType', 'sticky');
+    });
+
+    it('offers the default card type on a kanban board and nowhere above it', () => {
+        renderDrawer();
+        expect(screen.getByTestId('setting-row-kanbanDefaultCardType')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('view-node-line'));
+        expect(screen.queryByTestId('setting-row-kanbanDefaultCardType')).not.toBeInTheDocument();
     });
 
     it('offers the card ratio on a kanban board and nowhere above it, since the width is a kanban concern', () => {

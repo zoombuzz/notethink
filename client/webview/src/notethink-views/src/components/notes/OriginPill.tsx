@@ -1,5 +1,5 @@
 import React, { useEffect, useState, type MouseEvent } from "react";
-import { detectThemeAttribute, originPillColour, pillColourForHue, projectAbbreviation, projectNameFromRelativePath } from "../../lib/originops";
+import { detectVscodeTheme, hueForOrigin, pillColourForHue, projectAbbreviation, projectNameFromRelativePath } from "../../lib/originops";
 import type { NoteOrigin } from "../../types/NoteProps";
 import styles from "./OriginPill.module.scss";
 
@@ -28,23 +28,22 @@ interface OriginPillProps {
  */
 export default function OriginPill({ origin, onClick, epicOnly }: OriginPillProps): React.ReactElement {
     // re-render on theme change so colour swatches stay readable when the user toggles VS Code theme
-    const [theme, setTheme] = useState<'dark' | 'light'>(detectThemeAttribute);
+    const [theme, setTheme] = useState<'dark' | 'light'>(detectVscodeTheme);
     useEffect(() => {
-        if (typeof document === 'undefined') { return; }
+        if (typeof document === 'undefined' || !document.body) { return; }
         const observer = new MutationObserver(() => {
-            setTheme(detectThemeAttribute());
+            setTheme(detectVscodeTheme());
         });
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-mantine-color-scheme'] });
+        // VS Code swaps the theme class on <body> when the user changes theme, with no reload
+        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
         return () => observer.disconnect();
     }, []);
 
     const project_name = projectNameFromRelativePath(origin.relative_path);
     // folder mode stamps origin.project_label using the global divergence rule (see buildProjectLabels); single-file / legacy origins fall back to the project name's first+second characters
     const label = origin.project_label ?? projectAbbreviation(project_name);
-    // origin.project_hue is the djb2 identity hash stamped by mergeAggregateRoot; when absent (single-file or legacy origins) originPillColour derives the same hash from the project name, so both paths converge on one colour
-    const colour = typeof origin.project_hue === 'number'
-        ? pillColourForHue(origin.project_hue, theme)
-        : originPillColour(project_name || origin.doc_path, theme);
+    // hueForOrigin is the one hue source shared with the sticky card, so a pill always matches the sticky it sits on
+    const colour = pillColourForHue(hueForOrigin(origin), theme);
 
     return (
         <span className={styles.originPillGroup} role="presentation">

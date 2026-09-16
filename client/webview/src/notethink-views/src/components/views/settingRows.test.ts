@@ -39,6 +39,7 @@ describe('settingRows - the view pane', () => {
             'columnOrder',
             'kanbanCardRatio',
             'kanbanAnimateTransitions',
+            'kanbanDefaultCardType',
             'orientation',
             'kanbanGroupBy',
             'scrollNoteIntoView',

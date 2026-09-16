@@ -1,5 +1,8 @@
 import type { NoteOrigin } from "../types/NoteProps";
 
+// the <body> classes VS Code stamps on a webview for a light theme; mirrored as the light selectors in OriginPill.module.scss and StickyNote.module.scss
+export const VS_CODE_LIGHT_THEME_CLASSES = ['vscode-light', 'vscode-high-contrast-light'];
+
 /**
  * Pure helpers backing the OriginPill JSX component. Lifted out of OriginPill.tsx
  * so the React component stays JSX-only and these functions can be reused by the
@@ -42,13 +45,24 @@ export function pillColourForHue(hue: number, theme: 'dark' | 'light'): string {
 }
 
 /**
- * Deterministic colour for a project pill from the project name only. Uses
- * hueForProjectName (djb2 identity hash) so the colour is set-independent -
- * single-file mode, folder mode, and legacy origins all converge on the same
- * value for a given project name.
+ * True when an origin links its note to a project, which is when the headline draws a
+ * project pill rather than an epic chip alone. Folder-mode origins carry project metadata;
+ * single-file story cards carry only an epic. Every surface that asks "does this note have
+ * a project" reads this, so the pill and anything coloured by project agree.
  */
-export function originPillColour(project_name: string, theme: 'dark' | 'light'): string {
-    return pillColourForHue(hueForProjectName(project_name), theme);
+export function originHasProject(origin: NoteOrigin | undefined): origin is NoteOrigin {
+    return !!(origin && (origin.relative_path || origin.project_label || origin.project_hue !== undefined));
+}
+
+/**
+ * The hue a project is drawn in, for the project pill and for anything coloured to match it.
+ * The djb2 identity hash mergeAggregateRoot stamps as project_hue wins; without it the same
+ * hash is taken from the project name (or the doc path when the name is empty), so single-file,
+ * folder and legacy origins all converge on one hue for a given project.
+ */
+export function hueForOrigin(origin: NoteOrigin): number {
+    if (typeof origin.project_hue === 'number') { return origin.project_hue; }
+    return hueForProjectName(projectNameFromRelativePath(origin.relative_path) || origin.doc_path);
 }
 
 /**
@@ -135,11 +149,13 @@ export function buildProjectLabels(names: string[]): Map<string, string> {
 }
 
 /**
- * Read the current Mantine color scheme from <html data-mantine-color-scheme>.
- * Defaults to 'dark' if the attribute is missing.
+ * Read the current VS Code theme kind from the class VS Code stamps on a webview's <body>:
+ * `vscode-light` and `vscode-high-contrast-light` are light, and every other theme,
+ * including a body with no theme class at all, is dark. VS_CODE_LIGHT_THEME_CLASSES
+ * lists the light ones so a stylesheet and this function name the same classes.
  */
-export function detectThemeAttribute(): 'dark' | 'light' {
-    if (typeof document === 'undefined') { return 'dark'; }
-    const scheme = document.documentElement.getAttribute('data-mantine-color-scheme');
-    return scheme === 'light' ? 'light' : 'dark';
+export function detectVscodeTheme(): 'dark' | 'light' {
+    if (typeof document === 'undefined' || !document.body) { return 'dark'; }
+    const is_light = VS_CODE_LIGHT_THEME_CLASSES.some(name => document.body.classList.contains(name));
+    return is_light ? 'light' : 'dark';
 }

@@ -1,9 +1,9 @@
 # Jest Test Results
-# Version: 0.3.68
-# Date: 2026-09-15T09:39:44+01:00
+# Version: 0.3.69
+# Date: 2026-09-16T12:34:31+01:00
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # Exit status: 0
-# Tree: HEAD 348d082 plus client/extension/src/vscode/PanelSession.ts, client/extension/src/vscode/notethinkEditor.test.ts, client/webview/src/hooks/useAutoIntegration.ts, client/webview/src/hooks/useVscodeMessages.ts, docstech/reports/jest-results.txt, docstech/reports/playwright-dev-results.txt, docstech/users/alex.stanhope/todo.md, package.json
+# Tree: HEAD c59e0a9 plus AUTHORING_GUIDE.md, CODING_STANDARDS.md, client/extension/src/lib/settings.ts, client/webview/src/constants.ts, client/webview/src/notethink-views/src/components/ViewRenderer.module.scss, client/webview/src/notethink-views/src/components/notes/GenericNote.tsx, client/webview/src/notethink-views/src/components/notes/OriginPill.module.scss, client/webview/src/notethink-views/src/components/notes/OriginPill.test.tsx, client/webview/src/notethink-views/src/components/notes/OriginPill.tsx, client/webview/src/notethink-views/src/components/notes/StickyNote.module.scss, client/webview/src/notethink-views/src/components/notes/StickyNote.test.tsx, client/webview/src/notethink-views/src/components/notes/StickyNote.tsx, client/webview/src/notethink-views/src/components/notes/cardregistryops.test.ts, client/webview/src/notethink-views/src/components/notes/cardregistryops.ts, client/webview/src/notethink-views/src/components/notes/markdown/MarkdownNoteHeadline.tsx, client/webview/src/notethink-views/src/components/views/AutoView.tsx, client/webview/src/notethink-views/src/components/views/drawers/SettingsViewDrawer.test.tsx, client/webview/src/notethink-views/src/components/views/drawers/SettingsViewDrawer.tsx, client/webview/src/notethink-views/src/components/views/generic/useViewToolbar.ts, client/webview/src/notethink-views/src/components/views/settingRows.test.ts, client/webview/src/notethink-views/src/components/views/settingRows.ts, client/webview/src/notethink-views/src/lib/originops.test.ts, client/webview/src/notethink-views/src/lib/originops.ts, client/webview/src/notethink-views/src/lib/viewregistryops.test.ts, client/webview/src/notethink-views/src/lib/viewregistryops.ts, client/webview/src/notethink-views/src/types/Messages.ts, client/webview/src/notethink-views/src/types/NoteProps.ts, docstech/users/alex.stanhope/todo.md, l10n/bundle.l10n.de.json, l10n/bundle.l10n.es.json, l10n/bundle.l10n.fr.json, l10n/bundle.l10n.it.json, l10n/bundle.l10n.json, package.json, package.nls.de.json, package.nls.es.json, package.nls.fr.json, package.nls.it.json, package.nls.json, playwright/harness/index.html, playwright/specs/sticky-card.spec.ts (untracked)
 # ---
 $ bash scripts/test-jest.sh
 $ jest --config jest.config.cjs --forceExit
@@ -11,7 +11,7 @@ $ jest --config jest.config.cjs --forceExit
 [1mTest Suites: [22m[1m[32m11 passed[39m[22m, 11 total
 [1mTests:       [22m[1m[32m311 passed[39m[22m, 311 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        2.744 s, estimated 3 s
+[1mTime:[22m        2.753 s, estimated 3 s
 [2mRan all test suites[22m[2m.[22m
 [1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -28,9 +28,9 @@ $ jest --config jest.config.cjs --forceExit
 [33mA worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.[39m
 
 [1mTest Suites: [22m[1m[32m68 passed[39m[22m, 68 total
-[1mTests:       [22m[1m[32m1544 passed[39m[22m, 1544 total
+[1mTests:       [22m[1m[32m1571 passed[39m[22m, 1571 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        3.583 s
+[1mTime:[22m        3.519 s
 [2mRan all test suites[22m[2m.[22m
 [1mForce exiting Jest: [22mHave you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 
@@ -38,9 +38,9 @@ $ jest --config jest.config.cjs --forceExit
 [1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
 [1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │    11 │ [32m   311[0m │ [2m     0[0m │ 2.744 s │
+│ extension        │    11 │ [32m   311[0m │ [2m     0[0m │ 2.753 s │
 │ webview          │    10 │ [32m   142[0m │ [2m     0[0m │ 0.803 s │
-│ notethink-views  │    68 │ [32m  1544[0m │ [2m     0[0m │ 3.583 s │
+│ notethink-views  │    68 │ [32m  1571[0m │ [2m     0[0m │ 3.519 s │
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-[1m│ TOTAL            │    89 │[0m [32m  1997[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m│ TOTAL            │    89 │[0m [32m  2024[0m [1m│[0m [2m     0[0m [1m│         │[0m
 [1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

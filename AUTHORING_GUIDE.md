@@ -290,7 +290,7 @@ renders.
 | Key | Effect |
 |---|---|
 | `nt_view` | View type for this subtree: `auto`, `document`, `kanban`, `line`. Legacy `ng_view` is still accepted on read. See [The Line view and grouping](#the-line-view-and-grouping) |
-| `nt_card` | How each note is drawn, independently of the view: `auto`, `card` (the full card - pill, title, attributes, body) or `sticky` (a compact summary - pill and title only). Set on the file root (`#`). In Folder mode it is majority-voted across files, same as `nt_view`. Legacy `ng_card` is accepted on read. See [Card types](#card-types) |
+| `nt_card` | How each note is drawn, independently of the view: `auto`, `card` (the full card - pill, title, attributes, body) or `sticky` (a sticky in its project's colour - pill and title only). Set on the file root (`#`). In Folder mode it is majority-voted across files, same as `nt_view`. Legacy `ng_card` is accepted on read. See [Card types](#card-types) |
 | `nt_group_by` | The attribute the **Line** view groups its lanes by: an attribute key present on your stories (e.g. `assignee`) or the implicit key `nt_first_level_folder` (each file's first path segment / project folder). Defaults to `nt_first_level_folder` when unset. Set on the file root (`#`). In Folder mode it is majority-voted across files, same as `nt_view`. See [The Line view and grouping](#the-line-view-and-grouping) |
 | `nt_group_order` | The order the lanes appear in on the Line view's grouped axis (optional). Set on the file root (`#`) - the same idea as Kanban's column order |
 | `nt_integration_mode` | The integration mode this file opens into while the view is in **auto**: `current_file` or `folder`. In auto the view follows it; changing the mode or navigating away from the file's intent pins your own choice. Set on the file root (`#`). `nt_`-only - no `ng_` form |
@@ -358,7 +358,7 @@ about.
 | Value | What you get |
 |---|---|
 | `card` | The full card: origin pill, title, attribute chips, body |
-| `sticky` | A compact summary: origin pill and title only, in a tighter card |
+| `sticky` | A sticky: origin pill and title only, on paper with its bottom-right corner curled. The paper takes the colour of the note's project pill, or yellow when the note has no project |
 | `auto` | Resolve it rather than pin it (the default) |
 
 Set it on the file root (`#`), alongside the view if you want both:
@@ -370,7 +370,9 @@ Set it on the file root (`#`), alongside the view if you want both:
 In Folder mode the card type is majority-voted across the files' top-level
 `nt_card` linetags, exactly as `nt_view` is, and one vote is counted per file.
 When the vote ties, or no file declares a card type, the view's own default card
-applies - which is the full `card` for every view today.
+applies. That is the full `card` unless the view's settings choose another: Kanban
+has a **Default card type** setting in its view settings, so a Kanban board can
+default to `sticky` while every other view stays on `card`.
 
 `auto` is the default, so a file that says nothing about cards renders exactly as
 it always has. Use `sticky` when a board is for scanning titles rather than

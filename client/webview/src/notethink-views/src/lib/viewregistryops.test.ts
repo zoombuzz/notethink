@@ -234,7 +234,7 @@ describe('per-node setting counts', () => {
         expect(nodeSettingCount('root')).toBe(2);
         expect(nodeSettingCount('grouped')).toBe(1);
         expect(nodeSettingCount('line')).toBe(1);
-        expect(nodeSettingCount('kanban')).toBe(4);
+        expect(nodeSettingCount('kanban')).toBe(5);
         expect(nodeSettingCount('document')).toBe(0);
         // the card tree is counted by the same table, since a home names whichever tree it belongs to
         expect(nodeSettingCount('allcards')).toBe(4);
@@ -247,7 +247,7 @@ describe('per-node setting counts', () => {
     });
 
     it('names the keys a node owns in declaration order', () => {
-        expect(settingKeysForNode('kanban')).toEqual(['kanbanGroupBy', 'columnOrder', 'kanbanCardRatio', 'kanbanAnimateTransitions']);
+        expect(settingKeysForNode('kanban')).toEqual(['kanbanGroupBy', 'columnOrder', 'kanbanCardRatio', 'kanbanAnimateTransitions', 'kanbanDefaultCardType']);
         expect(settingKeysForNode('line')).toEqual(['orientation']);
         expect(settingKeysForNode('global')).toEqual(['watchUnopenedFilesInViewer', 'openNewEditorIfNoneOpen']);
     });

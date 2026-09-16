@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { aggregateNoteLinetags, findNoteBySeq, isAggregateRoot, majorityCardType, majorityNgView } from "../../lib/noteops";
 import { resolveNamespacedTag } from "../../lib/linetagops";
-import { CARD_AUTO, resolveCardType } from "../notes/cardregistryops";
+import { CARD_AUTO, cardRegistryWithViewSettings, resolveCardType } from "../notes/cardregistryops";
 import type { ViewProps } from "../../types/ViewProps";
 import type { LineTag } from "../../types/NoteProps";
 import GenericView from "./GenericView";
@@ -63,7 +63,7 @@ export default function AutoView(props: ViewProps): ReactElement {
     const voted_card_type = replaced_attributes.card_type === CARD_AUTO && is_aggregate_root
         ? majorityCardType(props.notes)
         : undefined;
-    const resolved_card_type = resolveCardType(voted_card_type ?? replaced_attributes.card_type, derived_attributes.type, props.display_options?.settings?.viewUserTypes ?? []);
+    const resolved_card_type = resolveCardType(voted_card_type ?? replaced_attributes.card_type, derived_attributes.type, props.display_options?.settings?.viewUserTypes ?? [], cardRegistryWithViewSettings(props.display_options?.settings));
     derived_attributes.display_options.settings = {
         ...props.display_options?.settings,
         cardType: resolved_card_type,

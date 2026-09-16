@@ -33,8 +33,9 @@
     user-select: none;
 }
 
-/* Light theme: dark text on bright pill */
-:global(html[data-mantine-color-scheme="light"]) .projectPill {
+/* Light theme: dark text on bright pill. The classes are VS_CODE_LIGHT_THEME_CLASSES in originops.ts */
+:global(body.vscode-light) .projectPill,
+:global(body.vscode-high-contrast-light) .projectPill {
     color: var(--vscode-editor-foreground, #1f1f1f);
 }
 

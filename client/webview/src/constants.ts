@@ -38,6 +38,7 @@ export const DEFAULT_SETTINGS_CASCADE: SettingsCascadePayload = {
     columnOrder: DEFAULT_COLUMN_ORDER,
     kanbanCardRatio: DEFAULT_CARD_RATIO,
     kanbanAnimateTransitions: true,
+    kanbanDefaultCardType: 'card',
     watchUnopenedFilesInViewer: true,
     openNewEditorIfNoneOpen: false,
     includeFilter: DEFAULT_INCLUDE_FILTER,

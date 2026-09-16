@@ -72,6 +72,7 @@ export const SETTINGS = {
     columnOrder:                { path: 'view.specific.kanban.columnOrder',        default: DEFAULT_COLUMN_ORDER as string[], node: 'kanban'    },
     kanbanCardRatio:            { path: 'view.specific.kanban.cardRatio',           default: 1.4 as number,                    node: 'kanban'    },
     kanbanAnimateTransitions:   { path: 'view.specific.kanban.animateTransitions', default: true as boolean,                  node: 'kanban'    },
+    kanbanDefaultCardType:      { path: 'view.specific.kanban.defaultCardType',    default: 'card' as string,                 node: 'kanban'    },
     watchUnopenedFilesInViewer: { path: 'view.generic.watchUnopenedFilesInViewer', default: true as boolean,                  node: NODE_GLOBAL },
     openNewEditorIfNoneOpen:    { path: 'view.generic.openNewEditorIfNoneOpen',    default: false as boolean,                 node: NODE_GLOBAL },
     includeFilter:              { path: 'files.includeFilter',                     default: DEFAULT_INCLUDE_FILTER as string, node: NODE_FILES  },

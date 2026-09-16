@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.68",
+  "version": "0.3.69",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -271,6 +271,12 @@
             "scope": "window",
             "default": true,
             "description": "%config.settings.view.specific.kanban.animateTransitions.description%"
+          },
+          "notethink.settings.view.specific.kanban.defaultCardType": {
+            "type": "string",
+            "scope": "resource",
+            "default": "card",
+            "description": "%config.settings.view.specific.kanban.defaultCardType.description%"
           },
           "notethink.settings.files.includeFilter": {
             "type": "string",

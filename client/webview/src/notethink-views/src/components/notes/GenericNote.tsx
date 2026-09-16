@@ -1,5 +1,5 @@
 import React, { lazy } from 'react';
-import { DEFAULT_CARD_TYPE, cardComponentFor, resolveCardType } from "./cardregistryops";
+import { DEFAULT_CARD_TYPE, cardComponentFor, cardRegistryWithViewSettings, resolveCardType } from "./cardregistryops";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteWrapper from "../../components/notes/GenericNoteWrapper";
 
@@ -79,7 +79,7 @@ export default React.memo(function GenericNote(props: NoteProps) {
     const is_view_container = props.seq === props.display_options?.parent_context_seq;
     const card_type = is_view_container
         ? DEFAULT_CARD_TYPE
-        : resolveCardType(props.display_options?.settings?.cardType, props.display_options?.settings?.viewType);
+        : resolveCardType(props.display_options?.settings?.cardType, props.display_options?.settings?.viewType, undefined, cardRegistryWithViewSettings(props.display_options?.settings));
     const CardComponent = cardComponentFor(card_type);
     return <CardComponent {...enriched_props} />;
 });

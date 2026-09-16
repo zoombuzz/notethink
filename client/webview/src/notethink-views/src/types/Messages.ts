@@ -186,6 +186,7 @@ export interface SettingsCascadePayload {
     columnOrder: string[];
     kanbanCardRatio: number;
     kanbanAnimateTransitions: boolean;
+    kanbanDefaultCardType: string;
     watchUnopenedFilesInViewer: boolean;
     openNewEditorIfNoneOpen: boolean;
     includeFilter: string;

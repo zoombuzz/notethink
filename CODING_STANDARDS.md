@@ -217,6 +217,16 @@ When a note becomes focused or selected, `useScrollToCaret` (`viewhooks.ts`) fra
 
 The recurring regression is a ring cropped on the left edge of a card flush against the scroll container: verify by focusing a card in the leftmost column.
 
+### Every card type works in every view
+
+A view decides how notes are laid out and a card decides how one note is drawn, and the two are chosen independently, so any card type must work in any view. [`AUTHORING_GUIDE.md`](AUTHORING_GUIDE.md) > Card types makes that promise to users; this is what it asks of the code.
+
+- **Design a view to take any card.** A view may give each card room, such as the target height and width a lane solves, but never branches on which card type fills it.
+- **Design a card to sit in any view.** A card draws one note and never assumes the lane, column or document flow around it.
+- **The first view a card type is tried in is a test surface, not its home** (operator decision). A card type is finished when it works in every view.
+
+Canonical: the header of `components/notes/cardregistryops.ts`, and `AutoView.tsx`, which resolves the card axis independently of the view.
+
 ## File Organization
 
 **notethink has no root `src/`.** Establish which of its three source roots you are in first:

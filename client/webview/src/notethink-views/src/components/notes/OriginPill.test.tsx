@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import OriginPill from './OriginPill';
 import { hueForProjectName, pillColourForHue } from '../../lib/originops';
 import type { NoteOrigin } from '../../types/NoteProps';
@@ -71,6 +71,29 @@ describe('OriginPill rendering', () => {
         const project_name = 'orbit';
         const expected_colour = pillColourForHue(hueForProjectName(project_name), 'dark');
         expect(pill).toHaveStyle({ backgroundColor: expected_colour });
+    });
+
+    describe('theme, read from the class VS Code stamps on the webview body', () => {
+
+        afterEach(() => {
+            document.body.className = '';
+        });
+
+        it('draws the light shade under a light theme', () => {
+            document.body.className = 'vscode-light';
+            render(<OriginPill origin={makeOrigin({ project_hue: 200 })} />);
+            expect(screen.getByTestId('origin-project-pill')).toHaveStyle({ backgroundColor: pillColourForHue(200, 'light') });
+        });
+
+        it('follows a theme change without a remount', async () => {
+            document.body.className = 'vscode-dark';
+            render(<OriginPill origin={makeOrigin({ project_hue: 200 })} />);
+            expect(screen.getByTestId('origin-project-pill')).toHaveStyle({ backgroundColor: pillColourForHue(200, 'dark') });
+            document.body.className = 'vscode-light';
+            await waitFor(() => {
+                expect(screen.getByTestId('origin-project-pill')).toHaveStyle({ backgroundColor: pillColourForHue(200, 'light') });
+            });
+        });
     });
 
     describe('epicOnly (single-file story cards: epic chip, no project pill)', () => {

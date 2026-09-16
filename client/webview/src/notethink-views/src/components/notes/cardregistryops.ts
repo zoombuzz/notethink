@@ -10,7 +10,7 @@ const debug = Debug("nodejs:notethink-views:cardregistryops");
 /*
  * The card hierarchy as data, the orthogonal axis to the view registry. A view decides how notes are
  * laid out; a card decides how one note is drawn - the full card (pill, title, attributes, body) or a
- * compact summary. The two are chosen independently, so `sticky` cards work in a document just as they
+ * sticky. The two are chosen independently, so `sticky` cards work in a document just as they
  * do in a kanban lane. The axis covers the notes a view LAYS OUT, not the view's own container: the note
  * a DocumentView opens at holds every note below it in its body, so GenericNote keeps it on the full card
  * whatever is selected.
@@ -23,7 +23,9 @@ const debug = Debug("nodejs:notethink-views:cardregistryops");
  *
  * Each VIEW declares the card type it defaults to, keyed by view-registry node id and resolved up the
  * view tree, so a default set at `root` covers every view and a view that wants its own says so once.
- * That is why the default lives here as data rather than as a switch at the dispatch site.
+ * That is why the default lives here as data rather than as a switch at the dispatch site. A view whose
+ * settings carry a default card type (VIEW_DEFAULT_CARD_TYPE_SETTINGS) has that declaration replaced by
+ * the configured value through cardRegistryWithViewSettings, so the user's choice rides the same walk.
  */
 
 export type CardNodeKind = 'abstract' | 'concrete';
@@ -160,12 +162,51 @@ export function selectableCardIds(registry: CardRegistry = CARD_REGISTRY): strin
 }
 
 /**
- * the ordered card types the selector offers: `auto` plus every selectable registry card that has a
- * component wired in CARD_COMPONENTS. A registry card declared without a component is not offered, so the
- * card tree can grow ahead of its renderers.
+ * the selectable card ids that can actually render, in tree order: every selectable registry card with a
+ * component wired in CARD_COMPONENTS. A registry card declared without a component is left out, so the
+ * card tree can grow ahead of its renderers. These are the choices a view's default card type offers.
  */
+export function renderableCardIds(registry: CardRegistry = CARD_REGISTRY): string[] {
+    return selectableCardIds(registry).filter(id => id in CARD_COMPONENTS);
+}
+
+/** the ordered card types the selector offers: `auto` plus every renderable card */
 export function selectableCardTypes(registry: CardRegistry = CARD_REGISTRY): string[] {
-    return [CARD_AUTO, ...selectableCardIds(registry).filter(id => id in CARD_COMPONENTS)];
+    return [CARD_AUTO, ...renderableCardIds(registry)];
+}
+
+/**
+ * The view settings that configure a view's default card type, keyed by view-registry node id. A view
+ * listed here takes its default from that setting; every other view keeps the registry's declaration,
+ * inherited up its chain as before.
+ */
+export const VIEW_DEFAULT_CARD_TYPE_SETTINGS: Partial<Record<string, SettingsCascadeKey>> = {
+    kanban: 'kanbanDefaultCardType',
+};
+
+/**
+ * The card registry with each configured view's declared default replaced by the value its setting holds.
+ * Pure - the built-in registry is never mutated, and with nothing configured it is returned unchanged. A
+ * setting naming no renderable card is ignored rather than trusted, since it comes from a user's
+ * settings.json, so a view can never be left with a default nothing draws. Callers hand the result to
+ * resolveCardType, which walks it exactly as it walks the built-in one, so a type minted under kanban
+ * inherits kanban's configured default by the same chain walk.
+ */
+export function cardRegistryWithViewSettings(settings: Partial<Record<SettingsCascadeKey, unknown>> | undefined, registry: CardRegistry = CARD_REGISTRY): CardRegistry {
+    if (!settings) { return registry; }
+    const configured: CardViewDefault[] = [];
+    for (const [view, key] of Object.entries(VIEW_DEFAULT_CARD_TYPE_SETTINGS)) {
+        const value = key === undefined ? undefined : settings[key];
+        if (typeof value === 'string' && value in CARD_COMPONENTS) {
+            configured.push({ view, card: value });
+        }
+    }
+    if (configured.length === 0) { return registry; }
+    const configured_views = new Set(configured.map(d => d.view));
+    return {
+        nodes: registry.nodes,
+        view_defaults: [...registry.view_defaults.filter(d => !configured_views.has(d.view)), ...configured],
+    };
 }
 
 /**

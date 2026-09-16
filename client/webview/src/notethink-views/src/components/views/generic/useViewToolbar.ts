@@ -3,7 +3,7 @@ import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { buildIntegrationDispatch, resolveIntegrationMode } from "../../../lib/viewstateops";
 import { arraysEqual, deriveNaturalColumnOrder, isAggregateRoot, majorityCardType } from "../../../lib/noteops";
 import { isGroupedViewType, registryWithUserTypes } from "../../../lib/viewregistryops";
-import { CARD_AUTO, resolveCardType } from "../../notes/cardregistryops";
+import { CARD_AUTO, cardRegistryWithViewSettings, resolveCardType } from "../../notes/cardregistryops";
 import { parentFolderOf } from "../../../lib/pathops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { SettingsCascadeKey, UserViewType } from "../../../types/Messages";
@@ -79,7 +79,7 @@ function readCardTypeState(props: ViewProps, display_options: NoteDisplayOptions
     const voted = selection === CARD_AUTO && isAggregateRoot(props.nested?.parent_context)
         ? majorityCardType(props.notes)
         : undefined;
-    return { selection, resolved: resolveCardType(voted ?? selection, props.type, user_types) };
+    return { selection, resolved: resolveCardType(voted ?? selection, props.type, user_types, cardRegistryWithViewSettings(display_options.settings)) };
 }
 
 /**

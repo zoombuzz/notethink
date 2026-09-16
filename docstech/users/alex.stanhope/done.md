@@ -5537,3 +5537,88 @@ Unpinned this wave: both cooldown ceilings from the last snapshot cleared as pre
 + [X] run lint, jest and build green
   + 1997 jest, lint 0 errors, webpack build compiled
 + manual: reload the VS Code window, open oma's done.md from the Explorer with the board filtered to `**/{todo}.md`, and confirm no done card joins the Oma column
+
+
+### Default card type as a view setting [](?id=view-default-card-type)
+
++ goal: a view's settings say which card type Auto resolves to for that view
++ operator decision 2026-09-16
+  + Kanban gets a "Default card type" setting, listed after the existing Kanban settings
+  + the control is a dropdown, with `card` selected by default
+  + view settings are ordered by the view type each setting is inherited from
++ background, measured 2026-09-16
+  + today the default is fixed data: `CARD_REGISTRY.view_defaults` maps `root` and `kanban` to `card`
+  + `resolveCardType` reads that data in `AutoView`, `useViewToolbar` and `GenericNote`
+  + a setting touches `SETTINGS`, `SETTING_HOMES`, the cascade payload, `package.json`, four translations and the harness
+  + `settingRows.ts` orders rows by owning view, then by declaration, so the row follows `kanbanAnimateTransitions`
++ scope: Kanban only, as asked; Document and Line keep the registry's `root` default of `card`
++ [X] add `kanbanDefaultCardType` at `view.specific.kanban.defaultCardType`, homed at `kanban`, default `card`
++ [X] mirror it in `SETTING_HOMES`, the cascade payload, the webview defaults and the harness defaults
++ [X] contribute it in `package.json` with a description in all five `package.nls` files
++ [X] resolve Auto through the setting, so a view's configured default wins over the registry's
+  + `cardRegistryWithViewSettings` swaps the declared default for the configured one, used by all three resolvers
+  + an unknown or unrenderable value falls back to the registry default
+  + a type minted from Kanban inherits Kanban's configured default
++ [X] render the row as a dropdown of the concrete card types, labelled in all five l10n bundles
++ [X] cover it in Jest: registry resolution, row order and the dropdown writing the setting
++ [X] cover it in Playwright: the row sits after the Kanban rows, shows Card, and Sticky makes Auto draw stickies
+  + `playwright/specs/sticky-card.spec.ts`, including a pinned card type still winning over the view default
++ acceptance criteria
+  + Kanban's view settings list Default card type after the other Kanban settings, as a dropdown showing Card
+  + choosing Sticky there makes a Kanban board on Auto draw stickies, and the card tab reads Auto (Sticky)
+  + a card type pinned on the card tab still wins over the view's default
+
+
+### Sticky card restyle [](?id=sticky-card)
+
++ goal: the existing `sticky` card looks like a paper sticky with a curled bottom-right corner
++ background, measured 2026-09-16
+  + `sticky` already exists: a `CARD_REGISTRY` node, `StickyNote.tsx` and `StickyNote.module.scss`
+  + today it is only a compact card: origin pill and headline, no body, tighter padding
+  + operator decision 2026-09-16: the name stays "Sticky"; no second name, and no brand name
+  + tried first in the kanban view, as a test surface rather than its home
+  + CODING_STANDARDS.md > Every card type works in every view
++ colour, operator decision 2026-09-16
+  + a sticky takes its project's hue, the same hue the project pill is drawn in
+  + a sticky with no project link is yellow
+  + "project link" is the headline's own test for drawing a project pill (`MarkdownNoteHeadline.tsx:32`)
+  + one hue function serves the pill and the sticky, so the two cannot drift apart
+  + the sticky is a paler shade of that hue, since the pill sits on it and an identical colour would hide the pill
++ selector, operator decision 2026-09-16
+  + the card selector offers Auto, and each view declares the card Auto resolves to
+  + kanban's default card is `card`
+  + already true before this story: the root radio is `auto` (`SettingsCardDrawer.tsx:115-131`)
+  + and `CARD_REGISTRY.view_defaults` maps `root` and `kanban` to `card` (`cardregistryops.ts`)
++ the lanes paint every card's surface themselves (`ViewRenderer.module.scss`, `.column > div > .note`)
+  + so a card cannot draw its own surface there without the view branching on card type
+  + the lane surface reads `--nt-card-*` custom properties with today's values as fallbacks
+  + a card overrides those properties on itself, mirroring how the board already hands `--nt-card-width` down
++ [X] add `originHasProject` and `hueForOrigin` to `originops.ts`, and draw the pill and headline through them
+  + `originPillColour` removed, since the pill now draws through `hueForOrigin` and nothing else called it
++ [X] read the lane card surface from `--nt-card-*` custom properties, light and dark rules alike
++ [X] read the theme from the VS Code body class, since nothing ever set the attribute the pill read
+  + found while matching the pill: `detectThemeAttribute` read `data-mantine-color-scheme`, which no code or harness sets
+  + so every pill drew its dark shade in every theme, and the pill's light-theme rule never matched
+  + VS Code stamps `vscode-light`, `vscode-dark` or a high-contrast class on the webview body, which the lanes already read
+  + now `detectVscodeTheme` and both stylesheets read that class, so pills draw their light shade in light themes
++ [X] give `StickyNote` a paper surface in its project hue, yellow without a project, in light and dark themes
++ [X] curl the bottom-right corner without clipping the card
+  + the paper's background gradient paints the corner transparent, and a pseudo-element flap covers the fold line
+  + the focus ring is an `outline`, so a clip on the card would crop it
+  + line number badges hang outside the headline, so a clip on the paper would crop them too
++ [X] keep the focus ring uncropped on a sticky in the leftmost column
+  + CODING_STANDARDS.md > Focused-note scroll framing
+  + `sticky-card.spec.ts` focuses the leftmost sticky and asserts the ring on an unclipped card
++ [X] update the `sticky` row and the Card types section of `AUTHORING_GUIDE.md`
+  + it described `sticky` as "a compact summary - pill and title only"
++ [X] update colocated Jest for `originops`, `OriginPill` and `StickyNote`
+  + `OriginPill.test.tsx` needed no change: its colour assertions hold through `hueForOrigin`
++ [X] verify in the Playwright harness in kanban, line and document views, light and dark
+  + `playwright/specs/sticky-card.spec.ts`: hue per project, cleared lane surface, curl, theme class, focus ring, three views
+  + the document view's heading margin had landed inside the paper; the sticky now zeroes it and pads round the paper
++ acceptance criteria
+  + a sticky in a project draws in that project's pill hue, and a sticky with no project draws yellow
+  + the bottom-right corner reads as curled, and the focus ring is never cropped
+  + choosing Sticky in the card selector draws stickies in document, line and kanban
+  + a file declaring `nt_card=sticky` still opens as stickies, with no migration
+  + the full card looks exactly as it did

@@ -21,6 +21,7 @@ import {
 import type { SettingsCascadeKey, SettingsCascadePayload, UserViewType } from "../../../types/Messages";
 import styles from "../../ViewRenderer.module.scss";
 import { CARD_RATIOS, DEFAULT_CARD_RATIO } from "../kanban/columnwidthops";
+import { DEFAULT_CARD_TYPE, renderableCardIds } from "../../notes/cardregistryops";
 import GroupBySelector from "../GroupBySelector";
 import SettingsRow from "../SettingsRow";
 import { viewTypeLabel } from "../viewTypeLabel";
@@ -225,6 +226,23 @@ function RowControl(props: RowControlProps): React.ReactElement {
                     ))}
                 </select>
             );
+        case 'cardType': {
+            // the concrete cards only: a view's default is what Auto resolves to, so Auto itself is no answer
+            const card_types = renderableCardIds();
+            return (
+                <select
+                    className={styles.settingsSelect}
+                    data-testid={`setting-control-${def.key}`}
+                    value={typeof props.value === 'string' && card_types.includes(props.value) ? props.value : DEFAULT_CARD_TYPE}
+                    aria-label={settingRowLabel(def.key)}
+                    onChange={(e) => props.onChange(def, e.target.value)}
+                >
+                    {card_types.map(card_type => (
+                        <option key={card_type} value={card_type}>{viewTypeLabel(card_type)}</option>
+                    ))}
+                </select>
+            );
+        }
         case 'orientation':
             return (
                 <select

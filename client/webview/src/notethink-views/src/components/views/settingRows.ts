@@ -1,5 +1,5 @@
 import * as l10n from "@vscode/l10n";
-import { CARD_REGISTRY, cardChainOf, owningCardNodeFor, type CardRegistry } from "../notes/cardregistryops";
+import { CARD_REGISTRY, DEFAULT_CARD_TYPE, cardChainOf, owningCardNodeFor, type CardRegistry } from "../notes/cardregistryops";
 import { DEFAULT_CARD_RATIO } from "./kanban/columnwidthops";
 import { NODE_GLOBAL, SETTING_HOMES, VIEW_REGISTRY, chainOf, owningNodeFor, type ViewRegistry } from "../../lib/viewregistryops";
 import type { SettingsCascadeKey } from "../../types/Messages";
@@ -15,7 +15,7 @@ import type { SettingsCascadeKey } from "../../types/Messages";
  * two keys, `groupBy` at grouped and `kanbanGroupBy` at kanban. These tables are therefore the row spec,
  * and `SETTING_HOMES` decides where each row lands.
  */
-export type SettingControlKind = 'checkbox' | 'groupBy' | 'orientation' | 'columnOrder' | 'cardRatio';
+export type SettingControlKind = 'checkbox' | 'groupBy' | 'orientation' | 'columnOrder' | 'cardRatio' | 'cardType';
 
 /**
  * One declared row.
@@ -40,8 +40,8 @@ const AXIS_ALIAS = 'axis';
 
 /*
  * Declaration order is the within-node order the pane renders, so the kanban rows read group-by, column
- * order, animate exactly as the drawer's design states them. Across nodes the chain decides the order,
- * so this list needs no most-specific-first arrangement of its own.
+ * order, card ratio, animate, default card type exactly as the drawer's design states them. Across nodes
+ * the chain decides the order, so this list needs no most-specific-first arrangement of its own.
  */
 export const VIEW_SETTING_ROWS: SettingRowDef[] = [
     { key: 'kanbanGroupBy', control: 'groupBy', fallback: 'auto', alias: AXIS_ALIAS },
@@ -49,6 +49,7 @@ export const VIEW_SETTING_ROWS: SettingRowDef[] = [
     { key: 'columnOrder', control: 'columnOrder', fallback: [] },
     { key: 'kanbanCardRatio', control: 'cardRatio', fallback: DEFAULT_CARD_RATIO },
     { key: 'kanbanAnimateTransitions', control: 'checkbox', fallback: true },
+    { key: 'kanbanDefaultCardType', control: 'cardType', fallback: DEFAULT_CARD_TYPE },
     { key: 'orientation', control: 'orientation', fallback: 'columns' },
     { key: 'scrollNoteIntoView', control: 'checkbox', fallback: true },
     { key: 'watchUnopenedFilesInViewer', control: 'checkbox', fallback: true },
@@ -90,6 +91,7 @@ export function settingRowLabel(key: SettingsCascadeKey): string {
         case 'columnOrder': return l10n.t('Group order');
         case 'kanbanCardRatio': return l10n.t('Target card ratio');
         case 'kanbanAnimateTransitions': return l10n.t('Animate passive transitions');
+        case 'kanbanDefaultCardType': return l10n.t('Default card type');
         case 'orientation': return l10n.t('Orientation');
         case 'showLinetagsInHeadlines': return l10n.t('Show linetags in headlines');
         case 'scrollNoteIntoView': return l10n.t('Scroll note into view');

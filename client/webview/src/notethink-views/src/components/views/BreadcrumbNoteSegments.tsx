@@ -34,7 +34,6 @@ export default function BreadcrumbNoteSegments(props: BreadcrumbNoteSegmentsProp
         });
     }, [headlines_raw, props.notes]);
     debug("notes=%d", memoized_notes.length);
-
     return (
         <>
             {memoized_notes.map((item: NoteProps, index: number) => {

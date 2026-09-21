@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, act } from '@testing-library/react';
 import Debug from 'debug';
 import ExtensionReceiverImpl from './ExtensionReceiver';
+import { MESSAGE_FLUSH_FALLBACK_MS } from '../hooks/useVscodeMessages';
 import { DEFAULT_SETTINGS_CASCADE } from '../constants';
 
 // most tests render the receiver without caring about the pending-work plumbing; inject a no-op api so every render() in the suite stays terse
@@ -17,6 +18,21 @@ const NOOP_JUMP_TARGETS_API = {
 };
 function ExtensionReceiver(): React.ReactElement {
     return <ExtensionReceiverImpl pendingWorkApi={NOOP_PENDING_WORK_API} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />;
+}
+
+/*
+ * Dispatch one of the coalesced wire messages (update, docDeleted, pendingChange) and wait for the commit.
+ *
+ * useVscodeMessages queues those three types and drains them once per animation frame, so a bare dispatch
+ * changes no state by itself. jsdom backs both requestAnimationFrame and the hook's fallback with timers,
+ * so yielding past the fallback covers whichever one fires. Every other message type still lands
+ * synchronously and is dispatched inline.
+ */
+async function postQueuedMessage(data: unknown): Promise<void> {
+    await act(async () => {
+        window.dispatchEvent(new MessageEvent('message', { data }));
+        await new Promise(resolve => setTimeout(resolve, MESSAGE_FLUSH_FALLBACK_MS + 5));
+    });
 }
 
 /*
@@ -84,41 +100,29 @@ describe('ExtensionReceiver', () => {
         remove_spy.mockRestore();
     });
 
-    it('updates docs when receiving an update message', () => {
+    it('updates docs when receiving an update message', async () => {
         render(<ExtensionReceiver />);
-        act(() => {
-            window.dispatchEvent(new MessageEvent('message', {
-                data: {
-                    type: 'update',
-                    partial: {
-                        docs: {
-                            'doc-1': { id: 'doc-1', path: '/test.md' },
-                        },
-                    },
+        await postQueuedMessage({
+            type: 'update',
+            partial: {
+                docs: {
+                    'doc-1': { id: 'doc-1', path: '/test.md' },
                 },
-            }));
+            },
         });
         const renderer = screen.getByTestId('NoteRenderer');
         expect(renderer).toHaveAttribute('data-note-count', '1');
     });
 
-    it('replaces docs on each update (single-file view)', () => {
+    it('replaces docs on each update (single-file view)', async () => {
         render(<ExtensionReceiver />);
-        act(() => {
-            window.dispatchEvent(new MessageEvent('message', {
-                data: {
-                    type: 'update',
-                    partial: { docs: { 'a': { id: 'a', path: '/a.md' } } },
-                },
-            }));
+        await postQueuedMessage({
+            type: 'update',
+            partial: { docs: { 'a': { id: 'a', path: '/a.md' } } },
         });
-        act(() => {
-            window.dispatchEvent(new MessageEvent('message', {
-                data: {
-                    type: 'update',
-                    partial: { docs: { 'b': { id: 'b', path: '/b.md' } } },
-                },
-            }));
+        await postQueuedMessage({
+            type: 'update',
+            partial: { docs: { 'b': { id: 'b', path: '/b.md' } } },
         });
         const renderer = screen.getByTestId('NoteRenderer');
         // second update replaces the first - only one doc at a time
@@ -136,68 +140,52 @@ describe('ExtensionReceiver', () => {
         expect(renderer).toHaveAttribute('data-note-count', '0');
     });
 
-    it('skips setState when doc hash_sha256 is unchanged', () => {
+    it('skips setState when doc hash_sha256 is unchanged', async () => {
         render(<ExtensionReceiver />);
         // send initial doc with hash
-        act(() => {
-            window.dispatchEvent(new MessageEvent('message', {
-                data: {
-                    type: 'update',
-                    partial: {
-                        docs: {
-                            'doc-1': { id: 'doc-1', path: '/test.md', hash_sha256: 'abc123' },
-                        },
-                    },
+        await postQueuedMessage({
+            type: 'update',
+            partial: {
+                docs: {
+                    'doc-1': { id: 'doc-1', path: '/test.md', hash_sha256: 'abc123' },
                 },
-            }));
+            },
         });
         expect(screen.getByTestId('NoteRenderer')).toHaveAttribute('data-note-count', '1');
 
         // send same doc with same hash - should not cause re-render issues
-        act(() => {
-            window.dispatchEvent(new MessageEvent('message', {
-                data: {
-                    type: 'update',
-                    partial: {
-                        docs: {
-                            'doc-1': { id: 'doc-1', path: '/test.md', hash_sha256: 'abc123' },
-                        },
-                    },
+        await postQueuedMessage({
+            type: 'update',
+            partial: {
+                docs: {
+                    'doc-1': { id: 'doc-1', path: '/test.md', hash_sha256: 'abc123' },
                 },
-            }));
+            },
         });
         expect(screen.getByTestId('NoteRenderer')).toHaveAttribute('data-note-count', '1');
     });
 
-    it('updates state when doc hash_sha256 changes', () => {
+    it('updates state when doc hash_sha256 changes', async () => {
         render(<ExtensionReceiver />);
         // send initial doc
-        act(() => {
-            window.dispatchEvent(new MessageEvent('message', {
-                data: {
-                    type: 'update',
-                    partial: {
-                        docs: {
-                            'doc-1': { id: 'doc-1', path: '/test.md', text: 'hello', hash_sha256: 'hash1' },
-                        },
-                    },
+        await postQueuedMessage({
+            type: 'update',
+            partial: {
+                docs: {
+                    'doc-1': { id: 'doc-1', path: '/test.md', text: 'hello', hash_sha256: 'hash1' },
                 },
-            }));
+            },
         });
         expect(screen.getByTestId('NoteRenderer')).toHaveAttribute('data-note-count', '1');
 
         // send same doc with different hash - should update
-        act(() => {
-            window.dispatchEvent(new MessageEvent('message', {
-                data: {
-                    type: 'update',
-                    partial: {
-                        docs: {
-                            'doc-1': { id: 'doc-1', path: '/test.md', text: 'changed', hash_sha256: 'hash2' },
-                        },
-                    },
+        await postQueuedMessage({
+            type: 'update',
+            partial: {
+                docs: {
+                    'doc-1': { id: 'doc-1', path: '/test.md', text: 'changed', hash_sha256: 'hash2' },
                 },
-            }));
+            },
         });
         expect(screen.getByTestId('NoteRenderer')).toHaveAttribute('data-note-count', '1');
     });
@@ -264,22 +252,14 @@ describe('ExtensionReceiver', () => {
     });
 
     describe('pendingChange message', () => {
-        it('routes pendingChange { on: true } to markPending and { on: false } to clearPending', () => {
+        it('routes pendingChange { on: true } to markPending and { on: false } to clearPending', async () => {
             const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
             render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
 
-            act(() => {
-                window.dispatchEvent(new MessageEvent('message', {
-                    data: { type: 'pendingChange', key: 'folderDiscovery', on: true },
-                }));
-            });
+            await postQueuedMessage({ type: 'pendingChange', key: 'folderDiscovery', on: true });
             expect(api.markPending).toHaveBeenCalledWith('folderDiscovery');
 
-            act(() => {
-                window.dispatchEvent(new MessageEvent('message', {
-                    data: { type: 'pendingChange', key: 'folderDiscovery', on: false },
-                }));
-            });
+            await postQueuedMessage({ type: 'pendingChange', key: 'folderDiscovery', on: false });
             expect(api.clearPending).toHaveBeenCalledWith('folderDiscovery');
         });
 
@@ -323,18 +303,14 @@ describe('ExtensionReceiver', () => {
             expect(cleared).toEqual(expect.arrayContaining(['settingsCascade', ...Object.keys(DEFAULT_SETTINGS_CASCADE)]));
         });
 
-        it('a bulk-replace aggregate update clears the integrationFilters sentinel', () => {
+        it('a bulk-replace aggregate update clears the integrationFilters sentinel', async () => {
             const api = { pending: false, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
             render(<ExtensionReceiverImpl pendingWorkApi={api} jumpTargetsApi={NOOP_JUMP_TARGETS_API} />);
 
-            act(() => {
-                window.dispatchEvent(new MessageEvent('message', {
-                    data: {
-                        type: 'update',
-                        partial: { docs: { 'doc-1': { id: 'doc-1', path: '/a.md' } } },
-                        aggregate_total_discovered: 1,
-                    },
-                }));
+            await postQueuedMessage({
+                type: 'update',
+                partial: { docs: { 'doc-1': { id: 'doc-1', path: '/a.md' } } },
+                aggregate_total_discovered: 1,
             });
             expect(api.clearPending).toHaveBeenCalledWith('integrationFilters');
         });
@@ -485,17 +461,13 @@ describe('ExtensionReceiver', () => {
             );
         });
 
-        it('valid update message still works after validation', () => {
+        it('valid update message still works after validation', async () => {
             render(<ExtensionReceiver />);
-            act(() => {
-                window.dispatchEvent(new MessageEvent('message', {
-                    data: {
-                        type: 'update',
-                        partial: {
-                            docs: { 'doc-v': { id: 'doc-v', path: '/v.md' } },
-                        },
-                    },
-                }));
+            await postQueuedMessage({
+                type: 'update',
+                partial: {
+                    docs: { 'doc-v': { id: 'doc-v', path: '/v.md' } },
+                },
             });
             const renderer = screen.getByTestId('NoteRenderer');
             expect(renderer).toHaveAttribute('data-note-count', '1');

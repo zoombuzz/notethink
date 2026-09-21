@@ -1,3 +1,4 @@
+import Debug from "debug";
 import { convertMdastToNoteHierarchy, type MdastInput } from "./convertMdastToNoteHierarchy";
 import { stripHeadlineLinetags, storyStableIdSlug } from "./noteops";
 import { resolveNamespacedTag } from "./linetagops";
@@ -6,6 +7,8 @@ import { buildProjectLabels, hueForProjectName, projectNameFromRelativePath } fr
 import { INTEGRATION_MODE_FOLDER } from "../types/IntegrationMode";
 import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NoteProps";
 
+const debug = Debug("nodejs:notethink-views:mergeAggregateRoot");
+
 /**
  * Aggregate (Folder) mode entry point.
  *
@@ -13,12 +16,36 @@ import type { LineTag, MdastNode, NoteProps, NoteOrigin } from "../types/NotePro
  * synthetic root NoteProps whose children are the depth-3 "stories" gathered from every
  * doc, each stamped with origin metadata so callers can route edits back to the source file.
  *
+ * A merge is incremental. A FolderMergeCache lets one board carry two things between merges:
+ * each doc's parsed tree, keyed on its content, and each doc's stamped story subtrees, keyed on
+ * every input the stamp reads. A doc whose keys are unchanged contributes the SAME NoteProps
+ * objects it contributed last time, and that reference stability is what lets the React memo
+ * chain stop at the cards whose own file actually changed.
+ *
+ * Stamping clones, it does not version. The stamp writes seq, level, parent_notes, origin and
+ * stable_id onto the notes it walks, so running it over a cached subtree would change what a card
+ * renders without changing anything React compares, and the board would keep showing the old one.
+ * Every stamp therefore runs over a fresh clone and the parsed tree itself is never written to. A
+ * version counter was the alternative and is worse: it still hands React the same object, so every
+ * memo comparison in the tree has to opt into checking it and one that forgets fails silently,
+ * whereas a clone makes "this subtree changed" and "these are different objects" the same fact.
+ * The single field a reused subtree does take is `parent_notes[0]`, re-pointed at the current
+ * merge's synthetic root; the two roots carry identical observable fields, so nothing a note
+ * renders depends on which of them it points at.
+ *
+ * Seqs are laid out on a fixed grid rather than counted off a running total, so one file's
+ * numbers do not move when a sibling file changes - see storySeqBase. The grid has two bounds, and
+ * breaking either gives two notes the same seq rather than an error: a board may carry fewer than
+ * SEQ_FILE_SLOT_COUNT files, and a story fewer than SEQ_STORY_STRIDE notes. Both constants carry
+ * what holds them and what raising them costs.
+ *
  * See design in docstech/users/alex.stanhope/todo.md (story "Aggregate (Folder) view").
  */
 
 /**
  * AggregatedDocInput is one source file's contribution to mergeAggregateRoot.
  * - mtime: on-disk modification time (epoch ms) - stamped onto every story's origin so within-band ordering can surface recently-edited files
+ * - hash_sha256: content hash, the key the per-doc caches compare; absent, they fall back to comparing `text`
  */
 export interface AggregatedDocInput {
     id: string;
@@ -27,6 +54,7 @@ export interface AggregatedDocInput {
     content: MdastInput;
     text: string;
     mtime?: number;
+    hash_sha256?: string;
 }
 
 export interface MergeAggregateRootResult {
@@ -55,8 +83,8 @@ interface EpicEntry {
 
 /**
  * mutable accumulator threaded through walkStorySubtree.
- * - all_notes: flat list every walked note is pushed onto
- * - next_seq: the next global seq to assign (incremented per note)
+ * - all_notes: flat list every walked note is pushed onto, in pre-order
+ * - next_seq: the next seq to assign, seeded at the story's block base and incremented per note
  */
 interface SeqWalkContext {
     all_notes: NoteProps[];
@@ -66,14 +94,203 @@ interface SeqWalkContext {
 interface CollectedStory {
     story: NoteProps;
     origin: NoteOrigin;
-    file_epic_by_id: Map<string, EpicEntry>;
-    file_epic_by_name: Map<string, EpicEntry>;
+}
+
+/**
+ * one doc's parsed tree, held between merges.
+ * - content_key: the doc content this tree was parsed from, compared to decide a re-parse
+ */
+interface ConvertedDoc {
+    content_key: string;
+    root: NoteProps;
+}
+
+/**
+ * one file's stamped contribution to a board, held between merges.
+ * - content_key / stamp_key: every input the stamp read, split so the content comparison stays a single string compare
+ * - stories: the file's selected story roots, rank 0 first
+ * - notes: each story's own pre-order note list, parallel to `stories`
+ */
+interface StampedFileEntry {
+    content_key: string;
+    stamp_key: string;
+    stories: NoteProps[];
+    notes: NoteProps[][];
+}
+
+/**
+ * ConversionProbe counts the work merges actually did, for the perf harness and for tests that
+ * assert the per-doc cache is doing its job.
+ * - conversions: convertMdastToNoteHierarchy calls made on behalf of a folder merge
+ * - merges: mergeAggregateRoot calls
+ */
+export interface ConversionProbe {
+    conversions: number;
+    merges: number;
 }
 
 // file H1 `order` linetag value: newest stories are appended at the bottom of the file (e.g. done.md)
 const ORDER_NEWEST_AT_BOTTOM = 'newest-at-bottom';
 
+/*
+ * Seqs reserved for one story's subtree. A story holding more notes than this runs into the next
+ * story's block and two notes end up sharing a seq, so the stamp reports any story that gets close.
+ * The largest story in the repo's own boards is three orders of magnitude below it.
+ */
+export const SEQ_STORY_STRIDE = 8192;
+
+/*
+ * File slots in one rank band, and so the ceiling on how many source files a merged board can
+ * number independently. A board carrying SEQ_FILE_SLOT_COUNT files or more would give the file at
+ * slot 1024 the same seqs as the file at slot 0 one rank up: a silent identity collision, not a
+ * crash. `MAX_AGGREGATE_FILES` in client/extension/src/constants.ts is what holds it, and
+ * mergeAggregateRoot.test.ts pins the two together so raising that cap past this one turns the
+ * suite red. Raising the cap means raising this constant in the same change.
+ */
+export const SEQ_FILE_SLOT_COUNT = 1024;
+
+const conversion_probe: ConversionProbe = { conversions: 0, merges: 0 };
+
+// the perf harness reads these counts off the page, where it has no way to reach a module-private binding
+(globalThis as { __notethink_conversion_probe?: ConversionProbe }).__notethink_conversion_probe = conversion_probe;
+
 export { FOLDER_VIEW_STATE_ID, anyViewInFolderMode } from "./viewstateops";
+
+/**
+ * A snapshot of the conversion probe. Returns a copy so a caller can compare two readings.
+ */
+export function conversionProbe(): ConversionProbe {
+    return { ...conversion_probe };
+}
+
+/**
+ * Zero the conversion probe. Each test case that asserts on it resets first, since the counts are
+ * process-wide.
+ */
+export function resetConversionProbe(): void {
+    conversion_probe.conversions = 0;
+    conversion_probe.merges = 0;
+}
+
+/**
+ * The content identity of a doc: its hash when the extension sent one, else the text itself, which
+ * compares by reference for the docs a board actually re-merges.
+ */
+function docContentKey(doc: AggregatedDocInput): string {
+    return doc.hash_sha256 ?? doc.text;
+}
+
+/**
+ * Parse one doc into a NoteProps tree, counting the call for the probe.
+ */
+function convertCounted(doc: AggregatedDocInput): NoteProps {
+    conversion_probe.conversions++;
+    return convertMdastToNoteHierarchy(doc.content, doc.text);
+}
+
+/**
+ * FolderMergeCache is one folder board's memory between merges, and the reason a watcher event on
+ * one file does not re-parse and re-render the other 199. It holds each doc's parsed tree and each
+ * doc's stamped story subtrees, both keyed on the inputs that produced them, and forgets a doc the
+ * moment it leaves the board. A merge without one is correct and simply does all the work again,
+ * which is what the tests that construct no cache exercise.
+ *
+ * Owned by the composer (one instance per mounted folder view) rather than by this module, so two
+ * views, a test and a harness run never share counts or entries.
+ */
+export class FolderMergeCache {
+    private conversions = new Map<string, ConvertedDoc>();
+    private stamped = new Map<string, StampedFileEntry>();
+
+    /**
+     * The doc's parsed tree, re-parsing only when its content key has moved.
+     */
+    convert(doc: AggregatedDocInput): NoteProps {
+        const content_key = docContentKey(doc);
+        const cached = this.conversions.get(doc.id);
+        if (cached && cached.content_key === content_key) { return cached.root; }
+        const root = convertCounted(doc);
+        this.conversions.set(doc.id, { content_key, root });
+        return root;
+    }
+
+    /**
+     * The doc's stamped stories when every stamp input still matches, else undefined.
+     */
+    stampedFor(doc_id: string, content_key: string, stamp_key: string): StampedFileEntry | undefined {
+        const cached = this.stamped.get(doc_id);
+        if (!cached || cached.content_key !== content_key || cached.stamp_key !== stamp_key) { return undefined; }
+        return cached;
+    }
+
+    putStamped(doc_id: string, entry: StampedFileEntry): void {
+        this.stamped.set(doc_id, entry);
+    }
+
+    /**
+     * Forget every doc outside `doc_ids`, so a file removed from the board (deleted, renamed, or
+     * filtered out) stops holding its parsed tree and its stamped subtrees alive.
+     */
+    retain(doc_ids: Set<string>): void {
+        for (const id of [...this.conversions.keys()]) {
+            if (!doc_ids.has(id)) { this.conversions.delete(id); }
+        }
+        for (const id of [...this.stamped.keys()]) {
+            if (!doc_ids.has(id)) { this.stamped.delete(id); }
+        }
+    }
+}
+
+/**
+ * The first seq of one story's block.
+ *
+ * Seqs sit on a fixed (file_rank, file_slot) grid instead of counting off a running total, so a
+ * story's numbers follow from its own file's position and its own rank within that file and from
+ * nothing any other file does: a sibling file gaining, losing or rewriting a story leaves them
+ * alone, which is what keeps an unchanged card out of the memo comparisons that read a seq. Rank is
+ * the major term because the merged reading order is rank-major (rank 0 of every file, then rank 1),
+ * so block bases still sort exactly where the round-robin interleave puts their stories. The grid is
+ * sparse by construction: seqs are unique and ordered, never contiguous.
+ */
+function storySeqBase(file_slot: number, file_rank: number): number {
+    if (file_slot >= SEQ_FILE_SLOT_COUNT) {
+        debug('file slot %d is past the %d-slot grid, so this file shares its seqs with another file', file_slot, SEQ_FILE_SLOT_COUNT);
+    }
+    return ((file_rank * SEQ_FILE_SLOT_COUNT) + file_slot + 1) * SEQ_STORY_STRIDE;
+}
+
+// a children_body entry is a child note rather than a raw mdast body node when it carries a seq
+function isChildNoteItem(item: NoteProps | MdastNode): boolean {
+    return 'seq' in item && typeof (item as NoteProps).seq === 'number';
+}
+
+/**
+ * Deep-copy one story subtree, sharing everything the stamp never writes: the mdast `children`
+ * arrays (so the node-keyed render cache in renderops still hits for an unchanged doc), `position`,
+ * and any pre-rendered headline. `children_body` mixes child notes with raw mdast nodes and its
+ * notes are the same objects as `child_notes`, so both go through one `clones` map and the copy
+ * keeps that shared identity. Linetags are copied because the stamp writes `note_seq` into them.
+ */
+function cloneStorySubtree(note: NoteProps, clones: Map<NoteProps, NoteProps>): NoteProps {
+    const existing = clones.get(note);
+    if (existing) { return existing; }
+    const clone: NoteProps = { ...note };
+    clones.set(note, clone);
+    if (note.linetags) {
+        const linetags: { [key: string]: LineTag } = {};
+        for (const key of Object.keys(note.linetags)) {
+            linetags[key] = { ...note.linetags[key] };
+        }
+        clone.linetags = linetags;
+    }
+    if (note.child_notes) {
+        clone.child_notes = note.child_notes.map(child => cloneStorySubtree(child, clones));
+    }
+    clone.children_body = (note.children_body ?? []).map(item => (
+        isChildNoteItem(item) ? cloneStorySubtree(item as NoteProps, clones) : item
+    ));
+    return clone;
+}
 
 /**
  * Select a single file's contributed stories for the merged view: trim to at
@@ -220,10 +437,10 @@ function extendChildPath(child_path: string, index: number): string {
 }
 
 /**
- * walk a story subtree: assign sequential seqs, rewrite parent_notes/level, stamp
+ * walk a story subtree: assign seqs from the story's own block, rewrite parent_notes/level, stamp
  * origin (including the pre-merge `source_position` copy of `position` so the
  * editor-caret matcher can resolve folder-mode focus in source-file offsets), and
- * keep linetag.note_seq in sync with the renumbered seq. `child_path` is the note's
+ * keep linetag.note_seq in sync with the assigned seq. `child_path` is the note's
  * ordinal position under the story root, '' at the root itself: the root takes
  * `story_stable_id` verbatim and descendants derive `${story_stable_id}:${child_path}`,
  * so a length-changing edit anywhere in the file leaves their ids alone and only a
@@ -261,6 +478,258 @@ function walkStorySubtree(
 }
 
 /**
+ * Parse every usable doc in the map, in the merge's stable file order (relative_path, falling back
+ * to path). With a cache only the docs whose content key has moved are parsed again; without one
+ * every doc is parsed, which is the behaviour a caller that passes no cache asks for.
+ */
+function parseAggregatedDocs(
+    docs: { [key: string]: AggregatedDocInput | undefined },
+    cache: FolderMergeCache | undefined,
+): PerFileParse[] {
+    const parsed: PerFileParse[] = [];
+    for (const id of Object.keys(docs)) {
+        const doc = docs[id];
+        if (!doc || !doc.content || !doc.text) { continue; }
+        const root = cache ? cache.convert(doc) : convertCounted(doc);
+        parsed.push({ doc, root, h1: findFileH1(root) });
+    }
+    parsed.sort((a, b) => {
+        const ar = a.doc.relative_path ?? a.doc.path;
+        const br = b.doc.relative_path ?? b.doc.path;
+        return ar < br ? -1 : ar > br ? 1 : 0;
+    });
+    return parsed;
+}
+
+/**
+ * The universe of project names pill labels are derived against: the workspace list when the
+ * extension supplied one, then any visible-set project it did not already name. The
+ * workspace-driven seed keeps labels stable across folder descents. Hue needs no universe - it is
+ * an identity hash of the project name (hueForProjectName) and so is set-independent.
+ */
+function distinctProjectNames(parsed: PerFileParse[], workspace_projects: string[] | undefined): string[] {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const name of (workspace_projects ?? [])) {
+        if (!seen.has(name)) {
+            seen.add(name);
+            names.push(name);
+        }
+    }
+    for (const file of parsed) {
+        const project_name = projectNameFromRelativePath(file.doc.relative_path);
+        if (project_name && !seen.has(project_name)) {
+            seen.add(project_name);
+            names.push(project_name);
+        }
+    }
+    return names;
+}
+
+/**
+ * The synthetic root one merge hangs its stories off. Built fresh each merge so a board whose
+ * content changed hands React a new note list, and carrying integration_path for breadcrumb/debug.
+ */
+function makeSyntheticRoot(integration_path: string): NoteProps {
+    const synthetic_root: NoteProps = {
+        seq: 0,
+        level: 0,
+        type: 'root',
+        position: { start: { offset: 0, line: 1 }, end: { offset: 0, line: 1 } },
+        children: [],
+        children_body: [],
+        child_notes: [],
+        headline_raw: '',
+        body_raw: '',
+        stable_id: `__folder__:${integration_path}`,
+    };
+    (synthetic_root as NoteProps & { integration_path?: string }).integration_path = integration_path;
+    return synthetic_root;
+}
+
+/**
+ * Every stamp input that does not come from the doc's content, joined into one comparable key. A
+ * mismatch is what forces a file's stories to be stamped onto fresh clones, so anything the stamp
+ * reads and the content key does not cover belongs here: the doc's own location and mtime, the
+ * project label (derived against the whole board's universe), the file's slot in the merged file
+ * order, and the per-file story cap.
+ */
+function fileStampKey(
+    doc: AggregatedDocInput,
+    file_slot: number,
+    project_label: string | undefined,
+    maxNotesPerFile: number | undefined,
+): string {
+    return [
+        doc.path,
+        doc.relative_path ?? '',
+        doc.mtime ?? '',
+        project_label ?? '',
+        file_slot,
+        maxNotesPerFile ?? '',
+    ].join(' ');
+}
+
+/**
+ * This file's full ordered story contribution (direct + epic-nested) in document order.
+ * selectFileStories then trims and orients it, and the round-robin pass interleaves it with the
+ * other files. Stories are still the parsed tree's own notes here - the stamp clones them.
+ */
+function collectFileStories(walk_children: NoteProps[], base_origin: Omit<NoteOrigin, 'epic'>): CollectedStory[] {
+    const file_stories: CollectedStory[] = [];
+    for (const c of walk_children) {
+        if (c.depth === 3) {
+            // story directly under H1 (or doc root, in no-H1 case)
+            file_stories.push({ story: c, origin: { ...base_origin } });
+        } else if (c.depth === 2) {
+            // epic: recurse one level
+            const epic_entry = epicEntryFromHeading(c);
+            for (const g of (c.child_notes || [])) {
+                if (g.depth === 3) {
+                    file_stories.push({ story: g, origin: { ...base_origin, epic: epic_entry } });
+                }
+            }
+        }
+        // ignore other depths and non-heading types at file root
+    }
+    return file_stories;
+}
+
+/**
+ * Resolve a collected story's `epic` linetag (direct > inherited > structural). The
+ * applyChildAttributeInheritance pass during convertMdastToNoteHierarchy has already collapsed an
+ * inherited nt_child_epic= onto the story as a regular `epic` linetag (with inherited: true), and a
+ * direct linetag overwrites an inherited one, so this covers both uniformly. With no linetag the
+ * structural epic set during collection stays, or undefined.
+ */
+function resolveCollectedEpic(
+    collected_story: CollectedStory,
+    file_epic_by_id: Map<string, EpicEntry>,
+    file_epic_by_name: Map<string, EpicEntry>,
+): void {
+    const epic_linetag: LineTag | undefined = collected_story.story.linetags?.epic;
+    if (epic_linetag?.value) {
+        collected_story.origin.epic = resolveEpicLinetag(epic_linetag.value, file_epic_by_id, file_epic_by_name);
+    }
+}
+
+/**
+ * The per-file origin every one of its stories starts from, before rank and epic are stamped on.
+ * Each file-level value takes an H1 linetag over the front-matter one (most-specific wins).
+ */
+function fileBaseOrigin(
+    file: PerFileParse,
+    project_name: string | undefined,
+    project_label: string | undefined,
+): Omit<NoteOrigin, 'epic'> {
+    const { doc, root } = file;
+    return {
+        doc_id: doc.id,
+        doc_path: doc.path,
+        relative_path: doc.relative_path,
+        file_view_type: fileDeclaredViewType(root),
+        file_card_type: fileDeclaredCardType(root),
+        file_group_by: fileDeclaredGroupBy(root),
+        file_group_order: fileDeclaredGroupOrder(root),
+        file_mtime: doc.mtime,
+        project_hue: project_name ? hueForProjectName(project_name) : undefined,
+        project_label,
+    };
+}
+
+/**
+ * Stamp one file's selected stories onto clones of its parsed subtrees, each numbered from its own
+ * (file_slot, rank) block. The clone is what keeps the parsed tree reusable and what makes a real
+ * change visible to React as a new object.
+ */
+function stampFileStories(
+    file: PerFileParse,
+    file_slot: number,
+    project_label: string | undefined,
+    maxNotesPerFile: number | undefined,
+    synthetic_root: NoteProps,
+): { stories: NoteProps[]; notes: NoteProps[][] } {
+    const { doc, root, h1 } = file;
+    // walk_children returns the level-2 children of either H1 or doc root
+    const walk_children = h1 ? (h1.child_notes || []) : (root.child_notes || []);
+    // register this file's epics (## headings) so direct/inherited epic= linetags resolve by id or name
+    const { file_epic_by_id, file_epic_by_name } = buildFileEpicRegistries(walk_children);
+    const base_origin = fileBaseOrigin(file, projectNameFromRelativePath(doc.relative_path), project_label);
+    // `order` for the per-file cap: an H1 value overrides the document-root (front-matter) value
+    const file_order = h1?.linetags?.order?.value ?? root.linetags?.order?.value;
+    const selected = selectFileStories(collectFileStories(walk_children, base_origin), maxNotesPerFile, file_order);
+    const stories: NoteProps[] = [];
+    const notes: NoteProps[][] = [];
+    // per-(doc_id, slug) counter so two same-headline stories in a file get distinct ids (#1, #2, …)
+    const slug_counts = new Map<string, number>();
+    for (const [rank, collected_story] of selected.entries()) {
+        resolveCollectedEpic(collected_story, file_epic_by_id, file_epic_by_name);
+        // stamp the per-file rank so relevance ordering can break ties among equal-rank stories
+        collected_story.origin.file_rank = rank;
+        const story = cloneStorySubtree(collected_story.story, new Map());
+        const ctx: SeqWalkContext = { all_notes: [], next_seq: storySeqBase(file_slot, rank) };
+        walkStorySubtree(story, [synthetic_root], collected_story.origin, storyStableIdFor(collected_story, slug_counts), '', ctx);
+        if (ctx.all_notes.length > SEQ_STORY_STRIDE) {
+            debug('story %s holds %d notes, past the %d-seq block stride', story.stable_id, ctx.all_notes.length, SEQ_STORY_STRIDE);
+        }
+        stories.push(story);
+        notes.push(ctx.all_notes);
+    }
+    return { stories, notes };
+}
+
+/**
+ * The story's stable_id: `${doc_id}:${slug}`, with a `#N` occurrence ordinal when the file already
+ * used that slug.
+ */
+function storyStableIdFor(collected_story: CollectedStory, slug_counts: Map<string, number>): string {
+    const slug_key = `${collected_story.origin.doc_id}:${storyStableIdSlug(collected_story.story)}`;
+    const prior_count = slug_counts.get(slug_key) ?? 0;
+    slug_counts.set(slug_key, prior_count + 1);
+    return prior_count === 0 ? slug_key : `${slug_key}#${prior_count}`;
+}
+
+/**
+ * Point a reused file's notes at this merge's synthetic root. The old and new roots carry identical
+ * observable fields, so this is the one write a cached subtree takes and nothing rendered from it
+ * changes; it exists so no note holds a root the current tree has replaced.
+ */
+function reparentStampedFile(entry: StampedFileEntry, synthetic_root: NoteProps): void {
+    for (const story_notes of entry.notes) {
+        for (const note of story_notes) {
+            if (note.parent_notes?.length) { note.parent_notes[0] = synthetic_root; }
+        }
+    }
+}
+
+/**
+ * One file's stamped contribution, taken from the cache when every stamp input still matches and
+ * built (and cached) otherwise.
+ */
+function fileContribution(
+    file: PerFileParse,
+    file_slot: number,
+    project_label_by_name: Map<string, string>,
+    maxNotesPerFile: number | undefined,
+    synthetic_root: NoteProps,
+    cache: FolderMergeCache | undefined,
+): StampedFileEntry {
+    const project_name = projectNameFromRelativePath(file.doc.relative_path);
+    const project_label = project_name ? project_label_by_name.get(project_name) : undefined;
+    const content_key = docContentKey(file.doc);
+    const stamp_key = fileStampKey(file.doc, file_slot, project_label, maxNotesPerFile);
+    const cached = cache?.stampedFor(file.doc.id, content_key, stamp_key);
+    if (cached) {
+        reparentStampedFile(cached, synthetic_root);
+        return cached;
+    }
+    const stamped = stampFileStories(file, file_slot, project_label, maxNotesPerFile, synthetic_root);
+    const entry: StampedFileEntry = { content_key, stamp_key, ...stamped };
+    cache?.putStamped(file.doc.id, entry);
+    return entry;
+}
+
+/**
  * Build the merged synthetic root from a set of documents.
  *
  * Walks each doc's H1 (or document root if no H1) and collects depth-3 headings as stories.
@@ -268,7 +737,10 @@ function walkStorySubtree(
  * structural origin.epic. Direct `epic=` linetags (including those propagated from
  * `nt_child_epic=` ancestors via applyChildAttributeInheritance) override structural.
  *
- * Renumbers seqs globally and rewrites parent_notes so the merged tree has a single root.
+ * Interleaves the files round-robin by per-file rank so each column shows the latest picture across
+ * projects: rank 0 of every file in stable file order, then rank 1, and so on, a file with fewer
+ * stories simply dropping out of later rounds. Assigns each story's subtree its own seq block and
+ * rewrites parent_notes so the merged tree has a single root.
  *
  * `maxNotesPerFile` (optional) caps how many top-level stories each source file
  * contributes. Undefined → no cap (unchanged behaviour). Which end is kept depends on
@@ -280,186 +752,36 @@ function walkStorySubtree(
  * hue indices so descending into a sub-project doesn't re-derive labels against a smaller
  * visible set (e.g. "NT" suddenly becoming "NO"). When undefined / empty, falls back to
  * the visible-set derivation (preserves the legacy behaviour for tests and single-file callers).
+ *
+ * `cache` (optional) is the board's FolderMergeCache. Pass the same instance on every merge of one
+ * board and an unchanged file re-contributes the very NoteProps objects it contributed last time;
+ * omit it and every file is parsed and stamped afresh.
  */
-// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function mergeAggregateRoot(
     docs: { [key: string]: AggregatedDocInput | undefined },
     integration_path: string,
     maxNotesPerFile?: number,
     workspace_projects?: string[],
+    cache?: FolderMergeCache,
 ): MergeAggregateRootResult {
-    // 1. parse each doc once
-    const parsed: PerFileParse[] = [];
-    for (const id of Object.keys(docs)) {
-        const doc = docs[id];
-        if (!doc || !doc.content || !doc.text) { continue; }
-        const root = convertMdastToNoteHierarchy(doc.content, doc.text);
-        parsed.push({ doc, root, h1: findFileH1(root) });
-    }
-
-    // stable file ordering: by relative_path, then path
-    parsed.sort((a, b) => {
-        const ar = a.doc.relative_path ?? a.doc.path;
-        const br = b.doc.relative_path ?? b.doc.path;
-        return ar < br ? -1 : ar > br ? 1 : 0;
-    });
-
-    // seed the label universe from workspace_projects when provided, then append any visible-set project not already in it. The workspace-driven seed keeps labels stable across folder descents. Hue is an identity hash of the project name (hueForProjectName) so it needs no universe - it is set-independent
-    const seen_project_names = new Set<string>();
-    const distinct_project_names: string[] = [];
-    if (workspace_projects && workspace_projects.length > 0) {
-        for (const name of workspace_projects) {
-            if (!seen_project_names.has(name)) {
-                seen_project_names.add(name);
-                distinct_project_names.push(name);
-            }
-        }
-    }
-    for (const file of parsed) {
-        const project_name = projectNameFromRelativePath(file.doc.relative_path);
-        if (project_name && !seen_project_names.has(project_name)) {
-            seen_project_names.add(project_name);
-            distinct_project_names.push(project_name);
-        }
-    }
-    // 2-character pill label per project - first letter + earliest character that differentiates this project from any other in the universe (notethink→NT, notebook→NB). Driven by the workspace universe when available so labels are stable across descents
-    const project_label_by_name = buildProjectLabels(distinct_project_names);
-
-    /*
-     * 2. for each file, build epic registries and collect stories
-     * each file's selected stories, kept in stable file order (parsed is sorted by relative_path)
-     */
-    const per_file_lists: CollectedStory[][] = [];
-
-    for (const file of parsed) {
-        const { doc, root, h1 } = file;
-
-        // walk_children returns the level-2 children of either H1 or doc root
-        const walk_children = h1 ? (h1.child_notes || []) : (root.child_notes || []);
-
-        // register this file's epics (## headings) so direct/inherited epic= linetags resolve by id or name
-        const { file_epic_by_id, file_epic_by_name } = buildFileEpicRegistries(walk_children);
-
-        // file-level view type: an H1 nt_view overrides the front-matter value (most-specific wins)
-        const file_view_type = fileDeclaredViewType(root);
-
-        // file-level card type: the orthogonal axis, read from an H1 nt_card over the front-matter value
-        const file_card_type = fileDeclaredCardType(root);
-
-        // file-level group-by key + lane order: an H1 nt_group_by / nt_group_order overrides the front-matter value
-        const file_group_by = fileDeclaredGroupBy(root);
-        const file_group_order = fileDeclaredGroupOrder(root);
-
-        // `order` for the per-file cap: an H1 value overrides the document-root (front-matter) value
-        const file_order = h1?.linetags?.order?.value ?? root.linetags?.order?.value;
-
-        const project_name = projectNameFromRelativePath(doc.relative_path);
-        const base_origin: Omit<NoteOrigin, 'epic'> = {
-            doc_id: doc.id,
-            doc_path: doc.path,
-            relative_path: doc.relative_path,
-            file_view_type,
-            file_card_type,
-            file_group_by,
-            file_group_order,
-            file_mtime: doc.mtime,
-            project_hue: project_name ? hueForProjectName(project_name) : undefined,
-            project_label: project_name ? project_label_by_name.get(project_name) : undefined,
-        };
-
-        // assemble this file's full ordered story contribution (direct + epic-nested) in document order; selectFileStories then trims + orients it, and the round-robin pass below interleaves it with the other files
-        const file_stories: CollectedStory[] = [];
-        for (const c of walk_children) {
-            if (c.depth === 3) {
-                // story directly under H1 (or doc root, in no-H1 case)
-                file_stories.push({
-                    story: c,
-                    origin: { ...base_origin },
-                    file_epic_by_id,
-                    file_epic_by_name,
-                });
-            } else if (c.depth === 2) {
-                // epic: recurse one level
-                const epic_entry = epicEntryFromHeading(c);
-                for (const g of (c.child_notes || [])) {
-                    if (g.depth === 3) {
-                        file_stories.push({
-                            story: g,
-                            origin: { ...base_origin, epic: epic_entry },
-                            file_epic_by_id,
-                            file_epic_by_name,
-                        });
-                    }
-                }
-            }
-            // ignore other depths and non-heading types at file root
-        }
-
-        per_file_lists.push(selectFileStories(file_stories, maxNotesPerFile, file_order));
-    }
-
-    // interleave round-robin by per-file rank so each column shows the latest picture across projects: rank-0 of every file (in stable file order), then rank-1, etc; a file with fewer stories simply drops out of later rounds while longer ones keep contributing
-    const collected: CollectedStory[] = [];
-    const max_file_stories = per_file_lists.reduce((max_len, list) => Math.max(max_len, list.length), 0);
+    conversion_probe.merges++;
+    const parsed = parseAggregatedDocs(docs, cache);
+    // 2-character pill label per project - first letter + earliest character that differentiates this project from any other in the universe (notethink→NT, notebook→NB)
+    const project_label_by_name = buildProjectLabels(distinctProjectNames(parsed, workspace_projects));
+    const synthetic_root = makeSyntheticRoot(integration_path);
+    const per_file = parsed.map((file, file_slot) => fileContribution(file, file_slot, project_label_by_name, maxNotesPerFile, synthetic_root, cache));
+    const all_notes: NoteProps[] = [synthetic_root];
+    const max_file_stories = per_file.reduce((max_len, entry) => Math.max(max_len, entry.stories.length), 0);
     for (let rank = 0; rank < max_file_stories; rank++) {
-        for (const list of per_file_lists) {
-            if (rank < list.length) {
-                const cs = list[rank];
-                // stamp the per-file rank so relevance ordering can break ties among equal-rank stories
-                cs.origin.file_rank = rank;
-                collected.push(cs);
-            }
+        for (const entry of per_file) {
+            if (rank >= entry.stories.length) { continue; }
+            synthetic_root.child_notes!.push(entry.stories[rank]);
+            synthetic_root.children_body.push(entry.stories[rank]);
+            for (const note of entry.notes[rank]) { all_notes.push(note); }
         }
     }
-
-    /*
-     * 3. resolve epic linetags on each story (direct > inherited > structural)
-     * the applyChildAttributeInheritance pass during convertMdastToNoteHierarchy has already collapsed inherited nt_child_epic= onto stories as a regular `epic` linetag (with inherited: true); direct linetags overwrite inherited (child's own wins), so this step covers both direct and inherited uniformly
-     */
-    for (const c of collected) {
-        const epic_linetag: LineTag | undefined = c.story.linetags?.epic;
-        if (epic_linetag?.value) {
-            c.origin.epic = resolveEpicLinetag(
-                epic_linetag.value,
-                c.file_epic_by_id,
-                c.file_epic_by_name,
-            );
-        }
-        // else: structural origin.epic (set during the walk) stays, or undefined
-    }
-
-    // 4. build synthetic root and rewire each story's subtree
-    const root_position = { start: { offset: 0, line: 1 }, end: { offset: 0, line: 1 } };
-    const synthetic_root: NoteProps = {
-        seq: 0,
-        level: 0,
-        type: 'root',
-        position: root_position,
-        children: [],
-        children_body: [],
-        child_notes: [],
-        headline_raw: '',
-        body_raw: '',
-        stable_id: `__folder__:${integration_path}`,
-    };
-
-    const ctx: SeqWalkContext = { all_notes: [synthetic_root], next_seq: 1 };
-    // per-(doc_id, slug) counter so two same-headline stories in a file get distinct ids (#1, #2, …)
-    const stable_id_slug_counts = new Map<string, number>();
-    for (const c of collected) {
-        const slug_key = `${c.origin.doc_id}:${storyStableIdSlug(c.story)}`;
-        const prior_count = stable_id_slug_counts.get(slug_key) ?? 0;
-        stable_id_slug_counts.set(slug_key, prior_count + 1);
-        const story_stable_id = prior_count === 0 ? slug_key : `${slug_key}#${prior_count}`;
-        walkStorySubtree(c.story, [synthetic_root], c.origin, story_stable_id, '', ctx);
-        synthetic_root.child_notes!.push(c.story);
-        synthetic_root.children_body.push(c.story);
-    }
-
-    // expose integration_path on the root for breadcrumb / debug
-    (synthetic_root as NoteProps & { integration_path?: string }).integration_path = integration_path;
-
-    return { root: synthetic_root, all_notes: ctx.all_notes };
+    cache?.retain(new Set(parsed.map(file => file.doc.id)));
+    return { root: synthetic_root, all_notes };
 }
 
 /**

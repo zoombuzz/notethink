@@ -42,20 +42,16 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
     const show_delay_ms = options.showDelayMs ?? PENDING_WORK_SHOW_DELAY_MS;
     const min_visible_ms = options.minVisibleMs ?? PENDING_WORK_MIN_VISIBLE_MS;
     const safety_net_ms = options.safetyNetMs ?? PENDING_WORK_SAFETY_NET_MS;
-
     const [pending, setPending] = useState<boolean>(false);
-
     // active keys + per-key safety-net timers
     const active_keys_ref = useRef<Set<string>>(new Set());
     const safety_timers_ref = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-
     // show-delay timer (set when the active-set goes 0 -> 1; cleared if the set empties before it fires)
     const show_timer_ref = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     // when did pending most-recently flip true (ms epoch); undefined while pending=false
     const shown_at_ref = useRef<number | undefined>(undefined);
     // hide-delay timer (set when the active-set drains while pending=true and we still owe min-visibility)
     const hide_timer_ref = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
     // schedule pending=true after show_delay_ms if the active set is still non-empty at that point
     const scheduleShow = useCallback((): void => {
         if (show_timer_ref.current !== undefined) { return; }
@@ -71,7 +67,6 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
             setPending(true);
         }, show_delay_ms);
     }, [show_delay_ms]);
-
     // schedule pending=false honouring the min-visibility window if the spinner is already shown
     const scheduleHide = useCallback((): void => {
         if (show_timer_ref.current !== undefined) {
@@ -103,7 +98,6 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
             setPending(false);
         }, remaining);
     }, [min_visible_ms]);
-
     const markPending = useCallback((key: string): void => {
         const was_empty = active_keys_ref.current.size === 0;
         if (active_keys_ref.current.has(key)) {
@@ -129,7 +123,6 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
             scheduleShow();
         }
     }, [safety_net_ms, scheduleShow, scheduleHide]);
-
     const clearPending = useCallback((key: string): void => {
         if (!active_keys_ref.current.has(key)) { return; }
         active_keys_ref.current.delete(key);
@@ -143,7 +136,6 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
             scheduleHide();
         }
     }, [scheduleHide]);
-
     const clearAll = useCallback((): void => {
         debug('clearAll (clearing %d keys)', active_keys_ref.current.size);
         active_keys_ref.current.clear();
@@ -160,7 +152,6 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
         shown_at_ref.current = undefined;
         setPending(false);
     }, []);
-
     // unmount cleanup so a tearing-down hook can't fire a timer into a dead component
     useEffect(() => () => {
         for (const timer of safety_timers_ref.current.values()) { clearTimeout(timer); }
@@ -168,6 +159,5 @@ export function usePendingWork(options: PendingWorkOptions = {}): UsePendingWork
         if (show_timer_ref.current !== undefined) { clearTimeout(show_timer_ref.current); }
         if (hide_timer_ref.current !== undefined) { clearTimeout(hide_timer_ref.current); }
     }, []);
-
     return { pending, markPending, clearPending, clearAll };
 }

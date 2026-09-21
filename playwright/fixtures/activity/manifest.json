@@ -1,0 +1,17 @@
+{
+  "contract_version": "1.0.0",
+  "producer": { "name": "example-activity-producer", "version": "0.4.1" },
+  "written_at": "2026-09-18T09:14:02Z",
+  "heartbeat_seconds": 10,
+  "capabilities": {
+    "tree_state": "supported",
+    "blob_base": "supported"
+  },
+  "sessions": [
+    "claude-bound-busy",
+    "grok-bound-idle",
+    "grok-question",
+    "claude-no-story",
+    "codex-no-question"
+  ]
+}

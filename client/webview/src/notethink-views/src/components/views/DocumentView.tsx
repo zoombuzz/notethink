@@ -23,13 +23,10 @@ export default React.memo(function DocumentView(props: ViewProps) {
     // set up view-level default display_options, overridden by props
     const display_options = Object.assign({
     }, props.display_options);
-
     // scroll focused note (and body item) into view when caret moves
     useScrollToCaret(display_options, props.id, props.selection);
-
     // virtual caret indicator: pulse-highlight the body item containing the editor caret
     useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
-
     // stabilise handlers reference to avoid unnecessary child re-renders
     const note_handlers = useMemo(() => ({
         click: props.handlers?.click,
@@ -38,7 +35,6 @@ export default React.memo(function DocumentView(props: ViewProps) {
         descendToFolder: props.handlers?.descendToFolder,
         setNoteExpanded: props.handlers?.setNoteExpanded,
     }), [props.handlers?.click, props.handlers?.setCaretPosition, props.handlers?.postMessage, props.handlers?.descendToFolder, props.handlers?.setNoteExpanded]);
-
     const renderNote = (note: NoteProps, _index: number): React.ReactElement => (
         <GenericNote
             key={note.stable_id ?? note.seq}
@@ -48,9 +44,7 @@ export default React.memo(function DocumentView(props: ViewProps) {
             handlers={note_handlers}
         />
     );
-
     const container_styles: Array<string> = [view_specific_styles.viewDocument, master_view_styles.content];
-
     const content = (
         <div className={container_styles.join(' ')}
              id={`v${props.id}-inner`}
@@ -68,7 +62,6 @@ export default React.memo(function DocumentView(props: ViewProps) {
             </div>
         </div>
     );
-
     if (onProfilerRender) {
         return <Profiler id="DocumentView" onRender={onProfilerRender}>{content}</Profiler>;
     }

@@ -9,7 +9,7 @@
  */
 
 import * as vscode from 'vscode';
-import { createMockWebviewPanel, Position, Selection, Uri } from '../__mocks__/vscode';
+import { createMockWebviewPanel, Position, RelativePattern, Selection, Uri } from '../__mocks__/vscode';
 import { NotethinkEditorProvider } from './notethinkEditor';
 import { SETTINGS, settingKeys } from '../lib/settings';
 import { DEFAULT_EXCLUDE_FILTER } from '../constants';
@@ -34,6 +34,13 @@ type MockTextEditor = {
 	selection: Selection;
 	edit: jest.Mock<Promise<boolean>, [(eb: EditBuilder) => void]>;
 	revealRange: jest.Mock;
+};
+
+/** The mocked folder watcher a test reaches for when it needs to fire a create/change/delete by hand. */
+type MockFolderWatcher = {
+	onDidCreate: jest.Mock;
+	onDidChange: jest.Mock;
+	onDidDelete: jest.Mock;
 };
 
 type WorkspaceMutable = {
@@ -135,6 +142,21 @@ function mockTextEditor(doc: MockTextDocument): MockTextEditor {
 		revealRange: jest.fn(),
 	};
 	return editor;
+}
+
+/*
+ * A panel scans and watches for two unrelated things: the folder aggregate, always through a
+ * RelativePattern rooted at the integration folder, and the agent activity contract, always through
+ * a plain string glob. Both helpers below select the folder ones by that shape rather than by call
+ * index, so an assertion about folder discovery keeps meaning what it says whatever else the panel
+ * has asked the host for.
+ */
+function folderFindCalls(): Array<[RelativePattern, string | null]> {
+	return (vscode.workspace.findFiles as jest.Mock).mock.calls.filter(call => call[0] instanceof RelativePattern);
+}
+
+function folderWatcherCalls(): Array<[RelativePattern]> {
+	return (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.filter(call => call[0] instanceof RelativePattern);
 }
 
 // point the mocked workspace at the given roots so the host-side path-containment guard treats paths under them as in-workspace
@@ -854,7 +876,7 @@ describe('NotethinkEditorProvider', () => {
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
 			await flush();
 
-			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[0];
+			const find_call = folderFindCalls()[0];
 			expect(find_call[0].pattern).toBe('**/*.md');
 			expect(find_call[1]).toBe(DEFAULT_EXCLUDE_FILTER);
 
@@ -871,7 +893,7 @@ describe('NotethinkEditorProvider', () => {
 			});
 			await flush();
 
-			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[0];
+			const find_call = folderFindCalls()[0];
 			expect(find_call[0].pattern).toBe('**/users/**');
 			expect(find_call[1]).toBeNull();
 
@@ -887,7 +909,7 @@ describe('NotethinkEditorProvider', () => {
 			});
 			await flush();
 
-			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[0];
+			const find_call = folderFindCalls()[0];
 			expect(find_call[0].pattern).toBe('**/*.md');
 			expect(find_call[1]).toBe('**/skip/**');
 		});
@@ -954,7 +976,7 @@ describe('NotethinkEditorProvider', () => {
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes/users' });
 			await flush();
 
-			const second_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[1];
+			const second_call = folderFindCalls()[1];
 			expect(second_call[0].pattern).toBe('**/users/**');
 			expect(second_call[1]).toBeNull();
 		});
@@ -1041,6 +1063,118 @@ describe('NotethinkEditorProvider', () => {
 			const off_msg = pending_changes.find(m => m.key === 'folderDiscovery' && m.on === false);
 			expect(on_msg).toBeDefined();
 			expect(off_msg).toBeDefined();
+		});
+
+		describe('discovery-phase batching', () => {
+			// every merge update the session posted, in order; the aggregate replace carries no merge_strategy and is excluded
+			const mergeUpdates = (): UpdateMessage[] => getUpdates(panelHelper.postedMessages).filter(u => u.merge_strategy === 'merge');
+			const docCounts = (): number[] => mergeUpdates().map(u => Object.keys(u.partial.docs).length);
+
+			// discover `count` distinct .md files and wait for the whole load to settle
+			const discoverFiles = async (count: number): Promise<void> => {
+				const uris = Array.from({ length: count }, (_unused, index) => Uri.file(`/workspace/notes/f${index}.md`));
+				(vscode.workspace.findFiles as jest.Mock).mockResolvedValue(uris);
+				(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => mockTextDocument(`# story in ${u.path}`, u.path));
+				panelHelper.postedMessages.length = 0;
+				await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+				while (!panelHelper.postedMessages.some(m => m.type === 'pendingChange' && m.on === false)) { await flush(); }
+			};
+
+			it('ships the whole discovery as one merge update rather than one per file', async () => {
+				await discoverFiles(3);
+
+				expect(docCounts()).toEqual([3]);
+			});
+
+			it('flushes at the size cap, so no batch exceeds the cap and the board fills before the aggregate lands', async () => {
+				await discoverFiles(25);
+
+				const counts = docCounts();
+				// the cap tripped mid-load: without it the whole discovery would arrive as a single trailing batch
+				expect(counts.length).toBeGreaterThan(1);
+				expect(Math.max(...counts)).toBeLessThanOrEqual(20);
+				expect(counts.reduce((total, count) => total + count, 0)).toBe(25);
+			});
+
+			/*
+			 * hold one discovery load open so the batch stays queued and unflushed, hand back the watcher
+			 * callbacks, then let the caller land a watcher event in that window before releasing the load.
+			 * Returns the paths discovery was given, in the order it loads them.
+			 */
+			const discoverHoldingOneFile = async (count: number): Promise<{ paths: string[]; release: () => void; watcher: MockFolderWatcher }> => {
+				const paths = Array.from({ length: count }, (_unused, index) => `/workspace/notes/f${index}.md`);
+				let release = (): void => {};
+				const held = new Promise<void>(resolve => { release = (): void => resolve(); });
+				(vscode.workspace.findFiles as jest.Mock).mockResolvedValue(paths.map(p => Uri.file(p)));
+				(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => {
+					// the last file blocks until released, so allSettled cannot fire and the earlier files stay in the batch
+					if (u.path === paths[paths.length - 1]) { await held; }
+					return mockTextDocument(`# story in ${u.path}`, u.path);
+				});
+				panelHelper.postedMessages.length = 0;
+				await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+				while ((vscode.workspace.openTextDocument as jest.Mock).mock.calls.length < count) { await flush(); }
+				/*
+				 * The unheld loads still have to finish hashing, which is genuinely async and which no host
+				 * call marks the end of, so they are drained generously rather than for a fixed few turns: a
+				 * small count is a race, and it started losing once the panel gained a second thing to do at
+				 * start-up. The drain is microseconds of real time, well inside the batch's own flush window.
+				 */
+				for (let turn = 0; turn < 200; turn++) { await flush(); }
+				// the scenario needs the batch still queued: a flush would have posted an update, and a delete landing after it would be testing nothing
+				expect(getUpdates(panelHelper.postedMessages)).toEqual([]);
+				const watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value as MockFolderWatcher;
+				return { paths, release, watcher };
+			};
+
+			it('flushes the watcher\'s fresh copy, never the stale one discovery queued for the same file', async () => {
+				const { paths, release, watcher } = await discoverHoldingOneFile(3);
+				const edited_path = paths[0];
+				(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode('# edited on disk while discovery was still loading'));
+
+				// the file changes on disk after discovery read it but before the batch flush
+				await watcher.onDidChange.mock.calls[0][0](Uri.file(edited_path));
+				release();
+				while (!panelHelper.postedMessages.some(m => m.type === 'pendingChange' && m.on === false)) { await flush(); }
+
+				// every copy of that doc the session posted after the watcher fired carries the on-disk text, in order
+				const posted_texts = mergeUpdates()
+					.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+					.filter(d => d.path === edited_path)
+					.map(d => d.text);
+				expect(posted_texts.length).toBeGreaterThan(0);
+				expect(posted_texts.every(text => text === '# edited on disk while discovery was still loading')).toBe(true);
+			});
+
+			it('never resurrects a doc a tombstone dropped while its batch was queued', async () => {
+				const { paths, release, watcher } = await discoverHoldingOneFile(3);
+				const deleted_path = paths[0];
+
+				// the file is deleted after discovery loaded it but before the batch flush
+				await watcher.onDidDelete.mock.calls[0][0](Uri.file(deleted_path));
+				release();
+				while (!panelHelper.postedMessages.some(m => m.type === 'pendingChange' && m.on === false)) { await flush(); }
+
+				const tombstone_index = panelHelper.postedMessages.findIndex(m => m.type === 'docDeleted');
+				expect(tombstone_index).toBeGreaterThanOrEqual(0);
+				// nothing after the tombstone re-adds it, the aggregate replace included
+				const re_added = getUpdates(panelHelper.postedMessages.slice(tombstone_index))
+					.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+					.map(d => d.path);
+				expect(re_added).not.toContain(deleted_path);
+			});
+
+			it('keeps a watcher-driven change streaming as its own single-doc update', async () => {
+				await discoverFiles(3);
+				const folder_watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+				const on_change_cb = folder_watcher.onDidChange.mock.calls[0][0];
+				(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode('# changed on disk'));
+
+				panelHelper.postedMessages.length = 0;
+				await on_change_cb(Uri.file('/workspace/notes/f1.md'));
+
+				expect(docCounts()).toEqual([1]);
+			});
 		});
 
 		it('does NOT emit a pendingChange when the discovered set exactly matches the cached docs (fast path)', async () => {
@@ -1328,8 +1462,8 @@ describe('NotethinkEditorProvider', () => {
 				path: '/etc',
 			});
 
-			expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
-			expect(vscode.workspace.createFileSystemWatcher).not.toHaveBeenCalled();
+			expect(folderFindCalls()).toEqual([]);
+			expect(folderWatcherCalls()).toEqual([]);
 		});
 
 		it('openExternal opens an allowed https URL', async () => {
@@ -1812,7 +1946,7 @@ describe('NotethinkEditorProvider', () => {
 		it('does NOT arm a watcher when the setting is off', async () => {
 			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockClear();
 			await setupUnvisitedDoc({ settingOn: false });
-			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(0);
+			expect(folderWatcherCalls().length).toBe(0);
 		});
 
 		it('re-parses the active doc from disk (not the openTextDocument cache) when the watcher fires onDidChange', async () => {
@@ -1891,7 +2025,7 @@ describe('NotethinkEditorProvider', () => {
 
 		it('arms a watcher when the setting flips on via configuration change', async () => {
 			const { provider: _provider } = await setupUnvisitedDoc({ settingOn: false });
-			const initial_calls = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length;
+			const initial_calls = folderWatcherCalls().length;
 			expect(initial_calls).toBe(0);
 
 			(vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
@@ -1902,7 +2036,7 @@ describe('NotethinkEditorProvider', () => {
 			const on_config_cb = (vscode.workspace.onDidChangeConfiguration as jest.Mock).mock.calls.slice(-1)[0][0];
 			on_config_cb({ affectsConfiguration: (key: string) => key === 'notethink.settings.view.generic.watchUnopenedFilesInViewer' });
 
-			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(1);
+			expect(folderWatcherCalls().length).toBe(1);
 		});
 
 		it('disposes the watcher when entering folder mode', async () => {
@@ -2164,7 +2298,7 @@ describe('NotethinkEditorProvider', () => {
 
 			// buildInitialDoc is skipped entirely: there is no doc to parse and no active path to watch
 			expect(panel.postedMessages).toEqual([]);
-			expect(vscode.workspace.createFileSystemWatcher).not.toHaveBeenCalled();
+			expect(folderWatcherCalls()).toEqual([]);
 		});
 
 		it('never sends an initial doc update or selection because buildInitialDoc is skipped', async () => {
@@ -2200,7 +2334,7 @@ describe('NotethinkEditorProvider', () => {
 			await panel.simulateMessage({ type: 'requestInitialState' });
 			await flush();
 
-			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls[0];
+			const find_call = folderFindCalls()[0];
 			expect(find_call[0].base).toBe('/workspace');
 			expect(find_call[0].pattern).toBe('**/*.md');
 			const aggregate = getUpdates(panel.postedMessages).pop();
@@ -2228,7 +2362,7 @@ describe('NotethinkEditorProvider', () => {
 			await flush();
 
 			expect(findByType(panel.postedMessages, 'command')).toBeUndefined();
-			expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
+			expect(folderFindCalls()).toEqual([]);
 		});
 
 		// the reload path restores its own scope by posting setIntegration BEFORE requestInitialState; the docless open must stay out of its way
@@ -2243,7 +2377,7 @@ describe('NotethinkEditorProvider', () => {
 			await flush();
 
 			expect(findByType(panel.postedMessages, 'command')).toBeUndefined();
-			expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
+			expect(folderFindCalls()).toEqual([]);
 		});
 
 		// a .md file IS active: behaviour is unchanged, so the board stays on that file and no folder scope is originated

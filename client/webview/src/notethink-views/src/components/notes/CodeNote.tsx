@@ -7,7 +7,6 @@ import view_specific_styles from "../../components/ViewRenderer.module.scss";
 export default function CodeNote(props: NoteProps): ReactElement {
     const note = props;
     const lang_label = note.lang || '';
-
     // render note
     return (
         <div className={buildNoteStyles(note).join(' ')}

@@ -135,6 +135,7 @@ export const SETTING_HOMES = {
     showLineNumbers:            { node: 'allcards',  path: 'view.generic.showLineNumbers' },
     groupBy:                    { node: 'grouped',   path: 'view.specific.grouped.groupBy' },
     orientation:                { node: 'line',      path: 'view.specific.line.orientation' },
+    lineBreadth:                { node: 'line',      path: 'view.specific.line.lineBreadth' },
     kanbanGroupBy:              { node: 'kanban',    path: 'view.specific.kanban.groupBy' },
     columnOrder:                { node: 'kanban',    path: 'view.specific.kanban.columnOrder' },
     kanbanCardRatio:            { node: 'kanban',    path: 'view.specific.kanban.cardRatio' },
@@ -341,12 +342,18 @@ function structuralKeyFor(key: string): string {
  * resolves through the chain, where an existing OPEN override outranks the home, and every other row
  * answers with its SETTING_HOMES node. The three sentinel homes belong to no view type and yield
  * undefined.
+ *
+ * A saved view type contributes an OPEN override for every key it declares, whether or not the registry
+ * models that key, so the chain is searched before the flat home is consulted. Without that search a type
+ * holding its own card ratio still showed a Kanban pill and an offer to save what it already held.
  */
 export function owningNodeFor(node_id: string, key: SettingsCascadeKey, registry: ViewRegistry = VIEW_REGISTRY): string | undefined {
     const home = SETTING_HOMES[key].node;
     if (isSentinelNode(home)) { return undefined; }
-    const structural_key = STRUCTURAL_SETTING_KEYS[key];
-    if (structural_key === undefined) { return home; }
+    const structural_key = structuralKeyFor(key);
+    const nearest = nearestOverrideOnChain(chainOf(node_id, registry), structural_key, registry);
+    if (nearest?.mode === 'open') { return nearest.node; }
+    if (STRUCTURAL_SETTING_KEYS[key] === undefined) { return home; }
     const resolution = resolveSettingIn(registry, node_id, structural_key);
     return resolution.open_at ?? resolution.home ?? home;
 }
@@ -378,19 +385,68 @@ function isUsableUserViewType(user_type: UserViewType, nodes: ViewNode[]): boole
 }
 
 /**
+ * The overrides a saved type declares, keyed by cascade key exactly as the drawer wrote them. The list
+ * comes from a user's settings.json and is untrusted, so an entry carrying anything but an object reads
+ * as declaring nothing rather than throwing.
+ */
+function declaredOverrides(user_type: UserViewType | undefined): Record<string, unknown> {
+    const declared = user_type?.overrides;
+    if (typeof declared !== 'object' || declared === null) { return {}; }
+    return declared;
+}
+
+/**
  * The OPEN registry overrides a saved view type contributes, one per setting key it declares, keyed by
  * the structural setting each one forks. No config_path: a minted type does not fork to a config key of
  * its own, it writes through the same path its parent's row already writes.
  */
 function userTypeOverrides(user_type: UserViewType): ViewSettingOverride[] {
-    const declared = user_type.overrides;
-    if (typeof declared !== 'object' || declared === null) { return []; }
-    return Object.entries(declared).map(([key, value]) => ({
+    return Object.entries(declaredOverrides(user_type)).map(([key, value]) => ({
         node: user_type.id,
         key: structuralKeyFor(key),
         mode: 'open' as const,
         value,
     }));
+}
+
+/**
+ * True when a saved type declares its own value for `key`, which is what sends a change to that row into
+ * the type rather than to the workspace scope. A type's overrides layer over the whole cascade when the
+ * board renders, so a workspace write to a key the type holds is written, ignored, and then painted over
+ * by the type's own value.
+ */
+export function userTypeHoldsKey(user_type: UserViewType | undefined, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(declaredOverrides(user_type), key);
+}
+
+/**
+ * The one write that carries a setting change to where it takes effect. A key the rendered custom type
+ * holds is written into that type's overrides, because a workspace write to it would be written, ignored
+ * and painted over; every other key is a plain per-key write at workspace scope. The drawer's rows and a
+ * dragged lane boundary both route through here, so they can never disagree about where a value lands.
+ */
+export function settingWriteFor(
+    user_types: UserViewType[],
+    user_type: UserViewType | undefined,
+    key: SettingsCascadeKey,
+    value: unknown,
+): { setting: SettingsCascadeKey; value: unknown } {
+    if (user_type !== undefined && userTypeHoldsKey(user_type, key)) {
+        return { setting: 'viewUserTypes', value: updateUserViewTypeOverrides(user_types, user_type.id, { [key]: value }) };
+    }
+    return { setting: key, value };
+}
+
+/**
+ * The saved list with one type's overrides merged with `overrides`: a key already held takes the new
+ * value, a key it has never held is added, and every other key it holds is left alone. The id, label and
+ * parent are untouched, so an update can neither re-home a type nor orphan the settings on a user's disk
+ * stored under its id.
+ */
+export function updateUserViewTypeOverrides(user_types: UserViewType[], id: string, overrides: Record<string, unknown>): UserViewType[] {
+    return user_types.map(type => (
+        type.id === id ? { ...type, overrides: { ...declaredOverrides(type), ...overrides } } : type
+    ));
 }
 
 /**

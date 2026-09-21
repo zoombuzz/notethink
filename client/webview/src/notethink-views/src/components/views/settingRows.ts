@@ -1,6 +1,6 @@
 import * as l10n from "@vscode/l10n";
 import { CARD_REGISTRY, DEFAULT_CARD_TYPE, cardChainOf, owningCardNodeFor, type CardRegistry } from "../notes/cardregistryops";
-import { DEFAULT_CARD_RATIO } from "./kanban/columnwidthops";
+import { DEFAULT_CARD_RATIO, DEFAULT_LINE_BREADTH } from "./kanban/columnwidthops";
 import { NODE_GLOBAL, SETTING_HOMES, VIEW_REGISTRY, chainOf, owningNodeFor, type ViewRegistry } from "../../lib/viewregistryops";
 import type { SettingsCascadeKey } from "../../types/Messages";
 
@@ -15,7 +15,7 @@ import type { SettingsCascadeKey } from "../../types/Messages";
  * two keys, `groupBy` at grouped and `kanbanGroupBy` at kanban. These tables are therefore the row spec,
  * and `SETTING_HOMES` decides where each row lands.
  */
-export type SettingControlKind = 'checkbox' | 'groupBy' | 'orientation' | 'columnOrder' | 'cardRatio' | 'cardType';
+export type SettingControlKind = 'checkbox' | 'groupBy' | 'orientation' | 'columnOrder' | 'cardRatio' | 'cardType' | 'breadth';
 
 /**
  * One declared row.
@@ -51,6 +51,7 @@ export const VIEW_SETTING_ROWS: SettingRowDef[] = [
     { key: 'kanbanAnimateTransitions', control: 'checkbox', fallback: true },
     { key: 'kanbanDefaultCardType', control: 'cardType', fallback: DEFAULT_CARD_TYPE },
     { key: 'orientation', control: 'orientation', fallback: 'columns' },
+    { key: 'lineBreadth', control: 'breadth', fallback: DEFAULT_LINE_BREADTH },
     { key: 'scrollNoteIntoView', control: 'checkbox', fallback: true },
     { key: 'watchUnopenedFilesInViewer', control: 'checkbox', fallback: true },
     { key: 'openNewEditorIfNoneOpen', control: 'checkbox', fallback: false },
@@ -79,13 +80,15 @@ export function rowHome(def: SettingRowDef): string {
  * would never reach the bundle.
  *
  * Two of these are named for the thing rather than for the axis it happens to be drawn on. Orientation
- * transposes the board, so "column order" and "column width" name nothing once the lanes are rows; the
- * lanes are groups whichever way they run, and the width is only ever a consequence of the card shape.
- * The config paths still say `columnOrder` and `cardRatio` - a path is a permanent name on a user's disk,
- * so renaming a row moves what it is called and never where it is stored.
+ * transposes the board, so "column order" names nothing once the lanes are rows; the lanes are groups
+ * whichever way they run. The breadth row is the exception, named for the axis it runs along: "Column
+ * width" while the lanes are columns and "Row height" once they are rows, which is why the label takes the
+ * orientation. The config paths still say `columnOrder` and `cardRatio` - a path is a permanent name on a
+ * user's disk, so renaming a row moves what it is called and never where it is stored.
  */
-export function settingRowLabel(key: SettingsCascadeKey): string {
+export function settingRowLabel(key: SettingsCascadeKey, orientation?: unknown): string {
     switch (key) {
+        case 'lineBreadth': return orientation === 'rows' ? l10n.t('Row height') : l10n.t('Column width');
         case 'groupBy':
         case 'kanbanGroupBy': return l10n.t('Group by');
         case 'columnOrder': return l10n.t('Group order');

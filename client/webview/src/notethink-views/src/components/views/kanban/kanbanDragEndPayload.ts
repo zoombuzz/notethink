@@ -43,19 +43,16 @@ export function buildKanbanDragEndPayload(input: KanbanDragEndPayloadInput): Edi
     const { dragged_note, destination_column_value, destination_column_children, destination_column_position } = input;
     const group_field = input.group_field ?? 'status';
     const dragged_doc_path = dragged_note.origin?.doc_path;
-
     // inverse projection: write the group field to the dropped lane's value, or delete it for the absent lane
     const field_changes: Array<EditTextChange> = calculateTextChangesForNewLinetagValue(
         dragged_note, group_field, destination_column_value, ABSENT_VALUE_BUCKET,
     );
-
     const destination_children_with_drop = destination_column_children
         .filter((note) => (dragged_note.seq !== note.seq));
     destination_children_with_drop.splice(destination_column_position, 0, dragged_note);
     const ordering_change_sets = calculateTextChangesForOrdering(
         destination_children_with_drop, destination_column_position, 'nt_kanban_ordering_weight',
     );
-
     // group-field change goes under the dragged file; each ordering change-set under its own doc_path
     const changes_by_doc: Record<string, Array<EditTextChange>> = {};
     if (field_changes.length > 0 && dragged_doc_path !== undefined) {
@@ -69,7 +66,6 @@ export function buildKanbanDragEndPayload(input: KanbanDragEndPayloadInput): Edi
     for (const key of Object.keys(changes_by_doc)) {
         if (changes_by_doc[key].length === 0) { delete changes_by_doc[key]; }
     }
-
     // pure single-file mode: no origin to key on, flatten into the legacy single-doc shape
     if (dragged_doc_path === undefined) {
         const flat: Array<EditTextChange> = [...field_changes];
@@ -78,17 +74,14 @@ export function buildKanbanDragEndPayload(input: KanbanDragEndPayloadInput): Edi
         debug('single-file mode payload: %d changes', flat.length);
         return { type: 'editText', changes: flat, docPath: undefined };
     }
-
     const doc_paths = Object.keys(changes_by_doc);
     if (doc_paths.length === 0) { return null; }
-
     // every change targets one file - legacy single-doc shape
     if (doc_paths.length === 1) {
         const only_doc = doc_paths[0];
         debug('single-doc payload: docPath=%s, %d changes', only_doc, changes_by_doc[only_doc].length);
         return { type: 'editText', changes: changes_by_doc[only_doc], docPath: only_doc };
     }
-
     // cascade spilled across files - partitioned shape
     debug('multi-doc payload: %d files', doc_paths.length);
     return { type: 'editText', changes_by_doc };

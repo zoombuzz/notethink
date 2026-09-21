@@ -108,6 +108,19 @@ const clientExtensionConfig = {
 const clientWebviewConfig = {
 	context: path.join(__dirname, 'client', 'webview'),
 	mode: process.env.NODE_ENV === 'production' ? 'production' : 'none',
+	/*
+	 * React chooses its development build from process.env.NODE_ENV, which `mode: 'none'` leaves
+	 * undefined, so without this pin the dev host runs React's dev instrumentation and pays several
+	 * times the cost on every interaction. Pinning NODE_ENV to production gives every build
+	 * production React while `mode` stays 'none', so watch rebuilds stay fast, the app code stays
+	 * unminified and the source map stays useful in webview devtools. The webview bundle alone
+	 * carries React, and the extension bundle gates its errorops `debug()` helper on
+	 * NODE_ENV !== 'production', so the same pin there would silence a dev convenience for nothing.
+	 * NOTETHINK_DEV is a separate switch, driven by SELFINSPECT_ENV.
+	 */
+	optimization: {
+		nodeEnv: 'production',
+	},
 	target: 'webworker', // extensions run in a webworker context
 	entry: {
 		'index': './src/index.tsx',

@@ -22,7 +22,6 @@ export default function AutoView(props: ViewProps): ReactElement {
         display_options: {},
     };
     const is_aggregate_root = isAggregateRoot(props.nested?.parent_context);
-
     // folder mode: synthetic root has no single nt_view linetag on a top-level note, so apply a majority vote across originating files (one vote per file)
     if (is_aggregate_root) {
         const majority = majorityNgView(props.notes);
@@ -31,7 +30,6 @@ export default function AutoView(props: ViewProps): ReactElement {
         }
         // fall through - focused-note linetag aggregation below may still tweak attributes
     }
-
     if (props.display_options?.focused_notes?.length) {
         const attributes: { [key: string]: LineTag } = aggregateNoteLinetags(props.display_options?.focused_notes);
         const view_tag = resolveNamespacedTag(attributes, 'view');
@@ -52,7 +50,6 @@ export default function AutoView(props: ViewProps): ReactElement {
             replaced_attributes.display_options.level = props.display_options?.level;
         }
     }
-
     /*
      * The card axis, resolved independently of the view and by the same rules: an explicit selection is
      * pinned, and `auto` majority-votes nt_card across the originating files before falling back to the
@@ -68,7 +65,6 @@ export default function AutoView(props: ViewProps): ReactElement {
         ...props.display_options?.settings,
         cardType: resolved_card_type,
     };
-
     return (
         <div className={view_specific_styles.fullheight}
              data-auto-selected-viewtype={derived_attributes.type}

@@ -18,7 +18,9 @@ import KanbanColumn from "./KanbanColumn";
 import GenericNote from "../../notes/GenericNote";
 import type { KanbanColumnDescriptor } from "./useKanbanColumns";
 import { cardSignature } from "./columnwidthops";
+import { useLaneBreadth } from "./useLaneBreadth";
 import { useBoardColumnStyle } from "./useColumnWidth";
+import LaneSeparator from "./LaneSeparator";
 import view_specific_styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:KanbanBoard");
@@ -101,7 +103,8 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
     const layout = `${orientation ?? 'columns'}/${display_options.settings?.cardType ?? 'auto'}`;
     const signature = useMemo(() => cardSignature(visible_columns, layout), [visible_columns, layout]);
     const ratio = display_options.settings?.kanbanCardRatio;
-    const board = useBoardColumnStyle(board_ref, lanes_side_by_side, ratio, visible_columns.length, signature);
+    const { breadth, commitBreadth } = useLaneBreadth(view, display_options);
+    const board = useBoardColumnStyle(board_ref, lanes_side_by_side, ratio, breadth, visible_columns.length, signature);
     debug('rendering %d lanes as %s', visible_columns.length, orientation ?? 'columns');
     return (
         <div
@@ -114,12 +117,23 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
         >
             <DragDropContext onDragEnd={onDragEnd} onDragStart={onDragStart}>
                 {visible_columns.map((column: KanbanColumnDescriptor, i: number) => (
-                    /*
+                    <React.Fragment key={column.value}>
+                    {i > 0 && (
+                        <LaneSeparator
+                            viewId={view.id}
+                            boardRef={board_ref}
+                            orientation={orientation ?? 'columns'}
+                            lanesBefore={i}
+                            breadth={breadth}
+                            onCommit={commitBreadth}
+                        />
+                    )}
+                    {/*
                      * key by the column's stable status value, not its array index: when a column empties and drops
                      * out of visible_columns, index keys remap the surviving columns onto each other's DOM subtrees
                      * (and the FLIP layer's data-flip-id nodes), which corrupts the before/after measurement
-                     */
-                    <Droppable key={column.value} droppableId={`${column.seq}`}>
+                     */}
+                    <Droppable droppableId={`${column.seq}`}>
                         {(provided_drop) => (
                             <KanbanColumn
                                 seq={column.seq || i}
@@ -174,6 +188,7 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                             </KanbanColumn>
                         )}
                     </Droppable>
+                    </React.Fragment>
                 ))}
             </DragDropContext>
         </div>

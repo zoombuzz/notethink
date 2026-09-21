@@ -23,7 +23,6 @@ export default function ViewIntegrationSelector(props: ViewIntegrationSelectorPr
     const handleChange = (e: ChangeEvent<HTMLSelectElement>): void => {
         props.onChange(e.target.value as IntegrationMode);
     };
-
     return (
         <select
             data-testid="view-integration-selector"

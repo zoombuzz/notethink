@@ -184,7 +184,8 @@ test.describe('Default card type as a Kanban view setting', () => {
         const control = drawer.getByTestId('setting-control-kanbanDefaultCardType');
         await expect(control).toBeVisible();
         await expect(control).toHaveValue('card');
-        await expect(control.locator('option')).toHaveText(['Card', 'Sticky']);
+        // every renderable card is offered, because a view may default to any of them
+        await expect(control.locator('option')).toHaveText(['Card', 'Sticky', 'Agent']);
     });
 
     test('choosing Sticky makes Auto draw yellow stickies, and the card tab says so', async ({ page }) => {

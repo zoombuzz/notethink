@@ -114,7 +114,6 @@ function findCharInTextNode(range: Range, text_node: Text, node_len: number, cli
         }
     }
     if (line_char < 0) { return -1; }
-
     // scan outward from line_char to find line boundaries
     const line_rect = range.getBoundingClientRect();
     const line_top = line_rect.top;
@@ -131,7 +130,6 @@ function findCharInTextNode(range: Range, text_node: Text, node_len: number, cli
         if (range.getBoundingClientRect().top !== line_top) { break; }
         line_end++;
     }
-
     // binary search on X within the line
     lo = line_start;
     hi = line_end;
@@ -164,7 +162,6 @@ export function findCharAtPoint(wrapper: HTMLElement, clientX: number, clientY: 
     const walker = doc.createTreeWalker(wrapper, NodeFilter.SHOW_TEXT);
     const range = doc.createRange();
     let char_count = 0;
-
     while (walker.nextNode()) {
         const text_node = walker.currentNode as Text;
         const node_len = text_node.length;
@@ -172,25 +169,20 @@ export function findCharAtPoint(wrapper: HTMLElement, clientX: number, clientY: 
         range.selectNodeContents(text_node);
         if (!range.getBoundingClientRect) { return undefined; }
         const node_rect = range.getBoundingClientRect();
-
         // skip text nodes whose bounding box doesn't contain the click at all
         if (node_rect.height === 0 || clientY < node_rect.top || clientY > node_rect.bottom) {
             char_count += node_len;
             continue;
         }
-
         // click is past this text node's right edge - skip to next inline element
         if (clientX > node_rect.right) {
             char_count += node_len;
             continue;
         }
-
         const index = findCharInTextNode(range, text_node, node_len, clientX, clientY);
         if (index >= 0) { return char_count + index; }
-
         char_count += node_len;
     }
-
     return undefined;
 }
 

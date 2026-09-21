@@ -34,7 +34,6 @@ export const STICKY_FALLBACK_HUE = 52;
 export default function StickyNote(props: NoteProps): ReactElement {
     const note_props = props;
     const provided = note_props.display_options?.provided;
-
     // the full card's headline parse, memoised on the same text, checkbox state and linetag start
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(note_props, {
@@ -46,7 +45,6 @@ export default function StickyNote(props: NoteProps): ReactElement {
         note_props.checked,
         note_props.linetags_from,
     ]);
-
     // take the props version of every attribute, because the memoized headline only augments the note
     const note: NoteProps = {
         headline: memoized_headline,
@@ -55,7 +53,6 @@ export default function StickyNote(props: NoteProps): ReactElement {
     const sticky_hue = originHasProject(note.origin) ? hueForOrigin(note.origin) : STICKY_FALLBACK_HUE;
     // the drag style, which may already carry the board's --nt-card-width, plus the paper's hue; React's style type names no custom properties, so it goes in untyped
     const card_style: Record<string, unknown> = { ...(provided?.draggableProps?.style as Record<string, unknown> | undefined), '--nt-sticky-hue': sticky_hue };
-
     return (
         <div className={buildNoteStyles(note, [sticky_styles.stickyNote, ...(note.display_options?.additional_classes ?? [])]).join(' ')}
              id={note.display_options?.id}

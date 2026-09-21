@@ -51,13 +51,11 @@ export interface BreadcrumbTrailProps extends NoteProps {
  */
 export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactElement {
     const parent_notes = props.parent_notes || [];
-
     // the same segmenter the Jump drawer's leaf resolution uses, so the rendered trail and the drawer's target leaf can't drift
     const path_segments = useMemo(
         () => breadcrumbSegmentsForView(props.integration_path, props.doc_path, props.workspace_root, props.doc_relative_path),
         [props.doc_path, props.workspace_root, props.doc_relative_path, props.integration_path],
     );
-
     // folder mode only: "(X in Y files)" after the path, or "(X in Y of M files)" when the discovery cap truncated the set; never in single-file mode (always one file, so the count is meaningless there)
     const file_count_label = useMemo(() => {
         if (!props.integration_path || typeof props.file_count !== 'number') { return undefined; }
@@ -68,13 +66,11 @@ export default function BreadcrumbTrail(props: BreadcrumbTrailProps): ReactEleme
             ? l10n.t('({0} in {1} of {2} files)', String(notes), String(loaded), String(total))
             : l10n.t('({0} in {1} files)', String(notes), String(loaded));
     }, [props.integration_path, props.file_count, props.note_count, props.aggregate_total_discovered]);
-
     const has_path = path_segments.length > 0;
     const has_notes = parent_notes.length > 0;
     // the pending-work spinner lives here (not out in the toolbar) so it sits immediately to the right of the "(X in Y files)" count - the slow path is far more often file discovery/loading than the view-type selector it used to neighbour
     const { pending } = usePendingWorkContext();
     debug("segments=%d notes=%d collisions=%s", path_segments.length, parent_notes.length, props.has_collisions);
-
     return (
         <nav className={styles.breadcrumbTrail} role="navigation" aria-label={l10n.t('Breadcrumb')}>
             <BreadcrumbPathSegments

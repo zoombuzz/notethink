@@ -1,5 +1,6 @@
 import Debug from 'debug';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { emitBoardCommit } from '../lib/boardCommitProbe';
 import { anyViewInFolderMode, resolveIntegrationMode, FOLDER_VIEW_STATE_ID } from '../notethink-views/src/lib/viewstateops';
 import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
@@ -8,6 +9,19 @@ import type { SettingsCascadePayload, JumpTargetsMessage } from '../notethink-vi
 import type { ViewState } from './usePersistedViewStates';
 
 const debug = Debug("nodejs:notethink:useVscodeMessages");
+
+/*
+ * Ceiling on how long a queued message waits for its flush. requestAnimationFrame is the primary trigger,
+ * but a hidden or backgrounded webview has its frames throttled or stopped altogether, and a message that
+ * never commits is a worse failure than one that commits late - so this timeout races every frame request
+ * and whichever fires first drains the queue.
+ */
+export const MESSAGE_FLUSH_FALLBACK_MS = 50;
+// wire types whose handling is coalesced: the folder-load doc stream plus the pending sentinel bracketing it, so the spinner clears in the same commit as the docs it was covering. Every other type dispatches as it arrives.
+const QUEUED_MESSAGE_TYPES: readonly string[] = ['update', 'docDeleted', 'pendingChange'];
+
+// one wire-format message as it arrives from the extension, having passed isMessageValid; each consumer narrows the fields it reads
+type WireMessage = { type: string; [key: string]: unknown };
 
 interface SelectionState {
     [docPath: string]: TextSelection;
@@ -104,10 +118,10 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
  * merge an incoming update payload into the current doc map; returns the previous map unchanged when no hashes differ
  * merge_strategy 'merge' upserts incoming docs (folder-mode incremental updates); anything else replaces the map entirely (single-file view, or folder-mode initial bulk load)
  */
-function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial: { docs?: HashMapOf<Doc> }; merge_strategy?: string }): { docs?: HashMapOf<Doc> } {
-    const incoming_docs = message.partial.docs || {};
+function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: WireMessage): { docs?: HashMapOf<Doc> } {
+    const incoming_docs = (message.partial as { docs?: HashMapOf<Doc> }).docs || {};
     const current_docs = current.docs || {};
-    const merge_strategy = message.merge_strategy;
+    const merge_strategy = message.merge_strategy as string | undefined;
     if (merge_strategy === 'merge') {
         let has_changes = false;
         for (const [id, doc] of Object.entries(incoming_docs) as [string, Doc][]) {
@@ -140,9 +154,86 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: { partial
     return { ...current, docs: incoming_docs };
 }
 
+// drop one doc by id; returns the map unchanged when the id is malformed or absent, so a tombstone for a doc the board never held commits nothing
+function removeDeletedDoc(current: { docs?: HashMapOf<Doc> }, doc_id: unknown): { docs?: HashMapOf<Doc> } {
+    if (typeof doc_id !== 'string') {
+        debug('docDeleted with invalid docId %O', doc_id);
+        return current;
+    }
+    if (!current.docs || !current.docs[doc_id]) { return current; }
+    const next = { ...current.docs };
+    delete next[doc_id];
+    return { ...current, docs: next };
+}
+
+/*
+ * fold every doc payload in one flush into a single doc map, so a batch of N messages commits once
+ * order is preserved, so a tombstone that arrived after an update still wins, exactly as it does when each message commits on its own
+ */
+function applyDocMessages(current: { docs?: HashMapOf<Doc> }, queued: WireMessage[]): { docs?: HashMapOf<Doc> } {
+    let next = current;
+    for (const message of queued) {
+        if (message.type === 'update') { next = mergeUpdatedDocs(next, message); }
+        if (message.type === 'docDeleted') { next = removeDeletedDoc(next, message.docId); }
+    }
+    return next;
+}
+
+/*
+ * Queue the doc-stream message types and drain them once per animation frame, so a burst of discovery
+ * updates commits as one board render instead of N. Falls back to a MESSAGE_FLUSH_FALLBACK_MS timeout
+ * for a hidden webview whose frames never fire.
+ *
+ * The drain is read through a ref so the returned enqueue identity never changes: the message listener
+ * is installed once on mount and must not capture a stale drain.
+ */
+function useFrameFlushQueue(drain: (queued: WireMessage[]) => void): (message: WireMessage) => void {
+    const queue = useRef<WireMessage[]>([]);
+    const frame_handle = useRef<number | undefined>(undefined);
+    const fallback_handle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const drain_ref = useRef(drain);
+    drain_ref.current = drain;
+    const cancelScheduledFlush = useCallback((): void => {
+        if (frame_handle.current !== undefined) {
+            cancelAnimationFrame(frame_handle.current);
+            frame_handle.current = undefined;
+        }
+        if (fallback_handle.current !== undefined) {
+            clearTimeout(fallback_handle.current);
+            fallback_handle.current = undefined;
+        }
+    }, []);
+    const flush = useCallback((): void => {
+        cancelScheduledFlush();
+        const queued = queue.current;
+        queue.current = [];
+        if (queued.length === 0) { return; }
+        debug('draining %d queued messages', queued.length);
+        drain_ref.current(queued);
+    }, [cancelScheduledFlush]);
+    const enqueue = useCallback((message: WireMessage): void => {
+        queue.current.push(message);
+        if (frame_handle.current === undefined && typeof requestAnimationFrame === 'function') {
+            frame_handle.current = requestAnimationFrame(flush);
+        }
+        if (fallback_handle.current === undefined) {
+            fallback_handle.current = setTimeout(flush, MESSAGE_FLUSH_FALLBACK_MS);
+        }
+    }, [flush]);
+    // drop anything still queued on unmount: the panel is going away, so a late commit has nothing to render into
+    useEffect(() => cancelScheduledFlush, [cancelScheduledFlush]);
+    return enqueue;
+}
+
 /*
  * own the core doc/selection/workspace state, the host message listener, and the dispatch
  * the message-type string literals ('update', 'activeEditorDoc', 'selectionChanged', 'command', 'settingsCascade', 'jumpTargets') are the on-the-wire contract and must stay exactly as-is
+ *
+ * Validation runs on arrival, on every message, unchanged. What is deferred is the handling of the
+ * QUEUED_MESSAGE_TYPES: they commit once per animation frame, so a folder load's doc stream costs one
+ * board render per frame rather than one per file. 'pendingChange' rides the same queue deliberately -
+ * the extension clears the discovery sentinel immediately after the aggregate payload, and dispatching
+ * that clear ahead of the docs it covers would drop the spinner a frame before the board filled.
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState {
@@ -159,7 +250,58 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     // folder mode: the effective include/exclude globs the extension is using, echoed back so the Files drawer can show them
     const [includeFilter, setIncludeFilter] = useState<string | undefined>(undefined);
     const [excludeFilter, setExcludeFilter] = useState<string | undefined>(undefined);
-
+    // wire messages folded into the board commit that has not landed yet; the probe effect below reads and resets it
+    const pending_message_count = useRef(0);
+    // scalar payload an update carries alongside its docs: workspace identity, discovery totals and the echoed filters
+    const applyUpdateMetadata = useCallback((message: WireMessage): void => {
+        if (message.workspace_root) {
+            setWorkspaceRoot(message.workspace_root as string);
+        }
+        if (Array.isArray(message.workspace_projects)) {
+            setWorkspaceProjects((message.workspace_projects as unknown[]).filter((p): p is string => typeof p === 'string'));
+        }
+        if (message.extension_version) {
+            (window as unknown as Record<string, unknown>).__NOTETHINK_EXTENSION_VERSION__ = message.extension_version;
+        }
+        if (typeof message.aggregate_total_discovered === 'number') {
+            setAggregateTotalDiscovered(message.aggregate_total_discovered);
+        }
+        if (typeof message.includeFilter === 'string') {
+            setIncludeFilter(message.includeFilter);
+        }
+        if (typeof message.excludeFilter === 'string') {
+            setExcludeFilter(message.excludeFilter);
+        }
+        // a bulk replace update (no merge_strategy) carrying aggregate totals is the apply-filters round-trip echo; clear the filter-edit sentinel so the spinner drops once the new file set has landed
+        if (!message.merge_strategy && typeof message.aggregate_total_discovered === 'number') {
+            clearPending('integrationFilters');
+        }
+    }, [clearPending]);
+    /*
+     * apply one flush: each message's non-doc side effects in arrival order, then a single setDocsState
+     * folding every doc payload in the batch, which React commits as one board render
+     */
+    const drainMessageQueue = useCallback((queued: WireMessage[]): void => {
+        for (const message of queued) {
+            if (message.type === 'update') { applyUpdateMetadata(message); }
+            if (message.type === 'pendingChange') {
+                if (message.on) { markPending(message.key as string); } else { clearPending(message.key as string); }
+            }
+        }
+        pending_message_count.current += queued.length;
+        setDocsState(current => applyDocMessages(current, queued));
+    }, [applyUpdateMetadata, markPending, clearPending]);
+    const enqueueMessage = useFrameFlushQueue(drainMessageQueue);
+    // one probe event per board commit, carrying how many wire messages it folded; a no-op unless a test or the perf harness enabled the probe
+    useEffect(() => {
+        if (pending_message_count.current === 0) { return; }
+        emitBoardCommit({
+            messages: pending_message_count.current,
+            docs: Object.keys(docs_state.docs ?? {}).length,
+            at: performance.now(),
+        });
+        pending_message_count.current = 0;
+    }, [docs_state]);
     // dispatch a validated command message to the appropriate viewState mutation / navigation
     const handleCommand = useCallback((message: { command: string; viewType?: string; direction?: string; mode?: string; path?: string }) => {
         debug('received command %s', message.command);
@@ -190,56 +332,18 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 return;
         }
     }, [postMessage, updateAllViewStates, setViewManagedState, view_states_ref, navigation_callback_ref]);
-
-    // eslint-disable-next-line max-lines-per-function -- onMessage dispatches on every wire-format message type; further decomposition would split the switch across two functions without making the contract clearer (tracked: function-decomposition-wave2)
     const onMessage = useCallback((event: MessageEvent) => {
         const message = event.data;
         // any message from the extension host proves it's alive
         markConnected();
         if (!isMessageValid(message)) { return; }
-
         debug('onMessage %s', message.type);
+        // the folder-load doc stream and its pending sentinel are coalesced into one commit per animation frame; everything else lands as it arrives
+        if (QUEUED_MESSAGE_TYPES.includes(message.type)) {
+            enqueueMessage(message as WireMessage);
+            return;
+        }
         switch (message.type) {
-            case 'update':
-                debug('received update, docs: %O', Object.keys(message.partial.docs || {}));
-                if (message.workspace_root) {
-                    setWorkspaceRoot(message.workspace_root);
-                }
-                if (Array.isArray(message.workspace_projects)) {
-                    setWorkspaceProjects((message.workspace_projects as unknown[]).filter((p): p is string => typeof p === 'string'));
-                }
-                if (message.extension_version) {
-                    (window as unknown as Record<string, unknown>).__NOTETHINK_EXTENSION_VERSION__ = message.extension_version;
-                }
-                if (typeof message.aggregate_total_discovered === 'number') {
-                    setAggregateTotalDiscovered(message.aggregate_total_discovered);
-                }
-                if (typeof message.includeFilter === 'string') {
-                    setIncludeFilter(message.includeFilter);
-                }
-                if (typeof message.excludeFilter === 'string') {
-                    setExcludeFilter(message.excludeFilter);
-                }
-                setDocsState(current => mergeUpdatedDocs(current, message));
-                // a bulk replace update (no merge_strategy) carrying aggregate totals is the apply-filters round-trip echo; clear the filter-edit sentinel so the spinner drops once the new file set has landed
-                if (!message.merge_strategy && typeof message.aggregate_total_discovered === 'number') {
-                    clearPending('integrationFilters');
-                }
-                return;
-            case 'docDeleted':
-                // folder mode: drop a single doc by id when the watcher sees a delete
-                debug('received docDeleted for %s', message.docId);
-                if (typeof message.docId !== 'string') {
-                    debug('docDeleted with invalid docId %O', message);
-                    return;
-                }
-                setDocsState(current => {
-                    if (!current.docs || !current.docs[message.docId]) { return current; }
-                    const next = { ...current.docs };
-                    delete next[message.docId];
-                    return { ...current, docs: next };
-                });
-                return;
             case 'activeEditorDoc':
                 debug('received activeEditorDoc for %s', (message.doc as Doc).path);
                 setActiveDoc(message.doc as Doc);
@@ -278,14 +382,6 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                     clearPending(key);
                 }
                 return;
-            case 'pendingChange':
-                debug('received pendingChange key=%s on=%s', message.key, message.on);
-                if (message.on) {
-                    markPending(message.key as string);
-                } else {
-                    clearPending(message.key as string);
-                }
-                return;
             case 'jumpTargets':
                 debug('received jumpTargets mode=%s path=%s', message.mode, message.path);
                 setJumpTargets(message as JumpTargetsMessage);
@@ -294,8 +390,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 handleCommand(message);
                 return;
         }
-    }, [markConnected, setSettingsCascade, handleCommand, markPending, clearPending, setJumpTargets]);
-
+    }, [markConnected, setSettingsCascade, handleCommand, enqueueMessage, clearPending, setJumpTargets]);
     // listen for messages sent from the extension to the webview
     useEffect(() => {
         window.addEventListener('message', onMessage);
@@ -334,9 +429,8 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
             debug('removed message event listener');
             window.removeEventListener('message', onMessage);
         };
-        // mount-once listener: onMessage's deps (setters + stable handleCommand) never go stale, so empty deps is correct
+        // mount-once listener: onMessage's deps (setters, stable handleCommand, and an enqueue whose drain is read through a ref) never go stale, so empty deps is correct
     }, []);
-
     return {
         docs: docs_state.docs,
         selections,

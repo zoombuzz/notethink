@@ -197,6 +197,18 @@ test.describe('View settings drawer', () => {
     });
 
     /*
+     * The offer on a built-in rung is unchanged by the update path: there is no type of the reader's own
+     * to update, so minting one beside it is the only way the change can be kept.
+     */
+    test('a built-in rung offers the mint alone, with no update beside it', async ({ page }) => {
+        await showKanbanSettings(page);
+        await page.getByTestId('group-by-selector').selectOption('assignee');
+        await expect(page.getByTestId('new-view-type-offer')).toBeVisible();
+        await expect(page.getByTestId('new-view-type-open')).toBeVisible();
+        await expect(page.getByTestId('user-view-type-update')).toHaveCount(0);
+    });
+
+    /*
      * The offer is a question about the settings, not about the session. A workspace already carrying an
      * ancestor-owned change makes the offer the moment the drawer opens, with nothing touched - which the
      * earlier shape could not do, because it remembered the row the user last clicked and a reload has no

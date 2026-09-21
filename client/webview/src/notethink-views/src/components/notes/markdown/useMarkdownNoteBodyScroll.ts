@@ -53,8 +53,8 @@ export interface UseMarkdownNoteBodyScrollArgs {
  * All three share one effect: separate effects would need separate dependency
  * arrays, and the task-aware one would then re-fire and stomp a caret position
  * the caret-aware one does not re-assert. first_incomplete_seq is deliberately
- * NOT memoised: `seq` is renumbered globally by mergeAggregateRoot on every
- * merge, so a content-keyed cache resolves a stale seq to a different note in
+ * NOT memoised: `seq` is reassigned whenever the note's own file is re-parsed or
+ * re-merged, so a content-keyed cache resolves a stale seq to a different note in
  * the same card. It is a per-render derivation consumed by the same commit's DOM.
  *
  * Dependencies are all read-only; the hook never mutates props.

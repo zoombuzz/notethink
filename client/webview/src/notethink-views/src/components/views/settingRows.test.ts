@@ -41,6 +41,7 @@ describe('settingRows - the view pane', () => {
             'kanbanAnimateTransitions',
             'kanbanDefaultCardType',
             'orientation',
+            'lineBreadth',
             'kanbanGroupBy',
             'scrollNoteIntoView',
         ]);

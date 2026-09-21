@@ -33,14 +33,12 @@ export interface UseProjectedNotesApi {
 export function useProjectedNotes(authoritative_notes: Array<NoteProps> | undefined): UseProjectedNotesApi {
     const [projection, setProjection] = useState<ProjectionState | null>(null);
     const timeout_ref = useRef<ReturnType<typeof setTimeout> | null>(null);
-
     const cancelTimeout = useCallback(() => {
         if (timeout_ref.current !== null) {
             clearTimeout(timeout_ref.current);
             timeout_ref.current = null;
         }
     }, []);
-
     const applyOptimisticMove = useCallback((move: KanbanMove) => {
         const projected_notes = applyKanbanMove(authoritative_notes ?? [], move);
         debug('applying optimistic move: dragged=%s dest=%s idx=%d', move.dragged_stable_id, move.destination_column_value, move.destination_index);
@@ -52,7 +50,6 @@ export function useProjectedNotes(authoritative_notes: Array<NoteProps> | undefi
             timeout_ref.current = null;
         }, KANBAN_PROJECTION_MAX_MS);
     }, [authoritative_notes, cancelTimeout]);
-
     // reconcile: when the authoritative notes satisfy the projected move, drop the projection
     useEffect(() => {
         if (projection === null) { return; }
@@ -62,12 +59,10 @@ export function useProjectedNotes(authoritative_notes: Array<NoteProps> | undefi
             setProjection(null);
         }
     }, [authoritative_notes, projection, cancelTimeout]);
-
     // clear the safety timeout on unmount
     useEffect(() => {
         return () => { cancelTimeout(); };
     }, [cancelTimeout]);
-
     const notes_to_render = projection ? projection.projected_notes : (authoritative_notes ?? []);
     return { notes_to_render, applyOptimisticMove, is_projecting: projection !== null };
 }

@@ -5,12 +5,11 @@ import { simulateSelectionChanged } from '../helpers/simulate-selection';
 /*
  * The column width, driven in the browser against the real bundle.
  *
- * The width is derived from the cards rather than declared, so none of these assert a number. Each one
- * asserts the DIRECTION the setting names: a squarer target card means a wider lane, a wider board past
- * the point the lanes fit means more of them rather than fatter ones, and stacking the lanes turns the
- * ratio on its side, so it sizes the card's height and each card's width is solved from its own text.
- * Only a real browser can answer any of it - the whole mechanism is a measurement of reflowed text,
- * which jsdom does not do.
+ * The lane width is the breadth setting, so what these assert is how the rest of the board answers it: a
+ * wider board past the point the lanes fit shows more of them rather than fatter ones, the ratio shapes
+ * the card without moving the lane, and stacking the lanes turns the breadth on its side, so it sizes the
+ * row's height and each card's width is solved from its own text. Only a real browser can answer any of
+ * it - the stacked widths are a measurement of reflowed text, which jsdom does not do.
  */
 
 async function setupKanbanBoard(page: Page, fixture = 'kanban-wide.md'): Promise<void> {
@@ -43,6 +42,11 @@ async function cardWidth(page: Page): Promise<number> {
     return page.locator('[data-column-card-id]').first().evaluate(el => el.getBoundingClientRect().width);
 }
 
+/** the rendered height of the first card, which is the number the ratio moves */
+async function cardHeight(page: Page): Promise<number> {
+    return page.locator('[data-column-card-id]').first().evaluate(el => el.getBoundingClientRect().height);
+}
+
 /** the rendered width of the first lane, which is the number every setting here moves */
 async function laneWidth(page: Page): Promise<number> {
     return page.locator('[data-flip-column-id]').first().evaluate(el => el.getBoundingClientRect().width);
@@ -65,22 +69,22 @@ test.describe('Kanban column width', () => {
     });
 
     /*
-     * The area a card's text occupies is fixed by the notes, so a shorter target card is a wider one. The
-     * same board asked for a 1:1 card must therefore lay out wider lanes than the same board asked for 1:3,
-     * which is the whole claim the setting makes.
+     * The ratio shapes the card and no longer chooses the lane: on a board too narrow for every lane, the
+     * lanes hold the breadth setting whatever the ratio, and only how tall a card stands moves with it.
      */
-    test('a squarer target card asks for a wider lane, since the text area is fixed', async ({ page }) => {
-        // narrow, so the lanes take their target width; with room to fit, the fill rule decides instead
+    test('the ratio moves the card height and leaves the lane width alone', async ({ page }) => {
         await page.setViewportSize({ width: 520, height: 800 });
-        await setupKanbanBoard(page);
+        await setupKanbanBoard(page, 'manual-expand.md');
         await openKanbanSettings(page);
 
         await page.selectOption('[data-testid="setting-control-kanbanCardRatio"]', '3');
         await expect.poll(() => laneWidth(page)).toBeGreaterThan(0);
-        const tall = await laneWidth(page);
+        const tall_lane = await laneWidth(page);
+        const tall_card = await cardHeight(page);
 
         await page.selectOption('[data-testid="setting-control-kanbanCardRatio"]', '1');
-        await expect.poll(() => laneWidth(page)).toBeGreaterThan(tall);
+        await expect.poll(() => cardHeight(page)).toBeLessThan(tall_card);
+        expect(await laneWidth(page)).toBeCloseTo(tall_lane, 0);
     });
 
     /*
@@ -103,17 +107,19 @@ test.describe('Kanban column width', () => {
         await expect.poll(() => cardWidth(page)).toBeCloseTo(opened_stacked, 0);
     });
 
-    test('a stacked board that flips to columns still answers the ratio', async ({ page }) => {
+    test('a stacked board that flips to columns lays its lanes out at the breadth setting', async ({ page }) => {
         await page.setViewportSize({ width: 520, height: 800 });
         await seedOrientation(page, 'rows');
         await setupKanbanBoard(page);
         await openKanbanSettings(page);
         await page.selectOption('[data-testid="setting-control-orientation"]', 'columns');
-        await expect.poll(() => laneWidth(page)).toBeGreaterThan(0);
-        const at_default = await laneWidth(page);
+        await expect(page.locator('[data-flip-root]')).toHaveAttribute('data-orientation', 'columns');
+        // the lanes hold the default breadth once the flip has laid them out, which is what makes the next read a change
+        await expect.poll(() => laneWidth(page)).toBe(220);
 
-        await page.selectOption('[data-testid="setting-control-kanbanCardRatio"]', '3');
-        await expect.poll(() => laneWidth(page)).toBeLessThan(at_default);
+        await page.fill('[data-testid="setting-control-lineBreadth"]', '300');
+        await page.press('[data-testid="setting-control-lineBreadth"]', 'Enter');
+        await expect.poll(() => laneWidth(page)).toBe(300);
     });
 
     /*

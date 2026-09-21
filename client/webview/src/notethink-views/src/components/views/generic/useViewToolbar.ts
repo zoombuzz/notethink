@@ -106,7 +106,6 @@ export function useViewToolbar(
     // the user's minted view types, read from the cascade so a saved kanban type is still a lane view
     const user_view_types = display_options.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
     const { selection: card_type_selection, resolved: resolved_card_type } = readCardTypeState(props, display_options, user_view_types);
-
     /*
      * handle_integration_change - change the view's integration selection.
      *  - 'auto' (explicit re-select) is a full reset: re-resolve mode + scope from the opened file's
@@ -142,7 +141,6 @@ export function useViewToolbar(
         // a folder scope or any resolve-to-current_file posts setIntegration so the extension swaps folder discovery / re-sends just the active doc; target_file_path (a Files-drawer click) makes it open that file
         if (message) { handlers.postMessage?.(message); }
     }, [handlers, props.doc_path, props.view_state_ids, props.id, props.file_declared_integration]);
-
     /*
      * Natural lane order for the drawer's lane-order row: alphabetical, with 'untagged' last. Derived for
      * ANY lane view rather than for kanban alone, because the drawer renders that row from the node the
@@ -152,7 +150,6 @@ export function useViewToolbar(
         if (!isGroupedViewType(props.type, registryWithUserTypes(user_view_types))) { return []; }
         return deriveNaturalColumnOrder(notes_within_parent_context);
     }, [props.type, notes_within_parent_context, user_view_types]);
-
     /*
      * cascade_write_setting - write one setting to VS Code config under notethink.settings.*, at the
      * scope the extension picks (Workspace, falling back to User in a folderless window). This is the
@@ -170,7 +167,6 @@ export function useViewToolbar(
             value,
         });
     }, [handlers, markPending]);
-
     /*
      * handle_view_type_change - change the view type (auto / document / kanban). Mirrors
      * handle_integration_change: dispatch the selection to this view's id, then cascade-write
@@ -181,7 +177,6 @@ export function useViewToolbar(
         handlers.setViewManagedState([{ id: props.id, type: view_type }]);
         cascade_write_setting('viewType', view_type);
     }, [handlers, props.id, cascade_write_setting]);
-
     /*
      * handle_card_type_change - pin the card type, or return it to auto. One cascade write and nothing
      * else: the card reaches every note through the view's display_options, rebuilt from the cascade.
@@ -189,9 +184,7 @@ export function useViewToolbar(
     const handle_card_type_change = useCallback((card_type: string): void => {
         cascade_write_setting('cardType', card_type);
     }, [cascade_write_setting]);
-
     const default_actions = useDefaultActions(handlers);
-
     /*
      * handle_column_order_change - apply the Kanban column order. The cascade spells "natural order"
      * as an empty array rather than an absent value, matching the package.json default's shape, so a
@@ -201,7 +194,6 @@ export function useViewToolbar(
         const matches_natural = arraysEqual(next_order, natural_column_order);
         cascade_write_setting('columnOrder', matches_natural ? [] : next_order);
     }, [natural_column_order, cascade_write_setting]);
-
     return {
         integration_selection,
         integration_mode,

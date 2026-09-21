@@ -36,7 +36,6 @@ export default function GroupBySelector(props: GroupBySelectorProps): ReactEleme
     const handleChange = (e: ChangeEvent<HTMLSelectElement>): void => {
         props.onChange(e.target.value);
     };
-
     const select_style = {
         background: 'var(--vscode-dropdown-background)',
         border: '1px solid var(--vscode-dropdown-border)',
@@ -46,7 +45,6 @@ export default function GroupBySelector(props: GroupBySelectorProps): ReactEleme
         padding: '2px 0.3em',
         color: 'var(--vscode-dropdown-foreground)',
     };
-
     // fixed (kanban): a disabled select showing the pinned key, plus a hint naming the view that unlocks it
     if (props.fixed) {
         const fixed_value = props.fixedValue ?? 'status';
@@ -63,7 +61,6 @@ export default function GroupBySelector(props: GroupBySelectorProps): ReactEleme
             </>
         );
     }
-
     const options = ['auto', ...props.candidateKeys];
     return (
         <select

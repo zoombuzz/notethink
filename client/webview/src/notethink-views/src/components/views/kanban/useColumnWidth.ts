@@ -2,27 +2,23 @@ import Debug from "debug";
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import {
     DEFAULT_CARD_RATIO,
+    clampBreadth,
     cardWidthsForHeight,
     medianCardArea,
     solveColumnLayout,
     targetCardHeight,
-    targetColumnWidth,
     type CardBox,
 } from "./columnwidthops";
 
 const debug = Debug("nodejs:notethink-views:useColumnWidth");
 
-// the lane gap, mirroring `.board { gap: 8px }`: a solve needs the number the browser already uses
-const BOARD_GAP = 8;
+// the lane gap, which the stylesheet spends on a separator element between lanes: a solve needs the same number
+export const BOARD_GAP = 8;
 
 /*
- * The lane width the area is probed at. Fixed, and deliberately near the answer.
- *
- * Fixed is what matters most: an area read off the live board would be taken at whatever width the board
- * currently has, so applying the result would change the next reading, which is the feedback loop this
- * design exists to avoid. Near the answer matters because the area-only model treats a card as pure
- * reflowing text - a wide card is mostly heading and padding, and counting those as text overstated the
- * area enough to hand back columns half again too wide, measured on the real board before this was fixed.
+ * The lane width the stacked layout probes each card's text at. Fixed: a reading taken off the live board
+ * would be taken at whatever width the board currently has, so applying the result would change the next
+ * reading, which is a feedback loop.
  */
 const PROBE_COLUMN_WIDTH = 200;
 
@@ -34,9 +30,12 @@ const CARDS_SELECTOR = '[data-column-cards]';
 const CARD_ID_ATTRIBUTE = 'data-column-card-id';
 
 /**
- * The two widths a solve produces, in px.
+ * What one solve produces, in px.
  * - column: the lane's width when the lanes run side by side, after the fit-or-fill rule
- * - card: the card's own target width, which is what the ratio actually solves for
+ * - card: the card's own width when the lanes are stacked, which is the row's height over the ratio
+ * - height: the height every card aims at: the drawn lane width times the ratio side by side, the row
+ *   height less the lane's padding stacked
+ * - cardWidths: the width each card needs to stand `height` tall, keyed by card id, for a stacked lane
  */
 export interface SolvedWidths {
     column: number;
@@ -46,15 +45,34 @@ export interface SolvedWidths {
 }
 
 /**
- * The measured shape of the typical card, cached against the content that produced it.
- * - area: the card's width times its height at the probe width, in px squared
- * - lane_padding: what the lane spends outside the card, so a solved card width becomes a column width
+ * The measured text of the board's cards, cached against the content that produced it, for the stacked
+ * layout's per-card widths.
+ * - area: the median card's width times its height at the probe width, in px squared
+ * - boxes: every card's border box at the probe width, whole note and no clip
  */
 interface CardModel {
     signature: string;
     area: number;
-    lane_padding: number;
     boxes: CardBox[];
+}
+
+/**
+ * Strip a cloned card back to what the note holds, rather than what the board last decided to show of it.
+ *
+ * Two inline values come off. The card's own width is what the stacked layout wrote from the last solve,
+ * so leaving it would have the probe measure its own output. The body's max-height is the clip cut from
+ * the target height this very measurement produces, and it arrives through the clone as the same feedback
+ * loop by another route - what the solve needs to know is how much text the note holds, which is one
+ * number whatever is on screen.
+ */
+function unclipProbeCard(card: HTMLElement): void {
+    Object.assign(card.style, { flex: '0 0 auto', width: '100%', maxHeight: 'none' });
+    card.style.removeProperty('--nt-card-width');
+    card.querySelectorAll<HTMLElement>('[style]').forEach(node => {
+        if (node.style.maxHeight === '') { return; }
+        node.style.removeProperty('max-height');
+        node.style.removeProperty('overflow');
+    });
 }
 
 /**
@@ -65,12 +83,16 @@ interface CardModel {
  * different card. It is appended, measured and removed inside this one call, and the attributes that make
  * a node interesting to anything else - the FLIP ids, and the hooks this measurement itself looks for -
  * are stripped first, so nothing can observe the probe or mistake it for a real lane.
+ *
+ * What it reads is the whole note, not the part the board is currently showing: every clone is stripped
+ * back to its content first, because the clip a card wears is cut from the very height this measurement
+ * produces.
  */
 function measureAtProbeWidth(board: HTMLElement): Omit<CardModel, 'signature'> | undefined {
     const lane = board.querySelector(LANE_SELECTOR);
     const cards = board.querySelectorAll(`${CARDS_SELECTOR} > *`);
     if (lane === null || cards.length === 0) { return undefined; }
-
+    // the probe itself: one empty lane holding a clone of every card on the board
     const probe_lane = lane.cloneNode(false) as HTMLElement;
     const probe_cards = document.createElement('div');
     probe_cards.className = lane.querySelector(CARDS_SELECTOR)?.className ?? '';
@@ -99,11 +121,7 @@ function measureAtProbeWidth(board: HTMLElement): Omit<CardModel, 'signature'> |
      * fixed probe width exists to prevent, arriving through the clone instead of through the board.
      */
     Object.assign(probe_cards.style, { flexDirection: 'column', alignItems: 'stretch' });
-    Array.prototype.forEach.call(probe_cards.children, (card: Element) => {
-        Object.assign((card as HTMLElement).style, { flex: '0 0 auto', width: '100%', maxHeight: 'none' });
-        (card as HTMLElement).style.removeProperty('--nt-card-width');
-    });
-
+    Array.prototype.forEach.call(probe_cards.children, (card: Element) => unclipProbeCard(card as HTMLElement));
     // clone order is query order, so the live card at index i is the one probed at index i
     const ids = Array.prototype.map.call(cards, (node: Element) => node.getAttribute(CARD_ID_ATTRIBUTE) ?? undefined) as Array<string | undefined>;
     board.appendChild(probe_lane);
@@ -111,39 +129,59 @@ function measureAtProbeWidth(board: HTMLElement): Omit<CardModel, 'signature'> |
         const rect = node.getBoundingClientRect();
         return { id: ids[index], width: rect.width, height: rect.height };
     }) as CardBox[];
-    // both boxes are read rather than assumed, so the gap is whatever the stylesheet spends
-    const card_width = boxes.reduce((widest, box) => Math.max(widest, box.width), 0);
-    const lane_width = probe_lane.getBoundingClientRect().width;
     board.removeChild(probe_lane);
-
+    // nothing measurable answers undefined, which is the board's signal to keep its stylesheet fallback
     const area = medianCardArea(boxes);
-    if (area <= 0 || card_width <= 0) { return undefined; }
-    return { area, lane_padding: Math.max(lane_width - card_width, 0), boxes };
+    if (area <= 0) { return undefined; }
+    return { area, boxes };
 }
 
 /**
- * The board's column width, measured from its own cards.
+ * What a lane spends on its own padding and border along the axis its breadth runs, read from the lane's
+ * computed style so the stylesheet stays the one place the number lives. The breadth is a lane's outer
+ * size, and the card sits inside it.
+ */
+function readLanePadding(board: HTMLElement, lanes_side_by_side: boolean): number | undefined {
+    const lane = board.querySelector(LANE_SELECTOR);
+    if (lane === null) { return undefined; }
+    const style = getComputedStyle(lane);
+    const sides = lanes_side_by_side
+        ? [style.paddingLeft, style.paddingRight, style.borderLeftWidth, style.borderRightWidth]
+        : [style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth];
+    return sides.reduce((total, side) => total + (parseFloat(side) || 0), 0);
+}
+
+/**
+ * The board's lane and card sizes, solved from the lane breadth setting.
  *
- * Two measurements with quite different lifetimes, which is the whole reason this is a hook rather than a
- * calculation. The typical card's AREA is a property of the notes, so it is probed at a fixed width once
- * per content change and cached. The board's available WIDTH changes constantly and is watched, but only
- * arithmetic hangs off it, so a resize costs no measurement and cannot disturb the model.
+ * Side by side this reads nothing but the board's own width and the lane's padding: the lanes take the
+ * breadth, spread to fill the board when they all fit, and a card is drawn at the lane less its padding.
+ * Stacked, the card's width has to come from its own text, so the cards' area is probed at a fixed width
+ * once per content change and cached; the board's width changes constantly and costs no measurement.
  *
- * Returns undefined until a measurement lands, and whenever the ratio is off, which is the board's signal
- * to leave the stylesheet's own fallback widths in place rather than render a guess.
- * - signature: changes exactly when the rendered cards change, and is what invalidates the cached model
+ * Returns undefined until the board has been measured, which is the board's signal to leave the
+ * stylesheet's own fallback sizes in place rather than render a guess.
+ * - signature: changes exactly when the rendered cards change, and is what invalidates the cached probe
  */
 function useColumnWidth(
     board_ref: RefObject<HTMLDivElement | null>,
-    ratio: number | undefined,
+    lanes_side_by_side: boolean,
+    ratio: number,
+    breadth: number,
     lane_count: number,
     signature: string,
 ): SolvedWidths | undefined {
     const [model, setModel] = useState<CardModel | undefined>(undefined);
     const [available, setAvailable] = useState<number>(0);
+    const [lane_padding, setLanePadding] = useState<number | undefined>(undefined);
     const model_ref = useRef(model);
     model_ref.current = model;
-
+    // the padding is stylesheet-owned, so it is re-read whenever the layout or the lane set changes
+    useEffect(() => {
+        const board = board_ref.current;
+        if (board === null) { return; }
+        setLanePadding(readLanePadding(board, lanes_side_by_side));
+    }, [board_ref, lanes_side_by_side, signature, available]);
     /*
      * `available` is a dependency so a failed probe gets another go. A board measured before its first
      * real layout has nothing to read, and storing nothing meant the effect never ran again for that
@@ -152,18 +190,17 @@ function useColumnWidth(
      */
     useEffect(() => {
         const board = board_ref.current;
-        if (board === null) { return; }
+        if (board === null || lanes_side_by_side) { return; }
         const cached = model_ref.current;
         if (cached?.signature === signature && cached.area > 0) { return; }
         const measured = measureAtProbeWidth(board);
         if (measured === undefined) {
-            if (cached?.signature !== signature) { setModel({ signature, area: 0, lane_padding: 0, boxes: [] }); }
+            if (cached?.signature !== signature) { setModel({ signature, area: 0, boxes: [] }); }
             return;
         }
-        debug('probed at %dpx: area %d, lane padding %d', PROBE_COLUMN_WIDTH, Math.round(measured.area), Math.round(measured.lane_padding));
+        debug('probed at %dpx: area %d', PROBE_COLUMN_WIDTH, Math.round(measured.area));
         setModel({ ...measured, signature });
-    }, [board_ref, signature, available]);
-
+    }, [board_ref, lanes_side_by_side, signature, available]);
     // the board's own width, which every resize of the panel or the editor group changes
     useEffect(() => {
         const board = board_ref.current;
@@ -173,34 +210,33 @@ function useColumnWidth(
         setAvailable(board.clientWidth);
         return () => observer.disconnect();
     }, [board_ref]);
-
-    if (ratio === undefined || model === undefined || model.area <= 0 || available <= 0) { return undefined; }
-    const target = targetColumnWidth(model.area, ratio, model.lane_padding);
-    if (target === undefined) { return undefined; }
-    const card = Math.max(target - model.lane_padding, 1);
-    const height = targetCardHeight(card, ratio);
-    return {
-        column: solveColumnLayout(target, available, lane_count, BOARD_GAP).width,
-        card,
-        height,
-        cardWidths: cardWidthsForHeight(model.boxes, height, card),
-    };
+    if (available <= 0 || lane_padding === undefined) { return undefined; }
+    if (lanes_side_by_side) {
+        const column = solveColumnLayout(breadth, available, lane_count, BOARD_GAP).width;
+        const card = Math.max(column - lane_padding, 1);
+        return { column, card, height: targetCardHeight(card, ratio), cardWidths: {} };
+    }
+    if (model === undefined || model.signature !== signature || model.area <= 0) { return undefined; }
+    const height = Math.max(breadth - lane_padding, 1);
+    const card = height / ratio;
+    return { column: breadth, card, height, cardWidths: cardWidthsForHeight(model.boxes, height, card) };
 }
 
 /**
- * What the board publishes: a style for the board itself, and a width for each card the stacked layout
- * sizes individually.
+ * What the board publishes: a style for the board itself, a width for each card the stacked layout sizes
+ * individually, and the height every card on the board is aiming at.
  *
- * Both orientations size a card by the ratio - what differs is which of its two dimensions the ratio
- * pins. Side by side, every card is the same WIDTH and the lane carries it, so one number serves the
- * whole board and a wordy card is simply taller. Stacked, every card is the same HEIGHT, which is the
- * same rule read along the other axis and cannot be one number: a card's width has to be solved from its
- * own text, or the row ends up as tall as its longest card with every other card floating in the gap.
+ * Both orientations size a card by the ratio - what differs is which of its two dimensions the breadth
+ * pins. Side by side, the breadth is the lane's width, so one number serves the whole board and the ratio
+ * decides how tall a card stands in it: a card with more to say than that height allows clips its own body
+ * to reach it, and one with less simply stays short. Stacked, the breadth is the row's height, which is the
+ * same rule read along the other axis and cannot be one width: a card's width has to be solved from its own
+ * text, or the row ends up as tall as its longest card with every other card floating in the gap.
  *
  * The per-card widths are custom properties on the cards themselves, so the board's own value stays as
  * the fallback for a card added since the last measurement. The height is one number for the whole board,
- * because it is the dimension every stacked card shares - and it is handed to the card rather than set on
- * it, because a card already owns a clip of its own and an outer cap only fights it.
+ * and it is handed to the card rather than set on it, because a card already owns a clip of its own and
+ * an outer cap only fights it.
  */
 export interface BoardWidths {
     style: CSSProperties | undefined;
@@ -212,18 +248,19 @@ export function useBoardColumnStyle(
     board_ref: RefObject<HTMLDivElement | null>,
     lanes_side_by_side: boolean,
     ratio: number | undefined,
+    breadth: number | undefined,
     lane_count: number,
     signature: string,
 ): BoardWidths {
-    const solved = useColumnWidth(board_ref, ratio ?? DEFAULT_CARD_RATIO, lane_count, signature);
+    const solved = useColumnWidth(board_ref, lanes_side_by_side, ratio ?? DEFAULT_CARD_RATIO, clampBreadth(breadth), lane_count, signature);
     if (solved === undefined) { return { style: undefined, cardWidths: {}, cardHeight: undefined }; }
     // a custom property is not in React's CSSProperties, so the record is asserted once
     const custom: Record<string, string> = lanes_side_by_side
         ? { '--nt-column-width': `${solved.column.toFixed(1)}px` }
-        : { '--nt-card-width': `${solved.card.toFixed(1)}px` };
+        : { '--nt-card-width': `${solved.card.toFixed(1)}px`, '--nt-row-height': `${solved.column.toFixed(1)}px` };
     return {
         style: custom as CSSProperties,
-        cardWidths: lanes_side_by_side ? {} : solved.cardWidths,
-        cardHeight: lanes_side_by_side ? undefined : solved.height,
+        cardWidths: solved.cardWidths,
+        cardHeight: solved.height,
     };
 }

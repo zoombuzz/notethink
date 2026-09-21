@@ -1,0 +1,372 @@
+/*
+ * The agent card: the story's headline, then one row per agent, any question band, the session drawer
+ * and the two file bands.
+ *
+ * Colour is rationed deliberately. The state rail on an agent row is the only saturated mark on the
+ * card, because state is the one thing worth acting on; the vendor is monochrome monospace type, and
+ * the file bands are drawn in the editor's own foreground at reduced opacity. Every colour falls back
+ * to a literal, because the chart colours are not among the variables a bare webview host is
+ * guaranteed to stamp and an unresolved var() would leave a rail with no colour at all.
+ *
+ * The card keeps the lane's card surface rather than clearing it the way the sticky does: this is a
+ * full card and wants the border, background and shadow a lane gives one.
+ *
+ * The drawer is a local 0fr -> 1fr grid rather than the toolbar's. ViewRenderer's .drawerGrid is
+ * sticky-positioned against the toolbar's height, which is meaningless inside a card.
+ */
+
+.agentNote {
+  --nt-agent-working: var(--vscode-charts-green, #4ec9b0);
+  --nt-agent-waiting: var(--vscode-charts-orange, #cca700);
+  --nt-agent-idle: var(--vscode-descriptionForeground, rgba(204, 204, 204, 0.7));
+  --nt-agent-ended: var(--vscode-disabledForeground, rgba(204, 204, 204, 0.45));
+  --nt-agent-unknown: var(--vscode-editorHint-foreground, rgba(204, 204, 204, 0.45));
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 6px;
+}
+
+.agentRows,
+.questionBands,
+.fileRows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agentRow {
+  // the rail's colour, resolved once per row from the state the card publishes
+  --nt-agent-state-colour: var(--nt-agent-unknown);
+
+  &[data-state="working"] { --nt-agent-state-colour: var(--nt-agent-working); }
+  &[data-state="waiting"] { --nt-agent-state-colour: var(--nt-agent-waiting); }
+  &[data-state="idle"] { --nt-agent-state-colour: var(--nt-agent-idle); }
+  &[data-state="ended"] { --nt-agent-state-colour: var(--nt-agent-ended); }
+}
+
+.agentRowButton {
+  display: grid;
+  grid-template-columns: 3px auto auto 1fr;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: -1px;
+  }
+}
+
+.agentRail {
+  align-self: stretch;
+  min-height: 1em;
+  border-radius: 2px;
+  background: var(--nt-agent-state-colour);
+}
+
+// a contract file the host refused that belongs to this session, drawn where a reader is looking at that session
+.agentRowRefusals {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 2px 15px;
+  font-size: 0.8em;
+  color: var(--vscode-editorError-foreground, #f48771);
+  opacity: 0.85;
+}
+
+.agentMonogram {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.85em;
+  letter-spacing: 0.05em;
+  opacity: 0.75;
+}
+
+.agentState {
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+.agentLive {
+  overflow: hidden;
+  font-size: 0.85em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+
+  // a fact the producer cannot report reads as absent unless it is marked as unreported
+  &[data-fact="unsupported"] {
+    font-style: italic;
+    opacity: 0.55;
+  }
+}
+
+.questionBand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-left: 3px solid var(--nt-agent-waiting);
+  border-radius: 2px;
+  background: var(--vscode-inputValidation-warningBackground, rgba(204, 167, 0, 0.12));
+  font-size: 0.85em;
+
+  &[data-fact="unsupported"] {
+    border-left-color: var(--nt-agent-unknown);
+    background: transparent;
+    font-style: italic;
+    opacity: 0.6;
+  }
+}
+
+.questionOptions {
+  opacity: 0.7;
+}
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.bannerRefusals {
+  list-style: none;
+  margin: 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--vscode-editorError-foreground, #f48771);
+  background: var(--vscode-inputValidation-errorBackground, rgba(244, 135, 113, 0.12));
+}
+
+.bannerNotice {
+  margin: 0;
+}
+
+.fileBands {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fileBandTitle {
+  margin: 0;
+  font-size: 0.8em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+
+.fileBandEmpty {
+  margin: 0;
+  font-size: 0.85em;
+  opacity: 0.55;
+}
+
+.fileRowButton {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85em;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover:enabled {
+    background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: -1px;
+  }
+
+  // a row whose diff the producer stored no side for offers no action, and the line beneath it says why
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+}
+
+.fileAttribution {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.9em;
+  opacity: 0.7;
+}
+
+// an unattributed row is marked in type rather than in colour, so it does not compete with a state rail
+.fileRow[data-attributed="false"] .fileAttribution {
+  font-style: italic;
+  opacity: 0.55;
+}
+
+.filePath {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.fileChange {
+  opacity: 0.6;
+}
+
+.fileDetailLine {
+  margin: 0;
+  padding: 0 6px 2px 24px;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+.drawerGrid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 150ms cubic-bezier(0.2, 0, 0.38, 0.9);
+
+  &[data-open="true"] {
+    grid-template-rows: 1fr;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition-duration: 0ms;
+  }
+}
+
+.drawer {
+  overflow: hidden; // required for the 0fr -> 1fr grid trick
+  min-height: 0;    // required for the 0fr -> 1fr grid trick
+}
+
+.drawerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border-radius: 3px;
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.08));
+  font-size: 0.85em;
+}
+
+.drawerHeading {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  font-size: 0.9em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+
+.drawerWindow {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.drawerList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.drawerMessage,
+.drawerToolCall {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.drawerRole,
+.drawerTool {
+  font-family: var(--vscode-editor-font-family, monospace);
+  opacity: 0.6;
+}
+
+.drawerText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.drawerEmpty {
+  margin: 0;
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.drawerFacts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 6px;
+  margin: 0;
+}
+
+.drawerFactKey {
+  font-family: var(--vscode-editor-font-family, monospace);
+  opacity: 0.6;
+}
+
+.drawerFactValue {
+  margin: 0;
+}
+
+/*
+ * Handing a session to its vendor's own chat panel. Drawn as a quiet secondary control inside the
+ * drawer rather than as the row's action, because the handover's outcome cannot be confirmed and the
+ * digest beside it can.
+ */
+.drawerHandover {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+  border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+}
+
+.drawerHandoverButton {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.25));
+  color: var(--vscode-button-secondaryForeground, inherit);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 1px;
+  }
+}
+
+.drawerHandoverNote {
+  font-size: 0.9em;
+  opacity: 0.6;
+}

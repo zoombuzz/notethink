@@ -8,8 +8,34 @@ const PATH_A = `${WORKSPACE_ROOT}/alpha/docstech/board.md`;
 const PATH_B = `${WORKSPACE_ROOT}/beta/docstech/board.md`;
 const PATH_C = `${WORKSPACE_ROOT}/gamma/docstech/board.md`;
 
-// keyboard-based drag - @hello-pangea/dnd supports lift (Space) + arrow moves + drop (Space). matches the established pattern in kanban-drag.spec.ts so the folder-mode specs use the same wire boundary as single-file mode
-async function keyboardDrag(page: Page, draggable_locator: Locator, direction: 'right' | 'left' | 'up' | 'down', moves: number): Promise<void> {
+// alpha's only doing-column card, the one the delayed-echo spec drags
+const DRAGGED_HEADLINE = 'Alpha Task Two';
+
+// mirrors useProjectedNotes' own ceiling: past this the optimistic projection is dropped and the live document wins
+const KANBAN_PROJECTION_MAX_MS = 1500;
+
+/*
+ * How long after the drop the delayed-echo spec withholds the authoritative update. Derived from
+ * measurement, not from the ceiling: a 200-doc folder board takes 632ms in the page from the update
+ * message to the moved card being painted (50 docs: 178ms), so 900ms clears the worst measured case
+ * by ~1.4x while leaving 600ms under KANBAN_PROJECTION_MAX_MS. A delay chosen to sit just under the
+ * ceiling instead would flake on timer jitter and would be measuring the harness, not the board.
+ */
+const SIMULATED_ECHO_DELAY_MS = 900;
+
+const ECHO_POLL_MS = 100;
+
+// the aria-label of the column region currently holding the card with this headline, or null when no column does
+async function columnHoldingHeadline(page: Page, headline: string): Promise<string | null> {
+    return page.evaluate((wanted: string) => {
+        const heading = Array.from(document.querySelectorAll<HTMLElement>('[role="region"][aria-label] [role="heading"], [role="region"][aria-label] h1, [role="region"][aria-label] h2, [role="region"][aria-label] h3, [role="region"][aria-label] h4'))
+            .find((node) => (node.textContent ?? '').trim().startsWith(wanted));
+        return heading?.closest('[role="region"][aria-label]')?.getAttribute('aria-label') ?? null;
+    }, headline);
+}
+
+// keyboard-based drag - @hello-pangea/dnd supports lift (Space) + arrow moves + drop (Space). matches the established pattern in kanban-drag.spec.ts so the folder-mode specs use the same wire boundary as single-file mode. Returns the moment of the drop, which is when the optimistic projection's clock starts
+async function keyboardDrag(page: Page, draggable_locator: Locator, direction: 'right' | 'left' | 'up' | 'down', moves: number): Promise<number> {
     await draggable_locator.scrollIntoViewIfNeeded();
     await draggable_locator.focus();
     await page.waitForTimeout(200);
@@ -24,7 +50,9 @@ async function keyboardDrag(page: Page, draggable_locator: Locator, direction: '
         await page.waitForTimeout(200);
     }
     await page.keyboard.press('Space');
+    const dropped_at = Date.now();
     await page.waitForTimeout(500);
+    return dropped_at;
 }
 
 async function setupFolderKanban(page: Page, docs?: Array<{ fixture: string; doc_path: string; relative_path: string }>): Promise<void> {
@@ -185,6 +213,51 @@ test.describe('Folder-mode kanban drag and drop', () => {
         // direction / baseline are captured so reviewers can see what the drag intent was; the weighted-fixture assertion above is deterministic on its own
         expect(direction).toMatch(/up|down/);
         expect(typeof baseline_beta_first).toBe('boolean');
+    });
+
+    test('a drop survives an authoritative echo delayed to 200-file scale - no snap-back', async ({ page }) => {
+        /*
+         * The drop is optimistic: useProjectedNotes masks the live document with the projected move for at most
+         * KANBAN_PROJECTION_MAX_MS (1500ms), and the card snaps back to its old column the moment that expires with no
+         * authoritative echo to reconcile against. What sets that latency is the round trip - write, watcher, re-parse,
+         * merge - and the merge is the part that scaled with the whole corpus rather than with the one file that
+         * changed, so on a large board the echo could arrive after the window had already closed.
+         *
+         * This holds the echo back for SIMULATED_ECHO_DELAY_MS to stand in for that latency, samples the card's column
+         * throughout, and requires that it is in the destination column at every sample and still there once the echo
+         * lands. A snap-back shows up as a sample reading "doing" rather than as a final-state failure, which is why
+         * the sampling is here and not a single assertion at the end.
+         */
+        await setupFolderKanban(page);
+        const doing = page.locator('[role="region"][aria-label="doing"]');
+        const alpha_handle = doing.locator('[data-rfd-drag-handle-draggable-id]').filter({
+            has: page.locator('[data-testid="origin-project-pill"][data-project="alpha"]'),
+        }).first();
+        await expect(alpha_handle).toBeVisible({ timeout: 5000 });
+        await expect(doing.getByRole('heading', { name: DRAGGED_HEADLINE })).toBeVisible({ timeout: 5000 });
+        // doing → done, the same cross-column move the first spec makes
+        const dropped_at = await keyboardDrag(page, alpha_handle, 'right', 1);
+        expect(await columnHoldingHeadline(page, DRAGGED_HEADLINE)).toBe('done');
+        // sample to a deadline measured from the drop itself, stopping while a further sample still fits, so the last read provably lands inside the window rather than depending on how long keyboardDrag's own settle wait took
+        const samples: Array<string | null> = [];
+        const sample_deadline = dropped_at + SIMULATED_ECHO_DELAY_MS;
+        for (let i = 0; i < Math.ceil(SIMULATED_ECHO_DELAY_MS / ECHO_POLL_MS) && Date.now() + ECHO_POLL_MS < sample_deadline; i++) {
+            await page.waitForTimeout(ECHO_POLL_MS);
+            samples.push(await columnHoldingHeadline(page, DRAGGED_HEADLINE));
+        }
+        expect(samples.length).toBeGreaterThanOrEqual(2);
+        expect(samples.filter((column) => column !== 'done')).toEqual([]);
+        // the echo has to arrive inside the projection window for the rest of the spec to mean anything, so say so rather than let a drifted helper wait fail as a mystery snap-back
+        expect(Date.now() - dropped_at).toBeLessThan(KANBAN_PROJECTION_MAX_MS);
+        // the echo the extension would post once the edit round-tripped: alpha's card now carries status=done in the file
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'kanban-folder-a-echo-done.md', doc_path: PATH_A, relative_path: 'alpha/docstech/board.md' },
+            { fixture: 'kanban-folder-b.md', doc_path: PATH_B, relative_path: 'beta/docstech/board.md' },
+        ], { workspace_root: WORKSPACE_ROOT });
+        await expect(page.locator('[role="region"][aria-label="done"]').getByRole('heading', { name: DRAGGED_HEADLINE })).toBeVisible({ timeout: 5000 });
+        // and it stays put once the projection has certainly expired, so the reconcile handed over to the live document rather than the timeout
+        await page.waitForTimeout(KANBAN_PROJECTION_MAX_MS + 200);
+        expect(await columnHoldingHeadline(page, DRAGGED_HEADLINE)).toBe('done');
     });
 
     test('single-file kanban drag still emits the legacy single-doc shape (regression guard)', async ({ page }) => {

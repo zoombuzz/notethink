@@ -117,21 +117,17 @@ function findChildNotes(
         const should_be_note = parent_type === 'listItem'
             ? isListItemChildNote(child, parent_type)
             : isNoteNode(child);
-
         if (!should_be_note) {
             // non-note nodes go into children_body as raw MdastNode
             children_body_accumulator.push(child);
             continue;
         }
-
         seq_counter.value++;
         const seq = seq_counter.value;
-
         let headline_raw = '';
         let body_raw = '';
         let end_body_offset: number | undefined;
         const note_children_body: Array<NoteProps | MdastNode> = [];
-
         if (child.type === 'heading') {
             headline_raw = extractHeadlineRaw(child, text);
             end_body_offset = computeHeadingEndBody(i, children, parent_end_offset);
@@ -147,7 +143,6 @@ function findChildNotes(
             headline_raw = text.slice(child.position.start.offset, child.position.end.offset);
             body_raw = '';
         }
-
         const note: NoteProps = {
             seq,
             level: 0, // level assigned later by nestChildNotes
@@ -168,18 +163,15 @@ function findChildNotes(
             headline_raw,
             body_raw,
         };
-
         // parse linetags from the headline
         const linetags_str = findLineTags(headline_raw);
         if (linetags_str) {
             note.linetags_from = child.position.start.offset + headline_raw.length - linetags_str.length;
             note.linetags = parseLineTags(linetags_str, seq);
         }
-
         // push to all_notes before recursing so parent appears before children in nestChildNotes
         all_notes.push(note);
         children_body_accumulator.push(note);
-
         // recurse into section/list children
         if (child.type === 'heading' && end_body_offset !== undefined) {
             const section_children: MdastNode[] = [];
@@ -364,14 +356,11 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
     const seq_counter: SeqCounter = { value: 0 };
     const all_notes: NoteProps[] = [];
     const root_children_body: Array<NoteProps | MdastNode> = [];
-
     // pre-compute line-offset index for O(log n) position lookups
     const line_index = buildLineIndex(text);
-
     // normalise children from either MdastRoot (typed) or MdastNode (local)
     const mdast_children = (mdast.children || []) as MdastNode[];
     const root_end_offset = mdast.position?.end?.offset ?? text.length;
-
     // find all child notes from the MDAST root
     findChildNotes(
         'root',
@@ -383,10 +372,8 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         root_children_body,
         line_index,
     );
-
     // assign levels based on containment
     nestChildNotes(all_notes, 0);
-
     // populate child_notes arrays (direct children only, used for kanban column assignment)
     for (const note of all_notes) {
         if (note.parent_notes?.length) {
@@ -397,7 +384,6 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
             direct_parent.child_notes.push(note);
         }
     }
-
     /*
      * lift front matter into the document root as linetags - the broadest, document-scoped layer
      * computed before the inheritance pass so the root can act as the top ancestor; absent front matter leaves both fields undefined
@@ -406,10 +392,8 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
     const root_frontmatter = frontmatter_node
         ? parseFrontmatterLinetags(frontmatter_node, text, 0)
         : {};
-
     // propagate nt_child_*, nt_child2y_*, nt_childall_* linetags to descendants, with the root front matter as the broadest ancestor above the whole tree
     applyChildAttributeInheritance(all_notes, root_frontmatter.linetags);
-
     // build the root note
     const root: NoteProps = {
         seq: 0,
@@ -427,6 +411,5 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
         headline_raw: '',
         body_raw: text,
     };
-
     return root;
 }

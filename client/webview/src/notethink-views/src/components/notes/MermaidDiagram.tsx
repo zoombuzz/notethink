@@ -16,10 +16,8 @@ const MermaidDiagram = (props: MermaidDiagramProps): React.ReactElement => {
     const [element, setElement] = useState<HTMLDivElement>();
     const [render_result, setRenderResult] = useState<RenderResult>();
     if (instance_count === undefined) { instance_count = 0; }
-
     const container_id = `${props.id || 'd' + (instance_count++)}-mermaid`;
     const diagram_text = props.children;
-
     useEffect(() => {
         // securityLevel is pinned strict so mermaid keeps DOMPurify-sanitising the rendered SVG; lowering it to 'loose'/'antiscript' would turn the innerHTML assignment below into an untrusted-markdown XSS sink
         mermaid.initialize({
@@ -28,12 +26,10 @@ const MermaidDiagram = (props: MermaidDiagramProps): React.ReactElement => {
             securityLevel: 'strict'
         });
     }, []);
-
     const updateDiagramRef = useCallback((elem: HTMLDivElement) => {
         if (!elem) { return; }
         setElement(elem);
     }, []);
-
     useEffect(() => {
         if (!element) { return; }
         if (!render_result?.svg) { return; }
@@ -44,7 +40,6 @@ const MermaidDiagram = (props: MermaidDiagramProps): React.ReactElement => {
         element,
         render_result
     ]);
-
     useEffect(() => {
         if (!diagram_text || diagram_text.length === 0) { return; }
         (async () => {
@@ -58,7 +53,6 @@ const MermaidDiagram = (props: MermaidDiagramProps): React.ReactElement => {
     }, [
         diagram_text
     ]);
-
     return (
         <div className={props.className}
              onClick={props.onClick}

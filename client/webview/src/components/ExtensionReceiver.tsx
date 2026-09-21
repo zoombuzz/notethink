@@ -59,7 +59,6 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         clearPending: props.pendingWorkApi.clearPending,
         setJumpTargets: props.jumpTargetsApi.setJumpTargets,
     });
-
     // effects
     useLinkInterceptor(postMessageToExtension);
     useVscodeStatePersistence(docs, view_states, persistVscodeState);
@@ -73,7 +72,6 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         postMessage: postMessageToExtension,
         setViewManagedState: handleSetViewManagedState,
     });
-
     // early returns
     const has_docs = docs && Object.keys(docs).length > 0;
     if (!has_docs && !connected && timed_out) {
@@ -84,7 +82,6 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
             </p>
         </div>;
     }
-
     // render
     return <NoteRenderer
         notes={docs || {}}

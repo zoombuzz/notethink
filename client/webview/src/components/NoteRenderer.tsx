@@ -64,7 +64,6 @@ export interface NoteRendererProps {
  */
 export default function NoteRenderer(props: NoteRendererProps): ReactElement {
     const ref = useRef<HTMLDivElement>(null);
-
     const handleRenderError = useCallback((error: Error) => {
         props.postMessage?.({
             type: 'renderError',
@@ -72,11 +71,9 @@ export default function NoteRenderer(props: NoteRendererProps): ReactElement {
             stack: error.stack,
         });
     }, [props.postMessage]);
-
     // folder mode: when any view state has integration_mode === 'folder', pick FolderTreeComposer to build a single merged tree across every loaded doc instead of stacking N per-doc composers
     const folder_mode = anyViewInFolderMode(props.viewStates);
     const integration_path = folder_mode ? firstIntegrationPath(props.viewStates) : undefined;
-
     if (folder_mode && integration_path) {
         return <div ref={ref} data-testid="NoteRenderer" data-folder-mode="true">
             <Suspense fallback={<div>Loading...</div>}>
@@ -86,7 +83,6 @@ export default function NoteRenderer(props: NoteRendererProps): ReactElement {
             </Suspense>
         </div>;
     }
-
     // current_file mode: render exactly one composer for the most-recently-sent doc; never stack N single-file views
     const active_entry = pickMostRecentlySentDoc(props.notes);
     let rendered_note: ReactElement | null = null;

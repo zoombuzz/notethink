@@ -1,6 +1,8 @@
-import { mergeAggregateRoot, anyViewInFolderMode, firstIntegrationPath, flattenSingleFileStories, stampSingleFileStableIds, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from './mergeAggregateRoot';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { mergeAggregateRoot, anyViewInFolderMode, conversionProbe, firstIntegrationPath, flattenSingleFileStories, resetConversionProbe, stampSingleFileStableIds, FolderMergeCache, FOLDER_VIEW_STATE_ID, SEQ_FILE_SLOT_COUNT, SEQ_STORY_STRIDE, type AggregatedDocInput } from './mergeAggregateRoot';
 import { convertMdastToNoteHierarchy } from './convertMdastToNoteHierarchy';
-import { flattenAllNotes } from './noteops';
+import { findNoteBySeq, flattenAllNotes } from './noteops';
 import type { MdastNode, NoteProps } from '../types/NoteProps';
 
 /**
@@ -94,6 +96,20 @@ function twoBulletStoryDoc(id: string, first_bullet: string): AggregatedDocInput
     return makeDoc(id, 'x/todo.md', text, children);
 }
 
+/**
+ * Assert what a merged seq set actually guarantees: the synthetic root is 0, and all_notes is
+ * strictly increasing and therefore unique, which is the merged reading order every comparator
+ * sorts by. Deliberately not a contiguity check - seqs sit on a sparse (file_slot, file_rank) grid
+ * so that an unchanged file keeps its numbers when a sibling file changes.
+ */
+function expectOrderedUniqueSeqs(all_notes: NoteProps[]): void {
+    expect(all_notes[0].seq).toBe(0);
+    for (let i = 1; i < all_notes.length; i++) {
+        expect(all_notes[i].seq).toBeGreaterThan(all_notes[i - 1].seq);
+    }
+    expect(new Set(all_notes.map(n => n.seq)).size).toBe(all_notes.length);
+}
+
 describe('mergeAggregateRoot', () => {
 
     it('empty docs map produces synthetic root with no children', () => {
@@ -106,17 +122,17 @@ describe('mergeAggregateRoot', () => {
         expect(all_notes[0]).toBe(root);
     });
 
-    it('single file with two stories: stamps origin, renumbers seqs from 0', () => {
+    it('single file with two stories: stamps origin, numbers each story from its own seq block', () => {
         const doc = simpleFile('id-a', 'a/todo.md', 'Todo', ['Story A', 'Story B']);
         const { root, all_notes } = mergeAggregateRoot({ 'id-a': doc }, '/repo/');
 
         expect(root.child_notes).toHaveLength(2);
         expect(all_notes).toHaveLength(3); // root + 2 stories
-        expect(all_notes.map(n => n.seq)).toEqual([0, 1, 2]);
+        expectOrderedUniqueSeqs(all_notes);
 
         const [storyA, storyB] = root.child_notes!;
         expect(storyA.headline_raw).toBe('### Story A');
-        expect(storyA.seq).toBe(1);
+        expect(storyA.seq).toBeGreaterThan(root.seq);
         expect(storyA.level).toBe(1);
         expect(storyA.origin?.doc_id).toBe('id-a');
         expect(storyA.origin?.doc_path).toBe('/repo/a/todo.md');
@@ -124,7 +140,7 @@ describe('mergeAggregateRoot', () => {
         expect(storyA.origin?.epic).toBeUndefined();
 
         expect(storyB.headline_raw).toBe('### Story B');
-        expect(storyB.seq).toBe(2);
+        expect(storyB.seq).toBeGreaterThan(storyA.seq);
         expect(storyB.origin?.doc_id).toBe('id-a');
     });
 
@@ -136,7 +152,7 @@ describe('mergeAggregateRoot', () => {
 
         expect(root.child_notes).toHaveLength(3);
         expect(all_notes).toHaveLength(4);
-        expect(all_notes.map(n => n.seq)).toEqual([0, 1, 2, 3]);
+        expectOrderedUniqueSeqs(all_notes);
         // round 0: A1 (a), B1 (b); round 1: only A2 (b has no rank-1 story)
         const [s1, s2, s3] = root.child_notes!;
         expect(s1.headline_raw).toBe('### A1');
@@ -398,21 +414,18 @@ describe('mergeAggregateRoot', () => {
             docs[`id-${i}`] = simpleFile(`id-${i}`, `proj${i}/todo.md`, `T${i}`, ['One', 'Two', 'Three']);
         }
         const { all_notes } = mergeAggregateRoot(docs, '/repo/');
-        const seqs = all_notes.map(n => n.seq);
-        const seq_set = new Set(seqs);
-        expect(seq_set.size).toBe(seqs.length);
-        // contiguous from 0
-        expect(seqs).toEqual([...Array(seqs.length).keys()]);
+        expectOrderedUniqueSeqs(all_notes);
     });
 
-    it('all_notes[seq] indexing matches each note (contiguous seqs)', () => {
+    it('every note in the merged tree resolves by its own seq', () => {
         const docs: Record<string, AggregatedDocInput> = {
             'id-1': simpleFile('id-1', 'a/todo.md', 'A', ['One']),
             'id-2': simpleFile('id-2', 'b/todo.md', 'B', ['Two']),
         };
         const { all_notes } = mergeAggregateRoot(docs, '/repo/');
-        for (let i = 0; i < all_notes.length; i++) {
-            expect(all_notes[i].seq).toBe(i);
+        // findNoteBySeq is the supported lookup; all_notes.at(seq) is not, and the sparse grid makes that explicit
+        for (const note of all_notes) {
+            expect(findNoteBySeq(all_notes, note.seq)).toBe(note);
         }
     });
 
@@ -478,7 +491,7 @@ describe('mergeAggregateRoot', () => {
         expect(story_a?.origin?.source_position?.start.offset).toBe(7);
     });
 
-    it('source_position survives the global seq renumbering - it carries source-file offsets, not merged-tree offsets', () => {
+    it('source_position survives the merge seq assignment - it carries source-file offsets, not merged-tree offsets', () => {
         const docA = simpleFile('id-a', 'a/todo.md', 'A', ['A1']);
         const docB = simpleFile('id-b', 'b/todo.md', 'B', ['B1']);
         // round-robin interleaves stories - A1 first (file a sorts ahead), then B1
@@ -488,9 +501,8 @@ describe('mergeAggregateRoot', () => {
         // both stories carry their own pre-merge offsets (which happen to coincide because both files have the same H1 length); the seqs are globally renumbered but source_position is not
         expect(a1.origin?.source_position?.start.offset).toBe(a1.position.start.offset);
         expect(b1.origin?.source_position?.start.offset).toBe(b1.position.start.offset);
-        // global seq renumbering puts a1 at seq=1, b1 at seq=2 - source_position is unaffected
-        expect(a1.seq).toBe(1);
-        expect(b1.seq).toBe(2);
+        // the merge numbers a1 ahead of b1 (file a sorts first at rank 0) - source_position is unaffected
+        expect(a1.seq).toBeLessThan(b1.seq);
     });
 
     it('source_position is preserved per-note on descendants too', () => {
@@ -631,8 +643,8 @@ describe('mergeAggregateRoot', () => {
             const doc = orderedFile('id-a', 'a/todo.md', 'T', undefined, ['S1', 'S2', 'S3', 'S4', 'S5']);
             const { root, all_notes } = mergeAggregateRoot({ 'id-a': doc }, '/repo/', 3);
             expect(root.child_notes!.map(n => n.headline_raw)).toEqual(['### S1', '### S2', '### S3']);
-            // seqs renumber contiguously over the kept set only
-            expect(all_notes.map(n => n.seq)).toEqual([0, 1, 2, 3]);
+            // only the kept stories are numbered, and they keep the merged reading order
+            expectOrderedUniqueSeqs(all_notes);
         });
 
         it('explicit newest-at-top keeps the FIRST N stories', () => {
@@ -646,7 +658,7 @@ describe('mergeAggregateRoot', () => {
             const { root, all_notes } = mergeAggregateRoot({ 'id-a': doc }, '/repo/', 2);
             // last 2 in the file are S4,S5; S5 is newest so it sorts first (smallest seq)
             expect(root.child_notes!.map(n => n.headline_raw)).toEqual(['### S5', '### S4']);
-            expect(all_notes.map(n => n.seq)).toEqual([0, 1, 2]);
+            expectOrderedUniqueSeqs(all_notes);
         });
 
         it('newest-at-bottom reverses even when uncapped (implicit ordering weight)', () => {
@@ -690,7 +702,7 @@ describe('mergeAggregateRoot', () => {
             expect(root.child_notes!.map(n => n.headline_raw)).toEqual(
                 ['### A1', '### B4', '### A2', '### B3'],
             );
-            expect(all_notes.map(n => n.seq)).toEqual([0, 1, 2, 3, 4]);
+            expectOrderedUniqueSeqs(all_notes);
         });
 
         it('epic-nested stories are counted in the per-file cap', () => {
@@ -1423,5 +1435,224 @@ describe('flattenSingleFileStories', () => {
         // without exactly one # H1 the document root stays the scope and the ## epics stay its children; lifting stories there would make a single file look like a folder aggregate (isAggregateRoot)
         expect(root.child_notes!.map(n => n.headline_raw)).toEqual(before);
         expect(root.child_notes!.every(n => n.origin === undefined)).toBe(true);
+    });
+});
+
+/**
+ * Incremental merges. The acceptance property is identity: a doc nothing touched must contribute
+ * the very NoteProps objects it contributed last merge, because that is what lets every memo
+ * comparison downstream stop at the cards whose own file moved. Each case here carries its own
+ * negative control - the same merge run without a cache - so a silently-disabled cache fails
+ * rather than passing by coincidence.
+ */
+describe('mergeAggregateRoot incremental merges', () => {
+
+    function hashed(doc: AggregatedDocInput, hash: string): AggregatedDocInput {
+        return { ...doc, hash_sha256: hash };
+    }
+
+    /**
+     * A board of `count` single-story files, each its own project, hashed by content.
+     */
+    function board(count: number, changed_index?: number): Record<string, AggregatedDocInput> {
+        const docs: Record<string, AggregatedDocInput> = {};
+        for (let i = 0; i < count; i++) {
+            const changed = i === changed_index;
+            const title = changed ? `T${i} edited` : `T${i}`;
+            docs[`id-${i}`] = hashed(simpleFile(`id-${i}`, `proj${i}/todo.md`, title, [`Story ${i}`]), `hash-${i}${changed ? '-edited' : ''}`);
+        }
+        return docs;
+    }
+
+    function storiesByStableId(root: NoteProps): Map<string, NoteProps> {
+        const by_id = new Map<string, NoteProps>();
+        for (const story of (root.child_notes ?? [])) { by_id.set(story.stable_id!, story); }
+        return by_id;
+    }
+
+    it('an unchanged doc contributes the same NoteProps objects to the next merge', () => {
+        const cache = new FolderMergeCache();
+        const first = mergeAggregateRoot(board(3), '/repo/', undefined, undefined, cache);
+        const second = mergeAggregateRoot(board(3, 1), '/repo/', undefined, undefined, cache);
+        const before = storiesByStableId(first.root);
+        const after = storiesByStableId(second.root);
+        // a missing id would make every identity assertion below pass on undefined === undefined
+        expect(before.get('id-0:story-0')).toBeDefined();
+        expect(before.get('id-2:story-2')).toBeDefined();
+        expect(after.get('id-0:story-0')).toBe(before.get('id-0:story-0'));
+        expect(after.get('id-2:story-2')).toBe(before.get('id-2:story-2'));
+    });
+
+    it('the changed doc re-derives: new objects, and the memo-relevant fields follow the new content', () => {
+        const cache = new FolderMergeCache();
+        const first = mergeAggregateRoot(board(3), '/repo/', undefined, undefined, cache);
+        const second = mergeAggregateRoot(board(3, 1), '/repo/', undefined, undefined, cache);
+        const before = storiesByStableId(first.root).get('id-1:story-1')!;
+        const after = storiesByStableId(second.root).get('id-1:story-1')!;
+        expect(after).not.toBe(before);
+        // the edited H1 is one character longer, so the story below it moves - the change React has to see
+        expect(after.position.start.offset).not.toBe(before.position.start.offset);
+    });
+
+    it('without a cache every doc contributes fresh objects, which is what the cache is measured against', () => {
+        const first = mergeAggregateRoot(board(3), '/repo/');
+        const second = mergeAggregateRoot(board(3, 1), '/repo/');
+        const before = storiesByStableId(first.root);
+        const after = storiesByStableId(second.root);
+        expect(before.get('id-0:story-0')).toBeDefined();
+        expect(after.get('id-0:story-0')).not.toBe(before.get('id-0:story-0'));
+        expect(after.get('id-2:story-2')).not.toBe(before.get('id-2:story-2'));
+    });
+
+    it('a one-doc update on a 50-doc board converts exactly one doc', () => {
+        const cache = new FolderMergeCache();
+        mergeAggregateRoot(board(50), '/repo/', undefined, undefined, cache);
+        resetConversionProbe();
+        mergeAggregateRoot(board(50, 7), '/repo/', undefined, undefined, cache);
+        expect(conversionProbe().conversions).toBe(1);
+        expect(conversionProbe().merges).toBe(1);
+    });
+
+    it('a re-merge of an untouched 50-doc board converts nothing', () => {
+        const cache = new FolderMergeCache();
+        mergeAggregateRoot(board(50), '/repo/', undefined, undefined, cache);
+        resetConversionProbe();
+        mergeAggregateRoot(board(50), '/repo/', undefined, undefined, cache);
+        expect(conversionProbe().conversions).toBe(0);
+    });
+
+    it('without a cache the same one-doc update converts all 50', () => {
+        mergeAggregateRoot(board(50), '/repo/');
+        resetConversionProbe();
+        mergeAggregateRoot(board(50, 7), '/repo/');
+        expect(conversionProbe().conversions).toBe(50);
+    });
+
+    it('an unchanged doc keeps its seqs and stable_ids when a sibling doc changes', () => {
+        const cache = new FolderMergeCache();
+        const first = mergeAggregateRoot(board(3), '/repo/', undefined, undefined, cache);
+        const second = mergeAggregateRoot(board(3, 1), '/repo/', undefined, undefined, cache);
+        const before = first.all_notes.filter(n => n.origin?.doc_id === 'id-2').map(n => ({ seq: n.seq, stable_id: n.stable_id }));
+        const after = second.all_notes.filter(n => n.origin?.doc_id === 'id-2').map(n => ({ seq: n.seq, stable_id: n.stable_id }));
+        expect(after).toEqual(before);
+        expect(before.length).toBeGreaterThan(0);
+    });
+
+    it('seq assignment is deterministic, so even an uncached re-merge leaves an unchanged file alone', () => {
+        const first = mergeAggregateRoot(board(3), '/repo/');
+        const second = mergeAggregateRoot(board(3, 1), '/repo/');
+        const before = first.all_notes.filter(n => n.origin?.doc_id === 'id-2').map(n => n.seq);
+        const after = second.all_notes.filter(n => n.origin?.doc_id === 'id-2').map(n => n.seq);
+        expect(after).toEqual(before);
+    });
+
+    it('a doc gaining a story leaves every other doc\'s seqs where they were', () => {
+        const grown = board(3);
+        grown['id-1'] = hashed(simpleFile('id-1', 'proj1/todo.md', 'T1', ['Story 1', 'Story 1b']), 'hash-1-grown');
+        const first = mergeAggregateRoot(board(3), '/repo/');
+        const second = mergeAggregateRoot(grown, '/repo/');
+        for (const doc_id of ['id-0', 'id-2']) {
+            const before = first.all_notes.filter(n => n.origin?.doc_id === doc_id).map(n => n.seq);
+            const after = second.all_notes.filter(n => n.origin?.doc_id === doc_id).map(n => n.seq);
+            expect(after).toEqual(before);
+        }
+    });
+
+    it('a reused subtree hangs off the merge that is rendering it, not the one that stamped it', () => {
+        const cache = new FolderMergeCache();
+        mergeAggregateRoot(board(3), '/repo/', undefined, undefined, cache);
+        const second = mergeAggregateRoot(board(3, 1), '/repo/', undefined, undefined, cache);
+        const reused = storiesByStableId(second.root).get('id-0:story-0')!;
+        expect(reused.parent_notes![0]).toBe(second.root);
+    });
+
+    it('the file cap stays inside the seq grid, so no two files can share a slot', () => {
+        /*
+         * The bound that matters is silent when it breaks: a board of SEQ_FILE_SLOT_COUNT files or more gives the file
+         * at slot N the same seqs as the file at slot N - SEQ_FILE_SLOT_COUNT one rank up, and two notes answering to
+         * one seq is the identity-collision class CODING_STANDARDS records as having surfaced three times already.
+         * MAX_AGGREGATE_FILES is what holds it. It lives in the extension package, which this one cannot import, so
+         * the pin reads the declaration - raising the cap past the grid turns this red rather than corrupting a board.
+         */
+        const constants_path = path.resolve(__dirname, '..', '..', '..', '..', '..', 'extension', 'src', 'constants.ts');
+        const source = fs.readFileSync(constants_path, 'utf8');
+        const declaration = /export const MAX_AGGREGATE_FILES = (\d+);/.exec(source);
+        expect(declaration).not.toBeNull();
+        const max_aggregate_files = Number(declaration![1]);
+        expect(max_aggregate_files).toBeGreaterThan(0);
+        expect(max_aggregate_files).toBeLessThan(SEQ_FILE_SLOT_COUNT);
+    });
+
+    it('a file at the last slot of a rank band does not collide with the next band', () => {
+        // the arithmetic the bound above protects, asserted directly so the relationship is visible without deriving it
+        const last_slot_first_rank = ((0 * SEQ_FILE_SLOT_COUNT) + (SEQ_FILE_SLOT_COUNT - 1) + 1) * SEQ_STORY_STRIDE;
+        const first_slot_second_rank = ((1 * SEQ_FILE_SLOT_COUNT) + 0 + 1) * SEQ_STORY_STRIDE;
+        expect(first_slot_second_rank).toBeGreaterThan(last_slot_first_rank);
+        // and one story's block cannot reach the next one
+        expect(first_slot_second_rank - last_slot_first_rank).toBeGreaterThanOrEqual(SEQ_STORY_STRIDE);
+    });
+
+    it('two merges of identical input leave the tree consistent, the shape a StrictMode double-invoke produces', () => {
+        const cache = new FolderMergeCache();
+        const docs = board(3);
+        const first = mergeAggregateRoot(docs, '/repo/', undefined, undefined, cache);
+        const second = mergeAggregateRoot(docs, '/repo/', undefined, undefined, cache);
+        expect(second.root).not.toBe(first.root);
+        expect(second.root.child_notes).toEqual(first.root.child_notes);
+        for (const story of second.root.child_notes!) {
+            expect(story.parent_notes![0]).toBe(second.root);
+        }
+    });
+
+    it('the merge never writes to the parsed tree it caches', () => {
+        const cache = new FolderMergeCache();
+        const docs = board(1);
+        const parsed = cache.convert(docs['id-0']);
+        const parsed_story = parsed.child_notes![0].child_notes![0];
+        const before = { seq: parsed_story.seq, level: parsed_story.level, origin: parsed_story.origin, stable_id: parsed_story.stable_id };
+        const { root } = mergeAggregateRoot(docs, '/repo/', undefined, undefined, cache);
+        expect(root.child_notes![0]).not.toBe(parsed_story);
+        expect(parsed_story.seq).toBe(before.seq);
+        expect(parsed_story.level).toBe(before.level);
+        expect(parsed_story.origin).toBe(before.origin);
+        expect(parsed_story.stable_id).toBe(before.stable_id);
+    });
+
+    it('a doc that leaves the board is forgotten, and re-parsed if it comes back', () => {
+        const cache = new FolderMergeCache();
+        mergeAggregateRoot(board(3), '/repo/', undefined, undefined, cache);
+        const without = board(3);
+        delete without['id-1'];
+        mergeAggregateRoot(without, '/repo/', undefined, undefined, cache);
+        resetConversionProbe();
+        mergeAggregateRoot(board(3), '/repo/', undefined, undefined, cache);
+        expect(conversionProbe().conversions).toBe(1);
+    });
+
+    it('a cache carried across a change of maxNotesPerFile re-stamps rather than serving the old cap', () => {
+        const cache = new FolderMergeCache();
+        const docs = { 'id-a': hashed(simpleFile('id-a', 'a/todo.md', 'A', ['S1', 'S2', 'S3']), 'hash-a') };
+        const capped = mergeAggregateRoot(docs, '/repo/', 2, undefined, cache);
+        expect(capped.root.child_notes!.map(n => n.headline_raw)).toEqual(['### S1', '### S2']);
+        const uncapped = mergeAggregateRoot(docs, '/repo/', undefined, undefined, cache);
+        expect(uncapped.root.child_notes!.map(n => n.headline_raw)).toEqual(['### S1', '### S2', '### S3']);
+    });
+
+    it('a doc whose mtime moved re-stamps, so relevance ordering sees the new value', () => {
+        const cache = new FolderMergeCache();
+        const docs = { 'id-a': hashed(simpleFile('id-a', 'a/todo.md', 'A', ['S1']), 'hash-a') };
+        mergeAggregateRoot(docs, '/repo/', undefined, undefined, cache);
+        const touched = { 'id-a': { ...docs['id-a'], mtime: 1_700_000_000_000 } };
+        const second = mergeAggregateRoot(touched, '/repo/', undefined, undefined, cache);
+        expect(second.root.child_notes![0].origin?.file_mtime).toBe(1_700_000_000_000);
+    });
+
+    it('a cached subtree keeps its mdast node identity, so the render cache still hits', () => {
+        const cache = new FolderMergeCache();
+        const first = mergeAggregateRoot(board(2), '/repo/', undefined, undefined, cache);
+        const second = mergeAggregateRoot(board(2, 1), '/repo/', undefined, undefined, cache);
+        const before = storiesByStableId(first.root).get('id-0:story-0')!;
+        const after = storiesByStableId(second.root).get('id-0:story-0')!;
+        expect(after.children).toBe(before.children);
     });
 });

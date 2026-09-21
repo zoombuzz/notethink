@@ -78,9 +78,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		 * in dev a per-load query param forces a fresh fetch; production keeps the cacheable URL
 		 */
 		const cache_bust = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV) ? `?v=${Date.now()}` : '';
-
 		const nonce = getNonce();
-
 		return /* html */`
 			<!DOCTYPE html>
 			<html lang="en">

@@ -24,7 +24,6 @@ interface CollisionsDrawerProps {
  */
 function CollisionsDrawer(props: CollisionsDrawerProps): ReactElement {
     debug("rendering %d collision group(s)", props.collisions.length);
-
     return (
         <div className={styles.drawerBody} data-testid="collisions-drawer">
             <div className={styles.drawerGroups}>

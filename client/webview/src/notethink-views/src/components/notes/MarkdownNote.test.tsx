@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, act, fireEvent } from '@testing-library/react';
-import MarkdownNote from './MarkdownNote';
+import MarkdownNote, { areMarkdownNotePropsEqual } from './MarkdownNote';
 import { nextExpandedIds } from '../../lib/viewstateops';
 import type { NoteProps } from '../../types/NoteProps';
 
@@ -349,5 +349,76 @@ describe('MarkdownNote', () => {
         const body = remeasuredBody(container);
         expect(screen.getByRole('button', { name: /show less/i })).toBeInTheDocument();
         expect(body.style.maxHeight).toBe('');
+    });
+});
+
+/**
+ * The memo comparator decides how much of a board an unrelated file's update repaints, which the
+ * rendered output cannot show, so it is asserted directly. The case that matters is the one
+ * @hello-pangea/dnd creates: it rebuilds `provided` on every render of its Draggable, so a
+ * comparator that reads those bags by identity repaints every mounted card on every board update.
+ */
+describe('areMarkdownNotePropsEqual', () => {
+    function card(overrides: Partial<NoteProps> = {}): NoteProps {
+        return {
+            seq: 8192,
+            level: 1,
+            stable_id: 'doc-a:story-one',
+            type: 'heading',
+            depth: 3,
+            position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } },
+            children: [],
+            children_body: [],
+            headline_raw: '### Story One',
+            body_raw: 'body',
+            ...overrides,
+        };
+    }
+
+    function withProvided(draggable: Record<string, unknown>, handle: Record<string, unknown>): NoteProps {
+        return card({ display_options: { provided: { draggableProps: draggable, dragHandleProps: handle } } });
+    }
+
+    it('skips the repaint when dnd hands back new prop bags holding the same values', () => {
+        const prev = withProvided({ 'data-rfd-draggable-id': 'doc-a:story-one', style: { transform: null } }, { tabIndex: 0 });
+        const next = withProvided({ 'data-rfd-draggable-id': 'doc-a:story-one', style: { transform: null } }, { tabIndex: 0 });
+        expect(prev.display_options!.provided!.draggableProps).not.toBe(next.display_options!.provided!.draggableProps);
+        expect(areMarkdownNotePropsEqual(prev, next)).toBe(true);
+    });
+
+    it('repaints when a nested style value moves, which is what a drag does', () => {
+        const prev = withProvided({ style: { transform: null } }, { tabIndex: 0 });
+        const next = withProvided({ style: { transform: 'translate(12px, 4px)' } }, { tabIndex: 0 });
+        expect(areMarkdownNotePropsEqual(prev, next)).toBe(false);
+    });
+
+    it('repaints when a bag gains or loses a key', () => {
+        const prev = withProvided({ style: { transform: null } }, { tabIndex: 0 });
+        const next = withProvided({ style: { transform: null }, onTransitionEnd: () => {} }, { tabIndex: 0 });
+        expect(areMarkdownNotePropsEqual(prev, next)).toBe(false);
+    });
+
+    it('repaints when the drag handle bag changes value', () => {
+        const prev = withProvided({ style: { transform: null } }, { tabIndex: 0 });
+        const next = withProvided({ style: { transform: null } }, { tabIndex: -1 });
+        expect(areMarkdownNotePropsEqual(prev, next)).toBe(false);
+    });
+
+    it('treats one bag present and the other absent as a change', () => {
+        const prev = card({ display_options: { provided: { draggableProps: undefined, dragHandleProps: undefined } } });
+        const next = withProvided({ style: { transform: null } }, { tabIndex: 0 });
+        expect(areMarkdownNotePropsEqual(prev, next)).toBe(false);
+    });
+
+    it('repaints a different note even when everything the bags hold matches', () => {
+        const prev = withProvided({ style: { transform: null } }, { tabIndex: 0 });
+        const next = { ...withProvided({ style: { transform: null } }, { tabIndex: 0 }), stable_id: 'doc-a:story-two' };
+        expect(areMarkdownNotePropsEqual(prev, next)).toBe(false);
+    });
+
+    it('repaints when the note keeps its identity but its seq moved, since the DOM carries the seq', () => {
+        const prev = withProvided({ style: { transform: null } }, { tabIndex: 0 });
+        const next = { ...withProvided({ style: { transform: null } }, { tabIndex: 0 }), seq: 16384 };
+        expect(areMarkdownNotePropsEqual(prev, next)).toBe(false);
     });
 });

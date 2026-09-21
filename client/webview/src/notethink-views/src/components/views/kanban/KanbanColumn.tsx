@@ -16,7 +16,6 @@ export default function KanbanColumn(props: KanbanColumnProps): ReactElement {
     const note_styles = [view_specific_styles.column];
     if (props.type) { note_styles.push(view_specific_styles.pseudo); }
     if (props.display_options?.draglight) { note_styles.push(view_specific_styles.draglight); }
-
     return (
         <div className={note_styles.join(' ')}
              role={'region'} aria-label={props.value}

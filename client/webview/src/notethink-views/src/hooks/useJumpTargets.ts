@@ -22,11 +22,9 @@ export interface UseJumpTargetsApi {
  */
 export function useJumpTargets(): UseJumpTargetsApi {
     const [jump_targets, setJumpTargetsState] = useState<JumpTargetsMessage | undefined>(undefined);
-
     const setJumpTargets = useCallback((response: JumpTargetsMessage): void => {
         debug('setJumpTargets mode=%s path=%s entries=%d', response.mode, response.path, response.entries.length);
         setJumpTargetsState(response);
     }, []);
-
     return { jump_targets, setJumpTargets };
 }

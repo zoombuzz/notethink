@@ -67,10 +67,8 @@ export interface LineViewDragApi {
  */
 export function useLineViewDrag(params: UseLineViewDragParams): LineViewDragApi {
     const { is_projecting, columns, visible_columns, apply_optimistic_move, axis, group_field, drag_disabled, animate_enabled, view } = params;
-
     const drag_active = useRef(false);
     const content_ref = useRef<HTMLDivElement>(null);
-
     /*
      * the FLIP gate marks when a layout change is the user's own move (drag → optimistic projection →
      * authoritative echo) rather than a passive external edit. useFlipGate holds it open for the whole
@@ -78,7 +76,6 @@ export function useLineViewDrag(params: UseLineViewDragParams): LineViewDragApi 
      * card is never re-animated on its own echo. The handlers below drive the drag edges.
      */
     const flip_gate = useFlipGate(is_projecting);
-
     /**
      * arm the post-drop click guard. The browser fires a `click` after the drop's mouseup; with the
      * projection re-rendering the board, dnd's own click-suppression is defeated and that click bubbles
@@ -93,7 +90,6 @@ export function useLineViewDrag(params: UseLineViewDragParams): LineViewDragApi 
         // hold the FLIP gate for the whole drag (any duration) so an update arriving mid-drag - or in the race before @hello-pangea/dnd's async drag-end fires - is never animated; drag-end releases it (projection hold then takes over)
         flip_gate.hold();
     };
-
     /**
      * thin React adapter around `buildKanbanDragEndPayload`: pulls the dragged note and
      * destination lane out of the drop result, applies the lock + no-destination guards,
@@ -139,7 +135,6 @@ export function useLineViewDrag(params: UseLineViewDragParams): LineViewDragApi 
             });
         }
     };
-
     /*
      * FLIP passive-transition layer: animate the board when an external/AI edit re-lays the cards.
      * flip_ids is every card's stable_id (the data-flip-id registry key) in render order; column_ids
@@ -157,6 +152,5 @@ export function useLineViewDrag(params: UseLineViewDragParams): LineViewDragApi 
         class_names: FLIP_CLASS_NAMES,
     });
     debug('drag lifecycle wired: %d visible lanes, disabled=%s', visible_columns.length, drag_disabled);
-
     return { content_ref, drag_active, handle_drag_start, handle_drag_end };
 }

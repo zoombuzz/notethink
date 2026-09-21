@@ -26,7 +26,6 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
     const view_state = props.viewStates?.[note_id] || props.viewStates?.['__default'];
     // explicit `current_file` stamp makes the composer the single source of truth for the toolbar selector + breadcrumb (symmetric with FolderTreeComposer's `integration_mode: 'folder'` stamp); without it the toolbar's selector falls back to a hard-coded default and any stale stranded tag on this view's display_options can still register as folder
     const { viewType, view_display_options } = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
-
     // memoize conversion keyed on content hash - avoids redundant work when only selection changes
     const root_note = useMemo(
         () => {
@@ -41,11 +40,10 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
         [note.hash_sha256, note_id, note.path, viewType]
     );
     const selection = note.path ? props.selections?.[note.path] : undefined;
-    const all_notes = flattenAllNotes(root_note);
-
+    // the flat list only changes when the tree does, and every view memo downstream keys on its identity
+    const all_notes = useMemo(() => flattenAllNotes(root_note), [root_note]);
     const cascade = props.settingsCascade;
     const view_state_ids = props.viewStates ? Object.keys(props.viewStates) : undefined;
-
     const view_props: ViewProps = {
         // --- identity + opened-doc location ---
         id: note_id,
@@ -91,6 +89,5 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
             } : undefined,
         },
     };
-
     return <GenericView {...view_props} />;
 }

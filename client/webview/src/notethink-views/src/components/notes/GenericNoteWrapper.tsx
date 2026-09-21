@@ -5,7 +5,6 @@ import type { NoteProps } from "../../types/NoteProps";
 export default function GenericNoteWrapper(props: NoteProps): React.ReactElement | undefined {
     const note = props;
     const data_props = getStandardNoteDataProps(note);
-
     // render note wrapper
     switch (note.type) {
         case 'list':

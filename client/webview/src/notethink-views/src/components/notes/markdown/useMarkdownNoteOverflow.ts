@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-// abridge when rendered height exceeds this multiple of width (top-level notes only)
+// abridge a top-level note at this multiple of its own width, where no view has given the card a target
 const HEIGHT_RATIO = 1;
 
 // a card is never clipped below this, so a tall headline still leaves some body showing
@@ -18,6 +18,18 @@ function chromeHeightAround(body: HTMLElement): number {
 }
 
 /**
+ * The vertical padding and border a content-box body draws outside the height its `max-height` names. The
+ * chrome above is measured against the body's border box, so a clip set to the bare remainder would render
+ * this much taller than asked and every clipped card would overshoot its target by it.
+ */
+function bodyBoxExtraHeight(body: HTMLElement): number {
+    const style = getComputedStyle(body);
+    if (style.boxSizing === 'border-box') { return 0; }
+    return [style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth]
+        .reduce((total, side) => total + (parseFloat(side) || 0), 0);
+}
+
+/**
  * The height a body clips at, and the single place that rule lives.
  *
  * Two callers need the same answer at two different moments - this module's passive effect, which drives
@@ -28,7 +40,7 @@ function chromeHeightAround(body: HTMLElement): number {
  */
 export function bodyClipHeight(body: HTMLElement, card_target_height?: number): number {
     if (card_target_height === undefined) { return body.offsetWidth * HEIGHT_RATIO; }
-    return Math.max(card_target_height - chromeHeightAround(body), MIN_CLIP_HEIGHT);
+    return Math.max(card_target_height - chromeHeightAround(body) - bodyBoxExtraHeight(body), MIN_CLIP_HEIGHT);
 }
 
 export interface MarkdownNoteOverflowState {
@@ -46,13 +58,14 @@ export interface MarkdownNoteOverflowState {
  * the element has zero width (during initial layout or a hidden tab - leaving
  * the previous reading in place rather than collapsing max_height to 0).
  *
- * `card_target_height` inverts which dimension decides the clip, and is what a stacked lane passes in.
- * Left off, the body clips at its own width, so a card is about as tall as it is wide and a lane of them
- * comes out even because they all share a width. Set, the body clips at whatever is left of the target
- * once this card's own chrome is taken off - so a card carrying three linetags and a four-line headline
- * gets a shorter body than its neighbour and the two still finish the same height, which is what makes a
- * stacked row exactly one card tall. The chrome is measured rather than assumed, and is invariant under
- * the clip it produces (it is the card's height minus the body's), so the measurement settles in one pass.
+ * `card_target_height` inverts which dimension decides the clip, and is what a kanban lane passes in,
+ * whichever way its lanes run. Left off, the body clips at its own width, so a card is about as tall as it
+ * is wide and a lane of them comes out even because they all share a width. Set, the body clips at
+ * whatever is left of the target once this card's own chrome is taken off - so a card carrying three
+ * linetags and a four-line headline gets a shorter body than its neighbour and the two still finish the
+ * same height, which is what lands a card on the board's target ratio side by side and makes a stacked row
+ * exactly one card tall. The chrome is measured rather than assumed, and is invariant under the clip it
+ * produces (it is the card's height minus the body's), so the measurement settles in one pass.
  *
  * Dependencies:
  * - body_ref: ref to the body DOM node; safe when null (no-op)

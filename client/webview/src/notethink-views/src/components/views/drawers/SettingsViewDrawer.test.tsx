@@ -5,6 +5,7 @@ import type { UserViewType } from '../../../types/Messages';
 import SettingsViewDrawer, { mintUserViewTypeId, newViewTypeNameHint } from './SettingsViewDrawer';
 import { VIEW_REGISTRY } from '../../../lib/viewregistryops';
 import { CARD_SETTING_ROWS, VIEW_SETTING_ROWS } from '../settingRows';
+import { setBreadthDraft } from '../kanban/useBreadthDraft';
 
 /*
  * The lane-order chips drag through @hello-pangea/dnd, which needs real layout to run a gesture. The
@@ -125,7 +126,7 @@ describe('SettingsViewDrawer tree', () => {
         expect(screen.getByTestId('view-node-count-root')).toHaveTextContent('(1)');
         expect(screen.getByTestId('view-node-count-document')).toHaveTextContent('(0)');
         expect(screen.getByTestId('view-node-count-grouped')).toHaveTextContent('(1)');
-        expect(screen.getByTestId('view-node-count-line')).toHaveTextContent('(1)');
+        expect(screen.getByTestId('view-node-count-line')).toHaveTextContent('(2)');
         expect(screen.getByTestId('view-node-count-kanban')).toHaveTextContent('(5)');
     });
 
@@ -172,6 +173,7 @@ describe('SettingsViewDrawer rows', () => {
             'kanbanAnimateTransitions',
             'kanbanDefaultCardType',
             'orientation',
+            'lineBreadth',
             'kanbanGroupBy',
             'scrollNoteIntoView',
             'watchUnopenedFilesInViewer',
@@ -258,7 +260,7 @@ describe('SettingsViewDrawer controls', () => {
         const control = screen.getByTestId('setting-control-kanbanDefaultCardType') as HTMLSelectElement;
         expect(control.tagName).toBe('SELECT');
         expect(control.value).toBe('card');
-        expect(Array.from(control.options).map(option => option.value)).toEqual(['card', 'sticky']);
+        expect(Array.from(control.options).map(option => option.value)).toEqual(['card', 'sticky', 'agent']);
         expect(screen.getByTestId('setting-row-kanbanDefaultCardType')).toHaveTextContent('Default card type');
     });
 
@@ -637,6 +639,117 @@ describe('SettingsViewDrawer custom view types', () => {
     });
 });
 
+/*
+ * Updating the selected type is the other half of the offer: the change is kept in the type the reader is
+ * standing on rather than in a second type minted beside it. Every case here first moves the highlight
+ * onto the minted node, since the offer is made against the selected node rather than the rendered one.
+ */
+describe('SettingsViewDrawer updating a custom view type', () => {
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    /** the minted type highlighted with a kanban-owned row already diverged, so the offer is standing */
+    function renderOnMintedTypeWithOffer(overrides: Partial<typeof default_props> = {}): void {
+        renderDrawer({ userTypes: [MINTED], diverged: ['kanbanCardRatio'], settings: { kanbanCardRatio: 2 }, ...overrides });
+        fireEvent.click(screen.getByTestId(`view-node-${MINTED.id}`));
+    }
+
+    it('offers Update beside Save once the highlight is on a minted type', () => {
+        renderOnMintedTypeWithOffer();
+        expect(screen.getByTestId('user-view-type-update')).toBeInTheDocument();
+        expect(screen.getByTestId('new-view-type-open')).toBeInTheDocument();
+        expect(screen.getByTestId('new-view-type-reason')).toHaveTextContent('Update Kanban by Owner');
+    });
+
+    it('offers no Update on a built-in rung, which leaves minting as the only way to keep the change', () => {
+        renderDrawer({ diverged: ['kanbanGroupBy'], settings: { kanbanGroupBy: 'assignee' } });
+        expect(screen.getByTestId('new-view-type-open')).toBeInTheDocument();
+        expect(screen.queryByTestId('user-view-type-update')).not.toBeInTheDocument();
+        expect(screen.getByTestId('new-view-type-reason')).toHaveTextContent('Save your change as a new view type');
+    });
+
+    it('merges the diverged rows into the type overrides and clears the keys off the workspace', () => {
+        const on_setting_change = jest.fn();
+        renderOnMintedTypeWithOffer({ onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId('user-view-type-update'));
+        expect(mintedTypes(on_setting_change)).toEqual([{ ...MINTED, overrides: { kanbanGroupBy: 'owner', kanbanCardRatio: 2 } }]);
+        expect(on_setting_change).toHaveBeenCalledWith('kanbanCardRatio', undefined);
+    });
+
+    it('carries every ancestor-owned divergence into the update, not just one of them', () => {
+        const on_setting_change = jest.fn();
+        renderOnMintedTypeWithOffer({
+            onSettingChange: on_setting_change,
+            diverged: ['kanbanCardRatio', 'orientation'],
+            settings: { kanbanCardRatio: 2, orientation: 'rows' },
+        });
+        fireEvent.click(screen.getByTestId('user-view-type-update'));
+        expect(mintedTypes(on_setting_change)[0].overrides).toEqual({ kanbanGroupBy: 'owner', kanbanCardRatio: 2, orientation: 'rows' });
+        expect(on_setting_change).toHaveBeenCalledWith('orientation', undefined);
+    });
+
+    it('leaves the board alone when it is already rendering the type being updated', () => {
+        const on_view_type_change = jest.fn();
+        renderOnMintedTypeWithOffer({ onViewTypeChange: on_view_type_change, viewTypeSelection: MINTED.id, currentType: MINTED.id });
+        fireEvent.click(screen.getByTestId('user-view-type-update'));
+        expect(on_view_type_change).not.toHaveBeenCalled();
+    });
+
+    /*
+     * A type's overrides layer over the cascade while it is the RENDERED type, so clearing the workspace
+     * keys without pinning the type would drop the change off the board the moment it was kept.
+     */
+    it('pins the board to the type when it is rendering something else', () => {
+        const on_view_type_change = jest.fn();
+        renderOnMintedTypeWithOffer({ onViewTypeChange: on_view_type_change });
+        fireEvent.click(screen.getByTestId('user-view-type-update'));
+        expect(on_view_type_change).toHaveBeenCalledWith(MINTED.id);
+    });
+
+    /*
+     * The pill and the offer are one question asked twice, and a key with no registry setting behind it
+     * used to answer it from its flat home: a ratio saved into a type still showed a Kanban pill and an
+     * offer to mint what the type already held.
+     */
+    it('names the type on the pill of a key it holds, and offers nothing over it', () => {
+        const holds_ratio: UserViewType = { ...MINTED, overrides: { kanbanGroupBy: 'owner', kanbanCardRatio: 2 } };
+        renderDrawer({ userTypes: [holds_ratio], diverged: ['kanbanCardRatio'], settings: { kanbanCardRatio: 2 } });
+        fireEvent.click(screen.getByTestId(`view-node-${holds_ratio.id}`));
+        expect(screen.getByTestId('setting-pill-kanbanCardRatio')).toHaveTextContent('Kanban by Owner');
+        expect(screen.queryByTestId('new-view-type-offer')).not.toBeInTheDocument();
+    });
+
+    it('writes a change to a key the type holds into the type, never to the workspace', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ userTypes: [MINTED], onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId(`view-node-${MINTED.id}`));
+        fireEvent.change(screen.getByTestId('group-by-selector'), { target: { value: 'assignee' } });
+        expect(on_setting_change).toHaveBeenCalledTimes(1);
+        expect(mintedTypes(on_setting_change)).toEqual([{ ...MINTED, overrides: { kanbanGroupBy: 'assignee' } }]);
+    });
+
+    it('writes a change to a key the type does not hold to the workspace, where the offer catches it', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ userTypes: [MINTED], onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId(`view-node-${MINTED.id}`));
+        fireEvent.change(screen.getByTestId('setting-control-kanbanCardRatio'), { target: { value: '2' } });
+        expect(on_setting_change).toHaveBeenCalledWith('kanbanCardRatio', 2);
+    });
+
+    it('routes a dropped lane into the type when the type holds the lane order', () => {
+        const on_setting_change = jest.fn();
+        const on_column_order_change = jest.fn();
+        const holds_order: UserViewType = { ...MINTED, overrides: { columnOrder: ['done', 'doing'] } };
+        renderDrawer({ userTypes: [holds_order], onSettingChange: on_setting_change, onColumnOrderChange: on_column_order_change });
+        fireEvent.click(screen.getByTestId(`view-node-${holds_order.id}`));
+        dropChip(1, 0);
+        expect(on_column_order_change).not.toHaveBeenCalled();
+        expect(mintedTypes(on_setting_change)[0].overrides.columnOrder).toEqual(['done', 'doing', 'untagged']);
+    });
+});
+
 describe('minting a view type', () => {
 
     it('slugs the label once, prefixes it, and never collides with a built-in rung', () => {
@@ -654,5 +767,60 @@ describe('minting a view type', () => {
         const scroll = VIEW_SETTING_ROWS.find(def => def.key === 'scrollNoteIntoView')!;
         expect(newViewTypeNameHint('Kanban', scroll, true)).toBe('Kanban with Scroll note into view');
         expect(newViewTypeNameHint('Kanban', scroll, false)).toBe('Kanban without Scroll note into view');
+    });
+});
+
+describe('the lane breadth row', () => {
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        act(() => { setBreadthDraft('v1', undefined); });
+    });
+
+    it('is a pixel text box labelled Column width while the lanes are columns and Row height once they are rows', () => {
+        renderDrawer({ settings: { orientation: 'columns' } });
+        expect(screen.getByTestId('setting-control-lineBreadth')).toHaveAttribute('aria-label', 'Column width');
+        expect(screen.getByTestId('setting-row-lineBreadth')).toHaveTextContent('Column width');
+        renderDrawer({ settings: { orientation: 'rows' } });
+        expect(screen.getAllByTestId('setting-control-lineBreadth').at(-1)).toHaveAttribute('aria-label', 'Row height');
+    });
+
+    it('shows the saved breadth, falling back to the default before the cascade arrives', () => {
+        renderDrawer({ settings: { lineBreadth: 340 } });
+        expect(screen.getByTestId('setting-control-lineBreadth')).toHaveValue('340');
+    });
+
+    it('follows a drag live by showing the draft breadth', () => {
+        renderDrawer({ settings: { lineBreadth: 340 } });
+        act(() => { setBreadthDraft('v1', 410); });
+        expect(screen.getByTestId('setting-control-lineBreadth')).toHaveValue('410');
+    });
+
+    it('writes a typed number on Enter', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ settings: { lineBreadth: 340 }, onSettingChange: on_setting_change });
+        const box = screen.getByTestId('setting-control-lineBreadth');
+        fireEvent.change(box, { target: { value: '400' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        expect(on_setting_change).toHaveBeenCalledWith('lineBreadth', 400);
+    });
+
+    it('clamps a number under the floor', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ settings: { lineBreadth: 340 }, onSettingChange: on_setting_change });
+        const box = screen.getByTestId('setting-control-lineBreadth');
+        fireEvent.change(box, { target: { value: '30' } });
+        fireEvent.blur(box);
+        expect(on_setting_change).toHaveBeenCalledWith('lineBreadth', 120);
+    });
+
+    it('rejects what is not a number, writes nothing and goes back to the saved value', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ settings: { lineBreadth: 340 }, onSettingChange: on_setting_change });
+        const box = screen.getByTestId('setting-control-lineBreadth');
+        fireEvent.change(box, { target: { value: 'wide' } });
+        fireEvent.blur(box);
+        expect(on_setting_change).not.toHaveBeenCalled();
+        expect(box).toHaveValue('340');
     });
 });

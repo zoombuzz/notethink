@@ -181,11 +181,9 @@ function playCardMove(
     const delta = computeInverseTransform(prev_rect, measured.rect);
     if (!isSignificantDelta(delta)) { return; }
     emitAnimationEvent({ kind: 'move', id, dx: delta.dx, dy: delta.dy, duration: KANBAN_ANIMATION_TRANSITION_MAX_MS });
-
     const el = measured.el;
     el.style.transform = `translate(${delta.dx}px, ${delta.dy}px)`;
     el.classList.add(flipping_class);
-
     const playMove = (): void => {
         el.style.transform = '';
         if (typeof el.animate === 'function') {
@@ -195,7 +193,6 @@ function playCardMove(
             el.classList.remove(flipping_class);
         }
     };
-
     const column_el = el.closest('[data-flip-column-id]');
     const lands_in_entering_column = column_el !== null &&
         entering_columns.has(column_el.getAttribute('data-flip-column-id') ?? '');
@@ -249,13 +246,11 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
     const prev_columns = useRef<Set<string>>(new Set());
     const first_run = useRef(true);
     const cap_timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
     // signature changes whenever the column set or card order/membership changes - i.e. a reorder
     const signature = useMemo(
         () => options.column_ids.join('|') + '#' + options.flip_ids.join(','),
         [options.column_ids, options.flip_ids],
     );
-
     /*
      * The FLIP samples each card's rect on the commit that introduces a reorder (LAST) and inverts it
      * against the previous baseline (FIRST). For the deltas to mean "the reorder" and nothing else, both
@@ -271,7 +266,6 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
     useLayoutEffect(() => {
         const container = options.container_ref.current;
         if (!container) { return; }
-
         // snapshot the measured layout as the next baseline (the FIRST for the following reorder)
         const snapshotBaseline = (rects: Map<string, MeasuredCard>, columns: Set<string>): void => {
             const baseline = new Map<string, RectLike>();
@@ -280,7 +274,6 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
             prev_columns.current = columns;
             first_run.current = false;
         };
-
         /*
          * settle any still-playing move so getBoundingClientRect reads the true layout box - a mid-flight
          * position would otherwise bake into the baseline; skipped while the gate is hot, where dnd owns
@@ -293,7 +286,6 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
         const new_column_els = measureColumns(container);
         const new_columns = new Set(new_column_els.keys());
         const reduced = prefersReducedMotion();
-
         // GATE / FIRST-RUN / DISABLED / REDUCED-MOTION: establish baseline, never animate
         if (first_run.current || options.gate.isHot() || !options.enabled || reduced) {
             const reason = skipReason(first_run.current, options.gate.isHot(), options.enabled, reduced);
@@ -302,12 +294,10 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
             snapshotBaseline(new_rects, new_columns);
             return;
         }
-
         // PLAN. emit probe events for the whole schedule, then play via WAAPI where available.
         const prev_rect_map = prev_rects.current;
         const classification = classifyTransitions(prev_rect_map.keys(), new_rects.keys());
         const entering_cols = enteringColumns(new_columns, prev_columns.current);
-
         entering_cols.forEach((value) => playColumnEnter(value, new_column_els.get(value), options.class_names.columnEntering));
         classification.moving.forEach((id) => {
             const prev_rect = prev_rect_map.get(id);
@@ -316,11 +306,9 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
         });
         classification.entering.forEach((id) => playCardEnter(id, new_rects.get(id)));
         classification.exiting.forEach((id) => { emitAnimationEvent({ kind: 'exit', id }); });
-
         snapshotBaseline(new_rects, new_columns);
         armGlobalCap(container, cap_timer);
     }, [signature, options.container_ref, options.enabled, options.gate, options.class_names]);
-
     // clear the global-cap timer on unmount (the gate's own cancel is owned by KanbanView)
     useEffect(() => {
         return () => {

@@ -7,7 +7,12 @@ import {
     medianOf,
     solveColumnLayout,
     targetCardHeight,
-    targetColumnWidth,
+    DEFAULT_LINE_BREADTH,
+    MIN_LINE_BREADTH,
+    breadthFromPointer,
+    clampBreadth,
+    nudgeBreadth,
+    parseBreadthInput,
 } from './columnwidthops';
 
 describe('medianOf', () => {
@@ -57,36 +62,76 @@ describe('medianCardArea', () => {
     });
 });
 
-describe('targetColumnWidth', () => {
-
-    /*
-     * The whole algorithm in one assertion: a card holding 240x480 of text is at ratio 2, and asking for
-     * ratio 2 back must return the width it already has. sqrt(115200 / 2) = 240.
-     */
-    it('returns the width a card at that ratio already has', () => {
-        expect(targetColumnWidth(240 * 480, 2, 0)).toBeCloseTo(240, 5);
-    });
-
-    it('widens the column as the target ratio drops, since a shorter card is a wider one', () => {
-        const tall = targetColumnWidth(100000, 3, 0) as number;
-        const square = targetColumnWidth(100000, 1, 0) as number;
-        expect(square).toBeGreaterThan(tall);
-        // area is fixed, so halving the ratio widens by sqrt(2) rather than doubling
-        expect((targetColumnWidth(100000, 1, 0) as number) / (targetColumnWidth(100000, 2, 0) as number)).toBeCloseTo(Math.SQRT2, 5);
-    });
-
-    it('adds the lane padding back, because that sits outside the card the ratio is about', () => {
-        expect(targetColumnWidth(240 * 480, 2, 26)).toBeCloseTo(266, 5);
-    });
-
-    it('answers undefined when there is nothing to solve, which leaves the stylesheet width alone', () => {
-        expect(targetColumnWidth(0, 2, 26)).toBeUndefined();
-        expect(targetColumnWidth(-1, 2, 26)).toBeUndefined();
-        expect(targetColumnWidth(100000, 0, 26)).toBeUndefined();
-    });
+describe('the ratios the drawer offers', () => {
 
     it('offers a default that is one of the ratios the drawer lists', () => {
         expect(CARD_RATIOS).toContain(DEFAULT_CARD_RATIO);
+    });
+});
+
+describe('clampBreadth', () => {
+
+    it('holds a breadth to the floor and rounds it to whole pixels', () => {
+        expect(clampBreadth(50)).toBe(MIN_LINE_BREADTH);
+        expect(clampBreadth(300.6)).toBe(301);
+    });
+
+    it('answers the default for anything that is not a finite number, so a corrupt value cannot collapse the board', () => {
+        expect(clampBreadth(undefined)).toBe(DEFAULT_LINE_BREADTH);
+        expect(clampBreadth('wide')).toBe(DEFAULT_LINE_BREADTH);
+        expect(clampBreadth(NaN)).toBe(DEFAULT_LINE_BREADTH);
+        expect(clampBreadth(Infinity)).toBe(DEFAULT_LINE_BREADTH);
+    });
+});
+
+describe('parseBreadthInput', () => {
+
+    it('reads a plain number, with or without px', () => {
+        expect(parseBreadthInput('300')).toBe(300);
+        expect(parseBreadthInput(' 300px ')).toBe(300);
+    });
+
+    it('clamps a number under the floor', () => {
+        expect(parseBreadthInput('10')).toBe(MIN_LINE_BREADTH);
+        expect(parseBreadthInput('-5')).toBe(MIN_LINE_BREADTH);
+    });
+
+    it('rejects what is not a number, which leaves the setting alone', () => {
+        expect(parseBreadthInput('')).toBeUndefined();
+        expect(parseBreadthInput('wide')).toBeUndefined();
+        expect(parseBreadthInput('30em')).toBeUndefined();
+    });
+});
+
+describe('breadthFromPointer', () => {
+
+    /*
+     * The boundary after the first lane sits in the middle of the gap, so with an 8px gap a pointer 224px in
+     * is over a 220px lane and half a gap.
+     */
+    it('is the distance from the board start over the lanes before the boundary', () => {
+        expect(breadthFromPointer(224, 1, 8)).toBe(220);
+    });
+
+    it('spreads the pointer over every lane before the boundary and the gaps between them', () => {
+        // three lanes of 200 and two gaps of 8 before a gap whose middle is 4 further
+        expect(breadthFromPointer(3 * 200 + 2 * 8 + 4, 3, 8)).toBe(200);
+    });
+
+    it('clamps at the floor rather than following the pointer past it', () => {
+        expect(breadthFromPointer(10, 2, 8)).toBe(MIN_LINE_BREADTH);
+    });
+});
+
+describe('nudgeBreadth', () => {
+
+    it('steps by ten, or fifty with shift held', () => {
+        expect(nudgeBreadth(220, 1, false)).toBe(230);
+        expect(nudgeBreadth(220, -1, true)).toBe(170);
+    });
+
+    it('cannot reach a value the pointer could not', () => {
+        expect(nudgeBreadth(MIN_LINE_BREADTH, -1, false)).toBe(MIN_LINE_BREADTH);
     });
 });
 
@@ -168,20 +213,16 @@ describe('cardSignature', () => {
 describe('the stacked transpose', () => {
 
     /*
-     * The two layouts are one rule read along different axes, and the median card is where they meet: the
-     * height it lands at side by side is the height every card is sized to when the lanes stack, so that
-     * card comes out the same shape either way round.
+     * The two layouts are one rule read along different axes, and the median card is where they meet: a card
+     * drawn 240 wide at ratio 2 stands 480 tall, and stacked at that row height it is 240 wide again.
      */
-    it('takes the height the side by side layout already produces for the typical card', () => {
-        const width = targetColumnWidth(240 * 480, 2, 0) as number;
-        expect(targetCardHeight(width, 2)).toBeCloseTo(480, 5);
+    it('takes the height the side by side layout gives a card as the stacked row height', () => {
+        expect(targetCardHeight(240, 2)).toBeCloseTo(480, 5);
     });
 
     it('leaves the median card exactly as wide as it is side by side', () => {
-        const area = 240 * 480;
-        const width = targetColumnWidth(area, 2, 0) as number;
-        const widths = cardWidthsForHeight([{ id: 'median', width: 240, height: 480 }], targetCardHeight(width, 2), width);
-        expect(widths.median).toBeCloseTo(width, 5);
+        const widths = cardWidthsForHeight([{ id: 'median', width: 240, height: 480 }], targetCardHeight(240, 2), 240);
+        expect(widths.median).toBeCloseTo(240, 5);
     });
 
     /*

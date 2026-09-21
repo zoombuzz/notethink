@@ -1499,12 +1499,20 @@ body.disableAddressBarHidingOnScroll {
    */
   .board {
     display: flex;
-    gap: 8px;
+    // the 8px between lanes is a separator element, which the drag handle needs and a CSS gap cannot be
+    gap: 0;
     margin-top: 0.8em;
     overflow-x: auto;
 
     &[data-orientation="columns"] {
       flex-direction: row;
+
+      .laneSeparator {
+        cursor: col-resize;
+        flex: 0 0 8px;
+        // the row is as tall as its tallest lane, so the handle runs the whole height
+        align-self: stretch;
+      }
 
       .column {
         flex: 1 1 var(--nt-column-width, 17.0em);
@@ -1520,6 +1528,12 @@ body.disableAddressBarHidingOnScroll {
     &[data-orientation="rows"] {
       flex-direction: column;
 
+      .laneSeparator {
+        cursor: row-resize;
+        flex: 0 0 8px;
+        width: 100%;
+      }
+
       /*
        * A stacked lane is as wide as its own cards, floored at the board so a one-card lane still draws a
        * full-width band, and its name sits BESIDE the cards rather than above them, so none of the row's
@@ -1530,6 +1544,8 @@ body.disableAddressBarHidingOnScroll {
         flex: 0 0 auto;
         width: max-content;
         min-width: 100%;
+        // the breadth is the row's height, a minimum like the column width, so a short row still stands on it
+        min-height: var(--nt-row-height, 0);
         display: flex;
         flex-direction: row;
         align-items: stretch;
@@ -1575,6 +1591,21 @@ body.disableAddressBarHidingOnScroll {
             margin: 8px 0 0;
           }
         }
+      }
+    }
+
+    // the whole gap between two lanes is the drag target; nothing is drawn in it until it is hovered or focused
+    .laneSeparator {
+      background: transparent;
+      border-radius: 2px;
+      touch-action: none;
+      user-select: none;
+
+      &:hover,
+      &:focus-visible,
+      &.dragging {
+        background: var(--vscode-focusBorder);
+        outline: none;
       }
     }
 
@@ -2030,6 +2061,16 @@ body.disableAddressBarHidingOnScroll {
   color: var(--vscode-input-foreground);
   font: inherit;
   padding: 2px 0.3em;
+}
+
+.settingsBreadthInput {
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-dropdown-border));
+  border-radius: 2px;
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  padding: 2px 0.3em;
+  width: 4.5em;
 }
 
 .settingsSelect {

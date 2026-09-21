@@ -29,12 +29,10 @@ function getPositionLabels(): Record<InsertPoint, string> {
 export default function InsertModal(props: InsertModalProps): ReactElement {
     const dialog_ref = useRef<HTMLDialogElement>(null);
     const search_ref = useRef<HTMLInputElement>(null);
-
     const [search, setSearch] = useState('');
     const [selected_key, setSelectedKey] = useState<string | null>(null);
     const [scope, setScope] = useState<'simple' | 'withExample'>('simple');
     const [position, setPosition] = useState<InsertPoint>('currentCaret');
-
     // reset state when modal opens
     useEffect(() => {
         if (props.opened) {
@@ -46,7 +44,6 @@ export default function InsertModal(props: InsertModalProps): ReactElement {
             requestAnimationFrame(() => search_ref.current?.focus());
         }
     }, [props.opened]);
-
     // open/close the native dialog element
     useEffect(() => {
         const dialog = dialog_ref.current;
@@ -57,18 +54,15 @@ export default function InsertModal(props: InsertModalProps): ReactElement {
             dialog.close();
         }
     }, [props.opened]);
-
     const filtered = useMemo(() => {
         if (!search) { return INSERT_LIST; }
         const q = search.toLowerCase();
         return INSERT_LIST.filter(i => i.title_lowercase!.includes(q) || (i.group || '').toLowerCase().includes(q));
     }, [search]);
-
     const selected_insert = useMemo((): Insert | null => {
         if (!selected_key) { return null; }
         return inserts[selected_key] || null;
     }, [selected_key]);
-
     const effective_position = useMemo((): InsertPoint => {
         if (!selected_insert) { return position; }
         if (scope === 'withExample' && selected_insert.example_insert_point) {
@@ -79,7 +73,6 @@ export default function InsertModal(props: InsertModalProps): ReactElement {
         }
         return position;
     }, [selected_insert, scope, position]);
-
     const handleSelect = useCallback((key: string) => {
         setSelectedKey(key);
         const insert = inserts[key];
@@ -92,7 +85,6 @@ export default function InsertModal(props: InsertModalProps): ReactElement {
             setScope('simple');
         }
     }, []);
-
     const handleConfirm = useCallback(() => {
         if (!selected_insert) { return; }
         const text = scope === 'withExample' && selected_insert.example_content
@@ -101,17 +93,14 @@ export default function InsertModal(props: InsertModalProps): ReactElement {
         props.onInsert(text, effective_position);
         props.onClose();
     }, [selected_insert, scope, effective_position, props.onInsert, props.onClose]);
-
     const handleCancel = useCallback(() => {
         props.onClose();
     }, [props.onClose]);
-
     // handle native dialog cancel (Escape key)
     const handleDialogCancel = useCallback((event: React.SyntheticEvent<HTMLDialogElement>) => {
         event.preventDefault();
         props.onClose();
     }, [props.onClose]);
-
     // keyboard navigation in the list
     const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
         if (event.key === 'Enter' && selected_insert) {
@@ -134,7 +123,6 @@ export default function InsertModal(props: InsertModalProps): ReactElement {
             }
         }
     }, [filtered, selected_key, selected_insert, handleConfirm]);
-
     // group the filtered items
     const grouped = useMemo(() => {
         const map = new Map<string, Insert[]>();
@@ -146,7 +134,6 @@ export default function InsertModal(props: InsertModalProps): ReactElement {
         }
         return map;
     }, [filtered]);
-
     return (
         <dialog ref={dialog_ref} className={`${styles.modal} ${styles.insertModal}`} onCancel={handleDialogCancel}>
             <h3>{l10n.t('Insert')}</h3>

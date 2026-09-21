@@ -9,16 +9,16 @@ const debug = Debug("nodejs:notethink-views:cardregistryops");
 
 /*
  * The card hierarchy as data, the orthogonal axis to the view registry. A view decides how notes are
- * laid out; a card decides how one note is drawn - the full card (pill, title, attributes, body) or a
- * sticky. The two are chosen independently, so `sticky` cards work in a document just as they
- * do in a kanban lane. The axis covers the notes a view LAYS OUT, not the view's own container: the note
- * a DocumentView opens at holds every note below it in its body, so GenericNote keeps it on the full card
- * whatever is selected.
+ * laid out; a card decides how one note is drawn - the full card (pill, title, attributes, body), a
+ * sticky, or the agents working on the note's story. The two are chosen independently, so `sticky`
+ * cards work in a document just as they do in a kanban lane. The axis covers the notes a view LAYS OUT,
+ * not the view's own container: the note a DocumentView opens at holds every note below it in its body,
+ * so GenericNote keeps it on the full card whatever is selected.
  *
  * Shaped deliberately like VIEW_REGISTRY rather than as a flat list of ids, because the same three
  * questions get asked of both axes: which entries may the user select, which node owns a setting, and
  * what does this node inherit. `allcards` is the abstract parent that owns the settings every card
- * shares; `card` and `sticky` are the concrete renderers. Adding a card type is one node here plus one
+ * shares, and every node under it is a concrete renderer. Adding a card type is one node here plus one
  * line in CARD_COMPONENTS.
  *
  * Each VIEW declares the card type it defaults to, keyed by view-registry node id and resolved up the
@@ -66,11 +66,15 @@ export const CARD_AUTO = 'auto';
 // the card every view falls back to when nothing else resolves: the full card
 export const DEFAULT_CARD_TYPE = 'card';
 
+// the card drawing the AI agents working on a note's story, and the one card type that admits virtual notes
+export const AGENT_CARD_TYPE = 'agent';
+
 export const CARD_REGISTRY: CardRegistry = {
     nodes: [
         { id: 'allcards', kind: 'abstract', selectable: false, label: 'All cards' },
         { id: 'card', parent: 'allcards', kind: 'concrete', selectable: true, label: 'Card' },
         { id: 'sticky', parent: 'allcards', kind: 'concrete', selectable: true, label: 'Sticky' },
+        { id: AGENT_CARD_TYPE, parent: 'allcards', kind: 'concrete', selectable: true, label: 'Agent' },
     ],
     view_defaults: [
         { view: 'root', card: DEFAULT_CARD_TYPE },
@@ -87,6 +91,7 @@ export const CARD_REGISTRY: CardRegistry = {
 export const CARD_COMPONENTS: Record<string, ComponentType<NoteProps>> = {
     card: lazy(() => import('./MarkdownNote')),
     sticky: lazy(() => import('./StickyNote')),
+    agent: lazy(() => import('./AgentNote')),
 };
 
 /** the node record for a card id in the given registry (defaults to the built-in CARD_REGISTRY) */
@@ -156,7 +161,7 @@ export function offersNewCardType(selected_node: string, key: SettingsCascadeKey
     return isCardDescendantOf(selected_node, owner, registry);
 }
 
-/** the selectable concrete card ids in tree order (card, sticky); the source of the selector list */
+/** the selectable concrete card ids in tree order; the source of the selector list */
 export function selectableCardIds(registry: CardRegistry = CARD_REGISTRY): string[] {
     return registry.nodes.filter(n => n.selectable).map(n => n.id);
 }

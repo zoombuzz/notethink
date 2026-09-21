@@ -102,7 +102,6 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
                 </div>
             );
         }
-
         return this.props.children;
     }
 }

@@ -21,11 +21,9 @@ function deriveDiagramType(input: string): string {
 export default function MermaidNote(props: NoteProps): React.ReactElement {
     const note = props;
     const data_props = getStandardNoteDataProps(note);
-
     const diagram_text = note.body_raw;
     const type = deriveDiagramType(diagram_text);
     const classes = [view_specific_styles.body, note_specific_styles.noteMermaid, MERMAID_CLASS_NAME, note_specific_styles[`type_${type}`]];
-
     return (
         <div className={buildNoteStyles(note).join(' ')}
              id={note.display_options?.id}

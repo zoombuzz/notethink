@@ -1,36 +1,30 @@
-import Debug from "debug";
-
-const debug = Debug("nodejs:notethink-views:columnwidthops");
-
 /*
- * Column width derived from the shape you want the cards to be.
+ * Lane breadth is a setting, and the ratio only shapes the card.
  *
- * A card's height is not independent of its width: the text reflows, so a narrower column runs the same
- * words taller. Model a card as pure reflowing text and its area is invariant - `h(w) = A / w` - which
- * makes the height-to-width ratio `rho = h / w = A / w^2`. Asking for a target ratio is therefore asking
- * for one width, and it falls out as a square root rather than a search:
+ * `lineBreadth` is the pixel breadth of one lane: its width when the lanes run side by side, its height when
+ * they are stacked. It is a minimum rather than an exact size - lanes that all fit still spread to fill the
+ * board - and it is the one number the drawer's text box shows and a dragged lane boundary sets. The card
+ * ratio then decides how tall a card stands at the width it is drawn at, and a card holding more than that
+ * clips its own body to reach it. Stacked, the same rule runs along the other axis: a row is `lineBreadth`
+ * tall, and each card's width is solved from its own text so the row is one card high whatever it holds.
  *
- *   w = sqrt(A / rho)
- *
- * That is the whole algorithm. `A` is measured once per content change from an off-screen clone of the
- * cards at a FIXED probe width, never from the live board - a reading taken at the width the answer just
- * set would feed straight back into the next answer - and everything after it is arithmetic: how many
- * columns of that width fit, and whether the leftover space is shared out or scrolled past.
- *
- * The model is deliberately the simple one, chosen over its refinement after both were tried. A card also
- * carries chrome that does not reflow - the heading, the padding, the border - so the true curve is
- * `h(w) = c + A / w`, and reading that chrome as text is why the probe width matters: probe wide and the
- * area is overstated, probe near the answer and the error is small. Fitting `c` out properly is available
- * and costs one more probe: measure at two widths, solve `A = (h1 - h2) / (1/w1 - 1/w2)` and
- * `c = h1 - A/w1`, then take the positive root of `rho*w^2 - c*w - A = 0`. Measured on a real board it
- * moves the answer by a few pixels, which is under what the eye reads, so it stays written down here
- * rather than built.
+ * Nothing here reads the DOM, which is what keeps the drag arithmetic and the fill rule testable.
  */
 
 // the ratios the drawer offers, height over width; the band that reads well is 1.2 to 1.5
 export const CARD_RATIOS = [1, 1.2, 1.4, 1.6, 2, 2.5, 3];
 
 export const DEFAULT_CARD_RATIO = 1.4;
+
+// the breadth a lane starts at, measured from the layout it replaced: 3 lanes on a 760px board, 7 on 1590px
+export const DEFAULT_LINE_BREADTH = 220;
+
+// the narrowest a lane may be dragged or typed to; below it a card has no room to hold a line of text
+export const MIN_LINE_BREADTH = 120;
+
+// the pixels one arrow key nudges a lane boundary, and one with shift held
+export const BREADTH_NUDGE = 10;
+export const BREADTH_NUDGE_LARGE = 50;
 
 /**
  * One card as measured on screen, its border box in px.
@@ -86,7 +80,8 @@ export function medianOf(values: number[]): number {
 }
 
 /**
- * The invariant area of the typical card, in px squared. Cards too small to have reflowed at all are
+ * The typical card's area at the probe width, in px squared, which stacked lanes read to size each card's
+ * width and which doubles as the test that a probe measured anything. Cards too small to have reflowed at all are
  * dropped: an empty lane's drop placeholder or a card mid-flight measures as a sliver and would drag the
  * median down to a width no real card wants.
  */
@@ -96,22 +91,11 @@ export function medianCardArea(cards: CardBox[]): number {
 }
 
 /**
- * The column width that lands the typical card near `ratio`. `lane_padding` is what the lane spends on
- * its own padding and border, which sits outside the card, so it is added back after the card's width is
- * solved rather than being folded into the reflow model. Returns undefined when nothing usable was
- * measured, which is the board's signal to keep its stylesheet fallback.
- */
-export function targetColumnWidth(area: number, ratio: number, lane_padding: number): number | undefined {
-    if (!(area > 0) || !(ratio > 0)) { return undefined; }
-    const card_width = Math.sqrt(area / ratio);
-    debug('area=%d ratio=%s -> card %dpx', Math.round(area), ratio, Math.round(card_width));
-    return card_width + Math.max(lane_padding, 0);
-}
-
-/**
- * The height a card of `card_width` lands at when it hits the target ratio, which is the height the side
- * by side layout already produces for the typical card. Stacked, it becomes the height every card is sized
- * to instead - the same rule read along the other axis.
+ * The height a card of `card_width` lands at when it hits the target ratio, which is what both
+ * orientations aim every card at. Side by side it is the shape of the card itself: a card holding more
+ * than fits clips its own body to reach it, and one holding less is left short. Stacked it is the single
+ * height a whole row shares - the same rule read along the other axis - and each card's width is solved
+ * back out of it.
  */
 export function targetCardHeight(card_width: number, ratio: number): number {
     return card_width * ratio;
@@ -122,7 +106,8 @@ export function targetCardHeight(card_width: number, ratio: number): number {
  *
  * This is the transpose of the side by side layout, and the reason a stacked board needs one width per
  * card rather than one for all of them. Side by side, every card is the same WIDTH and a card holding
- * four times the text is four times as tall. Stacked, that would make the row as tall as its longest card
+ * four times the text stands at the target height with the rest of its body clipped away, so the one
+ * width is the whole answer. Stacked, a single width would make the row as tall as its longest card
  * and leave every other card in a band of empty space, which is what a uniform width actually produced.
  * Fixing the height instead and solving `w = A / h` per card makes the long card four times as WIDE and
  * exactly as tall as its neighbours, so the row is one card high whatever is in it.
@@ -163,4 +148,43 @@ export function solveColumnLayout(target: number, available: number, lane_count:
         return { width: Math.max(width, spread), fit: lane_count, scrolls: false };
     }
     return { width, fit, scrolls: true };
+}
+
+
+/**
+ * A lane breadth held to the floor. Anything that is not a finite number answers the default, so a
+ * corrupt saved value can never collapse the board.
+ */
+export function clampBreadth(value: unknown): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) { return DEFAULT_LINE_BREADTH; }
+    return Math.max(Math.round(value), MIN_LINE_BREADTH);
+}
+
+/**
+ * What the drawer's text box makes of what was typed: a whole number of pixels held to the floor, or
+ * undefined when it is not a number at all, which is the caller's signal to leave the setting alone.
+ */
+export function parseBreadthInput(text: string): number | undefined {
+    const trimmed = text.trim();
+    if (trimmed === '' || !/^-?\d+(\.\d+)?(px)?$/i.test(trimmed)) { return undefined; }
+    return clampBreadth(parseFloat(trimmed));
+}
+
+/**
+ * The breadth a dragged boundary implies. The boundary sits in the middle of the gap after `lanes_before`
+ * lanes, so the pointer, measured from the board's start with its scroll added back, is over that many lane
+ * breadths and one gap fewer between them plus half the gap it is standing in. Solving for the breadth
+ * keeps the boundary under the pointer for as long as the lanes are not being filled out.
+ */
+export function breadthFromPointer(offset: number, lanes_before: number, gap: number): number {
+    const count = Math.max(lanes_before, 1);
+    return clampBreadth((offset - gap / 2 - gap * (count - 1)) / count);
+}
+
+/**
+ * The breadth after an arrow key. `direction` is +1 to grow and -1 to shrink, and the result is held to
+ * the floor, so a keyboard user cannot reach a value the pointer could not.
+ */
+export function nudgeBreadth(breadth: number, direction: 1 | -1, large: boolean): number {
+    return clampBreadth(breadth + direction * (large ? BREADTH_NUDGE_LARGE : BREADTH_NUDGE));
 }

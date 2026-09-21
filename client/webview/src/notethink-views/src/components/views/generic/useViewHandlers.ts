@@ -179,7 +179,6 @@ export function useViewHandlers(
         postMessage: props.handlers?.postMessage,
 
     }, props.handlers);
-
     /*
      * handle breadcrumb folder click - switch to (or narrow within) folder integration mode. Dispatch
      * targets FOLDER_VIEW_STATE_ID so the integration_mode tag never lands on a doc-path key in
@@ -203,10 +202,8 @@ export function useViewHandlers(
             path: folder_path,
         });
     }, [handlers, props.file_declared_integration]);
-
     // expose the same folder-descent gesture on the ViewApi so the origin pill (which only sees note-level handlers) can descend into its project subfolder via the same pipeline the breadcrumb uses
     handlers.descendToFolder = handle_folder_click;
-
     /*
      * handle_apply_filters - apply the user's edited include/exclude globs + per-file
      * story cap. Posts a background setIntegration so the extension re-discovers the
@@ -247,7 +244,6 @@ export function useViewHandlers(
             handlers.postMessage?.({ type: 'updateSetting', setting: 'maxNotesPerFile', value: next_max_notes_per_file });
         }
     }, [handlers, props.id, props.display_options?.integration_path, props.display_options?.integration_mode, markPending]);
-
     // request the list of jump targets reachable from the terminal breadcrumb leaf; mode is folder when aggregating a folder, else current-file (sibling .md files)
     const handle_jump_request = useCallback((leaf_path: string): void => {
         const mode = props.display_options?.integration_mode === INTEGRATION_MODE_FOLDER
@@ -255,11 +251,9 @@ export function useViewHandlers(
             : INTEGRATION_MODE_CURRENT_FILE;
         handlers.postMessage?.({ type: 'requestJumpTargets', mode, path: leaf_path });
     }, [handlers, props.display_options?.integration_mode]);
-
     // open a chosen file jump target in the editor
     const handle_file_jump = useCallback((file_path: string): void => {
         handlers.postMessage?.({ type: 'openFile', path: file_path });
     }, [handlers]);
-
     return { handlers, handle_folder_click, handle_apply_filters, handle_jump_request, handle_file_jump };
 }

@@ -45,17 +45,18 @@ function viewComponentFor(view_type: string, user_types: UserViewType[]): React.
 }
 
 export default function GenericView(props: ViewProps): React.ReactElement {
-    const { view_context, handlers, handle_folder_click, handle_apply_filters, handle_file_jump, drawers, jump, collisions, toolbar, insert, auto_resolved_type } = useGenericView(props);
+    // view_props is what every hook below, and every view beneath them, saw: virtual notes admitted and the handler surface guarded
+    const { view_props, view_context, handlers, handle_folder_click, handle_apply_filters, handle_file_jump, drawers, jump, collisions, toolbar, insert, auto_resolved_type } = useGenericView(props);
     const { display_options, parent_context, deepest, notes_within_parent_context } = view_context;
     /*
      * document-level front-matter strip: bound to the document root (notes[0]), single-file mode only
      * built once here and handed to whichever leaf view renders it, so the views don't each re-derive it
      */
-    const document_root = documentRootForStrip(props.notes, display_options.integration_mode);
+    const document_root = documentRootForStrip(view_props.notes, display_options.integration_mode);
     const document_strip = document_root ? <GenericNoteAttributes {...document_root} /> : undefined;
     const breadcrumb_trail = (
         <GenericViewBreadcrumb
-            props={props}
+            props={view_props}
             parentContext={parent_context}
             handlers={handlers}
             activeDrawer={drawers.active_drawer}
@@ -67,9 +68,9 @@ export default function GenericView(props: ViewProps): React.ReactElement {
         />
     );
     // render the toolbar at the leaf level only - when type is 'auto', AutoView delegates to a concrete type that renders GenericView again with the toolbar
-    const show_toolbar = props.type !== 'auto';
+    const show_toolbar = view_props.type !== 'auto';
     // the registry-keyed component for this type, inheriting a minted type's renderer from its parent
-    const ViewComponent = viewComponentFor(props.type, display_options.settings?.viewUserTypes ?? []);
+    const ViewComponent = viewComponentFor(view_props.type, display_options.settings?.viewUserTypes ?? []);
     /*
      * The props the rendered view component receives.
      * - display_options.settings.cardType: the resolved card, stamped here rather than in AutoView alone.
@@ -77,26 +78,31 @@ export default function GenericView(props: ViewProps): React.ReactElement {
      *   note fell back to the view's default card. The stamp is skipped at an `auto` level, because the
      *   AutoView below is about to do its own and reads this same field to recover the user's raw choice -
      *   stamping over it there costs the card tab its "Auto (Sticky)" label.
+     * - display_options.activity_doc_path: the view's own workspace-relative document path, which is the
+     *   single-file fallback for joining a story to agent activity. Folder-mode notes carry an origin and
+     *   need none; a single-file note has no origin at all, and the contract binds on a workspace-relative
+     *   path, so an absolute one is deliberately not substituted.
      */
     const enriched_props: ViewProps = {
-        ...props,
+        ...view_props,
         display_options: {
             ...display_options,
             deepest,
+            activity_doc_path: view_props.doc_relative_path,
             settings: show_toolbar
                 ? { ...display_options.settings, cardType: toolbar.resolved_card_type }
                 : display_options.settings,
         },
-        notes: props.notes as Array<NoteProps>,
+        notes: view_props.notes as Array<NoteProps>,
         notes_within_parent_context,
-        nested: { ...props.nested, parent_context, breadcrumb_trail, auto_resolved_type, document_strip, document_root },
+        nested: { ...view_props.nested, parent_context, breadcrumb_trail, auto_resolved_type, document_strip, document_root },
         handlers,
     };
     return (
         <>
             {show_toolbar && (
                 <GenericViewToolbar
-                    props={props}
+                    props={view_props}
                     handlers={handlers}
                     displayOptions={display_options}
                     breadcrumbTrail={breadcrumb_trail}

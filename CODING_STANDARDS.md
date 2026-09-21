@@ -49,7 +49,9 @@ Transient code uses the implicit id and writes nothing to the file. Write an exp
 
 ### A `seq` is valid only within the render pass that derived it
 
-`note.seq` is a document-order index, reassigned on every parse and renumbered globally by `mergeAggregateRoot` whenever the per-file trees are re-interleaved. It addresses a position in the current tree, not a note.
+`note.seq` is a document-order index, reassigned on every parse and again by `mergeAggregateRoot` whenever the per-file trees are re-interleaved. It addresses a position in the current tree, not a note.
+
+**A merged seq happens to be stable across many updates, and that changes nothing here.** `mergeAggregateRoot` numbers each story's subtree from its own block on a fixed grid (`storySeqBase`), so an unchanged file keeps its numbers when a sibling file changes; that exists to keep unchanged cards out of the memo comparisons that read a seq, and it is a performance property, not an identity one. Anything crossing an update boundary still takes a `stable_id` or a source offset.
 
 **If a value crosses an update boundary - cached in a `useMemo`, written to view-managed state, stashed in a ref, or emitted into the DOM for a later effect to look up - it must be a `stable_id` (identity) or a source offset (position), never a `seq`.** Resolve it back to a `seq` on read, against the tree you are about to render. Same-pass use is fine and cheapest: `focused_seqs` and `resolveCaretTarget`'s `v<view>-n<seq>` element id are derived and consumed in one render.
 
@@ -86,7 +88,7 @@ async function applyEdit(doc_path: string, changes: TextChange[]): Promise<void>
 
 ### Block organisation
 
-[`CODE_LAYOUT.md`](../lightenna-iac/docstech/standards/CODE_LAYOUT.md) > Blank lines holds the rule. notethink's delta: a single blank line may separate the logical sections of a function body, each section opening with its comment; there are no other blank lines inside a block.
+[`CODE_LAYOUT.md`](../lightenna-iac/docstech/standards/CODE_LAYOUT.md) > Blank lines holds the rule and notethink takes it unmodified: no blank line between two statements inside a block, and a blank line before a comment line is not an exception. `client/webview/src/blankLines.test.ts` enforces it over `client/` with no allowlist, because the eslint rule that would has no inside-blocks-only scope.
 
 ### Braces
 
@@ -297,6 +299,14 @@ Canonical: [`VERIFICATION.md`](../lightenna-iac/docstech/standards/VERIFICATION.
 ### No web dev server
 
 notethink has no `dev` script and no HTTP server, so there is no port to probe. It is not an exception to the workspace dev-server start pattern: `/open-dev` launches `pnpm run watch` (webpack) with `systemd-run --user --scope --slice=devservers.slice`. The bundles are previewed in an ordinary VS Code window through the `notethink-dev` symlink in [`AGENTS.md` > Dev Server](AGENTS.md#dev-server), or manually through the F5 Extension Development Host. The Playwright harness (`playwright.config.ts` starts `playwright/harness/serve.mjs` on port 9123 for the run and tears it down) is test infrastructure, not a dev server.
+
+### Every build runs production React; the extension bundle keeps NODE_ENV unset
+
+The webview config in `webpack.config.js` sets `optimization.nodeEnv: 'production'`, so `build`, `watch` and the marketplace `package` build all serve React's production build and none of React's dev instrumentation reaches the dev host. Outside `package`, `mode` stays `'none'` and `devtool` stays `'source-map'`: watch rebuilds stay fast, the app code stays unminified, and webview devtools still resolve sources.
+
+**The extension bundle deliberately leaves `process.env.NODE_ENV` undefined.** It carries no React, and `debug()` in `client/extension/src/lib/errorops.ts` is gated on `process.env.NODE_ENV !== 'production'`, so pinning it there would silence a dev-host convenience and buy nothing measurable. `NOTETHINK_DEV` is the independent switch (driven by `SELFINSPECT_ENV`, never by `NODE_ENV`) and both bundles keep it: the file logger and the webview cache-buster below are unaffected.
+
+**React's production build has no profiler timer**, so the `NOTETHINK_DEV` `<Profiler onRender>` logging in `DocumentView.tsx` and `LineView.tsx` is inert: the components render, the callback never fires. Render cost is measured with `pnpm run test-perf` instead. Restoring those timings means aliasing `react-dom` to `react-dom/profiling` for dev builds, which puts back the instrumentation cost this pin exists to remove.
 
 ### After every code change
 

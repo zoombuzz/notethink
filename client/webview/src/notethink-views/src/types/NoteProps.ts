@@ -36,6 +36,7 @@ export interface NoteDisplayOptions {
         showLineNumbers?: boolean;
         groupBy?: string;
         orientation?: 'columns' | 'rows';
+        lineBreadth?: number;
         kanbanGroupBy?: string;
         columnOrder?: string[];
         kanbanCardRatio?: number;
@@ -105,18 +106,22 @@ export interface NoteHandlers {
  * heading / list / code-block / list-item paragraph; constructed by
  * convertMdastToNoteHierarchy and (in folder mode) re-stamped by
  * mergeAggregateRoot.
- * - seq: 1-based document-order index assigned during parse. Globally
- *   renumbered by mergeAggregateRoot when the per-file trees are interleaved,
- *   which is why React must NOT key on this - see stable_id. A seq is valid only
+ * - seq: 1-based document-order index assigned during parse, and reassigned by
+ *   mergeAggregateRoot when the per-file trees are interleaved, which is why
+ *   React must NOT key on this - see stable_id. A merged seq is sparse rather
+ *   than contiguous: each story's subtree is numbered from its own block on a
+ *   fixed (file slot, story rank) grid, so a file's numbers move only when that
+ *   file or its position in the merged file order moves. A seq is valid only
  *   within the render pass that derived it: the moment one outlives a re-parse
  *   (cached in a memo, written to view state, stashed in a ref, or put in the DOM
  *   to be looked up later) it addresses whichever note now holds that number. Use
  *   stable_id, or a source offset, for anything that crosses an update boundary.
  *   A seq is NOT an index into the flat `notes` array, however much it looks like
  *   one: the two coincide for a plain parse (both numbering passes append in the
- *   same document-order walk that assigns the seq) and diverge as soon as
+ *   same document-order walk that assigns the seq), diverge as soon as
  *   flattenSingleFileStories lifts `###` stories out from under their `##` epics,
- *   which drops the epic headings from the walked tree without renumbering. Look
+ *   which drops the epic headings from the walked tree without renumbering, and
+ *   never coincide in folder mode, whose grid is sparse by construction. Look
  *   notes up with findNoteBySeq, never `notes.at(seq)`.
  * - origin: folder mode metadata stamped on every story and its descendants by
  *   mergeAggregateRoot; lets callers route edits back to the source file and
@@ -141,7 +146,7 @@ export interface NoteHandlers {
  *   story, so it hangs off the synthetic root as
  *   `${doc_id}:__root__:${child_path}`. Byte offsets / `seq` / `file_rank`
  *   are deliberately NOT in the derivation: those churn under merge
- *   re-shuffles, global seq renumbering, and unrelated sibling additions, and
+ *   re-shuffles, seq reassignment, and unrelated sibling additions, and
  *   using them would defeat the whole point.
  */
 export interface NoteProps {
@@ -199,7 +204,7 @@ export interface NoteProps {
  * - file_mtime: on-disk mtime (epoch ms) of the source file at parse time; within a file_rank band, stories from more recently modified files sort first - background edits by another tool (or a save of the file currently open) naturally surface to the top without any explicit "active file" signal
  * - project_hue: identity hash of the project name (0-359), set-independent; stamped by mergeAggregateRoot via hueForProjectName(project_name) so the colour is fixed at the project name alone and cannot change as the workspace universe fills in on first paint
  * - project_label: pre-computed 2-character pill label; stamped by mergeAggregateRoot using buildProjectLabels - the first char is the project's initial, the second is the earliest character that differentiates this project from any other in the aggregate (so `notethink`→`NT`, `notebook`→`NB`, cobalt→`CO`); OriginPill falls back to a single-project first+second-character abbreviation when this is absent (single-file mode, legacy origins)
- * - source_position: the note's pre-merge offset range in its source file, preserved through mergeAggregateRoot's global seq + position re-numbering so the editor-caret → note-focus derivation can match by source-file offsets in folder mode (where merged `position` is in synthetic merged-tree coordinates and doesn't share a coordinate system with any single editor)
+ * - source_position: the note's pre-merge offset range in its source file, preserved through mergeAggregateRoot's seq assignment so the editor-caret → note-focus derivation can match by source-file offsets in folder mode (where merged `position` is in synthetic merged-tree coordinates and doesn't share a coordinate system with any single editor)
  */
 export interface NoteOrigin {
     doc_id: string;

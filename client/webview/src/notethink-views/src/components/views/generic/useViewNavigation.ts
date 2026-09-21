@@ -30,11 +30,9 @@ export function useViewNavigation(input: ViewNavigationInput): void {
         handlers,
         navigation_command_ref,
     } = input;
-
     const handleNavigation = useCallback((direction: string): void => {
         const focused_seqs = display_options.focused_seqs || [];
         const focused_notes_list = display_options.focused_notes || [];
-
         switch (direction) {
             case 'clearFocus': {
                 const clear_handler = handlers.getClearHandler?.(focused_notes_list);
@@ -92,7 +90,6 @@ export function useViewNavigation(input: ViewNavigationInput): void {
         parent_context_seq,
         handlers,
     ]);
-
     // register navigation callback on the ref provided by the parent
     useEffect(() => {
         if (navigation_command_ref) {

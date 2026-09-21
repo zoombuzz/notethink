@@ -9,9 +9,14 @@ import { parse } from '../lib/parseops';
 import { isPathWithin, isWithinWorkspace } from '../lib/pathops';
 import { isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, hasOverride, settingKeys, editTarget, buildSettingsCascadePayload } from '../lib/settings';
 import type { HashMapOf, Doc } from '../types/general';
+import { ActivityCommands } from './ActivityCommands';
+import { ActivityReader } from './ActivityReader';
 
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
+// discovery-phase merge posts are batched until one of these trips, so a 200-file load ships tens of messages rather than 200 while a fresh slice of board still lands every flush interval
+const DISCOVERY_BATCH_FLUSH_MS = 100;
+const DISCOVERY_BATCH_MAX_DOCS = 20;
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
 // upper bound on directories visited by the non-file: scheme readDirectory walk, so a symlink cycle or pathological provider can't loop forever
 const MAX_WALK_ENTRIES = 5000;
@@ -84,6 +89,9 @@ export class PanelSession {
 	private integration_include = DEFAULT_INCLUDE_FILTER;
 	private integration_exclude = DEFAULT_EXCLUDE_FILTER;
 	private readonly integration_docs: HashMapOf<Doc> = {};
+	// ids of docs the discovery fan-out has loaded, held until the flush timer or the size cap trips; watcher-driven single-file updates never enter it and keep streaming one message each
+	private readonly discovery_batch = new Set<string>();
+	private discovery_batch_timer: ReturnType<typeof setTimeout> | undefined;
 	// folder-size metadata from the latest discovery, surfaced to the webview so the breadcrumb can show "(loaded of discovered)"; watcher-driven incremental updates re-send these so the count doesn't reset to zero
 	private integration_total_discovered = 0;
 	private integration_truncated = false;
@@ -96,6 +104,9 @@ export class PanelSession {
 	// scheme+authority carrier for every folder-mode and open-by-path URI; preserves the real workspace scheme (file:, vscode-vfs:, notegit: and other custom provider schemes) so discovery and opens work on non-file: hosts
 	private readonly base_uri: vscode.Uri;
 	private readonly extension_version: string;
+	// the activity contract's reader and its row commands; the reader's watcher is deliberately separate from the folder markdown watcher, which would parse a contract file into a story
+	private readonly activity_reader: ActivityReader;
+	private readonly activity_commands: ActivityCommands;
 
 	constructor(
 		private readonly webviewPanel: vscode.WebviewPanel,
@@ -112,6 +123,9 @@ export class PanelSession {
 		// prefer the workspace folder's URI as the scheme carrier; fall back to the active doc's URI when no folder is open (single loose file)
 		this.base_uri = workspace_folder?.uri ?? initialDocument?.uri ?? INERT_BASE_URI;
 		this.extension_version = this.context.extension.packageJSON.version as string || '';
+		const postToWebview = (message: Record<string, unknown>): void => { this.webviewPanel.webview.postMessage(message); };
+		this.activity_reader = new ActivityReader(this.base_uri, postToWebview);
+		this.activity_commands = new ActivityCommands(this.base_uri, this.activity_reader, postToWebview);
 	}
 
 	// rebuild an absolute-path string into a URI that carries the workspace scheme + authority, so folder-mode discovery and opens never assume file:
@@ -137,6 +151,7 @@ export class PanelSession {
 		this.webviewPanel.webview.html = this.getHtml(this.webviewPanel.webview);
 		if (this.initialDocument) { await this.buildInitialDoc(this.initialDocument); }
 		this.registerListeners();
+		await this.activity_reader.start();
 	}
 
 	// --- doc construction and dispatch ---
@@ -325,8 +340,10 @@ export class PanelSession {
 			this.onDispose(this.webviewPanel);
 			if (this.change_timer) { clearTimeout(this.change_timer); }
 			if (this.selection_timer) { clearTimeout(this.selection_timer); }
+			this.discardDiscoveryBatch();
 			if (this.integration_watcher) { this.integration_watcher.dispose(); this.integration_watcher = undefined; }
 			if (this.active_file_watcher) { this.active_file_watcher.dispose(); this.active_file_watcher = undefined; }
+			this.activity_reader.dispose();
 			changeDocumentSubscription.dispose();
 			activeEditorSubscription.dispose();
 			visibleEditorsSubscription.dispose();
@@ -409,6 +426,7 @@ export class PanelSession {
 	private async handleMessage(e: Record<string, unknown>): Promise<void> {
 		debug('onDidReceiveMessage', e.type);
 		try {
+			if (await this.activity_commands.handleMessage(e)) { return; }
 			switch (e.type) {
 				case 'requestInitialState': return this.handleRequestInitialState();
 				case 'updateSetting': return this.handleUpdateSetting(e);
@@ -449,6 +467,7 @@ export class PanelSession {
 				this.sendCurrentSelection();
 			}
 			this.sendSettingsCascade();
+			this.activity_reader.resend();
 			this.syncActiveFileWatcher();
 			await this.openFolderAtWorkspaceRootIfDocless();
 		} catch (err) {
@@ -693,6 +712,7 @@ export class PanelSession {
 			 */
 			const previous_docs = { ...this.integration_docs };
 			for (const key of Object.keys(this.integration_docs)) { delete this.integration_docs[key]; }
+			this.discardDiscoveryBatch();
 			this.integration_path = folder_path;
 			// resolve filters BEFORE discovery so we never load a wider set than the user actually wants - the workspace cascade is the source of truth, and an explicit message field overrides on top
 			this.adoptFolderFilters(e);
@@ -883,9 +903,11 @@ export class PanelSession {
 		// signal the webview that real work has started - only when there's actual loading to do; the fast path above skips this so the spinner never flashes on a no-op breadcrumb click
 		this.sendPendingChange('folderDiscovery', true);
 		// arrow wrapper isolates loadFolderDoc from .map's (value, index, array) trio so the index does not collide with the opts argument
-		const load_promises = uris.map(uri => this.loadFolderDoc(uri));
+		const load_promises = uris.map(uri => this.loadFolderDoc(uri, { batched: true }));
 		Promise.allSettled(load_promises).then(() => {
 			debug('setIntegration folder: load complete, %d docs', Object.keys(this.integration_docs).length);
+			// post whatever the last flush interval left queued before the canonical map lands, so no loaded doc waits on the aggregate alone
+			this.flushDiscoveryBatch();
 			this.sendAggregatePayload();
 			this.sendPendingChange('folderDiscovery', false);
 		});
@@ -934,12 +956,80 @@ export class PanelSession {
 	}
 
 	/**
+	 * post one merge update carrying every doc in the map. The discovery batch and the
+	 * watcher's single-file path share it, so both ship the same envelope and only the
+	 * number of docs per message differs.
+	 */
+	private sendFolderDocs(docs: HashMapOf<Doc>): void {
+		this.webviewPanel.webview.postMessage({
+			type: 'update',
+			partial: { docs },
+			merge_strategy: 'merge',
+			workspace_root: this.workspace_root,
+			workspace_projects: this.workspace_projects,
+			extension_version: this.extension_version,
+			aggregate_total_discovered: this.integration_total_discovered,
+			aggregate_truncated: this.integration_truncated,
+			include_filter: this.integration_include,
+			exclude_filter: this.integration_exclude,
+		});
+	}
+
+	/**
+	 * hold a freshly loaded discovery doc back until the batch is worth posting: DISCOVERY_BATCH_MAX_DOCS
+	 * docs, or DISCOVERY_BATCH_FLUSH_MS after the first doc of the batch, whichever comes first. The timer
+	 * bound is what keeps a slow folder filling the board progressively rather than in one final reveal.
+	 */
+	private queueDiscoveryDoc(doc_id: string): void {
+		this.discovery_batch.add(doc_id);
+		if (this.discovery_batch.size >= DISCOVERY_BATCH_MAX_DOCS) {
+			this.flushDiscoveryBatch();
+			return;
+		}
+		if (this.discovery_batch_timer === undefined) {
+			this.discovery_batch_timer = setTimeout(() => this.flushDiscoveryBatch(), DISCOVERY_BATCH_FLUSH_MS);
+		}
+	}
+
+	/**
+	 * post everything queued as one merge update. A no-op on an empty batch, so every discovery exit can
+	 * call it unconditionally.
+	 *
+	 * Each id is resolved against integration_docs HERE rather than posted from a snapshot taken when it
+	 * was queued, because the batch outlives the load: a watcher re-read of the same file, or a delete,
+	 * can land in the window before the flush. Posting the queued copy would send the stale version after
+	 * the watcher's fresh one, or resurrect a doc a tombstone has already dropped.
+	 */
+	private flushDiscoveryBatch(): void {
+		const batched_ids = [...this.discovery_batch];
+		this.discardDiscoveryBatch();
+		const docs: HashMapOf<Doc> = {};
+		for (const doc_id of batched_ids) {
+			const doc = this.integration_docs[doc_id];
+			if (doc) { docs[doc_id] = doc; }
+		}
+		if (Object.keys(docs).length === 0) { return; }
+		debug('flushDiscoveryBatch: posting %d docs', Object.keys(docs).length);
+		this.sendFolderDocs(docs);
+	}
+
+	// drop anything queued without posting it: a batch left over from a previous integration_path would re-introduce docs the new folder never admitted
+	private discardDiscoveryBatch(): void {
+		if (this.discovery_batch_timer !== undefined) {
+			clearTimeout(this.discovery_batch_timer);
+			this.discovery_batch_timer = undefined;
+		}
+		this.discovery_batch.clear();
+	}
+
+	/**
 	 * shared per-file loader for both initial discovery and the folder watcher. The
 	 * watcher path passes fromDisk=true to re-read raw bytes (openTextDocument's cache
-	 * can't be trusted to reflect external on-disk edits). Posts a merge update so the
-	 * view fills in progressively.
+	 * can't be trusted to reflect external on-disk edits) and posts its own update at
+	 * once; discovery passes batched=true and joins the batch above, so the view still
+	 * fills in progressively but at a bounded number of board renders.
 	 */
-	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean } = {}): Promise<void> {
+	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean; batched?: boolean } = {}): Promise<void> {
 		try {
 			// guard against late-arriving loads from a previous integration_path. discoverFolderDocs fires its per-file loaders via Promise.allSettled WITHOUT awaiting them - when the user descends folders (e.g. pill click from in_development → carbon), the old loaders can still resolve after the new enterFolderMode cleared integration_docs and changed integration_path, then write sibling-project docs into integration_docs and post merge updates that re-introduce already-cleared files. A positive path-containment check is the only correct gate here: the isAdmittedByIntegrationFilters check below does not reliably reject a sibling project (its folder-relative `../` path still matches a `**/` include, and nothing in the exclude list names it)
 			if (!this.isWithinIntegrationPath(uri.path)) {
@@ -969,18 +1059,11 @@ export class PanelSession {
 				return;
 			}
 			this.integration_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };
-			this.webviewPanel.webview.postMessage({
-				type: 'update',
-				partial: { docs: { [doc.id]: this.integration_docs[doc.id] } },
-				merge_strategy: 'merge',
-				workspace_root: this.workspace_root,
-				workspace_projects: this.workspace_projects,
-				extension_version: this.extension_version,
-				aggregate_total_discovered: this.integration_total_discovered,
-				aggregate_truncated: this.integration_truncated,
-				include_filter: this.integration_include,
-				exclude_filter: this.integration_exclude,
-			});
+			if (opts.batched) {
+				this.queueDiscoveryDoc(doc.id);
+				return;
+			}
+			this.sendFolderDocs({ [doc.id]: this.integration_docs[doc.id] });
 		} catch (err) {
 			writeToErrorLog('loadFolderDoc', `failed to load ${uri.path}`, err);
 		}
@@ -1023,6 +1106,8 @@ export class PanelSession {
 		this.integration_include = DEFAULT_INCLUDE_FILTER;
 		this.integration_exclude = DEFAULT_EXCLUDE_FILTER;
 		for (const key of Object.keys(this.integration_docs)) { delete this.integration_docs[key]; }
+		// a queued flush would post folder docs as a merge after the replace below has already pruned them
+		this.discardDiscoveryBatch();
 		// re-resolve the active editor (it may have changed while in folder mode) and re-send just that file; integration_path is now unset so sendDoc replaces, pruning stale folder docs
 		try {
 			// a Files-drawer file click targets a specific file: open + focus it first so it becomes the active editor this mode renders (doing it here, in one handler, avoids the race a separate openFile message would have)

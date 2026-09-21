@@ -38,13 +38,11 @@ export default function OriginPill({ origin, onClick, epicOnly }: OriginPillProp
         observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
         return () => observer.disconnect();
     }, []);
-
     const project_name = projectNameFromRelativePath(origin.relative_path);
     // folder mode stamps origin.project_label using the global divergence rule (see buildProjectLabels); single-file / legacy origins fall back to the project name's first+second characters
     const label = origin.project_label ?? projectAbbreviation(project_name);
     // hueForOrigin is the one hue source shared with the sticky card, so a pill always matches the sticky it sits on
     const colour = pillColourForHue(hueForOrigin(origin), theme);
-
     return (
         <span className={styles.originPillGroup} role="presentation">
             {!epicOnly && (

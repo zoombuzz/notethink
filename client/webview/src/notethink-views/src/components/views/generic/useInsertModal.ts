@@ -15,15 +15,12 @@ export interface InsertModalState {
  */
 export function useInsertModal(props: ViewProps, handlers: ViewApi): InsertModalState {
     const [insert_modal_open, setInsertModalOpen] = useState(false);
-
     const open_insert_modal = useCallback((): void => {
         setInsertModalOpen(true);
     }, []);
-
     const close_insert_modal = useCallback((): void => {
         setInsertModalOpen(false);
     }, []);
-
     const handle_insert = useCallback((text: string, insert_point: string): void => {
         const doc_text = props.doc_text || '';
         const head = props.selection?.main?.head ?? doc_text.length;
@@ -48,6 +45,5 @@ export function useInsertModal(props: ViewProps, handlers: ViewApi): InsertModal
         }
         handlers.postMessage?.({ type: 'editText', changes: [{ from, insert: text }] });
     }, [props.doc_text, props.selection, handlers]);
-
     return { insert_modal_open, open_insert_modal, close_insert_modal, handle_insert };
 }

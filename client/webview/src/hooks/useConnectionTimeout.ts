@@ -15,10 +15,8 @@ const CONNECTION_TIMEOUT_MS = 5000;
 export function useConnectionTimeout(initially_connected: boolean): ConnectionTimeoutState {
     const [connected, setConnected] = useState(initially_connected);
     const [timed_out, setTimedOut] = useState(false);
-
     // any message from the extension host proves it's alive
     const markConnected = useCallback(() => { setConnected(true); }, []);
-
     // show a helpful message if the extension host never responds
     useEffect(() => {
         if (connected) { return; }
@@ -28,6 +26,5 @@ export function useConnectionTimeout(initially_connected: boolean): ConnectionTi
         }, CONNECTION_TIMEOUT_MS);
         return () => clearTimeout(timer);
     }, [connected]);
-
     return { connected, timed_out, markConnected };
 }

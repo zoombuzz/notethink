@@ -55,7 +55,6 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
     const [applied_include, setAppliedInclude] = useState(props.include);
     const [applied_exclude, setAppliedExclude] = useState(props.exclude);
     const debounce_timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
     // resync when the effective globs/cap change underneath us (extension echo, reload, breadcrumb re-narrow)
     useEffect(() => {
         setIncludeValue(props.include);
@@ -64,14 +63,12 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
         setAppliedInclude(props.include);
         setAppliedExclude(props.exclude);
     }, [props.include, props.exclude, props.maxNotesPerFile]);
-
     // parse the cap input to a clamped integer; an empty/NaN box keeps the current effective value
     const resolveMaxNotes = useCallback((raw: string): number => {
         const parsed = parseInt(raw, 10);
         if (Number.isNaN(parsed)) { return props.maxNotesPerFile; }
         return Math.max(MIN_MAX_NOTES_PER_FILE, parsed);
     }, [props.maxNotesPerFile]);
-
     const scheduleApply = useCallback((next_include: string, next_exclude: string, next_max_raw: string) => {
         if (debounce_timer.current) { clearTimeout(debounce_timer.current); }
         debounce_timer.current = setTimeout(() => {
@@ -84,35 +81,29 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
             props.onApplyFilters(next_include, next_exclude, next_max);
         }, FILES_FILTER_DEBOUNCE_MS);
     }, [props.onApplyFilters, resolveMaxNotes]);
-
     // clear any pending timer on unmount so a debounced apply can't fire after the drawer closes
     useEffect(() => () => {
         if (debounce_timer.current) { clearTimeout(debounce_timer.current); }
     }, []);
-
     const handleIncludeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setIncludeValue(value);
         scheduleApply(value, exclude_value, max_notes_value);
     }, [scheduleApply, exclude_value, max_notes_value]);
-
     const handleExcludeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setExcludeValue(value);
         scheduleApply(include_value, value, max_notes_value);
     }, [scheduleApply, include_value, max_notes_value]);
-
     const handleMaxNotesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setMaxNotesValue(value);
         scheduleApply(include_value, exclude_value, value);
     }, [scheduleApply, include_value, exclude_value]);
-
     const visible_files = useMemo(
         () => props.files.filter(f => globMatches(f, applied_include, applied_exclude)),
         [props.files, applied_include, applied_exclude],
     );
-
     return (
         <div className={styles.drawerBody} data-testid="files-drawer">
             <div className={styles.drawerGroups}>

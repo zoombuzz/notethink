@@ -42,7 +42,6 @@ function JumpDrawer(props: JumpDrawerProps): ReactElement {
     const root_label = props.requestedPath ? (props.requestedPath.split('/').filter(Boolean).pop() ?? props.requestedPath) : '';
     const entries = is_loading ? [] : jump_targets.entries;
     debug("requestedPath=%s loading=%s entries=%d", props.requestedPath, is_loading, jump_targets?.entries.length ?? -1);
-
     let placeholder: ReactNode = undefined;
     if (is_loading) {
         placeholder = <li className={styles.drawerEmpty} data-testid="jump-drawer-loading">{l10n.t('Loading…')}</li>;
@@ -53,7 +52,6 @@ function JumpDrawer(props: JumpDrawerProps): ReactElement {
             </li>
         );
     }
-
     const root_node: DrawerTreeNode = {
         id: 'jump-root',
         label: root_label,
@@ -78,7 +76,6 @@ function JumpDrawer(props: JumpDrawerProps): ReactElement {
             },
         })),
     };
-
     return (
         <div className={styles.drawerBody} data-testid="jump-drawer">
             <div className={styles.drawerGroups}>

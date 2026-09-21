@@ -1,4 +1,4 @@
-import { DEFAULT_CARD_RATIO } from './notethink-views/src/components/views/kanban/columnwidthops';
+import { DEFAULT_CARD_RATIO, DEFAULT_LINE_BREADTH } from './notethink-views/src/components/views/kanban/columnwidthops';
 import type { SettingsCascadePayload } from './notethink-views/src/types/Messages';
 
 // webview-side mirror of the extension's folder-mode filter defaults (see client/extension/src/constants.ts); used until the extension echoes the effective globs back through the first update message
@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS_CASCADE: SettingsCascadePayload = {
     showLineNumbers: false,
     groupBy: 'auto',
     orientation: 'columns',
+    lineBreadth: DEFAULT_LINE_BREADTH,
     kanbanGroupBy: 'auto',
     columnOrder: DEFAULT_COLUMN_ORDER,
     kanbanCardRatio: DEFAULT_CARD_RATIO,

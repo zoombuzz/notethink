@@ -84,10 +84,8 @@ export function applyKanbanMove(notes: Array<NoteProps>, move: KanbanMove): Arra
         debug('applyKanbanMove: dragged note not found, stable_id=%s', move.dragged_stable_id);
         return notes;
     }
-
     const dest_members = buildDestinationMembers(notes, dragged_note, move);
     const clone_map = buildCloneMap(dragged_note, dest_members, move);
-
     debug('applyKanbanMove: dest=%s index=%d members=%d', move.destination_column_value, move.destination_index, dest_members.length);
     return notes.map(n => clone_map.get(n.seq) ?? n);
 }
@@ -122,7 +120,6 @@ function buildCloneMap(
     // first pass: apply the destination lane's value to the dragged note's group field
     const dragged_clone = cloneDraggedWithFieldValue(dragged_note, move.group_field ?? 'status', move.destination_column_value);
     clone_map.set(dragged_note.seq, dragged_clone);
-
     // second pass: apply synthetic weight to every position in the ordered destination list
     for (let i = 0; i < dest_members.length; i++) {
         const member = dest_members[i];
@@ -145,17 +142,13 @@ export function projectionSatisfied(notes: Array<NoteProps>, move: KanbanMove): 
         debug('projectionSatisfied: dragged note absent, treating as satisfied');
         return true;
     }
-
     const group_field = move.group_field ?? 'status';
     if (kanbanColumnValue(dragged_note, group_field) !== move.destination_column_value) {
         return false;
     }
-
     const dest_members = notesInKanbanColumn(notes, move.destination_column_value, group_field);
-
     const actual_index = dest_members.findIndex(n => n.stable_id === move.dragged_stable_id);
     const clamped = clampIndex(move.destination_index, dest_members.length - 1);
-
     debug('projectionSatisfied: actual_index=%d clamped=%d', actual_index, clamped);
     return actual_index === clamped;
 }

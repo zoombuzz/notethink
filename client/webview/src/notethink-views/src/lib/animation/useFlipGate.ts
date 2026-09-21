@@ -20,7 +20,6 @@ export function useFlipGate(is_projecting: boolean): PassiveUpdateGate {
     const gate_ref = useRef<PassiveUpdateGate | null>(null);
     if (gate_ref.current === null) { gate_ref.current = createPassiveUpdateGate(); }
     const was_projecting = useRef(false);
-
     useEffect(() => {
         const gate = gate_ref.current;
         if (is_projecting) {
@@ -31,8 +30,6 @@ export function useFlipGate(is_projecting: boolean): PassiveUpdateGate {
             was_projecting.current = false;
         }
     }, [is_projecting]);
-
     useEffect(() => () => gate_ref.current?.cancel(), []);
-
     return gate_ref.current;
 }

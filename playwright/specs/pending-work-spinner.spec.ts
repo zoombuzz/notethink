@@ -1,7 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
 import { injectMultipleDocsFromFixtures, selectFolderMode, selectIntegrationMode } from '../helpers/inject-multi-docs';
+import { fixtureText } from '../helpers/fixtures';
+import { parse } from '../helpers/parse-markdown';
 
 const WORKSPACE_ROOT = '/mnt/workspace/in_development';
+// folder-a.md carries two stories, so every streamed doc contributes two origin pills to the board
+const PILLS_PER_DOC = 2;
+const STREAM_WAVE_SIZE = 6;
 
 // emit a pendingChange message into the webview as if the extension had sent it
 async function emitPendingChange(page: Page, key: string, on: boolean): Promise<void> {
@@ -12,6 +17,57 @@ async function emitPendingChange(page: Page, key: string, on: boolean): Promise<
 
 async function selectCurrentFileMode(page: Page): Promise<void> {
     await selectIntegrationMode(page, 'current_file');
+}
+
+interface StreamDoc {
+    id: string;
+    path: string;
+    relative_path: string;
+    text: string;
+    hash_sha256: string;
+    content: unknown;
+}
+
+interface BoardCommit {
+    messages: number;
+    docs: number;
+    at: number;
+}
+
+// synthetic folder docs numbered from `start`, each a copy of the same story-bearing fixture, as discovery would load them
+function buildStreamDocs(start: number, count: number): StreamDoc[] {
+    const text = fixtureText('folder-a.md');
+    const content = parse(text);
+    return Array.from({ length: count }, (_unused, index) => {
+        const relative_path = `orbit/docstech/todo-${start + index}.md`;
+        return {
+            id: `stream-${start + index}`,
+            path: `${WORKSPACE_ROOT}/${relative_path}`,
+            relative_path,
+            text,
+            hash_sha256: `hash-${start + index}`,
+            content,
+        };
+    });
+}
+
+// dispatch one merge update per doc back to back, the way one discovery batch lands in the webview
+async function streamFolderDocs(page: Page, docs: StreamDoc[]): Promise<void> {
+    await page.evaluate((payload) => {
+        for (const doc of payload) {
+            window.dispatchEvent(new MessageEvent('message', {
+                data: { type: 'update', merge_strategy: 'merge', partial: { docs: { [doc.id]: doc } } },
+            }));
+        }
+    }, docs);
+}
+
+async function readBoardCommits(page: Page): Promise<BoardCommit[]> {
+    return page.evaluate(() => (window as unknown as { __notethinkBoardCommits?: BoardCommit[] }).__notethinkBoardCommits ?? []);
+}
+
+async function clearBoardCommits(page: Page): Promise<void> {
+    await page.evaluate(() => { (window as unknown as { __notethinkBoardCommits: BoardCommit[] }).__notethinkBoardCommits = []; });
 }
 
 test.describe('Pending-work spinner', () => {
@@ -112,5 +168,73 @@ test.describe('Pending-work spinner', () => {
         } finally {
             await context.close();
         }
+    });
+});
+
+/*
+ * The webview half of the folder-load coalescing: the extension batches its discovery posts (covered by
+ * the PanelSession jest suite), and whatever still arrives as separate messages is folded into one board
+ * commit per animation frame here. These drive the wire messages directly, so they measure the webview.
+ */
+test.describe('Folder-load coalescing', () => {
+
+    test.beforeEach(async ({ page }) => {
+        // the probe has to be armed before any message lands, so it counts the load rather than the tail of it
+        await page.addInitScript(() => { (window as unknown as { __NOTETHINK_COMMIT_PROBE__: boolean }).__NOTETHINK_COMMIT_PROBE__ = true; });
+        await page.goto('/playwright/harness/index.html');
+        await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
+        ], { workspace_root: WORKSPACE_ROOT });
+        await selectFolderMode(page);
+        await page.waitForSelector('[data-folder-mode="true"]');
+    });
+
+    test('a streamed load fills the board wave by wave and commits far fewer times than it receives messages', async ({ page }) => {
+        const pills = page.locator('[data-testid="origin-project-pill"]');
+        const seeded = await pills.count();
+        await clearBoardCommits(page);
+
+        // each wave is one task in the page, so its messages coalesce; the assertion between waves is the progressive fill
+        for (let wave = 0; wave < 3; wave++) {
+            await streamFolderDocs(page, buildStreamDocs(wave * STREAM_WAVE_SIZE, STREAM_WAVE_SIZE));
+            await expect(pills).toHaveCount(seeded + (wave + 1) * STREAM_WAVE_SIZE * PILLS_PER_DOC, { timeout: 5000 });
+        }
+
+        const commits = await readBoardCommits(page);
+        const streamed_messages = 3 * STREAM_WAVE_SIZE;
+        // one commit per wave is the floor: fewer would mean the board revealed in one go instead of filling
+        expect(commits.length).toBeGreaterThanOrEqual(3);
+        expect(commits.length).toBeLessThan(streamed_messages);
+        expect(commits.reduce((total, commit) => total + commit.messages, 0)).toBe(streamed_messages);
+        // the board grew across the commits rather than arriving whole in the last one
+        expect(commits[0].docs).toBeLessThan(commits[commits.length - 1].docs);
+    });
+
+    test('the discovery spinner clears with the docs it covered, not a frame ahead of them', async ({ page }) => {
+        const toolbar_spinner = page.getByTestId('view-toolbar').getByTestId('pending-work-spinner');
+        const pills = page.locator('[data-testid="origin-project-pill"]');
+        // the replace below prunes these, so the final count only means something if the board started non-empty
+        const seeded = await pills.count();
+        expect(seeded).toBeGreaterThan(0);
+
+        await emitPendingChange(page, 'folderDiscovery', true);
+        await expect(toolbar_spinner).toBeVisible({ timeout: 2000 });
+
+        // the extension posts the aggregate replace and clears the sentinel back to back, so both land in one frame
+        const docs = buildStreamDocs(0, STREAM_WAVE_SIZE);
+        await page.evaluate((payload) => {
+            const docs_map: Record<string, unknown> = {};
+            for (const doc of payload) { docs_map[doc.id] = doc; }
+            window.dispatchEvent(new MessageEvent('message', {
+                data: { type: 'update', partial: { docs: docs_map }, aggregate_total_discovered: payload.length },
+            }));
+            window.dispatchEvent(new MessageEvent('message', { data: { type: 'pendingChange', key: 'folderDiscovery', on: false } }));
+        }, docs);
+
+        // the replace prunes the seeded docs, so the board ends up holding exactly the streamed set
+        await expect(pills).toHaveCount(STREAM_WAVE_SIZE * PILLS_PER_DOC, { timeout: 5000 });
+        await expect(toolbar_spinner).toHaveCount(0, { timeout: 2000 });
     });
 });

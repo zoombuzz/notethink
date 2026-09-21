@@ -1,4 +1,5 @@
 import {
+    AGENT_CARD_TYPE,
     CARD_AUTO,
     CARD_COMPONENTS,
     CARD_REGISTRY,
@@ -31,8 +32,8 @@ describe('cardregistryops', () => {
             expect(node?.parent).toBeUndefined();
         });
 
-        it('card and sticky are concrete, selectable and parented on allcards', () => {
-            for (const id of ['card', 'sticky']) {
+        it('every card beneath allcards is concrete, selectable and parented on it', () => {
+            for (const id of ['card', 'sticky', 'agent']) {
                 const node = getCardNode(id);
                 expect(node?.kind).toBe('concrete');
                 expect(node?.selectable).toBe(true);
@@ -44,6 +45,14 @@ describe('cardregistryops', () => {
             expect(getCardNode('nosuchcard')).toBeUndefined();
         });
 
+        it('the agent card is a card type like any other, so every view can draw it', () => {
+            expect(getCardNode(AGENT_CARD_TYPE)?.selectable).toBe(true);
+            expect(AGENT_CARD_TYPE in CARD_COMPONENTS).toBe(true);
+            expect(resolveCardType(AGENT_CARD_TYPE, 'document')).toBe(AGENT_CARD_TYPE);
+            expect(resolveCardType(AGENT_CARD_TYPE, 'line')).toBe(AGENT_CARD_TYPE);
+            expect(resolveCardType(AGENT_CARD_TYPE, 'kanban')).toBe(AGENT_CARD_TYPE);
+        });
+
         it('every concrete node has a component wired', () => {
             const concrete = CARD_REGISTRY.nodes.filter(n => n.kind === 'concrete').map(n => n.id);
             expect(concrete.every(id => id in CARD_COMPONENTS)).toBe(true);
@@ -53,11 +62,11 @@ describe('cardregistryops', () => {
     describe('selectable lists', () => {
 
         it('selectableCardIds returns the concrete cards in tree order', () => {
-            expect(selectableCardIds()).toEqual(['card', 'sticky']);
+            expect(selectableCardIds()).toEqual(['card', 'sticky', 'agent']);
         });
 
         it('selectableCardTypes prefixes auto', () => {
-            expect(selectableCardTypes()).toEqual([CARD_AUTO, 'card', 'sticky']);
+            expect(selectableCardTypes()).toEqual([CARD_AUTO, 'card', 'sticky', 'agent']);
         });
 
         it('a registry card with no component wired is not offered', () => {
@@ -68,8 +77,8 @@ describe('cardregistryops', () => {
                 ],
                 view_defaults: CARD_REGISTRY.view_defaults,
             };
-            expect(selectableCardIds(registry)).toEqual(['card', 'sticky', 'photo']);
-            expect(selectableCardTypes(registry)).toEqual([CARD_AUTO, 'card', 'sticky']);
+            expect(selectableCardIds(registry)).toEqual(['card', 'sticky', 'agent', 'photo']);
+            expect(selectableCardTypes(registry)).toEqual([CARD_AUTO, 'card', 'sticky', 'agent']);
         });
     });
 
@@ -126,7 +135,7 @@ describe('cardregistryops', () => {
     describe('a view default configured through settings', () => {
 
         it('offers every renderable card and never auto, since auto is what the default answers', () => {
-            expect(renderableCardIds()).toEqual(['card', 'sticky']);
+            expect(renderableCardIds()).toEqual(['card', 'sticky', 'agent']);
             expect(renderableCardIds()).not.toContain(CARD_AUTO);
         });
 
@@ -185,7 +194,7 @@ describe('cardregistryops', () => {
 
         it('lists the tree roots for undefined and the children of a node otherwise', () => {
             expect(childCardNodes(undefined).map(n => n.id)).toEqual(['allcards']);
-            expect(childCardNodes('allcards').map(n => n.id)).toEqual(['card', 'sticky']);
+            expect(childCardNodes('allcards').map(n => n.id)).toEqual(['card', 'sticky', 'agent']);
             expect(childCardNodes('sticky')).toEqual([]);
         });
 

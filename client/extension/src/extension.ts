@@ -30,12 +30,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	// write the file log to the extension's standard VS Code log dir (context.logUri), never the user's open workspace folder
 	initLogDir(context.logUri);
-
 	// register our custom editor for "Open With..." right-click
 	const provider = new NotethinkEditorProvider(context);
 	const provider_registration = vscode.window.registerCustomEditorProvider(NotethinkEditorProvider.viewType, provider);
 	context.subscriptions.push(provider_registration);
-
 	// register serializer to restore panels after window reload
 	context.subscriptions.push(vscode.window.registerWebviewPanelSerializer(PANEL_VIEWTYPE, {
 		async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: unknown) {
@@ -57,7 +55,6 @@ export function activate(context: vscode.ExtensionContext): void {
 			}
 		}
 	}));
-
 	// register command defined in package.json
 	const open_viewer_command = vscode.commands.registerCommand('notethink.openViewer', async () => {
 		const active_editor = vscode.window.activeTextEditor;
@@ -78,7 +75,6 @@ export function activate(context: vscode.ExtensionContext): void {
 		await provider.myWebviewPanel(panel, active_md_document);
 	});
 	context.subscriptions.push(open_viewer_command);
-
 	// view type switching commands
 	for (const viewType of ['auto', 'document', 'kanban'] as const) {
 		const command_name = `notethink.setView${viewType.charAt(0).toUpperCase() + viewType.slice(1)}`;
@@ -86,12 +82,10 @@ export function activate(context: vscode.ExtensionContext): void {
 			provider.sendCommandToActiveWebview('setViewType', { viewType });
 		}));
 	}
-
 	// line numbers: one write path, so onDidChangeConfiguration pushes the change to every open board
 	context.subscriptions.push(vscode.commands.registerCommand('notethink.toggleLineNumbers', async () => {
 		await writeSetting('showLineNumbers', !readSetting('showLineNumbers'), editTarget());
 	}));
-
 	// navigation commands
 	for (const direction of ['up', 'down', 'drillIn', 'drillOut', 'clearFocus'] as const) {
 		const command_map: Record<string, string> = {

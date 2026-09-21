@@ -127,13 +127,11 @@ export function useScrollToCaret(
             const ring = SCROLL_FOCUS_RING_PX;
             // sticky toolbar (and any open drawer) eat the top of the vertical scrollport
             const occluder_top = stickyOccluderBottomPx(view_id) + SCROLL_OCCLUDER_BUFFER_PX;
-
             // vertical (page scroller): reserve the ring top/bottom, keep the top clear of the sticky header, anchor the top when the story is taller than the available room
             const v = findScrollParent(story, 'y');
             const v_rect = v.getBoundingClientRect();
             const dy = frameDelta(rect.top - ring, rect.bottom + ring, Math.max(v_rect.top, occluder_top), v_rect.bottom);
             if (dy !== 0) { v.scrollBy({ top: dy, behavior: 'smooth' }); }
-
             /*
              * horizontal (kanban board): reserve the ring left/right so the halo isn't clipped against the board edge, anchor the left when too wide
              * a document view has no horizontal scroller, so dx resolves to 0 (no-op)
@@ -165,30 +163,24 @@ export function useCaretIndicator(
     caret_class: string,
 ): void {
     const prev_target_ref = useRef<HTMLElement | null>(null);
-
     useEffect(() => {
         const resolved = resolveCaretTarget(display_options.focused_seqs, view_id, selection?.main.head);
         if (!resolved) { return; }
-
         // only flash when the caret is within a specific content element (headline or body item with data-offset-start/end); gaps between notes have no rendered content so nothing should flash
         const target = resolved.body_item;
         if (!target) { return; }
-
         // skip re-flash if the caret moved within the same element
         if (target === prev_target_ref.current) { return; }
         prev_target_ref.current = target;
-
         // check if the target is already in the viewport; treat the sticky header stack as the effective top edge so a target hidden behind the toolbar/drawer counts as off-screen and we wait for the scroll
         const rect = target.getBoundingClientRect();
         const occluder_bottom = stickyOccluderBottomPx(view_id);
         const is_visible = rect.top >= occluder_bottom && rect.top < window.innerHeight && rect.bottom > occluder_bottom;
-
         if (is_visible) {
             // already on screen - flash immediately
             target.classList.add(caret_class);
             return () => { target.classList.remove(caret_class); };
         }
-
         // off screen - a scroll is about to start; wait for it to finish + 150ms settle
         let timer: ReturnType<typeof setTimeout> | undefined;
         const apply = (): void => { target.classList.add(caret_class); };

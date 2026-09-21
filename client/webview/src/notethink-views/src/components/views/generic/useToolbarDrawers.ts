@@ -27,7 +27,6 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
     // the element whose viewport position is held stable across the open/close animation (and refocused on Escape) - the gear for settings, the breadcrumb count for files
     const anchor_el_ref = useRef<HTMLElement | null>(null);
     const anchor_top_ref = useRef<number | null>(null);
-
     // toggle a drawer; capture the trigger element's viewport position so the scroll-anchor effect can keep it stable through the open/close animation
     const toggleDrawer = useCallback((which: DrawerKind, anchor: HTMLElement | null): void => {
         if (anchor) {
@@ -36,34 +35,27 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
         }
         setActiveDrawer(prev => (prev === which ? 'none' : which));
     }, []);
-
     const toggle_settings = useCallback((): void => {
         toggleDrawer('settings', gear_button_ref.current);
     }, [toggleDrawer]);
-
     const toggle_cards = useCallback((anchor: HTMLElement): void => {
         toggleDrawer('cards', anchor);
     }, [toggleDrawer]);
-
     const toggle_files = useCallback((anchor: HTMLElement): void => {
         toggleDrawer('files', anchor);
     }, [toggleDrawer]);
-
     const toggle_collisions = useCallback((anchor: HTMLElement): void => {
         toggleDrawer('collisions', anchor);
     }, [toggleDrawer]);
-
     const toggle_jump = useCallback((anchor: HTMLElement): void => {
         toggleDrawer('jump', anchor);
     }, [toggleDrawer]);
-
     // close whichever drawer is open (the in-drawer X button); hold the trigger's viewport position stable across the close animation, mirroring Escape
     const close_drawer = useCallback((): void => {
         const anchor = anchor_el_ref.current;
         if (anchor) { anchor_top_ref.current = anchor.getBoundingClientRect().top; }
         setActiveDrawer('none');
     }, []);
-
     // scroll-anchor the trigger element across the open/close animation so the content the user was looking at stays visible
     useLayoutEffect(() => {
         if (anchor_top_ref.current === null) { return; }
@@ -88,7 +80,6 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
         raf_id = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf_id);
     }, [active_drawer]);
-
     // Escape closes whichever drawer is open and returns focus to its trigger element
     useEffect(() => {
         if (active_drawer === 'none') { return; }
@@ -105,7 +96,6 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [active_drawer]);
-
     /*
      * outside-click closes whichever drawer is open; the trigger and the drawer body are excluded so the trigger's own onClick toggles cleanly and clicks inside the drawer don't dismiss
      * pointerdown (not click) fires before any onClick on the click target, so the drawer is gone by the time the clicked control runs its handler; no focus restore here - focus follows the pointer
@@ -125,6 +115,5 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
         document.addEventListener('pointerdown', onPointerDown);
         return () => document.removeEventListener('pointerdown', onPointerDown);
     }, [active_drawer, view_id]);
-
     return { active_drawer, gear_button_ref, toggle_settings, toggle_cards, toggle_files, toggle_collisions, toggle_jump, close_drawer };
 }

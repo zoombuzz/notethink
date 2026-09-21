@@ -18,7 +18,10 @@ import {
     resolveSettingIn,
     selectableViewIds,
     settingKeysForNode,
+    updateUserViewTypeOverrides,
+    userTypeHoldsKey,
     type ViewRegistry,
+    settingWriteFor,
 } from './viewregistryops';
 import type { UserViewType } from '../types/Messages';
 
@@ -233,7 +236,7 @@ describe('per-node setting counts', () => {
     it('counts the settings each node owns, and reports zero for a node that owns none', () => {
         expect(nodeSettingCount('root')).toBe(2);
         expect(nodeSettingCount('grouped')).toBe(1);
-        expect(nodeSettingCount('line')).toBe(1);
+        expect(nodeSettingCount('line')).toBe(2);
         expect(nodeSettingCount('kanban')).toBe(5);
         expect(nodeSettingCount('document')).toBe(0);
         // the card tree is counted by the same table, since a home names whichever tree it belongs to
@@ -248,7 +251,7 @@ describe('per-node setting counts', () => {
 
     it('names the keys a node owns in declaration order', () => {
         expect(settingKeysForNode('kanban')).toEqual(['kanbanGroupBy', 'columnOrder', 'kanbanCardRatio', 'kanbanAnimateTransitions', 'kanbanDefaultCardType']);
-        expect(settingKeysForNode('line')).toEqual(['orientation']);
+        expect(settingKeysForNode('line')).toEqual(['orientation', 'lineBreadth']);
         expect(settingKeysForNode('global')).toEqual(['watchUnopenedFilesInViewer', 'openNewEditorIfNoneOpen']);
     });
 
@@ -455,5 +458,98 @@ describe('editing the saved view types', () => {
     it('leaves a registry with nothing left to merge once the last type goes', () => {
         const merged = registryWithUserTypes(removeUserViewType([alpha], 'user-alpha'));
         expect(merged.nodes).toHaveLength(VIEW_REGISTRY.nodes.length);
+    });
+});
+
+/*
+ * A saved type carries values for keys the registry models and for keys it does not, and the pill has to
+ * name the type for both. Target card ratio is the case that forces it: `kanbanCardRatio` has no registry
+ * setting behind it, so before this the answer came from the flat home and a type holding its own ratio
+ * still showed a Kanban pill and an offer to save what it already held.
+ */
+describe('a custom type owns every key its overrides hold', () => {
+
+    const tall_cards: UserViewType = { id: 'user-tall-cards', label: 'Tall Cards', parent: 'kanban', overrides: { kanbanCardRatio: 2 } };
+
+    it('names the custom type for a key it holds that has no registry presence', () => {
+        const merged = registryWithUserTypes([tall_cards]);
+        expect(owningNodeFor('user-tall-cards', 'kanbanCardRatio', merged)).toBe('user-tall-cards');
+        expect(offersNewViewType('user-tall-cards', 'kanbanCardRatio', merged)).toBe(false);
+    });
+
+    it('still names the flat home for a key the custom type does not hold, which keeps offering', () => {
+        const merged = registryWithUserTypes([tall_cards]);
+        expect(owningNodeFor('user-tall-cards', 'kanbanAnimateTransitions', merged)).toBe('kanban');
+        expect(offersNewViewType('user-tall-cards', 'kanbanAnimateTransitions', merged)).toBe(true);
+    });
+
+    it('names the nearest holder from a type saved on top of one, and offers there', () => {
+        const merged = registryWithUserTypes([
+            tall_cards,
+            { id: 'user-tall-rows', label: 'Tall Rows', parent: 'user-tall-cards', overrides: { orientation: 'rows' } },
+        ]);
+        expect(owningNodeFor('user-tall-rows', 'kanbanCardRatio', merged)).toBe('user-tall-cards');
+        expect(offersNewViewType('user-tall-rows', 'kanbanCardRatio', merged)).toBe(true);
+    });
+
+    it('leaves a built-in rung answering exactly as before, since no saved type is on its chain', () => {
+        const merged = registryWithUserTypes([tall_cards]);
+        expect(owningNodeFor('kanban', 'kanbanCardRatio', merged)).toBe('kanban');
+        expect(owningNodeFor('kanban', 'kanbanGroupBy', merged)).toBe('grouped');
+        expect(owningNodeFor('kanban', 'columnOrder', merged)).toBe('kanban');
+    });
+});
+
+describe('updating a saved view type', () => {
+
+    const alpha: UserViewType = { id: 'user-alpha', label: 'Alpha', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' } };
+    const beta: UserViewType = { id: 'user-beta', label: 'Beta', parent: 'kanban', overrides: { orientation: 'rows' } };
+
+    it('merges the new values into the named type and leaves its siblings alone', () => {
+        const updated = updateUserViewTypeOverrides([alpha, beta], 'user-alpha', { kanbanCardRatio: 2 });
+        expect(updated[0].overrides).toEqual({ kanbanGroupBy: 'assignee', kanbanCardRatio: 2 });
+        expect(updated[1]).toBe(beta);
+    });
+
+    it('replaces the value of a key the type already holds', () => {
+        expect(updateUserViewTypeOverrides([alpha], 'user-alpha', { kanbanGroupBy: 'status' })[0].overrides).toEqual({ kanbanGroupBy: 'status' });
+    });
+
+    it('leaves the id, label and parent alone, since the id is what settings are stored under', () => {
+        const updated = updateUserViewTypeOverrides([alpha], 'user-alpha', { orientation: 'rows' })[0];
+        expect(updated.id).toBe('user-alpha');
+        expect(updated.label).toBe('Alpha');
+        expect(updated.parent).toBe('kanban');
+    });
+
+    it('ignores an id no saved type carries', () => {
+        expect(updateUserViewTypeOverrides([alpha], 'user-nothing', { orientation: 'rows' })).toEqual([alpha]);
+    });
+
+    it('treats a type whose overrides are not an object as declaring nothing rather than throwing', () => {
+        const malformed = JSON.parse('[{"id":"user-bad","label":"Bad","parent":"kanban","overrides":null}]') as UserViewType[];
+        expect(updateUserViewTypeOverrides(malformed, 'user-bad', { orientation: 'rows' })[0].overrides).toEqual({ orientation: 'rows' });
+        expect(userTypeHoldsKey(malformed[0], 'orientation')).toBe(false);
+    });
+
+    it('reports which keys a type holds, which is what routes a row change into it', () => {
+        expect(userTypeHoldsKey(alpha, 'kanbanGroupBy')).toBe(true);
+        expect(userTypeHoldsKey(alpha, 'kanbanCardRatio')).toBe(false);
+        expect(userTypeHoldsKey(undefined, 'kanbanGroupBy')).toBe(false);
+    });
+});
+
+describe('settingWriteFor', () => {
+    const held: UserViewType = { id: 'user-a', label: 'A', parent: 'kanban', overrides: { lineBreadth: 300 } };
+
+    it('writes a key the rendered custom type holds into that type, since a workspace write would be painted over', () => {
+        const write = settingWriteFor([held], held, 'lineBreadth', 400);
+        expect(write.setting).toBe('viewUserTypes');
+        expect(write.value).toEqual([{ ...held, overrides: { lineBreadth: 400 } }]);
+    });
+
+    it('writes any other key at workspace scope as a plain per-key write', () => {
+        expect(settingWriteFor([held], held, 'kanbanCardRatio', 2)).toEqual({ setting: 'kanbanCardRatio', value: 2 });
+        expect(settingWriteFor([held], undefined, 'lineBreadth', 400)).toEqual({ setting: 'lineBreadth', value: 400 });
     });
 });

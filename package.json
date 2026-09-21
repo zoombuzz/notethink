@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.69",
+  "version": "0.3.70",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -237,6 +237,13 @@
             "default": "columns",
             "description": "%config.settings.view.specific.line.orientation.description%"
           },
+          "notethink.settings.view.specific.line.lineBreadth": {
+            "type": "number",
+            "scope": "resource",
+            "minimum": 120,
+            "default": 220,
+            "description": "%config.settings.view.specific.line.lineBreadth.description%"
+          },
           "notethink.settings.view.specific.kanban.groupBy": {
             "type": "string",
             "scope": "resource",
@@ -306,6 +313,7 @@
     "bump-version": "npm version patch --no-git-tag-version",
     "test-jest": "bash scripts/test-jest.sh",
     "test-playwright": "pnpm run build && playwright test",
+    "test-perf": "node scripts/perf/run.mjs",
     "lint": "eslint . && tsc --noEmit -p client/extension && tsc --noEmit -p client/webview && tsc --noEmit -p client/webview/src/notethink-views",
     "check": "pnpm run lint && pnpm run build-and-rollup && pnpm run test-jest",
     "build-and-rollup": "pnpm run build && cd client/webview/src/notethink-views && pnpm run rollup",

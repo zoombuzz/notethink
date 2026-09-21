@@ -25,11 +25,9 @@ export function usePersistedViewStates(
     initial_view_states: Record<string, ViewState>,
 ): PersistedViewStatesState {
     const [view_states, setViewStates] = useState<Record<string, ViewState>>(initial_view_states);
-
     // ref mirror so the empty-deps onMessage callback can read the current view_states without re-binding
     const view_states_ref = useRef<Record<string, ViewState>>(view_states);
     useEffect(() => { view_states_ref.current = view_states; }, [view_states]);
-
     const updateAllViewStates = useCallback((updater: (view_state: ViewState) => ViewState) => {
         setViewStates(prev => {
             const next = { ...prev };
@@ -42,7 +40,6 @@ export function usePersistedViewStates(
             return next;
         });
     }, []);
-
     const handleSetViewManagedState = useCallback((updates: Array<Record<string, unknown>>) => {
         setViewStates(prev => {
             const next = { ...prev };
@@ -61,7 +58,6 @@ export function usePersistedViewStates(
             return next;
         });
     }, []);
-
     return { view_states, view_states_ref, setViewStates, updateAllViewStates, handleSetViewManagedState };
 }
 

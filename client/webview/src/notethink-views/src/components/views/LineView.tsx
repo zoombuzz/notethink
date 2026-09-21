@@ -75,25 +75,21 @@ export default function LineView(props: LineViewProps): ReactElement {
     const group_field = axisField(axis);
     // orientation is a LineView setting: columns (kanban default) lay lanes side by side, rows stack them
     const orientation: 'columns' | 'rows' = props.display_options?.settings?.orientation ?? 'columns';
-
     const display_options: NoteDisplayOptions = {
         ...props.display_options,
     };
-
     /*
      * optimistic projection: hold the dropped layout client-side until the document round-trip lands, so there is no drop→snap-back→re-land flash
      * safe to render the projected order during the drop animation because KanbanBoard collapses the drop tween via transitionDuration, not the old transition:'none' hack that broke dnd's transitionend and left cards stuck
      */
     const { notes_to_render, applyOptimisticMove, is_projecting } = useProjectedNotes(props.notes_within_parent_context);
     const columns = useKanbanColumns(notes_to_render, display_options.settings?.columnOrder, axis);
-
     /*
      * only render lanes that contain stories (a stale lane order can list values no note currently uses)
      * fall back to all lanes when nothing has stories so an empty board is never blank
      */
     const populated_columns = columns.filter(col => (col.child_notes?.length ?? 0) > 0);
     const visible_columns = populated_columns.length > 0 ? populated_columns : columns;
-
     // drag lifecycle: the FLIP gate + passive-transition layer and the drag responders that post the group-key rewrite
     const drag = useLineViewDrag({
         is_projecting,
@@ -106,15 +102,11 @@ export default function LineView(props: LineViewProps): ReactElement {
         animate_enabled: display_options.settings?.kanbanAnimateTransitions ?? true,
         view: props,
     });
-
     // scroll focused note (and body item) into view when caret moves
     useScrollToCaret(display_options, props.id, props.selection);
-
     // virtual caret indicator: pulse-highlight the body item containing the editor caret
     useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
-
     const container_styles: Array<string> = [view_specific_styles.viewKanban, view_specific_styles.content];
-
     // clear focus on a background click, but ignore the post-drop click (drag_active) that would otherwise jump the caret to the next story via the clear handler
     const clear_handler = display_options.focused_notes?.length
         ? props.handlers?.getClearHandler?.(display_options.focused_notes)
@@ -122,7 +114,6 @@ export default function LineView(props: LineViewProps): ReactElement {
     const containerClickHandler = clear_handler
         ? (event: React.MouseEvent<HTMLElement>) => { if (!drag.drag_active.current) { clear_handler(event); } }
         : undefined;
-
     const content = (
         <div className={container_styles.join(' ')} id={`v${props.id}-inner`}
              ref={drag.content_ref}
@@ -141,7 +132,6 @@ export default function LineView(props: LineViewProps): ReactElement {
             />
         </div>
     );
-
     if (onProfilerRender) {
         return <Profiler id="LineView" onRender={onProfilerRender}>{content}</Profiler>;
     }

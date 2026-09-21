@@ -272,6 +272,7 @@ export const workspace = {
 		inspect: jest.fn(() => undefined),
 	})),
 	onDidChangeConfiguration: jest.fn(() => ({ dispose: jest.fn() })),
+	onDidChangeWorkspaceFolders: jest.fn(() => ({ dispose: jest.fn() })),
 	registerFileSystemProvider: jest.fn(() => ({ dispose: jest.fn() })),
 	fs: {
 		readFile: jest.fn(async () => new Uint8Array()),
@@ -316,7 +317,6 @@ export function createMockWebviewPanel(): MockWebviewPanelHelper {
 	const onDidDisposeListeners: Array<() => void> = [];
 	const onDidChangeViewStateListeners: Array<(e: Record<string, unknown>) => void> = [];
 	const postedMessages: Array<Record<string, unknown>> = [];
-
 	const panel = {
 		active: true,
 		webview: {
@@ -342,7 +342,6 @@ export function createMockWebviewPanel(): MockWebviewPanelHelper {
 			return { dispose: jest.fn() };
 		}),
 	};
-
 	return {
 		panel,
 		postedMessages,

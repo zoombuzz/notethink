@@ -68,6 +68,7 @@ export const SETTINGS = {
     showLineNumbers:            { path: 'view.generic.showLineNumbers',            default: false as boolean,                 node: 'allcards'  },
     groupBy:                    { path: 'view.specific.grouped.groupBy',           default: 'auto' as string,                 node: 'grouped'   },
     orientation:                { path: 'view.specific.line.orientation',          default: 'columns' as 'columns' | 'rows',  node: 'line'      },
+    lineBreadth:                { path: 'view.specific.line.lineBreadth',           default: 220 as number,                    node: 'line'      },
     kanbanGroupBy:              { path: 'view.specific.kanban.groupBy',            default: 'auto' as string,                 node: 'kanban'    },
     columnOrder:                { path: 'view.specific.kanban.columnOrder',        default: DEFAULT_COLUMN_ORDER as string[], node: 'kanban'    },
     kanbanCardRatio:            { path: 'view.specific.kanban.cardRatio',           default: 1.4 as number,                    node: 'kanban'    },

@@ -72,3 +72,6 @@ docstech/design/logos/render/
 # Exclude local Claude Code runtime state, but version skills
 .claude/*
 !.claude/skills/
+
+# Agent activity written by an external producer (ACTIVITY_CONTRACT.md); never committed, so it cannot show in the uncommitted files band it feeds
+**/.notethink/

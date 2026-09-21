@@ -22,13 +22,11 @@ export function useJumpDrawer(
     handle_jump_request: (leaf_path: string) => void,
 ): JumpDrawerModel {
     const [requested_jump_path, setRequestedJumpPath] = useState<string | undefined>(undefined);
-
     const open_jump_drawer = useCallback((leaf_path: string, anchor: HTMLElement): void => {
         setRequestedJumpPath(leaf_path);
         toggle_jump(anchor);
         handle_jump_request(leaf_path);
     }, [toggle_jump, handle_jump_request]);
-
     debug("requested=%s view=%s", requested_jump_path, props.id);
     return { requested_jump_path, open_jump_drawer };
 }

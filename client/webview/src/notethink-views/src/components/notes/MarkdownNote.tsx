@@ -28,11 +28,9 @@ function dispatchNoteExpanded(note: NoteProps, expanded: boolean): void {
 export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     const note_ref = useRef<HTMLDivElement>(null);
     const body_ref = useRef<HTMLDivElement>(null);
-
     // top-level = direct child of the parent context note
     const parent_seq = props.parent_notes?.length ? props.parent_notes[props.parent_notes.length - 1].seq : undefined;
     const is_top_level = parent_seq !== undefined && parent_seq === props.display_options?.parent_context_seq;
-
     // merge refs: our measurement ref + drag-and-drop innerRef
     const set_refs = useCallback((el: HTMLDivElement | null) => {
         note_ref.current = el;
@@ -43,14 +41,11 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
             (inner_ref as { current: HTMLDivElement | null }).current = el;
         }
     }, [props.display_options?.provided?.innerRef]);
-
     // detect drag-in-progress from hello-pangea/dnd's provided style
     const is_dragging = props.display_options?.provided?.draggableProps?.style !== undefined
         && props.display_options?.provided?.draggableProps?.style !== null
         && (props.display_options.provided.draggableProps.style as Record<string, unknown>).position === 'fixed';
-
     const overflow_state = useMarkdownNoteOverflow(body_ref, is_top_level, props.display_options?.card_target_height);
-
     /*
      * manual expand state is the view's, not this component's: "Show more" / "Show less" add and remove
      * this note's stable_id from view_expanded_ids, and the flag is derived from that list every render.
@@ -60,7 +55,6 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
      */
     const manually_expanded = isManuallyExpanded(props);
     const auto_expand = props.display_options?.settings?.autoExpandFocusedNote;
-
     /*
      * clip logic: auto-expand ON → expand on focus; OFF → respect manually_expanded;
      * lock clip state during drag to prevent flash on drop
@@ -73,10 +67,8 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     const clip_lock_ref = useRef(should_clip_base);
     if (!is_dragging) { clip_lock_ref.current = should_clip_base; }
     const should_clip = is_dragging ? clip_lock_ref.current : should_clip_base;
-
     // settle the clip geometry synchronously, before the kanban FLIP host samples positions
     useSyncedBodyClip(body_ref, { is_top_level, is_dragging, auto_expand, focused: props.focused, manually_expanded, card_target_height: props.display_options?.card_target_height });
-
     const { scrolled_top, at_bottom } = useMarkdownNoteBodyScroll({
         body_ref,
         should_clip,
@@ -85,7 +77,6 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         body_raw: props.body_raw,
         caret_offset: props.display_options?.caret_offset as number | undefined,
     });
-
     /*
      * parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
      * always strip linetag link nodes from MDAST - they render as invisible empty <a> elements;
@@ -106,7 +97,6 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         headline: memoized_headline,
         ...props
     };
-
     return (
         <MarkdownNoteContainer note={note} set_refs={set_refs}>
             <MarkdownNoteHeadline note={note} />
@@ -134,7 +124,49 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     );
 }, areMarkdownNotePropsEqual);
 
-function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
+// a value that can be walked one level deeper, which an array is not: an array reaching the compare below is treated as changed
+function isPropRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Whether two of @hello-pangea/dnd's `provided` prop bags carry the same values.
+ *
+ * dnd rebuilds `provided` on every render of its Draggable, so comparing the bags by identity
+ * repaints every card on every board update for no visible change. What the card does with them is
+ * spread them onto its container, so their VALUES are what decides whether it has to: equal values
+ * mean the DOM already carries them. `depth` bounds the walk at the one nested object these bags
+ * hold, `style`, whose own members are primitives; anything deeper counts as changed.
+ */
+function providedPropsEqual(prev: Record<string, unknown> | undefined, next: Record<string, unknown> | undefined, depth: number = 1): boolean {
+    if (prev === next) { return true; }
+    if (!prev || !next) { return false; }
+    const keys = Object.keys(prev);
+    if (keys.length !== Object.keys(next).length) { return false; }
+    for (const key of keys) {
+        const prev_value = prev[key];
+        const next_value = next[key];
+        if (prev_value === next_value) { continue; }
+        if (depth <= 0 || !isPropRecord(prev_value) || !isPropRecord(next_value)) { return false; }
+        if (!providedPropsEqual(prev_value, next_value, depth - 1)) { return false; }
+    }
+    return true;
+}
+
+/**
+ * Whether this card can skip a re-render.
+ *
+ * stable_id leads because it is the note's identity: two notes that share a slot across an update
+ * are the same note only if it matches, and unlike seq it survives a merge that re-interleaves the
+ * files. seq is still compared, one line down, because the rendered DOM carries it (data-seq, and
+ * the `v<view>-n<seq>` element id the caret and scroll hooks look up), so a card whose number moved
+ * has to repaint even when nothing else about it did.
+ *
+ * Exported for its own test: what this returns decides how much of a board an unrelated file's
+ * update repaints, and that is not observable from the rendered output.
+ */
+export function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
+    if (prev.stable_id !== next.stable_id) { return false; }
     if (prev.seq !== next.seq) { return false; }
     if (prev.headline_raw !== next.headline_raw) { return false; }
     if (prev.body_raw !== next.body_raw) { return false; }
@@ -153,6 +185,8 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
     if (prev.display_options?.settings?.showLinetagsInHeadlines !== next.display_options?.settings?.showLinetagsInHeadlines) { return false; }
     if (prev.display_options?.settings?.showLineNumbers !== next.display_options?.settings?.showLineNumbers) { return false; }
     if (prev.display_options?.settings?.autoExpandFocusedNote !== next.display_options?.settings?.autoExpandFocusedNote) { return false; }
+    // the document view renders every story inside the root note's body, so a root that skips its re-render pins each story to the card component it first mounted with
+    if (prev.display_options?.settings?.cardType !== next.display_options?.settings?.cardType) { return false; }
     // caret offset drives body scroll in clipped notes - only re-render focused notes
     if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
     // one id list covers this note and the descendants it renders, so a parent repaints even when its own membership is unchanged
@@ -166,8 +200,8 @@ function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boolean {
      * keep the unclipped body it first rendered.
      */
     if (prev.display_options?.card_target_height !== next.display_options?.card_target_height) { return false; }
-    // DnD: provided changes during drag (draggableProps.style contains transform)
-    if (prev.display_options?.provided?.draggableProps !== next.display_options?.provided?.draggableProps) { return false; }
-    if (prev.display_options?.provided?.dragHandleProps !== next.display_options?.provided?.dragHandleProps) { return false; }
+    // DnD: provided changes during drag (draggableProps.style contains transform), so compare what the bags hold and not which objects they are
+    if (!providedPropsEqual(prev.display_options?.provided?.draggableProps, next.display_options?.provided?.draggableProps)) { return false; }
+    if (!providedPropsEqual(prev.display_options?.provided?.dragHandleProps, next.display_options?.provided?.dragHandleProps)) { return false; }
     return true;
 }

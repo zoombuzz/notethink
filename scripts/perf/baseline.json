@@ -1,0 +1,180 @@
+{
+    "captured_at": "2026-09-18T16:52:27.300Z",
+    "wire": "batched-discovery: spinner, one merge update per flushed batch, aggregate replace, spinner",
+    "environment": {
+        "platform": "linux",
+        "node": "v24.15.0",
+        "cpu_model": "Intel(R) Core(TM) Ultra 7 265K",
+        "cpu_count": 20,
+        "memory_gb": 46,
+        "commit": "ef11de8"
+    },
+    "bundle": {
+        "mode": "production",
+        "bytes": 4142090,
+        "minified": true,
+        "react_build": "production"
+    },
+    "metrics": {
+        "folder-load-20": {
+            "elapsed_ms": 381.5,
+            "long_task_count": 3,
+            "long_task_total_ms": 298,
+            "long_task_max_ms": 136,
+            "long_task_max_offset_ms": 14.4,
+            "board_commits": 1,
+            "conversions": 20,
+            "merges": 1
+        },
+        "folder-load-50": {
+            "elapsed_ms": 816.8,
+            "long_task_count": 4,
+            "long_task_total_ms": 708,
+            "long_task_max_ms": 454,
+            "long_task_max_offset_ms": 224.8,
+            "board_commits": 2,
+            "conversions": 50,
+            "merges": 2
+        },
+        "folder-click-50": {
+            "elapsed_ms": 153.3,
+            "long_task_count": 0,
+            "long_task_total_ms": 0,
+            "long_task_max_ms": 0,
+            "long_task_max_offset_ms": 0,
+            "board_commits": 0,
+            "conversions": 0,
+            "merges": 0
+        },
+        "folder-selection-50": {
+            "elapsed_ms": 87.1,
+            "long_task_count": 1,
+            "long_task_total_ms": 74,
+            "long_task_max_ms": 74,
+            "long_task_max_offset_ms": 3.7,
+            "board_commits": 0,
+            "conversions": 0,
+            "merges": 0
+        },
+        "folder-merge-50": {
+            "elapsed_ms": 84.1,
+            "long_task_count": 0,
+            "long_task_total_ms": 0,
+            "long_task_max_ms": 0,
+            "long_task_max_offset_ms": 0,
+            "board_commits": 1,
+            "conversions": 1,
+            "merges": 1
+        },
+        "single-file-load-100k": {
+            "elapsed_ms": 556.4,
+            "long_task_count": 1,
+            "long_task_total_ms": 142,
+            "long_task_max_ms": 142,
+            "long_task_max_offset_ms": 310,
+            "board_commits": 1,
+            "conversions": 0,
+            "merges": 0
+        },
+        "single-file-edit-100k": {
+            "elapsed_ms": 26.2,
+            "long_task_count": 0,
+            "long_task_total_ms": 0,
+            "long_task_max_ms": 0,
+            "long_task_max_offset_ms": 0,
+            "board_commits": 1,
+            "conversions": 0,
+            "merges": 0
+        },
+        "single-file-load-400k": {
+            "elapsed_ms": 965.3,
+            "long_task_count": 2,
+            "long_task_total_ms": 372,
+            "long_task_max_ms": 272,
+            "long_task_max_offset_ms": 323,
+            "board_commits": 1,
+            "conversions": 0,
+            "merges": 0
+        },
+        "single-file-edit-400k": {
+            "elapsed_ms": 98.9,
+            "long_task_count": 1,
+            "long_task_total_ms": 65,
+            "long_task_max_ms": 65,
+            "long_task_max_offset_ms": 10.3,
+            "board_commits": 1,
+            "conversions": 0,
+            "merges": 0
+        },
+        "folder-load-10x400k": {
+            "elapsed_ms": 7176.7,
+            "long_task_count": 20,
+            "long_task_total_ms": 6897,
+            "long_task_max_ms": 1790,
+            "long_task_max_offset_ms": 3763.6,
+            "board_commits": 7,
+            "conversions": 10,
+            "merges": 7
+        },
+        "folder-load-100": {
+            "elapsed_ms": 2462.9,
+            "long_task_count": 7,
+            "long_task_total_ms": 2248,
+            "long_task_max_ms": 737,
+            "long_task_max_offset_ms": 1492.9,
+            "board_commits": 4,
+            "conversions": 100,
+            "merges": 4
+        },
+        "folder-load-200": {
+            "elapsed_ms": 10536.9,
+            "long_task_count": 21,
+            "long_task_total_ms": 10294,
+            "long_task_max_ms": 1800,
+            "long_task_max_offset_ms": 7268.9,
+            "board_commits": 9,
+            "conversions": 200,
+            "merges": 9
+        },
+        "folder-load-50-unbatched": {
+            "elapsed_ms": 6414.2,
+            "long_task_count": 39,
+            "long_task_total_ms": 4614,
+            "long_task_max_ms": 250,
+            "long_task_max_offset_ms": 5815.7,
+            "board_commits": 49,
+            "conversions": 50,
+            "merges": 50
+        },
+        "folder-click-200": {
+            "elapsed_ms": 443.6,
+            "long_task_count": 1,
+            "long_task_total_ms": 62,
+            "long_task_max_ms": 62,
+            "long_task_max_offset_ms": 370.2,
+            "board_commits": 0,
+            "conversions": 0,
+            "merges": 0
+        },
+        "folder-selection-200": {
+            "elapsed_ms": 481.2,
+            "long_task_count": 3,
+            "long_task_total_ms": 475,
+            "long_task_max_ms": 333,
+            "long_task_max_offset_ms": 0.1,
+            "board_commits": 0,
+            "conversions": 0,
+            "merges": 0
+        },
+        "folder-merge-200": {
+            "elapsed_ms": 213.5,
+            "long_task_count": 2,
+            "long_task_total_ms": 147,
+            "long_task_max_ms": 75,
+            "long_task_max_offset_ms": 122,
+            "board_commits": 1,
+            "conversions": 1,
+            "merges": 1
+        }
+    }
+}

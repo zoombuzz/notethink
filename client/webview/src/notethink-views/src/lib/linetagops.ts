@@ -349,7 +349,6 @@ export function flattenOrderingChangeSets(change_sets: Array<OrderingChangeSet>)
 export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name: string, new_value: string, default_value: string): Array<OrderingChange> {
     const changes: Array<OrderingChange> = [];
     const setting_as_default = (new_value === default_value);
-
     // if the existing linetag is inherited (from a parent's nt_child_* attribute), treat it as if the note has no linetag for this key - either generate a new one or skip if setting back to default (inherited value handles it)
     const existing_tag = note.linetags?.[key_name];
     if (existing_tag?.inherited) {
@@ -375,11 +374,9 @@ export function calculateTextChangesForNewLinetagValue(note: NoteProps, key_name
         });
         return changes;
     }
-
     if (!note.linetags && !setting_as_default) {
         // generate linetag completely of the form
         const new_linetags = ` [](?${key_name}=${new_value})`;
-
         changes.push({
             from: note.position.start.offset + note.headline_raw.length,
             insert: new_linetags,

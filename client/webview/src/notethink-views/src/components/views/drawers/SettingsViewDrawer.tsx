@@ -15,12 +15,16 @@ import {
     registryWithUserTypes,
     removeUserViewType,
     renameUserViewType,
+    settingWriteFor,
+    updateUserViewTypeOverrides,
+    userTypeHoldsKey,
     type ViewNode,
     type ViewRegistry,
 } from "../../../lib/viewregistryops";
 import type { SettingsCascadeKey, SettingsCascadePayload, UserViewType } from "../../../types/Messages";
 import styles from "../../ViewRenderer.module.scss";
-import { CARD_RATIOS, DEFAULT_CARD_RATIO } from "../kanban/columnwidthops";
+import { CARD_RATIOS, DEFAULT_CARD_RATIO, clampBreadth, parseBreadthInput } from "../kanban/columnwidthops";
+import { useBreadthDraft } from "../kanban/useBreadthDraft";
 import { DEFAULT_CARD_TYPE, renderableCardIds } from "../../notes/cardregistryops";
 import GroupBySelector from "../GroupBySelector";
 import SettingsRow from "../SettingsRow";
@@ -191,7 +195,59 @@ interface RowControlProps {
     groupByResolvedKey: string;
     groupByCandidateKeys: string[];
     naturalColumnOrder: string[];
+    orientation: unknown;
     onChange: (def: SettingRowDef, value: unknown) => void;
+}
+
+/**
+ * The lane breadth as a pixel text box, the non-drag path to the number a lane boundary sets. It follows a
+ * drag live by reading the shared draft, and writes only when the user commits: Enter or leaving the box.
+ * Something that is not a number is dropped and the box goes back to the setting, and a number under the
+ * floor is held to it.
+ */
+function BreadthControl(props: { viewId: string; value: unknown; label: string; onCommit: (breadth: number) => void }): React.ReactElement {
+    const draft = useBreadthDraft(props.viewId);
+    const saved = clampBreadth(props.value);
+    const [text, setText] = useState<string | undefined>(undefined);
+    const commit = (): void => {
+        if (text === undefined) { return; }
+        const parsed = parseBreadthInput(text);
+        setText(undefined);
+        if (parsed !== undefined && parsed !== saved) { props.onCommit(parsed); }
+    };
+    return (
+        <input
+            type="text"
+            inputMode="numeric"
+            className={styles.settingsBreadthInput}
+            data-testid="setting-control-lineBreadth"
+            value={text ?? String(draft ?? saved)}
+            aria-label={props.label}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') { commit(); }
+                if (e.key === 'Escape') { setText(undefined); }
+            }}
+        />
+    );
+}
+
+function CardRatioControl(props: { value: unknown; label: string; onChange: (ratio: number) => void }): React.ReactElement {
+    return (
+        <select
+            className={styles.settingsSelect}
+            data-testid="setting-control-kanbanCardRatio"
+            value={String(typeof props.value === 'number' ? props.value : DEFAULT_CARD_RATIO)}
+            aria-label={props.label}
+            title={l10n.t('Pick the height-to-width shape you want cards to land near: a card holding more than that shape allows clips its own body to reach it.')}
+            onChange={(e) => props.onChange(Number(e.target.value))}
+        >
+            {CARD_RATIOS.map(ratio => (
+                <option key={ratio} value={String(ratio)}>{l10n.t('1 : {0}', ratio.toFixed(1))}</option>
+            ))}
+        </select>
+    );
 }
 
 /**
@@ -211,21 +267,16 @@ function RowControl(props: RowControlProps): React.ReactElement {
                     onChange={(group_by_key) => props.onChange(def, group_by_key)}
                 />
             );
-        case 'cardRatio':
+        case 'breadth':
             return (
-                <select
-                    className={styles.settingsSelect}
-                    data-testid="setting-control-kanbanCardRatio"
-                    value={String(typeof props.value === 'number' ? props.value : DEFAULT_CARD_RATIO)}
-                    aria-label={settingRowLabel(def.key)}
-                    title={l10n.t('The column width follows the cards: pick the height-to-width shape you want them to land near, and a wider board shows more lanes rather than wider ones.')}
-                    onChange={(e) => props.onChange(def, Number(e.target.value))}
-                >
-                    {CARD_RATIOS.map(ratio => (
-                        <option key={ratio} value={String(ratio)}>{l10n.t('1 : {0}', ratio.toFixed(1))}</option>
-                    ))}
-                </select>
+                <BreadthControl
+                    viewId={props.viewId}
+                    value={props.value}
+                    label={settingRowLabel(def.key, props.orientation)}
+                    onCommit={(breadth) => props.onChange(def, breadth)}
+                />
             );
+        case 'cardRatio': return <CardRatioControl value={props.value} label={settingRowLabel(def.key)} onChange={(ratio) => props.onChange(def, ratio)} />;
         case 'cardType': {
             // the concrete cards only: a view's default is what Auto resolves to, so Auto itself is no answer
             const card_types = renderableCardIds();
@@ -372,7 +423,7 @@ function SettingsPane(props: SettingsPaneProps): React.ReactElement {
         <SettingsRow
             key={def.key}
             rowKey={def.key}
-            label={settingRowLabel(def.key)}
+            label={settingRowLabel(def.key, props.settings.orientation)}
             ownerLabel={owner_label}
             diverged={props.diverged.includes(def.key)}
             control={
@@ -383,6 +434,7 @@ function SettingsPane(props: SettingsPaneProps): React.ReactElement {
                     groupByResolvedKey={props.groupByResolvedKey}
                     groupByCandidateKeys={props.groupByCandidateKeys}
                     naturalColumnOrder={props.naturalColumnOrder}
+                    orientation={props.settings.orientation}
                     onChange={props.onRowChange}
                 />
             }
@@ -403,26 +455,50 @@ interface NewTypeOfferProps {
     def: SettingRowDef;
     ownerLabel: string | undefined;
     nameHint: string;
+    updateTypeLabel?: string;
+    onUpdate?: () => void;
     onSave: (label: string) => void;
 }
 
 /**
- * The offer to mint a view type, made when a change lands on a setting an ancestor owns. It leads with
- * WHY - which setting moved and which type up the tree owns it - because the bare button that shipped
- * first asked a question nothing on screen answered. The name is taken inline rather than through
- * `window.prompt`, which a VS Code webview does not honour, and opens pre-filled so accepting is one click.
+ * The sentence above the offer's buttons: which setting moved, which type up the tree owns it, and what
+ * can be done about it. Two literals rather than one assembled from parts, because `vscode-l10n-dev
+ * export` reads `l10n.t('...')` statically and a sentence stitched together would never reach the bundle.
+ */
+function offerReason(def: SettingRowDef, owner_label: string | undefined, update_type_label: string | undefined): string {
+    const owner = owner_label ?? l10n.t('another view type');
+    if (update_type_label === undefined) {
+        return l10n.t('{0} is owned by {1}. Save your change as a new view type to keep it without altering the type it came from.', settingRowLabel(def.key), owner);
+    }
+    return l10n.t('{0} is owned by {1}. Update {2} to keep the change in it, or save it as a new view type instead.', settingRowLabel(def.key), owner, update_type_label);
+}
+
+/**
+ * The offer to keep a change that landed on a setting an ancestor owns. It leads with WHY - which setting
+ * moved and which type up the tree owns it - because the bare button that shipped first asked a question
+ * nothing on screen answered. On a type the user owns there are two ways to keep the change, and updating
+ * the type they are standing on leads, because minting a second type beside it is the larger act. The name
+ * is taken inline rather than through `window.prompt`, which a VS Code webview does not honour, and opens
+ * pre-filled so accepting is one click.
  */
 function NewTypeOffer(props: NewTypeOfferProps): React.ReactElement {
     const [draft, setDraft] = useState<string | undefined>(undefined);
     return (
         <div className={styles.settingsNewTypeOffer} data-testid="new-view-type-offer">
             <p className={styles.settingsCustomTypesNote} data-testid="new-view-type-reason">
-                {l10n.t('{0} is owned by {1}. Save your change as a new view type to keep it without altering the type it came from.', settingRowLabel(props.def.key), props.ownerLabel ?? l10n.t('another view type'))}
+                {offerReason(props.def, props.ownerLabel, props.updateTypeLabel)}
             </p>
             {draft === undefined ? (
-                <button type="button" data-testid="new-view-type-open" onClick={() => setDraft(props.nameHint)}>
-                    {l10n.t('Save as a new view type')}
-                </button>
+                <div className={styles.settingsCustomTypesRow}>
+                    {props.onUpdate !== undefined && (
+                        <button type="button" data-testid="user-view-type-update" onClick={props.onUpdate}>
+                            {l10n.t('Update this view type')}
+                        </button>
+                    )}
+                    <button type="button" data-testid="new-view-type-open" onClick={() => setDraft(props.nameHint)}>
+                        {l10n.t('Save as a new view type')}
+                    </button>
+                </div>
             ) : (
                 <div className={styles.settingsCustomTypesRow}>
                     <label>
@@ -511,6 +587,7 @@ interface CustomViewTypesDisclosureProps {
     overrides: Record<string, unknown>;
     selectedUserType: UserViewType | undefined;
     onSave: (label: string, overrides: Record<string, unknown>) => void;
+    onUpdate: (overrides: Record<string, unknown>) => void;
     onRename: (id: string, label: string) => void;
     onDelete: (id: string) => void;
 }
@@ -553,6 +630,8 @@ function CustomViewTypesDisclosure(props: CustomViewTypesDisclosureProps): React
                         def={offer}
                         ownerLabel={props.offerOwnerLabel}
                         nameHint={props.nameHint}
+                        updateTypeLabel={props.selectedUserType?.label}
+                        onUpdate={props.selectedUserType === undefined ? undefined : () => props.onUpdate(props.overrides)}
                         onSave={(label) => props.onSave(label, props.overrides)}
                     />
                 )}
@@ -678,10 +757,12 @@ function countedSettings(settings: SettingRowValues): Partial<SettingsCascadePay
  */
 interface SettingsDrawerSelection {
     selected_node: string;
+    selected_user_type: UserViewType | undefined;
     handle_highlight: (node_id: string) => void;
     handle_pick_type: (view_type: string) => void;
     handle_row_change: (def: SettingRowDef, value: unknown) => void;
     handle_save_new_type: (label: string, overrides: Record<string, unknown>) => void;
+    handle_update_type: (overrides: Record<string, unknown>) => void;
     handle_rename_type: (id: string, label: string) => void;
     handle_delete_type: (id: string) => void;
 }
@@ -690,6 +771,7 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
     const [picked_node, setPickedNode] = useState<string | undefined>(undefined);
     const selected_node = resolveSelectedNode(picked_node, props.currentType, registry);
     const { onViewTypeChange, onSettingChange, onColumnOrderChange, userTypes } = props;
+    const selected_user_type = userTypes.find(type => type.id === selected_node);
     const handle_highlight = useCallback((node_id: string): void => {
         setPickedNode(node_id);
     }, []);
@@ -697,13 +779,23 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
         onViewTypeChange(view_type);
         if (view_type !== AUTO_TYPE) { setPickedNode(view_type); }
     }, [onViewTypeChange]);
+    /*
+     * A row the selected type already holds is written into that type, because a workspace write to such a
+     * key is written, ignored and then painted over: the type's overrides layer over the whole cascade when
+     * the board renders. That is what made the control snap back to the type's value on the next echo.
+     */
     const handle_row_change = useCallback((def: SettingRowDef, value: unknown): void => {
+        if (selected_user_type !== undefined && userTypeHoldsKey(selected_user_type, def.key)) {
+            const write = settingWriteFor(userTypes, selected_user_type, def.key, value);
+            onSettingChange(write.setting, write.value);
+            return;
+        }
         if (def.control === 'columnOrder') {
             onColumnOrderChange(value as string[]);
         } else {
             onSettingChange(def.key, value);
         }
-    }, [onColumnOrderChange, onSettingChange]);
+    }, [onColumnOrderChange, onSettingChange, selected_user_type, userTypes]);
     /*
      * Saving is three writes, not one, because a minted type only means anything once the board renders as
      * it: `applyUserTypeOverrides` layers a type's overrides while walking the RENDERED type's chain, so a
@@ -726,6 +818,19 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
         for (const key of keys) { onSettingChange(key, undefined); }
         setPickedNode(minted.id);
     }, [registry, selected_node, onSettingChange, onViewTypeChange, userTypes]);
+    /*
+     * Updating is the same shape as minting, less the mint: the diverged values move into the selected
+     * type's overrides and then off the workspace scope, which is the only thing that makes them the
+     * type's rather than this workspace's. The board is pinned to the type when it is showing something
+     * else, because a type's overrides apply only while it is the type being rendered.
+     */
+    const handle_update_type = useCallback((overrides: Record<string, unknown>): void => {
+        const keys = Object.keys(overrides) as SettingsCascadeKey[];
+        if (selected_user_type === undefined || keys.length === 0) { return; }
+        onSettingChange('viewUserTypes', updateUserViewTypeOverrides(userTypes, selected_user_type.id, overrides));
+        if (props.viewTypeSelection !== selected_user_type.id) { onViewTypeChange(selected_user_type.id); }
+        for (const key of keys) { onSettingChange(key, undefined); }
+    }, [onSettingChange, onViewTypeChange, props.viewTypeSelection, selected_user_type, userTypes]);
     const handle_rename_type = useCallback((id: string, label: string): void => {
         onSettingChange('viewUserTypes', renameUserViewType(userTypes, id, label));
     }, [onSettingChange, userTypes]);
@@ -742,10 +847,12 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
     }, [onSettingChange, onViewTypeChange, props.viewTypeSelection, userTypes]);
     return {
         selected_node,
+        selected_user_type,
         handle_highlight,
         handle_pick_type,
         handle_row_change,
         handle_save_new_type,
+        handle_update_type,
         handle_rename_type,
         handle_delete_type,
     };
@@ -754,7 +861,7 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
 function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement {
     const registry = useMemo(() => registryWithUserTypes(props.userTypes), [props.userTypes]);
     const drawer = useSettingsDrawerSelection(props, registry);
-    const { selected_node } = drawer;
+    const { selected_node, selected_user_type } = drawer;
     const chain_rows = useMemo(() => viewRowsForNode(selected_node, registry), [selected_node, registry]);
     const global_rows = useMemo(() => globalSettingRows(), []);
     const diverged_count = [...chain_rows, ...global_rows].filter(def => props.diverged.includes(def.key)).length;
@@ -771,8 +878,6 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
     });
     const selected_label = nodeLabel(getViewNode(selected_node, registry) ?? registry.nodes[0], registry);
     const offer_rows = useOfferRows(chain_rows, props.diverged, selected_node, registry);
-    // the panel earns its place only with something in it: an offer, or a type to rename or delete
-    const selected_user_type = props.userTypes.find(type => type.id === selected_node);
     return (
         <div className={`${styles.drawerBody} ${styles.settingsDrawerBody}`} data-testid="settings-drawer-view">
             <div className={styles.settingsPanes}>
@@ -807,6 +912,7 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
                             onResetToDefault={props.onResetToDefault}
                             canResetToDefault={props.canResetToDefault}
                         />
+                        {/* the panel earns its place only with something in it: an offer, or a type to rename or delete */}
                         {(offer_rows.length > 0 || selected_user_type !== undefined) && (
                         <CustomViewTypesDisclosure
                             /* a fresh set of reasons is a fresh offer, so the panel reopens and the name form starts over */
@@ -817,6 +923,7 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
                             overrides={Object.fromEntries(offer_rows.map(def => [def.key, props.settings[def.key] ?? def.fallback]))}
                             selectedUserType={selected_user_type}
                             onSave={drawer.handle_save_new_type}
+                            onUpdate={drawer.handle_update_type}
                             onRename={drawer.handle_rename_type}
                             onDelete={drawer.handle_delete_type}
                         />

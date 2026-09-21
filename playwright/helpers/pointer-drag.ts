@@ -20,6 +20,23 @@ const LIFT_SETTLE_MS = 150;
 const TRAVEL_SETTLE_MS = 150;
 
 /**
+ * a point inside the visible part of a box, since a kanban lane or a card standing at the target
+ * card ratio can run off both edges of the window. The wanted offset is honoured whenever it lands
+ * on screen, so a box that fits is unaffected; otherwise the point falls back to the middle of the
+ * visible band. A box with no visible band at all throws, because a coordinate outside the viewport
+ * dispatches no pointer event and would fail later as a drag that silently never started.
+ */
+function visiblePointY(box: { y: number; height: number }, offset: number, viewport_height: number): number {
+    const top = Math.max(box.y, 0);
+    const bottom = Math.min(box.y + box.height, viewport_height);
+    if (bottom <= top) {
+        throw new Error(`pointerDrag: box lies entirely outside the viewport (y ${box.y}, height ${box.height}, viewport height ${viewport_height})`);
+    }
+    const wanted = box.y + offset;
+    return wanted > top && wanted < bottom ? wanted : (top + bottom) / 2;
+}
+
+/**
  * drive @hello-pangea/dnd's pointer sensor with a real mouse gesture: press on the card, nudge past
  * the drag threshold, travel over the destination in steps so dnd tracks the move, settle, release.
  * This is a different code path from the keyboard sensor - it has a position:fixed clone, a
@@ -36,6 +53,8 @@ export async function pointerDrag(page: Page, handle: Locator, destination: Loca
     const start = await handle.boundingBox();
     const end = await destination.boundingBox();
     if (!start || !end) { throw new Error('pointerDrag: missing bounding box'); }
+    const viewport = page.viewportSize();
+    if (!viewport) { throw new Error('pointerDrag: page has no viewport size'); }
     const pre_release_settle_ms = options.pre_release_settle_ms ?? PRE_RELEASE_SETTLE_MS;
     const post_release_settle_ms = options.post_release_settle_ms ?? POST_RELEASE_SETTLE_MS;
     const press_offset = options.max_press_offset === undefined
@@ -44,9 +63,9 @@ export async function pointerDrag(page: Page, handle: Locator, destination: Loca
     const destination_inset_y = options.destination_inset_y ?? DESTINATION_INSET_Y;
 
     const from_x = start.x + start.width / 2;
-    const from_y = start.y + press_offset;
+    const from_y = visiblePointY(start, press_offset, viewport.height);
     const to_x = end.x + end.width / 2;
-    const to_y = end.y + destination_inset_y;
+    const to_y = visiblePointY(end, destination_inset_y, viewport.height);
 
     await page.mouse.move(from_x, from_y);
     await page.mouse.down();

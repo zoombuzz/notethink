@@ -182,6 +182,7 @@ export interface SettingsCascadePayload {
     showLineNumbers: boolean;
     groupBy: string;
     orientation: 'columns' | 'rows';
+    lineBreadth: number;
     kanbanGroupBy: string;
     columnOrder: string[];
     kanbanCardRatio: number;

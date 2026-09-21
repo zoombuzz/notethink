@@ -79,6 +79,8 @@ export default [
             "**/*.js",
             "**/*.cjs",
             "**/*.mjs",
+            // contract diff-side fixtures: stored file content a producer wrote, named by content hash, so they carry source extensions without being source
+            "playwright/fixtures/activity/blobs/**",
         ],
     },
     {

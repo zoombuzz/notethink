@@ -4,6 +4,21 @@ import { FOLDER_VIEW_STATE_ID } from '../notethink-views/src/lib/viewstateops';
 import type { Doc, HashMapOf } from '../types/general';
 import type { ViewState } from './usePersistedViewStates';
 
+type AutoIntegrationProps = Parameters<typeof useAutoIntegration>[0];
+
+/**
+ * A mounted useAutoIntegration and the handles a test drives it through.
+ * - view_states_ref: stands in for the parent applying a dispatch, so a test can write what the parent would persist
+ * - makeProps: builds the props for the next rerender, as a switch of active editor or an edit of the file would
+ */
+interface ReactiveHarness {
+    set_view_managed_state: jest.Mock;
+    post_message: jest.Mock;
+    view_states_ref: { current: Record<string, ViewState> };
+    makeProps: (active_path: string, docs: HashMapOf<Doc>, active_doc?: Doc) => AutoIntegrationProps;
+    rerender: (props?: AutoIntegrationProps) => void;
+}
+
 // build a Doc with manually-offset MDAST so resolveFileIntegrationDeclaration can read its H1
 function parsedDoc(h1_line: string, overrides: Partial<Doc> = {}): Doc {
     const text = `${h1_line}\n`;
@@ -114,11 +129,11 @@ describe('useAutoIntegration', () => {
 describe('useAutoIntegration reactive follow', () => {
 
     // a mutable-ref harness so a test can simulate the parent applying a dispatch (view_states_ref.current) then switch the active editor / edit the file via rerender
-    function reactiveHarness(initial_doc: Doc) {
+    function reactiveHarness(initial_doc: Doc): ReactiveHarness {
         const set_view_managed_state = jest.fn();
         const post_message = jest.fn();
         const view_states_ref: { current: Record<string, ViewState> } = { current: {} };
-        const makeProps = (active_path: string, docs: HashMapOf<Doc>, active_doc?: Doc): Parameters<typeof useAutoIntegration>[0] => ({
+        const makeProps = (active_path: string, docs: HashMapOf<Doc>, active_doc?: Doc): AutoIntegrationProps => ({
             docs,
             active_editor_doc_path: active_path,
             active_doc,
@@ -127,7 +142,7 @@ describe('useAutoIntegration reactive follow', () => {
             postMessage: post_message,
             setViewManagedState: set_view_managed_state,
         });
-        const { rerender } = renderHook((p: Parameters<typeof useAutoIntegration>[0]) => useAutoIntegration(p), {
+        const { rerender } = renderHook((p: AutoIntegrationProps) => useAutoIntegration(p), {
             initialProps: makeProps(initial_doc.path!, { [initial_doc.id]: initial_doc }),
         });
         return { set_view_managed_state, post_message, view_states_ref, makeProps, rerender };
@@ -138,7 +153,7 @@ describe('useAutoIntegration reactive follow', () => {
         return { [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'auto', integration_path: path } } };
     }
 
-    const mobile = () => parsedDoc('# Mobile [](?nt_integration_mode=folder)', { id: 'mobile', path: '/repo/portfolio/mobile-app.md', relative_path: 'portfolio/mobile-app.md', hash_sha256: 'h-mobile' });
+    const mobile = (): Doc => parsedDoc('# Mobile [](?nt_integration_mode=folder)', { id: 'mobile', path: '/repo/portfolio/mobile-app.md', relative_path: 'portfolio/mobile-app.md', hash_sha256: 'h-mobile' });
 
     it('EXIT (the bug): switching the active editor to a plain file OUTSIDE the scope drops to current_file', () => {
         const h = reactiveHarness(mobile());

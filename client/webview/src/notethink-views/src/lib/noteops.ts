@@ -35,6 +35,19 @@ export function arraysEqual<T>(a: T[] | undefined, b: T[] | undefined): boolean 
     return true;
 }
 
+/** membership of a note's own stable_id in the view's manual-expansion list; a note with no stable_id can never be listed */
+export function isNoteManuallyExpanded(note: NoteProps): boolean {
+    const stable_id = note.stable_id;
+    if (stable_id === undefined) { return false; }
+    return note.display_options?.view_expanded_ids?.includes(stable_id) ?? false;
+}
+
+/** hand the view that owns the id list one expand/collapse; a note with no stable_id has no identity to key expansion on */
+export function dispatchNoteExpanded(note: NoteProps, expanded: boolean): void {
+    if (note.stable_id === undefined) { return; }
+    note.handlers?.setNoteExpanded?.(note.stable_id, expanded);
+}
+
 /**
  * Check if a position is within a note headline or body.
  */

@@ -91,6 +91,62 @@ export interface KanbanBoardProps {
 }
 
 /**
+ * What one card needs from the board that draws it.
+ * - card_height: the height every card in a stacked lane aims at, from the board's solved layout
+ * - card_widths: each card's own solved width, keyed by draggable id, for a stacked lane
+ */
+interface BoardCardArgs {
+    note: NoteProps;
+    index: number;
+    display_options: NoteDisplayOptions;
+    view: ViewProps;
+    dragDisabled?: boolean;
+    card_height: number | undefined;
+    card_widths: Record<string, number>;
+}
+
+/**
+ * render one card: a `<Draggable>` wrapping the note's `<GenericNote>`, carrying the board's measurement
+ * and FLIP handles on its display options. A plain render function rather than a component, so the tree
+ * dnd and the FLIP layer see is exactly the one the board would build inline.
+ */
+function renderBoardCard(args: BoardCardArgs): ReactElement {
+    const { note, index, display_options, view, dragDisabled, card_height, card_widths } = args;
+    const draggable_id = kanbanDraggableId(note);
+    return (
+        <Draggable key={draggable_id} draggableId={draggable_id} index={index} isDragDisabled={dragDisabled}>
+            {(provided_drag, snapshot_drag) => (
+                <GenericNote
+                    {...note}
+                    display_options={{
+                        ...buildChildNoteDisplayOptions(display_options, note, view),
+                        additional_classes: snapshot_drag.isDragging ? ['dragging'] : undefined,
+                        card_target_height: card_height,
+                        provided: {
+                            draggableProps: {
+                                ...provided_drag.draggableProps,
+                                style: cardStyle(provided_drag.draggableProps.style, snapshot_drag, card_widths[draggable_id]),
+                                'data-column-card-id': draggable_id,
+                                ...(note.stable_id !== undefined ? { 'data-flip-id': note.stable_id } : {}),
+                            },
+                            dragHandleProps: provided_drag.dragHandleProps ? { ...provided_drag.dragHandleProps } : undefined,
+                            innerRef: provided_drag.innerRef,
+                        },
+                    }}
+                    handlers={{
+                        click: view.handlers?.click,
+                        setCaretPosition: view.handlers?.setCaretPosition,
+                        postMessage: view.handlers?.postMessage,
+                        descendToFolder: view.handlers?.descendToFolder,
+                        setNoteExpanded: view.handlers?.setNoteExpanded,
+                    }}
+                />
+            )}
+        </Draggable>
+    );
+}
+
+/**
  * render the kanban board: a `<DragDropContext>` wrapping one `<Droppable>` per visible
  * column, each column rendering its `child_notes` as `<Draggable>`-wrapped `<GenericNote>`.
  * Sequenced as the eventual `ColumnBasedView` substitution target - keep the prop shape
@@ -148,42 +204,15 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                                     },
                                 }}
                             >
-                                {(column.child_notes || [])
-                                    .map((note: NoteProps, index: number) => {
-                                        const draggable_id = kanbanDraggableId(note);
-                                        return (
-                                        <Draggable key={draggable_id} draggableId={draggable_id} index={index} isDragDisabled={dragDisabled}>
-                                            {(provided_drag, snapshot_drag) => (
-                                                <GenericNote
-                                                    {...note}
-                                                    display_options={{
-                                                        ...buildChildNoteDisplayOptions(display_options, note, view),
-                                                        additional_classes: snapshot_drag.isDragging ? ['dragging'] : undefined,
-                                                        card_target_height: board.cardHeight,
-                                                        provided: {
-                                                            draggableProps: {
-                                                                ...provided_drag.draggableProps,
-                                                                style: cardStyle(provided_drag.draggableProps.style, snapshot_drag, board.cardWidths[draggable_id]),
-                                                                'data-column-card-id': draggable_id,
-                                                                ...(note.stable_id !== undefined ? { 'data-flip-id': note.stable_id } : {}),
-                                                            },
-                                                            dragHandleProps: provided_drag.dragHandleProps ? { ...provided_drag.dragHandleProps } : undefined,
-                                                            innerRef: provided_drag.innerRef,
-                                                        },
-                                                    }}
-                                                    handlers={{
-                                                        click: view.handlers?.click,
-                                                        setCaretPosition: view.handlers?.setCaretPosition,
-                                                        postMessage: view.handlers?.postMessage,
-                                                        descendToFolder: view.handlers?.descendToFolder,
-                                                        setNoteExpanded: view.handlers?.setNoteExpanded,
-                                                    }}
-                                                />
-                                            )}
-                                        </Draggable>
-                                        );
-                                    })
-                                }
+                                {(column.child_notes || []).map((note: NoteProps, index: number) => renderBoardCard({
+                                    note,
+                                    index,
+                                    display_options,
+                                    view,
+                                    dragDisabled,
+                                    card_height: board.cardHeight,
+                                    card_widths: board.cardWidths,
+                                }))}
                                 {provided_drop.placeholder}
                             </KanbanColumn>
                         )}

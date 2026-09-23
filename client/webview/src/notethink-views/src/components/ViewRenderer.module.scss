@@ -1771,8 +1771,9 @@ body.disableAddressBarHidingOnScroll {
         margin: 0.6em auto 0 auto;
       }
 
+      // a list the card draws itself rather than one parsed from markdown (a roster, a file list) sets --nt-card-list-padding on that list to opt out of the markdown indent
       ul {
-        padding: 0 0 0 1.3em;
+        padding: var(--nt-card-list-padding, 0 0 0 1.3em);
       }
     }
   }

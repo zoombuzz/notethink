@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { initLogDir, writeToErrorLog } from './lib/errorops';
+import { initLogDir, writeToErrorLog, writeToLog } from './lib/errorops';
 import { editTarget, readSetting, writeSetting } from './lib/settings';
 import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 
@@ -12,7 +12,7 @@ const PANEL_VIEWTYPE = 'notethink';
  * for an open/visible/active .md editor matching the saved path and reuse its full uri so the doc resolves with the right scheme.
  */
 async function waitForRestorableMdUri(preferred_path?: string): Promise<vscode.Uri | undefined> {
-	const matches = (uri: vscode.Uri) => uri.path.endsWith('.md') && (!preferred_path || uri.path === preferred_path);
+	const matches = (uri: vscode.Uri): boolean => uri.path.endsWith('.md') && (!preferred_path || uri.path === preferred_path);
 	for (let attempt = 0; attempt < 30; attempt++) {
 		const open_doc = vscode.workspace.textDocuments.find((doc) => matches(doc.uri));
 		if (open_doc) { return open_doc.uri; }
@@ -30,6 +30,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	// write the file log to the extension's standard VS Code log dir (context.logUri), never the user's open workspace folder
 	initLogDir(context.logUri);
+	// the happy path otherwise logs nothing at info or above, so this is what tells a quiet session apart from one running an old or broken build
+	const build_kind = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV) ? 'dev' : 'production';
+	writeToLog('activate', `NoteThink ${context.extension.packageJSON.version as string} activated (${build_kind} build)`);
 	// register our custom editor for "Open With..." right-click
 	const provider = new NotethinkEditorProvider(context);
 	const provider_registration = vscode.window.registerCustomEditorProvider(NotethinkEditorProvider.viewType, provider);

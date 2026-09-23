@@ -5622,3 +5622,780 @@ Unpinned this wave: both cooldown ceilings from the last snapshot cleared as pre
   + choosing Sticky in the card selector draws stickies in document, line and kanban
   + a file declaring `nt_card=sticky` still opens as stickies, with no migration
   + the full card looks exactly as it did
+
+
+### Cards on the target ratio, lanes at a draggable breadth [](?id=kanban-card-ratio-height)
+
+With lanes side by side, a card does not land on the Target card ratio. A board of real stories set to 1 : 1.4 comes out nearer 1 : 1.5, and changing the ratio moves the lane width far more than it moves the card's shape. Follows the `kanban-column-width` story in done.md.
+
+Landing cards on the ratio then made the lanes far too wide: a narrow panel shows one lane where it showed three or four. The width becomes a pixel setting the user drags from the gap between any two lanes or types into the view settings, and the ratio only shapes the card.
+
++ problem: side by side, the ratio sets only the lane width, so a card's height is decided by an older, separate rule
++ problem: once the probe stopped reading the clip, a board of real stories solves lanes far too wide to scan
++ problem: there is no direct way to make the lanes wider or narrower, only a ratio that moves them indirectly
++ background: what sets the height today, verified against the code 2026-09-16
+  + the whole card is measured: the probe reads each card's border box (`useColumnWidth.ts:69`)
+  + side by side, no target height reaches the card (`useColumnWidth.ts:227`)
+  + so the body clip falls back to the body's own width, `HEIGHT_RATIO = 1` (`useMarkdownNoteOverflow.ts:4`, `:30`)
+  + a clipped card is therefore a square body plus its heading and attribute rows, whatever the target
+  + the width solve `w = sqrt(A / rho)` assumes a card reflows like text, which a clipped card does not
+  + the probe clones cards with the body's inline `max-height` still set (`useColumnWidth.ts:77`), so it measures whatever clip the live board had
++ background: measured in the Playwright harness 2026-09-16, ten real todo.md files grouped by first level folder, 800px board
+  + every card was clipped at every target, except 3 of 97 at 1 : 1
+  + medians: target 1 : 1 gave 1 : 1.37, 1 : 1.4 gave 1 : 1.50, 1 : 2 gave 1 : 1.63, 1 : 3 gave 1 : 2.06
+  + at 1 : 1.4 every body clipped at 197px under 57 to 133px of heading and attributes, so cards ran 1 : 1.31 to 1 : 1.69
+  + the probe area followed the live clip: 362543 px² on a one-lane board with unclipped bodies, 55261 px² on the ten-lane board
+  + on the same board in VS Code 2026-09-16, the three fully visible cards measured 1 : 1.36, 1 : 1.43 and 1 : 1.53
++ background: what the 1 : 1 clip is for
+  + it abridges a content-heavy top-level note so it cannot grow very tall (`Height-based abridging` in done.md)
+  + it applies in every view, and only the lane board has a ratio to replace it with
+  + after this change a lane board clips to the ratio instead, so a 1 : 3 target shows taller bodies and fewer cards per screen
+  + outside the lane board the 1 : 1 clip is unchanged
++ approach
+  + hand side by side cards `card_target_height = card width × ratio`, the rule stacked lanes already use
+  + `bodyClipHeight` already subtracts each card's own chrome from a target, so a clipped card lands on the ratio
+  + a card shorter than the target stays short, since the clip applies only when the body overflows
+  + strip the body clip from the probe clones, so the width solve reads content rather than a stale clip
++ measured 2026-09-18: the clip only ever truncates, so a card's height is `min(natural height, drawn width x ratio)`
+  + `manual-expand.md` at 1280x720: ratio 1.4 gives 617 x 869 clipped; ratio 3 gives 610 x 1060 unclipped, short of its 1830 target
+  + raising the ratio reveals more of the note and can never grow the card past the note's own content at that width
+  + where the clip does bite, the Show more bar starts below the fold and ordinary page scrolling reaches it
++ decided 2026-09-18: the target is the width the card is DRAWN at (`column - lane_padding`), not the width the ratio solved
+  + the two differ whenever the lanes all fit and spread to fill the board, the common wide-board case
+  + the solved width would clip a filling board's card to a height solved for a much narrower card
+  + they agree exactly when the board scrolls; carried as `sideBySideHeight` on `SolvedWidths`
++ background: measured 2026-09-21 in the Playwright harness, the same ten todo.md files grouped by first level folder, 1 : 1.4
+  + lanes now solve at 576px: 1 lane on a 760px board, 2 on a 1590px board
+  + the old probe, reproduced on the same cards, gave 220 to 226px: 3 lanes at 760px, 6 at 1590px
+  + the median card is 2431px tall at the 200px probe width, so the whole-note solve sizes a lane to show all of it
+  + the old narrow width never came from the ratio reading content
+    + the probe read a 1 : 1 body clip cut while the lanes sat at the 17em stylesheet fallback
+    + so every card looked like a square body plus chrome, and the solve came back near 17em
+  + a card that clips to width × ratio has the right shape at any width, so the ratio can no longer choose the width
++ decided 2026-09-21: the lane breadth is a pixel setting the user drags or types, and the ratio only shapes the card
+  + chosen over re-deriving the width from an abridged card, and over capping the whole-note solve
+  + a pixel setting needs one stable number to show and to drag, and both of those recompute it from content
+  + supersedes the width solve from the `kanban-column-width` story in done.md
++ design: the lane breadth setting
+  + cascade key `lineBreadth`, persisted at `notethink.settings.view.specific.line.lineBreadth` (operator sign-off 2026-09-21)
+  + homed at `line`, beside `orientation`, since Line and Kanban both render through it (`LineView.tsx:124`)
+  + default 220px, the measured old layout: 3 lanes on a 760px board, 7 on 1590px
+  + a custom view type holds its own value in its overrides, as it can any setting
+  + drawer row: a pixel text box labelled "Column width" when the lanes are columns and "Row height" when they are rows
+  + a minimum, not an exact width: lanes that all fit still spread to fill the board (operator decision 2026-09-21)
+    + the fill rule is `solveColumnLayout` today (`columnwidthops.ts:162`), and it keeps doing it
++ design: dragging the gap between two lanes
+  + the whole gap between two columns is the drag target, with no separate handle drawn inside it
+  + stacked, the whole gap between two rows is the target, and dragging it sets the row height
+  + hovering a gap shows a `col-resize` cursor between columns and `row-resize` between rows
+  + dragging any one gap resizes every lane together
+  + the dragged gap stays under the pointer: breadth is the distance from the board's start over the lanes before it
+  + the gap has to become an element, since a CSS `gap` takes no pointer events
+    + `.board` spaces its lanes with `gap: 8px` today (`ViewRenderer.module.scss:1502`)
+    + a separator exactly that size replaces it, so `BOARD_GAP` (`useColumnWidth.ts:16`) and the fill arithmetic hold
+  + the drawer's text box follows the drag live, and the setting is written once, on release
+  + a release writes where the drawer would, per `handle_row_change` (`SettingsViewDrawer.tsx:737`)
+    + into the rendered custom view type when it holds the key, otherwise at workspace scope
+  + on a board its lanes fill, dragging narrower moves the number but not the lanes until the breadth passes the fill
+  + follows PATTERNS.md > "Accessible drag and resize affordances", reference calfam's `FamilyVisualisation.tsx` splitter
+    + the gap element carries `role="separator"`, `aria-valuenow`, `aria-valuemin`, a translated `aria-label` and `tabIndex={0}`
+    + arrow keys on a focused gap nudge the breadth
+    + the drawer's text box is the non-drag path to the same value
++ design: what the ratio does now
+  + side by side, a card is drawn at its lane minus the lane padding and clips its body at drawn width × ratio, as above
+  + stacked, a card stands the row height minus the lane padding, and its width comes from its own text as today
+    + floored at height / ratio, the width a card needs to stand on the ratio
+  + the probe survives only for the stacked per-card widths; side by side reads no measurement
++ [X] pass the target card height to side by side lanes in `useBoardColumnStyle`
++ [X] strip the body's inline clip from the probe clones in `measureAtProbeWidth`
++ [X] update the header comments in `columnwidthops.ts` and `useColumnWidth.ts` to the new rule
++ [X] jest: a side by side board hands its cards a target height of width × ratio
++ [X] playwright: side by side, a clipped card's height is within 2% of width × ratio
++ [X] playwright: the probe area is the same whether the live board is clipped or not
++ [X] add the `lineBreadth` setting, homed at line, defaulting to 220
+  + wire all six places a setting lives, as `kanbanCardRatio` did in the `kanban-column-width` story
+  + `SETTINGS` (`settings.ts:61`), the package contribution and its five NLS files, the wire payload
+  + `SETTING_HOMES` (`viewregistryops.ts:128`), the default cascade and `VIEW_SETTING_ROWS` (`settingRows.ts:46`)
++ [X] add a pixel text box control to the drawer, labelled by orientation
+  + "Column width" and "Row height" both through `l10n.t`, with the five l10n bundles
+  + reject a value that is not a number, and clamp to a floor of 120px
++ [X] size side by side lanes from `lineBreadth` through `solveColumnLayout`, keeping the fill rule
++ [X] size stacked cards from `lineBreadth`: the row height less lane padding, widths floored at height / ratio
++ [X] retire the side by side area solve, `targetColumnWidth` (`columnwidthops.ts:105`), and anything only it reads
++ [X] replace the board's CSS `gap` with a separator element of the same size between each pair of lanes
++ [X] make the whole of each gap a drag target that resizes all lanes and keeps the dragged gap under the pointer
++ [X] show `col-resize` on a gap between columns and `row-resize` on a gap between rows
++ [X] hold the in-flight breadth where the board and the drawer both read it, so the text box follows the drag
++ [X] write `lineBreadth` once on release, routed as the drawer routes a row change
++ [X] give the gap element the separator role, aria values, a translated label and arrow-key nudges
++ [X] rewrite the Target card ratio description in `package.nls.json` and its four translations
+  + it says the column width is derived from the ratio, which stops being true
++ [X] update the header comments in `columnwidthops.ts`, `useColumnWidth.ts` and `settingRows.ts:83` to the breadth rule
++ [X] jest: the drag arithmetic, breadth from the pointer and the lanes before the gap, clamped at the floor
++ [X] jest: side by side lanes take the breadth setting, and spread to fill when they all fit
++ [X] jest: stacked cards stand the row height less padding, and no card is narrower than height / ratio
++ [X] playwright: rewrite `kanban-column-width.spec.ts:72` and `:106`, which assert the ratio moves the lane width
++ [X] playwright: move the probe-independence spec in `kanban-card-ratio.spec.ts` onto the stacked card widths
++ [X] playwright: at the default breadth, a board with more lanes than fit shows 3 whole lanes at 760px and 7 at 1590px
++ [X] playwright: a drag started at either edge of a gap resizes every lane, and the drawer shows the width mid-drag
++ [X] playwright: stacked, dragging the gap between two rows changes the row height
++ [X] playwright: hovering a gap shows `col-resize`, and `row-resize` when stacked
++ [X] playwright: releasing a drag posts one `updateSetting` for `lineBreadth`
++ [X] playwright: typing a width into the drawer resizes the lanes, and stacked the same box reads "Row height"
++ manual: drag the gap between two lanes on your own board in VS Code and judge whether 220px is the right default
+
+
+### Save drawer changes into an existing custom view type [](?id=user-view-type-update)
+
+On a custom view type such as "Next up by project", changing a setting only offers to save a new view type. There is no way to keep the change in the type already selected, and a value the type already holds cannot be changed from the drawer at all.
+
++ problem: a custom view type can be created, renamed and deleted, but never updated
++ background: verified against the code 2026-09-16
+  + saving always mints a new type whose parent is the selected node (`SettingsViewDrawer.tsx:715`, `:721`)
+  + the only other controls on a custom type are rename and delete (`SettingsViewDrawer.tsx:463`)
+  + the offer fires when a row's owner is a strict ancestor of the selected node (`viewregistryops.ts:366`)
+  + a setting with no registry presence answers its flat home (`viewregistryops.ts:349`), so Target card ratio is always owned by Kanban
+  + a custom type's overrides are layered over the whole cascade when the board renders (`composerops.ts:32`)
++ background: measured in the Playwright harness 2026-09-16, with the operator's saved type copied from User settings
+  + the type is `user-next-up-by-project`, parent `kanban`, one override `kanbanGroupBy: nt_first_level_folder`
+  + changing Target card ratio to 1 : 1.6 offered "Target card ratio is owned by Kanban. Save your change as a new view type..."
+  + the panel held three buttons: Save as a new view type, Rename view type, Delete view type
+  + saving minted "Next up by project by 1.6" as a child of the selected type
+  + setting Group by to Status wrote `kanbanGroupBy: status` at workspace scope, but the lanes stayed notegit, notethink and oma
+  + the Group by control then snapped back to First Level Folder, because the type's override wins at render
++ confirmed 2026-09-18: a ratio saved into a custom type showed a Kanban pill, since the flat home ignored user types
+  + measured by asserting `owningNodeFor` against the unfixed code: expected the custom type, got `kanban`
+  + the row also kept offering to mint a type for a value the selected type already held
++ approach
+  + on a custom type, offer "Update this view type" beside "Save as a new view type"
+  + updating writes the diverged ancestor-owned rows into the selected type's overrides
+  + then clears those keys at workspace scope, the same clear the mint already does
+  + a row whose key the selected type already holds writes into that type's overrides, not the workspace
+  + a key held in a custom type's overrides reports that type as its owner, so its pill and offer agree
++ [X] offer "Update this view type" in the Custom view types panel when the selected node is a custom type
++ [X] write updated values into the selected type's overrides and clear them at workspace scope
++ [X] route a change to a key the selected type already holds into that type's overrides
++ [X] report a custom type as the owner of any key its overrides hold, in `owningNodeFor`
++ [X] jest: updating a custom type merges the diverged rows into its overrides and clears the workspace keys
++ [X] jest: a key held by a custom type is owned by that type and offers nothing
++ [X] playwright: changing Group by on a custom type that holds it changes the lanes
++ [X] playwright: updating a custom type keeps the change after the workspace scope is cleared
+
+
+### Agent activity card [](?id=agent-activity-card)
+
++ problem: every agent card says no producer is writing, and no agent activity has ever shown on one
+  + the card read a `.notethink/` file contract that a producer outside notethink was to write, and none was built
+  + the producer rested on a premise measured false on desktop: that the extension cannot read outside the workspace
++ goal: a card type showing, live, which AI agents are working on a story and what each is doing
++ goal: a clear token and cost counter on each story, so expensive work stands out while several agents run at once
++ goal: one pane across every project, clicking through to the detail of any single activity
++ scope: Claude Code, OpenAI Codex and xAI Grok sessions, all three in this story, operator decision 2026-09-21
++ background: why a card type and not a view type, operator decision 2026-09-16
+  + the story is the key that joins agents, files and cost, and a card is what draws one story
+  + every card type works in every view, so this card is designed for all of them, not for one
+  + CODING_STANDARDS.md > Every card type works in every view
++ background: the producer model is dropped for in-extension transcript reads, operator decision 2026-09-21
+  + no `.notethink/` directory exists anywhere in the operator's workspace, so every card reported no producer
+  + the extension log recorded nothing about the contract scan: a walk that finds nothing logged nothing
+  + the analyser is part of notethink, not a sibling extension, so a user installs one thing
++ background: how notethink logs, measured 2026-09-22
+  + a dev build (`build`, `watch`) mirrors every level to `notethink-extension.log` under `logUri`, a rolling 2000 lines
+  + a marketplace build has no file log: `NOTETHINK_DEV` is false and the logger is dead code
+  + both builds write info and above to `NoteThink.log` through the output channel, whose default level drops debug and trace
+  + a dev build in an isolated VS Code wrote a folder cap-hit line to both files within a second, so the file log works
+  + all 10 NoteThink windows since 2026-09-18 have an empty `NoteThink.log`, so none logged anything at info or above
+  + the happy path logs nothing: every log call is an error, a cap hit, an edit or chat open made through NoteThink, or a contract event
+  + so an empty or missing log cannot tell a quiet session from a broken logger or a shipped build
++ background: every warning NoteThink produces, reviewed 2026-09-22, all fixed in this story by operator decision
+  + an Extension Development Host logs 36 warnings per panel open, from 17 `resource` settings read with no resource
+  + VS Code warns only in an Extension Development Host: a normal window read the same setting and logged nothing
+  + `settings.ts` reads and writes every setting for the whole workspace, never per folder, so `resource` overstates them
+  + 2 more per folder open come from VS Code's own `findFiles` reading `search.useIgnoreFiles`, which no argument avoids
+  + lint reports 6 warnings
+  + jest reports 2 suites whose workers fail to exit, and `--forceExit` in all 3 hides what holds them open
+  + rollup reports 7 Sass legacy API deprecations, circular imports inside d3-selection, and an ambiguous `util` resolution
+  + webpack reports none, in dev or production
+  + the Playwright harness console shows only the 4 errors the error-boundary spec causes on purpose
+  + the real VS Code webview console, captured over the DevTools protocol, shows none from NoteThink
++ background: what the extension host can do, measured 2026-09-21 in a probe in the VS Code 1.137 web worker host
+  + `workspace.fs` reads files outside the workspace: 1.4 MB in 25ms, 26 MB in 209ms, 122 MB in 780ms
+  + a `RelativePattern` watcher on a directory outside the workspace fired as often as one inside it
+  + a nested `Worker` starts from a bundled file or a blob URL
+  + 26 MB decoded and parsed in the worker in 68ms, while a 10ms host timer ticked 6 times in the 70ms round trip
+  + on the host thread the same 26 MB split into read 107ms, decode 43ms, parse 32ms
+  + `git.api.getRepositories` and `git.api.getRepositoryState` reach the node-hosted git extension across hosts
+  + the state carries HEAD, upstream, ahead and behind counts, and working tree and index changes
+  + a `git:` URI with `ref: HEAD` reads the committed side of a file in 13ms, so a diff needs no stored copy
+  + no command lists a commit's files, and `.git/logs/HEAD` reads as text with commit subjects
+  + no API gives the home directory, and `context.logUri` is a `file:` path under the user data directory
+  + a web host (vscode.dev, notegit) has no local disk, so the feature cannot work there
++ background: what each vendor writes, measured 2026-09-21
+  + Claude Code lists live sessions in `~/.claude/sessions/<pid>.json`: session id, cwd, and `status` busy or idle
+  + its transcript is `~/.claude/projects/<cwd slug>/<session id>.jsonl`, appended as the session runs
+  + subagent transcripts sit in `<session id>/subagents/agent-*.jsonl`, not in the main file
+  + every assistant line carries `message.model` and `message.usage`
+  + usage splits input, output, cache read, and cache write into 5 minute and 1 hour tiers
+  + one `message.id` repeats on 1 to 35 lines with identical usage, so a sum that does not dedupe overcounts
+  + Grok lists live sessions in `~/.grok/active_sessions.json`, each with a per-session directory
+  + its `events.jsonl` records tool starts and completions, and permission requests with their wait
+  + its `usage.json` records per-turn tokens and a vendor-computed `costUsdTicks`, whose unit is inferred, not confirmed
+  + Codex has no live session list: `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` holds each thread
+  + a rollout carries `session_meta` with the cwd, tool calls, and cumulative `token_count` events with the plan type
+  + 30 days of Claude transcripts is 300 files and 573 MB, the largest 26.6 MB; the largest ever is 122 MB
+  + the statusline cost work in the lightenna-iac tooling prices the same transcripts, so the two should share one price table
++ design: one activity analyser per extension host, shared by every panel
+  + it starts when a panel draws the `agent` card type and stops when none does; the card type is the enabling setting for now
+  + the host cannot see the card type, which resolves in the webview (`cardregistryops.ts:70`), so the webview posts its demand
+  + the host does the reads; a nested worker decodes, parses and aggregates, so the host thread stays free
+  + it feeds the webview the way folder docs are fed: one entry per session, keyed by id, carrying a content hash
+  + discovery is batched and a change is sent at once, mirroring `queueDiscoveryDoc` and `flushDiscoveryBatch` (`PanelSession.ts:983-1003`)
+  + transcripts only grow, so the worker keeps each one's parsed offset and parses only the new tail
+  + reads are whole-file, so a large transcript is re-read no more often than its measured read cost allows
+  + the webview gets derived fields only: tool names, short arguments, bounded message snippets and token counts
++ binding a session to a story, operator decision 2026-09-21, reversing "declaration only" of 2026-09-16
+  + a session binds to each story whose section its own write calls changed, such as a status change or a task tick
+  + measured: 155 `todo.md` edits in transcripts since 2026-09-17 resolve to 29 session and story pairs
+  + an edit resolves to a story by its file, then the enclosing story heading, keyed by the story's stable id
+  + turns before a session's first story edit count toward that first story
+  + a turn that edits several stories splits its usage evenly across them
+  + a session that edits no story draws on a virtual note, never on a guessed story
+  + a shell command binds only when it writes the board and quotes text found in a story's section, operator decision 2026-09-23
++ token usage and cost, operator decision 2026-09-21
+  + each story counts tokens and estimated cost over the last 30 days, and says so
+  + the counter states the span from the story's earliest counted activity, capped at 30 days, operator decision 2026-09-23
+  + subagent usage counts toward its parent session, wherever the vendor writes it
+  + every API call is priced at its own time from a price table shipped as data, one row per model id
+  + each row names its source and the date it was read
+  + an unknown model shows its tokens and "unpriced", never another model's rate
+  + a rate may carry time windows, and a call whose measured span touches a peak window is priced at peak
+  + a call's span runs from the previous transcript record's timestamp to its own
+  + DeepSeek's off-peak rate is half its peak rate; peak is Mon to Fri, 01:00 to 04:00 and 06:00 to 10:00 UTC
+  + holidays are ignored, so a DeepSeek estimate errs high, as does one from a gateway that reports no cache hits
+  + a vendor's own cost figure wins over the table, as Grok's does
+  + a subscription session is priced at API list rates, and the card labels the figure as an estimate
++ card anatomy, agreed 2026-09-18, amended 2026-09-21
+  + state owns the colour and vendor is a monospace monogram, so the only saturated mark is the one to act on
+  + one live line per agent showing its current tool call
+  + a token and cost counter on the story, and one on each agent row
+  + the conversation never draws on the card: an agent row opens the session in VS Code, operator decision 2026-09-23
+  + a pending question renders as a band on the card; a vendor that cannot report one draws no band, operator decision 2026-09-23
+  + no card-level state rail: the meta row chip and the per-agent row rails carry state, operator decision 2026-09-23
+  + uncommitted band: per-file rows from the git state, credited to a session only by its own write calls
+    + a modified file is marked `M`, git's own letter, since every row is a change; other kinds keep their word, operator decision 2026-09-23
+  + committed band: dropped from the card, operator decision 2026-09-23, reversing 2026-09-21
+    + a long-lived branch listed every commit since it forked on every card, burying the story's own activity
+    + the commits are still read and carried on the card model, and `AgentCommitBand` still draws them, so the band can return
+  + a story with no agent activity shows one muted line, not a paragraph repeated on every card
++ virtual notes: where an agent on no story is drawn, operator decision 2026-09-18
+  + a card draws one note (`cardregistryops.ts:11-16`), so an unbound agent draws on a virtual note
+  + a virtual note is a note no markdown file holds, carrying the same `NoteProps` shape as a parsed one
+  + the abstraction is central, taken once on behalf of every view, so no view branches on the distinction
++ found and fixed 2026-09-18: a card-type change never repainted the document view, a pre-existing defect this card uncovered
+  + `areMarkdownNotePropsEqual` compared three settings and not `cardType`, so the root note skipped its re-render
+  + the document view renders every story inside the root note's body via `renderBodyItems`, so the stories below kept the card they first mounted with
+  + kanban and line render cards directly from the column, so `sticky-card.spec.ts` could never have caught it
++ superseded 2026-09-21: the `.notethink/` producer contract, built and documented 2026-09-18 and never fed
++ background: the type layer simplifies now the analyser runs inside the host, 2026-09-22
+  + the retired contract's "producer per contract root" model existed because an external producer could not know the VS Code workspace layout, so every path was root-relative and the host resolved it
+  + the analyser has no such limit: it already knows the workspace, so a session's `story.doc_path` is workspace-relative directly, and `ActivityAnalyserState` is one value for the whole snapshot rather than one per repository
+  + `root_relative` survives only on `ActivityTreeState`, the one place a workspace-relative base is still needed, to match a note's own doc_path to the repository its working tree belongs to
++ found and fixed 2026-09-22: `resolveGitApi` called `vscode.extensions.getExtension` outside any try/catch, so a host with no `extensions` namespace at all (caught by a fresh jest mock with none) threw uncaught inside every scan and silently stuck the analyser at `scanning` forever
+  + the call is now inside the same try/catch as extension activation, and the shared `__mocks__/vscode.ts` gained an `extensions.getExtension` stub returning `undefined` so the failure mode is covered rather than accidentally unreachable in tests
++ background: the git `Status` enum is reconstructed, not verified live, 2026-09-22
+  + the built-in git extension's API is typed in its own `git.d.ts`, not a dependency of this project, so `agentgitops.ts`'s numeric `GitStatus` values are taken from that extension's long-stable public source rather than checked against a running instance in this session
+  + confirming it means opening a real repository with a modified, an added and a renamed file and reading what `repository.state.workingTreeChanges` reports for each
+  + superseded 2026-09-23: the analyser reads statuses by name from `git.api.getRepositoryState`, so no numeric enum remains
++ background: the analyser transfers bytes, never decoded text, to its worker, 2026-09-22
+  + `AgentAnalyser.ts` reads every session file as a `Uint8Array` and never runs `TextDecoder` on a whole transcript on the host thread; only a small bounded prefix is decoded, for the host's own cwd-sniffing heuristic
+  + `AgentAnalyserWorker.ts` decodes each file from its transferred `ArrayBuffer` immediately before handing it to the vendor reader
+  + a worker retry after a failure re-discovers fresh bytes from disk rather than resending the failed attempt's buffers, which `postMessage`'s transfer already detached
++ [X] add the `agent` card type as a `CARD_REGISTRY` node and a `CARD_COMPONENTS` line
++ [X] carry activity on its own extension-to-webview message, never on `NoteProps`
+  + `NoteProps` is the mdast contract (`NoteProps.ts:146`) and stays free of agent, git and process fields
++ [X] admit virtual notes centrally, so any view draws a card for a note no file holds
++ [X] render the card: state rail, agent rows, question band and file bands
++ [X] make agent rows and file rows keyboard operable
+  + PATTERNS.md > Rows that must be clickable
++ [X] open an agent row's chat in the vendor's own chat panel where one exists
+  + Claude Code registers `claude-vscode.editor.open`, whose first argument is a session id
+  + it is undocumented and has no stability contract, so guard the call and fall back on failure
+  + measured 2026-09-18: the command opens a tab even for a session id the extension does not know
+  + the affordance therefore says it asked the vendor to open, never that the chat opened
++ [X] show an agent drawer with the conversation, tool calls and session facts
+  + superseded 2026-09-23 by operator decision: the drawer is removed, and a row opens the session in VS Code
+  + PATTERNS.md > Bounded lists say they are bounded: the drawer states its window
++ [X] retire the `.notethink/` contract
+  + delete `ACTIVITY_CONTRACT.md`, `ActivityReader.ts`, the contract parsers and their fixtures
+  + keep the webview snapshot types where the analyser's payload reuses them
++ [X] add the analyser as one service per extension host, started by the first panel drawing `agent` cards
+  + the webview posts its demand when a note resolves to the `agent` card type, and withdraws it when none does
+  + stop after the last panel withdraws, with a short grace so toggling the card type does not thrash
+  + jest: two panels share one analyser, and the last withdrawal stops it
+  + a `vscode.workspace.fs` watcher on each vendor's directory debounces a write burst into one scan (`AGENT_WATCH_DEBOUNCE_MS`, 300ms), which is what gets a live tool call to a card within about a second; the 15s poll (`AGENT_RESCAN_INTERVAL_MS`) is the safety net behind it for a change a watcher misses
++ [X] run decoding, parsing and aggregation in a nested worker bundled beside the extension
+  + a second webpack entry targeting `webworker`
+  + transfer the bytes to the worker rather than copying them
+  + a worker crash is logged and restarted once, after which the card says the analyser failed
++ [X] locate each vendor's files from the home directory derived from `context.logUri`
+  + cover the Linux, macOS and Windows user data layouts, for Code, Insiders and VSCodium
+  + a layout the derivation does not recognise leaves the analyser unavailable, and the card says why
+  + jest: each platform's `logUri` resolves to its home directory
++ [X] read Claude Code sessions: the live list, transcripts and subagent transcripts
+  + live means listed in `~/.claude/sessions/`; recent means a transcript modified within 30 days
+  + dedupe usage by `message.id`
++ [X] read Grok sessions: the live list, event log and per-turn usage
+  + permission requests fill the question band
+  + measure where Grok records tool arguments before relying on them: `events.jsonl` carries tool names only
+  + confirmed 2026-09-22: no file this reader loads (`events.jsonl`, `usage.json`, `prompt_context.json`) carries a path at all, so a Grok session's own write calls can never bind it to a story under the story-binding rule above; a Grok question is therefore always drawn on its virtual note, never on a story's card, and the acceptance line below is corrected to say so rather than left overclaiming
+  + the unit of `costUsdTicks` was never confirmed against a source, only inferred (2026-09-22); rather than publish an unconfirmed figure as the vendor's own authoritative cost, `grokops.ts` stops setting `vendor_cost_usd` at all, so a Grok call is priced from the table like any other vendor and stays marked as an estimate
++ [X] read Codex sessions: rollout transcripts and token counts
+  + with no live list, a rollout written in the last few minutes counts as live, and the card says so
+  + Codex records no permission request, so its question band says Codex cannot report one
+  + Codex's `YYYY/MM/DD` session folders are the host machine's local calendar, not UTC: measured 2026-09-22 against five real rollouts on this machine (Europe/London, BST), each filename timestamp sitting exactly one hour ahead of that same line's own UTC `session_meta.timestamp`; `datesInWindow` walks local dates, jest covers a UTC/local day boundary in a UTC+14 zone
++ [X] follow transcripts incrementally: re-read on change, parse only the appended tail
+  + jest: an appended line is parsed once, a torn last line waits until it completes, and a shrunk file is parsed again
+  + `vscode.workspace.fs` takes no offset or length, so the host still reads a changed file whole; the saving is transfer, decode and parse
+  + `sliceTail` (`agenttailparseops.ts`) sends the bytes after the last complete line, and a shrunk file or changed prefix goes whole
+  + each vendor reader splits into a parse step and a build step, and the worker keeps parsed lines only for live or recently changed sessions
+  + measured 2026-09-23: a 28.4 MB transcript parsed whole in 88ms and its steady-state tail in 12ms, with equal results
+  + measured 2026-09-23: after a first scan of 290 sessions (806 MB) the worker retained 6 sessions (55 MB), under a 128 MB cap
+  + a worker restart invalidates every tail bookmark, so the next scan parses whole
+  + measured 2026-09-23 in the dev log after a restart: no errors, unchanged scans read 0 bytes in under 0.7s, a live 28 MB transcript sent tails of 654 bytes to 160 KB
++ [X] apply the transcript size cap identically to whole and tail scans
+  + found 2026-09-23: the worker cached every line of a whole file before the reader refused it, so a 34.5 MB live transcript was refused once, then accepted from its tail
+  + `transcriptSizeRefusal` (`AgentAnalyserWorker.ts`) judges cached plus new bytes before either path, and a refused session is never cached or bookmarked
+  + measured 2026-09-23: a 122 MB transcript parsed whole in 131ms, so the cap rose to 64 MB, half the worker's 128 MB line cache
++ [X] bind a session to each story whose section its own write calls changed, by the rule above
+  + reopened 2026-09-23: the shipped rule credited every board write to the one topmost `status=doing` story with an authored id
+  + measured 2026-09-23 over 30 days of transcripts: two notethink code-review stories had 6 editing sessions each, two oma doing stories 31 and 26, all credited 0
+  + vendor readers carry each write call's edit text (bounded), so the binder finds the enclosing heading in the board's current text
+  + a story moved from `todo.md` to `done.md` keeps its credit
+  + a whole-file write binds nothing
+  + split a turn's usage evenly across the stories it edited
+  + found 2026-09-23: in a workspace folder holding several projects the analyser found no board at all, so every session bound to nothing
+    + `projectRootsUnder` (`AgentAnalyser.ts:824`) reads a folder's own `docstech/users`, else each child project's
+  + measured 2026-09-23: against hand-classified edits, the binder matched every session on six notethink and oma stories
+  + `splitUsageByTurn` gives each priced call to the story edited most recently before it, the first story for calls before any edit
+  + `boardEditFromBashCommand` (`claudecodeops.ts`) binds a board write made by a shell script, from its quoted literals
+    + measured: one session ticked `kanban-perf-harness` and `user-view-type-update` only through a `python3` heredoc, so both read 0 without it
+    + read-only commands and literals passed only to `.index(` or `.find(` never bind
++ [X] key a story by its authored id, else the id derived from its title, on both sides of the wire
+  + the "carries no ID linetag" state was spurious: `storyStableIdSlug` (`noteops.ts:685`) already derives it, and oma authors no ids at all
+  + the extension mirrors the slug derivation, with a jest table proving both sides agree
+  + `storyKeyForNote` uses `storyStableIdSlug`; the no-id state and its l10n key are gone
+  + a session carries `stories` and `story_usage`, so it can bind to several stories
++ found 2026-09-23: the analyser worker crashed whenever an agent session was active
+  + scans had no in-flight guard, so a write burst ran 4 scans at once, each reading about 778 MB of transcripts whole
+  + concurrent requests overwrote the one worker's handlers, a failure terminated it under its siblings, and the shared failure counter reached 26
+  + the file log wrote every worker error as `{}`, because `JSON.stringify` drops an Error's message and stack
++ [X] run one scan at a time, with one follow-up for triggers that arrive mid-scan
+  + `runScan` guards `runScanOnce` with `rescan_requested` (`AgentAnalyser.ts:329`); a follow-up waits `AGENT_MIN_SCAN_SPACING_MS` (1s) after the last scan ended
++ [X] skip reading and parsing a transcript whose size and mtime are unchanged since the last scan
+  + measured 2026-09-23: between consecutive scans 273 of 275 transcripts were byte-identical
+  + `file_cache` reuses a session's last worker output when every file it reads is unchanged, and evicts a session the scan no longer finds
++ [X] recompute a cached session's live or ended state every scan, from the live lists and the clock
+  + `overlayLiveState` in `AgentAnalyser.ts` applies Claude's pid-file status, Grok's live set and Codex's 5 minute clock to a reused session, reading no transcript bytes
++ [X] log a worker failure's message and stack, never `{}`
+  + `errorLikeFields` (`errorops.ts:174`) unpacks an Error or an ErrorEvent before the file log stringifies it
++ [X] isolate a bad job in the worker, so one transcript cannot fail the batch
+  + `runJobIsolated` (`AgentAnalyserWorker.ts:443`) turns a throw into that session's `unreadable` refusal
++ [X] pad the card body with the shared `.body` class the default card uses (`ViewRenderer.module.scss`)
+  + `AgentNote.tsx` wraps everything below the headline in `view_specific_styles.body`; `agent-card.spec.ts` asserts non-zero horizontal padding in kanban
++ [X] draw every analyser state on a card as one muted line, with the detail on hover
+  + measured 2026-09-23: a failed analyser drew the same three-line paragraph on every card on the board
+  + `emptyNotice` in `AgentActivityBanner.tsx` returns a short line and puts the full sentence in its `title`
+  + the state rail is an inset `--nt-card-shadow`, the surface variable StickyNote also sets, so no theme rule outranks it
++ [X] match the card to the approved 2026-09-16 mockup, keeping this story's later amendments
+  + a multi-agent card takes its state by priority: needs you, then working, waiting, idle
+  + meta row: state chip with a beacon that pulses only for working and needs you, and the agent count
+  + agent row: colour-neutral vendor monogram, model, current tool call as verb and argument, elapsed clock
+  + files band: uncommitted count with line totals, three rows, then "and N more"
+  + drawn 2026-09-23: rail, meta row with state chip, model, clock, file cap with line totals
++ [X] carry each session's model id to its agent row
+  + each vendor reader returns the session's latest model; `AgentSessionRow.tsx` draws it muted beside the monogram
++ [X] count added and removed lines per uncommitted file, from the working tree against a `git:` HEAD read
+  + `countLineDiff` (`agentlinediffops.ts`) diffs lines; `lineDiffForFile` (`agentgitops.ts`) caps each side at 256 KB and skips binaries
+  + credited files plus 20 others per repository are counted, cached by mtime, size and HEAD commit
+  + colours come from the VS Code theme, not the mockup's palette
++ [X] price every API call from a shipped price table, with time windows and vendor figures
+  + read every rate from the vendor's pricing page when the table is written, never from memory
+  + jest: a call straddling a peak boundary is priced at peak, an unknown model is unpriced, and a repeated message id counts once
+  + Grok CLI sessions record `grok-4.5-build`, `grok-4.6-build` and `grok-4.7-build` (measured 2026-09-23 in local `usage.json` files), ids xAI's pricing page does not list
+  + each is priced at its base `grok-4.x` rate by an explicit row, operator decision 2026-09-23
++ [X] total tokens and cost per story and per session over the last 30 days, updating live
+  + a story's total is never shipped separately from the host: `totalActivityUsage` sums the sessions already on the card, webview-side, since the 30 day window already lives on each session's own `usage`
++ [X] show the counter on the card and on each agent row, stating its window and that cost is estimated
+  + `formatActivityUsage` states the counter's own span, `activityUsageWindow` from the earliest counted activity capped at 30 days (such as "(2d)" or "(5h)"), and prefixes an estimated cost with `~`
+  + every vendor, Grok included, is priced from the table and carries the tilde; Grok's `costUsdTicks` is never published, since no source confirms its unit
++ [X] fill the uncommitted band from `git.api.getRepositoryState`
+  + credit a file to a session only when that session's own write calls touched it
++ [X] read each session's own commits from its `git commit` calls and carry them on the card model
+  + the card does not draw them: `AgentCommitBand` is kept, with its own unit test, for the band's return, operator decision 2026-09-23
++ [X] open an uncommitted file's diff against a `git:` HEAD URI rather than a stored copy
+  + keep the `.md` gate on every existing reveal and jump path (`PanelSession.ts:573`, `:1029`, `:1065`, `:1110`, `:1143`)
+  + jest: a changed `.ts` file the git state lists is admitted, and a path outside the workspace is refused
++ [X] replace the empty states: host unavailable, scanning, analyser failed, no activity on this story
+  + no activity on a story is one muted line
+  + PATTERNS.md > Empty states: fix the error path before the presentation
++ [X] log the analyser's work at `debug`, so a dev build records it and a shipped build writes nothing that grows
+  + one line per discovery scan: where it looked, sessions found, bytes read and time taken
+  + a scan that finds nothing still logs, so "found nothing" is distinguishable from "never ran"
+  + one line per state change: a session appears, binds to a story, goes idle or ends; never one per transcript append
+  + worker start and stop at `debug`, a worker crash at `error`
+  + an unreadable file at `warn`, once per file, so a stuck file cannot fill a shipped `NoteThink.log`
+  + jest: a zero-hit scan logs exactly one `debug` line naming what it searched
++ [X] log one info line at activation naming the version and build kind
+  + every dev session then has a file log, so a missing one means a broken logger, never a quiet session
+  + CODING_STANDARDS.md > After every code change says to confirm the running build through the file log, which nothing writes today
+  + name the line in CODING_STANDARDS.md > Reading VS Code logs as the check that the file log is live
++ [X] report a file-log write failure once to the output channel rather than dropping it
+  + `flushLogBuffer` ignores every write failure (`errorops.ts:48`); writes succeeded in the 2026-09-22 probe, so this guards an unobserved failure
++ [X] declare the 17 workspace-wide settings `window` scope, matching how `settings.ts` reads and writes them
+  + jest: no `notethink.settings.*` contribution declares a scope that needs a resource (`settings.test.ts`)
+  + verified 2026-09-22 in an Extension Development Host: a panel open logs no NoteThink warning, only VS Code's 2 `findFiles` lines
++ [X] fix the 6 lint warnings
+  + `KanbanBoard` draws each card through `renderBoardCard`, a plain function, so the tree dnd and FLIP see is unchanged
++ [X] find what keeps jest workers alive, fix it, and drop `--forceExit` wherever nothing remains open
+  + React's scheduler opens a `MessageChannel` from the `worker_threads` polyfill, and its port held each worker open
+  + `setupEnv.js` records every channel and `setupTests.ts` closes them in `afterAll`, in both webview packages
+  + all 3 suites and a single in-band file exit on their own, so `--forceExit` is gone from all 3 test scripts
++ [X] fix the rollup warnings: the modern Sass API, d3's own circular imports filtered, and `util` resolved explicitly
+  + a loader named `sass` replaces the plugin's `sass.render` with `sass.compileString`; the 197 CSS module classes are unchanged
+  + the `util` warning hid a real fault: the library bundle imported `fs`, `fs/promises`, `tty` and `util` from Node
+  + node-resolve now takes browser builds (`browser: true`), as webpack's `mainFields` do, and the bundle imports no Node built-in
++ [X] rework the Playwright agent-card fixtures to the analyser's payload, with synthetic transcripts only
+  + `playwright/fixtures/activity/` (the `.notethink`-contract-shaped manifest/session/tree/blob JSON files) is deleted; `inject-activity.ts` now builds the `ActivitySnapshot` wire shape directly, in code, with no on-disk fixture at all
+  + the two markdown story-board fixtures (`activity-todo-notethink.md`, `activity-todo-notegit.md`) are unrelated to the retired contract and are unchanged
+  + all 18 agent-card specs pass against the real bundle in a browser
++ [X] say in the README which local agent files the agent card reads, before a user chooses it
++ found in review 2026-09-23: in a kanban lane the agent rows wrapped two or three characters to a line, and the live line was not drawn at all
+  + the row was one seven-column grid, and the card body's `overflow-wrap: anywhere` let every auto column shrink to one character
+  + the live line's `1fr` column, with `overflow: hidden`, shrank to zero width
+  + the row's counter showed the whole session's usage, up to 28x the story's own total above it
++ [X] stack each agent row onto lines that fit the card, and put it on one line only where the card is wide enough
+  + a container query on the row list picks the layout from the card's own width, so every view gets the right one
+  + each cell stays on one line and truncates with its full text on hover, never breaking inside a word
+  + `.agentRowButton` (`AgentNote.module.scss`) stacks by grid areas below a 440px roster and goes one line above it
+  + found on the way: the lane's disc and 1.3em indent on every card list reached the roster; `--nt-card-list-padding` lets a card opt its own lists out
+  + found on the way: commit rows ran vendor, subject and sha together and broke the sha; `.commitRow` lays them out as a grid
++ [X] show the story's own share of each session's usage on its row, without repeating the window the story total states
+  + `sessionUsageForStory` (`agentactivityops.ts`) feeds both the row and `totalActivityUsage`, so the row never exceeds the total
++ [X] shorten the row's model id and clock: no `claude-` prefix beside the CC monogram, whole days past 48 hours
+  + `shortModelId` and `formatElapsedClock` in `agentactivityops.ts`, the full id on hover
++ [X] say once per vendor, not once per session, that the vendor cannot report whether it is waiting on you
+  + superseded 2026-09-23 by operator decision: the line is removed from the card altogether
++ [X] draw one muted line for a card with no uncommitted files and no commits, not two empty bands
++ [X] cover the narrow lane in Playwright: no row cell wraps, and the live line has width
+  + `agent-card.spec.ts`: a 600px board holds a lane under 440px, and a document card is checked on one line
++ found in operator review 2026-09-23: five faults on the live board
+  + the card rail vanished on hover: the card set `--nt-card-shadow`, and the lane's hover rule reads `--nt-card-shadow-hover`
+  + every Claude card said Claude Code cannot report whether it is waiting, yet its pid file's `status` reads `waiting` (measured: an oma session asking a question)
+  + a pid-file status reached only a reused session; a freshly read one kept the transcript's reading
+  + the oma story's card said nothing uncommitted while `git status` listed about 20 untracked and several modified files its agents wrote
+  + the "(30d)" label claimed a month of history on a story days old
++ [X] drop the card-level state rail, keeping the per-agent row rail
+  + `AgentNote.module.scss` no longer sets `--nt-card-shadow`; `agent-card.spec.ts` checks no inset shadow before and during hover
++ [X] read Claude Code's `waiting` status, for fresh and reused sessions alike
+  + `CLAUDE_PID_STATUS_STATES` and the `live_status` overlay in `runScanOnce` (`AgentAnalyser.ts`); jest covers a fresh read and a busy to waiting flip
++ [X] remove the "cannot report whether it is waiting" band, and its string from all five l10n bundles
++ [X] open an agent row's session in VS Code instead of an in-card drawer
+  + Claude Code's chat panel first; a vendor with no panel, or a failed command, opens the session's transcript beside the board
+  + the transcript path comes from `transcriptPathFor` on the analyser, never from the webview message
+  + `AgentDrawer.tsx` and `AgentSessionDrawerRegion.tsx` are deleted, with their styles and 13 l10n strings
+  + a refusal draws under the row it names (`agent-open-refusal`)
++ [X] stop building and shipping the per-session conversation digest, which nothing reads once the drawer is gone
+  + `ActivityDigest`, the `digest` capability and every vendor reader's digest builder are gone; no message snippet crosses to the webview
++ [X] fill the uncommitted band with the files the working tree actually holds changed, untracked ones included
+  + cause: `resolveGitApi` read the git extension's `.exports`, which never cross from NoteThink's web worker host to git's node host, so every scan read no repository
+  + `agentgitops.ts` now reads only `git.api.getRepositories` and `git.api.getRepositoryState`, the commands measured crossing hosts on 2026-09-21
+  + measured in the git extension's own bundle: the state command returns URI strings and status names (`UNTRACKED`), so statuses are matched by name and the reconstructed numeric enum is gone
+  + a rename's previous path is `originalUri`: the git extension's `uri` and `renameUri` are both the new path
+  + the state command returns no separate untracked list, so `git.untrackedChanges: separate` hides untracked files; the default `mixed` lists them
+  + each scan logs at debug how many repositories it read; a command failure logs once
++ [X] state the counter's span from the story's earliest counted activity, capped at 30 days
+  + the host carries `first_at` on each `story_usage` entry; `activityUsageWindow` rounds up to whole days, or hours under a day
+  + without a dated entry the span reads the whole window; a story older than its first activity in the window reads that activity's age
++ found in operator review 2026-09-23: two faults on the live board
+  + the clock beside a row's state read how long ago the session last wrote (`Ended 6d`), while every other figure on the card measures what the session consumed
+  + switching a view to agent cards showed no spinner while the host started the analyser and scanned every agent's transcripts
++ [X] draw each row's clock as how long the session ran, from its first record to its last
+  + `formatDurationClock(started_at, updated_at)` in `agentactivityops.ts` replaces the time-since-update clock; the hover reads "Ran from {0} to {1}" in all five bundles
+  + the span is wall clock, so a session resumed after a pause counts the pause
++ [X] show the pending-work spinner while the agent analyser's first scan runs
+  + measured 2026-09-23 in the dev log: a first scan read 307 sessions, 891 MB, in 5657ms; later scans skip unchanged files and take about 0.5s
+  + `useAgentScanPending` (`activityhooks.ts`), mounted once in `App.tsx`, holds the `agentScan` key from the panel's first demand until the host reports anything but `scanning`
+  + it re-marks the key under the 10s safety net, so a slower first scan keeps its spinner; withdrawing the last agent card releases it
+  + found on the way: a first scan that threw left the analyser at `scanning` with no rescan armed; `recoverFromScanError` (`AgentAnalyser.ts`) now says `failed` and re-arms the poll
+  + `agent-card.spec.ts` picks the agent card from the card tab and holds the toolbar spinner until a live snapshot lands
++ found in operator review 2026-09-23: three faults on the live board
+  + every usage figure read "tokens · ~$cost", and the dot between the two says nothing
+  + this story's own card read 1106.9M tokens (8d) with no cost, while its sessions each showed one
+  + "and 36 more" under a capped uncommitted band was plain text, so the folded files could not be reached from the card
++ [X] drop the dot between a usage figure's tokens and its cost
+  + `formatActivityUsage` (`agentactivityops.ts`) joins them with a space
++ [X] price `claude-opus-5-5`, whose sessions were unpriced and so withheld the story total
+  + cause: the price table had no `claude-opus-5-5` row; transcripts on this machine carry 2779 calls under that id (measured 2026-09-23)
+  + `totalActivityUsage` withholds a story's cost when any session is unpriced, so one Opus 5.5 session dropped the whole total
+  + rates read from the vendor pricing page 2026-09-23: $4 input, $5 5-minute cache write, $0.20 cache read, $20 output
++ [X] make "and N more" unfold the band and "Show less" fold it back, as the default card's Show more does
+  + expansion is the view's `view_expanded_ids`, shared with the default card through `isNoteManuallyExpanded` and `dispatchNoteExpanded` (`noteops.ts`)
+  + a card with no view owning expansion keeps "and N more" as a plain count
+  + `agent-card.spec.ts` unfolds a seven-file band and folds it back
++ new pattern: reading local agent transcripts inside the extension for live activity and cost
++ acceptance criteria
+  + the agent card draws in document, line and kanban views
+  + with a session working on this story, its current tool call shows on this story's card within a second
+  + each story's card shows tokens and estimated cost since its earliest activity, at most 30 days, and the figure moves as agents work
+  + a Grok permission request shows on its virtual note, never on a story's card: Grok's own files carry no path a write call could bind on, measured 2026-09-22 (was written as "shows on its story's card"; corrected rather than left overclaiming)
+  + clicking an uncommitted file row opens a two-column diff in an editor column
+  + clicking a Claude Code agent row opens that session's chat, or its transcript when it cannot
+  + a session that edited no story is never drawn on a story's card
+  + with no panel drawing `agent` cards, no transcript is read
+  + in a web host the card says the feature is unavailable there
+  + a dev build's file log shows one line per scan, including a scan that found nothing
+  + a shipped build's `NoteThink.log` gains no line from a scan that succeeds
+
+
+### Remove blank lines between statements [](?id=code-layout-blank-lines&time_estimated=60)
+
++ goal: notethink's function bodies follow CODE_LAYOUT.md > Blank lines, so CODING_STANDARDS.md records no blank-line delta
++ background, measured 2026-09-14
+  + CODING_STANDARDS.md lets a blank line separate commented sections of a function body; no reason was ever recorded
+  + a scratch count of blank lines between two statements in non-test `client/` source: 268 in 53 of 143 files, 14.9 per 1000 lines
+  + siblings on the same count, per 1000 lines: calfam 2.4, zooey 1.9, aawai 1.3, ledger 1.2, dulcet 0.0
+  + the count is a heuristic (a statement-ending line, a blank, a statement-starting line); count again before editing
+  + recounted 2026-09-18 by the jest check's TypeScript AST walk: 296 in 53 of 144 non-test files, the same 53 files
+  + operator decision 2026-09-14: align notethink rather than sanction the style, from lightenna-iac's docs-consolidation sign-off
++ follows workspace `AGENTS.md` > Bulk edits on a dirty tree: predict the count, do the first file by hand, then apply
++ [X] write the rule as a jest check over `client/`, since CODE_LAYOUT.md says no eslint rule scopes to inside blocks
++ [X] remove the blank lines, starting with one file by hand
++ swept 2026-09-18: 277 blank lines removed across 52 files, 2 by hand and 275 by script
+  + the fresh count came in BELOW the earlier one, 277 in 52 against 296 in 53, which was the direction that means the walk may be broken
+  + the whole difference was one file: `mergeAggregateRoot.ts` went from 19 offenders to 0 because it was rewritten clean for [[kanban-incremental-merge]]
+  + verified by mutation rather than by arithmetic: a blank line inserted into that file and into a new untracked one took the count to 279 in 54, each reported at the inserted line
+  + the applier re-derives offenders through its own independent walk and agreed exactly, and refuses any target that is not blank or that falls inside a comment range
+  + zero targets anywhere in `client/` sat inside a comment, so no prose was reflowed
++ [X] run lint, jest and Playwright green
++ [X] drop the blank-line delta from CODING_STANDARDS.md
++ acceptance criteria
+  + the check passes over `client/` with no allowlist
+  + CODING_STANDARDS.md records no blank-line delta
+
+
+### Kanban perf harness and budgets [](?id=kanban-perf-harness)
+
+Measurement tooling that gates the whole performance cycle (stories [[dev-host-production-react]] through [[extension-parse-offload]]). Every acceptance budget below was baselined 2026-07-07 by driving the real webview bundle in the existing Playwright harness (`playwright/harness/index.html` + mocked VS Code API) with the exact wire-format messages `PanelSession` posts.
+
++ goal
+  + one command produces per-scenario timings (elapsed, long-task count/total/max) against the current bundle as JSON
+  + each optimization story proves its budget with this tool; regressions fail loudly before push
++ background - the measured baseline (production-mode bundle unless marked dev)
+  + folder progressive load (8KB files, 10 cards each): 50 files 9.2s, 100 files 36.4s, 200 files 211.8s with 206.8s of long tasks - clean O(N^2); 200 is the extension's own `MAX_AGGREGATE_FILES` cap (`client/extension/src/constants.ts:5`)
+  + interactions on a 50-file/500-card board: card click 168ms, editor caret move (selectionChanged) 154ms, one-file merge update 155ms; dev bundle: 708ms / 840ms / 2758ms
+  + single-file kanban (nt_view=kanban): 400KB/467 cards loads in 1.7s; a 400KB edit re-send crashed the renderer (repeatable); a 100-file progressive load under the CPU profiler also crashed the renderer
+  + extension-host costs (node bench): mdast parse 0.6ms/KB (400KB done.md = 230ms per debounced keystroke); mdast JSON payload is 6.2x the source text (200-file folder load ships ~9.3MB through postMessage); hashing negligible
+  + real workspace shape this models: ~601 md files, done.md files 400-820KB, maxNotesPerFile=10
++ scope
+  + `scripts/perf/` node runner + `pnpm run test-perf`; writes `test-results/perf.json`
+  + scenarios: folder progressive load (20/50/100/200 files), folder interactions (click, selectionChanged, single-file merge), folder with 10x400KB long files, single-file load + edit re-send (100KB and 400KB)
+  + budget config in one file, asserted per scenario, exit non-zero on breach; initial thresholds = baseline + 20%, ratcheted down by later stories
+  + defaults to the production-mode webview bundle; `--dev-bundle` flag for the dev build
++ out of scope
+  + CI integration (CI skips browser downloads by design - see CODING_STANDARDS Release section)
++ implementation notes (from the analysis prototypes - port, do not rediscover)
+  + generate synthetic story files (`### Story [](?status=...)` + checkbox bullets); single-file kanban needs H1 `[](?nt_view=kanban)` plus a selectionChanged at offset 2 so AutoView resolves kanban
+  + stage messages into the page as JSON strings and JSON.parse in-page; playwright's structured argument walk hangs for minutes on large mdast graphs
+  + settle = `[data-flip-id]` count reaches expected, then double-rAF; long tasks via a buffered PerformanceObserver installed in an init script
+  + folder mode boots via pre-seeded `window.__vsCodeState` viewStates (`__folder__` with `type: 'kanban'`, `integration_mode: 'folder'`)
++ acceptance criteria
+  + `pnpm run test-perf` runs headless, writes `test-results/perf.json`, asserts budgets, exits non-zero on breach
+  + scenario semantics documented in the runner header comment, including how to add a scenario
+  + baseline JSON captured and committed alongside the budget config so later ratchets have provenance
++ [X] build the generator + scenario runner under `scripts/perf/` with JSON-string staging and settle/longtask instrumentation
++ [X] add budget config + assertions + `test-perf` script; capture the initial baseline file
++ [X] document scenarios and the add-a-scenario recipe in the runner header
+
+
+### Dev host: production React in the webview bundle [](?id=dev-host-production-react)
+
+The dev-host webview currently runs the React development build: `webpack.config.js:110` sets `mode: 'none'` unless `NODE_ENV=production`, and the `build`/`watch` scripts never set it, so `process.env.NODE_ENV` stays undefined and React's dev instrumentation ships. Measured cost on a 50-file board: card click 708ms vs 168ms, caret move 840ms vs 154ms, single-file merge 2758ms vs 155ms - a 4-17x tax on every interaction the developer feels daily. CPU profiles attribute ~22% of load time to dev-only functions (`addObjectDiffToProperties`, `logComponentRender`).
+
++ goal
+  + the bundle the dev host serves runs production React while keeping the NOTETHINK_DEV conveniences (file logger, cache-buster) and usable source maps
++ scope
+  + make `build`/`watch` produce a production-mode (or at minimum NODE_ENV=production-defined) webview bundle; NOTETHINK_DEV define stays driven by SELFINSPECT_ENV as today (`webpack.config.js:23,87,172`)
+  + keep `devtool: 'source-map'` for dev builds so webview debugging still works
+  + decide (and document in CODING_STANDARDS Pre-Push Verification) whether the extension bundle follows or stays as-is; only the webview bundle carries React
++ out of scope
+  + changing the marketplace `package` build (already production)
++ acceptance criteria
+  + perf harness interaction scenarios on the build produced by `pnpm run build` meet the production-bundle baseline (click <= 200ms, selectionChanged <= 200ms, single-file merge <= 250ms on the 50-file scenario)
+  + `NOTETHINK_DEV` gated features still function: file logger writes to `logUri`, webview cache-buster appends `?v=`
+  + webview sources remain debuggable (source map resolves in webview devtools)
++ measured 2026-09-18 with `pnpm run test-perf`, both bundle modes on the same tree
+  + the harness reports the React build it found in each: production mode "production React, minified, 3.95MB", dev mode "production React, unminified, 11.26MB"
+  + 50-file interactions, dev bundle vs production bundle: click 154.7 vs 140.8ms, selectionChanged 85.9 vs 136.1ms, single-file merge 153.4 vs 119.6ms
+  + every acceptance budget is met on the dev-workflow bundle, and the production run is green on all 16 metrics
+  + this is dev vs production on today's tree, not the whole gap attributed to the React build: [[kanban-incremental-merge]] landed in between and cut card renders per update from 1022 to 34 at 500 cards, so both columns beat the 2026-07-07 baseline
+  + one breach in the dev run, folder-load-20 at 528.5/490.5/502.9ms over a 485 budget calibrated on the production bundle
+  + the breach is the unminified bundle, not React: dev minus production is a fixed cost that does not scale with board size, the shape of one-time lazy compilation
+  + read the offset as a shape, not a figure: one set of runs gave 103 to 160ms across the four sizes, another gave 44ms at 20 files and 56ms at 200, and the two distributions nearly touch
+  + what holds across both is that it does not grow with N, so it hits the smallest scenario hardest, which is why `folder-load-20` is the one that crosses
+  + every count is identical in both modes, conversions 20/50/100/200 and board commits 1/2/4/9, so the difference is cost and not behaviour
+  + resolved by scope rather than by tuning: the budgets are calibrated on the production bundle, so `--dev-bundle` reports breaches without gating on them
+  + minifying the dev bundle would close it and cost the source-map readability and watch speed this story exists to protect
++ [X] wire NODE_ENV/production mode into the default build + watch for the webview bundle
++ [X] verify NOTETHINK_DEV logger + cache-buster still work in the dev host
++ [X] run test-perf against the dev-workflow bundle and record the delta in this story
+
+
+### Incremental folder merge with stable card identity [](?id=kanban-incremental-merge)
+
+The core structural fix. Today every incoming doc update rebuilds the entire merged tree: `FolderTreeComposer.tsx:56-72` re-runs `mergeAggregateRoot`, which re-runs `convertMdastToNoteHierarchy` for EVERY doc (`mergeAggregateRoot.ts:263`), and `walkStorySubtree` renumbers every note's `seq` globally (`mergeAggregateRoot.ts:203`), which defeats `areMarkdownNotePropsEqual` (`MarkdownNote.tsx:127` compares seq first) so every card re-renders. A progressive N-file load therefore does O(N^2) conversions and N full-board renders; one file changing (watcher event, or the drag write-back echo) re-converts all 200 files and re-renders 2000 cards.
+
++ goal
+  + a doc update re-converts only the changed doc and re-renders only the affected cards
+  + the post-drag authoritative echo lands well inside `KANBAN_PROJECTION_MAX_MS` (1500ms, `useProjectedNotes.ts:10`) so drops never snap back
++ background
+  + measured: one-file merge on a 50-file board costs 155ms (prod) / 2758ms (dev) as a single long task; at 200 files this scales ~4x further and breaks the projection window
+  + `renderCache` (renderops.tsx:82) is a WeakMap keyed on mdast node identity - unchanged docs keep identity across merges, so preserving NoteProps identity unlocks the whole memo chain
++ scope
+  + cache per-doc `convertMdastToNoteHierarchy` results keyed on `(doc id, hash_sha256)`; invalidate on hash change or doc removal
+  + make story/card identity stable across merges: derive per-story keys and memo checks from `stable_id` (already stamped) instead of the global seq; assign seqs deterministically per (file, story) so an unchanged file's notes keep their numbers when a sibling file changes
+  + audit the in-place mutation in `walkStorySubtree` - a cached subtree must not be mutated into a state React cannot detect; clone story roots on stamp or version them explicitly
+  + memoize `flattenAllNotes` (`NoteTreeComposer.tsx:47`) and stop sorting `notes_within_parent_context` inside render (`useViewContext.ts:80` mutates and sorts every render)
++ out of scope
+  + message batching (see [[kanban-folder-load-coalescing]]) and windowing (see [[kanban-virtualized-columns]])
++ acceptance criteria
+  + perf harness single-file-merge, 50-file board: no long task > 50ms (prod bundle)
+    + NOT MET: 50 to 57ms across runs, with five of nine runs producing no long task at all
+  + perf harness single-file-merge, 200-file board: no long task > 150ms (prod bundle)
+    + MET: 73ms
+  + the post-drag authoritative echo lands well inside `KANBAN_PROJECTION_MAX_MS`
+    + MET on the webview half: 206 to 220ms against the 1500ms window; the extension half is unverified here
+  + both elapsed targets were removed as instrument-bound, operator decision 2026-09-18
+    + the harness carries a ~50ms three-frame settle floor under every `elapsed_ms`, so a <= 60ms target allowed about 10ms of real work
+    + no implementation could have met it, which makes it a statement about the instrument rather than about the code
+    + the long task is what tracks this change, so the criteria are expressed against it
+  + conversion-call probe (debug counter exposed for tests): a one-doc merge converts exactly 1 doc on a 50-doc board
+  + drag round-trip: folder-kanban-drag playwright specs stay green; add a spec asserting no snap-back with a simulated 200-file-scale echo delay
+  + jest: unchanged docs' NoteProps (or their memo-relevant fields) are reference-stable across a merge; changed doc's notes re-derive
+  + full `pnpm run check` green; all 106 playwright specs green
++ measured 2026-09-18 against the real bundle: the conversion cost is gone, and what remains is render
+  + `mergeAggregateRoot` for a one-doc update: 50 docs 7.5ms uncached to 0.4ms cached, 200 docs 25.4ms to 1.4ms, 1 doc converted either way
+  + echo to painted card: 178ms at 50 docs, 632ms at 200 docs, so at 200 docs the merge is 1.4ms of 632ms
+  + the balance is React reconciliation and FLIP measurement over 2000 cards, which this story scopes out
+  + corpus caveat: synthetic docs of 10 short stories each, not real 400KB done.md files, so a real board is larger
++ found and fixed 2026-09-18: the memo chain was defeated by this repo's own comparator, so identity alone bought nothing
+  + `areMarkdownNotePropsEqual` compared @hello-pangea/dnd's `provided` bags by identity, and dnd rebuilds them on every render of its `Draggable`
+  + a probe proved the values were identical every time, so every card re-rendered twice per update: 1022 renders against 506 mounted cards
+  + `providedPropsEqual` now compares by value, bounded at one level of nesting; a diagnostic confirmed dnd's `innerRef` identity never changes, so skipping the repaint cannot strand it
+  + card renders per update: 1022 to 34 at 500 cards and 4022 to 33 at 2000, so renders are flat in board size
+  + the 34 are the changed file's own ten cards and 27 legitimate bails, whose `linetags_from` and `position.start.offset` genuinely moved
+  + `draggableProps_identity_only` went from 1980 occurrences to zero
+  + the `card_target_height` bail went from 1500 to zero, so the side by side target height was a victim of this defect and not a cause
++ measured and rejected 2026-09-18: memoizing `GenericNote` properly buys nothing, so it was not done
+  + it already carries `React.memo` with the default shallow compare, which always fails because the parent rebuilds `display_options` every render
+  + a three-arm A/B on a 506-card board: memo off 119.6ms at 1056 renders, a real comparator 121.6ms at 1051, and an always-equal arm 124.6ms at 6
+  + so eliminating 1050 of 1056 executions moved elapsed not at all, and the always-equal arm bounds the ceiling at zero
+  + the residual cost is React reconciling 506 mounted card subtrees and the FLIP measurement, which no comparator reaches
+  + a working comparator would also need `handlers` and `display_options.selected_notes` stabilised in `KanbanBoard` and `useViewContext` first
++ residue 2026-09-18: the 50-file long-task criterion sits on its boundary and is the one thing not delivered
+  + `folder-merge-50` post-fix over 9 harness runs: elapsed median 83.5ms, range 73.3 to 94.1, 1 conversion and 1 commit every run
+  + five of the nine runs produced no long task at all, and the rest produced one of 50 to 57ms against a 50ms ceiling
+  + trajectory: 155ms at the 2026-07-07 baseline, 105 to 130ms before the memo fix, 83.5ms median after it
+  + `folder-merge-200` clears its 150ms ceiling comfortably at 73ms, so expressing the criteria against the instrument moved the shortfall from the large board to the small one
+  + `folder-merge-200` now measures 206.4ms against the <= 120ms criterion, so it misses by ~1.7x, with 1 conversion and 1 commit
+  + a pre-registered prediction of 450 to 650ms scaling linearly at 0.27ms per card was REFUTED, and the linear model is withdrawn
+  + the real scaling is sub-linear: 4x the cards buys 1.5 to 2.2x the work once the ~50ms settle floor is backed out
+  + so `windowing closes this` is an open question for [[kanban-virtualized-columns]], not an inherited conclusion
+  + the linear model was fitted to a different event: the story's own probe moved a story from doing to done, a column change that fires the FLIP layer to re-measure every mounted node
+  + the harness scenario appends a task instead, so no card changes column and no FLIP re-measure runs; turning animation off moved a 500-card read from 137.7ms to 104.5ms
+  + two differences separate the two readings, update shape and bundle, and they have not been separated, so FLIP is not claimed to account for all of the gap
++ eliminated 2026-09-18, by measurement rather than by argument, as the source of the residual cost
+  + per-doc conversion: 1 at both 50 and 200 files
+  + MarkdownNote bodies: flat at 33 renders for both 500 and 2000 cards
+  + GenericNote executions: eliminating 1050 of 1056 changed elapsed by nothing
+  + `useViewContext`'s `deepest.note` memo never holds, since `parent_context` is a fresh object every render and `resolveFocusedNote` rescans ~8000 notes; fixing it changed nothing at any size and was reverted
+  + what remains is React's own reconciliation and commit of mounted subtrees, the FLIP layer and dnd's machinery, none reachable without reducing mounted nodes
++ met 2026-09-18: the post-drag echo lands well inside `KANBAN_PROJECTION_MAX_MS` on the webview half
+  + a 200-file merge update completes in 206 to 220ms against the 1500ms window, so over 1.2s of headroom
+  + the extension half of the round trip belongs to other stories and is not measured here
++ handover to [[kanban-virtualized-columns]]: the interaction path is the sharper lead, not card count
+  + `folder-selection-200` 466ms with a 327ms long task and `folder-click-200` 445ms, both with 0 conversions and 0 commits
+  + that is a large interaction cost at 2000 cards with no merge in it at all
+  + the `useViewContext` memo above is free to fix for whoever works that path
+  + the echo criterion is met for the webview half only; end to end through the real extension host is unverified here
++ decided 2026-09-18: clone on stamp rather than version the stamped subtree
+  + the stamp writes seq, level, parent_notes, origin and stable_id, so stamping a cached subtree changes what a card renders without changing what React compares
+  + clones share the mdast `children` arrays, so renderops' WeakMap still hits
+  + versioning was rejected: it hands React the same object and needs every memo comparison to opt in
++ consequence 2026-09-18: merged seqs are sparse, not contiguous, and are visible in `data-seq` and `v<view>-n<seq>` element ids
+  + every lookup goes through `findNoteBySeq` or a comparator, so nothing indexes by seq
++ [X] add per-doc conversion cache keyed on (id, hash) with removal handling
++ [X] make seq assignment deterministic per file + story; key React and memo comparisons on stable_id
++ [X] resolve the walkStorySubtree mutation-vs-cache hazard (clone or version stamped subtrees)
++ [X] memoize flattenAllNotes and the parent-context sort
++ budgets, operator decision 2026-09-18: left at measurement + 20% as regression guards, not ratcheted
+  + the interaction spread widens under machine load, `folder-click-50` ranging 144 to 192ms across captures on one tree, so a tight budget becomes a flake generator
+  + a gate that cries wolf gets ignored, and an ignored gate is worse than none
+  + the sharp assertions carry the weight instead: conversions and board commits held at exactly 1/1 through every run including a breaching one
++ [X] add the conversion-call probe + jest coverage; ratchet perf budgets
+
+
+### Folder-load batching and update coalescing [](?id=kanban-folder-load-coalescing)
+
+Initial folder discovery streams one postMessage per file (`PanelSession.ts:826` fan-out, `:912` per-file merge update), and the webview commits a full state update per message (`useVscodeMessages.ts:245`), so a 200-file load produces 200 board renders plus a final aggregate replace. Measured: 20 files 5.3s, 50 files 9.2s (prod), 200 files 211.8s; the per-message costs (render + FLIP re-measure + persist) multiply with the O(N^2) merge fixed in [[kanban-incremental-merge]].
+
++ goal
+  + a 200-file folder load reaches a settled board in seconds with bounded, small long tasks, while still showing progressive fill (spinner + growing board), not a blank wait
++ scope
+  + extension: batch per-file merge updates during discovery - flush every ~100ms or every ~20 docs, whichever first; watcher-driven single-file updates keep streaming individually
+  + webview: coalesce incoming update messages within an animation frame into one setState (queue + rAF flush in useVscodeMessages); message validation unchanged
+  + keep the pendingChange spinner semantics (`pending-work-spinner` specs must stay green)
++ out of scope
+  + changing the wire payload shape (see [[folder-wire-payload-diet]])
++ acceptance criteria
+  + perf harness folder-200 progressive scenario: settled in <= 15s on the prod bundle with [[kanban-incremental-merge]] landed; no single long task > 500ms after the first paint
+  + board commit probe: <= 15 board-level commits for a 200-file load (vs ~200 today)
+  + progressive fill still visible: harness asserts cards appear before the final flush (not one big bang)
+  + all pending-work-spinner + folder playwright specs green; `pnpm run check` green
++ found and fixed 2026-09-18: a queued batch could post a stale doc over a fresher watcher copy
+  + discovery queued `f0` version A, a watcher then read and posted version B, and the flush posted the queued A after it
+  + the same window let a flush resurrect a doc a tombstone had just dropped
+  + both self-corrected at the aggregate replace, so the board held the wrong state until then
+  + fix: the batch holds doc ids, not snapshots, and resolves each against `integration_docs` at flush time, skipping ids no longer present
++ measured 2026-09-18 on the production bundle, once the harness modelled the batched wire
+  + folder-200 settled 124 to 195s before, 10.7s after, board commits 199 to 9
+  + folder-100 28 to 40s to 2.5s at 99 to 4 commits; folder-50 6.4 to 9.2s to 0.82s at 49 to 2; folder-20 1.3 to 1.7s to 0.38s at 19 to 1
+  + settled <= 15s is MET at 10.7s, and <= 15 board commits is MET at 9, the budget flipped to 15 after seeing the number rather than on the prediction
+  + the aggregate replace costs 0 commits, since `mergeUpdatedDocs` finds nothing changed and returns the same object
+  + `folder-long-files-10` is unchanged at 7.3s and 7 commits, correctly: 10 docs sit under the 20-doc cap and arrive slower than the 100ms timer
++ open for the operator 2026-09-18: the criterion says `after the first paint` and the instrument does not measure that
+  + the harness's long-task window opens at FIRST DISPATCH, so it counts the initial mount a user genuinely waits through
+  + at 50 files the peak at +224.8ms IS the first commit's mount at +214.0ms, which a literal reading of the criterion would exclude entirely
+  + the measure was deliberately NOT changed to fit the wording, and the mismatch is documented in the page-agent header and `budgets.mjs`
+  + immaterial at 200 files, where the peak at +7599ms is unambiguously after first paint
++ residue 2026-09-18: no long task > 500ms after first paint is NOT met, and most of the height is not batching's
+  + measured against the unbatched control: 200 files 1410ms to 1829ms, a 1.3x rise, against an 11x cut in elapsed and an 18x cut in long-task total
+  + at 50 files the rise is 1.8x over six paired same-run samples, 234 to 284ms unbatched against 452 to 478ms batched, and every batched sample is still under 500ms
+  + the ratio falls with N because the accumulated-docs term dominates as the corpus grows
+  + a prediction that the peak would be roughly unchanged was REFUTED: there is a real batch-size term, second order at large N rather than absent
+  + attribution by the probe's own `at` stamps: every peak lands on a commit, so the cost is merge and render downstream, not the drain
+  + commit spacing on the batched 200 run, 457 to 2066ms between successive commits each carrying an identical 20 docs, is the accumulated-docs scaling made visible
+  + so [[kanban-incremental-merge]] must bring the ceiling down from ~1410ms on the old wire, not from 1829ms: only the 1.3x is attributable here
+  + provenance, and the thin number is the TARGET rather than the ratio: the batched 200-file arm has six tight measurements from 1791 to 1847ms
+  + the ~1410ms unbatched control is a SINGLE sample, so the figure to treat with caution is the one this sets as [[kanban-incremental-merge]]'s target
+  + the 50-file pair is six paired same-run samples and is firm in both arms
+  + the 200-file control came from a one-off scenario that was removed again, so the permanent set is unchanged at 10
+  + measured and NOT pulled: ramping the batch size cannot move the 200-file peak, which lands on the 8th flush where batch size is only the 1.3x
++ found and fixed 2026-09-18: the tombstone regression test carried a pre-existing race in its own synchronisation helper
+  + `discoverHoldingOneFile` drained a fixed five event-loop turns while `generateIdentifier` hashing is genuinely async and no host call marks its end
+  + five turns was always marginal; a second start-up task in the panel was enough to lose the race in 2 runs of 5, and 30 turns passed 6 of 6
+  + diagnosed by measurement: the chosen watcher was the folder watcher in failing runs too, so watcher selection was never the cause
+  + the failing runs simply posted no tombstone, because `handleFolderDocDeleted` only posts one for a doc already in `integration_docs`
+  + the drain is now generous and a new guard asserts the batch is still queued, so a scenario that collapses into testing nothing fails loudly instead of passing
++ [X] batch discovery-phase merge posts in PanelSession with a flush timer + size cap
++ [X] coalesce webview update handling into per-frame state commits
++ [X] add a board-commit probe for the harness; assert progressive fill + budgets

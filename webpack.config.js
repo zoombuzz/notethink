@@ -29,7 +29,7 @@ const clientExtensionConfig = {
 	target: 'webworker', // web extensions run in a webworker context
 	entry: {
 		'extension': './src/extension.ts',
-		'test/suite/index': './src/test/suite/index.ts'
+		'test/suite/index': './src/test/suite/index.ts',
 	},
 	output: {
 		filename: '[name].js',
@@ -101,6 +101,51 @@ const clientExtensionConfig = {
 	devtool,
 	infrastructureLogging: {
 		level: "log", // enables logging required for problem matchers
+	},
+};
+
+/*
+ * The agent activity analyser's nested worker: decoding, parsing and pricing run here, off the
+ * extension host's own thread, loaded by `AgentAnalyser.ts` as a real `Worker` (agent-activity-card
+ * story). It cannot share `clientExtensionConfig`: that config's `libraryTarget: 'commonjs'` makes
+ * webpack emit `const __webpack_export_target__ = exports;` at the top of the bundle, and `exports`
+ * is a CommonJS/extension-host global a plain nested `Worker` never has, so the worker throws before
+ * its own `self.onmessage` line runs (measured 2026-09-22: a worker built this way rejects every
+ * request on `onerror`). This config has no `library`/`libraryTarget` at all, so
+ * the bundle runs as a plain worker script instead of trying to export a module.
+ */
+/** @type WebpackConfig */
+const agentAnalyserWorkerConfig = {
+	context: path.join(__dirname, 'client', 'extension'),
+	mode: process.env.NODE_ENV === 'production' ? 'production' : 'none',
+	target: 'webworker',
+	entry: {
+		'agentAnalyserWorker': './src/vscode/AgentAnalyserWorker.ts',
+	},
+	output: {
+		filename: '[name].js',
+		path: path.join(__dirname, 'client', 'extension', 'dist'),
+		devtoolModuleFilenameTemplate: '../[resource-path]'
+	},
+	resolve: clientExtensionConfig.resolve,
+	module: clientExtensionConfig.module,
+	plugins: [
+		new webpack.optimize.LimitChunkCountPlugin({
+			maxChunks: 1
+		}),
+		new webpack.ProvidePlugin({
+			process: 'process/browser',
+		}),
+		new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
+			resource.request = resource.request.replace(/^node:/, '');
+		}),
+	],
+	performance: {
+		hints: false
+	},
+	devtool,
+	infrastructureLogging: {
+		level: "log",
 	},
 };
 
@@ -201,4 +246,4 @@ const clientWebviewConfig = {
 	},
 };
 
-module.exports = [ clientExtensionConfig, clientWebviewConfig ];
+module.exports = [ clientExtensionConfig, agentAnalyserWorkerConfig, clientWebviewConfig ];

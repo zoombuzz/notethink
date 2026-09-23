@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import * as vscode from 'vscode';
 import {
     SETTINGS,
@@ -15,6 +17,14 @@ import {
     writeSetting,
     type SettingKey,
 } from './settings';
+
+const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', '..', '..', 'package.json');
+// scopes whose value VS Code resolves per resource; readSetting passes none, so such a key would silently ignore a folder's value
+const RESOURCE_SCOPES = ['resource', 'language-overridable'];
+
+interface ManifestSetting {
+    scope?: string;
+}
 
 interface FakeConfigEntry {
     workspaceValue?: unknown;
@@ -93,6 +103,17 @@ describe('SETTINGS is complete enough for the drawer to render and promote every
     it('gives every key a distinct config path', () => {
         const paths = settingKeys().map(key => SETTINGS[key].path);
         expect(new Set(paths).size).toBe(paths.length);
+    });
+
+    // settings are read and written for the whole workspace, so a scope that needs a resource would promise per-folder values no read honours
+    it('contributes every key at a scope that needs no resource to read', () => {
+        const manifest = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf-8')) as { contributes: { configuration: Array<{ properties: Record<string, ManifestSetting> }> } };
+        const properties: Record<string, ManifestSetting> = Object.assign({}, ...manifest.contributes.configuration.map(section => section.properties));
+        for (const key of settingKeys()) {
+            const contribution = properties[`notethink.settings.${SETTINGS[key].path}`];
+            expect(contribution).toBeDefined();
+            expect(RESOURCE_SCOPES).not.toContain(contribution.scope ?? 'window');
+        }
     });
 });
 

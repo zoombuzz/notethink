@@ -106,7 +106,7 @@ async function waitForGlideToSettle(page: Page): Promise<void> {
 async function dumpFlipState(page: Page): Promise<Record<string, unknown>> {
     return page.evaluate(() => {
         const cards = [...document.querySelectorAll('[data-rfd-draggable-id]')] as HTMLElement[];
-        const cs = (e: HTMLElement) => getComputedStyle(e);
+        const cs = (e: HTMLElement): CSSStyleDeclaration => getComputedStyle(e);
         return {
             totalCards: cards.length,
             withTransform: cards.filter((e) => cs(e).transform !== 'none').map((e) => ({ id: (e.getAttribute('data-rfd-draggable-id') || '').slice(-18), t: cs(e).transform.slice(0, 22), pos: cs(e).position })),

@@ -22,7 +22,7 @@ const UNBOUND_SESSION: ActivitySession = {
     updated_at: '2026-09-18T09:13:55Z',
     state: 'working',
     story_binding: 'none',
-    capabilities: { live_tool_call: 'supported', question: 'supported', digest: 'supported', file_attribution: 'supported' },
+    capabilities: { live_tool_call: 'supported', question: 'supported', file_attribution: 'supported' },
 };
 
 const UNBOUND_STATE: ActivitySessionState = {

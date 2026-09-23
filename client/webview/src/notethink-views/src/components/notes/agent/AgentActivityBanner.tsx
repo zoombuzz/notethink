@@ -1,49 +1,54 @@
 import React from "react";
 import * as l10n from "@vscode/l10n";
-import { ACTIVITY_DIR } from "../../../types/AgentActivity";
 import type { AgentNoteModel } from "./useAgentNoteModel";
 import styles from "../AgentNote.module.scss";
 
 /**
- * What the card says when it has little or nothing to draw, which is the half of this feature that has
- * to be got right: an empty board must never read as idle agents.
+ * What the card says when it has little or nothing to draw: an empty board must never read as idle
+ * agents.
  *
- * The error path is stated before the empty one. A contract file the host refused is drawn whether or
- * not there are sessions, because an empty board over a failed read is a worse bug for looking fine,
- * and so is a session the manifest declared that the host could not read - three declared and two read
- * is a fact a reader is owed. Below that the card separates nothing writing at all, from a contract
- * directory whose manifest could not be read, from a producer that has stopped, from a story nothing
- * has declared, from a story nothing COULD declare because it carries no authored id. Each is a
- * different thing to tell a user and only one of them means the agents are quiet.
+ * A story-level refusal (naming no particular session) is drawn first, whether or not the card has
+ * sessions, because an empty board over a failed read is a worse bug than looking fine; a refusal
+ * naming a session is drawn on that session's own row instead. Below the refusals, one notice covers
+ * whichever of these applies: sessions that could not be fully read, the host not having reported yet,
+ * the analyser being unavailable, still scanning, having failed, or - for a real (non-virtual) note -
+ * no agent activity in the last 30 days.
  *
- * PATTERNS.md > Empty states names Mantine's EmptyState as the canonical. notethink has no Mantine and
- * is a VS Code webview themed by the host's own variables, so the component half does not apply here;
- * the half that does, fixing the error path before the presentation, is what the ordering above is.
+ * Each notice is one short line, with its full explanation carried as the line's `title` for a reader
+ * who hovers.
+ *
+ * PATTERNS.md > Empty states: fix the error path before the presentation, which the ordering above is.
  */
 export interface AgentActivityBannerProps {
     model: AgentNoteModel;
 }
 
+/** a one-line notice with its full explanation kept for a hover */
+type EmptyNotice = { text: string; detail: string };
+
 /** the notice for a card with no sessions to draw, or undefined when there is nothing to say */
-function emptyNotice(model: AgentNoteModel): string | undefined {
-    if (!model.heard_from_host) {
-        return l10n.t('Waiting for NoteThink to report what is writing agent activity.');
+function emptyNotice(model: AgentNoteModel): EmptyNotice | undefined {
+    if (!model.heard_from_host || !model.analyser) {
+        return { text: l10n.t('Waiting for agent activity'), detail: l10n.t('Waiting for NoteThink to report agent activity.') };
     }
-    if (model.producer_state === 'absent') {
-        return l10n.t('No producer is writing agent activity for this repository. NoteThink reads files a producer writes into a {0} directory inside a repository in this workspace, and cannot see one writing anywhere else.', ACTIVITY_DIR);
+    if (model.analyser.state === 'unavailable') {
+        return {
+            text: l10n.t('Agent activity unavailable'),
+            detail: l10n.t('NoteThink cannot read local agent session files in this host. {0}', model.analyser.reason ?? l10n.t('This usually means a web host with no local disk.')),
+        };
     }
-    if (model.producer_state === 'unreadable') {
-        return l10n.t('A {0} directory is here and its manifest could not be read, so nothing below can be trusted to be complete.', ACTIVITY_DIR);
+    if (model.analyser.state === 'scanning') {
+        return { text: l10n.t('Scanning agent activity...'), detail: l10n.t('NoteThink is still scanning for local agent sessions.') };
     }
-    if (model.producer_state === 'stopped') {
-        return l10n.t('{0} has stopped writing, so anything below is as it was when it stopped.', model.producer?.producer?.name ?? l10n.t('The producer'));
+    if (model.analyser.state === 'failed') {
+        return {
+            text: l10n.t('Agent activity analyser failed'),
+            detail: l10n.t('The agent activity analyser failed. {0}', model.analyser.reason ?? l10n.t('See the extension log for detail.')),
+        };
     }
     if (model.is_virtual) { return undefined; }
-    if (!model.story_key) {
-        return l10n.t('This story carries no id linetag, so no agent can declare that it is working on it.');
-    }
     if (model.sessions.length === 0) {
-        return l10n.t('No agent has declared this story.');
+        return { text: l10n.t('No agent activity in 30 days'), detail: l10n.t('No agent has worked on this story in the last 30 days.') };
     }
     return undefined;
 }
@@ -68,11 +73,11 @@ function AgentActivityBanner(props: AgentActivityBannerProps): React.ReactElemen
             )}
             {unreadable > 0 && (
                 <p className={styles.bannerNotice} data-testid="agent-banner-unreadable">
-                    {l10n.t('{0} of the {1} sessions this producer declares could not be read, so this card is not the whole picture.', unreadable, model.producer?.declared_session_ids.length ?? unreadable)}
+                    {l10n.t('{0} session(s) could not be fully read, so this card is not the whole picture.', unreadable)}
                 </p>
             )}
             {notice !== undefined && (
-                <p className={styles.bannerNotice} data-testid="agent-banner-notice" data-producer-state={model.producer_state}>{notice}</p>
+                <p className={styles.bannerNotice} data-testid="agent-banner-notice" data-analyser-state={model.analyser?.state} title={notice.detail}>{notice.text}</p>
             )}
         </div>
     );

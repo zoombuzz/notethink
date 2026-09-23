@@ -1,3 +1,0 @@
-{"contract_version":"1.0.0","session_id":"partial-append","at":"2026-09-18T09:13:51Z","kind":"tool_call","tool":"Read","arg":"client/extension/src/constants.ts"}
-{"contract_version":"1.0.0","session_id":"partial-append","at":"2026-09-18T09:13:58Z","kind":"tool_result","tool":"Read","arg":"28 lines"}
-{"contract_version":"1.0.0","session_id":"partial-append","at":"2026-09-18T09:14:01Z","kind":"tool_call","tool":"Ed

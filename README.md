@@ -185,6 +185,34 @@ notethink/
 4. `NoteRenderer` converts MDAST to NoteProps hierarchy via `convertMdastToNoteHierarchy`
 5. `DocumentView` and `GenericNote` (both `React.memo`'d) render the note tree
 
+## Agent activity
+
+The `agent` card type shows which AI coding agents are working on a story, live, by reading each
+vendor's own local session files directly on disk - desktop only, and only while a panel is drawing
+an `agent` card. NoteThink reads no network endpoint for this and no vendor is asked to write
+anything for NoteThink to find. The files read, when present:
+
+- **Claude Code**: `~/.claude/sessions/*.json` (which sessions are live, and whether each is working,
+  idle or waiting on you) and `~/.claude/projects/*/*.jsonl` (each session's transcript, including
+  its `subagents/` directory)
+- **Codex**: `~/.codex/sessions/YYYY/MM/DD/*.jsonl` (each session's rollout transcript)
+- **Grok**: `~/.grok/active_sessions.json` (which sessions are live), `~/.grok/sessions/*/*/events.jsonl`
+  (each session's tool and permission timeline) and the matching `usage.json` where one exists
+
+Transcripts from the last 30 days are read; a vendor with none of the files above present is simply
+never read from. The card also reads the working tree of every git repository open in the workspace,
+through VS Code's built-in git extension, to show uncommitted files with their added and removed
+line counts. It also reads the commits each session made, though the card does not draw them.
+
+A session appears on a story's card when one of its own file edits changed that story's section of a
+story board, `docstech/users/<name>/todo.md` or `done.md`, in the workspace folder or in any project
+directly inside it. A story is matched by its `[](?id=...)` linetag, or by the id derived from its
+title when it has none, so a story keeps its agents when it moves from `todo.md` to `done.md`. A
+session that edited no story is drawn on a card of its own rather than guessed onto one.
+
+Clicking an agent on a card opens that session in VS Code: in Claude Code's own chat panel, or, for a
+vendor with no such panel, as the session's transcript in an editor.
+
 ## Known Limitations
 
 - **Read-only**: No editing support yet - NoteThink is a viewer, not an editor

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { writeToLog, writeToErrorLog, writeToLogAtLevel, debug, isRedirect, fatalError, nonFatalErrorInternally, nonFatalErrorReport } from './errorops';
+import { Uri } from '../__mocks__/vscode';
+import { writeToLog, writeToErrorLog, writeToLogAtLevel, debug, isRedirect, fatalError, nonFatalErrorInternally, nonFatalErrorReport, errorLikeFields, initLogDir } from './errorops';
 
 type ChannelSpy = { info: jest.Mock; error: jest.Mock; warn: jest.Mock; debug: jest.Mock; trace: jest.Mock };
 
@@ -108,11 +109,11 @@ describe('errorops', () => {
 	});
 
 	/*
-	 * These are the assertions the "does not throw" tests above cannot make. writeToLogAtLevel shifts
+	 * These assertions verify more than that the call does not throw. writeToLogAtLevel shifts
 	 * the source into winston's message slot, so every argument after it travels in splat, and both
 	 * the logger's `levels` and its `format` have to be wired for any of it to reach the channel.
-	 * Each expectation below fails against a different half of the gap this covers: drop `levels` and
-	 * the transport gate discards the record entirely, drop `format` and only the source survives.
+	 * Each test in this group exercises a different half of that requirement: drop `levels` and
+	 * the transport gate discards the record entirely; drop `format` and only the source survives.
 	 */
 	describe('what actually reaches the output channel', () => {
 		it('renders the description that follows the source', async () => {
@@ -147,6 +148,65 @@ describe('errorops', () => {
 			expect(loggedLines('trace')).toContainEqual(expect.stringContaining('offset 412'));
 		});
 	});
+
+		/*
+		 * writeToLogAtLevel's file-log formatter JSON.stringifies a non-string argument directly, and
+		 * Error.prototype.message/.stack are non-enumerable own properties, so a bare Error collapses to
+		 * "{}" without errorLikeFields extracting them first. errorLikeFields is the extraction every
+		 * non-string file-log argument runs through; these test it directly since NOTETHINK_DEV (and so
+		 * the whole buffered file-log write path) is off in this test environment.
+		 */
+		describe('errorLikeFields()', () => {
+			it('extracts name, message and stack from an Error, none of which JSON.stringify sees on its own', () => {
+				const fields = errorLikeFields(new Error('agent analyser worker timed out'));
+				expect(fields).toMatchObject({ name: 'Error', message: 'agent analyser worker timed out' });
+				expect(typeof fields?.stack).toBe('string');
+				expect(JSON.stringify(fields)).not.toBe('{}');
+			});
+
+			it('preserves a subclass name, such as TypeError', () => {
+				expect(errorLikeFields(new TypeError('bad input'))).toMatchObject({ name: 'TypeError', message: 'bad input' });
+			});
+
+			it('carries extra own-enumerable fields attached to an Error, such as an ErrorEvent\'s filename/lineno', () => {
+				const err = Object.assign(new Error('agent analyser worker error'), { filename: 'agentAnalyserWorker.js', lineno: 42 });
+				expect(errorLikeFields(err)).toMatchObject({ message: 'agent analyser worker error', filename: 'agentAnalyserWorker.js', lineno: 42 });
+			});
+
+			it('unwraps an ErrorEvent-like object (message/filename/lineno/error) into its parts', () => {
+				const fake_error_event = { message: 'script error', filename: 'agentAnalyserWorker.js', lineno: 42, error: new Error('inner cause') };
+				const fields = errorLikeFields(fake_error_event);
+				expect(fields).toMatchObject({ message: 'script error', filename: 'agentAnalyserWorker.js', lineno: 42 });
+				expect(fields?.error).toMatchObject({ message: 'inner cause' });
+			});
+
+			it('returns undefined for a plain object, leaving the caller\'s own JSON.stringify(d) in charge', () => {
+				expect(errorLikeFields({ foo: 'bar' })).toBeUndefined();
+			});
+		});
+
+		describe('the file log actually writes an Error\'s message, not "{}"', () => {
+			beforeEach(() => {
+				(globalThis as { NOTETHINK_DEV?: boolean }).NOTETHINK_DEV = true;
+				jest.useFakeTimers();
+			});
+
+			afterEach(() => {
+				jest.useRealTimers();
+				delete (globalThis as { NOTETHINK_DEV?: boolean }).NOTETHINK_DEV;
+			});
+
+			it('flushes a buffered line containing the Error\'s message', async () => {
+				initLogDir(Uri.file('/mock/logs'));
+				writeToErrorLog('sendToWorker', 'agent analyser worker attempt 1 failed', new Error('agent analyser worker timed out'));
+				await jest.advanceTimersByTimeAsync(1000);
+				const write_mock = vscode.workspace.fs.writeFile as unknown as jest.Mock;
+				const last_call = write_mock.mock.calls[write_mock.mock.calls.length - 1];
+				const line = new TextDecoder().decode(last_call[1] as Uint8Array);
+				expect(line).toContain('agent analyser worker timed out');
+				expect(line).not.toContain('{}');
+			});
+		});
 
 	describe('writeToLogAtLevel()', () => {
 		it('does not throw for info level', () => {

@@ -1,21 +1,24 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import type { Page } from '@playwright/test';
 
 /*
- * Drive the agent card from the contract fixtures with no live agent anywhere.
+ * Drive the agent card from a synthetic snapshot shaped exactly as `AgentAnalyser.ts` posts one, with
+ * no live agent anywhere: five sessions across the three vendors, one repository's working tree, and
+ * no on-disk fixture at all. There used to be a `.notethink/` contract this helper read from disk and
+ * reassembled; it is retired (agent-activity-card story, superseded 2026-09-21), and the analyser's
+ * payload needs no reassembly, since a spec can build the wire shape directly.
  *
- * playwright/fixtures/activity is a populated `.notethink/` directory, laid out exactly as a producer
- * writes one. This helper reads it the way the extension host will and folds it into the same
- * `ActivitySnapshot` the host posts, through the mocked VS Code channel every other injector uses. The
- * snapshot is per contract root, so a spec can place the fixture directory anywhere in the workspace
- * and the card's join has to resolve it from `root_relative` alone.
- *
- * The manifest is authoritative about which sessions are live, so the failure fixtures beside them are
- * read only when a spec asks for one as a refusal.
+ * The snapshot is per repository, so a spec can place the sessions at any `root_path`/`root_relative`
+ * and the card's join has to resolve it from `root_relative` alone, exactly as `treeForDocPath` does.
  */
 
-const ACTIVITY_FIXTURE_DIR = path.join(__dirname, '..', 'fixtures', 'activity');
+const DEFAULT_ROOT_RELATIVE = 'notethink';
+const DEFAULT_ROOT_PATH = '/mnt/workspace/in_development/notethink';
+const TODO_PATH = 'docstech/users/alex.stanhope/todo.md';
+
+const CLAUDE_CAPABILITIES = { live_tool_call: 'supported', question: 'unsupported', file_attribution: 'supported' };
+const CODEX_CAPABILITIES = { live_tool_call: 'supported', question: 'unsupported', file_attribution: 'supported' };
+const GROK_CAPABILITIES = { live_tool_call: 'supported', question: 'supported', file_attribution: 'unsupported' };
+const USAGE = { input_tokens: 4200, output_tokens: 980, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: 0.34, is_estimate: true };
 
 interface ActivityRefusalSpec {
     file: string;
@@ -24,57 +27,127 @@ interface ActivityRefusalSpec {
     session_id?: string;
 }
 
+/**
+ * Options for one injected activity snapshot.
+ * - root_relative: where the analyser found the repository, relative to the workspace folder; '' when
+ *   it IS the workspace folder
+ * - sessions: session ids to keep, defaulting to every session this helper declares
+ * - extra_uncommitted: this many more unattributed changed files in the working tree, enough to fold
+ *   a card's uncommitted band
+ */
 interface InjectActivityOptions {
-    // where the host found the `.notethink/` directory, relative to the workspace folder; '' when it IS the workspace folder
     root_relative?: string;
     root_path?: string;
     live?: boolean;
     refusals?: ActivityRefusalSpec[];
-    unreadable_session_ids?: string[];
-    // session ids to keep, defaulting to every session the manifest declares live
     sessions?: string[];
+    extra_uncommitted?: number;
 }
 
-const DEFAULT_ROOT_RELATIVE = 'notethink';
-const DEFAULT_ROOT_PATH = '/mnt/workspace/in_development/notethink';
-
-function readJson<T>(...segments: string[]): T {
-    return JSON.parse(fs.readFileSync(path.join(ACTIVITY_FIXTURE_DIR, ...segments), 'utf-8')) as T;
+/** one bound session's `stories`/`story_usage` pair for a single story, the common case every fixture session below has */
+function boundToOneStory(doc_path: string, id: string): Record<string, unknown> {
+    const story = { doc_path, id };
+    return { stories: [story], story_usage: [{ story, usage: USAGE }] };
 }
 
-/** the snapshot the extension host posts, assembled from the fixture directory exactly as it would read one */
+function claudeBoundBusy(story_doc_path: string): Record<string, unknown> {
+    return {
+        session_id: 'claude-bound-busy', vendor: 'claude-code', project: 'notethink',
+        started_at: '2026-09-18T08:51:30Z', updated_at: '2026-09-18T09:14:01Z', state: 'working',
+        story_binding: 'bound', ...boundToOneStory(story_doc_path, 'agent-activity-card'),
+        capabilities: CLAUDE_CAPABILITIES,
+        current: { at: '2026-09-18T09:14:01Z', kind: 'tool_call', tool: 'Edit', arg: 'client/extension/src/types/AgentActivity.ts' },
+        model: 'claude-sonnet-5',
+        usage: USAGE,
+    };
+}
+
+function grokBoundIdle(story_doc_path: string): Record<string, unknown> {
+    return {
+        session_id: 'grok-bound-idle', vendor: 'grok', project: 'notethink',
+        started_at: '2026-09-18T08:20:05Z', updated_at: '2026-09-18T09:10:12Z', state: 'idle',
+        story_binding: 'bound', ...boundToOneStory(story_doc_path, 'kanban-card-ratio-height'),
+        capabilities: GROK_CAPABILITIES,
+        usage: USAGE,
+    };
+}
+
+function grokQuestion(story_doc_path: string): Record<string, unknown> {
+    return {
+        session_id: 'grok-question', vendor: 'grok', project: 'notethink',
+        started_at: '2026-09-18T09:02:11Z', updated_at: '2026-09-18T09:13:40Z', state: 'waiting',
+        story_binding: 'bound', ...boundToOneStory(story_doc_path, 'user-view-type-update'),
+        capabilities: GROK_CAPABILITIES,
+        current: { at: '2026-09-18T09:13:40Z', kind: 'tool_call', tool: 'run_terminal_command' },
+        question: { question_id: 'q-4417', asked_at: '2026-09-18T09:13:40Z', prompt: 'Apply the rename across all 14 call sites?', options: ['Yes', 'No, just this one', 'Cancel'] },
+        usage: USAGE,
+    };
+}
+
+function claudeNoStory(): Record<string, unknown> {
+    return {
+        session_id: 'claude-no-story', vendor: 'claude-code', project: 'notethink',
+        started_at: '2026-09-18T09:06:40Z', updated_at: '2026-09-18T09:13:55Z', state: 'working',
+        story_binding: 'none',
+        capabilities: CLAUDE_CAPABILITIES,
+        current: { at: '2026-09-18T09:13:55Z', kind: 'tool_call', tool: 'Bash', arg: 'pnpm run lint' },
+        usage: USAGE,
+    };
+}
+
+function codexNoQuestion(story_doc_path: string): Record<string, unknown> {
+    return {
+        session_id: 'codex-no-question', vendor: 'codex', project: 'notethink',
+        started_at: '2026-09-18T09:05:00Z', updated_at: '2026-09-18T09:12:00Z', state: 'unknown',
+        story_binding: 'bound', ...boundToOneStory(story_doc_path, 'code-layout-blank-lines'),
+        capabilities: CODEX_CAPABILITIES,
+        usage: USAGE,
+    };
+}
+
+const SESSION_BUILDERS: Record<string, (story_doc_path: string) => Record<string, unknown>> = {
+    'claude-bound-busy': claudeBoundBusy,
+    'grok-bound-idle': grokBoundIdle,
+    'grok-question': grokQuestion,
+    'claude-no-story': () => claudeNoStory(),
+    'codex-no-question': codexNoQuestion,
+};
+
+/** the tree one repository's working tree carries, keyed to the same session ids the sessions above declare */
+function activityTree(extra_uncommitted = 0): Record<string, unknown> {
+    const extra = Array.from({ length: extra_uncommitted }, (_, i) => ({ path: `docs/extra-${i + 1}.md`, change: 'modified' }));
+    return {
+        generated_at: '2026-09-18T09:14:02Z',
+        branch: 'staging',
+        head_commit: 'ef11de8b1c9a4d2f6e5b0a3c7d8e9f01a2b3c4d5',
+        uncommitted: [
+            { path: 'client/extension/src/types/AgentActivity.ts', change: 'added', session_id: 'claude-bound-busy', added: 18, removed: 0 },
+            { path: 'client/extension/src/lib/agentanalyserops.ts', change: 'added', session_id: 'claude-bound-busy', added: 6, removed: 0 },
+            { path: 'package.json', change: 'modified' },
+            { path: 'media/board-icon.png', change: 'modified', session_id: 'claude-no-story' },
+            ...extra,
+        ],
+        committed: [
+            { sha: 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4', subject: 'wire the sticky note lane', session_id: 'grok-bound-idle' },
+            { sha: 'b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5', subject: 'rename axisops', session_id: 'grok-bound-idle' },
+        ],
+    };
+}
+
+/** the snapshot the analyser posts, assembled from synthetic data shaped exactly as the real one is */
 export function activityFixtureSnapshot(options: InjectActivityOptions = {}): Record<string, unknown> {
     const root_relative = options.root_relative ?? DEFAULT_ROOT_RELATIVE;
     const root_path = options.root_path ?? DEFAULT_ROOT_PATH;
-    const manifest = readJson<{ producer: unknown; capabilities: unknown; written_at: string; heartbeat_seconds: number; sessions: string[] }>('manifest.json');
-    const live_ids = options.sessions ?? manifest.sessions;
-    const sessions = live_ids.map(id => {
-        const digest_path = path.join(ACTIVITY_FIXTURE_DIR, 'sessions', `${id}.digest.json`);
-        return {
-            root_path,
-            root_relative,
-            session: readJson<Record<string, unknown>>('sessions', `${id}.session.json`),
-            events: [],
-            digest: fs.existsSync(digest_path) ? JSON.parse(fs.readFileSync(digest_path, 'utf-8')) : undefined,
-        };
-    });
+    const story_doc_path = root_relative ? `${root_relative}/${TODO_PATH}` : TODO_PATH;
+    const ids = options.sessions ?? Object.keys(SESSION_BUILDERS);
+    const sessions = ids.map(id => ({
+        root_path,
+        session: SESSION_BUILDERS[id](story_doc_path),
+    }));
     return {
-        contract_version: '1.0.0',
-        producers: [{
-            root_path,
-            root_relative,
-            project: 'notethink',
-            producer: manifest.producer,
-            written_at: manifest.written_at,
-            heartbeat_seconds: manifest.heartbeat_seconds,
-            live: options.live !== false,
-            capabilities: manifest.capabilities,
-            declared_session_ids: manifest.sessions,
-            unreadable_session_ids: options.unreadable_session_ids ?? [],
-            refusals: options.refusals ?? [],
-        }],
+        analyser: { state: options.live === false ? 'unavailable' : 'live', refusals: options.refusals ?? [] },
         sessions,
-        trees: [{ root_path, root_relative, tree: readJson('tree.json') }],
+        trees: [{ root_path, root_relative, tree: activityTree(options.extra_uncommitted) }],
     };
 }
 
@@ -86,11 +159,20 @@ export async function injectActivity(page: Page, options: InjectActivityOptions 
     }, activity);
 }
 
-/** post a snapshot saying nothing is writing anywhere the host can see, which is what a workspace with no producer looks like */
+/** post a snapshot saying the analyser is live and has found nothing, which is what a workspace with no agent working looks like */
 export async function injectNoProducer(page: Page): Promise<void> {
     await page.evaluate(() => {
         window.dispatchEvent(new MessageEvent('message', {
-            data: { type: 'activity', activity: { contract_version: '1.0.0', producers: [], sessions: [], trees: [] } },
+            data: { type: 'activity', activity: { analyser: { state: 'live', refusals: [] }, sessions: [], trees: [] } },
+        }));
+    });
+}
+
+/** post a snapshot saying the analyser's first scan is still in flight, which is what the host posts the moment a panel first demands activity */
+export async function injectScanning(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'activity', activity: { analyser: { state: 'scanning', refusals: [] }, sessions: [], trees: [] } },
         }));
     });
 }

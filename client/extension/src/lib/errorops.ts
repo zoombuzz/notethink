@@ -21,21 +21,24 @@ const logBuffer: string[] = [];
 let logFlushTimer: ReturnType<typeof setTimeout> | undefined;
 
 /*
- * the extension's standard log directory (vscode.ExtensionContext.logUri), set by initLogDir at activation
- * this is the canonical VS Code-managed place for extension log files - NEVER the user's open workspace folder
- * it resolves under the rotating session logs dir (~/.config/Code/logs/<session>/window<N>/exthost/webWorker/NoteThink.notethink/ on Linux)
- * VS Code guarantees logUri's parent exists but not logUri itself, so we create it once
+ * The extension's standard log directory (vscode.ExtensionContext.logUri), set by initLogDir at activation.
+ * This is the canonical VS Code-managed place for extension log files - NEVER the user's open workspace folder.
+ * It resolves under the rotating session logs dir (~/.config/Code/logs/<session>/window<N>/exthost/webWorker/NoteThink.notethink/ on Linux).
+ * VS Code guarantees logUri's parent exists but not logUri itself, so we create it once.
  */
 let logDir: vscode.Uri | undefined;
 
 /**
- * pin the file log to the extension's standard log directory. Call once from activate() with
+ * Pin the file log to the extension's standard log directory. Call once from activate() with
  * context.logUri. Creates the directory (logUri may not exist yet) so the first flush succeeds.
  */
 export function initLogDir(log_uri: vscode.Uri): void {
     logDir = log_uri;
     vscode.workspace.fs.createDirectory(log_uri).then(undefined, () => {});
 }
+
+// a write failure is reported once per session rather than on every flush, since a wedged log directory would otherwise retry every LOG_FLUSH_MS and fill the output channel with the same line
+let reportedFileLogFailure = false;
 
 function flushLogBuffer(): void {
     logFlushTimer = undefined;
@@ -45,7 +48,12 @@ function flushLogBuffer(): void {
     // fire-and-forget; never block logging on I/O
     vscode.workspace.fs.writeFile(logUri, new TextEncoder().encode(content)).then(
         undefined,
-        () => {} // silently ignore write failures
+        (err) => {
+            if (reportedFileLogFailure) { return; }
+            reportedFileLogFailure = true;
+            // logger.log rather than writeToLogAtLevel: appendToFileLog would try the same failing write again
+            logger.log('warn', 'flushLogBuffer', `the file log at ${logUri.path} could not be written: ${String(err)}`);
+        }
     );
 }
 
@@ -158,12 +166,27 @@ function formatFirstArg(arg: unknown, length: number): string {
 }
 
 /**
- * Write to the log
+ * The fields JSON.stringify drops from an Error's non-enumerable own properties (name, message,
+ * stack), or unwrapped from an ErrorEvent-like object ({message, filename, lineno, error}) so a
+ * worker crash logs what actually threw instead of collapsing to "{}". Returns undefined for
+ * anything else, so the caller's own JSON.stringify(d) still handles a plain object.
+ */
+export function errorLikeFields(d: unknown): Record<string, unknown> | undefined {
+    if (d instanceof Error) { return { ...d, name: d.name, message: d.message, stack: d.stack }; }
+    if (d && typeof d === 'object' && 'message' in d && ('filename' in d || 'lineno' in d || 'error' in d)) {
+        const event = d as { message?: unknown; filename?: unknown; lineno?: unknown; error?: unknown };
+        return { message: event.message, filename: event.filename, lineno: event.lineno, error: errorLikeFields(event.error) ?? event.error };
+    }
+    return undefined;
+}
+
+/**
+ * Write to the log.
  * @param level
  * @param {array} data
  * data[0] source
  * data[1] message description
- * data[2] abbreviated shop details (if available)
+ * data[2] additional context, such as an Error object, when present
  */
 export function writeToLogAtLevel(level: string, ...data: Array<unknown>): void {
     // format the first argument as a source
@@ -175,7 +198,7 @@ export function writeToLogAtLevel(level: string, ...data: Array<unknown>): void 
     logger.log(level, source, ...data);
     // mirror to file log for CLI access
     const ts = new Date().toISOString();
-    const msg = raw_data.map(d => typeof d === 'string' ? d : JSON.stringify(d)).join(' ');
+    const msg = raw_data.map(d => typeof d === 'string' ? d : JSON.stringify(errorLikeFields(d) ?? d)).join(' ');
     appendToFileLog(`${ts} ${level.toUpperCase().padEnd(5)} ${msg}`);
 }
 
@@ -195,8 +218,8 @@ export function writeToErrorLog(...data: Array<unknown>): void {
 }
 
 /**
- * gated, fire-and-forget POST of a caught/logged error to the host's client-error receiver.
- * no-ops unless the build opted in via the NOTETHINK_CLIENT_ERROR_REPORTING define (guarded with
+ * Gated, fire-and-forget POST of a caught/logged error to the host's client-error receiver.
+ * No-ops unless the build opted in via the NOTETHINK_CLIENT_ERROR_REPORTING define (guarded with
  * typeof so the absent symbol - e.g. under jest - is safe), and swallows every failure so reporting
  * can never disturb the logging path.
  */
@@ -222,8 +245,8 @@ function sendClientError(kind: string, message: string, stack: string): void {
 }
 
 /*
- * uncaught extension-host (webworker) errors never reach the host window, so hook the worker's own
- * global error / unhandledrejection handlers and forward them to the receiver with distinct kinds
+ * Uncaught extension-host (webworker) errors never reach the host window, so hook the worker's own
+ * global error / unhandledrejection handlers and forward them to the receiver with distinct kinds.
  */
 if (typeof NOTETHINK_CLIENT_ERROR_REPORTING !== 'undefined' && NOTETHINK_CLIENT_ERROR_REPORTING) {
     const worker_scope = globalThis as typeof globalThis & { addEventListener?: (type: string, listener: (event: unknown) => void) => void };

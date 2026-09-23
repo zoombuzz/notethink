@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.3.70",
+  "version": "0.4.3",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -166,13 +166,13 @@
           },
           "notethink.settings.view.type": {
             "type": "string",
-            "scope": "resource",
+            "scope": "window",
             "default": "auto",
             "description": "%config.settings.view.type.description%"
           },
           "notethink.settings.view.userTypes": {
             "type": "array",
-            "scope": "resource",
+            "scope": "window",
             "items": {
               "type": "object"
             },
@@ -181,31 +181,31 @@
           },
           "notethink.settings.card.type": {
             "type": "string",
-            "scope": "resource",
+            "scope": "window",
             "default": "auto",
             "description": "%config.settings.card.type.description%"
           },
           "notethink.settings.view.generic.showLineNumbers": {
             "type": "boolean",
-            "scope": "resource",
+            "scope": "window",
             "default": false,
             "description": "%config.settings.view.generic.showLineNumbers.description%"
           },
           "notethink.settings.view.generic.showLinetagsInHeadlines": {
             "type": "boolean",
-            "scope": "resource",
+            "scope": "window",
             "default": false,
             "description": "%config.settings.view.generic.showLinetagsInHeadlines.description%"
           },
           "notethink.settings.view.generic.scrollNoteIntoView": {
             "type": "boolean",
-            "scope": "resource",
+            "scope": "window",
             "default": true,
             "description": "%config.settings.view.generic.scrollNoteIntoView.description%"
           },
           "notethink.settings.view.generic.autoExpandFocusedNote": {
             "type": "boolean",
-            "scope": "resource",
+            "scope": "window",
             "default": false,
             "description": "%config.settings.view.generic.autoExpandFocusedNote.description%"
           },
@@ -223,13 +223,13 @@
           },
           "notethink.settings.view.specific.grouped.groupBy": {
             "type": "string",
-            "scope": "resource",
+            "scope": "window",
             "default": "auto",
             "description": "%config.settings.view.specific.grouped.groupBy.description%"
           },
           "notethink.settings.view.specific.line.orientation": {
             "type": "string",
-            "scope": "resource",
+            "scope": "window",
             "enum": [
               "columns",
               "rows"
@@ -239,20 +239,20 @@
           },
           "notethink.settings.view.specific.line.lineBreadth": {
             "type": "number",
-            "scope": "resource",
+            "scope": "window",
             "minimum": 120,
             "default": 220,
             "description": "%config.settings.view.specific.line.lineBreadth.description%"
           },
           "notethink.settings.view.specific.kanban.groupBy": {
             "type": "string",
-            "scope": "resource",
+            "scope": "window",
             "default": "auto",
             "description": "%config.settings.view.specific.kanban.groupBy.description%"
           },
           "notethink.settings.view.specific.kanban.columnOrder": {
             "type": "array",
-            "scope": "resource",
+            "scope": "window",
             "items": {
               "type": "string"
             },
@@ -267,7 +267,7 @@
           },
           "notethink.settings.view.specific.kanban.cardRatio": {
             "type": "number",
-            "scope": "resource",
+            "scope": "window",
             "minimum": 0.5,
             "maximum": 4,
             "default": 1.4,
@@ -281,25 +281,25 @@
           },
           "notethink.settings.view.specific.kanban.defaultCardType": {
             "type": "string",
-            "scope": "resource",
+            "scope": "window",
             "default": "card",
             "description": "%config.settings.view.specific.kanban.defaultCardType.description%"
           },
           "notethink.settings.files.includeFilter": {
             "type": "string",
-            "scope": "resource",
+            "scope": "window",
             "default": "**/*.md",
             "description": "%config.settings.files.includeFilter.description%"
           },
           "notethink.settings.files.excludeFilter": {
             "type": "string",
-            "scope": "resource",
+            "scope": "window",
             "default": "**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**",
             "description": "%config.settings.files.excludeFilter.description%"
           },
           "notethink.settings.files.maxNotesPerFile": {
             "type": "integer",
-            "scope": "resource",
+            "scope": "window",
             "minimum": 1,
             "default": 10,
             "description": "%config.settings.files.maxNotesPerFile.description%"

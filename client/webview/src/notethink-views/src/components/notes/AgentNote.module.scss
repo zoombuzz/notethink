@@ -1,6 +1,6 @@
 /*
- * The agent card: the story's headline, then one row per agent, any question band, the session drawer
- * and the two file bands.
+ * The agent card: the story's headline, then a meta row, a usage summary, an activity banner, one row
+ * per agent, any question band and the two file bands.
  *
  * Colour is rationed deliberately. The state rail on an agent row is the only saturated mark on the
  * card, because state is the one thing worth acting on; the vendor is monochrome monospace type, and
@@ -8,11 +8,8 @@
  * to a literal, because the chart colours are not among the variables a bare webview host is
  * guaranteed to stamp and an unresolved var() would leave a rail with no colour at all.
  *
- * The card keeps the lane's card surface rather than clearing it the way the sticky does: this is a
- * full card and wants the border, background and shadow a lane gives one.
- *
- * The drawer is a local 0fr -> 1fr grid rather than the toolbar's. ViewRenderer's .drawerGrid is
- * sticky-positioned against the toolbar's height, which is meaningless inside a card.
+ * The card keeps the lane's card surface, shadow included, unchanged on hover: the card itself carries
+ * no state rail, since the meta row's chip and the row rails already say what state it is in.
  */
 
 .agentNote {
@@ -24,16 +21,71 @@
 
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-bottom: 6px;
+
+  // the shared .note list rule (ViewRenderer.module.scss) puts a disc and a top margin on every list in a card, and the lane an indent; these lists are rosters, not prose
+  .agentRows,
+  .questionBands,
+  .fileRows {
+    --nt-card-list-padding: 0;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    > li {
+      list-style-type: none;
+    }
+  }
 }
 
-.agentRows,
-.questionBands,
-.fileRows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+// the body wrapper carrying the shared view_specific_styles.body class (ViewRenderer.module.scss), so
+// the card picks up the same horizontal/bottom padding and clipping every other card's body gets
+.agentBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+// the meta row: a state chip naming the card's winning state, and how many agents it draws
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.85em;
+}
+
+.stateChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--nt-agent-state-colour, var(--vscode-descriptionForeground, rgba(204, 204, 204, 0.7)));
+  font-weight: 600;
+
+  &[data-state="working"] { --nt-agent-state-colour: var(--nt-agent-working); }
+  &[data-state="waiting"] { --nt-agent-state-colour: var(--nt-agent-waiting); }
+  &[data-state="idle"] { --nt-agent-state-colour: var(--nt-agent-idle); }
+  &[data-state="ended"] { --nt-agent-state-colour: var(--nt-agent-ended); }
+}
+
+.beacon {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stateChip[data-state="working"] .beacon { animation: ntAgentPulse 1.9s ease-in-out infinite; }
+  .stateChip[data-state="waiting"] .beacon { animation: ntAgentPulse 1.1s ease-in-out infinite; }
+}
+
+@keyframes ntAgentPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.32; }
+}
+
+.agentCount {
+  opacity: 0.7;
 }
 
 .agentRow {
@@ -46,12 +98,32 @@
   &[data-state="ended"] { --nt-agent-state-colour: var(--nt-agent-ended); }
 }
 
+/*
+ * The roster is the size container its rows are laid out against, so a row reads the card's own width
+ * whichever view the card sits in: a kanban lane, a line view column or a full-width document.
+ */
+.agentRows {
+  container-type: inline-size;
+}
+
+/*
+ * A narrow card stacks each row onto three lines beside one rail: who (monogram and model) with how
+ * (state and clock) at the right, then the live line, then the counter. A card wide enough puts all of
+ * it on one line. Every cell has a zero minimum width and truncates, and the card body's
+ * `overflow-wrap: anywhere` is turned off here: that rule lets a grid track shrink to the width of one
+ * character, which is how a model id came to be drawn two letters to a line.
+ */
 .agentRowButton {
   display: grid;
-  grid-template-columns: 3px auto auto 1fr;
-  align-items: center;
-  gap: 6px;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "rail ident status"
+    "rail live live"
+    "rail usage usage";
+  align-items: baseline;
+  gap: 1px 6px;
   width: 100%;
+  overflow-wrap: normal;
   padding: 3px 6px;
   border: 0;
   border-radius: 3px;
@@ -69,13 +141,53 @@
     outline: 1px solid var(--vscode-focusBorder, #007fd4);
     outline-offset: -1px;
   }
+
+  // every text cell holds one line and truncates; its whole text is the cell's hover title
+  > span:not(.agentRail),
+  .agentIdent > span,
+  .agentStatus > span {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+@container (min-width: 440px) {
+  .agentRowButton {
+    grid-template-columns: 3px auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "rail ident live status usage";
+    row-gap: 0;
+  }
 }
 
 .agentRail {
+  grid-area: rail;
   align-self: stretch;
   min-height: 1em;
   border-radius: 2px;
   background: var(--nt-agent-state-colour);
+}
+
+.agentIdent,
+.agentStatus {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.agentIdent {
+  grid-area: ident;
+}
+
+// state and clock keep their width and give way only to the model beside them, which truncates first
+.agentStatus {
+  grid-area: status;
+  justify-self: end;
+
+  > span {
+    flex: none;
+  }
 }
 
 // a contract file the host refused that belongs to this session, drawn where a reader is looking at that session
@@ -89,10 +201,17 @@
 }
 
 .agentMonogram {
+  flex: none;
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 0.85em;
   letter-spacing: 0.05em;
   opacity: 0.75;
+}
+
+.agentModel {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.8em;
+  opacity: 0.55;
 }
 
 .agentState {
@@ -101,10 +220,8 @@
 }
 
 .agentLive {
-  overflow: hidden;
+  grid-area: live;
   font-size: 0.85em;
-  white-space: nowrap;
-  text-overflow: ellipsis;
   opacity: 0.7;
 
   // a fact the producer cannot report reads as absent unless it is marked as unreported
@@ -112,6 +229,19 @@
     font-style: italic;
     opacity: 0.55;
   }
+}
+
+.agentClock {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8em;
+  opacity: 0.6;
+}
+
+.agentUsage {
+  grid-area: usage;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8em;
+  opacity: 0.6;
 }
 
 .questionBand {
@@ -124,13 +254,6 @@
   border-radius: 2px;
   background: var(--vscode-inputValidation-warningBackground, rgba(204, 167, 0, 0.12));
   font-size: 0.85em;
-
-  &[data-fact="unsupported"] {
-    border-left-color: var(--nt-agent-unknown);
-    background: transparent;
-    font-style: italic;
-    opacity: 0.6;
-  }
 }
 
 .questionOptions {
@@ -157,10 +280,22 @@
   margin: 0;
 }
 
+.usageSummary {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground, rgba(204, 204, 204, 0.7));
+}
+
 .fileBands {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.fileBandHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .fileBandTitle {
@@ -172,6 +307,24 @@
   opacity: 0.6;
 }
 
+.fileBandMore {
+  margin: 0;
+  padding: 2px 6px;
+  font-size: 0.8em;
+  opacity: 0.6;
+}
+
+// the "and N more" / "Show less" control: a native button stripped to the default card's read-more link look
+.fileBandToggle {
+  display: block;
+  margin: 0;
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+}
+
 .fileBandEmpty {
   margin: 0;
   font-size: 0.85em;
@@ -180,10 +333,12 @@
 
 .fileRowButton {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: baseline;
   gap: 6px;
   width: 100%;
+  overflow-wrap: normal;
+  white-space: nowrap;
   padding: 2px 6px;
   border: 0;
   border-radius: 3px;
@@ -230,8 +385,40 @@
   text-align: left;
 }
 
+// a commit row has no action, so it is laid out as the file row's button is but drawn as plain text: vendor, subject, short sha
+.commitRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 6px;
+  font-size: 0.85em;
+  overflow-wrap: normal;
+}
+
+// a subject reads from its start, unlike a path whose file name is at its end
+.commitSubject {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .fileChange {
   opacity: 0.6;
+}
+
+// the numstat totals, reusing the same editor gitDecoration colours the built-in git view marks added/deleted resources with
+.lineDiff {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9em;
+}
+
+.lineDiffAdded {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #587c0c);
+}
+
+.lineDiffRemoved {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #ad0707);
 }
 
 .fileDetailLine {
@@ -239,134 +426,4 @@
   padding: 0 6px 2px 24px;
   font-size: 0.8em;
   opacity: 0.7;
-}
-
-.drawerGrid {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 150ms cubic-bezier(0.2, 0, 0.38, 0.9);
-
-  &[data-open="true"] {
-    grid-template-rows: 1fr;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    transition-duration: 0ms;
-  }
-}
-
-.drawer {
-  overflow: hidden; // required for the 0fr -> 1fr grid trick
-  min-height: 0;    // required for the 0fr -> 1fr grid trick
-}
-
-.drawerBody {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 40vh;
-  overflow-y: auto;
-  padding: 6px 8px;
-  border-radius: 3px;
-  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.08));
-  font-size: 0.85em;
-}
-
-.drawerHeading {
-  display: flex;
-  justify-content: space-between;
-  margin: 0;
-  font-size: 0.9em;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  opacity: 0.6;
-}
-
-.drawerWindow {
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.drawerList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.drawerMessage,
-.drawerToolCall {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 6px;
-  padding: 1px 0;
-}
-
-.drawerRole,
-.drawerTool {
-  font-family: var(--vscode-editor-font-family, monospace);
-  opacity: 0.6;
-}
-
-.drawerText {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.drawerEmpty {
-  margin: 0;
-  font-style: italic;
-  opacity: 0.6;
-}
-
-.drawerFacts {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 1px 6px;
-  margin: 0;
-}
-
-.drawerFactKey {
-  font-family: var(--vscode-editor-font-family, monospace);
-  opacity: 0.6;
-}
-
-.drawerFactValue {
-  margin: 0;
-}
-
-/*
- * Handing a session to its vendor's own chat panel. Drawn as a quiet secondary control inside the
- * drawer rather than as the row's action, because the handover's outcome cannot be confirmed and the
- * digest beside it can.
- */
-.drawerHandover {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 2px;
-  border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
-}
-
-.drawerHandoverButton {
-  align-self: flex-start;
-  padding: 2px 8px;
-  border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
-  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.25));
-  color: var(--vscode-button-secondaryForeground, inherit);
-  font: inherit;
-  font-size: 0.9em;
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: 1px solid var(--vscode-focusBorder, #007fd4);
-    outline-offset: 1px;
-  }
-}
-
-.drawerHandoverNote {
-  font-size: 0.9em;
-  opacity: 0.6;
 }

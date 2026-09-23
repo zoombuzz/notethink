@@ -10,7 +10,7 @@ import { isPathWithin, isWithinWorkspace } from '../lib/pathops';
 import { isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, hasOverride, settingKeys, editTarget, buildSettingsCascadePayload } from '../lib/settings';
 import type { HashMapOf, Doc } from '../types/general';
 import { ActivityCommands } from './ActivityCommands';
-import { ActivityReader } from './ActivityReader';
+import type { AgentAnalyser } from './AgentAnalyser';
 
 const CHANGE_DEBOUNCE_MS = 250;
 const SELECTION_DEBOUNCE_MS = 120;
@@ -104,9 +104,10 @@ export class PanelSession {
 	// scheme+authority carrier for every folder-mode and open-by-path URI; preserves the real workspace scheme (file:, vscode-vfs:, notegit: and other custom provider schemes) so discovery and opens work on non-file: hosts
 	private readonly base_uri: vscode.Uri;
 	private readonly extension_version: string;
-	// the activity contract's reader and its row commands; the reader's watcher is deliberately separate from the folder markdown watcher, which would parse a contract file into a story
-	private readonly activity_reader: ActivityReader;
+	// the shared, per-extension-host activity analyser and this panel's own row commands; demand/withdraw track whether THIS panel is currently drawing an `agent` card, never whether the analyser itself is running
 	private readonly activity_commands: ActivityCommands;
+	private readonly post_to_webview: (message: Record<string, unknown>) => void;
+	private activity_demanded = false;
 
 	constructor(
 		private readonly webviewPanel: vscode.WebviewPanel,
@@ -115,6 +116,7 @@ export class PanelSession {
 		private readonly getHtml: (webview: vscode.Webview) => string,
 		private readonly onActivate: (panel: vscode.WebviewPanel) => void,
 		private readonly onDispose: (panel: vscode.WebviewPanel) => void,
+		private readonly activity_analyser: AgentAnalyser,
 	) {
 		// resolve workspace root for breadcrumb display; asRelativePath/getWorkspaceFolder handle symlinks and may return undefined in web hosts
 		const workspace_folder = (initialDocument ? vscode.workspace.getWorkspaceFolder(initialDocument.uri) : undefined)
@@ -123,9 +125,8 @@ export class PanelSession {
 		// prefer the workspace folder's URI as the scheme carrier; fall back to the active doc's URI when no folder is open (single loose file)
 		this.base_uri = workspace_folder?.uri ?? initialDocument?.uri ?? INERT_BASE_URI;
 		this.extension_version = this.context.extension.packageJSON.version as string || '';
-		const postToWebview = (message: Record<string, unknown>): void => { this.webviewPanel.webview.postMessage(message); };
-		this.activity_reader = new ActivityReader(this.base_uri, postToWebview);
-		this.activity_commands = new ActivityCommands(this.base_uri, this.activity_reader, postToWebview);
+		this.post_to_webview = (message: Record<string, unknown>): void => { this.webviewPanel.webview.postMessage(message); };
+		this.activity_commands = new ActivityCommands(this.base_uri, this.activity_analyser, this.post_to_webview);
 	}
 
 	// rebuild an absolute-path string into a URI that carries the workspace scheme + authority, so folder-mode discovery and opens never assume file:
@@ -151,7 +152,6 @@ export class PanelSession {
 		this.webviewPanel.webview.html = this.getHtml(this.webviewPanel.webview);
 		if (this.initialDocument) { await this.buildInitialDoc(this.initialDocument); }
 		this.registerListeners();
-		await this.activity_reader.start();
 	}
 
 	// --- doc construction and dispatch ---
@@ -343,7 +343,7 @@ export class PanelSession {
 			this.discardDiscoveryBatch();
 			if (this.integration_watcher) { this.integration_watcher.dispose(); this.integration_watcher = undefined; }
 			if (this.active_file_watcher) { this.active_file_watcher.dispose(); this.active_file_watcher = undefined; }
-			this.activity_reader.dispose();
+			if (this.activity_demanded) { this.activity_analyser.withdraw(this.post_to_webview); this.activity_demanded = false; }
 			changeDocumentSubscription.dispose();
 			activeEditorSubscription.dispose();
 			visibleEditorsSubscription.dispose();
@@ -441,6 +441,8 @@ export class PanelSession {
 				case 'editText': return this.handleEditText(e);
 				case 'openExternal': return this.handleOpenExternal(e);
 				case 'openRelative': return this.handleOpenRelative(e);
+				case 'activityDemand': return this.handleActivityDemand();
+				case 'activityWithdraw': return this.handleActivityWithdraw();
 				case 'renderError': {
 					// rebuild an Error from the webview's payload so the log carries a real error object and the client-error report keeps its stack
 					const render_error = new Error(e.message as string);
@@ -467,12 +469,25 @@ export class PanelSession {
 				this.sendCurrentSelection();
 			}
 			this.sendSettingsCascade();
-			this.activity_reader.resend();
+			if (this.activity_demanded) { this.activity_analyser.resendTo(this.post_to_webview); }
 			this.syncActiveFileWatcher();
 			await this.openFolderAtWorkspaceRootIfDocless();
 		} catch (err) {
 			writeToErrorLog('handleRequestInitialState', 'failed to send initial state', err);
 		}
+	}
+
+	// the webview posts this once when a note resolves to the `agent` card type anywhere in this panel, and again on every requestInitialState reconnect; demand() itself is idempotent for an already-demanding panel, so a duplicate costs nothing
+	private handleActivityDemand(): void {
+		this.activity_demanded = true;
+		this.activity_analyser.demand(this.post_to_webview);
+	}
+
+	// posted once no note in this panel resolves to `agent` any more; the shared analyser keeps running for any other panel still demanding it
+	private handleActivityWithdraw(): void {
+		if (!this.activity_demanded) { return; }
+		this.activity_demanded = false;
+		this.activity_analyser.withdraw(this.post_to_webview);
 	}
 
 	/**

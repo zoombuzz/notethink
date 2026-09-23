@@ -283,9 +283,11 @@ export const workspace = {
 	},
 };
 
+// no command is registered by default; a test that needs the git extension's `git.api.*` commands present replaces getCommands' and executeCommand's answers
 export const commands = {
 	registerCommand: jest.fn(),
 	executeCommand: jest.fn(),
+	getCommands: jest.fn(async (): Promise<string[]> => []),
 };
 
 export const env = {

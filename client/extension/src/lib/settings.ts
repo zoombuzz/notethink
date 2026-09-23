@@ -14,6 +14,7 @@ import { DEFAULT_COLUMN_ORDER, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER } 
  * diverged count to zero.
  *
  * Adding a setting = one entry here plus a matching package.json contribution. The read/write helpers stay one-liners; the cascade payload, the override flags, the diverged set, and the promote/reset handlers all iterate this map.
+ * The contribution declares `"scope": "window"`: every read here passes no resource, so a `resource` scope would promise per-folder values that nothing reads.
  */
 
 /*

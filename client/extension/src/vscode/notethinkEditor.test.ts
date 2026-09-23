@@ -2392,4 +2392,39 @@ describe('NotethinkEditorProvider', () => {
 			expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
 		});
 	});
+
+	// activityDemand/activityWithdraw dispatch onto the shared AgentAnalyser the provider owns; the analyser's own lifecycle (ref-counting, restart-once, watchers) is AgentAnalyser.test.ts's job, this only proves the panel's message reaches it and answers back
+	describe('agent activity demand dispatch', () => {
+		it('activityDemand gets an activity message posted back to this panel', async () => {
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({ type: 'activityDemand' });
+			expect(findByType(panelHelper.postedMessages, 'activity')).toBeDefined();
+		});
+
+		it('activityWithdraw with no prior demand posts nothing back', async () => {
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({ type: 'activityWithdraw' });
+			expect(findByType(panelHelper.postedMessages, 'activity')).toBeUndefined();
+		});
+
+		it('a second panel sharing the same provider gets its own activity message on demand', async () => {
+			const second = createMockWebviewPanel();
+			await (provider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(second.panel, undefined);
+			await second.simulateMessage({ type: 'activityDemand' });
+			expect(findByType(second.postedMessages, 'activity')).toBeDefined();
+		});
+
+		it('requestInitialState after a demand resends the activity snapshot to that panel', async () => {
+			await panelHelper.simulateMessage({ type: 'activityDemand' });
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({ type: 'requestInitialState' });
+			expect(findByType(panelHelper.postedMessages, 'activity')).toBeDefined();
+		});
+
+		it('requestInitialState with no prior demand does not resend an activity snapshot', async () => {
+			panelHelper.postedMessages.length = 0;
+			await panelHelper.simulateMessage({ type: 'requestInitialState' });
+			expect(findByType(panelHelper.postedMessages, 'activity')).toBeUndefined();
+		});
+	});
 });

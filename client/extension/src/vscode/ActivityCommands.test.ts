@@ -1,25 +1,26 @@
-import * as fs from 'node:fs';
-import * as nodepath from 'node:path';
 import * as vscode from 'vscode';
 import { ActivityCommands } from './ActivityCommands';
-import { parseActivityTree } from '../lib/activityops';
 import type { ActivityTree } from '../types/AgentActivity';
 
-/*
- * The opener is driven with the fixture working tree, because the admission rule under test is
- * "the contract lists this path": a tree restated here would let the gate and the fixture drift
- * apart, and the fixture is what a producer reads as documentation.
- */
-const FIXTURES_DIR = nodepath.join(__dirname, '..', '..', '..', '..', 'playwright', 'fixtures', 'activity');
 const WORKSPACE_PATH = '/ws';
 const ROOT_PATH = '/ws/notethink';
-const CONTRACT_PATH = `${ROOT_PATH}/.notethink`;
-const BASE_BLOB = 'blobs/8c3a9f11da1abebb774cc753cfeccd67c68d8ae3a29479756f9f556eee4453b0.json';
+const TRANSCRIPTS: Record<string, string> = {
+	'claude-bound-busy': '/home/test/.claude/projects/-ws-notethink/claude-bound-busy.jsonl',
+	'codex-no-question': '/home/test/.codex/sessions/2026/09/22/rollout-codex-no-question.jsonl',
+};
 
-function fixtureTree(): ActivityTree {
-	const parsed = parseActivityTree(fs.readFileSync(nodepath.join(FIXTURES_DIR, 'tree.json'), 'utf-8'));
-	if (!parsed.ok) { throw new Error(`the tree fixture was refused: ${parsed.reason}`); }
-	return parsed.value;
+function makeTree(): ActivityTree {
+	return {
+		generated_at: '2026-09-22T00:00:00Z',
+		branch: 'staging',
+		head_commit: 'a'.repeat(40),
+		uncommitted: [
+			{ path: 'package.json', change: 'modified' },
+			{ path: 'client/extension/src/types/AgentActivity.ts', change: 'added' },
+			{ path: 'media/board-icon.png', change: 'deleted' },
+		],
+		committed: [{ sha: 'b'.repeat(40), subject: 'first commit', session_id: 'claude-bound-busy' }],
+	};
 }
 
 describe('opening what an activity row points at', () => {
@@ -28,7 +29,6 @@ describe('opening what an activity row points at', () => {
 	let commands: ActivityCommands;
 	let tree: ActivityTree;
 
-	// every path the fixture tree names, plus the blobs it references, as files that exist
 	function mountWorkspace(present_paths: string[]): void {
 		statted = [];
 		(vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [{ uri: vscode.Uri.file(WORKSPACE_PATH), name: 'ws', index: 0 }];
@@ -42,57 +42,49 @@ describe('opening what an activity row points at', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 		posted = [];
-		tree = fixtureTree();
+		tree = makeTree();
 		mountWorkspace([
-			`${ROOT_PATH}/client/extension/src/types/AgentActivity.ts`,
 			`${ROOT_PATH}/package.json`,
-			`${ROOT_PATH}/client/webview/src/notethink-views/src/components/notes/StickyNote.tsx`,
-			`${CONTRACT_PATH}/${BASE_BLOB}`,
-			`${CONTRACT_PATH}/blobs/2fed2679082ce5e91ec373df6ffcf62e1a4b450889cc9c99e6616fdd9699c4c5.tsx`,
-			`${CONTRACT_PATH}/blobs/a2631be9937502ce7ea9ad0997b1348b56f0c82f0233250348eeea36ea5fd4e8.tsx`,
+			`${ROOT_PATH}/client/extension/src/types/AgentActivity.ts`,
 		]);
 		commands = new ActivityCommands(
 			vscode.Uri.file(WORKSPACE_PATH),
-			{ treeFor: (root_path: string) => root_path === ROOT_PATH ? tree : undefined },
+			{
+				treeFor: (root_path: string) => root_path === ROOT_PATH ? tree : undefined,
+				transcriptPathFor: (session_id: string) => TRANSCRIPTS[session_id],
+			},
 			message => posted.push(message),
 		);
 	});
 
-	async function openDiff(file_path: string, band = 'uncommitted'): Promise<boolean> {
-		return commands.handleMessage({ type: 'openActivityDiff', root_path: ROOT_PATH, path: file_path, band });
+	async function openDiff(file_path: string): Promise<boolean> {
+		return commands.handleMessage({ type: 'openActivityDiff', root_path: ROOT_PATH, path: file_path });
 	}
 
-	it('admits a non-markdown path the contract lists, and diffs the stored side against the working file', async () => {
+	it('diffs a modified file against a live git: HEAD URI, never a stored copy', async () => {
 		expect(await openDiff('package.json')).toBe(true);
 		const [command, left, right, title] = (vscode.commands.executeCommand as jest.Mock).mock.calls[0];
 		expect(command).toBe('vscode.diff');
-		expect((left as vscode.Uri).path).toBe(`${CONTRACT_PATH}/${BASE_BLOB}`);
+		expect((left as vscode.Uri).scheme).toBe('git');
+		expect(JSON.parse((left as vscode.Uri).query)).toEqual({ path: `${ROOT_PATH}/package.json`, ref: 'HEAD' });
 		expect((right as vscode.Uri).path).toBe(`${ROOT_PATH}/package.json`);
 		expect(title).toContain('package.json');
 		expect(posted).toEqual([]);
 	});
 
-	it('diffs both stored sides for a file changed by a commit on the branch', async () => {
-		await openDiff('client/webview/src/notethink-views/src/components/notes/StickyNote.tsx', 'committed');
-		const [, left, right] = (vscode.commands.executeCommand as jest.Mock).mock.calls[0];
-		expect((left as vscode.Uri).path).toContain('/blobs/2fed2679');
-		expect((right as vscode.Uri).path).toContain('/blobs/a2631be9');
-	});
-
-	it('opens an added file on its own, since an added file has no left-hand side', async () => {
+	it('opens an added file on its own, since an added file has no committed side to read', async () => {
 		await openDiff('client/extension/src/types/AgentActivity.ts');
 		expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
 		const [uri] = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
 		expect((uri as vscode.Uri).path).toBe(`${ROOT_PATH}/client/extension/src/types/AgentActivity.ts`);
 	});
 
-	it('resolves a contract path against the contract root and nowhere else', async () => {
-		// the same file sitting at the workspace-relative spelling instead: a producer never writes one, so it is not a second place to look
-		mountWorkspace([`${WORKSPACE_PATH}/client/extension/src/types/AgentActivity.ts`]);
-		await openDiff('client/extension/src/types/AgentActivity.ts');
-		expect(statted).toEqual([`${ROOT_PATH}/client/extension/src/types/AgentActivity.ts`]);
-		expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
-		expect(posted[0].reason).toBe('no_side');
+	it('opens a deleted file on its own, from its committed side, since it has no working-tree side left to diff against', async () => {
+		mountWorkspace([]);
+		await openDiff('media/board-icon.png');
+		expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+		const [uri] = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
+		expect((uri as vscode.Uri).scheme).toBe('git');
 	});
 
 	it('refuses a path outside the workspace without so much as looking for it', async () => {
@@ -104,17 +96,11 @@ describe('opening what an activity row points at', () => {
 		expect(posted[0]).toEqual({ type: 'activityUnavailable', request: 'diff', reason: 'no_side', path: '../../etc/passwd' });
 	});
 
-	it('refuses a path the contract does not list, and a root it has read no tree for', async () => {
+	it('refuses a path the uncommitted band does not list, and a root the analyser has read no tree for', async () => {
 		await openDiff('client/extension/src/lib/errorops.ts');
 		expect(posted[0].reason).toBe('not_listed');
-		await commands.handleMessage({ type: 'openActivityDiff', root_path: '/ws/elsewhere', path: 'package.json', band: 'uncommitted' });
+		await commands.handleMessage({ type: 'openActivityDiff', root_path: '/ws/elsewhere', path: 'package.json' });
 		expect(posted[1].reason).toBe('unknown_root');
-		expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
-	});
-
-	it('says the diff is unavailable when a side exists and the producer did not store it', async () => {
-		await openDiff('media/board-icon.png');
-		expect(posted[0]).toEqual({ type: 'activityUnavailable', request: 'diff', reason: 'omitted_binary', path: 'media/board-icon.png' });
 		expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
 	});
 
@@ -128,14 +114,29 @@ describe('opening what an activity row points at', () => {
 		expect(posted).toEqual([]);
 	});
 
-	it('falls back for a vendor with no chat panel, a command that fails, and an unsafe session id', async () => {
+	it('opens a session from a vendor with no chat panel as its own transcript, beside the board', async () => {
 		await commands.handleMessage({ type: 'openActivityChat', vendor: 'codex', session_id: 'codex-no-question' });
-		expect(posted[0]).toEqual({ type: 'activityUnavailable', request: 'chat', reason: 'no_chat_panel', session_id: 'codex-no-question' });
+		expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+		const [uri, options] = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
+		expect((uri as vscode.Uri).path).toBe(TRANSCRIPTS['codex-no-question']);
+		expect(options).toEqual(expect.objectContaining({ viewColumn: vscode.ViewColumn.Beside }));
+		expect(posted).toEqual([]);
+	});
+
+	it('opens the transcript when the vendor command fails', async () => {
 		(vscode.commands.executeCommand as jest.Mock).mockRejectedValueOnce(new Error('command not found'));
 		await commands.handleMessage({ type: 'openActivityChat', vendor: 'claude-code', session_id: 'claude-bound-busy' });
-		expect(posted[1].reason).toBe('command_failed');
+		const [uri] = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
+		expect((uri as vscode.Uri).path).toBe(TRANSCRIPTS['claude-bound-busy']);
+		expect(posted).toEqual([]);
+	});
+
+	it('refuses a session the analyser has read no transcript for, and an unsafe session id', async () => {
+		await commands.handleMessage({ type: 'openActivityChat', vendor: 'grok', session_id: 'grok-never-scanned' });
+		expect(posted[0]).toEqual({ type: 'activityUnavailable', request: 'chat', reason: 'no_transcript', session_id: 'grok-never-scanned' });
 		await commands.handleMessage({ type: 'openActivityChat', vendor: 'claude-code', session_id: '../../../etc/passwd' });
-		expect(posted[2].reason).toBe('bad_request');
-		expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1);
+		expect(posted[1].reason).toBe('bad_request');
+		expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+		expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
 	});
 });

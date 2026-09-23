@@ -18,6 +18,10 @@ const LOCALES = ['fr', 'it', 'de', 'es'];
 const ALLOWED_SAME_EVERY_LOCALE = [
     // the aspect-ratio label "1 : 1.4" - digits and a placeholder, nothing to translate
     '1 : {0}',
+    // a dollar cost figure, e.g. "$0.42" - a currency symbol and a placeholder, nothing to translate
+    '${0}',
+    // the same figure marked as an estimate, e.g. "~$0.42"
+    '~${0}',
 ];
 
 const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
@@ -30,6 +34,8 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
     es: [
         // "Auto" is the accepted Spanish abbreviation of "automatico"; de and it use the full word
         'Auto ({0})',
+        // "tokens" is the loanword Spanish uses for model tokens, as its "{0} tokens ({1}d)" value already does; de/fr/it all differ
+        '{0} tokens',
     ],
     fr: [
         // "Collisions" is the French word; de/es/it all differ
@@ -38,6 +44,10 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         'Orientation',
         // "Auto" is the accepted French abbreviation of "automatique"; de and it use the full word
         'Auto ({0})',
+        // "Session" is the French word (a common loanword); de/es/it all differ
+        'Session',
+        // "agent" is the French word too, and French pluralises an optional plural with the same "(s)" suffix English uses here; de/es/it all differ
+        '{0} agent(s)',
     ],
     it: [],
 };

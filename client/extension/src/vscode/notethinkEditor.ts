@@ -1,12 +1,15 @@
 import * as vscode from 'vscode';
 import { getNonce } from '../lib/cryptoops';
 import { NOTETHINK_VIEW_TYPE } from '../constants';
+import { AgentAnalyser } from './AgentAnalyser';
 import { PanelSession } from './PanelSession';
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
 	public static readonly viewType = NOTETHINK_VIEW_TYPE;
 	private activePanel: vscode.WebviewPanel | undefined;
+	// one analyser for the whole extension host, shared by every panel this provider opens; a panel demands and withdraws it, it never owns one
+	private readonly activity_analyser: AgentAnalyser;
 
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
 		const provider = new NotethinkEditorProvider(context);
@@ -19,7 +22,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 	}
 
 	constructor(private readonly context: vscode.ExtensionContext) {
-		// no action
+		this.activity_analyser = new AgentAnalyser(context);
 	}
 
 	public sendCommandToActiveWebview(command: string, payload?: Record<string, unknown>): void {
@@ -49,6 +52,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			(webview) => this.getHtmlForWebview(webview),
 			(panel) => { this.activePanel = panel; },
 			(panel) => { if (this.activePanel === panel) { this.activePanel = undefined; } },
+			this.activity_analyser,
 		);
 		await session.start();
 	}

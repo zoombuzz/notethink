@@ -37,7 +37,7 @@
     "ts-jest": "^29.4.12"
   },
   "scripts": {
-    "test": "jest --config jest.config.cjs --forceExit"
+    "test": "jest --config jest.config.cjs"
   },
   "eslintConfig": {
     "extends": [

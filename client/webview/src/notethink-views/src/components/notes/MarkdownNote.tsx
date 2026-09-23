@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useRef } from "react";
 import type { ReactElement } from "react";
-import { arraysEqual } from "../../lib/noteops";
+import { arraysEqual, dispatchNoteExpanded, isNoteManuallyExpanded } from "../../lib/noteops";
 import { renderMarkdownNoteHeadline } from "../../lib/renderops";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteAttributes from "../../components/notes/GenericNoteAttributes";
@@ -11,19 +11,6 @@ import { useMarkdownNoteOverflow } from "./markdown/useMarkdownNoteOverflow";
 import { useSyncedBodyClip } from "./markdown/useSyncedBodyClip";
 import { useMarkdownNoteBodyScroll } from "./markdown/useMarkdownNoteBodyScroll";
 import view_specific_styles from "../../components/ViewRenderer.module.scss";
-
-// membership of this note's own stable_id in the view's manual-expansion list; a note with no stable_id can never be listed
-function isManuallyExpanded(note: NoteProps): boolean {
-    const stable_id = note.stable_id;
-    if (stable_id === undefined) { return false; }
-    return note.display_options?.view_expanded_ids?.includes(stable_id) ?? false;
-}
-
-// hand the view that owns the id list one expand/collapse; a note with no stable_id has no identity to key expansion on
-function dispatchNoteExpanded(note: NoteProps, expanded: boolean): void {
-    if (note.stable_id === undefined) { return; }
-    note.handlers?.setNoteExpanded?.(note.stable_id, expanded);
-}
 
 export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     const note_ref = useRef<HTMLDivElement>(null);
@@ -53,7 +40,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
      * kanban column, and a reload. A headline rename mints a new implicit stable_id and so collapses the
      * card - the id list is the note's identity and nothing re-derives it across the rename.
      */
-    const manually_expanded = isManuallyExpanded(props);
+    const manually_expanded = isNoteManuallyExpanded(props);
     const auto_expand = props.display_options?.settings?.autoExpandFocusedNote;
     /*
      * clip logic: auto-expand ON → expand on focus; OFF → respect manually_expanded;

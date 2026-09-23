@@ -1,49 +1,53 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { activityBlobPathFor, activityChangedFileIn } from '../lib/activitystoreops';
+import { ACTIVITY_VENDOR_CLAUDE_CODE, type ActivityChangedFile, type ActivityTree } from '../types/AgentActivity';
 import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
 import { isWithinWorkspace } from '../lib/pathops';
-import { ACTIVITY_SESSION_ID_PATTERN, ACTIVITY_VENDOR_CLAUDE_CODE, type ActivityChangedFile, type ActivityTree } from '../types/AgentActivity';
 import type { HashMapOf } from '../types/general';
 
 export const ACTIVITY_MESSAGE_OPEN_DIFF = 'openActivityDiff';
 export const ACTIVITY_MESSAGE_OPEN_CHAT = 'openActivityChat';
+export const ACTIVITY_MESSAGE_DEMAND = 'activityDemand';
+export const ACTIVITY_MESSAGE_WITHDRAW = 'activityWithdraw';
+
+// a session id is a vendor-chosen string that becomes an argument to a vendor command; bounded and pattern-checked so a malformed one is refused before it reaches executeCommand
+const ACTIVITY_SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 /*
- * The chat panel each vendor's session can be opened in, by the vendor slug the contract carries.
- * Claude Code is the only vendor shipping a VS Code extension today, and its command is
- * undocumented with no stability contract, so the call is guarded and a vendor absent from this map
- * falls back to NoteThink's own drawer. The map is where the next vendor's command goes.
+ * The chat panel each vendor's session can be opened in, by the vendor slug the analyser carries.
+ * Claude Code is the only vendor shipping a VS Code extension whose command takes a session id, and
+ * that command is undocumented with no stability contract, so the call is guarded and a vendor absent
+ * from this map opens the session's own transcript instead. The map is where the next vendor's
+ * command goes.
  */
 const ACTIVITY_CHAT_COMMANDS: HashMapOf<string> = {
 	[ACTIVITY_VENDOR_CLAUDE_CODE]: 'claude-vscode.editor.open',
 };
 
 /**
- * ActivityTreeLookup is the reader's published working tree, the only thing that admits a path to
- * the diff opener. Narrow on purpose, so the opener can be tested against a stub tree.
+ * ActivityTreeLookup is the analyser's own last read: the working tree, the only thing that admits a
+ * path to the diff opener, and each session's transcript, the only thing that admits a file to the
+ * chat opener's fallback. Narrow on purpose, so the openers can be tested against a stub.
  */
 export interface ActivityTreeLookup {
 	treeFor(root_path: string): ActivityTree | undefined;
+	transcriptPathFor(session_id: string): string | undefined;
 }
 
 /**
- * What a webview activity row does when it is clicked: open a changed file as a two-column diff,
- * and open an agent's conversation in its vendor's own chat panel.
+ * What a webview activity row does when it is clicked: open a changed file as a two-column diff
+ * against a live `git:` HEAD URI, and open an agent's conversation in its vendor's own chat panel.
  *
- * Both sides of a diff come from the contract, because this host cannot produce either: it is a web
- * extension with no child processes, so it cannot run git, and the built-in git extension lives in
- * an extension host it cannot reach. The producer stores the committed side as a blob and the
- * working file is the other side.
+ * The analyser reads the working tree itself through the built-in git extension, so the committed
+ * side of an uncommitted file's diff is read live, on demand, rather than fetched from a stored
+ * copy. The admission rule for a path is still the analyser's own tree listing it, and this stays
+ * the one deliberate exception to every other reveal
+ * and jump path's markdown-only gate (`PanelSession.ts`): a changed file is whatever the repository
+ * holds.
  *
- * The admission rule for a path is the contract listing it. Every other path into an editor here
- * stays markdown-only, and this one is the deliberate exception: a changed file is whatever the
- * repository holds, so the gate is that the producer named it in a band AND it resolves inside the
- * workspace. An unlisted path is refused before any URI is built from it.
- *
- * Nothing here throws at the webview. A side the producer did not store, a vendor with no chat
- * panel and a command that fails are all reported back as one message, so the board can say the
- * diff is unavailable rather than opening an empty pane, and fall back to its own drawer.
+ * Nothing here throws at the webview. A path the tree does not list, a session with no transcript to
+ * open and a command that fails are all reported back as one message, so the board can say what could
+ * not be opened rather than opening an empty pane.
  */
 export class ActivityCommands {
 	constructor(
@@ -64,15 +68,20 @@ export class ActivityCommands {
 	private async openDiff(e: Record<string, unknown>): Promise<void> {
 		const root_path = typeof e.root_path === 'string' ? e.root_path : '';
 		const file_path = typeof e.path === 'string' ? e.path : '';
-		const band = typeof e.band === 'string' ? e.band : '';
 		try {
 			const tree = this.lookup.treeFor(root_path);
-			if (!tree) { this.refuseDiff(file_path, 'unknown_root', `no contract working tree read for ${root_path}`); return; }
-			const entry = activityChangedFileIn(tree, band, file_path);
-			if (!entry) { this.refuseDiff(file_path, 'not_listed', `the ${band || 'unnamed'} band does not list ${file_path}`); return; }
-			const left = await this.blobUri(root_path, entry.base_blob);
-			const right = entry.head_blob ? await this.blobUri(root_path, entry.head_blob) : await this.workingFileUri(root_path, file_path);
-			await this.showSides(entry, tree, left, right);
+			if (!tree) { this.refuseDiff(file_path, 'unknown_root', `no working tree read for ${root_path}`); return; }
+			const entry = tree.uncommitted.find(candidate => candidate.path === file_path);
+			if (!entry) { this.refuseDiff(file_path, 'not_listed', `the uncommitted band does not list ${file_path}`); return; }
+			const resolved = path.posix.join(root_path, entry.path);
+			if (!isWithinWorkspace(resolved)) {
+				writeToLogAtLevel('error', 'openDiff', `changed-file path outside the workspace, refusing ${file_path}`);
+				this.refuseDiff(file_path, 'no_side', 'neither side of the diff could be resolved');
+				return;
+			}
+			const left = this.headUri(resolved, entry.change);
+			const right = entry.change === 'deleted' ? undefined : await this.workingFileUri(resolved);
+			await this.showSides(entry, left, right);
 		} catch (err) {
 			writeToErrorLog('openDiff', `failed to open the diff for ${file_path}`, err);
 			this.refuseDiff(file_path, 'open_failed', 'the editor refused to open the diff');
@@ -81,15 +90,13 @@ export class ActivityCommands {
 
 	/**
 	 * Show whichever sides exist: both as a diff, one alone as a plain editor, neither as a refusal.
-	 * A side that is missing because the producer chose not to store it is distinguished from one
-	 * that does not exist at all, which is what `omitted` is for: the first is reported unavailable,
-	 * the second is simply what an added or a deleted file looks like.
+	 * `added` has no committed side to read at all, which is what `left` being undefined here means;
+	 * `deleted` has no working-tree side, which is what `right` being undefined means.
 	 */
-	private async showSides(entry: ActivityChangedFile, tree: ActivityTree, left: vscode.Uri | undefined, right: vscode.Uri | undefined): Promise<void> {
-		if (entry.omitted && (!left || !right)) { this.refuseDiff(entry.path, `omitted_${entry.omitted}`, `the producer stored no ${entry.omitted === 'size' ? 'content for a file this large' : 'content for a binary file'}`); return; }
+	private async showSides(entry: ActivityChangedFile, left: vscode.Uri | undefined, right: vscode.Uri | undefined): Promise<void> {
 		const show_options = { viewColumn: vscode.ViewColumn.Beside, preview: false, preserveFocus: false };
 		if (left && right) {
-			await vscode.commands.executeCommand('vscode.diff', left, right, this.diffTitle(entry, tree), show_options);
+			await vscode.commands.executeCommand('vscode.diff', left, right, this.diffTitle(entry), show_options);
 			return;
 		}
 		const only_side = left ?? right;
@@ -98,44 +105,34 @@ export class ActivityCommands {
 	}
 
 	// name both sides in the tab, since a diff whose sides are unlabelled says nothing about what it is measuring against
-	private diffTitle(entry: ActivityChangedFile, tree: ActivityTree): string {
+	private diffTitle(entry: ActivityChangedFile): string {
 		const file_name = path.posix.basename(entry.path);
-		const left_label = entry.base_blob ? (tree.base_ref ?? tree.head_commit.slice(0, 8)) : 'nothing';
-		const right_label = entry.head_blob ? tree.head_commit.slice(0, 8) : 'working tree';
-		return `${file_name} (${left_label} vs ${right_label})`;
-	}
-
-	/** a blob the contract references, once it is confined to `blobs/`, inside the workspace, and actually there */
-	private async blobUri(root_path: string, blob_reference: string | undefined): Promise<vscode.Uri | undefined> {
-		const blob_path = activityBlobPathFor(root_path, blob_reference);
-		if (!blob_path) { return undefined; }
-		if (!isWithinWorkspace(blob_path)) {
-			writeToLogAtLevel('error', 'blobUri', `blob outside the workspace, refusing ${blob_path}`);
-			return undefined;
-		}
-		const uri = this.base_uri.with({ path: blob_path });
-		return await this.exists(uri) ? uri : undefined;
+		return `${file_name} (HEAD vs working tree)`;
 	}
 
 	/**
-	 * The changed file in the workspace. A producer writes every path relative to the contract root,
-	 * which is the only base it can know, so resolving one is a single join against where the
-	 * `.notethink/` directory was found. Whether the result is inside the workspace is a separate
-	 * question asked afterwards, and it is what stops a path climbing out of the repository.
+	 * The committed side of an uncommitted change, read live through the git extension's own `git:`
+	 * document-content provider rather than a stored copy; absent for a file the repository has no
+	 * committed version of at all. The scheme, path and JSON query below are the git extension's own
+	 * `toGitUri` shape (`extensions/git/src/uri.ts` in VS Code's source), reconstructed here since
+	 * that module is not a dependency of this project; a diff opened against a live checkout of this
+	 * shape is the way to confirm it still matches a future VS Code release.
 	 */
-	private async workingFileUri(root_path: string, file_path: string): Promise<vscode.Uri | undefined> {
-		const resolved = path.posix.join(root_path, file_path);
-		if (!isWithinWorkspace(resolved)) {
-			writeToLogAtLevel('error', 'workingFileUri', `contract path outside the workspace, refusing ${file_path}`);
-			return undefined;
-		}
+	private headUri(resolved: string, change: ActivityChangedFile['change']): vscode.Uri | undefined {
+		if (change === 'added') { return undefined; }
+		const working_uri = this.base_uri.with({ path: resolved });
+		return working_uri.with({ scheme: 'git', query: JSON.stringify({ path: working_uri.fsPath, ref: 'HEAD' }) });
+	}
+
+	/** the changed file in the workspace; the caller has already confirmed `resolved` sits inside it */
+	private async workingFileUri(resolved: string): Promise<vscode.Uri | undefined> {
 		const uri = this.base_uri.with({ path: resolved });
 		if (await this.exists(uri)) { return uri; }
-		writeToLog('workingFileUri', `the contract lists ${file_path} and no such file is in the workspace`);
+		writeToLog('workingFileUri', `the working tree lists ${resolved} and no such file is in the workspace`);
 		return undefined;
 	}
 
-	// a stat that throws is the answer rather than a failure: the file is not there, which is what a deleted or unstored side looks like
+	// a stat that throws is the answer rather than a failure: the file is not there, which is what a deleted file looks like
 	private async exists(uri: vscode.Uri): Promise<boolean> {
 		try {
 			await vscode.workspace.fs.stat(uri);
@@ -153,10 +150,10 @@ export class ActivityCommands {
 	// --- opening an agent's conversation ---
 
 	/**
-	 * Hand a session to its vendor's chat panel, and say so when there is none to hand it to. The
-	 * command resolves even for a session id the vendor does not know (measured against Claude Code
-	 * 2.1.274), so a rejection is the only failure it can report, and anything else is the vendor's
-	 * to show.
+	 * Open a session in VS Code rather than on the card: in its vendor's chat panel where one takes a
+	 * session id, else as its own transcript in an editor beside the board. The vendor command resolves
+	 * even for a session id the vendor does not know, so a rejection is the only failure it can report,
+	 * and a rejection falls through to the transcript too.
 	 */
 	private async openChat(e: Record<string, unknown>): Promise<void> {
 		const vendor = typeof e.vendor === 'string' ? e.vendor : '';
@@ -167,17 +164,33 @@ export class ActivityCommands {
 			return;
 		}
 		const command = ACTIVITY_CHAT_COMMANDS[vendor];
-		if (!command) {
-			this.post({ type: 'activityUnavailable', request: 'chat', reason: 'no_chat_panel', session_id });
+		if (command) {
+			try {
+				await vscode.commands.executeCommand(command, session_id);
+				writeToLog('openChat', `handed session ${session_id} to ${command}`);
+				return;
+			} catch (err) {
+				// the vendor's extension is absent, disabled, or the command has moved on
+				writeToErrorLog('openChat', `${command} failed for session ${session_id}, opening its transcript instead`, err);
+			}
+		}
+		await this.openTranscript(session_id);
+	}
+
+	// the transcript path comes from the analyser's own last scan, never from the message, so the webview cannot name a file to open
+	private async openTranscript(session_id: string): Promise<void> {
+		const transcript_path = this.lookup.transcriptPathFor(session_id);
+		if (!transcript_path) {
+			this.post({ type: 'activityUnavailable', request: 'chat', reason: 'no_transcript', session_id });
 			return;
 		}
 		try {
-			await vscode.commands.executeCommand(command, session_id);
-			writeToLog('openChat', `handed session ${session_id} to ${command}`);
+			const show_options = { viewColumn: vscode.ViewColumn.Beside, preview: false, preserveFocus: false };
+			await vscode.window.showTextDocument(vscode.Uri.file(transcript_path), show_options);
+			writeToLog('openTranscript', `opened the transcript of session ${session_id}`);
 		} catch (err) {
-			// the vendor's extension is absent, disabled, or the command has moved on; the board falls back to its own drawer
-			writeToErrorLog('openChat', `${command} failed for session ${session_id}`, err);
-			this.post({ type: 'activityUnavailable', request: 'chat', reason: 'command_failed', session_id });
+			writeToErrorLog('openTranscript', `failed to open the transcript of session ${session_id}`, err);
+			this.post({ type: 'activityUnavailable', request: 'chat', reason: 'open_failed', session_id });
 		}
 	}
 }

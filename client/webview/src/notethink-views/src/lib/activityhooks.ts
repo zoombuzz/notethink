@@ -1,8 +1,11 @@
 import Debug from "debug";
-import { useSyncExternalStore } from "react";
-import { parseActivityMessage, parseActivityUnavailableMessage, type ActivitySnapshot, type ActivityUnavailable } from "./agentactivityops";
+import { useEffect, useSyncExternalStore } from "react";
+import { ACTIVITY_DEMAND_MESSAGE_TYPE, ACTIVITY_WITHDRAW_MESSAGE_TYPE, AGENT_SCAN_PENDING_KEY, isAgentScanPending, parseActivityMessage, parseActivityUnavailableMessage, type ActivitySnapshot, type ActivityUnavailable } from "./agentactivityops";
+import { PENDING_WORK_SAFETY_NET_MS, type UsePendingWorkApi } from "../hooks/usePendingWork";
 
 const debug = Debug("nodejs:notethink-views:activityhooks");
+// re-marks the scan key at half the safety net, so a first scan slower than the net keeps its spinner rather than losing it mid-read
+const AGENT_SCAN_REMARK_MS = PENDING_WORK_SAFETY_NET_MS / 2;
 
 /**
  * The webview's store of the latest agent activity snapshot, and the hooks components read it through.
@@ -36,7 +39,7 @@ function publish(): void {
 function onWindowMessage(event: MessageEvent): void {
     const next = parseActivityMessage(event.data);
     if (next) {
-        debug('activity snapshot: %d producer(s), %d session(s), %d tree(s)', next.producers.length, next.sessions.length, next.trees.length);
+        debug('activity snapshot: %s, %d session(s), %d tree(s)', next.analyser.state, next.sessions.length, next.trees.length);
         snapshot = next;
         publish();
         return;
@@ -102,4 +105,60 @@ export function useAgentActivity(): ActivitySnapshot | undefined {
 /** the host's latest refusal of a row's request, re-rendering the caller when one arrives */
 export function useActivityUnavailable(): ActivityUnavailable | undefined {
     return useSyncExternalStore(subscribeToActivity, readActivityUnavailable, readActivityUnavailable);
+}
+
+/*
+ * How many mounted agent cards currently want the analyser running in THIS panel, module-scoped the
+ * same way the snapshot store is: several `AgentNote` instances can mount at once (several stories in
+ * a kanban board), and the host only needs to hear about the panel's demand once, on the 0-to-1 and
+ * 1-to-0 transitions, never once per card.
+ */
+let demand_count = 0;
+
+/** whether any mounted agent card in this panel has asked the host for activity */
+export function readActivityDemanded(): boolean {
+    return demand_count > 0;
+}
+
+/** post the panel's demand for agent activity on mount, and withdraw it on unmount, ref-counted across every mounted agent card so the host hears about it exactly once each way */
+export function useAgentActivityDemand(post_message: ((message: Record<string, unknown>) => void) | undefined): void {
+    useEffect(() => {
+        if (!post_message) { return; }
+        demand_count++;
+        if (demand_count === 1) {
+            post_message({ type: ACTIVITY_DEMAND_MESSAGE_TYPE });
+            publish();
+        }
+        return () => {
+            demand_count = Math.max(0, demand_count - 1);
+            if (demand_count === 0) {
+                post_message({ type: ACTIVITY_WITHDRAW_MESSAGE_TYPE });
+                publish();
+            }
+        };
+        // deliberately empty: post_message is a stable per-panel function, and this must run exactly once per mount, or every re-render of every mounted card would double-count the demand
+    }, []);
+}
+
+/**
+ * Hold the toolbar's pending-work spinner while this panel waits on the analyser's first scan, which
+ * reads every agent's transcripts and can take seconds on a long history. Mounted once per panel, not
+ * per card, so a card unmounting (a virtualised lane scrolling it away) cannot clear a key the other
+ * cards still depend on. The pending set's safety net exists for a clear the host never sends; here
+ * the store is the authority on whether the scan is still running, so the key is re-marked while it is.
+ */
+export function useAgentScanPending(api: Pick<UsePendingWorkApi, 'markPending' | 'clearPending'>): void {
+    const snapshot = useAgentActivity();
+    const demanded = useSyncExternalStore(subscribeToActivity, readActivityDemanded, readActivityDemanded);
+    const is_pending = isAgentScanPending(demanded, snapshot);
+    const { markPending, clearPending } = api;
+    useEffect(() => {
+        if (!is_pending) { return; }
+        markPending(AGENT_SCAN_PENDING_KEY);
+        const remark_timer = setInterval(() => markPending(AGENT_SCAN_PENDING_KEY), AGENT_SCAN_REMARK_MS);
+        return () => {
+            clearInterval(remark_timer);
+            clearPending(AGENT_SCAN_PENDING_KEY);
+        };
+    }, [is_pending, markPending, clearPending]);
 }

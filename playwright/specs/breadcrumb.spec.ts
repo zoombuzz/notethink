@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { injectMultipleDocsFromFixtures } from '../helpers/inject-multi-docs';
 import { sendCommand } from '../helpers/send-command';
@@ -121,7 +121,7 @@ test.describe('Toolbar row geometry', () => {
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
     });
 
-    async function toolbarHeight(page: import('@playwright/test').Page): Promise<number> {
+    async function toolbarHeight(page: Page): Promise<number> {
         const box = await page.locator('[data-testid="view-toolbar"]').first().boundingBox();
         return box!.height;
     }

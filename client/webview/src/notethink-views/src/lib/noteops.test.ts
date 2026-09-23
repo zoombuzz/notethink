@@ -1,5 +1,7 @@
 import {
     arraysEqual,
+    dispatchNoteExpanded,
+    isNoteManuallyExpanded,
     deriveNaturalColumnOrder,
     mergeSavedColumnOrder,
     moveInOrder,
@@ -1236,6 +1238,24 @@ describe('flattenAllNotes', () => {
         const real_child = makeNote({ seq: 5, children_body: [] });
         const root = makeNote({ seq: 0, children_body: [mdast_leaf as never, real_child] });
         expect(flattenAllNotes(root).map(n => n.seq)).toEqual([0, 5]);
+    });
+});
+
+describe('note manual expansion', () => {
+    const note = { seq: 1, stable_id: 'doc:a' } as NoteProps;
+
+    it('reads a note as expanded only when its own stable_id is in the view list', () => {
+        expect(isNoteManuallyExpanded({ ...note, display_options: { view_expanded_ids: ['doc:a'] } })).toBe(true);
+        expect(isNoteManuallyExpanded({ ...note, display_options: { view_expanded_ids: ['doc:b'] } })).toBe(false);
+        expect(isNoteManuallyExpanded({ ...note, stable_id: undefined, display_options: { view_expanded_ids: ['doc:a'] } })).toBe(false);
+    });
+
+    it('dispatches expand and collapse to the view on the note stable_id, and nothing for a note without one', () => {
+        const setNoteExpanded = jest.fn();
+        dispatchNoteExpanded({ ...note, handlers: { setNoteExpanded } }, true);
+        dispatchNoteExpanded({ ...note, handlers: { setNoteExpanded } }, false);
+        dispatchNoteExpanded({ ...note, stable_id: undefined, handlers: { setNoteExpanded } }, true);
+        expect(setNoteExpanded.mock.calls).toEqual([['doc:a', true], ['doc:a', false]]);
     });
 });
 

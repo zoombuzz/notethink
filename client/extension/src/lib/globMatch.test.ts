@@ -8,6 +8,14 @@ describe('globToRegExp', () => {
         expect(globToRegExp('**/*.md').test('todo.md')).toBe(true);
     });
 
+    it('matches only the named story files against **/{todo,done}.md', () => {
+        const re = globToRegExp('**/{todo,done}.md');
+        expect(re.test('todo.md')).toBe(true);
+        expect(re.test('docstech/users/alex/done.md')).toBe(true);
+        expect(re.test('docstech/users/alex/readme.md')).toBe(false);
+        expect(re.test('docs/mytodo.md')).toBe(false);
+    });
+
     it('matches a nested file against **/*.md', () => {
         expect(globToRegExp('**/*.md').test('docs/users/alex/todo.md')).toBe(true);
     });

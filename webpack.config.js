@@ -16,10 +16,12 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 const pkg = require('./package.json');
 const isProduction = process.env.NODE_ENV === 'production';
 const devtool = isProduction ? 'nosources-source-map' : 'source-map';
-// NOTETHINK_DEV gates the on-disk file logger and the webview cache-buster: OFF by default so any
-// shipped build (a `vsce publish` to the marketplace, or a hosted/web build) never litters a user's
-// machine with logs. The `build`/`watch` scripts opt in by exporting SELFINSPECT_ENV=dev (the
-// workspace-standard env marker, not NODE_ENV - see AGENTS.md).
+/*
+ * NOTETHINK_DEV gates the on-disk file logger and the webview cache-buster: OFF by default so any
+ * shipped build (a `vsce publish` to the marketplace, or a hosted/web build) never litters a user's
+ * machine with logs. The `build`/`watch` scripts opt in by exporting SELFINSPECT_ENV=dev (the
+ * workspace-standard env marker, not NODE_ENV - see AGENTS.md).
+ */
 const isDevBuild = process.env.SELFINSPECT_ENV === 'dev';
 
 /** @type WebpackConfig */
@@ -44,9 +46,7 @@ const clientExtensionConfig = {
 			// provides alternate implementation for node module and source files
 		},
 		fallback: {
-			// Webpack 5 no longer polyfills Node.js core modules automatically.
-			// see https://webpack.js.org/configuration/resolve/#resolvefallback
-			// for the list of Node.js core module polyfills.
+			// Webpack 5 no longer polyfills Node.js core modules automatically: https://webpack.js.org/configuration/resolve/#resolvefallback lists the polyfills
 			'assert': require.resolve('assert'),
 			'events': require.resolve('events/'),
 			'process/browser': require.resolve('process/browser'),
@@ -180,15 +180,12 @@ const clientWebviewConfig = {
 		mainFields: ['browser', 'module', 'main'], // look for `browser` entry point in imported node modules
 		extensions: ['.tsx', '.ts', '.js', '.mjs'],
 		alias: {
-			// force a single React instance across webview and nested sub-packages (notethink-views)
-			// without this, pnpm's per-package node_modules causes webpack to bundle two copies of React
+			// force a single React instance across webview and nested sub-packages (notethink-views): without it, pnpm's per-package node_modules makes webpack bundle two copies of React
 			'react': path.resolve(__dirname, 'client', 'webview', 'node_modules', 'react'),
 			'react-dom': path.resolve(__dirname, 'client', 'webview', 'node_modules', 'react-dom'),
 		},
 		fallback: {
-			// Webpack 5 no longer polyfills Node.js core modules automatically.
-			// see https://webpack.js.org/configuration/resolve/#resolvefallback
-			// for the list of Node.js core module polyfills.
+			// Webpack 5 no longer polyfills Node.js core modules automatically: https://webpack.js.org/configuration/resolve/#resolvefallback lists the polyfills
 			'assert': require.resolve('assert'),
 		}
 	},

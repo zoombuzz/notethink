@@ -36,11 +36,11 @@ suite('Web Extension Test Suite', () => {
 			const extension = vscode.extensions.getExtension(EXTENSION_ID);
 			assert.ok(extension, `Extension ${EXTENSION_ID} should be installed`);
 
-			// Open a markdown document to trigger the onLanguage:markdown activation event
+			// open a markdown document to trigger the onLanguage:markdown activation event
 			const uri = vscode.Uri.parse('untitled:activation-test.md');
 			await vscode.workspace.openTextDocument(uri);
 
-			// Give the extension a moment to activate
+			// give the extension a moment to activate
 			await new Promise(resolve => setTimeout(resolve, 500));
 
 			assert.ok(extension.isActive, 'Extension should be active after opening a markdown document');
@@ -50,7 +50,7 @@ suite('Web Extension Test Suite', () => {
 			const extension = vscode.extensions.getExtension(EXTENSION_ID);
 			assert.ok(extension, `Extension ${EXTENSION_ID} should be installed`);
 
-			// Ensure activated
+			// ensure activated
 			if (!extension.isActive) {
 				await extension.activate();
 			}
@@ -69,15 +69,15 @@ suite('Web Extension Test Suite', () => {
 	suite('Command Registration', () => {
 
 		const expectedCommands = [
-			// Core command
+			// core command
 			'notethink.openViewer',
-			// View type switching
+			// view type switching
 			'notethink.setViewAuto',
 			'notethink.setViewDocument',
 			'notethink.setViewKanban',
-			// Settings toggles
+			// settings toggles
 			'notethink.toggleLineNumbers',
-			// Navigation
+			// navigation
 			'notethink.navigateUp',
 			'notethink.navigateDown',
 			'notethink.drillIn',
@@ -86,7 +86,7 @@ suite('Web Extension Test Suite', () => {
 		];
 
 		suiteSetup(async () => {
-			// Ensure extension is activated before checking commands
+			// ensure extension is activated before checking commands
 			const extension = vscode.extensions.getExtension(EXTENSION_ID);
 			if (extension && !extension.isActive) {
 				await extension.activate();
@@ -217,7 +217,7 @@ suite('Web Extension Test Suite', () => {
 			const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
 			assert.ok(folder, 'getWorkspaceFolder should return a folder for workspace documents');
 
-			// The doc path should start with the workspace folder path
+			// the doc path should start with the workspace folder path
 			const starts_with = doc.uri.path.startsWith(folder.uri.path);
 			assert.ok(starts_with, `doc path "${doc.uri.path}" should start with workspace folder path "${folder.uri.path}"`);
 		});
@@ -239,7 +239,7 @@ suite('Web Extension Test Suite', () => {
 			const segments = relative_path.split('/').filter(Boolean);
 
 			assert.ok(segments.length > 0, 'Should have at least one path segment');
-			// The workspace root folder name itself should NOT appear in the segments
+			// the workspace root folder name itself should NOT appear in the segments
 			if (workspace_root) {
 				const ws_name = workspace_root.split('/').filter(Boolean).pop();
 				assert.ok(

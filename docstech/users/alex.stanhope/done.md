@@ -6399,3 +6399,26 @@ Initial folder discovery streams one postMessage per file (`PanelSession.ts:826`
 + [X] batch discovery-phase merge posts in PanelSession with a flush timer + size cap
 + [X] coalesce webview update handling into per-frame state commits
 + [X] add a board-commit probe for the harness; assert progressive fill + budgets
+
+
+### Open Viewer explains an empty board; filter caret stays put [](?id=open-viewer-empty-board)
+
+Open Viewer on a folder with no stories shows bare columns and no explanation, and typing mid-string in a Files drawer filter box sends the caret to the end.
+
++ [X] keep the caret where the user put it in the Files drawer filter boxes
+  + cause: the resync effect in `FilesDrawer.tsx` wrote each extension echo into the focused input, and an echo of an earlier apply carried an older string
+  + fix: a focused field owns its value; it adopts a skipped echo on blur unless its own apply is still pending or still awaiting its echo
+  + regressions in `FilesDrawer.test.tsx`; both fail against the previous component
++ decision: the include default stays `**/*.md`, because new users keep stories in markdown files under any name; a user who keeps them in todo.md and done.md narrows it in the Files drawer (operator decision)
++ [X] show the default kanban columns with an overlay note when Open Viewer finds no stories
+  + `EmptyStoriesOverlay.tsx`, gated in `GenericView.tsx` on folder mode, zero notes, no pending discovery and a first aggregate having landed; single-file mode never shows it
+  + the aggregate gate exists because the host seeds folder scope before its file search and raises `pending` only once the search returns
+  + its button opens the Files drawer
+  + `AutoView.tsx` resolves a zero-story folder to kanban; it fell back to the document view because a folder with no stories casts no view-type votes
++ [X] give the Files drawer instructions for pointing the include and exclude filters at story files
+  + shown while the aggregate has no stories, with `**/todo.md` and `docs/**/*.md` as example filters
++ [X] cover the empty board, the link and the instructions in Playwright
+  + `playwright/specs/empty-stories-note.spec.ts`
++ [X] check the service worker registration error on Open Viewer
+  + no trace of it in any VS Code log of the reporting session; one panel and one `webview.html` write per open, no dispose-and-recreate or reveal-while-hidden
+  + it is the VS Code webview host's own race (microsoft/vscode#125993, open upstream): Developer: Reload Window clears it, and a recurrence clears with VS Code quit and `~/.config/Code/Service Worker` removed

@@ -11,12 +11,13 @@ interface DocSpec {
 
 /**
  * Inject multiple docs in a single 'update' message - sufficient to bootstrap
- * the webview's folder renderer for tests.
+ * the webview's folder renderer for tests. aggregate_total_discovered, when given, rides the
+ * message as the host's aggregate payload carries it, marking discovery as having landed.
  */
 export async function injectMultipleDocsFromFixtures(
     page: Page,
     docs: DocSpec[],
-    options: { workspace_root?: string } = {},
+    options: { workspace_root?: string; aggregate_total_discovered?: number } = {},
 ): Promise<Array<{ id: string; path: string; relative_path?: string }>> {
     const built = docs.map((d) => {
         const text = fixtureText(d.fixture);
@@ -33,7 +34,7 @@ export async function injectMultipleDocsFromFixtures(
         };
     });
 
-    await page.evaluate(({ docs_payload, ws_root }) => {
+    await page.evaluate(({ docs_payload, ws_root, total_discovered }) => {
         const docs_map: Record<string, unknown> = {};
         for (const d of docs_payload) {
             docs_map[d.id] = {
@@ -50,9 +51,10 @@ export async function injectMultipleDocsFromFixtures(
                 type: 'update',
                 partial: { docs: docs_map },
                 workspace_root: ws_root,
+                ...(total_discovered === undefined ? {} : { aggregate_total_discovered: total_discovered }),
             },
         }));
-    }, { docs_payload: built, ws_root: options.workspace_root || '' });
+    }, { docs_payload: built, ws_root: options.workspace_root || '', total_discovered: options.aggregate_total_discovered });
 
     return built.map(({ id, path, relative_path }) => ({ id, path, relative_path }));
 }

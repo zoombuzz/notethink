@@ -19,7 +19,7 @@ test.describe('Breadcrumb workspace root stripping', () => {
         const nav = page.locator('nav[aria-label="Breadcrumb"]');
         await expect(nav).toBeVisible({ timeout: 5000 });
 
-        // Without workspace_root or relative_path, all path segments should be visible
+        // without workspace_root or relative_path, all path segments should be visible
         await expect(nav.locator('button', { hasText: 'mnt' })).toBeVisible();
         await expect(nav.locator('button', { hasText: 'secure' })).toBeVisible();
         await expect(nav.locator('button', { hasText: 'in_development' })).toBeVisible();

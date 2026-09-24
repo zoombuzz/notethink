@@ -1,6 +1,8 @@
 import React, { Suspense, createRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { render, screen, waitFor, fireEvent, act, within, type RenderResult } from '@testing-library/react';
 import GenericView from './GenericView';
+import { PendingWorkProvider } from '../../hooks/PendingWorkContext';
+import type { UsePendingWorkApi } from '../../hooks/usePendingWork';
 import type { ViewProps, ViewApi } from '../../types/ViewProps';
 import type { NoteProps, ClickPositionInfo } from '../../types/NoteProps';
 import type { UserViewType } from '../../types/Messages';
@@ -397,7 +399,7 @@ describe('GenericView click state machine', () => {
             position: { start: { offset: 10, line: 2 }, end: { offset: 30, line: 3 }, end_body: { offset: 50, line: 5 } },
         });
 
-        // Render with selection.main.head === 10 (simulating response from first click)
+        // render with selection.main.head === 10 (simulating response from first click)
         render(
             <Suspense fallback={<div>loading</div>}>
                 <GenericView {...makeViewProps({
@@ -1688,5 +1690,116 @@ describe('GenericView document-level strip', () => {
         );
         await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
         expect(lastDocNested()?.document_strip).toBeUndefined();
+    });
+});
+
+describe('GenericView empty stories overlay', () => {
+
+    const FOLDER_ZERO_STORIES: Partial<ViewProps> = {
+        type: 'kanban',
+        display_options: { integration_mode: 'folder', integration_path: '/workspace/project' },
+        aggregate_total_discovered: 1,
+        note_count: 0,
+    };
+
+    // wraps children in a PendingWorkProvider seeded with a fixed pending value, so the overlay's discovery-settled gate can be exercised without driving usePendingWork's real timers
+    function withPending(pending: boolean, children: React.ReactElement): React.ReactElement {
+        const api: UsePendingWorkApi = { pending, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
+        return <PendingWorkProvider api={api}>{children}</PendingWorkProvider>;
+    }
+
+    it('shows the empty-stories note in folder mode once discovery has settled with zero stories', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps(FOLDER_ZERO_STORIES)} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
+        expect(screen.getByTestId('empty-stories-overlay')).toBeInTheDocument();
+        expect(screen.getByTestId('empty-stories-overlay')).toHaveTextContent('No stories found');
+    });
+
+    it('does not show the note while discovery is still pending, even with zero stories so far', async () => {
+        render(
+            withPending(true, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps(FOLDER_ZERO_STORIES)} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
+        expect(screen.queryByTestId('empty-stories-overlay')).not.toBeInTheDocument();
+    });
+
+    it('does not show the note before the first aggregate lands, while the host is still searching for files', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({ ...FOLDER_ZERO_STORIES, aggregate_total_discovered: undefined })} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
+        expect(screen.queryByTestId('empty-stories-overlay')).not.toBeInTheDocument();
+    });
+
+    it('does not show the note once stories are found', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({ ...FOLDER_ZERO_STORIES, note_count: 3 })} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
+        expect(screen.queryByTestId('empty-stories-overlay')).not.toBeInTheDocument();
+    });
+
+    it('does not show the note in current_file mode, even with zero stories', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({
+                        type: 'kanban',
+                        doc_path: '/workspace/project/notes.md',
+                        display_options: { integration_mode: 'current_file' },
+                        note_count: 0,
+                    })} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
+        expect(screen.queryByTestId('empty-stories-overlay')).not.toBeInTheDocument();
+    });
+
+    it('still renders the default board columns underneath the note', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps(FOLDER_ZERO_STORIES)} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
+        expect(screen.getByTestId('kanban-view')).toBeInTheDocument();
+        expect(screen.getByTestId('empty-stories-overlay')).toBeInTheDocument();
+    });
+
+    it('the note\'s link opens the Files drawer', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps(FOLDER_ZERO_STORIES)} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
+        const grid = screen.getByTestId('files-drawer-grid');
+        expect(grid).toHaveAttribute('data-open', 'false');
+        fireEvent.click(screen.getByTestId('empty-stories-open-files'));
+        expect(grid).toHaveAttribute('data-open', 'true');
+        expect(screen.getByTestId('files-drawer-mock')).toBeInTheDocument();
     });
 });

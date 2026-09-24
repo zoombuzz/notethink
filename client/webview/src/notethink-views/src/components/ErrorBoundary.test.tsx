@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import ErrorBoundary from './ErrorBoundary';
 
-// Suppress console.error noise from React and our componentDidCatch during tests
+// suppress console.error noise from React and our componentDidCatch during tests
 const original_console_error = console.error;
 beforeAll(() => {
     console.error = jest.fn();
@@ -50,7 +50,7 @@ describe('ErrorBoundary', () => {
         );
         const details = screen.getByText('Stack trace').closest('details');
         expect(details).toBeInTheDocument();
-        // The pre element inside details should contain the error stack
+        // the pre element inside details should contain the error stack
         const pre = details?.querySelector('pre');
         expect(pre).toBeInTheDocument();
         expect(pre?.textContent).toContain('stack trace test');
@@ -72,17 +72,17 @@ describe('ErrorBoundary', () => {
             </ErrorBoundary>
         );
 
-        // Fallback is shown
+        // fallback is shown
         expect(screen.getByTestId('error-boundary-fallback')).toBeInTheDocument();
         expect(screen.queryByTestId('recovered-child')).not.toBeInTheDocument();
 
-        // Fix the child so it won't throw on re-render
+        // fix the child so it won't throw on re-render
         should_throw = false;
 
-        // Click "Try Again"
+        // click "Try Again"
         fireEvent.click(screen.getByText('Try Again'));
 
-        // Children render successfully
+        // children render successfully
         expect(screen.getByTestId('recovered-child')).toBeInTheDocument();
         expect(screen.queryByTestId('error-boundary-fallback')).not.toBeInTheDocument();
     });

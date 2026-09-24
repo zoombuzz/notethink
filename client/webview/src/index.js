@@ -4,11 +4,8 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './components/base/App';
 import reportWebVitals from './reportWebVitals';
-// This is a placeholder file only
-// The actual HTML is generated dynamically in the client/extension/src/extension.ts file
+// placeholder entry only: the actual HTML is generated dynamically in client/extension/src/extension.ts
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(_jsx(React.StrictMode, { children: _jsx(App, {}) }));
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+// if you want to start measuring performance in your app, pass a function to log results (for example: reportWebVitals(console.log)) or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();

@@ -157,5 +157,11 @@
   "That session id is not one NoteThink will open.": "NoteThink n'ouvrira pas cet identifiant de session.",
   "{0} left no transcript NoteThink has read for this session.": "{0} n'a laissé aucune transcription de cette session que NoteThink ait lue.",
   "VS Code could not open this session.": "VS Code n'a pas pu ouvrir cette session.",
-  "Open this session in VS Code": "Ouvrir cette session dans VS Code"
+  "Open this session in VS Code": "Ouvrir cette session dans VS Code",
+  "No stories found": "Aucune histoire trouvée",
+  "NoteThink could not find any markdown files containing story or task definitions.": "NoteThink n'a trouvé aucun fichier markdown contenant des définitions d'histoires ou de tâches.",
+  "Open File settings": "Ouvrir les paramètres des fichiers",
+  "Point NoteThink at your stories": "Orientez NoteThink vers vos histoires",
+  "Set the Include filter to the markdown files where you keep your notes, for example {0} or {1}.": "Réglez le filtre d'inclusion sur les fichiers markdown où vous conservez vos notes, par exemple {0} ou {1}.",
+  "NoteThink turns each {0} heading into a story card, with task list items written as {1} and {2}.": "NoteThink transforme chaque titre {0} en carte d'histoire ; les éléments de liste de tâches s'écrivent {1} et {2}."
 }

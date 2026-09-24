@@ -307,10 +307,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         debug('received command %s', message.command);
         switch (message.command) {
             case 'setIntegrationScope':
-                /*
-                 * host-originated folder scope, sent only for a docless open (Open Viewer with no .md file active), where nothing else can seed one
-                 * resolveIntegrationMode defaults an unseeded view state to current_file and the aggregate `update` payload carries no scope to infer from, so without this the board renders an arbitrary file out of the folder's docs instead of the folder
-                 */
+                // host-originated folder scope, sent only for a docless open: an unseeded view state resolves to current_file and the aggregate `update` carries no scope, so without this the board renders an arbitrary file instead of the folder
                 if (message.mode !== INTEGRATION_MODE_FOLDER || !message.path) { return; }
                 // never stomp a scope the webview already owns - state restored from a reload, or a mode the user pinned
                 if (anyViewInFolderMode(view_states_ref.current)) { return; }
@@ -395,20 +392,14 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     useEffect(() => {
         window.addEventListener('message', onMessage);
         debug('added message event listener');
-        /*
-         * if saved state shows we were in folder mode, re-establish the integration first
-         * sending setIntegration before requestInitialState lets the extension synchronously set integration_path before the async findFiles - so when the requestInitialState handler runs sendDoc it uses merge_strategy='merge' and upserts into the saved folder docs map instead of replacing it
-         */
+        // re-establish a saved folder integration first: setIntegration before requestInitialState sets integration_path before the async findFiles, so sendDoc merges into the saved folder docs map instead of replacing it
         if (saved_view_states) {
             for (const id of Object.keys(saved_view_states)) {
                 const vs = saved_view_states[id];
                 // restore folder for a concrete folder pin AND for an `auto` view whose path was seeded by auto-resolution (resolveIntegrationMode treats auto + a path as folder), so an auto-folder file re-aggregates on reload without a flash through current_file
                 if (resolveIntegrationMode(vs?.display_options) === INTEGRATION_MODE_FOLDER && vs?.display_options?.integration_path) {
                     debug('restoring folder integration on reload: %s', vs.display_options.integration_path);
-                    /*
-                     * host re-validates this path against the workspace before acting - persisted webview state is untrusted (defense-in-depth)
-                     * do NOT replay the persisted includeFilter / excludeFilter here: the workspace cascade (notethink.settings.files.*) is the source of truth, and replaying a snapshot from an earlier session masks any later edit the user made in settings.json. handle_apply_filters writes user-applied filters through to the cascade, so the cascade is always up to date with the user's intent after a fresh Apply
-                     */
+                    // the host re-validates this untrusted persisted path; persisted include/exclude filters are deliberately not replayed, because the settings cascade is the source of truth and handle_apply_filters keeps it current
                     postMessage({
                         type: 'setIntegration',
                         mode: INTEGRATION_MODE_FOLDER,
@@ -418,10 +409,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 }
             }
         }
-        /*
-         * request initial state - this is what triggers the extension to send the active doc (and selection + the settings cascade)
-         * sent after setIntegration so the extension has integration_path set by the time it runs sendDoc here
-         */
+        // request the active doc, selection and settings cascade, after setIntegration so integration_path is set by the time the extension runs sendDoc
         postMessage({
             type: 'requestInitialState',
         });

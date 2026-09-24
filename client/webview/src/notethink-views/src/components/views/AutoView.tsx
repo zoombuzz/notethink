@@ -2,10 +2,22 @@ import type { ReactElement } from "react";
 import { aggregateNoteLinetags, findNoteBySeq, isAggregateRoot, majorityCardType, majorityNgView } from "../../lib/noteops";
 import { resolveNamespacedTag } from "../../lib/linetagops";
 import { CARD_AUTO, cardRegistryWithViewSettings, resolveCardType } from "../notes/cardregistryops";
+import { INTEGRATION_MODE_FOLDER } from "../../types/IntegrationMode";
 import type { ViewProps } from "../../types/ViewProps";
 import type { LineTag } from "../../types/NoteProps";
 import GenericView from "./GenericView";
 import view_specific_styles from "../ViewRenderer.module.scss";
+
+/**
+ * Whether the view is a folder aggregate with no stories at all. isAggregateRoot needs at least one child
+ * to recognise a merged root, and the majority vote is cast per contributed story, so such a folder
+ * reaches neither. Without this it falls to the single-file 'document' default and opens a docless
+ * folder on a blank page instead of the empty board: default columns under GenericView's empty-stories note.
+ */
+function isEmptyFolderAggregate(props: ViewProps): boolean {
+    return props.display_options?.integration_mode === INTEGRATION_MODE_FOLDER
+        && (props.nested?.parent_context?.child_notes?.length ?? 0) === 0;
+}
 
 export default function AutoView(props: ViewProps): ReactElement {
 
@@ -25,10 +37,11 @@ export default function AutoView(props: ViewProps): ReactElement {
     // folder mode: synthetic root has no single nt_view linetag on a top-level note, so apply a majority vote across originating files (one vote per file)
     if (is_aggregate_root) {
         const majority = majorityNgView(props.notes);
-        if (majority) {
-            derived_attributes.type = majority;
-        }
+        if (majority) { derived_attributes.type = majority; }
         // fall through - focused-note linetag aggregation below may still tweak attributes
+    } else if (isEmptyFolderAggregate(props)) {
+        // an empty folder opens on the board, never the single-file document default
+        derived_attributes.type = 'kanban';
     }
     if (props.display_options?.focused_notes?.length) {
         const attributes: { [key: string]: LineTag } = aggregateNoteLinetags(props.display_options?.focused_notes);

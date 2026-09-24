@@ -139,7 +139,7 @@ describe('convertMdastToNoteHierarchy', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
 
-        // First heading should have end_body at offset 11 (start of second heading)
+        // first heading should have end_body at offset 11 (start of second heading)
         const allNotes = flattenNotes(root);
         const headingA = allNotes[0];
         expect(headingA.headline_raw).toBe('# A');
@@ -159,7 +159,7 @@ describe('convertMdastToNoteHierarchy', () => {
         expect(root.children_body).toHaveLength(1);
 
         const para = root.children_body[0] as MdastNode;
-        // Should be a raw MdastNode, not a NoteProps (no seq)
+        // should be a raw MdastNode, not a NoteProps (no seq)
         expect('seq' in para).toBe(false);
         expect(para.type).toBe('paragraph');
     });
@@ -183,12 +183,12 @@ describe('convertMdastToNoteHierarchy', () => {
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
 
-        // Root has a list note
+        // root has a list note
         const listNote = root.children_body[0] as NoteProps;
         expect(listNote.type).toBe('list');
         expect(listNote.seq).toBeGreaterThan(0);
 
-        // List has listItem children in children_body
+        // list has listItem children in children_body
         const listItemNotes = listNote.children_body.filter((c): c is NoteProps => 'seq' in c && c.seq !== undefined);
         expect(listItemNotes.length).toBe(2);
         expect(listItemNotes[0].type).toBe('listItem');
@@ -266,7 +266,7 @@ describe('convertMdastToNoteHierarchy', () => {
         const allNotes = flattenNotes(root);
         const heading = allNotes[0];
 
-        // The paragraph should appear in the heading's children_body as a raw MdastNode
+        // the paragraph should appear in the heading's children_body as a raw MdastNode
         expect(heading.children_body.length).toBeGreaterThan(0);
         const bodyPara = heading.children_body.find(c => !('seq' in c) && c.type === 'paragraph');
         expect(bodyPara).toBeDefined();
@@ -312,7 +312,7 @@ describe('child attribute inheritance', () => {
         const allNotes = flattenNotes(root);
         const grandchild = allNotes.find(n => n.depth === 3);
 
-        // Grandchild should NOT have inherited status from nt_child_
+        // grandchild should NOT have inherited status from nt_child_
         expect(grandchild.linetags?.['status']).toBeUndefined();
     });
 
@@ -332,9 +332,9 @@ describe('child attribute inheritance', () => {
         const parent = allNotes.find(n => n.depth === 2);
         const grandchild = allNotes.find(n => n.depth === 3);
 
-        // Direct child should NOT have it
+        // direct child should NOT have it
         expect(parent.linetags?.['priority']).toBeUndefined();
-        // Grandchild should have it
+        // grandchild should have it
         expect(grandchild.linetags!['priority']).toBeDefined();
         expect(grandchild.linetags!['priority'].value).toBe('high');
         expect(grandchild.linetags!['priority'].inherited).toBe(true);
@@ -395,7 +395,7 @@ describe('child attribute inheritance', () => {
         const child = allNotes.find(n => n.depth === 2);
 
         expect(child.linetags!['status'].inherited).toBe(true);
-        // Parent should NOT have inherited flag on nt_child_status
+        // parent should NOT have inherited flag on nt_child_status
         const parent = allNotes.find(n => n.depth === 1);
         expect(parent.linetags!['nt_child_status'].inherited).toBeUndefined();
     });
@@ -417,10 +417,10 @@ describe('drag-drop on inherited-status notes', () => {
         const allNotes = flattenNotes(root);
         const child = allNotes.find(n => n.depth === 2);
 
-        // Simulate dragging to "doing" column
+        // simulate dragging to "doing" column
         const changes = calculateTextChangesForNewLinetagValue(child, 'status', 'doing', 'untagged');
         expect(changes.length).toBeGreaterThan(0);
-        // Should insert a new linetag block since the child has no real linetags
+        // should insert a new linetag block since the child has no real linetags
         expect(changes[0].insert).toContain('status=doing');
     });
 
@@ -438,7 +438,7 @@ describe('drag-drop on inherited-status notes', () => {
         const allNotes = flattenNotes(root);
         const child = allNotes.find(n => n.depth === 2);
 
-        // Setting back to "default" value should produce no edits
+        // setting back to "default" value should produce no edits
         const changes = calculateTextChangesForNewLinetagValue(child, 'status', 'untagged', 'untagged');
         expect(changes).toHaveLength(0);
     });
@@ -481,9 +481,9 @@ describe('makePosition line computation (binary search)', () => {
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
 
-        // First heading at offset 0 → line 1
+        // first heading at offset 0 → line 1
         expect(allNotes[0].position.start.line).toBe(1);
-        // Second heading at offset 9 → line 3 (after newlines at 3, 8)
+        // second heading at offset 9 → line 3 (after newlines at 3, 8)
         expect(allNotes[1].position.start.line).toBe(3);
     });
 
@@ -837,7 +837,7 @@ describe('edge cases: footnoteDefinition nodes in hierarchy', () => {
             ],
         };
         const root = convertMdastToNoteHierarchy(mdast, text);
-        // Both should be raw MdastNodes, not NoteProps
+        // both should be raw MdastNodes, not NoteProps
         expect(root.children_body).toHaveLength(2);
         for (const child of root.children_body) {
             expect('seq' in child).toBe(false);

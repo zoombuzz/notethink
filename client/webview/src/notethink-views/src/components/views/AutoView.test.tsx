@@ -267,6 +267,29 @@ describe('AutoView', () => {
             expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'document');
         });
 
+        it('an aggregate root with zero stories defaults to kanban, not the single-file document default', () => {
+            // a synthetic root with no children at all - no story ever cast a file_view_type vote, and isAggregateRoot itself cannot recognise an empty root as aggregate, so this reads integration_mode instead
+            const root = makeAggregateRoot();
+            const props = makeViewProps({
+                notes: [root],
+                nested: { parent_context: root },
+                display_options: { integration_mode: 'folder' },
+            });
+            render(<AutoView {...props} />);
+            expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'kanban');
+        });
+
+        it('a single-file view with zero stories still defaults to document (integration_mode is not folder)', () => {
+            const root = makeAggregateRoot();
+            const props = makeViewProps({
+                notes: [root],
+                nested: { parent_context: root },
+                display_options: { integration_mode: 'current_file' },
+            });
+            render(<AutoView {...props} />);
+            expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'document');
+        });
+
         it('multiple stories from same file vote only once', () => {
             /*
              * file 'a' has 3 stories, all carrying file_view_type=kanban; file 'b' has 1 story with document

@@ -15,7 +15,7 @@ const CLASS_NAMES: FlipClassNames = { flipping: 'flipping', columnEntering: 'col
 
 interface RectLookup { [id: string]: { left: number; top: number; width: number; height: number }; }
 
-// the test controls per-id rects; the mock reads data-flip-id off the element to pick its rect.
+// the test controls per-id rects; the mock reads data-flip-id off the element to pick its rect
 let rect_lookup: RectLookup = {};
 // the board-root (`[data-flip-root]`) rect; tests shift it to simulate a scroll / folder-mode header growth
 let root_rect = { left: 0, top: 0, width: 0, height: 0 };

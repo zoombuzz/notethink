@@ -338,12 +338,12 @@ body.disableAddressBarHidingOnScroll {
 }
 
 
-//
-// Drawer shell - shared by the settings, files, and collisions drawers. each drawer
-// composes these base classes (.drawerBody / .drawerGroups / .drawerGroup / .drawerMeta,
-// plus .drawerList / .drawerEmpty for the scrollable lists) and adds only its own
-// .settingsDrawer* / .filesDrawer* / .collisionsDrawer* specialisations below.
-//
+/*
+ * Drawer shell - shared by the settings, files, and collisions drawers. Each drawer
+ * composes these base classes (.drawerBody / .drawerGroups / .drawerGroup / .drawerMeta,
+ * plus .drawerList / .drawerEmpty for the scrollable lists) and adds only its own
+ * .settingsDrawer* / .filesDrawer* / .collisionsDrawer* specialisations below.
+ */
 
 .drawerGrid {
   display: grid;
@@ -453,8 +453,7 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
-// shared scrollable, monospace list used by the files + collisions drawers
-// font-family/size intentionally omitted so every drawer list inherits the shell's 13px sans (consistent across all drawers, matching the VS Code UI font)
+// scrollable list shared between the files and collisions drawers; font-family/size intentionally omitted so every drawer list inherits the shell's 13px sans, matching the VS Code UI font
 .drawerList {
   list-style: none;
   margin: 0.2em 0 0;
@@ -664,11 +663,11 @@ body.disableAddressBarHidingOnScroll {
 }
 
 
-//
-// Drawer tree - the shared recursive tree behind the jump drawer's folder list and the view
-// settings tree, consistent with the VS Code Explorer: a root row with its children indented
-// beneath, drawn with a tree indent-guide.
-//
+/*
+ * Drawer tree - the shared recursive tree behind the jump drawer's folder list and the view
+ * settings tree, consistent with the VS Code Explorer: a root row with its children indented
+ * beneath, drawn with a tree indent-guide.
+ */
 
 // a stacking context, so the row's band paints UNDERNEATH the indent guides its ancestors draw
 .drawerTree {
@@ -968,8 +967,7 @@ body.disableAddressBarHidingOnScroll {
 
 }
 
-// standalone fullheight class - used on views and their wrappers (e.g. AutoView);
-// extracted from .view nesting to ensure css-loader exports the class name correctly
+// standalone fullheight class used on views and their wrappers (e.g. AutoView), kept out of .view nesting so css-loader exports the class name
 .fullheight {
   height: 100%;
 
@@ -980,6 +978,86 @@ body.disableAddressBarHidingOnScroll {
   .spacer {
     height: 100px;
   }
+}
+
+// positions EmptyStoriesOverlay against the rendered view rather than the page
+.viewContentRegion {
+  position: relative;
+}
+
+/*
+ * Board-level empty state (aggregate mode, zero stories): a card floated over the content area, never
+ * covering the toolbar above it. pointer-events: none on the wrapper so the (empty) board underneath
+ * stays reachable; the card opts back in so its own button is clickable.
+ */
+.emptyStoriesOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 3em;
+  pointer-events: none;
+}
+
+.emptyStoriesCard {
+  pointer-events: auto;
+  max-width: 28em;
+  padding: 1.2em 1.4em;
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, inherit));
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  text-align: center;
+
+  p {
+    margin: 0 0 0.6em 0;
+  }
+
+  button {
+    margin-top: 0.4em;
+    background: var(--vscode-button-secondaryBackground, #3a3d41);
+    color: var(--vscode-button-secondaryForeground, #fff);
+    border: 1px solid var(--vscode-button-border, transparent);
+    border-radius: 2px;
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+
+    &:hover {
+      background: var(--vscode-button-secondaryHoverBackground, #45494e);
+    }
+  }
+}
+
+.emptyStoriesTitle {
+  font-weight: 600;
+  font-size: 1.05em;
+}
+
+// instructions in the Files drawer while the aggregate has zero stories: how to point the Include and Exclude filters at story files
+.filesDrawerInstructions {
+  margin: 0 0 0.8em 0;
+  padding: 0.6em 0.8em;
+  border-radius: 4px;
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+  background: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.1));
+
+  p {
+    margin: 0 0 0.4em 0;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+.filesDrawerInstructionsTitle {
+  font-weight: 600;
 }
 
 
@@ -994,16 +1072,17 @@ body.disableAddressBarHidingOnScroll {
   &.focused {
     outline: dashed 2px var(--vscode-focusBorder);
 
-    // an inner focused note sits just inside its parent's ring (the parent's
-    // symmetric body padding keeps this inner ring equally spaced on both sides)
+    // an inner focused note sits just inside its parent's ring (the parent's symmetric body padding keeps this inner ring equally spaced on both sides)
     .note.focused {
       outline-offset: 8px;
     }
 
-    // when this note contains another focused note it becomes the outer context
-    // ring: keep its position unchanged (no offset bump, so the ring doesn't jump
-    // as the caret moves into a child) and only fade it so the inner note reads
-    // as the real focus target
+    /*
+     * When this note contains another focused note it becomes the outer context
+     * ring: keep its position unchanged (no offset bump, so the ring doesn't jump
+     * as the caret moves into a child) and only fade it so the inner note reads
+     * as the real focus target.
+     */
     &:has(.note.focused) {
       outline-color: color-mix(in srgb, var(--vscode-focusBorder), transparent 70%);
     }
@@ -1090,11 +1169,13 @@ body.disableAddressBarHidingOnScroll {
   }
 
   .body {
-    // symmetric horizontal padding plus a matching bottom inset so a nested note
-    // card (and therefore its selection ring) is inset on both sides and below,
-    // not just the left - without this the last child's ring pokes past the
-    // parent's bottom edge. top stays flush since the headline already spaces it.
-    // the synthetic root container is exempted below (it has no card of its own)
+    /*
+     * Symmetric horizontal padding plus a matching bottom inset so a nested note
+     * card (and therefore its selection ring) is inset on both sides and below,
+     * not just the left - without this the last child's ring pokes past the
+     * parent's bottom edge. Top stays flush since the headline already spaces it.
+     * The synthetic root container is exempted below (it has no card of its own).
+     */
     padding: 0 0.4em 0.4em;
 
     table, p {
@@ -1245,9 +1326,11 @@ body.disableAddressBarHidingOnScroll {
       // restore bullet explicitly - framework CSS resets may remove it
       list-style-type: disc;
 
-      // hide discs on todo items whose OWN headline has a checkbox. Scope to the
-      // direct-descendant chain li > div.note > div.headline > input so non-checkbox
-      // listItems that contain a nested sub-list of checkbox items don't match.
+      /*
+       * Hide discs on todo items whose OWN headline has a checkbox. Scope to the
+       * direct-descendant chain li > div.note > div.headline > input so non-checkbox
+       * listItems that contain a nested sub-list of checkbox items don't match.
+       */
       &:has(> input[type=checkbox]), &:has(> div > div > input[type=checkbox]) {
         list-style-type: none;
         text-indent: -1.6em;
@@ -1288,12 +1371,14 @@ body.disableAddressBarHidingOnScroll {
 
 }
 
-// the synthetic root container has no headline, border, or card of its own, so its body
-// must not inset the top-level note - otherwise the focus ring jumps 0.4em as the caret
-// crosses from the document frontmatter (root focused) into the first note. zero all sides:
-// the bottom inset would otherwise make the root ring 0.4em taller than the top-level
-// note's ring. nested notes keep the .body inset above so their rings stay clear of the
-// parent's. the `> div >` hop is the position:relative wrapper MarkdownNoteBody renders
+/*
+ * The synthetic root container has no headline, border, or card of its own, so its body
+ * must not inset the top-level note - otherwise the focus ring jumps 0.4em as the caret
+ * crosses from the document frontmatter (root focused) into the first note. Zero all sides:
+ * the bottom inset would otherwise make the root ring 0.4em taller than the top-level
+ * note's ring. Nested notes keep the .body inset above so their rings stay clear of the
+ * parent's. The `> div >` hop is the position:relative wrapper MarkdownNoteBody renders.
+ */
 [data-mdast-type='root'] > div > .body {
   padding: 0;
 }
@@ -1421,10 +1506,9 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
-//
-// View-specific styles
-// including specialised sub-elements (like notes etc.)
-//
+/*
+ * View-specific styles, including specialised sub-elements (like notes etc.)
+ */
 
 .viewDocument {
   padding: 8px 0 1.2em 0;
@@ -1663,7 +1747,6 @@ body.disableAddressBarHidingOnScroll {
         &:hover {
           box-shadow: var(--nt-card-shadow-hover, 0 4px 12px rgba(0, 0, 0, 0.12));
           // don't lift the note up on hover, just glow
-          //transform: translateY(-1px);
         }
 
         // hello-pangea/dnd sets [data-rfd-draggable-id] on dragging items
@@ -1692,8 +1775,7 @@ body.disableAddressBarHidingOnScroll {
           // don't allow content to extend outside note boundaries, particularly useful when inserting non-reflowable content like images or diagrams
           overflow: hidden;
 
-          // spacing between sub-notes within a kanban card;
-          // must exceed 2× outline-offset (8px) + 2× outline-width (2px) to prevent overlap
+          // spacing between sub-notes within a kanban card; must exceed 2× outline-offset (8px) + 2× outline-width (2px) to prevent overlap
           > .note {
             margin-top: 22px;
             overflow: hidden;
@@ -1800,10 +1882,10 @@ body.disableAddressBarHidingOnScroll {
 }
 
 
-//
-// View settings drawer - the two panes and the four-column settings rows. The tree pane reuses the
-// shared .drawerTree* classes above; everything here is the right-hand pane and the row grid.
-//
+/*
+ * View settings drawer - the two panes and the four-column settings rows. The tree pane reuses the
+ * shared .drawerTree* classes above; everything here is the right-hand pane and the row grid.
+ */
 
 /*
  * The settings drawers stack rather than sitting beside a meta column: title, then the two panes, then

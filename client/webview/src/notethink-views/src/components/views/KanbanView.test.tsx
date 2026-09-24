@@ -369,7 +369,7 @@ describe('KanbanView', () => {
             notes_within_parent_context: [doing_note],
         });
         render(<KanbanView {...props} />);
-        // Untagged column should be hidden since it's empty and other columns exist
+        // untagged column should be hidden since it's empty and other columns exist
         expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });

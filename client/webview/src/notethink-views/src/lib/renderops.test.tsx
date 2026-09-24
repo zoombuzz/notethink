@@ -78,7 +78,7 @@ describe('renderNodeUnified cache', () => {
 
         const first = renderNodeUnified(makeNode());
         const second = renderNodeUnified(makeNode());
-        // Different object references → different cache entries
+        // different object references → different cache entries
         expect(first).not.toBe(second);
     });
 

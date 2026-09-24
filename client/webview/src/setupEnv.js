@@ -26,8 +26,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
     Object.defineProperty(globalThis, 'TextDecoder', { value: TextDecoder });
 }
 
-// mock acquireVsCodeApi global (available in VS Code webview context)
-// singleton so tests spying on .postMessage observe the same instance the SUT uses
+// mock the acquireVsCodeApi webview global as a singleton, so tests spying on .postMessage observe the same instance the SUT uses
 const __vscode_api_singleton = {
     getState: () => ({ docs: {} }),
     setState: () => {},

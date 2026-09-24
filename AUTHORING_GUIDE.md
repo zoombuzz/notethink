@@ -596,7 +596,10 @@ the view.
 
 In Folder mode, NoteThink:
 
-1. Loads every `*.md` file under the folder.
+1. Loads every `*.md` file under the folder. The include and exclude filters
+   in the **Files drawer** narrow that set (to `**/{todo,done}.md` for the
+   story files described above, say). When none of the loaded files holds a
+   story, the board shows its columns with a note linking to the Files drawer.
 2. Walks each file's tree:
    - depth-3 (`###`) headings become stories on the merged board
    - depth-2 (`##`) headings become epics; their depth-3 children become stories

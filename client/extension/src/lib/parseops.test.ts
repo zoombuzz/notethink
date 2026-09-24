@@ -100,7 +100,7 @@ describe('parseops', () => {
 			expect(link?.url).toBe('https://example.com');
 		});
 
-		// Frontmatter
+		// frontmatter
 		it('parses YAML frontmatter', () => {
 			const markdown = '---\ntitle: Test\ndate: 2024-01-01\n---\n\n# Content';
 			const result = parse(markdown);
@@ -118,7 +118,7 @@ describe('parseops', () => {
 			expect(fm?.value).toContain('title = "Test"');
 		});
 
-		// Position data
+		// position data
 		it('includes position data on nodes', () => {
 			const result = parse('# Hello');
 			const heading = result.children[0] as Heading;
@@ -128,7 +128,7 @@ describe('parseops', () => {
 			expect(heading.position?.start.line).toBe(1);
 		});
 
-		// Code blocks
+		// code blocks
 		it('parses fenced code blocks', () => {
 			const markdown = '```js\nconsole.log("hi");\n```';
 			const result = parse(markdown);
@@ -138,7 +138,7 @@ describe('parseops', () => {
 			expect(code?.value).toBe('console.log("hi");');
 		});
 
-		// Links and images
+		// links and images
 		it('parses links', () => {
 			const markdown = '[click here](https://example.com)';
 			const result = parse(markdown);
@@ -250,7 +250,7 @@ describe('parseops', () => {
 		});
 	});
 
-	// Large file performance
+	// large file performance
 	describe('large file (1000+ lines)', () => {
 		it('parses a 1500-line markdown file correctly', () => {
 			const lines: string[] = [];
@@ -291,7 +291,7 @@ describe('parseops', () => {
 		});
 	});
 
-	// Mixed content (all features in one document)
+	// mixed content (all features in one document)
 	describe('mixed content document', () => {
 		it('parses frontmatter + GFM features + unicode in one document', () => {
 			const markdown = [

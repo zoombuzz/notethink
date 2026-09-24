@@ -274,11 +274,7 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
             prev_columns.current = columns;
             first_run.current = false;
         };
-        /*
-         * settle any still-playing move so getBoundingClientRect reads the true layout box - a mid-flight
-         * position would otherwise bake into the baseline; skipped while the gate is hot, where dnd owns
-         * the card transforms and FLIP has nothing in flight.
-         */
+        // settle any still-playing move so the baseline reads the true layout box, not a mid-flight position; skipped while the gate is hot, where dnd owns the card transforms
         if (!options.gate.isHot()) {
             settleInFlightAnimations(container);
         }

@@ -1,6 +1,8 @@
 import React, { lazy } from "react";
 import { documentRootForStrip } from "../../lib/noteops";
 import { chainOf, registryWithUserTypes } from "../../lib/viewregistryops";
+import { usePendingWorkContext } from "../../hooks/PendingWorkContext";
+import { INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode } from "../../types/IntegrationMode";
 import type { UserViewType } from "../../types/Messages";
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps } from "../../types/NoteProps";
@@ -8,7 +10,9 @@ import GenericNoteAttributes from "../notes/GenericNoteAttributes";
 import InsertModal from "../InsertModal";
 import GenericViewBreadcrumb from "./generic/GenericViewBreadcrumb";
 import GenericViewToolbar from "./generic/GenericViewToolbar";
+import EmptyStoriesOverlay from "./EmptyStoriesOverlay";
 import { useGenericView } from "./generic/useGenericView";
+import view_styles from "../ViewRenderer.module.scss";
 
 /*
  * component per concrete view id, keyed by the same ids the view registry declares. dynamic import() is
@@ -44,10 +48,28 @@ function viewComponentFor(view_type: string, user_types: UserViewType[]): React.
     return undefined;
 }
 
+/**
+ * Whether to lay the empty-stories note over the board. Folder mode only: a single file opened
+ * deliberately with no ### headings is unremarkable, so it takes no note, while folder mode's columns
+ * render empty rather than blank and the note says why. It waits for discovery to settle (`pending`) and
+ * for the first aggregate to land (aggregate_total_discovered stays undefined until then), because the
+ * host seeds folder scope before its file search runs and raises `pending` only once that search returns.
+ */
+function showsEmptyStoriesNote(show_toolbar: boolean, integration_mode: ConcreteIntegrationMode, pending: boolean, view_props: ViewProps): boolean {
+    return show_toolbar
+        && integration_mode === INTEGRATION_MODE_FOLDER
+        && !pending
+        && view_props.aggregate_total_discovered !== undefined
+        && (view_props.note_count ?? 0) === 0;
+}
+
+// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function GenericView(props: ViewProps): React.ReactElement {
     // view_props is what every hook below, and every view beneath them, saw: virtual notes admitted and the handler surface guarded
     const { view_props, view_context, handlers, handle_folder_click, handle_apply_filters, handle_file_jump, drawers, jump, collisions, toolbar, insert, auto_resolved_type } = useGenericView(props);
     const { display_options, parent_context, deepest, notes_within_parent_context } = view_context;
+    // the same discovery-settled signal the toolbar spinner reads (folderDiscovery et al.), so the empty-stories note never flashes mid-load
+    const { pending } = usePendingWorkContext();
     /*
      * document-level front-matter strip: bound to the document root (notes[0]), single-file mode only
      * built once here and handed to whichever leaf view renders it, so the views don't each re-derive it
@@ -71,6 +93,8 @@ export default function GenericView(props: ViewProps): React.ReactElement {
     const show_toolbar = view_props.type !== 'auto';
     // the registry-keyed component for this type, inheriting a minted type's renderer from its parent
     const ViewComponent = viewComponentFor(view_props.type, display_options.settings?.viewUserTypes ?? []);
+    // the toolbar's integration_mode, so the note tracks the same mode the Files drawer it opens gates on
+    const show_empty_stories = showsEmptyStoriesNote(show_toolbar, toolbar.integration_mode, pending, view_props);
     /*
      * The props the rendered view component receives.
      * - display_options.settings.cardType: the resolved card, stamped here rather than in AutoView alone.
@@ -134,7 +158,10 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     onApplyFilters={handle_apply_filters}
                 />
             )}
-            {ViewComponent && <ViewComponent {...enriched_props} />}
+            <div className={view_styles.viewContentRegion}>
+                {ViewComponent && <ViewComponent {...enriched_props} />}
+                {show_empty_stories && <EmptyStoriesOverlay onOpenFilesDrawer={drawers.toggle_files} />}
+            </div>
             <InsertModal
                 opened={insert.insert_modal_open}
                 onClose={insert.close_insert_modal}

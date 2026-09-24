@@ -37,8 +37,7 @@
   }
 }
 
-// the body wrapper carrying the shared view_specific_styles.body class (ViewRenderer.module.scss), so
-// the card picks up the same horizontal/bottom padding and clipping every other card's body gets
+// the body wrapper carrying the shared view_specific_styles.body class (ViewRenderer.module.scss), so the card picks up the same horizontal/bottom padding and clipping every other card's body gets
 .agentBody {
   display: flex;
   flex-direction: column;

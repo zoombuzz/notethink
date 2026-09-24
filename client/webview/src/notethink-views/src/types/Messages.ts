@@ -6,7 +6,7 @@
 
 import type { IntegrationMode } from './IntegrationMode';
 
-// Webview -> Extension messages
+// webview -> Extension messages
 
 export interface RevealRangeMessage {
     type: 'revealRange';
@@ -123,7 +123,7 @@ export type WebviewToExtensionMessage =
     | RequestJumpTargetsMessage
     | OpenFileMessage;
 
-// Extension -> Webview messages
+// extension -> Webview messages
 
 export interface UpdateMessage {
     type: 'update';

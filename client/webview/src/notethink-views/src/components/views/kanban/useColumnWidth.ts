@@ -113,13 +113,7 @@ function measureAtProbeWidth(board: HTMLElement): Omit<CardModel, 'signature'> |
         visibility: 'hidden',
         pointerEvents: 'none',
     });
-    /*
-     * Force the probe into the side by side layout whatever the board is doing, because the clone keeps
-     * the lane's class and sits inside the live board, so the stacked rules reach it: they would lay its
-     * cards along a row and size each one from `--nt-card-width`, which the cloned cards carry inline from
-     * the last solve. The probe would then be measuring the widths it produced - the feedback loop the
-     * fixed probe width exists to prevent, arriving through the clone instead of through the board.
-     */
+    // force the probe side by side whatever the board does: the clone keeps the lane's class inside the live board, so stacked rules would size its cards from the last solve's `--nt-card-width` and the probe would measure its own output, the feedback loop the fixed probe width prevents
     Object.assign(probe_cards.style, { flexDirection: 'column', alignItems: 'stretch' });
     Array.prototype.forEach.call(probe_cards.children, (card: Element) => unclipProbeCard(card as HTMLElement));
     // clone order is query order, so the live card at index i is the one probed at index i

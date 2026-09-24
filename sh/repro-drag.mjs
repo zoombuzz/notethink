@@ -28,8 +28,10 @@ const SHOT_DIR = join(tmpdir(), 'notethink-repro-drag');
 const log = (...a) => console.log('[repro]', ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// clean multi-file folder board: Doing [A1,A2,B1], Done [B2], Backlog [Mover]. "Mover" is the card a text edit glides.
-// folder mode aggregates the clicked file's CONTAINING folder, so the story files live in a `board/` subfolder
+/*
+ * Clean multi-file folder board: Doing [A1,A2,B1], Done [B2], Backlog [Mover]. "Mover" is the card a text edit glides.
+ * Folder mode aggregates the clicked file's CONTAINING folder, so the story files live in a `board/` subfolder.
+ */
 function writeFixture() {
     const dir = mkdtempSync(join(tmpdir(), 'nt-board-'));
     const board = join(dir, 'board');
@@ -148,8 +150,10 @@ async function realDrag(page, cf, sourceCol, targetCol, label, cardName) {
     return landed;
 }
 
-// open a file's source as text to the SIDE via the explorer context menu (Go-to-File is not indexed in vscode-test-web),
-// keeping the board visible so it can glide when the source changes
+/*
+ * Open a file's source as text to the SIDE via the explorer context menu (Go-to-File is not indexed in
+ * vscode-test-web), keeping the board visible so it can glide when the source changes.
+ */
 async function openSourceToSide(page, filename) {
     await page.locator('.explorer-folders-view .monaco-list-row', { hasText: filename }).first().click({ button: 'right' }); await sleep(700);
     await page.locator('.monaco-menu .action-label', { hasText: 'Open to the Side' }).first().click().catch(() => {});
@@ -211,13 +215,7 @@ async function main() {
         const topFocus = await page.evaluate(() => (document.activeElement ? document.activeElement.tagName + '.' + (document.activeElement.className || '').toString().slice(0, 25) : 'none'));
         const iframeFocus = await cf.evaluate(() => ({ hasFocus: document.hasFocus(), active: document.activeElement ? document.activeElement.tagName + '.' + (document.activeElement.className || '').toString().slice(0, 25) : 'none' }));
         log('focus after undo: top=', topFocus, 'iframe=', JSON.stringify(iframeFocus));
-        /*
-         * smoking gun: after a Monaco edit the webview iframe has hasFocus=false, so @hello-pangea/dnd's mouse sensor
-         * never sees the mousedown and the next drag never starts. (a from-inside window.focus() DOES flip hasFocus
-         * true, confirming focus is reclaimable - but it detaches/recreates the webview iframe, so a real fix must
-         * reclaim focus more gently, on the board's own pointer interaction, not by force.)
-         */
-        // GENTLE-FOCUS probe: does focusing an existing board ELEMENT restore hasFocus WITHOUT detaching the frame? if so that is the fix shape.
+        // after a Monaco edit the iframe has hasFocus=false, so dnd never sees the mousedown, and window.focus() recreates the iframe; this GENTLE-FOCUS probe tests whether focusing an existing board element restores hasFocus without detaching the frame, which would be the fix shape
         if (process.env.REPRO_ELFOCUS === '1') {
             const res = await cf.evaluate(() => {
                 const el = document.querySelector('button, [tabindex], a[href], input');

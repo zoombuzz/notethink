@@ -26,7 +26,7 @@ describe('FilesDrawer', () => {
         jest.useFakeTimers();
     });
     afterEach(() => {
-        jest.runOnlyPendingTimers();
+        act(() => { jest.runOnlyPendingTimers(); });
         jest.useRealTimers();
     });
 
@@ -95,6 +95,62 @@ describe('FilesDrawer', () => {
         expect(screen.getByTestId('files-drawer-max-notes')).toHaveValue(5);
     });
 
+    it('never rewrites the field being typed in when a stale echo arrives, so the caret stays put', () => {
+        const { rerender } = renderDrawer();
+        const input = screen.getByTestId('files-drawer-include') as HTMLInputElement;
+        fireEvent.focus(input);
+        fireEvent.change(input, { target: { value: '**/users/*.md' } });
+        input.setSelectionRange(9, 9);
+        // the echo of an earlier apply lands mid-edit
+        rerender(<FilesDrawer {...default_props} include="**/users/*" />);
+        expect(input).toHaveValue('**/users/*.md');
+        expect(input.selectionStart).toBe(9);
+        expect(input.selectionEnd).toBe(9);
+    });
+
+    it('still resyncs the fields that are not focused when an echo arrives', () => {
+        const { rerender } = renderDrawer();
+        fireEvent.focus(screen.getByTestId('files-drawer-include'));
+        rerender(<FilesDrawer {...default_props} exclude="" maxNotesPerFile={5} />);
+        expect(screen.getByTestId('files-drawer-exclude')).toHaveValue('');
+        expect(screen.getByTestId('files-drawer-max-notes')).toHaveValue(5);
+    });
+
+    it('adopts the effective value it skipped once the field loses focus', () => {
+        const { rerender } = renderDrawer();
+        const input = screen.getByTestId('files-drawer-include');
+        fireEvent.focus(input);
+        rerender(<FilesDrawer {...default_props} include="**/notes/**" />);
+        expect(input).toHaveValue('**/*.md');
+        fireEvent.blur(input);
+        expect(input).toHaveValue('**/notes/**');
+    });
+
+    it('keeps the typed value on blur while its apply is still pending', () => {
+        const { props } = renderDrawer();
+        const input = screen.getByTestId('files-drawer-include');
+        fireEvent.focus(input);
+        fireEvent.change(input, { target: { value: '**/users/**' } });
+        fireEvent.blur(input);
+        expect(input).toHaveValue('**/users/**');
+        act(() => { jest.advanceTimersByTime(200); });
+        expect(props.onApplyFilters).toHaveBeenCalledWith('**/users/**', DERIVED_DIR_EXCLUDE, 10);
+    });
+
+    it('keeps the applied value on blur while that apply still awaits its echo', () => {
+        const { props, rerender } = renderDrawer();
+        const input = screen.getByTestId('files-drawer-include');
+        fireEvent.focus(input);
+        fireEvent.change(input, { target: { value: '**/users/**' } });
+        rerender(<FilesDrawer {...default_props} include="**/users/*" />);
+        act(() => { jest.advanceTimersByTime(200); });
+        expect(props.onApplyFilters).toHaveBeenCalledWith('**/users/**', DERIVED_DIR_EXCLUDE, 10);
+        fireEvent.blur(input);
+        expect(input).toHaveValue('**/users/**');
+        rerender(<FilesDrawer {...default_props} include="**/users/**" />);
+        expect(input).toHaveValue('**/users/**');
+    });
+
     it('debounces a max-notes change and applies the clamped integer', () => {
         const { props } = renderDrawer();
         fireEvent.change(screen.getByTestId('files-drawer-max-notes'), { target: { value: '3' } });
@@ -140,5 +196,19 @@ describe('FilesDrawer', () => {
         fireEvent.click(rows[0]);
         expect(onFileClick).toHaveBeenCalledTimes(1);
         expect(onFileClick).toHaveBeenCalledWith('/abs/docs/a.md');
+    });
+
+    it('shows the point-at-your-stories instructions when the aggregate has zero stories', () => {
+        renderDrawer({ noteCount: 0 });
+        const instructions = screen.getByTestId('files-drawer-instructions');
+        expect(instructions).toHaveTextContent('Point NoteThink at your stories');
+        expect(instructions).toHaveTextContent('**/todo.md');
+        expect(instructions).toHaveTextContent('docs/**/*.md');
+        expect(instructions).toHaveTextContent('###');
+    });
+
+    it('does not show the instructions once stories are found', () => {
+        renderDrawer({ noteCount: 42 });
+        expect(screen.queryByTestId('files-drawer-instructions')).not.toBeInTheDocument();
     });
 });

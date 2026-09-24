@@ -16,7 +16,7 @@ test.describe('Keyboard Navigation', () => {
         await page.waitForSelector('[role="rowheader"]', { timeout: 5000 });
         await page.waitForTimeout(500);
 
-        // Click first headline
+        // click first headline
         await clearCapturedMessages(page);
         const headlines = page.locator('[role="rowheader"]');
         await headlines.nth(0).click();
@@ -25,7 +25,7 @@ test.describe('Keyboard Navigation', () => {
         expect(first_reveal).toBeDefined();
         expect(typeof first_reveal!.from).toBe('number');
 
-        // Click a different headline
+        // click a different headline
         await clearCapturedMessages(page);
         const headline_count = await headlines.count();
         await headlines.nth(Math.min(1, headline_count - 1)).click();
@@ -40,15 +40,15 @@ test.describe('Keyboard Navigation', () => {
         await page.waitForSelector('[role="rowheader"]', { timeout: 5000 });
         await page.waitForTimeout(500);
 
-        // Click a headline
+        // click a headline
         await page.locator('[role="rowheader"]').first().click();
         await page.waitForTimeout(200);
 
-        // Get the revealRange message
+        // get the revealRange message
         const reveal = await findRevealMessage(page);
         expect(reveal).toBeDefined();
 
-        // Simulate the extension responding with selectionChanged
+        // simulate the extension responding with selectionChanged
         await simulateSelectionChanged(page, reveal!.docPath || doc_path, reveal!.from!);
         await page.waitForTimeout(500);
 
@@ -62,11 +62,11 @@ test.describe('Keyboard Navigation', () => {
         await page.waitForSelector('[role="rowheader"]', { timeout: 5000 });
         await page.waitForTimeout(500);
 
-        // Navigate down to focus on a note with children
+        // navigate down to focus on a note with children
         await sendCommand(page, 'navigate', { direction: 'down' });
         await page.waitForTimeout(300);
 
-        // Simulate selectionChanged so GenericView knows the caret position
+        // simulate selectionChanged so GenericView knows the caret position
         const reveal = await findRevealMessage(page);
         if (reveal?.from !== undefined) {
             await simulateSelectionChanged(page, reveal.docPath || doc_path, reveal.from);
@@ -78,7 +78,7 @@ test.describe('Keyboard Navigation', () => {
         const parent_before_drill = await data_parent.first().getAttribute('data-parent-content-seq');
         expect(parent_before_drill).not.toBeNull();
 
-        // Drill in
+        // drill in
         await sendCommand(page, 'navigate', { direction: 'drillIn' });
         await page.waitForTimeout(500);
 
@@ -92,7 +92,7 @@ test.describe('Keyboard Navigation', () => {
         await page.waitForSelector('[role="rowheader"]', { timeout: 5000 });
         await page.waitForTimeout(500);
 
-        // Navigate down and simulate selection
+        // navigate down and simulate selection
         await sendCommand(page, 'navigate', { direction: 'down' });
         await page.waitForTimeout(300);
         const reveal = await findRevealMessage(page);
@@ -104,7 +104,7 @@ test.describe('Keyboard Navigation', () => {
         const data_parent = page.locator('[data-parent-content-seq]');
         const parent_before_drill = await data_parent.first().getAttribute('data-parent-content-seq');
 
-        // Drill in
+        // drill in
         await sendCommand(page, 'navigate', { direction: 'drillIn' });
         await page.waitForTimeout(500);
 
@@ -118,7 +118,7 @@ test.describe('Keyboard Navigation', () => {
         expect(parent_after_drill).not.toBeNull();
         expect(parent_after_drill).not.toBe(parent_before_drill);
 
-        // Drill out
+        // drill out
         await sendCommand(page, 'navigate', { direction: 'drillOut' });
         await page.waitForTimeout(500);
 

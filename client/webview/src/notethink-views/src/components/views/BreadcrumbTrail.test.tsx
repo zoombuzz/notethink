@@ -377,7 +377,7 @@ describe('BreadcrumbTrail', () => {
 
     it('doc_relative_path takes precedence over workspace_root', () => {
         const current = makeNote({ seq: 0 });
-        // Even with mismatched workspace_root (symlink), doc_relative_path wins
+        // even with mismatched workspace_root (symlink), doc_relative_path wins
         render(<BreadcrumbTrail {...current}
             doc_path="/mnt/secure/home/dev/git/github.com/in_development/notethink/README.md"
             doc_relative_path="notethink/README.md"

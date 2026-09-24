@@ -15,11 +15,11 @@ test.describe('Click Interaction', () => {
         await page.waitForSelector('[role="rowheader"]', { timeout: 5000 });
         await clearCapturedMessages(page);
 
-        // Click a headline
+        // click a headline
         const headline = page.locator('[role="rowheader"]').first();
         await headline.click();
 
-        // Wait for React to process the click
+        // wait for React to process the click
         await page.waitForTimeout(200);
 
         const reveal_or_select = await getRevealOrSelectMessages(page);
@@ -30,7 +30,7 @@ test.describe('Click Interaction', () => {
         await injectDocsFromFixture(page, 'basic.md');
         await page.waitForSelector('[role="row"]', { timeout: 5000 });
 
-        // Click a headline to trigger focus
+        // click a headline to trigger focus
         const headline = page.locator('[role="rowheader"]').first();
         await headline.click();
         await page.waitForTimeout(200);
@@ -39,11 +39,11 @@ test.describe('Click Interaction', () => {
         const reveal_msg = await findRevealMessage(page);
 
         if (reveal_msg) {
-            // Simulate the extension responding with a selectionChanged
+            // simulate the extension responding with a selectionChanged
             await simulateSelectionChanged(page, reveal_msg.docPath!, reveal_msg.from!);
             await page.waitForTimeout(300);
 
-            // Check that a note now has aria-current="true"
+            // check that a note now has aria-current="true"
             const focused_note = page.locator('[role="row"][aria-current="true"]');
             await expect(focused_note).toBeVisible({ timeout: 3000 });
         }
@@ -54,7 +54,7 @@ test.describe('Click Interaction', () => {
         await page.waitForSelector('[role="rowheader"]', { timeout: 5000 });
         await clearCapturedMessages(page);
 
-        // Step 1: Click a headline to trigger revealRange
+        // step 1: Click a headline to trigger revealRange
         const headline = page.locator('[role="rowheader"]').first();
         await headline.click();
         await page.waitForTimeout(200);
@@ -62,14 +62,14 @@ test.describe('Click Interaction', () => {
         const reveal_msg = await findRevealMessage(page);
         expect(reveal_msg).toBeDefined();
 
-        // Step 2: Simulate extension responding with collapsed selection (head === anchor) → note becomes focused
+        // step 2: Simulate extension responding with collapsed selection (head === anchor) → note becomes focused
         await simulateSelectionChanged(page, reveal_msg!.docPath!, reveal_msg!.from!);
         await page.waitForTimeout(300);
 
         const focused_note = page.locator('[role="row"][aria-current="true"]');
         await expect(focused_note).toBeVisible({ timeout: 3000 });
 
-        // Step 3: Clear messages and click the same headline again → should send selectRange
+        // step 3: Clear messages and click the same headline again → should send selectRange
         await clearCapturedMessages(page);
         await headline.click();
         await page.waitForTimeout(200);
@@ -79,15 +79,15 @@ test.describe('Click Interaction', () => {
         expect(select_msg!.from).toBeDefined();
         expect(select_msg!.to).toBeDefined();
 
-        // Step 4: Simulate extension responding with range selection (head ≠ anchor)
+        // step 4: Simulate extension responding with range selection (head ≠ anchor)
         await simulateRangeSelectionChanged(page, reveal_msg!.docPath!, select_msg!.from!, select_msg!.to!);
         await page.waitForTimeout(300);
 
-        // Step 5: Assert view did NOT blank - notes are still visible
+        // step 5: Assert view did NOT blank - notes are still visible
         const visible_notes = page.locator('[data-seq]');
         await expect(visible_notes.first()).toBeVisible({ timeout: 3000 });
 
-        // Step 6: Assert at least one note became selected
+        // step 6: Assert at least one note became selected
         const selected_notes = page.locator('[role="row"][aria-selected="true"]');
         await expect(selected_notes.first()).toBeVisible({ timeout: 3000 });
     });

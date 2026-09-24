@@ -41,8 +41,7 @@ module.exports = {
       presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
     }],
   },
-  // allow all ESM packages to be transformed via babel
-  // the unified ecosystem (hast-util, mdast-util, etc.) has many ESM-only packages
+  // allow all ESM packages to be transformed via babel: the unified ecosystem (hast-util, mdast-util, etc.) has many ESM-only packages
   transformIgnorePatterns: [],
   moduleNameMapper: {
     // handle CSS modules

@@ -8,7 +8,7 @@ import styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:FilesDrawer");
 
-// debounce between a keystroke in a filter box and (a) re-filtering the drawer list client-side and (b) the background re-discovery round-trip
+// debounce between a filter-box keystroke and both the client-side re-filter and the background re-discovery
 const FILES_FILTER_DEBOUNCE_MS = 200;
 // floor for the per-file story cap; an empty/NaN input falls back to the current value, never 0
 const MIN_MAX_NOTES_PER_FILE = 1;
@@ -32,7 +32,7 @@ interface FilesDrawerProps {
     canRestoreBuiltinDefault?: boolean;
 }
 
-// resolve a Files-drawer entry to the absolute path the openFile message needs (aggregate_loaded_files are workspace-relative where known)
+// resolves a Files-drawer entry to the absolute path openFile needs; aggregate_loaded_files are workspace-relative
 function absolutizeFilePath(file_path: string, workspace_root?: string): string {
     if (file_path.startsWith('/')) { return file_path; }
     return workspace_root ? `${workspace_root}/${file_path}` : file_path;
@@ -121,7 +121,7 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
     const handleFieldFocus = useCallback((field: FilesDrawerField) => {
         focused_field.current = field;
     }, []);
-    // on leaving a field, adopt an effective value it skipped while focused; an apply still pending or awaiting its echo will do that instead
+    // on blur, adopts a value skipped while focused, unless an apply is still pending or awaiting its echo
     const handleFieldBlur = useCallback(() => {
         focused_field.current = null;
         if (skipped_echo.current && !debounce_timer.current && !awaited_echo.current) { resyncFromProps(null); }

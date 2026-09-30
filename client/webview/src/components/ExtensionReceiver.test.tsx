@@ -5,7 +5,7 @@ import ExtensionReceiverImpl from './ExtensionReceiver';
 import { MESSAGE_FLUSH_FALLBACK_MS } from '../hooks/useVscodeMessages';
 import { DEFAULT_SETTINGS_CASCADE } from '../constants';
 
-// most tests render the receiver without caring about the pending-work plumbing; inject a no-op api so every render() in the suite stays terse
+// a no-op pending-work api keeps every render() in the suite terse when a test does not care about it
 const NOOP_PENDING_WORK_API = {
     pending: false,
     markPending: jest.fn(),
@@ -36,8 +36,8 @@ async function postQueuedMessage(data: unknown): Promise<void> {
 }
 
 /*
- * mock the debug library so message-validation logging can be asserted (validation logs via the debug instance, not console)
- * the spy is created inside the factory so it exists when the hooks' module-load `Debug(namespace)` calls run; every namespace returns the same shared spy
+ * Mocks debug so validation logging can be asserted. The spy is created inside the factory so it
+ * exists before the hooks' module-load `Debug(namespace)` calls run, and every namespace shares it.
  */
 jest.mock('debug', () => {
     const mock_log = jest.fn();
@@ -578,7 +578,7 @@ describe('ExtensionReceiver', () => {
         });
     });
 
-    // when the integration_mode tag is dispatched to the canonical folder key, the folder viewState's other settings (columnOrder, filters, ...) must survive a flip to current_file and back
+    // the folder viewState's other settings must survive a flip to current_file and back
     describe('folder viewState survives integration_mode flip', () => {
         const FOLDER_KEY = '__folder__';
 

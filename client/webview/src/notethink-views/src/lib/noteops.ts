@@ -3,6 +3,7 @@ import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } 
 import { INTEGRATION_MODE_CURRENT_FILE } from "../types/IntegrationMode";
 import { ABSENT_VALUE_BUCKET, FIRST_LEVEL_FOLDER_KEY, axisField, categoricalLaneFor, projectNoteOntoAxis, type Axis } from "./axisops";
 import { projectNameFromRelativePath } from "./originops";
+import { isVirtualNote } from "./virtualnoteops";
 
 const debug = Debug("nodejs:notethink-views:noteops");
 
@@ -18,12 +19,9 @@ export interface CollisionNoteLocation {
 }
 
 /**
- * generic shallow element-wise equality for two ordered arrays of any primitive
- * comparable by `===` (string, number, boolean). Returns true when both inputs
- * are undefined, false when exactly one is, and a length+element-wise comparison
- * otherwise. Lives in noteops alongside the note-tree comparators because the
- * codebase's only consumers (MarkdownNote memo compare, kanban columnops) are
- * note-adjacent; if a second non-note caller appears, lift to its own file
+ * Shallow element-wise equality for two ordered arrays of primitives. Lives here beside the
+ * note-tree comparators since its only consumers (MarkdownNote memo compare, kanban columnops) are
+ * note-adjacent; move it out if a non-note caller appears.
  */
 export function arraysEqual<T>(a: T[] | undefined, b: T[] | undefined): boolean {
     if (a === b) { return true; }
@@ -82,13 +80,10 @@ export function findDeepestNote(notes: Array<NoteProps>, caret_position: number,
 }
 
 /**
- * find the deepest note whose source-file offset range contains caret_pos, among
- * notes whose origin.doc_path matches active_doc_path. unified matcher used by
- * the editor-caret → note-focus derivation in both current_file mode (every
- * visible note's origin.doc_path matches the active doc) and folder mode (per-doc
- * filter, then match by source_position preserved through mergeAggregateRoot's
- * re-stamping). notes without an origin or source_position match nothing - the
- * caller falls back to the in-tree findDeepestNote path
+ * Deepest note whose source_position spans caret_pos, restricted to origin.doc_path ===
+ * active_doc_path. Works in both current_file and folder mode since source_position survives
+ * mergeAggregateRoot's re-stamping; a note without one matches nothing and the caller falls back
+ * to findDeepestNote.
  */
 export function findDeepestNoteByOriginPosition(notes: Array<NoteProps>, active_doc_path: string, caret_pos: number): NoteProps | undefined {
     let best: NoteProps | undefined;
@@ -99,7 +94,7 @@ export function findDeepestNoteByOriginPosition(notes: Array<NoteProps>, active_
         if (!sp) { continue; }
         const end_offset = sp.end_body?.offset ?? sp.end.offset;
         if (caret_pos < sp.start.offset || caret_pos > end_offset) { continue; }
-        // prefer the deepest (most specific) note - the one with the latest start offset, mirroring findDeepestNote's right-to-left walk
+        // prefers the deepest note: latest start offset, mirroring findDeepestNote's right-to-left walk
         if (sp.start.offset > best_start) {
             best = note;
             best_start = sp.start.offset;
@@ -109,12 +104,9 @@ export function findDeepestNoteByOriginPosition(notes: Array<NoteProps>, active_
 }
 
 /**
- * find all notes within the active editor's source doc whose source_position is
- * spanned by the editor's range selection (lo..hi). mirrors
- * findDeepestNoteByOriginPosition's per-doc + source_position contract for the
- * selection path. notes without source_position fall back to the in-tree
- * withinNoteHeadlineOrBody predicate, which is coordinate-coherent only when the
- * merged tree shares offsets with the editor (single-file case)
+ * Notes in the active doc whose source_position falls within the editor's [lo, hi] selection. A
+ * note without source_position falls back to withinNoteHeadlineOrBody, which only agrees with the
+ * editor's offsets in single-file mode.
  */
 export function findSelectedNotesByOriginPosition(
     notes: Array<NoteProps>,
@@ -136,16 +128,9 @@ export function findSelectedNotesByOriginPosition(
 }
 
 /**
- * resolve the focused note by stable_id. latest-click-wins with the editor as
- * tiebreaker - the editor-derived caret match wins whenever it produces a note
- * (almost all real editing happens in the editor and the view is a real-time
- * visualisation). view_focused_ids is the immediate-feedback source for the brief
- * window between a view click and the editor's selectionChanged round-trip, and
- * the fallback when the editor has no opinion (active editor on a doc outside the
- * aggregated set, or caret outside every matched note). view_caret is the virtual-caret
- * offset (board-as-editor caret when no editor is live); it is the last resort so a note
- * clicked WITHOUT a stable_id still highlights - the caret lives in in-tree offset space,
- * so findDeepestNote resolves it in both single-file and folder mode
+ * Resolves the focused note: the editor-derived caret match wins whenever present, then the
+ * latest view_focused_ids click, then the virtual view_caret against in-tree offsets - the last
+ * resort so a note clicked without a stable_id still highlights.
  */
 export function resolveFocusedNote(
     view_focused_ids: string[] | undefined,
@@ -168,10 +153,9 @@ export function resolveFocusedNote(
 }
 
 /**
- * detect whether the root parent_context is a synthetic aggregate root - one
- * whose direct children carry note.origin with multiple distinct doc_ids (or a
- * single origin under an empty synthetic seq-0 root). pure document mode has
- * either no origins or a single origin under a real headline
+ * True when parent_context is a synthetic aggregate root: children carry origin with more than one
+ * distinct doc_id, or a single origin under an empty synthetic seq-0 root. Pure document mode has
+ * no origins, or one origin under a real headline.
  */
 export function isAggregateRoot(parent_context: NoteProps | undefined): boolean {
     if (!parent_context) { return false; }
@@ -184,10 +168,10 @@ export function isAggregateRoot(parent_context: NoteProps | undefined): boolean 
 }
 
 /**
- * majority-vote a per-file attribute across the originating files in an aggregate tree. one vote per
- * file (keyed on origin.doc_id), taken by `voteFor` from each note's origin; the first note seen for a
- * file casts its vote. strict plurality wins; ties or no votes return undefined. shared by the nt_view
- * and nt_group_by auto-resolution so both apply identical semantics.
+ * Majority-vote a per-file attribute across an aggregate tree's originating files: one vote per
+ * file (keyed on origin.doc_id), cast by `voteFor` from the first note seen for that file. Strict
+ * plurality wins; ties or no votes return undefined. Shared by nt_view and nt_group_by
+ * auto-resolution so both apply identical semantics.
  */
 export function majorityFileVote(notes: NoteProps[] | undefined, voteFor: (note: NoteProps) => string | undefined): string | undefined {
     if (!notes?.length) { return undefined; }
@@ -214,36 +198,36 @@ export function majorityFileVote(notes: NoteProps[] | undefined, voteFor: (note:
 }
 
 /**
- * majority-vote nt_view across the originating files (one vote per file from origin.file_view_type,
- * captured from each file's H1). ties or no votes return undefined; caller falls back to 'document'.
+ * Majority-vote nt_view across the originating files, one vote per file from
+ * origin.file_view_type as captured from each file's H1. Ties or no votes return undefined;
+ * the caller falls back to 'document'.
  */
 export function majorityNgView(notes: NoteProps[] | undefined): string | undefined {
     return majorityFileVote(notes, n => n.origin?.file_view_type);
 }
 
 /**
- * majority-vote nt_card across the originating files (one vote per file from origin.file_card_type,
- * captured from each file's H1). ties or no votes return undefined; the caller then falls back to the
- * resolved view's declared default card type.
+ * Majority-vote nt_card across the originating files, one vote per file from
+ * origin.file_card_type as captured from each file's H1. Ties or no votes return undefined;
+ * the caller falls back to the resolved view's declared default card type.
  */
 export function majorityCardType(notes: NoteProps[] | undefined): string | undefined {
     return majorityFileVote(notes, n => n.origin?.file_card_type);
 }
 
 /**
- * majority-vote nt_group_by across the originating files (one vote per file from origin.file_group_by).
- * ties or no votes return undefined; the Line view then falls back to the first level folder default.
+ * Majority-vote nt_group_by across the originating files, one vote per file from
+ * origin.file_group_by. Ties or no votes return undefined; the Line view falls back to the
+ * first-level folder default.
  */
 export function majorityGroupBy(notes: NoteProps[] | undefined): string | undefined {
     return majorityFileVote(notes, n => n.origin?.file_group_by);
 }
 
 /**
- * find the neighbour note (previous/next) of the currently-focused note within
- * a flat list. direction = -1 walks back, +1 walks forward; the result clamps at
- * the edges (no wraparound). when the focused seq isn't in the list, treats the
- * implicit index as -1 so up → first, down → first. used by useViewNavigation's
- * up/down keyboard handlers - identical computation for both directions
+ * Neighbour note (previous/next) of the focused note in a flat list; direction -1 walks back, +1
+ * forward, clamped at the edges (no wraparound). An unmatched focused seq is treated as index -1,
+ * so both up and down land on the first note.
  */
 export function navigateToNeighbour(notes: Array<NoteProps>, focused_seqs: number[] | undefined, direction: -1 | 1): NoteProps | undefined {
     if (!notes?.length) { return undefined; }
@@ -260,9 +244,8 @@ export function navigateToNeighbour(notes: Array<NoteProps>, focused_seqs: numbe
 }
 
 /**
- * flatten a NoteProps tree into a flat array (root at index 0, children follow
- * in seq order). skips items without a positive numeric seq (mdast leaf nodes
- * that didn't get assigned one). cross-file lib used by both tree composers
+ * Flattens a NoteProps tree into an array (root at index 0, children in seq order), skipping items
+ * without a positive numeric seq (unassigned mdast leaf nodes).
  */
 export function flattenAllNotes(root: NoteProps): NoteProps[] {
     const result: NoteProps[] = [root];
@@ -446,12 +429,9 @@ export function findFirstIncompleteTaskSeq(items: Array<NoteProps | MdastNode>):
 }
 
 /**
- * resolve an `nt_breadcrumb_last` epic/story label against a flat note list: return the first
- * heading note whose stripped headline equals `label`, for seeding `parent_context_id` so the
- * view opens scoped to that note's subtree. Only heading notes are considered (epics / stories
- * are headings); the synthetic seq-0 root and body items are skipped. Returns undefined when
- * nothing matches (caller leaves the scope at the default). Returns the note rather than its
- * seq because no caller wants a number that stops being valid after the next parse.
+ * Resolves an `nt_breadcrumb_last` epic/story label to the first heading note whose stripped
+ * headline matches it, for seeding `parent_context_id`. Only heading notes are considered; returns
+ * the note itself since its seq would not survive the next parse.
  */
 export function breadcrumbNoteForLabel(label: string, notes: Array<NoteProps> | undefined): NoteProps | undefined {
     if (!label || !notes?.length) { return undefined; }
@@ -463,14 +443,12 @@ export function breadcrumbNoteForLabel(label: string, notes: Array<NoteProps> | 
 }
 
 /**
- * look a note up by its seq in the flat note list a view receives.
+ * Looks a note up by its seq in the flat note list a view receives.
  *
- * Use this rather than `notes.at(seq)`. The two agree for a plain parse, where seqs are assigned
- * in the same document-order walk that builds the list, but they diverge after
- * flattenSingleFileStories: it lifts `###` stories out from under their `##` epics and re-links
- * children_body to the lifted set WITHOUT renumbering, so the dropped epic headings leave gaps and
- * every note past the first epic sits at an index below its seq. Indexing by seq there silently
- * returns a different note.
+ * Use this rather than `notes.at(seq)`. The two agree for a plain parse, where seqs match array
+ * index, but they diverge after flattenSingleFileStories: it lifts `###` stories out from under
+ * their `##` epics without renumbering, so the dropped epic headings leave gaps and every later
+ * note's index falls below its seq. Indexing by seq there returns a different note.
  */
 export function findNoteBySeq(notes: Array<NoteProps> | undefined, seq: number): NoteProps | undefined {
     if (!notes?.length) { return undefined; }
@@ -478,16 +456,11 @@ export function findNoteBySeq(notes: Array<NoteProps> | undefined, seq: number):
 }
 
 /**
- * resolve the persisted `parent_context_id` to the note the view should scope to, against the
- * tree of the current parse. Mirrors resolveFocusedNote's precedence chain, for the same reason:
- * the stored value outlives the tree it was written against, so it has to be re-derived rather
- * than trusted.
- *
- * Order: an exact `stable_id` match (what a drill-in or a breadcrumb click writes), then the
- * authored `nt_breadcrumb_last` headline label (the file-declared seed, which has no stable_id
- * available at the point it is resolved). Returns undefined when the id resolves to nothing - a
- * renamed or deleted story - so the caller scopes to the root rather than pinning the view to
- * whichever note inherited the number.
+ * Resolves the persisted `parent_context_id` to the note the view should scope to, against the
+ * current parse. Mirrors resolveFocusedNote's precedence: an exact `stable_id` match first, then
+ * the authored `nt_breadcrumb_last` label (no stable_id yet at that point). Undefined means the id
+ * no longer resolves (a renamed or deleted story), so the caller scopes to the root instead of
+ * pinning to whatever note inherited the number.
  */
 export function resolveParentContextNote(parent_context_id: string | undefined, notes: Array<NoteProps> | undefined): NoteProps | undefined {
     if (!parent_context_id || !notes?.length) { return undefined; }
@@ -515,7 +488,8 @@ export function stripHeadlineLinetags(headline_raw: string): string {
 }
 
 /**
- * format a kanban column name for display: replace dashes with spaces and title-case each word. The raw status slug (`code-review`) is what lives in the data; this produces the user-facing label (`Code Review`). Empty input returns empty.
+ * Formats a kanban column name for display: dashes become spaces, each word is title-cased, so the
+ * raw slug `code-review` renders as `Code Review`. Empty input returns empty.
  */
 export function formatColumnLabel(value: string): string {
     if (!value) { return ''; }
@@ -563,10 +537,9 @@ export function moveInOrder(order: string[], from_index: number, to_index: numbe
 }
 
 /**
- * the lane a note belongs to on an axis: its linetag value for the axis field, or the absent-value
- * bucket when it has none (an empty value also falls through to the absent bucket). The `status` default
- * is the kanban case; passing another axis groups by that attribute. Single source of truth for the
- * note->lane rule, shared by the lane builder, the drag projection, and the natural lane order.
+ * The lane a note belongs to on an axis: its linetag value for the axis field, or the absent-value
+ * bucket when it has none (empty also falls through). Single source of truth for the note->lane
+ * rule, shared by the lane builder, drag projection, and natural lane order.
  */
 export function kanbanColumnValue(note: NoteProps, axis: Axis = 'status'): string {
     // the first-level-folder axis is computed from origin, not a linetag; every other axis reads its linetag
@@ -577,9 +550,8 @@ export function kanbanColumnValue(note: NoteProps, axis: Axis = 'status'): strin
 }
 
 /**
- * the notes belonging to one lane on an axis, in display order - selected by `kanbanColumnValue` and
- * sorted by `kanbanNoteOrder`. Shared so the lane builder and the drag projection derive a lane's
- * membership and ordering identically rather than each reimplementing the filter+sort.
+ * Notes in one lane on an axis, in display order: selected by `kanbanColumnValue`, sorted by
+ * `kanbanNoteOrder`. Shared so the lane builder and drag projection agree on membership and order.
  */
 export function notesInKanbanColumn(notes: Array<NoteProps>, column_value: string, axis: Axis = 'status'): Array<NoteProps> {
     return notes.filter(note => kanbanColumnValue(note, axis) === column_value).sort(kanbanNoteOrder);
@@ -661,26 +633,23 @@ export function kanbanNoteOrder(a: NoteProps, b: NoteProps): number {
 }
 
 /**
- * identity string for a note in column views, used as both the @hello-pangea/dnd draggableId and
- * the React key. Prefers stable_id (invariant across re-parse) so a card keeps its DOM node when
- * the document round-trips and the projection re-attaches; falls back to seq when stable_id is absent.
+ * Identity string for a note in column views: the @hello-pangea/dnd draggableId and React key.
+ * Prefers stable_id, invariant across re-parse, so a card keeps its DOM node through a round-trip;
+ * falls back to seq when stable_id is absent.
  */
 export function kanbanDraggableId(note: NoteProps): string {
     return note.stable_id ?? `${note.seq}`;
 }
 
-// lowercase kebab-case: trim, replace every run of non-alphanumeric chars with a single hyphen, strip leading/trailing hyphens
+// lowercase kebab-case: non-alphanumeric runs become one hyphen, leading/trailing hyphens stripped
 export function slugify(text: string): string {
     return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 /**
- * derive the story-level stable_id slug from its raw headline + linetags. Prefers
- * the explicit `[](?id=...)` linetag (canonical, author-controlled) and falls back
- * to slugify() of the stripped headline text so implicit and future explicit ids
- * coincide. The caller is responsible for namespacing with `doc_id` and
- * disambiguating duplicates across the file. See the NoteProps header comment for
- * the full derivation rationale.
+ * Derives the story-level stable_id slug from headline + linetags: the explicit `[](?id=...)`
+ * linetag when present, else slugify() of the stripped headline, so implicit and future explicit
+ * ids coincide. The caller namespaces with `doc_id` and disambiguates duplicates within the file.
  */
 export function storyStableIdSlug(story: NoteProps): string {
     const id_value = story.linetags?.id?.value;
@@ -690,13 +659,13 @@ export function storyStableIdSlug(story: NoteProps): string {
 }
 
 /**
- * a note participates in slug-based stable_id stamping when it is a real story-level
- * heading: a heading note with a positive seq (excludes the synthetic seq-0/level-0/type-'root'
- * root) and a non-empty stripped headline. path-keyed descendants never reach here because
- * they are not headings with their own slug; mirrors the set mergeAggregateRoot stamps as
- * `${doc_id}:${slug}`.
+ * True for a heading with a positive seq (excludes the synthetic root) and a non-empty stripped
+ * headline - the set mergeAggregateRoot stamps as `${doc_id}:${slug}`. Virtual notes are excluded
+ * too: their stable_id comes from session identity, so grouping by headline would falsely flag two
+ * agents that describe themselves alike.
  */
 function isStoryLevelNote(note: NoteProps): boolean {
+    if (isVirtualNote(note)) { return false; }
     if (note.type !== 'heading') { return false; }
     if (!(note.seq > 0)) { return false; }
     return stripHeadlineLinetags(note.headline_raw ?? '') !== '';
@@ -708,13 +677,9 @@ function collisionNoteLine(note: NoteProps): number {
 }
 
 /**
- * group the in-scope flat note list by the slug each story-level heading would receive
- * (storyStableIdSlug - explicit `[](?id=...)` linetag, else slugified stripped headline,
- * else `headline-<line>` fallback). returns one group per slug shared by >=2 story-level
- * notes; the `headline-<line>` fallback is kept on equal footing so two genuinely
- * blank-slug notes still surface. notes within a group are ordered by source line (so the
- * drawer links walk the file top-to-bottom; seq breaks ties), and groups by their first
- * note's seq, so the result is deterministic. empty when nothing collides.
+ * Groups the flat note list by the slug each story-level heading would receive (storyStableIdSlug),
+ * keeping only slugs shared by >=2 notes so genuinely blank-slug notes still surface. Notes within
+ * a group are ordered by source line, groups by their first note's seq, for a deterministic result.
  */
 export function findStableIdCollisions(notes: NoteProps[]): StableIdCollision[] {
     const by_slug = new Map<string, NoteProps[]>();
@@ -736,9 +701,9 @@ export function findStableIdCollisions(notes: NoteProps[]): StableIdCollision[] 
 }
 
 /**
- * extract the display origin for a colliding note: the stripped headline plus the source
- * file + 1-based line. prefers folder-mode `origin.source_position`/`relative_path` and
- * falls back to the in-tree `position` + `doc_path` (empty path in single-file mode).
+ * Display origin for a colliding note: stripped headline plus source file and 1-based line.
+ * Prefers folder-mode `origin.source_position`/`relative_path`, else the in-tree `position` +
+ * `doc_path` (empty path in single-file mode).
  */
 export function collisionNoteLocation(note: NoteProps): CollisionNoteLocation {
     const headline = stripHeadlineLinetags(note.headline_raw ?? '');

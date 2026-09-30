@@ -94,24 +94,23 @@ export interface DropInversion {
 }
 
 /**
- * the synthetic absent-value bucket: the lane a note with no value for the axis field lands in. No file
- * ever carries this value - the categorical projection invents it, and dropping onto this lane deletes
- * the field's linetag. The status axis uses 'untagged' as its absent lane.
+ * The synthetic absent-value bucket: the lane a note with no value for the axis field lands in. No
+ * file carries this value - the categorical projection invents it, and dropping onto this lane
+ * deletes the field's linetag. The status axis uses 'untagged' as its absent lane.
  */
 export const ABSENT_VALUE_BUCKET = 'untagged';
 
 /**
- * the intra-cell rank channel key. The user-chosen order within a cell is carried by this ordering-weight
- * linetag, the rank channel every grouped view shares.
+ * The intra-cell rank channel key: the user-chosen order within a cell, carried by this
+ * ordering-weight linetag and shared by every grouped view.
  */
 export const INTRA_CELL_RANK_KEY = 'nt_kanban_ordering_weight';
 
 /**
- * the implicit read-only axis field for the first level folder: a note's value on this axis is computed
- * from its origin's relative_path (the project folder), not read from a linetag. Namespaced to preserve
- * the authored key space; a permanent name (blessed 2026-07-17). Read-only because a drop along it would
- * have to move a file on disk. Lives here as the neutral home both the lane helpers and the group-by
- * enumeration import without an import cycle.
+ * The implicit read-only axis field for the first-level folder: a note's value on this axis comes
+ * from its origin's relative_path, not a linetag. Namespaced to preserve the authored key space; a
+ * permanent name. Read-only since a drop along it would have to move a file on disk. Lives here as
+ * the neutral home both the lane helpers and the group-by enumeration import without a cycle.
  */
 export const FIRST_LEVEL_FOLDER_KEY = 'nt_first_level_folder';
 
@@ -130,9 +129,8 @@ export function normalizeAxis(axis: Axis): AxisSpec {
 }
 
 /**
- * the single field an axis reads. A single-field axis returns its field verbatim (the ship case); a
- * compound key (a slot) joins its parts with ':' so callers still get a stable string, though no view
- * builds compound keys yet.
+ * The single field an axis reads: a single-field axis returns it verbatim (the ship case); a
+ * compound key (a slot) joins its parts with ':' for a stable string, though no view builds one yet.
  */
 export function axisField(axis: Axis): string {
     const spec = normalizeAxis(axis);
@@ -150,19 +148,18 @@ export function categoricalLaneFor(raw_value: string | undefined): string {
 }
 
 /**
- * forward projection: the categorical lane a note occupies on an axis, read from the note's linetag for
- * the axis field (status is one such field). Implicit keys computed from a note's origin (e.g. the first
- * level folder) are not linetags, so their value is resolved by the caller and passed through
- * `categoricalLaneFor` instead.
+ * Forward projection: the categorical lane a note occupies on an axis, read from its linetag for the
+ * axis field. An implicit key computed from origin (e.g. the first-level folder) is not a linetag,
+ * so the caller resolves its value and passes it through `categoricalLaneFor` instead.
  */
 export function projectNoteOntoAxis(note: NoteProps, axis: Axis): string {
     return categoricalLaneFor(note.linetags?.[axisField(axis)]?.value);
 }
 
 /**
- * inverse projection for one categorical axis: turn the lane a card was dropped into back into an
- * attribute write. A read-only axis is rejected (the card snaps back along it). The absent-value lane
- * produces a delete; any other lane produces a set of the field to that lane value.
+ * Inverse projection for one categorical axis: turns the lane a card was dropped into back into an
+ * attribute write. A read-only axis is rejected (the card snaps back); the absent-value lane
+ * produces a delete, any other lane a set to that value.
  */
 export function invertCategoricalAxis(axis: Axis, lane_value: string): AxisInversion {
     const field = axisField(axis);
@@ -177,9 +174,9 @@ export function invertCategoricalAxis(axis: Axis, lane_value: string): AxisInver
 }
 
 /**
- * invert a whole drop: resolve which cell (invert each axis) and where in the cell (rank). Writable axes
- * contribute a bucket write; read-only axes contribute a rejected field and are not moved. Today a view
- * passes a single coordinate, but the shape is multi-axis from day one so grid/gantt are additive.
+ * Inverts a whole drop: resolves which cell (each axis) and where in it (rank). Writable axes
+ * contribute a bucket write; read-only axes contribute a rejected field and stay unmoved. A view
+ * passes a single coordinate today, but the shape is multi-axis so grid/gantt are additive.
  */
 export function invertDrop(coordinates: DropCoordinate[], rank?: IntraCellRank): DropInversion {
     const writes: AxisBucketWrite[] = [];

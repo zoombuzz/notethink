@@ -22,7 +22,7 @@ function customToolCallLine(timestamp: string, ordinal: number, name: string, in
     return JSON.stringify({ timestamp, ordinal, type: 'response_item', payload: { type: 'custom_tool_call', name, input } });
 }
 
-// the current CLI's own usage line: token_usage_record, with model resolved separately from a thread_settings_applied event_msg
+// the current CLI's usage line: token_usage_record, its model resolved separately from thread_settings_applied
 function tokenUsageRecordLine(timestamp: string, ordinal: number, input_tokens: number, output_tokens: number, cached_input_tokens = 0, reasoning_output_tokens = 0): string {
     return JSON.stringify({
         timestamp, ordinal, type: 'token_usage_record',
@@ -149,7 +149,7 @@ describe('readCodexSession', () => {
         expect(() => readCodexSession(baseInput(lines.join('\n')))).not.toThrow();
         const result = readCodexSession(baseInput(lines.join('\n')));
         expect(result.refusal).toBeUndefined();
-        // the message line after the unknown one still resets the working/idle tracking, proving it was recognised rather than silently dropped along with the unknown line
+        // the message line after the unknown one still resets idle tracking, proving it was recognised, not dropped
         expect(result.state).toBe('idle');
     });
 
@@ -223,7 +223,7 @@ describe('readCodexSession', () => {
     });
 
     describe('resumed (incremental) parsing equals a whole-file read', () => {
-        // a tail parse appends only its new lines to the cached ones before building, so this asserts equivalence to a whole read for every possible split point
+        // a tail parse appends only new lines to the cache, so this asserts equivalence at every possible split point
         const lines = [
             SESSION_META_LINE,
             threadSettingsLine('2026-09-04T08:35:00.000Z', 1, 'gpt-5-codex'),

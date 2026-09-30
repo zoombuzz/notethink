@@ -5,6 +5,7 @@ import {
     classifyTransitions,
     computeInverseTransform,
     isSignificantDelta,
+    isBulkTransition,
     buildMoveKeyframes,
     buildEnterKeyframes,
     moveTiming,
@@ -12,6 +13,7 @@ import {
     KANBAN_ANIMATION_TRANSITION_MAX_MS,
     KANBAN_ANIMATION_GLOBAL_CAP_MS,
     type RectLike,
+    type TransitionClassification,
 } from './flipMath';
 import type { PassiveUpdateGate } from './passiveUpdateGate';
 import { emitAnimationEvent } from './animationProbe';
@@ -79,11 +81,9 @@ function finishCardAnimations(el: HTMLElement): void {
 }
 
 /**
- * settle every still-playing move before a fresh measurement. getBoundingClientRect reports a card's
- * LIVE animated position, so measuring while a previous move is mid-flight would bake those in-between
- * rects into the next baseline and the following transition would invert from the wrong `previous` spot
- * (the displaced cards visibly fly in from the top of the column). Finishing snaps each card to its true
- * layout box first. The caller skips this during a drag, where dnd owns the inline transforms.
+ * Settles every still-playing move before a fresh measurement, since getBoundingClientRect reports a
+ * card's live animated position and would otherwise bake an in-between rect into the next baseline.
+ * The caller skips this during a drag, where dnd owns the inline transforms.
  */
 function settleInFlightAnimations(container: HTMLElement): void {
     forEachFlipCard(container, finishCardAnimations);
@@ -146,11 +146,12 @@ function enteringColumns(next: Set<string>, prev: Set<string>): Set<string> {
 }
 
 /** name the reason the hook is committing a baseline without animating (for the skip probe event + debug) */
-function skipReason(is_first_run: boolean, gate_hot: boolean, enabled: boolean, reduced: boolean): string {
+function skipReason(is_first_run: boolean, gate_hot: boolean, enabled: boolean, reduced: boolean, bulk: boolean): string {
     if (is_first_run) { return 'first-run'; }
     if (gate_hot) { return 'gate-hot'; }
     if (!enabled) { return 'disabled'; }
     if (reduced) { return 'reduced-motion'; }
+    if (bulk) { return 'bulk'; }
     return 'unknown';
 }
 
@@ -240,6 +241,10 @@ function armGlobalCap(container: HTMLElement, cap_timer: React.MutableRefObject<
  * jsdom GUARDS. `el.animate`, `el.getAnimations`, `requestAnimationFrame` and `window.matchMedia` may
  * all be absent under jest; each is feature-detected. The probe events fire regardless of WAAPI
  * availability, so the schedule is testable without a real animation loop.
+ *
+ * BULK / VIRTUALIZED LANES. A windowed lane's scroll can make two snapshots disagree for a reason
+ * that isn't a real reorder. `isBulkTransition` catches this (and a genuine bulk load) by size alone
+ * and takes the same silent-baseline path as the other skip reasons.
  */
 export function useFlipTransition(options: UseFlipTransitionOptions): void {
     const prev_rects = useRef<Map<string, RectLike>>(new Map());
@@ -251,18 +256,7 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
         () => options.column_ids.join('|') + '#' + options.flip_ids.join(','),
         [options.column_ids, options.flip_ids],
     );
-    /*
-     * The FLIP samples each card's rect on the commit that introduces a reorder (LAST) and inverts it
-     * against the previous baseline (FIRST). For the deltas to mean "the reorder" and nothing else, both
-     * must be read against the SETTLED card heights - guaranteed by MarkdownNote's useSyncedBodyClip, which
-     * applies the overflow clip in a CHILD layout effect that React runs before this parent effect. So a
-     * freshly (re)mounted card (notably one that just changed kanban columns and remounted into the new
-     * Droppable) is already clipped when we measure it; without that it is sampled at full height and
-     * shoves its new siblings down by its whole unclipped height, which this hook then inverts - the
-     * "displaced cards fly up above their slot then settle" bug. Board-anchored measurement (measureCards)
-     * additionally makes a scroll or header-height shift cancel in FIRST - LAST, so neither perturbs the
-     * deltas.
-     */
+    // FIRST/LAST must read settled, clipped heights (child clip effect runs first), or a remounted card shoves siblings
     useLayoutEffect(() => {
         const container = options.container_ref.current;
         if (!container) { return; }
@@ -274,7 +268,7 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
             prev_columns.current = columns;
             first_run.current = false;
         };
-        // settle any still-playing move so the baseline reads the true layout box, not a mid-flight position; skipped while the gate is hot, where dnd owns the card transforms
+        // settles any still-playing move so the baseline reads the true layout box, skipped while the gate is hot
         if (!options.gate.isHot()) {
             settleInFlightAnimations(container);
         }
@@ -282,17 +276,19 @@ export function useFlipTransition(options: UseFlipTransitionOptions): void {
         const new_column_els = measureColumns(container);
         const new_columns = new Set(new_column_els.keys());
         const reduced = prefersReducedMotion();
-        // GATE / FIRST-RUN / DISABLED / REDUCED-MOTION: establish baseline, never animate
-        if (first_run.current || options.gate.isHot() || !options.enabled || reduced) {
-            const reason = skipReason(first_run.current, options.gate.isHot(), options.enabled, reduced);
+        const prev_rect_map = prev_rects.current;
+        // classify before the gate: a virtualized lane's scroll churn reads as a bulk transition, which is a gate reason
+        const classification: TransitionClassification = classifyTransitions(prev_rect_map.keys(), new_rects.keys());
+        const bulk = isBulkTransition(classification);
+        // gate / first-run / disabled / reduced-motion / bulk: establish baseline, never animate
+        if (first_run.current || options.gate.isHot() || !options.enabled || reduced || bulk) {
+            const reason = skipReason(first_run.current, options.gate.isHot(), options.enabled, reduced, bulk);
             debug('skip animate: %s', reason);
             emitAnimationEvent({ kind: 'skip', reason });
             snapshotBaseline(new_rects, new_columns);
             return;
         }
-        // PLAN. emit probe events for the whole schedule, then play via WAAPI where available.
-        const prev_rect_map = prev_rects.current;
-        const classification = classifyTransitions(prev_rect_map.keys(), new_rects.keys());
+        // plan: emit probe events for the whole schedule, then play via WAAPI where available
         const entering_cols = enteringColumns(new_columns, prev_columns.current);
         entering_cols.forEach((value) => playColumnEnter(value, new_column_els.get(value), options.class_names.columnEntering));
         classification.moving.forEach((id) => {

@@ -1,6 +1,7 @@
 import Debug from 'debug';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { emitBoardCommit } from '../lib/boardCommitProbe';
+import { useWorkerParsedDocs } from './useWorkerParsedDocs';
 import { anyViewInFolderMode, resolveIntegrationMode, FOLDER_VIEW_STATE_ID } from '../notethink-views/src/lib/viewstateops';
 import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
@@ -17,10 +18,10 @@ const debug = Debug("nodejs:notethink:useVscodeMessages");
  * and whichever fires first drains the queue.
  */
 export const MESSAGE_FLUSH_FALLBACK_MS = 50;
-// wire types whose handling is coalesced: the folder-load doc stream plus the pending sentinel bracketing it, so the spinner clears in the same commit as the docs it was covering. Every other type dispatches as it arrives.
+// types coalesced into one flush: the doc stream and its bracketing pending sentinel, so the spinner clears with the docs
 const QUEUED_MESSAGE_TYPES: readonly string[] = ['update', 'docDeleted', 'pendingChange'];
 
-// one wire-format message as it arrives from the extension, having passed isMessageValid; each consumer narrows the fields it reads
+// a wire message that has passed isMessageValid; each consumer narrows the fields it reads
 type WireMessage = { type: string; [key: string]: unknown };
 
 interface SelectionState {
@@ -74,7 +75,7 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
     }
     if (message.type === 'selectionChanged') {
         const selection = message.selection as { head?: unknown; anchor?: unknown } | null | undefined;
-        // a null selection is the explicit "no editor owns this doc" clear signal and is valid; only a malformed non-null selection is discarded
+        // null selection is a valid "no editor owns this doc" clear signal; only a malformed non-null one is discarded
         if (selection !== null && (selection === undefined || typeof selection !== 'object' || typeof selection.head !== 'number' || typeof selection.anchor !== 'number')) {
             debug('discarding selectionChanged message with invalid selection %O', message);
             return false;
@@ -115,8 +116,24 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
 }
 
 /*
- * merge an incoming update payload into the current doc map; returns the previous map unchanged when no hashes differ
- * merge_strategy 'merge' upserts incoming docs (folder-mode incremental updates); anything else replaces the map entirely (single-file view, or folder-mode initial bulk load)
+ * True when `incoming` carries content or text `existing` lacks: a hash match alone doesn't mean
+ * unchanged, since a doc can be held metadata-only or text-only ahead of its worker parse. Without
+ * this, the fast path locks onto whichever shape arrived first and drops a fuller resend.
+ */
+function docGainsBody(existing: Doc, incoming: Doc): boolean {
+    return (incoming.content !== undefined && existing.content === undefined)
+        || (incoming.text !== undefined && existing.text === undefined);
+}
+
+// true unless `doc` is a same-or-lesser copy of `existing` (same hash, no more body)
+function docSupersedes(existing: Doc | undefined, doc: Doc): boolean {
+    if (!existing || !doc.hash_sha256 || existing.hash_sha256 !== doc.hash_sha256) { return true; }
+    return docGainsBody(existing, doc);
+}
+
+/**
+ * Merges an incoming update into the doc map, returning the same reference when no hash changed.
+ * `merge_strategy: 'merge'` upserts (folder-mode incremental); anything else replaces the whole map.
  */
 function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: WireMessage): { docs?: HashMapOf<Doc> } {
     const incoming_docs = (message.partial as { docs?: HashMapOf<Doc> }).docs || {};
@@ -125,8 +142,7 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: WireMessa
     if (merge_strategy === 'merge') {
         let has_changes = false;
         for (const [id, doc] of Object.entries(incoming_docs) as [string, Doc][]) {
-            const existing = current_docs[id];
-            if (!existing || !doc.hash_sha256 || existing.hash_sha256 !== doc.hash_sha256) {
+            if (docSupersedes(current_docs[id], doc)) {
                 has_changes = true;
                 break;
             }
@@ -140,8 +156,7 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: WireMessa
     let has_changes = Object.keys(incoming_docs).length !== Object.keys(current_docs).length;
     if (!has_changes) {
         for (const [id, doc] of Object.entries(incoming_docs) as [string, Doc][]) {
-            const existing = current_docs[id];
-            if (!existing || !doc.hash_sha256 || existing.hash_sha256 !== doc.hash_sha256) {
+            if (docSupersedes(current_docs[id], doc)) {
                 has_changes = true;
                 break;
             }
@@ -154,7 +169,7 @@ function mergeUpdatedDocs(current: { docs?: HashMapOf<Doc> }, message: WireMessa
     return { ...current, docs: incoming_docs };
 }
 
-// drop one doc by id; returns the map unchanged when the id is malformed or absent, so a tombstone for a doc the board never held commits nothing
+// drops one doc by id; unchanged if the id is malformed or the board never held it
 function removeDeletedDoc(current: { docs?: HashMapOf<Doc> }, doc_id: unknown): { docs?: HashMapOf<Doc> } {
     if (typeof doc_id !== 'string') {
         debug('docDeleted with invalid docId %O', doc_id);
@@ -166,9 +181,9 @@ function removeDeletedDoc(current: { docs?: HashMapOf<Doc> }, doc_id: unknown): 
     return { ...current, docs: next };
 }
 
-/*
- * fold every doc payload in one flush into a single doc map, so a batch of N messages commits once
- * order is preserved, so a tombstone that arrived after an update still wins, exactly as it does when each message commits on its own
+/**
+ * Folds every doc payload in one flush into a single map. Order is preserved, so a later tombstone
+ * still wins over an earlier update, as it would committing each message on its own.
  */
 function applyDocMessages(current: { docs?: HashMapOf<Doc> }, queued: WireMessage[]): { docs?: HashMapOf<Doc> } {
     let next = current;
@@ -225,15 +240,10 @@ function useFrameFlushQueue(drain: (queued: WireMessage[]) => void): (message: W
     return enqueue;
 }
 
-/*
- * own the core doc/selection/workspace state, the host message listener, and the dispatch
- * the message-type string literals ('update', 'activeEditorDoc', 'selectionChanged', 'command', 'settingsCascade', 'jumpTargets') are the on-the-wire contract and must stay exactly as-is
- *
- * Validation runs on arrival, on every message, unchanged. What is deferred is the handling of the
- * QUEUED_MESSAGE_TYPES: they commit once per animation frame, so a folder load's doc stream costs one
- * board render per frame rather than one per file. 'pendingChange' rides the same queue deliberately -
- * the extension clears the discovery sentinel immediately after the aggregate payload, and dispatching
- * that clear ahead of the docs it covers would drop the spinner a frame before the board filled.
+/**
+ * Owns the doc/selection/workspace state, the host message listener, and dispatch. The message-type
+ * string literals are the on-the-wire contract and must stay exactly as-is. QUEUED_MESSAGE_TYPES batch
+ * per animation frame, so a folder load's doc stream costs one board render per frame, not per file.
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState {
@@ -241,11 +251,11 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     const [docs_state, setDocsState] = useState<{ docs?: HashMapOf<Doc> }>({ docs: deps.initial_docs || {} });
     const [selections, setSelections] = useState<SelectionState>({});
     const [active_editor_doc_path, setActiveEditorDocPath] = useState<string | undefined>(undefined);
-    // folder mode: the active editor's doc when it sits outside integration_path or the folder filters reject it, delivered on the activeEditorDoc channel (sendDoc drops it from the aggregate) so useAutoIntegration can read its declaration and exit a folder the editor has left
+    // out-of-scope active editor's doc; sendDoc excludes it from the aggregate, so it arrives via activeEditorDoc
     const [active_doc, setActiveDoc] = useState<Doc | undefined>(undefined);
     const [workspace_root, setWorkspaceRoot] = useState<string>('');
     const [workspace_projects, setWorkspaceProjects] = useState<string[]>([]);
-    // folder mode: total .md files discovered before the extension's MAX_AGGREGATE_FILES cap truncated the loaded set (drives the "(N of M)" breadcrumb)
+    // total files discovered before MAX_AGGREGATE_FILES truncated the set; drives the "(N of M)" breadcrumb
     const [aggregate_total_discovered, setAggregateTotalDiscovered] = useState<number | undefined>(undefined);
     // folder mode: the effective include/exclude globs the extension is using, echoed back so the Files drawer can show them
     const [includeFilter, setIncludeFilter] = useState<string | undefined>(undefined);
@@ -272,15 +282,12 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         if (typeof message.excludeFilter === 'string') {
             setExcludeFilter(message.excludeFilter);
         }
-        // a bulk replace update (no merge_strategy) carrying aggregate totals is the apply-filters round-trip echo; clear the filter-edit sentinel so the spinner drops once the new file set has landed
+        // a bulk-replace update carrying aggregate totals is the apply-filters echo; clears the filter-edit sentinel
         if (!message.merge_strategy && typeof message.aggregate_total_discovered === 'number') {
             clearPending('integrationFilters');
         }
     }, [clearPending]);
-    /*
-     * apply one flush: each message's non-doc side effects in arrival order, then a single setDocsState
-     * folding every doc payload in the batch, which React commits as one board render
-     */
+    // applies one flush: non-doc side effects in order, then one setDocsState folding the batch into one render
     const drainMessageQueue = useCallback((queued: WireMessage[]): void => {
         for (const message of queued) {
             if (message.type === 'update') { applyUpdateMetadata(message); }
@@ -292,7 +299,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         setDocsState(current => applyDocMessages(current, queued));
     }, [applyUpdateMetadata, markPending, clearPending]);
     const enqueueMessage = useFrameFlushQueue(drainMessageQueue);
-    // one probe event per board commit, carrying how many wire messages it folded; a no-op unless a test or the perf harness enabled the probe
+    // one probe event per commit, counting folded messages; no-op unless a test or perf harness enabled it
     useEffect(() => {
         if (pending_message_count.current === 0) { return; }
         emitBoardCommit({
@@ -307,13 +314,13 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         debug('received command %s', message.command);
         switch (message.command) {
             case 'setIntegrationScope':
-                // host-originated folder scope, sent only for a docless open: an unseeded view state resolves to current_file and the aggregate `update` carries no scope, so without this the board renders an arbitrary file instead of the folder
+                // host folder scope for a docless open; without it an unseeded view state falls back to an arbitrary file
                 if (message.mode !== INTEGRATION_MODE_FOLDER || !message.path) { return; }
                 // never stomp a scope the webview already owns - state restored from a reload, or a mode the user pinned
                 if (anyViewInFolderMode(view_states_ref.current)) { return; }
                 setViewManagedState([{
                     id: FOLDER_VIEW_STATE_ID,
-                    // concrete 'folder' rather than 'auto': the scope came from the workspace, not from any file's declaration, so the auto reconcile must not re-derive it from whichever doc the aggregate happens to surface
+                    // concrete 'folder', not 'auto': the scope is workspace-sourced, so auto reconcile must not re-derive it
                     display_options: { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: message.path },
                 }]);
                 return;
@@ -335,7 +342,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         markConnected();
         if (!isMessageValid(message)) { return; }
         debug('onMessage %s', message.type);
-        // the folder-load doc stream and its pending sentinel are coalesced into one commit per animation frame; everything else lands as it arrives
+        // doc stream and its pending sentinel coalesce into one commit per frame; everything else dispatches immediately
         if (QUEUED_MESSAGE_TYPES.includes(message.type)) {
             enqueueMessage(message as WireMessage);
             return;
@@ -344,7 +351,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
             case 'activeEditorDoc':
                 debug('received activeEditorDoc for %s', (message.doc as Doc).path);
                 setActiveDoc(message.doc as Doc);
-                // the out-of-scope active editor never enters the folder aggregate, so record it as the active path here too (the selectionChanged echo also sets this, but cross-message ordering is not guaranteed)
+                // out-of-scope editor never enters the aggregate, so record its path here too; message order isn't guaranteed
                 setActiveEditorDocPath((message.doc as Doc).path);
                 return;
             case 'selectionChanged':
@@ -367,13 +374,13 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                         },
                     },
                 }));
-                // the doc whose selection just changed is the active editor - folder mode's per-doc matcher reads this to scope the caret-to-note resolution
+                // the doc whose selection changed is the active editor; folder mode's per-doc matcher scopes to it
                 setActiveEditorDocPath(message.docPath);
                 return;
             case 'settingsCascade':
                 debug('received settingsCascade %O', message.settings);
                 setSettingsCascade(message.settings as SettingsCascadePayload);
-                // echo confirms the cascade round-trip completed; clear any marks for each cascade key and the aggregate 'settingsCascade' sentinel
+                // echo confirms the round-trip; clears marks for each cascade key and the aggregate sentinel
                 clearPending('settingsCascade');
                 for (const key of Object.keys((message.settings as SettingsCascadePayload) ?? {})) {
                     clearPending(key);
@@ -392,14 +399,14 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     useEffect(() => {
         window.addEventListener('message', onMessage);
         debug('added message event listener');
-        // re-establish a saved folder integration first: setIntegration before requestInitialState sets integration_path before the async findFiles, so sendDoc merges into the saved folder docs map instead of replacing it
+        // setIntegration before requestInitialState sets integration_path ahead of findFiles, so sendDoc merges
         if (saved_view_states) {
             for (const id of Object.keys(saved_view_states)) {
                 const vs = saved_view_states[id];
-                // restore folder for a concrete folder pin AND for an `auto` view whose path was seeded by auto-resolution (resolveIntegrationMode treats auto + a path as folder), so an auto-folder file re-aggregates on reload without a flash through current_file
+                // covers a pinned folder and an auto-resolved one, so a folder file re-aggregates without flashing current_file
                 if (resolveIntegrationMode(vs?.display_options) === INTEGRATION_MODE_FOLDER && vs?.display_options?.integration_path) {
                     debug('restoring folder integration on reload: %s', vs.display_options.integration_path);
-                    // the host re-validates this untrusted persisted path; persisted include/exclude filters are deliberately not replayed, because the settings cascade is the source of truth and handle_apply_filters keeps it current
+                    // host re-validates this persisted path; filters are not replayed, since the settings cascade stays current
                     postMessage({
                         type: 'setIntegration',
                         mode: INTEGRATION_MODE_FOLDER,
@@ -409,7 +416,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
                 }
             }
         }
-        // request the active doc, selection and settings cascade, after setIntegration so integration_path is set by the time the extension runs sendDoc
+        // requests active doc, selection and settings cascade after integration_path is set for sendDoc
         postMessage({
             type: 'requestInitialState',
         });
@@ -417,10 +424,12 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
             debug('removed message event listener');
             window.removeEventListener('message', onMessage);
         };
-        // mount-once listener: onMessage's deps (setters, stable handleCommand, and an enqueue whose drain is read through a ref) never go stale, so empty deps is correct
+        // mount-once listener: onMessage's deps never go stale, since enqueue's drain is read through a ref
     }, []);
+    // fills in `content` for a folder-mode doc so downstream reads docs[id].content like any other doc
+    const parsed_docs = useWorkerParsedDocs(docs_state.docs);
     return {
-        docs: docs_state.docs,
+        docs: parsed_docs,
         selections,
         active_editor_doc_path,
         active_doc,

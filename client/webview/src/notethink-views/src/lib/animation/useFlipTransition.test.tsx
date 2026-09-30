@@ -31,8 +31,8 @@ interface HarnessProps {
 }
 
 /**
- * minimal harness: a measured container holding one [data-flip-column-id] div per column, each
- * holding its [data-flip-id] cards. drives useFlipTransition with the test-controlled inputs.
+ * Minimal harness: a measured container holding one [data-flip-column-id] div per column, each
+ * holding its [data-flip-id] cards. Drives useFlipTransition with the test-controlled inputs.
  */
 function Harness(props: HarnessProps): React.ReactElement {
     const container_ref = useRef<HTMLDivElement>(null);
@@ -302,11 +302,7 @@ describe('useFlipTransition', () => {
         const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }, { id: 'b', column: 'todo' }]} columns={['todo']} enabled={true} gate={gate} />);
         clearAnimationProbeEvents();
 
-        /*
-         * a strip above the board grows by 200 (or the content scrolls) before the reorder lands: the board AND
-         * every card shift down 200 together. raw viewport measurement would fold +200 into every delta; anchoring
-         * to the board cancels it, so the deltas match the no-shift reorder (-50 / 50)
-         */
+        // the board and every card shift down 200 together; anchoring to the board cancels it, matching the no-shift deltas
         root_rect = { left: 0, top: 200, width: 300, height: 200 };
         rect_lookup = { a: { left: 0, top: 250, width: 100, height: 40 }, b: { left: 0, top: 200, width: 100, height: 40 } };
         act(() => {
@@ -316,5 +312,25 @@ describe('useFlipTransition', () => {
         const moves = moveEvents();
         expect(moves.find((m) => m.id === 'a')).toMatchObject({ dx: 0, dy: -50 });
         expect(moves.find((m) => m.id === 'b')).toMatchObject({ dx: 0, dy: 50 });
+    });
+
+    it('skips animating a bulk membership change (a virtualized lane scrolling to a non-overlapping window) instead of animating every card', () => {
+        const gate = createPassiveUpdateGate();
+        const baseline_cards = Array.from({ length: 5 }, (_, i) => ({ id: `a${i}`, column: 'todo' }));
+        rect_lookup = Object.fromEntries(baseline_cards.map((c, i) => [c.id, { left: 0, top: i * 40, width: 100, height: 40 }]));
+        const { rerender } = render(<Harness cards={baseline_cards} columns={['todo']} enabled={true} gate={gate} />);
+        clearAnimationProbeEvents();
+
+        // simulate scrolling a virtualized lane to a disjoint window: every mounted id changes, well past the bulk threshold
+        const scrolled_cards = Array.from({ length: 25 }, (_, i) => ({ id: `b${i}`, column: 'todo' }));
+        rect_lookup = Object.fromEntries(scrolled_cards.map((c, i) => [c.id, { left: 0, top: i * 40, width: 100, height: 40 }]));
+        act(() => {
+            rerender(<Harness cards={scrolled_cards} columns={['todo']} enabled={true} gate={gate} />);
+        });
+
+        expect(moveEvents()).toHaveLength(0);
+        expect(eventsOfKind('enter')).toHaveLength(0);
+        expect(eventsOfKind('skip').some((e) => e.reason === 'bulk')).toBe(true);
+        expect(animate_spy).not.toHaveBeenCalled();
     });
 });

@@ -6,7 +6,6 @@
 //@ts-check
 'use strict';
 
-//@ts-check
 /** @typedef {import('webpack').Configuration} WebpackConfig **/
 
 const path = require('path');
@@ -17,10 +16,9 @@ const pkg = require('./package.json');
 const isProduction = process.env.NODE_ENV === 'production';
 const devtool = isProduction ? 'nosources-source-map' : 'source-map';
 /*
- * NOTETHINK_DEV gates the on-disk file logger and the webview cache-buster: OFF by default so any
- * shipped build (a `vsce publish` to the marketplace, or a hosted/web build) never litters a user's
- * machine with logs. The `build`/`watch` scripts opt in by exporting SELFINSPECT_ENV=dev (the
- * workspace-standard env marker, not NODE_ENV - see AGENTS.md).
+ * NOTETHINK_DEV gates the on-disk file logger and the webview cache-buster: off by default so a
+ * shipped build never writes logs to a user's machine. The `build`/`watch` scripts opt in with
+ * SELFINSPECT_ENV=dev, never NODE_ENV.
  */
 const isDevBuild = process.env.SELFINSPECT_ENV === 'dev';
 
@@ -46,19 +44,19 @@ const clientExtensionConfig = {
 			// provides alternate implementation for node module and source files
 		},
 		fallback: {
-			// Webpack 5 no longer polyfills Node.js core modules automatically: https://webpack.js.org/configuration/resolve/#resolvefallback lists the polyfills
+			/*
+			 * Webpack 5 no longer polyfills Node.js core modules automatically:
+			 * https://webpack.js.org/configuration/resolve/#resolvefallback lists the polyfills.
+			 * 'http'/'https'/'zlib'/'stream'/'url' are deliberately absent: nothing either entry
+			 * bundles requires them.
+			 */
 			'assert': require.resolve('assert'),
 			'events': require.resolve('events/'),
 			'process/browser': require.resolve('process/browser'),
 			'os': require.resolve('os-browserify/browser'),
 			'buffer': require.resolve('buffer/'),
 			'path': require.resolve('path-browserify'),
-			'zlib': require.resolve('browserify-zlib'),
 			'fs': require.resolve('memfs'),
-			'http': require.resolve('stream-http'),
-			'https': require.resolve('https-browserify'),
-			'stream': require.resolve('stream-browserify'),
-			'url': require.resolve('url/'),
 			'util': require.resolve('util/'),
 		}
 	},
@@ -105,14 +103,10 @@ const clientExtensionConfig = {
 };
 
 /*
- * The agent activity analyser's nested worker: decoding, parsing and pricing run here, off the
- * extension host's own thread, loaded by `AgentAnalyser.ts` as a real `Worker` (agent-activity-card
- * story). It cannot share `clientExtensionConfig`: that config's `libraryTarget: 'commonjs'` makes
- * webpack emit `const __webpack_export_target__ = exports;` at the top of the bundle, and `exports`
- * is a CommonJS/extension-host global a plain nested `Worker` never has, so the worker throws before
- * its own `self.onmessage` line runs (measured 2026-09-22: a worker built this way rejects every
- * request on `onerror`). This config has no `library`/`libraryTarget` at all, so
- * the bundle runs as a plain worker script instead of trying to export a module.
+ * The agent activity analyser's nested worker, loaded by `AgentAnalyser.ts` as a real `Worker` so
+ * decoding, parsing and pricing run off the extension host's thread. It has no `library`/`libraryTarget`:
+ * `libraryTarget: 'commonjs'` emits `const __webpack_export_target__ = exports;`, and a nested
+ * `Worker` has no `exports` global, so the worker would throw before `self.onmessage` is set.
  */
 /** @type WebpackConfig */
 const agentAnalyserWorkerConfig = {
@@ -149,24 +143,62 @@ const agentAnalyserWorkerConfig = {
 	},
 };
 
+/*
+ * The extension host's parse worker: PanelSession's ParsePool spawns a small pool of these to move
+ * mdast parsing off the host thread. No `library`/`libraryTarget`, because a nested Worker has no
+ * CommonJS `exports` global.
+ */
+/** @type WebpackConfig */
+const parseWorkerConfig = {
+	context: path.join(__dirname, 'client', 'extension'),
+	mode: process.env.NODE_ENV === 'production' ? 'production' : 'none',
+	target: 'webworker',
+	entry: {
+		'parseWorker': './src/vscode/ParseWorker.ts',
+	},
+	output: {
+		filename: '[name].js',
+		path: path.join(__dirname, 'client', 'extension', 'dist'),
+		devtoolModuleFilenameTemplate: '../[resource-path]'
+	},
+	resolve: clientExtensionConfig.resolve,
+	module: clientExtensionConfig.module,
+	plugins: [
+		new webpack.optimize.LimitChunkCountPlugin({
+			maxChunks: 1
+		}),
+		new webpack.ProvidePlugin({
+			process: 'process/browser',
+		}),
+		new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
+			resource.request = resource.request.replace(/^node:/, '');
+		}),
+	],
+	performance: {
+		hints: false
+	},
+	devtool,
+	infrastructureLogging: {
+		level: "log",
+	},
+};
+
 /** @type WebpackConfig */
 const clientWebviewConfig = {
 	context: path.join(__dirname, 'client', 'webview'),
 	mode: process.env.NODE_ENV === 'production' ? 'production' : 'none',
 	/*
-	 * React chooses its development build from process.env.NODE_ENV, which `mode: 'none'` leaves
-	 * undefined, so without this pin the dev host runs React's dev instrumentation and pays several
-	 * times the cost on every interaction. Pinning NODE_ENV to production gives every build
-	 * production React while `mode` stays 'none', so watch rebuilds stay fast, the app code stays
-	 * unminified and the source map stays useful in webview devtools. The webview bundle alone
-	 * carries React, and the extension bundle gates its errorops `debug()` helper on
-	 * NODE_ENV !== 'production', so the same pin there would silence a dev convenience for nothing.
-	 * NOTETHINK_DEV is a separate switch, driven by SELFINSPECT_ENV.
+	 * `mode: 'none'` leaves NODE_ENV undefined, which selects React's costly development build.
+	 * Pinning it gives every build production React while watch rebuilds stay fast and unminified.
 	 */
 	optimization: {
 		nodeEnv: 'production',
 	},
-	target: 'webworker', // extensions run in a webworker context
+	/*
+	 * The webview is a DOM iframe, not a worker, so target 'web'. That makes webpack load split
+	 * chunks by <script> tag ('jsonp'); the 'webworker' default, importScripts, does not exist here.
+	 */
+	target: 'web',
 	entry: {
 		'index': './src/index.tsx',
 	},
@@ -174,13 +206,20 @@ const clientWebviewConfig = {
 		filename: '[name].js',
 		path: path.join(__dirname, 'client', 'webview', 'dist'),
 		libraryTarget: 'commonjs',
-		devtoolModuleFilenameTemplate: '../[resource-path]'
+		devtoolModuleFilenameTemplate: '../[resource-path]',
+		/*
+		 * Chunk ids change every build, so clean stops stale chunks shipping in the vsix. `keep`
+		 * spares parseWorker.js/.map, which clientWebviewWorkerConfig emits into this directory.
+		 */
+		clean: {
+			keep: /^parseWorker/,
+		},
 	},
 	resolve: {
 		mainFields: ['browser', 'module', 'main'], // look for `browser` entry point in imported node modules
 		extensions: ['.tsx', '.ts', '.js', '.mjs'],
 		alias: {
-			// force a single React instance across webview and nested sub-packages (notethink-views): without it, pnpm's per-package node_modules makes webpack bundle two copies of React
+			// one React for the webview and notethink-views, which pnpm's per-package node_modules would duplicate
 			'react': path.resolve(__dirname, 'client', 'webview', 'node_modules', 'react'),
 			'react-dom': path.resolve(__dirname, 'client', 'webview', 'node_modules', 'react-dom'),
 		},
@@ -216,9 +255,6 @@ const clientWebviewConfig = {
 		]
 	},
 	plugins: [
-		new webpack.optimize.LimitChunkCountPlugin({
-			maxChunks: 1 // disable chunks by default since web extensions must be a single bundle
-		}),
 		new webpack.ProvidePlugin({
 			process: 'process/browser', // provide a shim for the global `process` variable
 		}),
@@ -243,4 +279,42 @@ const clientWebviewConfig = {
 	},
 };
 
-module.exports = [ clientExtensionConfig, agentAnalyserWorkerConfig, clientWebviewConfig ];
+/*
+ * The webview's folder-mode parse worker: a folder doc arrives with `text` but no `content`, and the
+ * webview parses it here, off the main thread, rather than the extension shipping mdast over the
+ * wire. A nested Worker needs neither `target: 'web'` nor a `libraryTarget`, and useWorkerParsedDocs.ts
+ * loads it via fetch-then-blob, never a <script> tag, so it needs no nonce or chunkLoading wiring.
+ */
+/** @type WebpackConfig */
+const clientWebviewWorkerConfig = {
+	context: path.join(__dirname, 'client', 'webview'),
+	mode: process.env.NODE_ENV === 'production' ? 'production' : 'none',
+	target: 'webworker',
+	entry: {
+		'parseWorker': './src/parseWorker.ts',
+	},
+	output: {
+		filename: '[name].js',
+		path: path.join(__dirname, 'client', 'webview', 'dist'),
+		devtoolModuleFilenameTemplate: '../[resource-path]'
+	},
+	resolve: clientWebviewConfig.resolve,
+	module: clientWebviewConfig.module,
+	plugins: [
+		new webpack.optimize.LimitChunkCountPlugin({
+			maxChunks: 1
+		}),
+		new webpack.ProvidePlugin({
+			process: 'process/browser',
+		}),
+	],
+	performance: {
+		hints: false
+	},
+	devtool,
+	infrastructureLogging: {
+		level: "log",
+	},
+};
+
+module.exports = [ clientExtensionConfig, agentAnalyserWorkerConfig, parseWorkerConfig, clientWebviewConfig, clientWebviewWorkerConfig ];

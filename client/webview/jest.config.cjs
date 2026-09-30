@@ -5,7 +5,13 @@ module.exports = {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
       tsconfig: 'tsconfig.jest.json',
     }],
+    // unified/micromark ship ESM-only .js; babel-jest transforms them to CommonJS
+    '^.+\\.js$': ['babel-jest', {
+      presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+    }],
   },
+  // let ESM-only node_modules reach the babel transform instead of being skipped
+  transformIgnorePatterns: [],
   moduleNameMapper: {
     // handle CSS files
     '\\.(css|scss|sass)$': 'identity-obj-proxy',

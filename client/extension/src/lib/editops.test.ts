@@ -122,7 +122,7 @@ describe('editops', () => {
                 { from: 15, to: 18, insert: 'XYZ' },
             ];
             logEditTextChanges(doc as never, '/repo/test.md', changes);
-            // ctx slice = text.slice(max(0, 15-10), 18+10) = text.slice(5, 28) - slice end exclusive, so chars 5..27 = '56789ABCDEFGHIJ01234567' (23 chars)
+            // ctx is text.slice(5, 28), the 10-char pad around [15, 18), exclusive of the slice end
             expect((writeToLog as jest.Mock).mock.calls[1][1]).toContain('ctx="56789ABCDEFGHIJ01234567"');
             expect((writeToLog as jest.Mock).mock.calls[1][1]).toContain('from=15 to=18 insert="XYZ"');
         });

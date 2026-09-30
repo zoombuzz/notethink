@@ -33,11 +33,11 @@ interface CandidateAccumulator {
     all_numeric: boolean;
 }
 
-// memoises the sweep against the notes array identity - a new merge output re-sweeps, an unchanged one is served from cache
+// memoises the sweep against the notes array identity: a new merge output re-sweeps, an unchanged one is cached
 const candidate_cache = new WeakMap<object, GroupByCandidate[]>();
 
 /**
- * a linetag value counts as numeric only when value_numeric was stored AND is a real number. LineTag
+ * A linetag value counts as numeric only when value_numeric was stored AND is a real number. LineTag
  * stores value_numeric as Number(value), so "5px" yields NaN - which must read as non-numeric here.
  */
 export function isNumericTag(tag: LineTag): boolean {
@@ -45,7 +45,7 @@ export function isNumericTag(tag: LineTag): boolean {
 }
 
 /**
- * fold one note's authored linetags into the per-key accumulator: collect each tag's value into the
+ * Folds one note's authored linetags into the per-key accumulator: collects each tag's value into the
  * key's distinct-value set (inherited tags included) and AND the key's all-numeric flag with whether
  * this tag's value is numeric. Namespaced (nt_/ng_) keys and the hidden noise keys are skipped.
  */
@@ -66,7 +66,7 @@ function foldNoteLinetags(note: NoteProps, accumulator: Map<string, CandidateAcc
 }
 
 /**
- * finalise the per-key accumulator into authored candidates: each key becomes a writable candidate,
+ * Finalises the per-key accumulator into authored candidates: each key becomes a writable candidate,
  * continuous when every collected value was numeric and categorical otherwise, with values sorted.
  */
 function finaliseAuthoredCandidates(accumulator: Map<string, CandidateAccumulator>): GroupByCandidate[] {
@@ -83,7 +83,7 @@ function finaliseAuthoredCandidates(accumulator: Map<string, CandidateAccumulato
 }
 
 /**
- * build the implicit first-level-folder candidate from the notes' origins: the distinct non-empty
+ * Builds the implicit first-level-folder candidate from the notes' origins: the distinct non-empty
  * project names (first segment of each origin.relative_path). returns undefined when no note carries a
  * folder (single-file mode), so the key simply does not appear.
  */
@@ -105,7 +105,7 @@ function buildFolderCandidate(notes: Array<NoteProps>): GroupByCandidate | undef
 }
 
 /**
- * enumerate the group-by candidate keys across the rendered notes: every authored (non-namespaced,
+ * Enumerates the group-by candidate keys across the rendered notes: every authored (non-namespaced,
  * non-hidden) attribute plus the implicit first-level-folder key computed from each note's origin. each
  * candidate reports its distinct sorted values, its axis kind (continuous when every value is numeric,
  * categorical otherwise), and its writability (authored attributes writable, the folder key read-only).
@@ -132,7 +132,7 @@ export function enumerateGroupByCandidates(notes: Array<NoteProps> | undefined):
 }
 
 /**
- * resolve which key a Line view groups by, with the same auto semantics as nt_view. An explicit selection
+ * Resolves which key a Line view groups by, with the same auto semantics as nt_view. An explicit selection
  * (a non-'auto' value picked in the group-by select) wins; otherwise a focused note's `nt_group_by`
  * overrides, then the majority `nt_group_by` vote across files, and finally the first-level-folder default.
  * `selection` is the persisted per-view choice ('auto' / undefined means auto-resolve).
@@ -153,7 +153,7 @@ export function resolveGroupByAxisKey(
 }
 
 /**
- * resolve which key a kanban board lanes by. Kanban's `auto` is status - the axis is what makes the view
+ * Resolves which key a kanban board lanes by. Kanban's `auto` is status - the axis is what makes the view
  * a kanban - so this deliberately does NOT walk the generic auto ladder, which would fall through a
  * focused-note tag and a majority vote to the first-level-folder default and lane a kanban by project.
  * An explicit selection still wins, because departing from the pinned axis is exactly what the drawer's
@@ -165,7 +165,7 @@ export function resolveKanbanAxisKey(selection: string | undefined): string {
 }
 
 /**
- * build the categorical Axis for a resolved group-by key. Writability comes from the enumerated
+ * Builds the categorical Axis for a resolved group-by key. Writability comes from the enumerated
  * candidate (authored attributes writable, the implicit folder key read-only); when the key is not yet
  * present in the notes it falls back to writable unless it is the read-only first-level-folder key.
  */

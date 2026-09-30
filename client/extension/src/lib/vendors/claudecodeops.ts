@@ -277,7 +277,7 @@ function summarizeToolArg(call_input: Record<string, unknown> | undefined): stri
     return candidate.length > ACTIVITY_ARG_MAX_CHARS ? candidate.slice(0, ACTIVITY_ARG_MAX_CHARS) : candidate;
 }
 
-// the model on the session's own most recent record naming one, across the whole transcript rather than only a windowed slice: a session's current model outlives whatever window happens to be open
+// the model from the most recent record naming one, across the whole transcript: it outlives whatever window is open
 function lastModelInRecords(records: ClaudeTranscriptRecord[]): string | undefined {
     for (let i = records.length - 1; i >= 0; i--) {
         const model = records[i].message?.model;
@@ -293,19 +293,19 @@ function parseCommitSubject(command: string): string | undefined {
     return match[1] ?? match[2] ?? match[3];
 }
 
-// a path a Bash script might write to, ending in todo.md or done.md, quoted (a Python string) or bare (a sed -i's trailing filename argument, unquoted since sed itself needs no shell quoting there)
+// a Bash-script path ending in todo.md or done.md, quoted or bare (sed -i's unquoted trailing filename)
 const BASH_BOARD_PATH = /(['"])((?:[^'"]*\/)?(?:todo|done)\.md)\1|(?:^|\s)((?:\S*\/)?(?:todo|done)\.md)(?=\s|$)/;
-// evidence the script actually writes the file it opened, not only reads it (`sed -n`, `cat`, `grep` never count, or a session that merely inspects a board would look bound to it, the exact over-counting the location-based binder exists to avoid)
+// evidence the script writes rather than merely reads the file it opened (`sed -n`, `cat`, `grep` don't count)
 const BASH_WRITE_EVIDENCE = /\.write\(|sed\s+-i\b/;
-// a Python triple-quoted block: large inserted story text (a whole new section, or a multi-paragraph note) routinely quotes a UI label or another story's own wording inside its markdown prose, so it is extracted as ONE literal rather than scanned for nested single/double quotes - scanning inside it would split out a short quoted sub-phrase that can coincidentally match unrelated wording in some other story about a similar feature
+// a Python triple-quoted block extracted whole to avoid a nested-quote scan matching unrelated story text
 const BASH_TRIPLE_QUOTED = /'''([\s\S]*?)'''|"""([\s\S]*?)"""/g;
 // a quoted string literal in a Bash command, single- or double-quoted, its own escaped quotes tolerated
 const BASH_STRING_LITERAL = /(['"])((?:\\.|(?!\1).)*)\1/g;
-// a literal used only to LOCATE a position (`text.index('...')`, `text.find("...")`) never itself becomes part of what a script writes - it can as easily be some other, unrelated heading used purely as a slice boundary - so it is excluded from extraction rather than treated as this call's own edited content
+// a locate-only literal (text.index/find) is excluded: it may be an unrelated heading used only as a slice boundary
 const BASH_LOCATE_ONLY_LITERAL = /\.(?:index|find)\(\s*(['"])((?:\\.|(?!\1).)*)\1/g;
-// shorter than this is noise (a bare flag, a single word) even as a fallback locator - a more generous bar than AGENT_EDIT_SNIPPET's own distinctive-line threshold, since a script literal is freeform text, not curated board content
+// shorter than this is noise as a locator, looser than AGENT_EDIT_SNIPPET since script text isn't curated content
 const BASH_LITERAL_MIN_LENGTH = 20;
-// this workspace's own task-list marker convention (workspace AGENTS.md > Format rules): a script ticks a task by literally replacing this prefix, so the UNTICKED form survives in the script as a literal but the TICKED form does not - it is produced by the replace call, never written out as its own literal
+// a script ticks a task by replacing this prefix, so only the unticked form ever appears as a literal
 const UNTICKED_TASK_PREFIX = '+ [ ] ';
 const TICKED_TASK_PREFIX = '+ [X] ';
 
@@ -340,9 +340,13 @@ function unescapeBashLiteral(raw: string): string {
  * matching the precedent this file's header already sets for Codex's own unparsed `apply_patch`
  * heredoc shape.
  */
-// pushes a candidate located edit for one extracted literal, unless it is the board's own path or too short to be distinctive; also synthesises the ticked form of an unticked task marker (see UNTICKED_TASK_PREFIX's header)
+/**
+ * Pushes a candidate located edit for one extracted literal, unless it is the board's own path or
+ * too short to be distinctive; also synthesises the ticked form when the literal is an unticked
+ * task marker.
+ */
 function pushLiteralEdit(edits: AgentToolInvocationEdit[], literal: string, file_path: string): void {
-    // the path literal itself (assigned to a variable, or named directly) is a path reference, not board content - a short project-relative path is exactly the kind of generic substring that can falsely match an unrelated mention of some other project's same-shaped path elsewhere on the board
+    // the path literal is a reference, not board content - it could falsely match an unrelated path elsewhere
     if (literal === file_path || literal.length < BASH_LITERAL_MIN_LENGTH) { return; }
     edits.push({ new_text: boundedSnippet(literal) });
     if (literal.startsWith(UNTICKED_TASK_PREFIX)) {
@@ -359,7 +363,7 @@ function boardEditFromBashCommand(command: string): { file_path: string; edits: 
     let locate_match: RegExpExecArray | null;
     while ((locate_match = BASH_LOCATE_ONLY_LITERAL.exec(command)) !== null) { locate_only.add(unescapeBashLiteral(locate_match[2])); }
     const edits: AgentToolInvocationEdit[] = [];
-    // triple-quoted blocks first, each as one whole literal, then their spans are blanked out so the single/double-quote pass below never re-scans a quote nested inside one (see BASH_TRIPLE_QUOTED's header)
+    // triple-quoted blocks extract first, each as one literal, then get blanked so the quote pass below skips nested quotes
     let remainder = '';
     let cursor = 0;
     BASH_TRIPLE_QUOTED.lastIndex = 0;
@@ -381,7 +385,7 @@ function boardEditFromBashCommand(command: string): { file_path: string; edits: 
     return edits.length > 0 ? { file_path, edits } : undefined;
 }
 
-// bounds one edit snippet to the shared display/carry limit, so neither a huge Write's content nor a pathological Edit blows the worker's reply
+// bounds an edit snippet to the shared display limit, so a huge Write or bad Edit can't blow the worker's reply
 function boundedSnippet(text: string): string {
     return text.length > AGENT_EDIT_SNIPPET_MAX_CHARS ? text.slice(0, AGENT_EDIT_SNIPPET_MAX_CHARS) : text;
 }

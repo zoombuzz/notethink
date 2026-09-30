@@ -139,10 +139,11 @@ describe('buildExitKeyframes', () => {
 // --- timing options ---
 
 describe('moveTiming / enterTiming / exitTiming', () => {
-    /*
-     * fill MUST be 'backwards', not 'both': a forwards fill leaves the finished animation permanently owning the
-     * card's `transform`, which outranks @hello-pangea/dnd's inline drag transform and stalls the next drag on a
-     * just-glided card. backwards keeps the anti-flash pre-frame while releasing the transform when the tween ends
+    /**
+     * Fill MUST be 'backwards', not 'both': a forwards fill leaves the finished animation permanently
+     * owning the card's `transform`, which outranks @hello-pangea/dnd's inline drag transform and
+     * stalls the next drag on a just-glided card. Backwards keeps the anti-flash pre-frame while
+     * releasing the transform when the tween ends.
      */
     it('moveTiming uses the transition-max duration, easing, and fill backwards', () => {
         expect(moveTiming()).toEqual({

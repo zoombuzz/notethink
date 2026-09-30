@@ -17,7 +17,7 @@ test.describe('Kanban View', () => {
         const { id, path: doc_path } = await injectDocsFromFixture(page, 'kanban.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
 
-        // simulate a cursor position inside the "# Project Board" heading; the heading starts at offset 0, so cursor at offset 2 is within it
+        // cursor at offset 2 sits inside the "# Project Board" heading, which starts at offset 0
         await simulateSelectionChanged(page, doc_path, 2);
 
         // wait for AutoView to detect nt_view=kanban and re-render
@@ -32,10 +32,7 @@ test.describe('Kanban View', () => {
         const auto_wrapper = page.locator('[data-auto-selected-viewtype="kanban"]');
         await expect(auto_wrapper).toBeVisible({ timeout: 5000 });
 
-        /*
-         * check that expected column headers appear (use h3 to avoid count badge text)
-         * formatColumnLabel title-cases the raw status slug for display; aria-labels keep the slug verbatim
-         */
+        // h3 avoids the count badge text; formatColumnLabel title-cases the slug, aria-labels keep it verbatim
         const column_headers = page.locator('[role="columnheader"] h3');
         const header_texts = await column_headers.allTextContents();
         expect(header_texts).toContain('Untagged');
@@ -70,6 +67,11 @@ test.describe('Kanban View', () => {
         await expect(untagged_column.getByText('Task D')).toBeVisible({ timeout: 5000 });
     });
 
+    /**
+     * The card has no overflow:hidden safety-net crop, since that was lifted so the lineno badge can
+     * extend leftward outside the card by design; wrap alone must therefore keep the headline inside
+     * the card's right edge.
+     */
     test('long unbreakable headline tokens wrap inside the card and do not punch past its right edge', async ({ page }) => {
         const { path: doc_path } = await injectDocsFromFixture(page, 'kanban-long-headline.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
@@ -82,7 +84,7 @@ test.describe('Kanban View', () => {
         await expect(card).toBeVisible();
         await expect(headline).toBeVisible();
 
-        // bounding-box check: the headline's right edge must not cross the card's right edge - proves wrap is doing its job on its own (the card no longer has overflow:hidden as a safety-net crop; that was lifted intentionally so the lineno badge can extend leftward outside the card by design, see ViewRenderer.module.scss kanban-card rule)
+        // checks wrap alone keeps the headline inside the card, with no overflow:hidden crop to fall back on
         const card_box = await card.boundingBox();
         const headline_box = await headline.boundingBox();
         expect(card_box).not.toBeNull();

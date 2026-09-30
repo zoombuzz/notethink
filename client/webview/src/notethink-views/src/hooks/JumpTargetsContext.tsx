@@ -4,7 +4,7 @@ import { useJumpTargets, type UseJumpTargetsApi } from "./useJumpTargets";
 
 const debug = Debug("nodejs:notethink-views:JumpTargetsContext");
 
-// default ctx-value: no latest response and no-op setters. Lets consumers read jump_targets / call the setters unconditionally even when no provider is mounted (tests, isolated component renders)
+// lets consumers read jump_targets / call the setters unconditionally with no provider mounted
 const NOOP_API: UseJumpTargetsApi = {
     jump_targets: undefined,
     setJumpTargets: () => {},
@@ -13,8 +13,9 @@ const NOOP_API: UseJumpTargetsApi = {
 const JumpTargetsCtx = createContext<UseJumpTargetsApi>(NOOP_API);
 
 /**
- * provider props for JumpTargetsProvider.
- * - api: an externally-owned hook instance - lets the parent wire the same instance into ExtensionReceiver's message reducer and the tree's components without two hooks fighting over state; when omitted the provider creates its own instance
+ * Provider props for JumpTargetsProvider.
+ * - api: an externally-owned hook instance, wired into both the message reducer and the tree so
+ *   they share state instead of fighting over it; when omitted the provider creates its own
  */
 interface JumpTargetsProviderProps {
     children: React.ReactNode;
@@ -39,7 +40,7 @@ function JumpTargetsProviderInternal(props: { children: React.ReactNode }): Reac
 }
 
 /**
- * lifts a single useJumpTargets instance to the React tree so the jump drawer and the
+ * Lifts a single useJumpTargets instance to the React tree so the jump drawer and the
  * extension-message reducer observe and mutate the same latest-response state.
  *
  * Most callers should mount this at the common ancestor of every consumer (notethink's

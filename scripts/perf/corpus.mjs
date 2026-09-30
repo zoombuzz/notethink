@@ -13,6 +13,9 @@
  * the runner pre-seeds the `__folder__` view state with `type: 'kanban'` instead. Folder mode caps
  * each file at maxNotesPerFile stories and single-file mode does not, so a folder file's card count
  * is its story count only while that stays at or below the cap.
+ *
+ * PanelSession skips parsing a folder-mode doc, so `buildFolderCorpus` ships every doc text-only,
+ * matching the real wire; `buildSingleFileCorpus` still ships mdast `content`, matching the active doc.
  */
 import { createHash } from 'node:crypto';
 import { fromMarkdown } from 'mdast-util-from-markdown';
@@ -72,15 +75,15 @@ function identifier(message) {
 }
 
 /**
- * Wrap source text in the Doc shape PanelSession.buildDocFromUriAndText posts, mdast content
- * included. The mdast is parsed with the same libraries and extensions the extension host uses, so
- * the payload the webview receives is byte-comparable with a real one.
+ * Wraps source text in the Doc shape PanelSession posts. `include_content` (default true) parses
+ * mdast so a current_file payload is byte-comparable with a real one; folder-mode passes it false,
+ * matching PanelSession's own skip.
  */
-export function buildWireDoc({ doc_path, relative_path, text, created_by = 'perfHarness' }) {
-    const content = fromMarkdown(text, {
+export function buildWireDoc({ doc_path, relative_path, text, created_by = 'perfHarness', include_content = true }) {
+    const content = include_content ? fromMarkdown(text, {
         extensions: [gfm(), frontmatter(['yaml', 'toml'])],
         mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(['yaml', 'toml'])],
-    });
+    }) : undefined;
     return {
         path: doc_path,
         relative_path,
@@ -109,7 +112,7 @@ export function buildFolderCorpus({ workspace_root, file_count, stories_per_file
             story_count: stories_per_file,
             target_bytes: file_bytes,
         });
-        docs.push(buildWireDoc({ doc_path: `${workspace_root}/${relative_path}`, relative_path, text }));
+        docs.push(buildWireDoc({ doc_path: `${workspace_root}/${relative_path}`, relative_path, text, include_content: false }));
     }
     const cards_per_file = Math.min(stories_per_file, max_notes_per_file);
     return {

@@ -16,7 +16,7 @@ export async function simulateSelectionChanged(
     }, { docPath, from: position });
 }
 
-// the extension's "no editor owns this doc" signal: a selectionChanged carrying a null selection, which the webview treats as a clear
+// simulates the extension's "no editor owns this doc" signal: a selectionChanged with a null selection
 export async function simulateSelectionCleared(
     page: Page,
     docPath: string,

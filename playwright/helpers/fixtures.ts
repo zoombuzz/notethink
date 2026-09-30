@@ -14,9 +14,9 @@ export function fixtureText(fixture: string): string {
 }
 
 /**
- * source offset of a literal within a fixture, so a spec can drive a caret to a known place without
- * hand-counting bytes. Throws rather than returning -1, because a silent -1 becomes offset 0 at the
- * top of the document and the spec then asserts against the wrong note instead of failing.
+ * Source offset of a literal within a fixture, so a spec can drive a caret to a known place without
+ * hand-counting bytes. Throws rather than returning -1, since a silent -1 would read as offset 0 and
+ * the spec would assert against the wrong note instead of failing.
  */
 export function fixtureOffsetOf(fixture: string, needle: string): number {
     const text = fixtureText(fixture);

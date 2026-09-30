@@ -106,7 +106,7 @@ test.describe('Kanban pointer drag round-trip - payload, hold, and no fling on e
         });
         expect(stuck, `cards left under a residual transform after the echo: ${JSON.stringify(stuck)}`).toEqual([]);
 
-        // secondary cross-check: the FLIP layer scheduled no move/enter for the card's own echo (the pixel check above is the primary guard)
+        // secondary check: the FLIP layer scheduled no move/enter for the card's own echo
         const moves = await probeMoves(page);
         expect(moves, `the dropped card's own echo was animated: ${JSON.stringify(moves)}`).toEqual([]);
     });

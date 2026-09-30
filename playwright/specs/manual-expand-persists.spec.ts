@@ -75,12 +75,11 @@ test.describe('Manual expand survives content edits', () => {
     });
 
     /*
-     * refresh-resilience test: the reload IS the behaviour under test, not a workaround. Expansion is
-     * keyed by stable_id and stable_id is re-derived from the same file content, so the id the reloaded
-     * view looks up is the id the persisted list already holds. The caret has to be replayed afterwards
-     * because AutoView resolves kanban from a selectionChanged and the harness has no editor to re-send
-     * one; a real host still has the document open and does. Docs themselves come back from the
-     * persisted state, so only the selection needs replaying.
+     * Refresh-resilience test: the reload is the behaviour under test. stable_id re-derives from
+     * file content, so the reloaded webview needs the doc replayed (ExtensionReceiver seeds
+     * docs_state empty on mount, since a matching hash would make useVscodeMessages treat the
+     * resend as a no-op) and the caret replayed, since AutoView has no editor to resend a
+     * selectionChanged.
      */
     test('an expanded card is still expanded after a reload', async ({ page }) => {
         const doc_path = await setupExpandedCard(page);
@@ -96,6 +95,8 @@ test.describe('Manual expand survives content edits', () => {
 
         await page.reload();
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
+        // stand in for the real host's resend-on-reveal: the reloaded webview otherwise has no doc at all
+        await injectDocsFromFixture(page, 'manual-expand.md', doc_path);
         await simulateSelectionChanged(page, doc_path, 2);
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 

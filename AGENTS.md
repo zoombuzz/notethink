@@ -15,7 +15,7 @@ There is no root `src/`: the three source roots are described in [`CODING_STANDA
 ```
 notethink/
 ├── client/
-│   ├── extension/src/            # extension host - VS Code API, winston logging, no DOM
+│   ├── extension/src/            # extension host - VS Code API, LogOutputChannel logging, no DOM
 │   │   ├── extension.ts          # activation
 │   │   ├── vscode/               # VS Code integration, incl. notethinkEditor.ts (custom editor provider)
 │   │   ├── lib/                  # utility modules, each with a colocated test
@@ -44,7 +44,7 @@ All `import` statements go at the top of the file, one statement per module, and
 
 ## Comment Style
 
-See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style, and > Dashes for the em and en dash ban. The one-line rule is enforced here by the local `local/no-consecutive-line-comments` ESLint rule. notethink's extras (no trailing period on a single-line comment, the section-divider exception) are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Comments.
+See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style, and > Dashes for the em and en dash ban. notethink's extras, and the lint rules that enforce the checkable parts, are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Comments.
 
 ## Cruft that only makes sense on one machine
 
@@ -58,11 +58,11 @@ Two things this deliberately does not cover: agent instruction files (this file,
 
 ## Debug Logging
 
-The webview bundles log through `debug`, namespaced by area (`Debug("nodejs:notethink:ModuleName")`, `Debug("nodejs:notethink-views:ComponentName")`); the extension host logs through winston. Enable webview output with `localStorage.debug = 'nodejs:*'` in the webview devtools console. The rules, and where each log stream lands: [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Logging and Error Handling.
+The webview bundles log through `debug`, namespaced by area (`Debug("nodejs:notethink:ModuleName")`, `Debug("nodejs:notethink-views:ComponentName")`); the extension host logs through `vscode.LogOutputChannel` directly. Enable webview output with `localStorage.debug = 'nodejs:*'` in the webview devtools console. The rules, and where each log stream lands: [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Logging and Error Handling.
 
 ## Testing Guidelines
 
-- **Extension tests (Mocha)** live in `client/extension/src/test/suite/` and run under `@vscode/test-electron` through the VS Code launch configuration; `client/extension/src/test/suite/lib/cryptoops.test.ts` is a representative suite.
+- **Extension tests (Mocha)** live in `client/extension/src/test/suite/` and run under `@vscode/test-web`, headless, via `pnpm run test-mocha` (part of `pnpm run check`) or the VS Code launch configuration; `client/extension/src/test/suite/lib/cryptoops.test.ts` is a representative suite.
 - **Jest specs** sit next to their source in three packages, each with its own `jest.config.cjs`: `client/extension`, `client/webview` (which ignores the nested package) and `client/webview/src/notethink-views`. Run all three from the repo root with `pnpm run test-jest`, which is `scripts/test-jest.sh`; the root has no `test` script, and `pnpm test` inside one package runs that package alone.
 
 ## Workflow and Commit Messages

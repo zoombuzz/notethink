@@ -1,14 +1,9 @@
 import type { Page } from '@playwright/test';
 
-/*
- * Drive the agent card from a synthetic snapshot shaped exactly as `AgentAnalyser.ts` posts one, with
- * no live agent anywhere: five sessions across the three vendors, one repository's working tree, and
- * no on-disk fixture at all. There used to be a `.notethink/` contract this helper read from disk and
- * reassembled; it is retired (agent-activity-card story, superseded 2026-09-21), and the analyser's
- * payload needs no reassembly, since a spec can build the wire shape directly.
- *
- * The snapshot is per repository, so a spec can place the sessions at any `root_path`/`root_relative`
- * and the card's join has to resolve it from `root_relative` alone, exactly as `treeForDocPath` does.
+/**
+ * Builds a synthetic activity snapshot shaped exactly as `AgentAnalyser.ts` posts one, with no
+ * on-disk fixture. Sessions can be placed at any `root_path`/`root_relative`; the card resolves
+ * them by `root_relative` alone, the way `treeForDocPath` does.
  */
 
 const DEFAULT_ROOT_RELATIVE = 'notethink';
@@ -29,16 +24,16 @@ interface ActivityRefusalSpec {
 
 /**
  * Options for one injected activity snapshot.
- * - root_relative: where the analyser found the repository, relative to the workspace folder; '' when
- *   it IS the workspace folder
- * - sessions: session ids to keep, defaulting to every session this helper declares
- * - extra_uncommitted: this many more unattributed changed files in the working tree, enough to fold
- *   a card's uncommitted band
+ * - root_relative: relative to the workspace folder; '' when the repository IS the workspace folder
+ * - state: defaults to 'live'; 'scanning' posts a growing snapshot, as an interim batch looks
+ * - sessions: session ids to keep; defaults to every session this helper declares
+ * - extra_uncommitted: extra unattributed changed files, to fill a card's uncommitted band
  */
 interface InjectActivityOptions {
     root_relative?: string;
     root_path?: string;
     live?: boolean;
+    state?: 'scanning' | 'live' | 'unavailable';
     refusals?: ActivityRefusalSpec[];
     sessions?: string[];
     extra_uncommitted?: number;
@@ -145,7 +140,7 @@ export function activityFixtureSnapshot(options: InjectActivityOptions = {}): Re
         session: SESSION_BUILDERS[id](story_doc_path),
     }));
     return {
-        analyser: { state: options.live === false ? 'unavailable' : 'live', refusals: options.refusals ?? [] },
+        analyser: { state: options.state ?? (options.live === false ? 'unavailable' : 'live'), refusals: options.refusals ?? [] },
         sessions,
         trees: [{ root_path, root_relative, tree: activityTree(options.extra_uncommitted) }],
     };

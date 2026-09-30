@@ -278,7 +278,7 @@ describe('buildIntegrationDispatch', () => {
             id: FOLDER_VIEW_STATE_ID,
             display_options: { integration_mode: INTEGRATION_MODE_AUTO, integration_path: '/repo/portfolio', view_focused_ids: undefined, view_selected_ids: undefined },
         });
-        // the canonical key is not re-listed in the clear loop; only the non-canonical id is, and it does not clear folder tags (this resolve is folder)
+        // the canonical key skips the clear loop; only doc-1 clears, and folder tags stay since this resolve is folder
         expect(updates).toHaveLength(2);
         expect(updates[1]).toEqual({ id: 'doc-1', display_options: { view_focused_ids: undefined, view_selected_ids: undefined } });
         expect(message).toEqual({ type: 'setIntegration', mode: INTEGRATION_MODE_FOLDER, path: '/repo/portfolio' });

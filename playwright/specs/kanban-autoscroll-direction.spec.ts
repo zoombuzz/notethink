@@ -88,10 +88,7 @@ test.describe('Kanban drag auto-scroll follows the drag direction', () => {
         const edge_y = board_box.y + board_box.height / 2;
         await page.mouse.move(edge_x, edge_y, { steps: 10 });
 
-        /*
-         * poll scrollLeft while re-asserting the pointer inside the edge zone each round (a 1px toggle) so the fluid
-         * scroller keeps ticking. the offset must climb ABOVE the start, proving the board scrolled toward the drag.
-         */
+        // toggles the pointer by 1px each round to keep the fluid scroller ticking while polling scrollLeft
         let toggle = 0;
         await expect
             .poll(async (): Promise<number> => {
@@ -112,15 +109,7 @@ test.describe('Kanban drag auto-scroll follows the drag direction', () => {
         // wait-for the drop to settle: the clone leaves the portal host
         await expect(clone).toHaveCount(0, { timeout: 3000 });
 
-        /*
-         * The drop must not scroll the board backward toward its origin, but the board is allowed to get narrower. The
-         * dragged card is backlog's only card, so dropping it elsewhere empties the backlog column, the column is
-         * removed, and the board loses a column's width, so the largest offset it allows falls by the same amount.
-         * The browser clamps scrollLeft to that new maximum. A drag held long enough to scroll past it, as it is on a
-         * loaded machine where every poll round takes longer, then reads as a backward move although nothing scrolled
-         * the board. So the offset must hold at whichever is lower, the offset at release or the largest offset the
-         * narrowed board allows.
-         */
+        // emptying backlog narrows the board, clamping scrollLeft, so compare against the release offset or the narrowed max
         const { scroll_left: scroll_after_drop, max_scroll_left: max_after_drop } = await getScrollMetrics(page);
         const expected_floor = Math.min(scroll_at_release, max_after_drop) - BACKWARD_TOLERANCE_PX;
         expect(scroll_after_drop, `the drop scrolled the board backward toward the start (released at ${scroll_at_release}, largest offset after the drop ${max_after_drop})`).toBeGreaterThanOrEqual(expected_floor);

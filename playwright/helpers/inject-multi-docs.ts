@@ -3,27 +3,36 @@ import * as crypto from 'node:crypto';
 import { fixtureText } from './fixtures';
 import { parse } from './parse-markdown';
 
+/**
+ * DocSpec: one doc to inject as a fixture.
+ * - fixture: filename in playwright/fixtures
+ * - doc_path: absolute path the doc should claim
+ * - relative_path: workspace-relative path, driving the breadcrumb and origin pill
+ */
 interface DocSpec {
-    fixture: string;        // filename in playwright/fixtures
-    doc_path: string;       // absolute path the doc should claim
-    relative_path?: string; // workspace-relative path (drives breadcrumb + origin pill)
+    fixture: string;
+    doc_path: string;
+    relative_path?: string;
 }
 
 /**
  * Inject multiple docs in a single 'update' message - sufficient to bootstrap
  * the webview's folder renderer for tests. aggregate_total_discovered, when given, rides the
  * message as the host's aggregate payload carries it, marking discovery as having landed.
+ *
+ * `omit_content` drops `content` (mdast) from every injected doc, modelling a folder-mode doc as
+ * shipped: the webview's own worker/fallback parse has to fill it in before the doc joins the view.
  */
 export async function injectMultipleDocsFromFixtures(
     page: Page,
     docs: DocSpec[],
-    options: { workspace_root?: string; aggregate_total_discovered?: number } = {},
+    options: { workspace_root?: string; aggregate_total_discovered?: number; omit_content?: boolean } = {},
 ): Promise<Array<{ id: string; path: string; relative_path?: string }>> {
     const built = docs.map((d) => {
         const text = fixtureText(d.fixture);
         const id = crypto.createHash('sha256').update(d.doc_path).digest('hex').slice(0, 16);
         const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
-        const mdast = parse(text);
+        const mdast = options.omit_content ? undefined : parse(text);
         return {
             id,
             path: d.doc_path,
@@ -43,7 +52,7 @@ export async function injectMultipleDocsFromFixtures(
                 relative_path: d.relative_path,
                 text: d.text,
                 hash_sha256: d.hash_sha256,
-                content: d.mdast,
+                ...(d.mdast === undefined ? {} : { content: d.mdast }),
             };
         }
         window.dispatchEvent(new MessageEvent('message', {

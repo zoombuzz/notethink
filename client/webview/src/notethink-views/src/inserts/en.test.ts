@@ -1,7 +1,7 @@
 import inserts from './en';
 import type { Insert } from './types';
 
-// the insert points InsertModal/useInsertModal know how to resolve; any template declaring an insert_point outside this set would silently fall through to the currentCaret default and land text in the wrong place
+// insert points InsertModal resolves; an unlisted insert_point silently falls through to currentCaret
 const VALID_INSERT_POINTS = ['currentCaret', 'startOfLine', 'endOfLine', 'endOfNote'];
 
 const ENTRIES = Object.entries(inserts);
@@ -41,7 +41,7 @@ describe('inserts registry (en)', () => {
         });
 
         it('has insertable content', () => {
-            // content must exist and carry something to insert (whitespace-only templates like Paragraph are intentional, so we only forbid empty)
+            // whitespace-only templates (Paragraph) are intentional, so only empty content is forbidden
             expect(typeof insert.content).toBe('string');
             expect(insert.content.length).toBeGreaterThan(0);
         });
@@ -102,7 +102,7 @@ describe('inserts registry (en)', () => {
         });
 
         it.each(mermaid)('"%s" wraps its diagram in a ```mermaid fence', (_key, insert: Insert) => {
-            // the kanban board is the one project-management template that is plain markdown rather than a mermaid diagram, so it is exempt
+            // pm_kanban is plain markdown, not a mermaid diagram, so it is exempt
             if (insert.value === 'pm_kanban') {
                 expect(insert.content).toContain('?nt_view=kanban');
                 return;

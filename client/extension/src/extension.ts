@@ -5,11 +5,10 @@ import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 
 const PANEL_VIEWTYPE = 'notethink';
 
-/*
- * on window reload a webview panel can be deserialized before its source editor finishes restoring, and the persisted
- * state carries only a path (no scheme) - a plain file:// reconstruction of that bare path then fails for virtual-FS docs
- * (notegit:/github: and other custom FileSystemProvider schemes), which disposed the panel and made the viewer vanish on a returning-user reload. poll a short window
- * for an open/visible/active .md editor matching the saved path and reuse its full uri so the doc resolves with the right scheme.
+/**
+ * On reload a panel can deserialize before its source editor finishes restoring; the persisted state
+ * carries only a bare path, so a plain file:// reconstruction fails for virtual-FS docs (notegit:, etc.).
+ * Polls briefly for an open/visible/active .md editor matching the path and reuses its full uri instead.
  */
 async function waitForRestorableMdUri(preferred_path?: string): Promise<vscode.Uri | undefined> {
 	const matches = (uri: vscode.Uri): boolean => uri.path.endsWith('.md') && (!preferred_path || uri.path === preferred_path);
@@ -30,7 +29,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	// write the file log to the extension's standard VS Code log dir (context.logUri), never the user's open workspace folder
 	initLogDir(context.logUri);
-	// the happy path otherwise logs nothing at info or above, so this is what tells a quiet session apart from one running an old or broken build
+	// the happy path logs nothing else at info or above, so this tells a quiet session from a broken build
 	const build_kind = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV) ? 'dev' : 'production';
 	writeToLog('activate', `NoteThink ${context.extension.packageJSON.version as string} activated (${build_kind} build)`);
 	// register our custom editor for "Open With..." right-click
@@ -40,10 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// register serializer to restore panels after window reload
 	context.subscriptions.push(vscode.window.registerWebviewPanelSerializer(PANEL_VIEWTYPE, {
 		async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: unknown) {
-			/*
-			 * the webview state stores only `.path` (no scheme/authority), so reconstructing with vscode.Uri.file() yields a
-			 * dead file:// path for virtual-FS docs; instead reuse an open/restoring editor's full uri (correct scheme)
-			 */
+			// state stores only `.path`, so reuse a restoring editor's full uri rather than a dead file:// reconstruction
 			const saved = state as { docs?: Record<string, { path?: string }> } | undefined;
 			const first_doc = saved?.docs ? Object.values(saved.docs)[0] : undefined;
 			const uri = await waitForRestorableMdUri(first_doc?.path);
@@ -62,16 +58,16 @@ export function activate(context: vscode.ExtensionContext): void {
 	const open_viewer_command = vscode.commands.registerCommand('notethink.openViewer', async () => {
 		const active_editor = vscode.window.activeTextEditor;
 		const active_md_document = active_editor?.document.uri.path.endsWith('.md') ? active_editor.document : undefined;
-		// with no .md file to open on, the panel goes docless and PanelSession opens folder mode at the workspace root instead; warn only when neither a file nor a folder gives it anything to show
+		// with no .md file to open on, the panel goes docless in folder mode; warn only if there's no folder either
 		if (!active_md_document && !vscode.workspace.workspaceFolders?.[0]) {
 			vscode.window.showWarningMessage(vscode.l10n.t('NoteThink: open a .md file first'));
 			return;
 		}
-		// createWebviewPanel avoids the VS Code breadcrumb bar that custom editors show; the WebviewPanelSerializer registered above handles restoring after window reload
+		// createWebviewPanel skips the breadcrumb bar; the serializer above handles restoring after window reload
 		const panel = vscode.window.createWebviewPanel(
 			PANEL_VIEWTYPE,
 			'NoteThink',
-			// open the viewer in column One (viewer-left); the markdown source opens in column Two. read-only viewer can't take focus, so preserveFocus (mirrors "Open Preview to the Side")
+			// column One is the viewer; the source opens in column Two. Read-only viewer can't focus, so preserveFocus
 			{ viewColumn: vscode.ViewColumn.One, preserveFocus: true },
 			{ enableScripts: true, retainContextWhenHidden: true },
 		);

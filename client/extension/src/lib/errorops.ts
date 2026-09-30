@@ -1,8 +1,5 @@
-import type { TransformFunction } from "logform";
 import * as util from 'util';
 import * as vscode from 'vscode';
-import * as winston from "winston";
-import { LogOutputChannelTransport } from 'winston-transport-vscode';
 
 const LOG_SOURCE_MAX_LEN = 24;
 // the host's client-error receiver; relative so a hosted build POSTs same-origin with no URL config
@@ -37,7 +34,7 @@ export function initLogDir(log_uri: vscode.Uri): void {
     vscode.workspace.fs.createDirectory(log_uri).then(undefined, () => {});
 }
 
-// a write failure is reported once per session rather than on every flush, since a wedged log directory would otherwise retry every LOG_FLUSH_MS and fill the output channel with the same line
+// reported once per session; a wedged log directory would otherwise retry every flush and repeat the line
 let reportedFileLogFailure = false;
 
 function flushLogBuffer(): void {
@@ -51,8 +48,8 @@ function flushLogBuffer(): void {
         (err) => {
             if (reportedFileLogFailure) { return; }
             reportedFileLogFailure = true;
-            // logger.log rather than writeToLogAtLevel: appendToFileLog would try the same failing write again
-            logger.log('warn', 'flushLogBuffer', `the file log at ${logUri.path} could not be written: ${String(err)}`);
+            // logToChannel rather than writeToLogAtLevel: appendToFileLog would try the same failing write again
+            logToChannel('warn', util.format('flushLogBuffer', `the file log at ${logUri.path} could not be written: ${String(err)}`));
         }
     );
 }
@@ -68,50 +65,19 @@ function appendToFileLog(line: string): void {
     }
 }
 
-// polyfill for winston call to `setImmediate()` as undefined in browser, https://github.com/webpack/webpack/issues/8280
-if (typeof global.setImmediate === 'undefined') {
-    // @ts-ignore method signature doesn't exactly match Node.js `setImmediate()`
-    global.setImmediate = (action) => {
-        setTimeout(action, 1);
-    };
-}
-
-// https://stackoverflow.com/a/78208018/1444233
-const combineTransform: TransformFunction = (info) => {
-    const output = { ...info };
-    const data = info[Symbol.for('splat')] as unknown[] | undefined;
-    if (data) { output.message = util.format(String(info.message), ...data); }
-    return output;
-};
-
 /*
- * The format the LogOutputChannel transport needs, wired into createLogger below.
- *
- * combineTransform is the load-bearing half. writeToLogAtLevel shifts the source into winston's
- * `message` slot, so a call's description and any error object land in splat instead; without this
- * transform the transport receives the source alone and drops everything after it.
- *
- * Nothing composes a timestamp, a level prefix or a colouriser here on purpose. output_channel is
- * created with {log: true}, so it is a LogOutputChannel that stamps its own timestamp and level, and
- * the file log adds its own ISO timestamp in writeToLogAtLevel. winston.format.colorize() would also
- * throw on a `trace` record, whose level has no registered colour.
+ * output_channel already timestamps and levels each line, so this only picks the matching method;
+ * the file log adds its own timestamp separately in writeToLogAtLevel.
  */
-const default_format = winston.format.combine(
-    winston.format(combineTransform)(),
-    LogOutputChannelTransport.format(),
-);
-
-const transports = [
-    new LogOutputChannelTransport({ outputChannel: output_channel }),
-];
-
-const logger = winston.createLogger({
-    level: 'trace',
-    // winston's npm levels have no `trace`, so without these the transport gate drops every record
-    levels: LogOutputChannelTransport.config.levels,
-    format: default_format,
-    transports,
-});
+function logToChannel(level: string, message: string): void {
+    switch (level) {
+        case 'trace': output_channel.trace(message); break;
+        case 'debug': output_channel.debug(message); break;
+        case 'warn': output_channel.warn(message); break;
+        case 'error': output_channel.error(message); break;
+        default: output_channel.info(message);
+    }
+}
 
 export function isRedirect(error: unknown): boolean {
     return error instanceof Response && error.status >= 300 && error.status < 400;
@@ -195,7 +161,8 @@ export function writeToLogAtLevel(level: string, ...data: Array<unknown>): void 
     if (data[0]) {
         source = formatFirstArg(data.shift(), LOG_SOURCE_MAX_LEN);
     }
-    logger.log(level, source, ...data);
+    // source is a printf-style format string only if it contains a %-directive, else just joined
+    logToChannel(level, util.format(source, ...data));
     // mirror to file log for CLI access
     const ts = new Date().toISOString();
     const msg = raw_data.map(d => typeof d === 'string' ? d : JSON.stringify(errorLikeFields(d) ?? d)).join(' ');

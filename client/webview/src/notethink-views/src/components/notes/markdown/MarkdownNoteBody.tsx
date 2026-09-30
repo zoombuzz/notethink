@@ -15,16 +15,11 @@ interface MarkdownNoteBodyProps {
 }
 
 /**
- * render-only subtree for the body region of a MarkdownNote: the body itself,
- * the rendered body items, and the optional top/bottom "Show more" fade bars.
- *
- * State-less: every measurement and scroll value is passed in (overflow / scroll
- * state lives in useMarkdownNoteOverflow and useMarkdownNoteBodyScroll). The
- * onExpand callback is invoked when either fade bar's "Show more" is clicked -
- * the view owns the expansion id list and the parent dispatches into it.
- *
- * Renders nothing when the note has no body children, mirroring the original
- * `has_body && (...)` guard.
+ * Render-only subtree for a MarkdownNote's body region: the body itself, its rendered items,
+ * and the optional top/bottom "Show more" fade bars. Stateless; overflow and scroll state live
+ * in useMarkdownNoteOverflow and useMarkdownNoteBodyScroll. onExpand fires from either fade
+ * bar's "Show more", since the view owns the expansion id list. Renders nothing when the note
+ * has no body children.
  */
 export default function MarkdownNoteBody(props: MarkdownNoteBodyProps): ReactElement | null {
     const { note, body_ref, should_clip, max_height, scrolled_top, at_bottom, onExpand } = props;

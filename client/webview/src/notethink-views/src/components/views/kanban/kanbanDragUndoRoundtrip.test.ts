@@ -11,7 +11,7 @@ import type { NoteProps } from '../../../types/NoteProps';
 import type { EditTextChange } from '../../../types/Messages';
 
 /*
- * deterministic drag -> undo -> drag round-trip harness for a FOLDER-mode board. mirrors the real path:
+ * Deterministic drag -> undo -> drag round-trip harness for a FOLDER-mode board. Mirrors the real path:
  * parse each source file, mergeAggregateRoot into one board, derive the kanban columns, build the exact
  * drag-end payload the webview posts, and apply it to the file text with the extension's own reverse-sorted
  * end-to-start apply. the user's undo is a single Ctrl+Z in ONE editor, so undo reverts ONLY the dragged
@@ -72,7 +72,7 @@ function changesByDoc(payload: ReturnType<typeof buildKanbanDragEndPayload>, dra
     return {};
 }
 
-// drag `card_text` into `dest_status` at `position` (default: bottom), applied to the board texts. returns the files written and the dragged doc
+// drags `card_text` into `dest_status` at `position` (default bottom); returns the files written and the dragged doc
 function drag(board: Board, card_text: string, dest_status: string, position?: number): { wrote: string[]; dragged_doc: string } {
     const { cards } = aggregate(board);
     const dragged = cardByText(cards, card_text);
@@ -108,7 +108,7 @@ function freshBoard(): Board {
 }
 
 describe('kanban drag -> undo -> drag round-trip (folder mode, cross-file)', () => {
-    // dropping at the bottom bypasses the ordering restraint guard and mints nt_kanban_ordering_weight; top does not. exercise both
+    // dropping at the bottom bypasses the ordering guard and mints nt_kanban_ordering_weight; top does not
     it.each([['bottom', undefined], ['top', 0], ['middle', 1]] as Array<[string, number | undefined]>)(
         'a drag(%s) -> single-file undo cycle, run twice, leaves every file byte-identical',
         (_label, position) => {

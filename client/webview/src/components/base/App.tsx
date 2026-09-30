@@ -7,7 +7,11 @@ import { JumpTargetsProvider } from '../../notethink-views/src/hooks/JumpTargets
 import { useAgentScanPending } from '../../notethink-views/src/lib/activityhooks';
 import ExtensionReceiver from '../ExtensionReceiver';
 
-// owns the single usePendingWork instance so the extension-message reducer (inside ExtensionReceiver) and every downstream consumer (toolbar spinner, drawer spinners, view handlers' markPending calls) all observe and mutate the same state. Pass the hook explicitly into ExtensionReceiver and via PendingWorkProvider for the rest of the tree
+/**
+ * Owns the single usePendingWork instance so ExtensionReceiver's reducer and every downstream
+ * consumer (toolbar and drawer spinners, view handlers' markPending calls) observe and mutate the
+ * same state; passed explicitly into ExtensionReceiver and via PendingWorkProvider for the rest of the tree.
+ */
 function App(): ReactElement {
   const pending_work_api = usePendingWork();
   useAgentScanPending(pending_work_api);

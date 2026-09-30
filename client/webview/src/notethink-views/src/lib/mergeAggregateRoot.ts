@@ -44,14 +44,16 @@ const debug = Debug("nodejs:notethink-views:mergeAggregateRoot");
 
 /**
  * AggregatedDocInput is one source file's contribution to mergeAggregateRoot.
- * - mtime: on-disk modification time (epoch ms) - stamped onto every story's origin so within-band ordering can surface recently-edited files
- * - hash_sha256: content hash, the key the per-doc caches compare; absent, they fall back to comparing `text`
+ * - mtime: on-disk modification time (epoch ms), stamped onto every story's origin for within-band ordering
+ * - hash_sha256: content hash the per-doc caches compare; absent, they fall back to comparing `text`
+ * - content: the doc's parsed mdast, needed only to build a fresh stamp; undefined is valid once a
+ *   cache hit is expected to cover this doc (a folder-mode doc sheds it after stamping)
  */
 export interface AggregatedDocInput {
     id: string;
     path: string;
     relative_path?: string;
-    content: MdastInput;
+    content?: MdastInput;
     text: string;
     mtime?: number;
     hash_sha256?: string;
@@ -63,7 +65,7 @@ export interface MergeAggregateRootResult {
 }
 
 /**
- * one parsed source file.
+ * One parsed source file.
  * - root: synthetic root from convertMdastToNoteHierarchy
  * - h1: the file's # heading, if any
  */
@@ -74,7 +76,7 @@ interface PerFileParse {
 }
 
 /**
- * an epic registry entry. `name` is the stripped headline.
+ * An epic registry entry. `name` is the stripped headline.
  */
 interface EpicEntry {
     name: string;
@@ -82,7 +84,7 @@ interface EpicEntry {
 }
 
 /**
- * mutable accumulator threaded through walkStorySubtree.
+ * Mutable accumulator threaded through walkStorySubtree.
  * - all_notes: flat list every walked note is pushed onto, in pre-order
  * - next_seq: the next seq to assign, seeded at the story's block base and incremented per note
  */
@@ -97,23 +99,17 @@ interface CollectedStory {
 }
 
 /**
- * one doc's parsed tree, held between merges.
- * - content_key: the doc content this tree was parsed from, compared to decide a re-parse
- */
-interface ConvertedDoc {
-    content_key: string;
-    root: NoteProps;
-}
-
-/**
- * one file's stamped contribution to a board, held between merges.
- * - content_key / stamp_key: every input the stamp read, split so the content comparison stays a single string compare
+ * One file's stamped contribution to a board, held between merges.
+ * - content_key / stamp_key: every input the stamp read; stamp_key deliberately excludes file_slot
+ * - file_slot: the slot these notes' seqs are currently seated on; reseatFileSlot rewrites it (and
+ *   every seq) in place when a sibling's arrival or departure moves this file to a new slot
  * - stories: the file's selected story roots, rank 0 first
  * - notes: each story's own pre-order note list, parallel to `stories`
  */
 interface StampedFileEntry {
     content_key: string;
     stamp_key: string;
+    file_slot: number;
     stories: NoteProps[];
     notes: NoteProps[][];
 }
@@ -123,10 +119,14 @@ interface StampedFileEntry {
  * assert the per-doc cache is doing its job.
  * - conversions: convertMdastToNoteHierarchy calls made on behalf of a folder merge
  * - merges: mergeAggregateRoot calls
+ * - story_count: top-level stories in the latest merge's root - a data-level settle signal for the
+ *   perf harness, since a virtualized kanban column mounts only its visible rows, and DOM card
+ *   count alone cannot tell "everything is in the tree" apart from "the board is one screenful"
  */
 export interface ConversionProbe {
     conversions: number;
     merges: number;
+    story_count: number;
 }
 
 // file H1 `order` linetag value: newest stories are appended at the bottom of the file (e.g. done.md)
@@ -149,7 +149,7 @@ export const SEQ_STORY_STRIDE = 8192;
  */
 export const SEQ_FILE_SLOT_COUNT = 1024;
 
-const conversion_probe: ConversionProbe = { conversions: 0, merges: 0 };
+const conversion_probe: ConversionProbe = { conversions: 0, merges: 0, story_count: 0 };
 
 // the perf harness reads these counts off the page, where it has no way to reach a module-private binding
 (globalThis as { __notethink_conversion_probe?: ConversionProbe }).__notethink_conversion_probe = conversion_probe;
@@ -170,6 +170,7 @@ export function conversionProbe(): ConversionProbe {
 export function resetConversionProbe(): void {
     conversion_probe.conversions = 0;
     conversion_probe.merges = 0;
+    conversion_probe.story_count = 0;
 }
 
 /**
@@ -181,38 +182,34 @@ function docContentKey(doc: AggregatedDocInput): string {
 }
 
 /**
- * Parse one doc into a NoteProps tree, counting the call for the probe.
+ * Parse one doc into a NoteProps tree, counting the call for the probe. Callers only reach this once
+ * `doc.content` is known to be defined (fileContribution's cache-miss-with-content branch).
  */
-function convertCounted(doc: AggregatedDocInput): NoteProps {
+function convertCounted(doc: AggregatedDocInput & { content: MdastInput }): NoteProps {
     conversion_probe.conversions++;
     return convertMdastToNoteHierarchy(doc.content, doc.text);
 }
 
 /**
- * FolderMergeCache is one folder board's memory between merges, and the reason a watcher event on
- * one file does not re-parse and re-render the other 199. It holds each doc's parsed tree and each
- * doc's stamped story subtrees, both keyed on the inputs that produced them, and forgets a doc the
- * moment it leaves the board. A merge without one is correct and simply does all the work again,
- * which is what the tests that construct no cache exercise.
+ * FolderMergeCache is one folder board's memory between merges: the reason a watcher event on one
+ * file does not re-parse and re-render every other file on the board. It holds each doc's stamped
+ * story subtrees only, keyed on every input that produced them, and forgets a doc the moment it
+ * leaves the board - it does not separately cache each doc's full, uncapped parsed tree.
+ * `fileContribution` checks this cache first, using only the doc's metadata and merge-position
+ * inputs, and parses only on a genuine miss, so a file's excess stories past `maxNotesPerFile` are
+ * never retained past the merge that discarded them (caching the full tree instead would keep
+ * 25-50x a dense file's text size in retained heap).
  *
- * Owned by the composer (one instance per mounted folder view) rather than by this module, so two
- * views, a test and a harness run never share counts or entries.
+ * `file_slot` is deliberately excluded from the stamp key: it moves whenever a sibling file arrives
+ * or leaves, and folding it in would force a re-parse of every displaced file even though a
+ * folder-mode doc may have already released its content after stamping. `reseatFileSlot` instead
+ * rewrites a cache hit's seqs in place, so a hit stays content-free start to finish.
+ *
+ * Owned by the composer (one instance per mounted folder view), so views, a test and a harness run
+ * never share entries.
  */
 export class FolderMergeCache {
-    private conversions = new Map<string, ConvertedDoc>();
     private stamped = new Map<string, StampedFileEntry>();
-
-    /**
-     * The doc's parsed tree, re-parsing only when its content key has moved.
-     */
-    convert(doc: AggregatedDocInput): NoteProps {
-        const content_key = docContentKey(doc);
-        const cached = this.conversions.get(doc.id);
-        if (cached && cached.content_key === content_key) { return cached.root; }
-        const root = convertCounted(doc);
-        this.conversions.set(doc.id, { content_key, root });
-        return root;
-    }
 
     /**
      * The doc's stamped stories when every stamp input still matches, else undefined.
@@ -223,18 +220,34 @@ export class FolderMergeCache {
         return cached;
     }
 
+    /**
+     * The doc's stamped stories regardless of whether the stamp inputs still match - the fallback for
+     * a doc that has shed its content (`releaseFolderDocContent`) and so cannot re-parse to catch up
+     * with a genuine stamp-key change. Stale but present beats the doc vanishing from the board; a
+     * real content change always arrives with fresh content, so this path is transient.
+     */
+    stampedForId(doc_id: string): StampedFileEntry | undefined {
+        return this.stamped.get(doc_id);
+    }
+
+    /**
+     * Whether the doc's current content has already been digested into a stamp, regardless of
+     * stamp_key. The composer's release effect uses this to decide a folder doc's parsed content is
+     * safe to drop.
+     */
+    hasContentKey(doc_id: string, content_key: string): boolean {
+        return this.stamped.get(doc_id)?.content_key === content_key;
+    }
+
     putStamped(doc_id: string, entry: StampedFileEntry): void {
         this.stamped.set(doc_id, entry);
     }
 
     /**
-     * Forget every doc outside `doc_ids`, so a file removed from the board (deleted, renamed, or
-     * filtered out) stops holding its parsed tree and its stamped subtrees alive.
+     * Forget every doc outside `doc_ids`, so a file removed from the board stops holding its
+     * stamped subtrees alive.
      */
     retain(doc_ids: Set<string>): void {
-        for (const id of [...this.conversions.keys()]) {
-            if (!doc_ids.has(id)) { this.conversions.delete(id); }
-        }
         for (const id of [...this.stamped.keys()]) {
             if (!doc_ids.has(id)) { this.stamped.delete(id); }
         }
@@ -317,7 +330,7 @@ function selectFileStories<T>(stories: T[], max: number | undefined, order: stri
     } else {
         kept = stories.slice(0, max);
     }
-    // newest-at-bottom files are stored oldest-first; reverse (on a copy - kept may alias the caller's array) so the newest story sorts to the top of its column
+    // newest-at-bottom files are stored oldest-first; reverse on a copy (kept may alias the caller's array)
     return newest_at_bottom ? [...kept].reverse() : kept;
 }
 
@@ -429,7 +442,7 @@ function buildFileEpicRegistries(walk_children: NoteProps[]): { file_epic_by_id:
 }
 
 /**
- * extend an ordinal child path by one level. A subtree root's own path is '', so its first child is
+ * Extend an ordinal child path by one level. A subtree root's own path is '', so its first child is
  * '0' and that child's third child is '0.2'.
  */
 function extendChildPath(child_path: string, index: number): string {
@@ -437,15 +450,12 @@ function extendChildPath(child_path: string, index: number): string {
 }
 
 /**
- * walk a story subtree: assign seqs from the story's own block, rewrite parent_notes/level, stamp
- * origin (including the pre-merge `source_position` copy of `position` so the
- * editor-caret matcher can resolve folder-mode focus in source-file offsets), and
- * keep linetag.note_seq in sync with the assigned seq. `child_path` is the note's
- * ordinal position under the story root, '' at the root itself: the root takes
- * `story_stable_id` verbatim and descendants derive `${story_stable_id}:${child_path}`,
- * so a length-changing edit anywhere in the file leaves their ids alone and only a
- * sibling insert or remove within the story renumbers them. Mutates the notes and
- * `ctx` (seq counter + all_notes list) in place.
+ * Walk a story subtree: assign seqs from the story's own block, rewrite parent_notes/level, stamp
+ * origin (including a pre-merge `source_position` copy of `position` so the editor-caret matcher
+ * can resolve folder-mode focus in source-file offsets), and keep linetag.note_seq in sync with the
+ * assigned seq. `child_path` is the note's ordinal position under the story root: the root takes
+ * `story_stable_id` verbatim and descendants derive `${story_stable_id}:${child_path}`, so only a
+ * sibling insert or remove renumbers them. Mutates the notes and `ctx` in place.
  */
 function walkStorySubtree(
     note: NoteProps,
@@ -458,7 +468,7 @@ function walkStorySubtree(
     note.seq = ctx.next_seq++;
     note.level = new_ancestors.length;
     note.parent_notes = new_ancestors.length ? [...new_ancestors] : undefined;
-    // stamp a per-note origin that carries this note's source-file offsets; cloning here keeps cross-note origin shape (doc_id, project_hue, …) shared while source_position varies per-note
+    // clones origin per note so source_position varies while the shared shape (doc_id, project_hue) stays one reference
     const source_position = note.position ? {
         start: { offset: note.position.start.offset, line: note.position.start.line },
         end: { offset: note.position.end.offset, line: note.position.end.line },
@@ -478,27 +488,26 @@ function walkStorySubtree(
 }
 
 /**
- * Parse every usable doc in the map, in the merge's stable file order (relative_path, falling back
- * to path). With a cache only the docs whose content key has moved are parsed again; without one
- * every doc is parsed, which is the behaviour a caller that passes no cache asks for.
+ * Every usable doc in the map, in the merge's stable file order - metadata only, no parsing.
+ * `content` is deliberately not required: a folder-mode doc that has shed it after an earlier
+ * stamp still has enough metadata to hit the stamp cache, so requiring content would drop it from
+ * the board the moment it is released.
  */
-function parseAggregatedDocs(
+function orderedAggregatedDocs(
     docs: { [key: string]: AggregatedDocInput | undefined },
-    cache: FolderMergeCache | undefined,
-): PerFileParse[] {
-    const parsed: PerFileParse[] = [];
+): AggregatedDocInput[] {
+    const usable: AggregatedDocInput[] = [];
     for (const id of Object.keys(docs)) {
         const doc = docs[id];
-        if (!doc || !doc.content || !doc.text) { continue; }
-        const root = cache ? cache.convert(doc) : convertCounted(doc);
-        parsed.push({ doc, root, h1: findFileH1(root) });
+        if (!doc || doc.text === undefined) { continue; }
+        usable.push(doc);
     }
-    parsed.sort((a, b) => {
-        const ar = a.doc.relative_path ?? a.doc.path;
-        const br = b.doc.relative_path ?? b.doc.path;
+    usable.sort((a, b) => {
+        const ar = a.relative_path ?? a.path;
+        const br = b.relative_path ?? b.path;
         return ar < br ? -1 : ar > br ? 1 : 0;
     });
-    return parsed;
+    return usable;
 }
 
 /**
@@ -507,7 +516,7 @@ function parseAggregatedDocs(
  * workspace-driven seed keeps labels stable across folder descents. Hue needs no universe - it is
  * an identity hash of the project name (hueForProjectName) and so is set-independent.
  */
-function distinctProjectNames(parsed: PerFileParse[], workspace_projects: string[] | undefined): string[] {
+function distinctProjectNames(docs: AggregatedDocInput[], workspace_projects: string[] | undefined): string[] {
     const seen = new Set<string>();
     const names: string[] = [];
     for (const name of (workspace_projects ?? [])) {
@@ -516,8 +525,8 @@ function distinctProjectNames(parsed: PerFileParse[], workspace_projects: string
             names.push(name);
         }
     }
-    for (const file of parsed) {
-        const project_name = projectNameFromRelativePath(file.doc.relative_path);
+    for (const doc of docs) {
+        const project_name = projectNameFromRelativePath(doc.relative_path);
         if (project_name && !seen.has(project_name)) {
             seen.add(project_name);
             names.push(project_name);
@@ -548,15 +557,13 @@ function makeSyntheticRoot(integration_path: string): NoteProps {
 }
 
 /**
- * Every stamp input that does not come from the doc's content, joined into one comparable key. A
- * mismatch is what forces a file's stories to be stamped onto fresh clones, so anything the stamp
- * reads and the content key does not cover belongs here: the doc's own location and mtime, the
- * project label (derived against the whole board's universe), the file's slot in the merged file
- * order, and the per-file story cap.
+ * Every content-independent stamp input a fresh parse must catch up with, joined into one
+ * comparable key: the doc's location and mtime, the project label, and the per-file story cap.
+ * `file_slot` is deliberately excluded: it moves whenever a sibling arrives or leaves, and
+ * `reseatFileSlot` corrects a cache hit's seqs for that without needing this key to change.
  */
 function fileStampKey(
     doc: AggregatedDocInput,
-    file_slot: number,
     project_label: string | undefined,
     maxNotesPerFile: number | undefined,
 ): string {
@@ -565,9 +572,8 @@ function fileStampKey(
         doc.relative_path ?? '',
         doc.mtime ?? '',
         project_label ?? '',
-        file_slot,
         maxNotesPerFile ?? '',
-    ].join(' ');
+    ].join('\0');
 }
 
 /**
@@ -690,11 +696,26 @@ function storyStableIdFor(collected_story: CollectedStory, slug_counts: Map<stri
 }
 
 /**
- * Point a reused file's notes at this merge's synthetic root. The old and new roots carry identical
- * observable fields, so this is the one write a cached subtree takes and nothing rendered from it
- * changes; it exists so no note holds a root the current tree has replaced.
+ * Point a reused file's notes at this merge's synthetic root, and rewrite every note's seq (and
+ * mirrored linetag.note_seq) when `file_slot` has moved since this entry was stamped. Reparenting is
+ * the one write a cached subtree always takes; the seq rewrite happens only when needed, since a
+ * sibling arriving or leaving moves this file to a new seq block without changing its own content -
+ * reseating in place, never re-parsing, is what keeps a stamp cache hit content-free. `rank` is
+ * unaffected by file_slot and needs no rewrite.
  */
-function reparentStampedFile(entry: StampedFileEntry, synthetic_root: NoteProps): void {
+function reseatFileSlot(entry: StampedFileEntry, file_slot: number, synthetic_root: NoteProps): void {
+    if (entry.file_slot !== file_slot) {
+        for (const [rank, story_notes] of entry.notes.entries()) {
+            let next_seq = storySeqBase(file_slot, rank);
+            for (const note of story_notes) {
+                note.seq = next_seq++;
+                if (note.linetags) {
+                    for (const key of Object.keys(note.linetags)) { note.linetags[key].note_seq = note.seq; }
+                }
+            }
+        }
+        entry.file_slot = file_slot;
+    }
     for (const story_notes of entry.notes) {
         for (const note of story_notes) {
             if (note.parent_notes?.length) { note.parent_notes[0] = synthetic_root; }
@@ -704,28 +725,43 @@ function reparentStampedFile(entry: StampedFileEntry, synthetic_root: NoteProps)
 
 /**
  * One file's stamped contribution, taken from the cache when every stamp input still matches and
- * built (and cached) otherwise.
+ * built (and cached) otherwise. The stamp-cache lookup runs before any parsing, using only `doc`'s
+ * metadata and merge-position inputs, so a hit costs nothing beyond the lookup and a miss with
+ * content is the only path that calls `convertMdastToNoteHierarchy`. The parsed tree a miss produces
+ * is allowed to go out of scope once stamped, so an excess-story file's discarded majority is
+ * eligible for GC immediately rather than held in a separate per-doc cache.
+ *
+ * A miss with no content (a folder-mode doc that shed it after an earlier stamp) falls back to
+ * whatever this doc last stamped, stale stamp_key and all, reseated onto the current file_slot; a
+ * doc with neither a fresh stamp nor content contributes nothing this pass, which the caller filters out.
  */
 function fileContribution(
-    file: PerFileParse,
+    doc: AggregatedDocInput,
     file_slot: number,
     project_label_by_name: Map<string, string>,
     maxNotesPerFile: number | undefined,
     synthetic_root: NoteProps,
     cache: FolderMergeCache | undefined,
-): StampedFileEntry {
-    const project_name = projectNameFromRelativePath(file.doc.relative_path);
+): StampedFileEntry | undefined {
+    const project_name = projectNameFromRelativePath(doc.relative_path);
     const project_label = project_name ? project_label_by_name.get(project_name) : undefined;
-    const content_key = docContentKey(file.doc);
-    const stamp_key = fileStampKey(file.doc, file_slot, project_label, maxNotesPerFile);
-    const cached = cache?.stampedFor(file.doc.id, content_key, stamp_key);
+    const content_key = docContentKey(doc);
+    const stamp_key = fileStampKey(doc, project_label, maxNotesPerFile);
+    const cached = cache?.stampedFor(doc.id, content_key, stamp_key);
     if (cached) {
-        reparentStampedFile(cached, synthetic_root);
+        reseatFileSlot(cached, file_slot, synthetic_root);
         return cached;
     }
+    if (!doc.content) {
+        const stale = cache?.stampedForId(doc.id);
+        if (stale) { reseatFileSlot(stale, file_slot, synthetic_root); }
+        return stale;
+    }
+    const root = convertCounted(doc as AggregatedDocInput & { content: MdastInput });
+    const file: PerFileParse = { doc, root, h1: findFileH1(root) };
     const stamped = stampFileStories(file, file_slot, project_label, maxNotesPerFile, synthetic_root);
-    const entry: StampedFileEntry = { content_key, stamp_key, ...stamped };
-    cache?.putStamped(file.doc.id, entry);
+    const entry: StampedFileEntry = { content_key, stamp_key, file_slot, ...stamped };
+    cache?.putStamped(doc.id, entry);
     return entry;
 }
 
@@ -765,11 +801,14 @@ export function mergeAggregateRoot(
     cache?: FolderMergeCache,
 ): MergeAggregateRootResult {
     conversion_probe.merges++;
-    const parsed = parseAggregatedDocs(docs, cache);
-    // 2-character pill label per project - first letter + earliest character that differentiates this project from any other in the universe (notethink→NT, notebook→NB)
-    const project_label_by_name = buildProjectLabels(distinctProjectNames(parsed, workspace_projects));
+    const ordered_docs = orderedAggregatedDocs(docs);
+    // 2-character pill label: first letter plus earliest differentiating character (notethink→NT, notebook→NB)
+    const project_label_by_name = buildProjectLabels(distinctProjectNames(ordered_docs, workspace_projects));
     const synthetic_root = makeSyntheticRoot(integration_path);
-    const per_file = parsed.map((file, file_slot) => fileContribution(file, file_slot, project_label_by_name, maxNotesPerFile, synthetic_root, cache));
+    const per_file = ordered_docs
+        .map((doc, file_slot) => fileContribution(doc, file_slot, project_label_by_name, maxNotesPerFile, synthetic_root, cache))
+        // a doc with neither a fresh stamp nor content nor any prior stamp to fall back on contributes nothing this pass
+        .filter((entry): entry is StampedFileEntry => entry !== undefined);
     const all_notes: NoteProps[] = [synthetic_root];
     const max_file_stories = per_file.reduce((max_len, entry) => Math.max(max_len, entry.stories.length), 0);
     for (let rank = 0; rank < max_file_stories; rank++) {
@@ -780,7 +819,9 @@ export function mergeAggregateRoot(
             for (const note of entry.notes[rank]) { all_notes.push(note); }
         }
     }
-    cache?.retain(new Set(parsed.map(file => file.doc.id)));
+    // retain by every doc id passed in, not just parsed ones: an undefined-valued key (awaiting parse) must not be evicted
+    cache?.retain(new Set(Object.keys(docs)));
+    conversion_probe.story_count = synthetic_root.child_notes!.length;
     return { root: synthetic_root, all_notes };
 }
 
@@ -809,19 +850,13 @@ export function firstIntegrationPath(
 }
 
 /**
- * stamp `stable_id` onto every note in a single-file parsed tree (the result of
- * convertMdastToNoteHierarchy). Mirrors the folder-mode rule but uses the
- * active doc id as the namespacing prefix, since single-file notes carry no
- * `origin`. Walks every note in the tree and treats each note in the chain as
- * a candidate "story root" using the same slug derivation as folder mode
- * (linetags.id when present, else stripped headline). Depth-3 headings act as
- * story roots (matching the kanban card grouping); their descendants get
- * `${story_stable_id}:${child_path}`, an ordinal path that only a sibling
- * insert or remove disturbs. Notes shallower than depth-3 (the file's H1 and
- * ## epic wrappers) get their own slug-based stable_id so view code that keys
- * on them remains stable across re-parse too.
+ * Stamp `stable_id` onto every note in a single-file parsed tree, mirroring the folder-mode rule
+ * but using the active doc id as the namespacing prefix, since single-file notes carry no `origin`.
+ * Depth-3 headings act as story roots (matching the kanban card grouping); their descendants get
+ * `${story_stable_id}:${child_path}`, an ordinal path only a sibling insert or remove disturbs.
+ * Shallower notes (the file's H1 and epic wrappers) get their own slug-based stable_id.
  *
- * Mutates the passed root tree in place. Idempotent - safe to call twice.
+ * Mutates the tree in place. Idempotent.
  */
 export function stampSingleFileStableIds(root: NoteProps, doc_id: string): void {
     // synthetic root keys off doc_id so single-file view-state survives a flip to/from folder mode
@@ -833,14 +868,12 @@ export function stampSingleFileStableIds(root: NoteProps, doc_id: string): void 
 }
 
 /**
- * recursively stamp `stable_id` down one subtree. A story-candidate note (depth ≤ 3)
- * mints a fresh slug-based id (deduplicated within the file via `slug_counts`) and
- * becomes the story root passed to its descendants, which resets `child_path` to ''
- * so ordinals count from that root; deeper notes derive
- * `${story_stable_id}:${child_path}` and so survive any length-changing edit,
- * churning only when a sibling on the path is inserted or removed. A note ahead of
- * the file's first heading has no enclosing story and hangs off the synthetic root
- * as `${doc_id}:__root__:${child_path}` instead.
+ * Recursively stamp `stable_id` down one subtree. A story-candidate note (depth <= 3) mints a
+ * fresh slug-based id and becomes the story root for its descendants, resetting `child_path` to
+ * '' so ordinals count from that root; deeper notes derive `${story_stable_id}:${child_path}` and
+ * survive any length-changing edit, churning only when a sibling on the path is inserted or
+ * removed. A note ahead of the file's first heading hangs off the synthetic root instead, as
+ * `${doc_id}:__root__:${child_path}`.
  */
 function walkSingleFileStableIds(
     note: NoteProps,
@@ -911,7 +944,7 @@ export function flattenSingleFileStories(root: NoteProps, doc_id: string, doc_pa
     const is_nested = walk_children.some(c => c.depth === 2 && (c.child_notes ?? []).some(g => g.depth === 3));
     if (!is_nested) { return; }
     const { file_epic_by_id, file_epic_by_name } = buildFileEpicRegistries(walk_children);
-    // collect ### stories: directly under the scope (no structural epic) and under ## epics (structural epic = the ## headline), mirroring mergeAggregateRoot's walk_children pass
+    // collects ### stories directly under scope, and under ## epics, mirroring mergeAggregateRoot's own walk
     const collected: Array<{ story: NoteProps; structural_epic: EpicEntry | undefined }> = [];
     for (const c of walk_children) {
         if (c.depth === 3) {
@@ -928,11 +961,11 @@ export function flattenSingleFileStories(root: NoteProps, doc_id: string, doc_pa
         const resolved_epic = epic_linetag?.value
             ? resolveEpicLinetag(epic_linetag.value, file_epic_by_id, file_epic_by_name)
             : structural_epic;
-        // keep the epic object whenever one resolved (matching folder mode, which stamps a structural epic even for an empty ## headline); only a story with no epic at all carries undefined
+        // keeps the epic object whenever one resolved, matching folder mode's structural-epic stamping
         story.origin = { doc_id, doc_path, epic: resolved_epic ? { name: resolved_epic.name, id: resolved_epic.id } : undefined };
         relevelStorySubtree(story, [parent], 1);
     }
-    // re-link the scope so both the kanban card set (child_notes) and the flatten-walk source (children_body, read by flattenAllNotes) are exactly the lifted stories
+    // re-links the scope so child_notes (kanban) and children_body (flattenAllNotes) are exactly the lifted stories
     const lifted = collected.map(c => c.story);
     parent.child_notes = lifted;
     parent.children_body = lifted;

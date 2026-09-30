@@ -1,33 +1,20 @@
 /**
- * Browser-side instrumentation for the perf runner (scripts/perf/run.mjs).
+ * Browser-side instrumentation for the perf runner (scripts/perf/run.mjs), installed via
+ * page.addInitScript so the long-task observer is recording before the bundle evaluates.
  *
- * Installed with page.addInitScript, so the long-task observer is recording before the webview
- * bundle evaluates and a scenario can attribute load-time long tasks as well as interaction ones.
- * The observer is buffered, so entries dispatched before it was constructed still arrive.
- *
- * Everything a scenario measures happens inside this file, for one reason: Playwright's structured
- * argument walk hangs for minutes on a large mdast graph, so payloads cross the boundary once, as a
- * JSON string, and are parsed here. The node side then only ever passes small option objects.
- *
- * Settle is the story's definition: wait for the `[data-flip-id]` card count to reach the expected
- * number, then two more animation frames. An interaction passes its current card count as the
- * expected one, so the first frame after the action is the one the blocking render delays, and the
- * elapsed time is that render.
- *
- * That definition puts a floor of roughly three animation frames, about 50ms, under every
- * elapsed_ms, settle frames included. It is the right measure for a load and for an interaction at
- * today's scale, and the wrong one below that floor: an optimisation that takes a click under 50ms
- * has to be asserted on long_task_max_ms, which no frame boundary quantises.
- *
- * A measurement also carries three counts read from the webview's own probes: board_commits, the
- * board-level state commits a window produced; and conversions and merges, the per-doc parses and
- * whole-tree merges it caused. These are what a batching, coalescing or caching change moves
- * directly, and unlike elapsed time none of them depends on how fast the machine is, so they are
- * the honest thing to assert when a timing is within noise of its budget.
+ * Everything a scenario measures happens inside this file: Playwright's structured argument walk
+ * hangs for minutes on a large mdast graph, so payloads cross the boundary once, as a JSON
+ * string, parsed here rather than passed as an object.
  */
 (() => {
     // frames to wait after the card count is reached, so the measurement spans the commit that follows it
     const SETTLE_FRAMES = 2;
+
+    // consecutive quiet frames (no new commit) before a windowed load counts as settled
+    const QUIET_FRAMES = 6;
+
+    // no progress for this long => stalled: long enough past one discovery flush + jitter, short enough to fail fast
+    const STALL_MS = 5000;
 
     // round to one decimal so a JSON report stays readable without pretending to sub-microsecond accuracy
     function round(value) {
@@ -71,22 +58,66 @@
             return this.staged.length;
         }
 
+        // total board commits recorded (the mirror array only ever grows); 0 if the bundle carries no probe
+        commitCount() {
+            const commits = globalThis.__notethinkBoardCommits;
+            return Array.isArray(commits) ? commits.length : 0;
+        }
+
+        // live probe object, returned by reference (not a snapshot); the module mutates it in place
+        readMergeProbe() {
+            return globalThis.__notethink_conversion_probe || null;
+        }
+
         /**
-         * Wait until the board holds `expected_cards` cards, then SETTLE_FRAMES further frames.
-         * Returns whether the count was reached, so a scenario that timed out is reported as
-         * unsettled rather than silently contributing a meaningless elapsed time.
+         * Waits until the board has settled, then SETTLE_FRAMES more frames. Returns `{ reached,
+         * stalled }`: `stalled` true means progress stopped for STALL_MS; both false means the
+         * timeout ran out still progressing.
+         *
+         * `use_quiescence` (progressive loads only) picks the settle definition: with a merge probe
+         * active (folder mode), settled requires `story_count >= expected_cards` AND QUIET_FRAMES of
+         * quiescence SINCE that count was reached - an OR would let a gap between discovery batches
+         * win early. With no merge probe (single-file mode), it's DOM count reaching
+         * `expected_cards` OR (at least one card mounted AND quiescence). The mounted-card guard is
+         * load-bearing: without it, quiescence alone reaches QUIET_FRAMES against the zero-card
+         * "Loading..." shell and reports settled before the file has even parsed.
          */
-        async settle(expected_cards, settle_timeout_ms) {
+        async settle(expected_cards, settle_timeout_ms, use_quiescence) {
             const deadline = performance.now() + settle_timeout_ms;
+            const merge_probe = this.readMergeProbe();
             let reached = false;
-            while (!reached && performance.now() < deadline) {
+            let stalled = false;
+            let quiet_streak = 0;
+            let last_commit_count = this.commitCount();
+            let last_progress_metric = use_quiescence ? last_commit_count : this.countCards();
+            let last_progress_at = performance.now();
+            while (!reached && !stalled && performance.now() < deadline) {
                 await this.nextFrame();
-                reached = this.countCards() >= expected_cards;
+                if (!use_quiescence) {
+                    const cards = this.countCards();
+                    if (cards !== last_progress_metric) { last_progress_metric = cards; last_progress_at = performance.now(); }
+                    else if (performance.now() - last_progress_at > STALL_MS) { stalled = true; break; }
+                    reached = cards >= expected_cards;
+                    continue;
+                }
+                const commit_count = this.commitCount();
+                if (commit_count > 0 && commit_count === last_commit_count) { quiet_streak += 1; }
+                else { quiet_streak = 0; last_commit_count = commit_count; }
+                const using_story_probe = merge_probe && merge_probe.merges > 0;
+                const progress_metric = using_story_probe ? merge_probe.story_count : commit_count;
+                if (progress_metric !== last_progress_metric) { last_progress_metric = progress_metric; last_progress_at = performance.now(); }
+                else if (performance.now() - last_progress_at > STALL_MS) { stalled = true; break; }
+                if (using_story_probe) {
+                    if (merge_probe.story_count >= expected_cards && quiet_streak >= QUIET_FRAMES) { reached = true; }
+                } else {
+                    const cards = this.countCards();
+                    if (cards >= expected_cards || (cards > 0 && quiet_streak >= QUIET_FRAMES)) { reached = true; }
+                }
             }
             for (let frame = 0; frame < SETTLE_FRAMES; frame += 1) {
                 await this.nextFrame();
             }
-            return reached;
+            return { reached, stalled };
         }
 
         /**
@@ -130,6 +161,23 @@
         }
 
         /**
+         * A reading of the parse-mode probe: whether a folder doc's parse went to a worker or fell
+         * back to the main thread. Before/after delta, like readConversionProbe, since the module
+         * mutates one object in place. null when the bundle carries no probe.
+         */
+        readParseModeProbe() {
+            const probe = globalThis.__notethink_parse_mode_probe;
+            if (!probe) { return null; }
+            return { worker_parses: probe.worker_parses, fallback_parses: probe.fallback_parses };
+        }
+
+        // the parses a measured window caused, as a delta between two probe readings
+        parseModeDelta(before, after) {
+            if (!before || !after) { return { worker_parses: null, fallback_parses: null }; }
+            return { worker_parses: after.worker_parses - before.worker_parses, fallback_parses: after.fallback_parses - before.fallback_parses };
+        }
+
+        /**
          * The long tasks that started inside a measured window, summarised.
          *
          * long_task_max_offset_ms is where the longest one began, relative to the start of the
@@ -161,19 +209,35 @@
             };
         }
 
-        /** time `action` plus the settle that follows it, and describe what the board looked like afterwards */
-        async measure(action, { expected_cards, settle_timeout_ms }) {
+        /**
+         * Times `action` plus the settle that follows it, and describes the board afterward.
+         * `expected_cards` undefined means "whatever is on screen once `action` returns"
+         * (dispatchMessage, clickCard); a caller naming a bigger target (dispatchStaged) passes it
+         * explicitly plus `use_quiescence`, since a windowed board may never DOM-count its way there.
+         */
+        async measure(action, { expected_cards, settle_timeout_ms, use_quiescence = false }) {
             const conversions_before = this.readConversionProbe();
+            const parse_mode_before = this.readParseModeProbe();
             const started = performance.now();
             await action();
-            const settled = await this.settle(expected_cards, settle_timeout_ms);
+            const target_cards = expected_cards === undefined ? this.countCards() : expected_cards;
+            const { reached, stalled } = await this.settle(target_cards, settle_timeout_ms, use_quiescence);
             const finished = performance.now();
+            const mounted_cards = this.countCards();
+            const merge_probe = this.readMergeProbe();
             return {
                 elapsed_ms: round(finished - started),
-                settled,
-                cards: this.countCards(),
+                settled: reached,
+                // true when settle() gave up on STALL_MS lack of progress, rather than running the full timeout
+                stalled,
+                cards: mounted_cards,
+                // same as `cards` but named for virtualization: mounted DOM nodes, not the story count
+                mounted_cards,
+                // merged tree's story count - null with no probe (single-file mode); what settle() waits on for a folder load
+                story_count: merge_probe ? merge_probe.story_count : null,
                 ...this.countBoardCommits(started, finished),
                 ...this.conversionDelta(conversions_before, this.readConversionProbe()),
+                ...this.parseModeDelta(parse_mode_before, this.readParseModeProbe()),
                 ...this.summariseLongTasks(started, finished),
                 observer_error: this.observer_error,
             };
@@ -198,18 +262,27 @@
                     window.dispatchEvent(new MessageEvent('message', { data: message }));
                     await this.nextFrame();
                 }
-            }, options);
+            }, { ...options, use_quiescence: true });
         }
 
-        /** dispatch a single JSON-encoded message and measure the board's response to it */
+        /**
+         * Dispatches a single JSON-encoded message and measures the board's response.
+         * `expected_cards` is dropped: the only messages sent this way (selectionChanged, a one-file
+         * merge, an edit re-send) add no new story, so the target is whatever is already on screen.
+         */
         async dispatchMessage(json, options) {
             const message = JSON.parse(json);
             return this.measure(async () => {
                 window.dispatchEvent(new MessageEvent('message', { data: message }));
-            }, options);
+            }, { ...options, expected_cards: undefined });
         }
 
-        /** click the headline of the card at `index` in DOM order, the route folder-click-focus drives */
+        /**
+         * Clicks the headline of the card at `index` in DOM order. `index` addresses the currently
+         * MOUNTED cards, same as `[data-flip-id]`; a windowed board narrows what's reachable, but a
+         * scenario always clicks index 0 on an already-settled board. `expected_cards` is dropped,
+         * as in dispatchMessage: a click adds no card.
+         */
         async clickCard(index, options) {
             const cards = document.querySelectorAll('[data-flip-id]');
             const card = cards[index];
@@ -217,7 +290,19 @@
                 throw new Error(`no card at index ${index}, the board holds ${cards.length}`);
             }
             const target = card.querySelector('[role="rowheader"]') || card;
-            return this.measure(async () => { target.click(); }, options);
+            return this.measure(async () => { target.click(); }, { ...options, expected_cards: undefined });
+        }
+
+        /**
+         * Clicks an element by its `data-testid` and measures the board's response - the route a
+         * drawer-open measurement drives. Same "nothing new mounts" target as clickCard/dispatchMessage.
+         */
+        async clickTestId(testid, options) {
+            const target = document.querySelector(`[data-testid="${testid}"]`);
+            if (!target) {
+                throw new Error(`no element with data-testid="${testid}"`);
+            }
+            return this.measure(async () => { target.click(); }, { ...options, expected_cards: undefined });
         }
     }
 

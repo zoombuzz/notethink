@@ -44,7 +44,10 @@ const GROK_READ_AT = '2026-09-22';
 const DEEPSEEK_SOURCE = 'https://api-docs.deepseek.com/quick_start/pricing';
 const DEEPSEEK_READ_AT = '2026-09-22';
 
-// DeepSeek's peak window is Monday-Friday, 01:00-04:00 and 06:00-10:00 UTC, per DEEPSEEK_SOURCE; Chinese public holidays are ignored, a known, accepted source of imprecision
+/**
+ * DeepSeek's peak window is Monday-Friday, 01:00-04:00 and 06:00-10:00 UTC. Chinese public
+ * holidays are ignored, a known, accepted source of imprecision.
+ */
 const DEEPSEEK_PEAK_DAYS = [1, 2, 3, 4, 5];
 const DEEPSEEK_PEAK_HOURS: Array<[number, number]> = [[1, 4], [6, 10]];
 
@@ -60,7 +63,7 @@ const DEEPSEEK_PEAK_HOURS: Array<[number, number]> = [[1, 4], [6, 10]];
  * The grok-* rows price every Grok call: `grokops.ts` never publishes Grok's own `costUsdTicks` as
  * `vendor_cost_usd`, because no source confirms its unit, so a Grok figure is an estimate like any
  * other vendor's. Grok CLI sessions record `grok-4.x-build` ids that xAI's pricing page does not list;
- * each is priced at its base `grok-4.x` rate by an explicit row of its own, operator decision 2026-09-23.
+ * each is priced at its base `grok-4.x` rate by an explicit row of its own (operator decision).
  *
  * A model whose vendor publishes a context-length-tiered rate (Grok's under/over 200k split) is
  * priced here at its lower, more-common tier; `AgentApiCall` carries no context-length field for this

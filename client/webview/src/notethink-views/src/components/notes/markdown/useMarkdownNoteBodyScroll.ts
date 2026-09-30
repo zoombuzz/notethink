@@ -29,35 +29,16 @@ export interface UseMarkdownNoteBodyScrollArgs {
 }
 
 /**
- * manages the clipped body's scrollTop and reports the derived top/bottom state
- * the fade overlays render against.
+ * Manages the clipped body's scrollTop and the derived top/bottom state the fade overlays render
+ * against. applyBodyScroll is the only write path and reads scrollTop back rather than trusting the
+ * requested value, since the browser can clamp a write and the fades must describe where the body
+ * actually is.
  *
- * Owns scrolled_top and at_bottom useState pairs. The applyBodyScroll callback
- * is private - every scroll write goes through it so both pieces of state stay
- * in sync with the DOM, and it reads scrollTop back rather than trusting the
- * requested value (the browser clamps a write the body cannot satisfy, and the
- * fade overlays must describe where the body actually is).
- *
- * One layout effect picks the framing target, in precedence order:
- *
- * 1. Not clipped: reset scrollTop to 0.
- *
- * 2. Caret-aware. When the body is both clipped and focused and the caret
- *    resolves to a body item outside the visible window (between the top and
- *    bottom fades), scroll so that item sits below the top fade. A focused body
- *    whose caret resolves to no body item falls through to 3.
- *
- * 3. Task-aware default. Scroll so the first incomplete task sits
- *    SCROLL_CONTEXT_PX from the top, showing some completed context above it.
- *
- * All three share one effect: separate effects would need separate dependency
- * arrays, and the task-aware one would then re-fire and stomp a caret position
- * the caret-aware one does not re-assert. first_incomplete_seq is deliberately
- * NOT memoised: `seq` is reassigned whenever the note's own file is re-parsed or
- * re-merged, so a content-keyed cache resolves a stale seq to a different note in
- * the same card. It is a per-render derivation consumed by the same commit's DOM.
- *
- * Dependencies are all read-only; the hook never mutates props.
+ * One layout effect, in precedence order, resets to 0 when unclipped, frames a focused caret target
+ * outside the visible window, or falls back to the first incomplete task; sharing one effect keeps the
+ * task-aware branch from re-firing and stomping a caret position the caret-aware branch left alone.
+ * first_incomplete_seq is deliberately not memoised: seq is reassigned on every re-parse, so a
+ * content-keyed cache could resolve a stale seq to the wrong note in the same card.
  */
 export function useMarkdownNoteBodyScroll(args: UseMarkdownNoteBodyScrollArgs): MarkdownNoteBodyScrollState {
     const { body_ref, should_clip, focused, children_body, body_raw, caret_offset } = args;

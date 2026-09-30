@@ -6422,3 +6422,483 @@ Open Viewer on a folder with no stories shows bare columns and no explanation, a
 + [X] check the service worker registration error on Open Viewer
   + no trace of it in any VS Code log of the reporting session; one panel and one `webview.html` write per open, no dispose-and-recreate or reveal-while-hidden
   + it is the VS Code webview host's own race (microsoft/vscode#125993, open upstream): Developer: Reload Window clears it, and a recurrence clears with VS Code quit and `~/.config/Code/Service Worker` removed
+
+
+### Reuse project labels across merges (declined) [](?id=project-label-reuse)
+
+An idea kept for reference, not built. `buildProjectLabels` (originops.ts) takes 4.5% of self time in the folder-load-200 CPU profile, the largest product function left after the browser's own layout calls. `mergeAggregateRoot` calls it once per merge over the distinct project names (mergeAggregateRoot.ts:832), so a progressive folder load recomputes every label on every batch.
+
++ decision: declined by the operator, 2026-09-28
+  + potential gain is at most the measured 4.5% share, about 60ms of a 1.3s folder-load-200
+  + a cache has to be kept fresh, which adds complexity the gain does not justify at this stage
+  + worth revisiting only if a profile shows the label search growing, for example with many more projects on one board
++ measured: 4.5% self time, CDP profile of folder-load-200 on the production bundle, 2026-09-25
++ inferred, never confirmed: the cost is the pairwise divergence search across project names (quadratic in the project count), repeated per merge while the name set rarely changes
++ cache design as proposed
+  + holds: the `buildProjectLabels` result, a map of project name to its two-letter pill label, one entry per distinct project on the board
+  + key: the sorted set of distinct project names (including the workspace project list); labels depend only on that set, so a hit always equals a recompute
+  + lives on the folder view's FolderMergeCache as a single slot (latest key and map), so it never grows
+  + lifetime: recomputed when the project-name set changes, discarded when the folder view closes, in memory only and never persisted
++ work it would have taken: measure calls and time per call, add the keyed single-slot map, add a test that an unchanged name set reuses it, re-profile folder-load-200
+
+
+### Upgrade NPM packages for notethink (minor/patch + pnpm 12.8.1 + mermaid 12 + vsce 4 + lockfile refresh)
+
+A minor/patch wave across all four manifests plus two operator-approved toolchain/app majors, pnpm 12.3.4 -> 12.8.1, mermaid 11 -> 12 and `@vscode/vsce` 3 -> 4. `@types/vscode` moved to 1.138.0 with `engines.vscode` raised to match, per the standing rule. This wave ran on a tree already carrying another session's in-flight work (two stories at `doing`, several at `code-review`, ~130 changed/untracked files across all three client trees, playwright specs, `AGENTS.md`, `CODING_STANDARDS.md`, `todo.md`/`done.md`, and all three nested `package.json`/lockfiles); a protective copy of every manifest, lockfile, workspace file and the todo/done boards was taken first, and every edit below is additive on top of that session's uncommitted changes, none of which was touched or reverted.
+
++ ncu, root: mocha ^12.0.0 -> ^12.0.2 (patch); `@types/vscode` ^1.138.0, `@typescript-eslint/*` and `typescript-eslint` ^8.71.0, `eslint` 10.11.0, `webpack` ^5.111.1 (minor); `pnpm` 12.3.4 -> 12.8.1. `memfs` (^4.79.0, 4.80.0 withheld) and `sass` (^1.105.0, 1.105.1 withheld) both hit the 24h cooldown, measured directly against npm's publish timestamps
++ ncu, `client/extension`: `@babel/core`/`@babel/preset-env` ^8.0.6, `babel-jest`/`jest` ^30.5.2, `ts-jest` ^29.4.14 (patch); `pnpm` -> 12.8.1
++ ncu, `client/webview`: same babel/jest/ts-jest patch set, plus `@testing-library/dom` ^10.4.2, `web-vitals` ^6.2.2, `@types/node` ^26.6.3 (confirmed `latest` dist-tag is back on the 26.x line, resolving last wave's noted upstream artefact); `pnpm` -> 12.8.1
++ ncu, notethink-views: same babel/jest/ts-jest patch set, plus `mdast-util-to-markdown` ^2.1.3, `rollup` ^4.63.5; `pnpm` -> 12.8.1
++ every `package.json` diffed against its pre-wave copy: only the rows above moved in each file; the other session's edits (activationEvents, scripts, the removed `vscode-languageclient`, version 0.4.5, etc.) are untouched
++ `engines.vscode` raised `^1.137.0` -> `^1.138.0` in the root and `client/extension/package.json`, paired with the `@types/vscode` bump per the standing rule; 1.138.0 confirmed >24h old (published 2026-09-16)
+
+mermaid 12, taken via ncu in `client/webview` and notethink-views (^11.17.2 -> ^12.0.0), latest dist-tag, well clear of cooldown.
+
++ release-notes review: ELK replaces dagre as the default layout engine, `redux-color`/`neo` replace `default`/`classic` as the default theme/look, `defaultRenderer` config option removed in favour of top-level `layout`, ES2024 target (Node >=22.12, fine under our >=22.18.0 floor)
++ only real API consumer in the tree is `MermaidDiagram.tsx` (`mermaid.initialize` / `mermaid.render`); `chunkLoading.ts` and the other session's `mermaid-lazy-chunk.spec.ts` concern webpack's lazy-chunk mechanism, not mermaid's API, so neither needed a change
++ source change: `MermaidDiagram.tsx:22-30` pins `layout: 'dagre', theme: 'default', look: 'classic'` in the existing `mermaid.initialize` call, alongside the pre-existing `securityLevel: 'strict'`, so mermaid 12's new defaults do not silently change every rendered diagram's appearance; a deliberate compatibility choice, not a bug fix
++ verified: `MermaidDiagram.test.tsx`'s `objectContaining` assertion still passes with the new keys; the webpack build still splits mermaid into its own lazy chunk (`8882.js`, not `index.js`) after the bump, and the notethink-views rollup ESM output carries `12.0.0`
+
+`@vscode/vsce` 4, taken via ncu in the root (^3.9.2 -> ^4.0.0), latest dist-tag (4.0.1 is a prerelease, not `latest`).
+
++ changelog review (GitHub releases, v4.0.0): Node baseline raised to 22 (fine), glob replaced with tinyglobby and chalk with Node's own styling internally, OIDC trusted-publishing added; no CLI flag renames for `package`/`publish`, no `.vscodeignore` change, no `validateVSCodeTypesCompatibility` change found
++ grepped `package.json` scripts and `.github/workflows/*.yml`: `package:vsix` and `publish:marketplace` both already use `--no-dependencies`; `sh/git/merge-main.sh` greps the captured publish output for `already (exists|published)`, a plain-text match unaffected by vsce 4's styling change
++ verified by packaging for real: `vsce package --no-dependencies -o <scratch>/test.vsix` (mirroring the repo's own flags) ran `vscode:prepublish` automatically, packaged 109 files / 1.95 MB with no errors, and in particular raised no `@types/vscode greater than engines.vscode` error, confirming the paired raise landed correctly; test.vsix deleted after inspection
+
+Regeneration: all four lockfiles, under pnpm 12.8.1.
+
++ both lockfiles and the whole `node_modules` tree were deleted for all four roots before a single root install, whose postinstall cascaded the three nested installs (an initial attempt that deleted only the lockfiles no-op'd as "Already up to date" and was redone properly)
++ gated on the diff, lines added/removed: root 588/1575, extension 824/1145, webview 2079/605, notethink-views 1148/1177; each also diffs against its pre-wave scratch copy
++ no manifest range moved by the regeneration itself: package.json content unchanged by install, no auto-appended `pnpm` field, no `minimumReleaseAgeExclude` auto-append, all four `pnpm-workspace.yaml` untouched
++ `install --frozen-lockfile --ignore-scripts` passes on all four roots
++ transitive majors, each traced to its parent: `parse5` 7 -> 8 and a second `entities` copy at 8.1.0, both from `@vscode/vsce@4.0.0`'s own `parse5` dependency; `@azure/msal-node` 5 -> 6 from `@azure/identity` <- `@vscode/vsce@4.0.0`; `@mermaid-js/parser` 1 -> 2 from `mermaid@12.0.0`'s own dependency; `@types/node` 22 -> 26 and `undici-types` 6 -> 8, consistent with the direct minor bump, also reached transitively via `jest-worker` <- `webpack@5.111.1` in the root and extension; `is-path-inside` 3 -> 4 from `mocha@12.0.2`. No surprises
++ deprecation warnings (`glob@10.5.0`, `whatwg-encoding@3.1.1`, `stable@0.1.8`) are pre-existing, at the same versions as before this wave, unrelated to mermaid/vsce
+
++ verified
+  + lint: 0 errors, 0 warnings, all three tsc projects clean
+  + jest: 2747 green across 133 suites (647 extension, 186 webview, 1914 notethink-views); HEAD recorded 2547, and the difference matches the other session's in-flight test additions. No timing/contention failures on this run
+  + `build-and-rollup` clean under webpack 5.111.1 and rollup 4.63.5; the mermaid lazy chunk still splits from `index.js`
+  + not covered: a real CI run and `vsce publish` (never run; packaging only)
+
+Pins in effect after this wave (snapshot):
+- `engines.vscode` @^1.138.0 in the root and `client/extension` - a paired constraint, not a pin. By standing operator decision every wave takes the latest `@types/vscode` and raises this to match in the same change; never hold the types down and never ask
+- `typescript` @^6.0.3 in the root and notethink-views - structural - re-verified: `@typescript-eslint/parser@8.71.0` still peers `typescript >=4.8.4 <6.1.0`, and `ts-jest@29.4.14`, still its latest, peers `>=4.3 <7`, while TypeScript latest is 7.0.2. `--target minor` holds it without a reject entry. Clear-condition unchanged: both peer ranges admit 7.x
+- `@eslint/js` @10.0.1, `copy-webpack-plugin` @14.0.0, `@hello-pangea/dnd` @18.0.1 - pre-existing exact pins. Each still equals its `latest` tag, so none withholds anything. `vscode-languageclient` is no longer in the tree (removed by the other in-flight session), so it drops off this snapshot
+- `eslint` @10.11.0 exact - not a hold. notethink is the fleet's eslint canary by operator decision; it took 10.11.0 cleanly while every other project stays on its own pin
+- `allowBuilds: false` for `@parcel/watcher`, `@playwright/browser-chromium`, `@vscode/vsce-sign` and `keytar` in the root, and for `@parcel/watcher` and `unrs-resolver` in each nested root - structural, unchanged, honoured by pnpm 12.8.1. `@playwright/browser-chromium` must stay false permanently
+- `memfs` @4.79.0 and `sass` @1.105.0 - not pins, cooldown ceilings. `memfs` 4.80.0 and `sass` 1.105.1 were withheld by `--cooldown 24h`, each published under 13h before this run's ncu, and both clear by themselves next wave
+- `pnpm` @12.8.1 exact (all four `packageManager` fields) - not a pin, the current cooldown-cleared version. 12.8.2 was withheld, published under 8h before this run
+
+Unpinned this wave: last wave's `@types/node` @22.20.2 transitive artefact cleared as predicted - the `latest` dist-tag is now on the 26.x line, and the direct `client/webview` dependency plus the transitive resolutions in root/extension/notethink-views all landed on 26.6.3/26.x. `typescript` remains held (clear-condition unmet). No structural pin's clear-condition cleared otherwise, and two majors were taken deliberately (mermaid 12, `@vscode/vsce` 4) rather than unpinned from a prior hold.
+
++ [X] run npm-check-updates across all four manifests
++ [X] revisit prior pins (try to unpin transient holds recorded in the last done.md story)
++ [X] pnpm install
++ [X] take approved majors: mermaid 12, @vscode/vsce 4
++ [X] regenerate all four lockfiles and verify no manifest range moved
++ [X] verify lint passes
++ [X] verify jest tests pass
++ [X] verify build-and-rollup succeeds and mermaid lazy chunk still splits from index.js
++ playwright, run centrally after the wave: 221 of 221, including both `mermaid-lazy-chunk.spec.ts` cases, which render a real diagram on mermaid 12 with the pinned dagre layout and classic look
+
+
+### Make NoteThink findable on the Marketplace [](?id=marketplace-findability)
+
+The listing a VS Code user finds has no screenshots, a single non-search keyword and a setup-first README, and editors built on Open VSX cannot find it at all.
+
++ background, measured 2026-09-29 (WebFetch of the Marketplace listing and GitHub, `curl` of the Open VSX API)
+  + 5 installs, 0 reviews, version 0.4.4; categories `Visualization`, `Other`; `keywords: ["multi-root ready"]` (`package.json:30-32`)
+  + the README leads with clone, install and F5 debugging, and carries no screenshot or GIF
+  + Open VSX returns "Extension not found: NoteThink.notethink"
+  + the GitHub repo has no topics
++ [X] rewrite the README's opening as a landing page: the promise, a GIF of Kanban from a todo.md, then install
+  + `README.md:1-48`; GIF is 3 real captures of a live checkbox toggle + column move on `media/screenshots/kanban-demo.gif`, not a mockup
++ [X] capture real screenshots of Document, Kanban, Line and Agent Activity views
+  + Document, Kanban, Line done: `media/screenshots/document-view.png`, `kanban-view.png`, `line-view.png` - real desktop VS Code (1.139.0) captures via X11 `import`, notethink.notethink-0.4.4 from the Marketplace, isolated `--user-data-dir`/`--extensions-dir` so the operator's real profile was never touched
+  + Agent Activity captured once for real 2026-09-29 (the production parser run on a live Claude Code transcript, injected into the webview harness in folder mode) but withheld: the card showed the operator's home path, internal tooling and a large session cost, which a public listing must not carry; the Playwright harness has no extension host, so the disk-reading analyser cannot run there, and a publishable capture needs a real session on a neutral demo project
+  + Agent Activity first attempt: opened this real file (in current-file mode, this session's own live edits to it) in the same isolated desktop VS Code - no agent-card overlay rendered. Forcing folder mode (where the card programme is exercised) needs either a UI click (no xdotool/ydotool/xte available to this session to drive one) or adding `nt_integration_mode=folder` to this file's own H1, which is outside what board-discipline authorises me to change on a shared production story file. Genuinely blocked, not fabricated - flagged to the operator
+  + Agent Activity, final, 2026-09-30 (operator decision: capture from a real demo session): created `/tmp/notethink-demo/todo.md` (3 ordinary stories, notethink linetag format), ran a genuine headless session against it (`claude -p "mark 'Write the weekend meal plan' done, add 'Plan the herb garden layout'"`, model `claude-haiku-4-5-20251001`, `--permission-mode acceptEdits`), producing a real transcript at `~/.claude/projects/-tmp-notethink-demo/13b43f0e-3b0c-41ed-adef-84cc2af2d3d7.jsonl` (kept, per instruction, not deleted). Ran the unmodified production parser (`readClaudeCodeSession`, `priceCalls`, `capabilitiesForVendor`) on that transcript and injected the real result into the webview harness in folder mode via the real UI (`selectIntegrationMode`), same mechanism as the earlier attempt. Read the rendered card before saving: shows "claude-code in notethink-demo", state Ended, model `haiku-4-5-20251001`, 85.4k tokens ~$0.03, "Nothing uncommitted" - no username, no `/home`/`/mnt`/`/tmp/claude-31001` path, no `~/.claude` or oversee tooling. One thing WAS caught and fixed before saving: a full-page capture (for width parity with the other three) showed the breadcrumb `.../users/alex.stanhope/...` from the injected board's own doc path; relabelled that path to `.../users/demo/...` for the capture (the doc's real content is unchanged, only the display path used for this screenshot) and re-verified clean. Saved to `media/screenshots/agent-activity-view.png` (2175x639, same width as the other three). Every scratch script and the demo project deleted afterward; only the kept transcript remains outside the repo
++ [X] replace `keywords` with search terms people use (markdown, kanban, todo, notes, linetags, agents)
+  + `package.json:30-38`
++ [X] set GitHub repo topics
+  + `gh repo edit zoombuzz/notethink --add-topic ...`; verified via `gh repo view zoombuzz/notethink --json repositoryTopics` -> vscode-extension, markdown, kanban, pkm, visualization, notes
++ the Open VSX publish is [[open-vsx-publish]], split out by operator decision 2026-09-30
+
+
+### Send no telemetry from the extension [](?id=extension-telemetry)
+
+Nothing tells us whether the five installs ever opened a file in NoteThink, so deep use cannot be measured from the extension itself.
+
++ operator decision 2026-09-29, overriding this story as originally written (the manager wrote the telemetry approach below without the operator's sign-off): "I'm not onboard with spying on users using the notethink extension. I haven't signed off on that. Notethink should not send telemetry unless it's being used by a site (notegit.com or notethink.com)"
++ what this means: the extension itself sends nothing, ever - no usage counts, no App Insights, no reporter of any kind. The only place notethink usage is measured is where the operator explicitly authorised it: notegit.com and notethink.com, through dulcet's per-site, consent-gated GA4 (see [[ga4-notethink-com]] in the notegit repo) - a visit to those sites, not an action inside the VS Code extension
++ deep use (proposed 2026-09-29, now unmeasurable from the extension - left on record in case a future, explicitly-authorised approach revisits it): a non-Document view (Kanban or Line) used on a real file, on 3 or more distinct days
++ the four tasks below were genuinely completed as written, before the operator's decision landed - kept ticked as an honest record of what was built, not as a claim that any of it ships. Every one of them is superseded by the removal tasks that follow
++ [X] send `activated`, `view_opened`, `view_mode_changed`, `folder_mode_used`, `linetags_present` and a bucketed active-days count - **superseded, removed**
+  + was `client/extension/src/lib/telemetryops.ts`, wired in `extension.ts` (activate), `PanelSession.ts` (buildDocFromUriAndText, handleSetIntegration, handleUpdateSetting, handleRequestInitialState)
++ [X] document what is sent in the README, with how to turn it off - **superseded, replaced**
+  + was `README.md` > Telemetry; now a one-line "NoteThink sends no telemetry" statement, see the removal tasks below
++ [X] decide and record whether error reporting is switched on or removed
+  + kept, operator decision 2026-09-30: `NOTETHINK_CLIENT_ERROR_REPORTING` is set only by notegit's image build (`service.nextjs.dulcet.Dockerfile`), which POSTs errors to notegit's own receiver (`notegit/nodejs/dulcet/src/app/api/client-error/route.ts`); the Marketplace build leaves it unset, so the extension a user installs sends nothing
+  + a removal drafted on the other machine assumed no receiver existed and was not merged
++ [X] add Jest cases proving no path or content leaves the machine - **superseded, deleted along with the module they tested**
+  + was `client/extension/src/lib/telemetryops.test.ts`, 29 cases
++ [X] measure the production build and packaged .vsix size cost of the telemetry dependency - **superseded; re-measured after removal below instead**
+  + before removal: production `client/extension/dist/extension.js` 875 KiB minified; packaged `.vsix` 2.09 MB / 40 files (`client/extension/` 1.12 MB)
++ [X] remove `@vscode/extension-telemetry` and every call site
+  + `pnpm -C client/extension remove @vscode/extension-telemetry` (-11 packages, lockfile updated); deleted `client/extension/src/lib/telemetryops.ts` and `telemetryops.test.ts`; removed every call site and now-dead code in `extension.ts` (the `initTelemetry`/`recordActivated` calls and their import) and `PanelSession.ts` (`recordLinetagsPresent` in `buildDocFromUriAndText`, `recordViewOpened` in `handleRequestInitialState`, the `previous_view_type` snapshot and `recordViewModeChanged` in `handleUpdateSetting`, `recordFolderModeUsed` in `handleSetIntegration`, and the `telemetryops` import); verified with a repo-wide grep for `telemetryops|extension-telemetry|TelemetryReporter|record(Activated|ViewOpened|ViewModeChanged|FolderModeUsed|LinetagsPresent)|initTelemetry` - zero hits outside `node_modules`/lockfile/build output
++ [X] replace the README Telemetry section with a plain no-telemetry statement
+  + `README.md` > Telemetry: "NoteThink sends no telemetry. Nothing about how you use the extension leaves your machine."
++ [X] re-measure the production build and packaged .vsix size after removal
+  + production (`pnpm run package`): `client/extension/dist/extension.js` 717 KiB minified, down from 875 KiB (-158 KiB)
+  + packaged `.vsix` (`pnpm run package:vsix`): 2.03 MB total, 40 files (`client/extension/` 985.74 KB, down from 1.12 MB), same 40-file shape otherwise
++ [X] lint and full Jest green after removal
+  + `pnpm run lint`: clean (eslint + all three `tsc --noEmit` projects)
+  + `pnpm run test-jest`: 2542/2542 (extension suite shrank from 606 to 577 tests, exactly the 29 deleted telemetry tests; one perf-timing assertion in `convertMdastToNoteHierarchy.test.ts` failed once under parallel load, unrelated to this change - passed in isolation and passed again on a clean full re-run, so treated as flaky CPU-contention noise, not a regression, and not silently dismissed)
++ version stays 0.4.5 - no new bump for this removal, per instruction; the 0.4.4 -> 0.4.5 bump already covers this release
+
+
+### Agent activity shows newest first after a reload [](?id=agent-activity-newest-first)
+
+After a window reload the agent cards stay empty for about seven seconds while the analyser parses every transcript from the last 30 days, and nothing is posted until all of it is done. Publish the newest sessions first and parse on several cores, without storing any copy of session data.
+
++ background
+  + measured from the NoteThink log: a cold scan takes 6992-7584ms for 402-417 sessions (about 1.1GB), posted once at the end (`runScanOnce` / `postToAll`, AgentAnalyser.ts); a cached rescan seconds later takes 400-650ms
+  + measured in a harness with no git or story work: parsing Claude Code transcripts is most of the cost; 4 parse workers parse the 30-day window 3.1x faster than 1 (3.2s to about 1.0s); the newest day parses in about 0.1s on 4 workers
+  + the board already shows "Scanning agent activity" and never says "No agent activity in 30 days" while scanning (AgentActivityBanner.tsx), and session rows are keyed by session id, so a growing snapshot does not flicker
++ decisions (operator, 2026-09-28)
+  + no persisted cache of session data: it duplicates private transcript content and adds a file to keep fresh; revisit only if this story falls short
+  + token and cost totals show dimmed while a scan is in progress
+  + uncommitted-file bands stay hidden until the scan completes, because crediting a file needs every session's edits to that repo
+  + a pre-parse line filter was measured at about 1% faster and is not worth doing
++ acceptance criteria
+  + on a reload of this workspace, the newest sessions' cards appear well before the scan completes, where before this story nothing showed until the end; measured from the extension log
+  + the scan's live post is no slower per GB of transcripts than the single-pass scan before this story (about 6.4-6.9s per GB); line counts follow the live post
+  + a rescan that reads no transcripts is no slower than before this story (400-650ms), measured from the extension log
+    + operator decision 2026-09-30: these bars measure improvement over the pre-story baseline, not fixed limits that a growing corpus or a loaded machine would break
+  + harness figures are design evidence only, never acceptance evidence: the harness has no git API, story documents or real line diffs
+  + a completed scan reports the same sessions and totals as the single-pass scan
+  + no card shows "No agent activity in 30 days", undimmed totals or file bands before the scan completes
+  + once a scan has completed, a card never returns to the scanning state; later scans replace its data when they complete
++ [X] log each scan phase (discovery, reading, parsing, git and story binding, posting) in the scan's timing line
+  + `scanTimingLine` (AgentAnalyser.ts) adds discovery, reading, parsing, fold, posting and first-post times to the one `runScan` debug line; parallel vendor phases combine by their maximum
++ [X] sort discovered transcripts newest first by the modified time the scan already reads, parse them in batches, and post the board after each batch with the scan still in progress, marking it complete only after the last batch
+  + discovery is stat-only; each changed session becomes a candidate whose bytes are read just before its batch's worker round trip, so batch 1 reads only the newest few files (AgentAnalyser.ts `runScanOnce`, `DiscoveryCandidate`); first batch at most 8 sessions or 4MB, later ones 64 or 32MB; reused sessions ride the first post
+  + story documents and git trees are read once per scan; file attribution re-runs after each batch
+  + measured in a harness over the real transcripts (423 sessions, about 1.15GB, one thread): first post went from 1468-1780ms to 21-28ms; total about 4.5s unchanged, since only the timing of reads moved
++ [X] parse on a pool of up to 4 analyser workers, routing each session to the same worker on every scan so incremental tail parsing still works, with the kept-lines memory cap shared across the pool and a single-worker fallback
+  + AgentAnalyserWorkerPool.ts routes by a hash of the session id; each worker takes its share of the cap through `pool_size`; inline fallback when no worker spawns; a failed round trip resets the pool and retries the scan once, then fails, counted per scan attempt so a transcript that always crashes cannot loop (AgentAnalyser.ts `handleBatchFailure`)
++ [X] show token and cost totals dimmed while scanning, and hide uncommitted-file bands until the scan completes
+  + totals carry `data-scanning` and `aria-busy` while the analyser is scanning and dim to the card's existing 0.55 de-emphasis (AgentUsageSummary.tsx, AgentNote.module.scss); file bands render only once the state is `live` (AgentNote.tsx:122); no new user-visible string
+  + commit bands are not rendered on the card today; they share the cross-session attribution problem, so they must gate on `live` too if they are ever wired in
+  + tests: AgentNote.test.tsx "AgentNote while a scan is in progress", AgentUsageSummary.test.tsx, and a scanning-to-live transition in playwright/specs/agent-card.spec.ts
++ [X] cover newest-first batch order, sticky routing across scans, the worker fallback, the in-progress state until the last batch, and the dimmed and hidden states in tests
+  + AgentAnalyser.test.ts "AgentAnalyser newest-first batching" (batch order, scanning until the last batch, reused sessions in the first post, totals equal to a single pass) and the deterministic-failure test; AgentAnalyserWorkerPool.test.ts (routing across round trips, fallback, crash, timeout); AgentAnalyserWorker.test.ts (cap sharing); webview tests ticked above; extension jest 630 passed
++ [X] log fold's parts separately (story documents, git trees, per-batch fold, attribution, line diffs) and the batch count in the scan's timing line
+  + `scanTimingLine` (AgentAnalyser.ts) prints `across N batch(es)` and `fold Nms [story docs, git trees, binding, attribution, line diffs]`
++ [X] find and fix what makes fold cost about 3.5s on a rescan that reads nothing, and what serialises reading, parsing and fold, until the rescan and reload bars hold in the real host; if the batched design cannot beat single-pass, record the measured loss and stop, with no session cache
+  + fold on a nothing-read rescan measured 102-129ms (sixth reload), down from 3372-3594ms; discovery, story boards and git trees now run together; stat and read concurrency 64 and 16 (AgentAnalyser.ts); no session cache
+  + fixed after the fifth reload: first post 1096ms there was discovery, story boards and git trees run one after another; AgentAnalyser.test.ts "reads git trees while discovery is still statting sessions"; extension jest 662 passed
+  + fixed so far, unmeasured in the real host: line diffs recomputed only on the last batch rather than every batch (a cold scan re-ran their git IO per batch), and repositories attributed in parallel rather than one after another; jest 2715 passed
+  + fixed, unmeasured in the real host: fold re-bound every unchanged session to every story on every scan; an in-memory `session_fold_cache` (never written to disk) replays an unchanged session's story binding and per-repo calls while the story boards and repository roots are unchanged, and live state is still recomputed each scan; line diffs log as wall time across parallel repositories; jest 2718 passed, lint clean
+  + risk: discovery alone took 453-604ms on a nothing-read rescan, most of the 650ms bar; the next reload shows whether it still does
+  + measured on the unreloaded story build, 2026-09-29 15:58Z: an active 91MB transcript is re-read and re-transferred in full on every scan (the 128MB tail cache split four ways leaves each worker 32MB), and watcher-triggered scans run back to back every ~5.4s, keeping the host busy almost continuously
+  + fixed, unmeasured in the real host: a worker keeps its last cached session while it is within the whole 128MB cap (`enforceCacheByteCap`, AgentAnalyserWorker.ts); the gap before the next scan is at least the last scan's duration, 1s to 15s, on the watcher path too (`minScanDelayMs`); discovery lists and stats 16 at a time (`AGENT_DISCOVERY_STAT_CONCURRENCY`); jest 2738 passed, lint clean
+  + fixed after the third reload, unmeasured in the real host: line counts use prefix/suffix trimming and Myers' O((n+m)d) search, exact against the old DP (agentlinediffops.ts, 300-pair property test); 4,000 lines with 10 edits 150ms to 1ms
+  + fixed after the third reload, unmeasured: binding indexes each board once (headings, line starts; agentstorybindingops.ts), about 16x faster; each call binds once and usage splits in one forward pass (AgentAnalyser.ts `splitUsageByTurn`)
+  + fixed after the third reload, unmeasured: the fold cache keys on per-board versions, not board text plus repository roots, so git opening repositories after activation no longer re-binds every session; AgentAnalyser.test.ts "keeps a reused session's binding cached when a repository opens between scans"; extension jest 658 passed
++ [X] show the scanning state only until the first scan completes; a later scan leaves the card's data in place and updates it once, when it completes
+  + reported by the operator 2026-09-29: an agent card with data periodically switches to scanning and back to almost the same display
+  + cause: every scan posted an interim `scanning` snapshot per batch, rescans included
+  + the host latches `has_shown_live` once the first scan completes; after it, a scan posts once, as `live`, on its last batch, a restart reattaches with the last data, and a failed rescan keeps the last data and retries; the webview latches `has_completed_scan` (activityhooks.ts) so a stray `scanning` never dims totals, hides bands or shows the banner
+  + tests: AgentAnalyser.test.ts (a multi-batch rescan posts once, straight to live; a twice-failed rescan posts nothing), a webview live-then-scanning test, and live -> scanning -> live in agent-card.spec.ts; jest 2747 passed, agent-card playwright 22 passed
++ [X] measure the reload against the acceptance criteria from the extension log
+  + sixth reload, 2026-09-30 18:40Z, against the improvement bars: first cards 1181ms where the pre-story scan showed nothing for about 7s; live post 7903ms for 480 sessions and 1.32GB, about 6.0s per GB against 6.4-6.9; rescans reading nothing 247ms against 400-650; line counts followed on the next scan (1275ms)
+  + fifth reload, 2026-09-30 18:18Z: first post 1096ms, live post 7779ms for 478 sessions and 1.32GB, line diffs 1304ms off the critical path, rescans 251-558ms
+  + fixed after the second reload, unmeasured in the real host: the fold cache keys each session on only the boards its own write calls touch, so edits to other boards no longer re-bind every session, with cache hits and misses in the log line; line-diff jobs spread across every worker rather than all on the first; batches hold 32MB per worker; reads run one batch ahead of parsing; jest 2744 passed
+  + fourth reload, 2026-09-30 17:53Z, git reporting all 10 repositories at the cold scan: first post 912ms; cold total 28373ms, of which line diffs 21391ms (a git show per uncommitted file, about 300 files) and binding 676ms; about 7s without line diffs; rescans reading nothing 268ms
+  + fixed after the fourth reload, unmeasured: line counts follow the live post rather than holding it (`postFreshLineDiffs`), side reads run 8 at a time, and an oversized or binary working side never reads its HEAD side; the timing line reports `live post`; AgentAnalyser.test.ts "posts live before any HEAD side is read", agentgitops.test.ts; extension jest 661 passed
+  + third reload, 2026-09-30 17:15Z: cold 11135ms for 468 sessions and 1.31GB (reading 9330, parsing 4262, fold 4646 of which binding 3929), first post 874ms; git reported 2 of 10 repositories at the cold scan, so the next scan re-bound all 468 sessions and spent 21096ms on line diffs (25165ms total); rescans reading nothing 363-389ms, 4 of 4 under 650ms
+  + measured in @types/vscode: `workspace.fs.readFile` has no offset or length, so a rescan reads the whole active transcript to send its tail, as it did before this story; a range read would need a desktop-only path through Node's fs
+  + second reload, 2026-09-29 16:51Z, after the fold, tail-cache, scan-gap and discovery fixes: cold 14338ms across 42 batches (discovery 157, reading 5663, parsing 4617, fold 3793 of which binding 3612, first post 2162); the next scan spent 20906ms on line diffs; warm rescans 1502-1782ms (discovery about 150, reading about 430 for the whole 97MB active transcript, binding 840-1070), every 3.1-3.5s; all three bars still missed
+  + first real reload, 2026-09-29, all four analyser workers spawned: cold scan total 15878ms (discovery 1613, reading 4832, parsing 4245, fold 4837, posting 349, first post 3195); warm scans 3837-4210ms with fold 3372-3594ms and nothing read, against 400-650ms before this story; a regression, being diagnosed with sub-timings inside fold
+
+
+### Agent card IDs stop colliding [](?id=agent-card-unique-ids)
+
+Agent activity cards derive their IDs from how the session describes itself ("Claude Code in lightenna-iac", "grok in active_development"), so many cards share an ID and the collisions warning fires constantly.
+
++ goal
+  + every agent card gets an ID that is unique by construction, so agent cards never raise a collision warning
+  + a collision warning appears only when a story title produces an ID that is already used somewhere else in the workspace
++ [X] find where agent card IDs are derived and where collisions are detected and surfaced
+  + cause: agent stable_ids were already unique (`nt-virtual:agent:<root_path>/<session_id>`, virtualNoteStableId); `findStableIdCollisions` (noteops.ts) groups story-level headings by headline slug, and virtual agent notes are headings whose headline is the self-description
++ [X] give agent cards stable unique IDs (session identity, not the self-description)
+  + already true via unboundSessionKey in agentactivityops.ts; no change needed
++ [X] restrict collision warnings to IDs derived from story titles, and suppress them for synthetic cards
+  + `isStoryLevelNote` excludes `isVirtualNote` notes (noteops.ts:703); same-headline and shared explicit `id=` collisions between stories still warn
++ [X] add jest regressions: several sessions with the same self-description, and a real title collision that still warns
+  + noteops.test.ts "excludes agent virtual notes even when several sessions share one self-description"; "groups two notes with the same headline" covers the genuine collision
+
+
+### Hot-path survey for workers and WASM [](?id=hot-path-survey)
+
+The app feels sluggish in use. Find the code that runs often or long, on either thread, and say for each hot path whether it should move to a worker, become WASM, or simply do less work.
+
++ goal
+  + a ranked list of hot paths, each with measured or cited cost, how often it runs, and a recommendation (worker, WASM, algorithmic fix, leave alone)
++ scope
+  + extension host: parse, discovery, watcher handling, message serialisation
+  + webview: mdast to NoteProps conversion, grouping and sorting, markdown rendering, FLIP measurement, state persistence
+  + WASM candidates judged on call frequency, input size, and serialisation cost across the JS/WASM boundary
++ [X] survey the hot paths with the perf harness and CPU profiles; publish the ranked findings for review
+  + full suite on the production bundle: 12 scenarios, no breaches, baseline.json refreshed; HEAD rebuilt on the same machine for comparison: folder-load-200 11361ms to about 1300ms, folder-click-200 834ms to 38-48ms, single-file-edit-400k 75.7ms to 28-32ms
+  + CPU profiles of folder-load-200, single-file-edit-400k and folder-drawer-open-200; WASM verdict stays no-go
++ [X] fold each accepted recommendation into an existing story, or file a new one
+  + implemented in this run, or filed as [[wasm-parser-spike]]; caching project labels was declined by the operator for a gain of about 60ms, recorded as "Reuse project labels across merges (declined)" in done.md
++ [X] fix the single-file edit regression found by the perf suite: single-file-edit-100k measures 211-279ms against a 68ms budget and single-file-edit-400k 431-486ms against 161ms, both reproducing in isolation
+  + the last committed baseline (ef11de8) measured 26.2ms and 98.9ms; the regressed step is one board commit, no conversions, no worker parses, and a single synchronous long task, so one blocking re-render
+  + bisected against a HEAD build by adding this session's changes back group by group: every group stays within budget until the kanban windowing group (KanbanBoard, KanbanColumn, VirtualizedKanbanColumn, useCardHeightCache, useLaneListHeight, virtualCardSizingOps, renderKanbanCard, ViewRenderer.module.scss)
+  + CPU profile: most of the long task is in `useSyncedBodyClip.ts`'s layout effect (unchanged this session); forcing every lane onto the plain path does not remove the regression, so the cause is outside the virtual branch
+  + measured per keystroke on single-file-edit-100k: HEAD runs that effect 4 times in 32ms, the current tree 1434 times in 257ms, so the regression is more runs, not costlier ones; the fix should bring the run count back near 4
+  + cause: a harness fault, not a product regression; the single-file settle path accepted commit quiescence after the "Loading..." shell's one commit, so the load step settled with 0 cards and the edit step absorbed the board's first mount
+  + fixed in scripts/perf/page-agent.js `settle()`: quiescence counts only once cards have mounted; folder scenarios unchanged
+  + measured after the fix, production bundle: single-file-load-100k 575.8ms (55 cards), single-file-edit-100k 23.7ms, single-file-load-400k 693.4ms (55 cards), single-file-edit-400k 30.5ms, all within budget
+  + the recorded baseline (scripts/perf/baseline.json, 2026-09-25) has single-file-edit-100k at 45.8ms and -400k at 29.9ms; the 100k edit varies between runs for an unestablished reason and stays inside its 68ms budget
+  + HEAD on the same harness: loads settle with every card mounted (120 and 479) in 593.4ms and 900.4ms, edits 31.7ms and 78.4ms; windowing mounts 55 cards, so loads and edits now match or beat HEAD
++ [X] move the agent line diff (`countLineDiff` / `lcsLength`, O(a x b) over up to 256KB per side) off the extension host thread into `AgentAnalyserWorker.ts`
+  + measured about 720ms per worst-case file on the host thread; now one batched `line_diff_jobs` request per repo per scan (AgentAnalyser.ts `computeLineDiffs`), host fallback via `lineDiffFromBytes` if the round trip fails; AgentAnalyser.test.ts and AgentAnalyserWorker.test.ts cover both paths
+
+
+### Virtualized kanban columns [](?id=kanban-virtualized-columns)
+
+Every card mounts into the DOM: 200 files x 10 stories = 2000 `Draggable` cards (`KanbanBoard.tsx:96-127`), each rendering markdown, and the FLIP layer measures every `[data-flip-id]` node with getBoundingClientRect on each membership change (`useFlipTransition.ts:292`, fired per merge via the `signature` memo). CPU profiles show querySelectorAll + getAnimations at ~9-12% of load. @hello-pangea/dnd officially supports virtual lists (react-window pattern, overscan required). The factor-out this story asked to coordinate with is now [[line-view]], and the ordering is resolved: it lands FIRST, so windowing is implemented once in `LineView` and every grouped view inherits it. This is the only story in the perf cycle that the view programme blocks.
+
++ goal
+  + DOM card count is bounded by viewport + overscan regardless of corpus size; scrolling a column streams cards in (the infinite-scroll feel)
+  + FLIP measurement cost scales with visible cards, not total cards
++ scope
+  + adopt react-window (or equivalent fixed/variable-size list) per kanban column following the dnd virtual-lists pattern, with overscanning and drag-clone rendering per their docs
+  + variable card heights: measure-and-cache strategy (cards clip to a max height already via useMarkdownNoteOverflow)
+  + scroll-to-focused-card (`useScrollToCaret`, viewhooks.ts) must ask the virtualizer to scroll before framing; keyboard navigation and the focus ring rules (CODING_STANDARDS Focused-note scroll framing) still hold
+  + FLIP: restrict measure/animate to mounted (visible) cards; skip animation entirely when a membership change exceeds a threshold (bulk load)
+  + land inside `LineView` so grouped views inherit it - [[line-view]] is a hard prerequisite, not a coordination question
+  + columns orientation: every lane always mounts, so the full breadth of the board is present and horizontal scrolling never waits; only the length of each lane is windowed (operator scrolls sideways often, vertically rarely)
+  + drawer expansion stays responsive, since a bounded board keeps the layout below the drawer small
++ out of scope
+  + virtualizing document view (different scroll model; follow-up once LineView ships)
++ acceptance criteria
+  + 200-file board: mounted cards <= visible + overscan (assert via DOM count in the harness); folder-200 settled load <= 8s prod with prior stories landed
+  + card click and selectionChanged on the 200-file board <= 200ms with no long task > 100ms
+  + all kanban drag playwright specs green, including cross-column drags of cards that start off-screen (add spec)
+  + keyboard navigation + focused-card scroll framing specs green (focus ring fully visible per CODING_STANDARDS)
+  + kanban-animation specs green with FLIP scoped to visible cards; bulk-load renders skip animation (assert via animation probe events)
+  + columns orientation: every lane is in the DOM on the 200-file board and a horizontal scroll mounts no new lanes (playwright assertion)
+  + opening a drawer over the 200-file board has no long task > 100ms (harness probe)
++ [X] implement windowed lanes inside `LineView` per the dnd virtual pattern (after [[line-view]])
+  + `VirtualizedKanbanColumn.tsx`: react-window `VariableSizeList` with dnd `mode="virtual"` and `renderClone`, from KanbanBoard.tsx; VirtualizedKanbanColumn.test.tsx asserts a 200-card lane mounts under 40 cards
+  + rows orientation stays unwindowed: it scrolls along the board's own horizontal scroller (decision in KanbanBoard.tsx header)
++ [X] wire scroll-to-focus + keyboard nav through the virtualizer
+  + `virtualScrollRegistry.ts` lets `useScrollToCaret` (viewhooks.ts) scroll a virtual lane before framing; kanban-virtualized-columns.spec.ts covers keyboard drag out of and into a virtual lane, pointer drag into one, and keyboard focus on a card outside the lane's window with its ring fully visible
+  + a lane virtualizes only when its content exceeds the board's height (`laneNeedsVirtualization`, virtualCardSizingOps.ts), deciding from a flat card estimate once the board has been measured
++ [X] scope FLIP to mounted cards + bulk-change skip; keep animation probe coverage
+  + measurement only sees mounted cards; `isBulkTransition` with `KANBAN_ANIMATION_BULK_THRESHOLD` 20 (flipMath.ts) skips animation on bulk changes and lane scrolls; useFlipTransition.test.tsx
++ [X] add off-screen drag + DOM-bound assertions to playwright; ratchet perf budgets
+  + kanban-virtualized-columns.spec.ts: 8 tests, including the off-screen pointer drag and the windowed-lane mount bound
+  + keyboard drag into a virtual lane needs the 2px right padding on `.virtualRow` (ViewRenderer.module.scss): dnd measures the lane's scrollport with integer clientWidth and cards with fractional getBoundingClientRect, so without it every card fails dnd's totally-visible check; measured 5/5 fail without, 5/5 pass with
+  + production bundle: folder-load-200's budget is 1940ms (was 13180ms), set from a six-run calibration series of 1338.9 to 1613.8ms recorded in budgets.mjs, with `mounted_cards` 55 of 2000 stories; folder-click-200 and folder-selection-200 have 200ms budgets with a 100ms long-task cap, folder-drawer-open-50 and -200 57ms and 50ms
+  + recorded baseline (scripts/perf/baseline.json, 2026-09-25): folder-load-200 1301.8ms, folder-click-200 37.7ms, folder-selection-200 48.3ms, folder-drawer-open-200 41.5ms, none with a long task over its cap
++ [X] render cards in a windowed lane with the same card surface as a non-windowed lane
+  + reported by the operator 2026-09-29 after reloading onto the page-scroll windowing: Untagged (403) and Done show their stories as one long unboxed list, while Doing and Code Review show proper cards
+  + cause: the lane's card-surface rule matched `.column > div > .note`, exactly two levels deep, and a windowed card sits deeper under its row wrappers; now `.column .note:not(.note .note)` in both theme blocks of ViewRenderer.module.scss
+  + kanban-virtualized-columns.spec.ts compares background, border, radius, shadow and padding between a windowed and a non-windowed card for every card type (card, sticky, agent); each fails against the old selector; playwright 220 passed, jest 2741 passed
++ [X] scroll a windowed lane with the page, never with a scrollbar of its own, and stop the lane clipping a focused card's ring
+  + reported by the operator 2026-09-29: the Untagged (400) and Doing (6) lanes each show their own vertical scrollbar; the page's scrollbar must be the only one, and the dashed ring around the focused "Build clients and teams" card is cut off at its sides
+  + cause: react-window's list scrolls its own outer element, so every windowed lane got a scrollport that drew a bar and clipped the ring
+  + windowing is now in-house: the lane renders at its full content height with cards absolutely positioned, and mounts the rows the page's viewport intersects plus overscan (`useLaneScrollOffset.ts`, `visibleRowRange` in virtualCardSizingOps.ts); row heights are looked up by stable id, so the reorder overlap cannot recur
+  + also fixed: `useLaneListHeight` flipped a lane in and out of windowing as the board scrolled past the viewport top, and page-root scroll events were never heard by `useScrollToCaret` (`scrollerViewportBounds`, viewhooks.ts)
+  + kanban-virtualized-columns.spec.ts asserts no lane has its own vertical scrollbar and a focused card's ring sits inside every clipping ancestor; jest 2741 passed, playwright 217 passed, folder-load-200 1322ms against its 1940ms budget
++ [X] stop cards in a windowed lane drawing over their neighbours
+  + reported by the operator 2026-09-28: in the Untagged lane (366 cards) "Measure notethink.com visits in GA4" and "Stop the write-pacing connect step timing out on prod" drew their titles over the previous card's agent-activity details, with oversized gaps elsewhere in the lane
+  + cause, measured: react-window caches row sizes by index and re-reads one only after `resetAfterIndex`; a card growing in place was already handled, but a reorder or insert (folder discovery adding files) moved a card onto an index sized for a different card, too short (overlap) or too tall (gap)
+  + fix: `firstReorderedIndex` (virtualCardSizingOps.ts) finds the first index where the card order or length changed, and VirtualizedKanbanColumn.tsx resets sizes from there on every order change; a length change counts so an append after a truncation cannot reuse a removed card's size
+  + playwright/specs/kanban-virtualized-agent-growth.spec.ts: a short and a tall card swap places (kanban-reorder-lane-v1.md / -v2.md) and the spec asserts no overlap and no stale gap; it failed with the reset removed (about 896px overlap) and passes with it; growth-in-place cases covered too; full suite 215 passed, jest 2694 passed
+
+
+### Webview state persistence diet [](?id=webview-state-persistence-diet)
+
+`useVscodeStatePersistence` calls `vscode.setState({docs, viewStates})` on every docs change (`usePersistedViewStates.ts:78-82`), serializing the full docs map - text plus mdast at 6.2x text size - once per incoming message. On a 200-file load that is ~200 serializations of a growing multi-MB object; profiles show setItem/setState at 2-3% even in the mock, and the real VS Code setState crosses an IPC boundary. It is also a memory-pressure contributor to the observed renderer crashes (docs map + persisted copy + NoteProps trees).
+
++ goal
+  + setState payloads become small and infrequent; reload still restores the board without a blank flash
++ background
+  + reload already re-requests state: the webview replays setIntegration + requestInitialState on mount (`useVscodeMessages.ts:330-368`), and the extension's discovery fast-path skips reloading unchanged files via mtime (`PanelSession.ts:839`)
++ scope
+  + persist viewStates always; persist doc METADATA only (id, path, relative_path, hash, mtime) instead of full text + mdast
+  + debounce persistence (e.g. 500ms trailing) and flush on visibilitychange/dispose
+  + reload path: render from re-requested extension state; verify the folder restore flow needs no persisted doc bodies (fast-path makes this cheap)
+  + migrate old persisted shapes via migrateSavedState (vscodeops.ts) so stale full-doc states load cleanly once then shrink
++ acceptance criteria
+  + setState payload per persist <= 100KB on the 200-file board (probe in harness mock)
+  + persist frequency during a 200-file load <= 5 calls (debounced), not ~200
+  + reload of a folder-mode board restores columns/cards without error and without a persisted-docs dependency (playwright reload spec)
+  + `pnpm run check` green
++ [X] slim the persisted shape to metadata + viewStates with migration
+  + `PersistedDocMeta` + `toPersistedDocs` (vscodeops.ts); `migrateSavedState` shrinks a legacy full-doc state on first read; vscodeops.test.ts covers both
+  + reload no longer seeds docs from persisted state (ExtensionReceiver.tsx `initial_docs: undefined`): a hash-matching placeholder would swallow the real re-send; the module-scope `saved_state` is released after mount
++ [X] debounce persist + flush on hide/dispose
+  + `PERSIST_DEBOUNCE_MS` 500ms trailing, flush on `visibilitychange` hidden and on unmount (usePersistedViewStates.ts); usePersistedViewStates.test.ts
++ [X] add payload-size + frequency probes and a folder reload spec
+  + `persistStateProbe.ts` emits bytes per persist; jest "a 200-file load in four bursts debounces to a handful of persist calls, each under the 100KB budget"; playwright/specs/folder-reload-persistence.spec.ts
+  + the 200-file figures (at most 5 saves, each under 100KB) come from that jest test of the load pattern; the perf harness does not read the persist probe, and the playwright reload spec checks the saved shape in the harness page
+
+
+### Folder wire-payload diet (no mdast over the wire) [](?id=folder-wire-payload-diet)
+
+Every Doc ships `text` plus the full mdast `content` (6.2x text) through postMessage (`PanelSession.ts:178,912`): a 200-file folder load transfers ~9.3MB, a single 400KB done.md re-send ~2.6MB, and serialization blocks both the extension host and the webview realms. The webview then derives its own NoteProps hierarchy anyway and caps each file at maxNotesPerFile=10 stories - most of the shipped tree is discarded. Design-first story: pick and prove one of the two payload shapes below, then implement.
+
++ goal
+  + folder-mode wire payload per file scales with what the board renders (capped stories), not file size; memory footprint stops duplicating full mdast per doc
+  + unlocks raising MAX_AGGREGATE_FILES (today 200, workspace has ~601 files) and file-level lazy loading
++ constraint from [[group-by-enumeration]] - whichever option wins
+  + group-by candidates are enumerated from `note.linetags`, so the wire shape MUST preserve every linetag on whatever it ships
+  + option A is the exposed one: a digest that drops or summarises linetags silently shrinks the group-by selector's options
+  + option B is safe by construction - the webview parses the text itself, so every linetag survives
++ option A is also where the retired RootNote idea (one combined wire structure instead of per-file docs) lives; `mergeAggregateRoot` already delivers its rendering goals
++ option A - ship digests
+  + extension converts to hierarchy + applies the per-file story cap host-side, ships only capped story subtrees (NoteProps + the text slices those stories cover, with source offsets preserved in origin.source_position)
+  + conversion code is pure TS in notethink-views; the extension bundle can import it (verify webpack config supports the cross-package import; the mirrored-constants exception in CODING_STANDARDS documents why modules are not currently shared - this import goes the allowed direction, webview package -> extension consumer)
+  + edits still route by source offsets, so buildKanbanDragEndPayload and editText flows are unchanged
++ option B - ship text only
+  + drop `content` from the wire Doc; the webview parses text in a Web Worker (workers in webviews load via blob: URI per the VS Code webview docs) and feeds the existing convertMdastToNoteHierarchy path
+  + keeps one parser location but moves parse cost into the webview; combine with [[kanban-incremental-merge]] caching so each file parses once per hash
++ scope
+  + spike both options against the perf harness long-files scenario (50 files with 10x400KB); pick by measured payload, settle time, and memory; record the decision in this story
+  + implement the winner behind the existing message validation; update playwright helpers (inject-docs/inject-multi-docs build wire docs) and fixtures accordingly
+  + document view (current_file mode) keeps full text + mdast for the active doc - only folder aggregation goes on the diet
++ acceptance criteria
+  + a folder update's wire payload scales with the file's text and never carries mdast: one 400KB file's update is at most about its text size (measure serialized message size in the harness); text diffs were considered and declined (operator decision)
+  + folder-50-with-long-files scenario: settled <= 6s prod (baseline 40s dev / to-be-measured prod); no renderer crash at 200 files under the harness memory probe
+  + drag write-back, click-to-editor reveal, and caret matching still work in folder mode (existing folder specs + drag roundtrip specs green)
+  + `pnpm run check` green
++ [X] spike option A vs B on the harness; record numbers + decision here
+  + decision: option B, text only over the wire, parsed in a webview Web Worker
+  + measured: option B cuts a long-files folder doc about 82% (404KB vs 2.3MB); option A came out 13x larger at the harness density and break-even (104%) at this repo's done.md density, because NoteProps re-embeds each note's mdast subtree and text at every level
+  + refinement: the worker returns mdast only; `convertMdastToNoteHierarchy` (about 11ms) stays on the main thread, since shipping NoteProps back costs 250-340ms of structured clone
++ [X] implement the chosen shape end-to-end (PanelSession, Messages types, useVscodeMessages, composers, playwright helpers)
+  + folder-mode docs skip the host parse and ship text only (`isFolderScoped` / `skip_parse`, PanelSession.ts); the webview parses them on its worker pool (useWorkerParsedDocs.ts, parseWorker.ts); inject helpers take `omit_content`; folder-wire-payload-diet.spec.ts covers render, reveal and drag write-back; the folder board renders with the worker in a real vscode-test-web host
++ [X] add payload-size + memory probes; ratchet budgets and raise-cap follow-up note
+  + raise-cap note: retained cost per file no longer grows with file size (a 400KB and a 734KB done.md, both capped to 10, measure within 2%), so memory scales with file count: about 6MB per dense file and 0.2-0.5MB per small file in the browser; 200 dense files would be about 1.2GB; before raising MAX_AGGREGATE_FILES, measure a 200-file board of real done.md-sized files end to end (folder-load-200 uses 8KB files and does not exercise this)
+  + payload probe landed: `folderDocPayloadCheck` in scenarios.mjs, budgets `content_leaked` 0 and `payload_to_text_ratio` 1.05; measured 1.0093
+  + heap probe landed (`readHeapUsedMb`, CDP JSHeapUsedSize after a forced GC and settle); measured 57MB at 200 x 8KB, 258MB at 10 x 400KB, 590MB at 50 x 400KB
+  + webview parse runs on a worker pool of clamp(cores/2, 1, 4) (useWorkerParsedDocs.ts); `fallback_parses` 0 is budgeted in every folder scenario
+  + verified in vscode-test-web folder mode by reading the probe in the webview frame: `worker_parses` 7, `fallback_parses` 0, parseWorker.js loaded, no CSP violations
+  + measured folder-load-50x400k on the worker path: 4.5-5.9s over 7 runs, budget 6000ms; settle waits for the full merged story count, not the DOM card count
++ [X] stop NoteProps trees holding redundant mdast copies: a dense 400KB file costs about 35-50x its text in the webview heap
+  + cause, measured by heap ablation: FolderMergeCache kept every doc's full uncapped NoteProps tree although the merge keeps 10 stories per file (91.5% unused for a 118-story done.md); the cache now keeps only the capped stamped result, keyed without needing a parse
+  + measured in Node with forced GC: 10 dense files through the merge pipeline retain 5.2MB in total, down from 9.6MB per file; `children` sharing asserted in convertMdastToNoteHierarchy.test.ts
+  + the worker's resolve cache also kept every folder doc's mdast; `releaseFolderDocContent` (useWorkerParsedDocs.ts) drops it once the merge has stamped the doc, and the stamp key no longer includes `file_slot`, so a sibling shift reseats in place instead of re-parsing
+  + guarded by `folder-dense-10x400k` (87 stories per 400KB file, this repo's done.md density): measured 60-61MB, about 6MB per file, budget 75MB; the old behaviour simulated at about 17MB per file
+
+
+### Extension parse offload and adaptive debounce [](?id=extension-parse-offload)
+
+mdast parse costs 0.6ms/KB on the extension host: each debounced keystroke on a 400KB done.md re-parses for 230ms (800KB: 509ms) on the same web worker that services every other extension request, and initial folder discovery parses up to 200 files inline (620ms for 200x8KB, several seconds with real done.md sizes). The web extension host supports spawning nested Web Workers (VS Code web-extensions guide), which is the safe first step; a WASM parser (markdown-rs, micromark's Rust sibling, via the @vscode/wasm toolchain) is the escalation if parse itself remains the bottleneck after offload.
+
++ goal
+  + typing in a large file never saturates the extension host; parse work happens off the host thread and only the final result crosses back
++ scope
+  + move parse() calls (buildDoc / buildDocFromUriAndText / loadFolderDoc paths in PanelSession) onto a worker pool (size ~cores/2, bounded queue); results post back as the existing Doc shape
+  + adaptive debounce: scale CHANGE_DEBOUNCE_MS (PanelSession.ts:13) with the last parse duration for that doc (floor 250ms, cap ~1s) so big files self-throttle
+  + drop stale parses: a newer edit for the same doc cancels the queued/in-flight older parse
+  + verify worker creation works in both desktop (webWorker extension host) and vscode-test-web; feature-detect and fall back inline if Worker is unavailable
++ out of scope
+  + WASM parser swap - leave a spike task with clear go/no-go criteria instead of committing to it
++ acceptance criteria
+  + extension jest: worker pool parses and returns identical mdast to inline parse for fixture corpus; stale-parse cancellation covered
+  + keystroke scenario: webview receives the re-send and the extension host stays responsive - measure by interleaving a settings round-trip during a 400KB keystroke storm in the harness (round-trip latency <= 100ms)
+  + folder discovery of the long-files scenario does not block watcher/selection handling (same interleaving probe)
+  + `pnpm run check` green including the extension Mocha suite
++ [X] implement the parse worker pool with fallback + stale cancellation
+  + `ParsePool.ts` / `ParseWorker.ts`: pool of clamp(cores/2, 1, 4), lazy spawn, permanent inline fallback if a spawn throws, `supersede(key)` cancels queued or in-flight stale parses; ParsePool.test.ts, ParseWorker.test.ts
+  + also hash-gates and visibility-gates the watcher paths, with one catch-up pass when a hidden panel becomes visible (notethinkEditor.test.ts)
+  + verified in vscode-test-web: the NoteThink output channel logs `ParsePool] spawned parse worker 1/4` and the board renders from the worker's parse, with no fallback line
+  + folder-mode docs skip the host parse entirely ([[folder-wire-payload-diet]]); the pool serves current-file mode
++ [X] make the change debounce adaptive to measured parse cost
+  + `debounceMsFor` in PanelSession.ts scales from the last measured parse duration, floor 250ms, cap 1000ms
++ [X] add the host-responsiveness interleaving probe to the perf harness
+  + `scripts/perf/host-responsiveness.mjs`; measured: 8 inline parses of a 389KB fixture block for 1699ms, a 2-worker pool keeps the worst interleaved ping at 11.8ms; exits non-zero over the 100ms budget
++ [X] write the markdown-rs/WASM spike task with go/no-go criteria (mdast position-compatibility, payload parity, measured speedup >= 3x) as a follow-up candidate for the user to green-light
+  + filed as [[wasm-parser-spike]]
+
+
+### Optimisation review 2026-07 for notethink [](?id=optimisation-review-2026-07)
+
+Systemic findings from a deep multi-agent optimisation review (scout + 5 dimension reviewers + synthesis + per-item adversarial verification against the code, 2026-07). The review independently converged on the existing kanban perf cycle and verified its premises at specific sites; the tasks below are the additional findings not already scoped there.
+
++ verified and already scoped in the perf cycle - no duplicate tasks here, evidence recorded for confidence
+  + per-doc conversion caching keyed on (id, hash): confirmed missing in folder mode (single-file NoteTreeComposer already memoises on hash; folder merge and useAutoIntegration both re-convert) - covered by [[kanban-incremental-merge]]
+  + folder-entry message storm: confirmed per-file posts then a whole-map aggregate re-post (double-ship), no batching on the host side - covered by [[kanban-folder-load-coalescing]]
+  + full-corpus setState per edit tick incl. mdast: confirmed synchronous, undebounced - covered by [[webview-state-persistence-diet]]; small delta: also release the module-scope saved_state pin (ExtensionReceiver.tsx:22) after first consumption to free the restored corpus
+
++ [X] Restore webview code splitting: drop LimitChunkCountPlugin and switch chunk loading to browser-style
+  + delivered: webview target 'web' without LimitChunkCountPlugin; `chunkLoading.ts` sets the public path and nonce from `window.__notethinkChunkConfig` (notethinkEditor.ts); measured prod entry 4.25MB to 0.84MB; playwright/specs/mermaid-lazy-chunk.spec.ts proves mermaid loads only when a diagram renders
+  + the single-bundle constraint applies to the extension host and the worker bundles only: they keep target 'webworker' and LimitChunkCountPlugin, while the webview config `clientWebviewConfig` is target 'web' (webpack.config.js:220) with no LimitChunkCountPlugin
+  + GenericView lazy-loads the views and GenericNote lazy-loads MermaidNote (mermaid's static import lives only inside that lazy subtree), so each becomes its own chunk; the dev entry was 11.9MB when this was one bundle
+  + `window.__notethinkChunkConfig` (notethinkEditor.ts) carries the asWebviewUri public path and the nonce so injected chunk script tags pass the CSP
+  + retainContextWhenHidden (notethinkEditor.ts:22) keeps a hidden tab resident, which now holds only the entry and the chunks that panel used
+  + refs: webpack.config.js:220, client/webview/src/chunkLoading.ts, client/webview/src/notethink-views/src/components/views/GenericView.tsx, client/webview/src/notethink-views/src/components/notes/GenericNote.tsx, client/extension/src/vscode/notethinkEditor.ts:22
+  + impact: multi-MB less JS fetched and parsed on every panel open; users who never render a diagram stop paying for mermaid entirely; effort: M
+
++ [X] Cut extension-host startup and vsix weight: trim activation events and replace winston with the native LogOutputChannel
+  + delivered: activation only on the custom editor and panel; errorops.ts logs straight to the LogOutputChannel; winston, logform, vscode-languageclient and five polyfills removed; `.vscodeignore` excludes client/extension/dist/test; measured prod extension.js 734KB to 232KB
+  + activationEvents include onStartupFinished and onLanguage:markdown, but activate() only registers the custom editor, a webview serializer and commands - onCustomEditor/onWebviewPanel suffice, so the 666KB bundle currently loads in every VS Code window for nothing
+  + winston wraps an output channel created with {log:true} that natively provides levels and timestamps (file logging is separately hand-rolled via workspace.fs); deleting winston removes 11 root polyfill deps and the webpack resolve.fallback list
+  + vscode-languageclient 9.0.1 is declared with zero usages (grep-verified); drop it
+  + .vscodeignore's 'dist/**/test/**' is anchored at the package root and does not match client/extension/dist/test/**, so a 361KB dead mocha bundle ships in every marketplace vsix - fix the glob
+  + refs: package.json:31, client/extension/src/lib/errorops.ts:94, webpack.config.js:46, .vscodeignore:7
+  + impact: zero startup cost until first NoteThink use and a 70-80% smaller extension bundle for every install; effort: M
+
++ [X] Hoist stable handler and display_options objects so GenericNote's React.memo stops whole-tree reconciles
+  + delivered: custom `areEqual` in genericNoteEquality.ts (unit-tested), `useStableSettings` in useViewContext.ts, handlers hoisted once per board in KanbanBoard.tsx; content-visibility stopgap superseded by windowed lanes
+  + GenericNote is React.memo with default shallow equality, but KanbanBoard passes fresh display_options and handlers object literals per Draggable render, and buildChildNoteDisplayOptions allocates a new object per call - the memo never passes
+  + DocumentView already hoists stable note_handlers via useMemo but still calls buildChildNoteDisplayOptions inline, so its props stay unstable too; useViewContext also rebuilds display_options and sorts in place per render
+  + add a custom areEqual on note identity plus focus/selection scalars; derive per-note flags at the view level; complements the stable_id/seq work in [[kanban-incremental-merge]]
+  + cheap follow-on: content-visibility:auto on cards to skip offscreen layout until [[kanban-virtualized-columns]] lands
+  + refs (client/webview/src/notethink-views/src/): components/notes/GenericNote.tsx:15, components/views/kanban/KanbanBoard.tsx:101, lib/noteui.ts:265, components/views/generic/useViewContext.ts:41
+  + impact: caret movement and typing become O(affected notes) instead of O(all notes), attacking the documented 50k-fibers-per-commit crash cliff; effort: M
+
++ [X] Hash-gate and visibility-gate PanelSession posts (small delta to [[kanban-folder-load-coalescing]])
+  + delivered with [[extension-parse-offload]]: the active-file watcher returns early when the panel is hidden or the text hash matches (PanelSession.ts:382, :388), and so does the folder watcher (:1157, :1162); a hidden panel catches up once on becoming visible
+  + watcher onDidCreate/onDidChange and sendDoc never compare hash or mtime before re-parsing and re-posting, so every save ships the doc twice
+  + no webviewPanel.visible check gates background work anywhere in PanelSession - hidden and duplicate panels run the full pipeline
+  + fold into the coalescing story when picked up, or land as a small standalone
+  + refs: client/extension/src/vscode/PanelSession.ts:964, client/extension/src/vscode/PanelSession.ts:166
+  + impact: eliminates redundant parse and post work on every save and for hidden panels; effort: S
+
+
+### Make the mocha web-extension suite runnable [](?id=mocha-web-suite-runnable)
+
+`client/extension/src/test/suite/` is a real suite that no script runs and that cannot currently produce a
+result. It is excluded from `jest.config.cjs`, so nothing in `pnpm run check` touches it, and the tests in
+it are edited by hand whenever a command is retired without anyone finding out whether they still pass.
+
++ background - measured 2026-09-07, driving it by hand
+  + the runner is a WEB extension suite: `require('mocha/mocha')` plus `require.context`, so it runs under `@vscode/test-web`, which is already a devDependency and already builds as a webpack entry to `client/extension/dist/test/suite/index.js`
+  + the invocation is `vscode-test-web --browserType=chromium --headless --port=<free> --extensionDevelopmentPath=. --extensionTestsPath=./client/extension/dist/test/suite/index.js ./docstech`
+  + it fails with `ReferenceError: document is not defined` inside `new HTML` before any test runs: `mocha.setup({ reporter: undefined })` leaves mocha's browser default, the HTML reporter, which builds a fragment through `document` - and an extension host is a worker
+  + naming a built-in reporter by string does not fix it, because the browser bundle resolves an unknown name through `require`, which webpack cannot serve inside the bundle it just built; a reporter FUNCTION does clear the crash
+  + the host drives `mocha.run` itself as soon as the mocha global exists, and does not wait for the exported `run()` - measured by placing a `throw` first inside `run()`, which never fired while the reporter's ReferenceError did
+  + so setting the reporter inside `run()` is too late; setting it at module scope clears the crash and the run then HANGS instead, because the tests are registered by an `importAll` that only `run()` reaches
+  + extension-host `console` output is not forwarded to the terminal, so a console-printing reporter reports nothing; the exit code is the only channel that currently carries a result
++ [X] settle who drives the run - register the tests at module scope, or stop the host driving mocha itself
+  + measured: the host calls the global `mocha.run()` and never the exported `run()`; `mocha.setup` and `require.context` registration moved to module scope (suite/index.ts)
++ [X] supply a worker-safe reporter function, since the HTML default cannot work in an extension host
+  + `reportToConsole(runner)` passed as a function (suite/index.ts)
++ [X] add a `test-mocha` script and put it in `pnpm run check`
+  + `scripts/test-mocha.sh` reads the reporter's `MOCHA_SUITE_RESULT failures=N` line for the exit code, because @vscode/test-web hangs after the run instead of exiting; 90s bound, kills its own process group
++ [X] confirm the suite actually passes, and fix whatever it finds - it has never been run, so it has never been green
+  + 35 passing; fixed six relative `untitled:` URIs; activation tests now assert the trimmed contract (a plain markdown file does not activate, `notethink.viewer` does); "Every contributed command is registered, and every registered command is contributed" fails when a command is retired (rehearsed, then reverted)
++ acceptance criteria
+  + `pnpm run test-mocha` exits non-zero on a deliberately broken assertion and zero otherwise
+  + a retired command breaks the suite rather than being quietly edited out of it

@@ -3,9 +3,8 @@ import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
 
 /**
- * one scheduled animation as the FLIP hook planned it (mirrors AnimationProbeEvent from
- * the production probe). the hook pushes every scheduled animation onto the global mirror
- * array when __NOTETHINK_ANIM_PROBE__ is set; we read it via page.evaluate.
+ * One scheduled animation as the FLIP hook planned it. The hook pushes every scheduled animation
+ * onto the global mirror array when __NOTETHINK_ANIM_PROBE__ is set, read via page.evaluate.
  */
 interface AnimationProbeEvent {
     kind: 'move' | 'enter' | 'exit' | 'column-enter' | 'column-exit' | 'cap' | 'skip';
@@ -43,9 +42,9 @@ test.describe('Kanban Passive Transition Animations', () => {
     });
 
     /**
-     * inject a kanban fixture and simulate a cursor inside the board heading so AutoView
-     * picks up nt_view=kanban and renders the board. The FIRST render is the FLIP baseline,
-     * so callers CLEAR the probe after this returns before triggering the passive update.
+     * Injects a kanban fixture and simulates a cursor inside the board heading so AutoView
+     * renders it. The first render is the FLIP baseline, so callers clear the probe after this
+     * returns before triggering the passive update.
      */
     async function setupKanbanView(page: Page, fixture = 'kanban.md'): Promise<{ id: string; path: string }> {
         const { id, path: doc_path } = await injectDocsFromFixture(page, fixture);
@@ -56,9 +55,8 @@ test.describe('Kanban Passive Transition Animations', () => {
     }
 
     /**
-     * keyboard-based drag with @hello-pangea/dnd (replicated from kanban-drag.spec.ts -
-     * the helper there is local, not exported). focus the draggable, Space to lift, arrows
-     * to move between droppables, Space to drop.
+     * Drags via @hello-pangea/dnd's keyboard interface: focus the draggable, Space to lift,
+     * arrow keys to move between droppables, Space to drop.
      */
     async function keyboardDrag(page: Page, draggable_locator: Locator, direction: 'right' | 'left', moves: number): Promise<void> {
         await draggable_locator.focus();
@@ -218,7 +216,7 @@ test.describe('Kanban Passive Transition Animations', () => {
 
         await clearAnimationEvents(page);
 
-        // fire ~5 passive updates in quick succession, alternating fixtures so Task A flips backlog<->doing; end on kanban-moved.md (Task A in doing)
+        // fires 5 passive updates in quick succession, alternating fixtures so Task A flips backlog<->doing
         const burst = ['kanban-moved.md', 'kanban.md', 'kanban-moved.md', 'kanban.md', 'kanban-moved.md'];
         for (const fixture of burst) {
             await injectDocsFromFixture(page, fixture, doc_path);
@@ -234,7 +232,7 @@ test.describe('Kanban Passive Transition Animations', () => {
         const task_a_in_backlog = await backlog_column.getByRole('heading', { name: 'Task A' }).count();
         expect(task_a_in_backlog).toBe(0);
 
-        // no stuck animations: every card cleared its inline transform and no WAAPI animation is still playing (a `finished` animation with fill:'both' legitimately lingers in getAnimations - that is the settled state, not a stuck one)
+        // a finished animation with fill:'both' legitimately lingers in getAnimations; only a still-playing one is stuck
         const clean = await page.evaluate(() => {
             const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-flip-id]'));
             return cards.every((el) => {
@@ -289,11 +287,7 @@ test.describe('Kanban Passive Transition Animations', () => {
         const backlog_column = page.locator('[role="region"][aria-label="backlog"]');
         await expect(backlog_column.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 3000 });
 
-        /*
-         * Turn the setting off through the harness store, so what it republishes is the whole cascade. A
-         * hand-built payload REPLACES the cascade rather than merging into it, silently dropping every
-         * key it forgets - which is how this spec was wiping kanbanCardRatio.
-         */
+        // goes through the harness store, not a hand-built payload, which would replace the cascade and drop other keys
         await page.evaluate(() => {
             const harness = window as unknown as { __nt_settings: { workspace: Record<string, unknown> }; __nt_publishSettings?: () => void };
             harness.__nt_settings.workspace.kanbanAnimateTransitions = false;

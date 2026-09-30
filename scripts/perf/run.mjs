@@ -1,105 +1,49 @@
 #!/usr/bin/env node
 /**
- * NoteThink performance harness: `pnpm run test-perf`.
+ * NoteThink performance harness: `pnpm run test-perf`. Drives the real webview bundle in a headless
+ * Chromium, posting the exact wire-format messages PanelSession.ts posts, and reports elapsed time
+ * and long-task cost per scenario as JSON at test-results/perf.json, checked against
+ * scripts/perf/budgets.mjs (a breach exits non-zero). It measures the built bundle and the real
+ * message shapes, not a model of either; CI is out of scope since it skips Playwright's browser
+ * download.
  *
- * Drives the real webview bundle in a headless Chromium against the repo's own Playwright harness
- * page, posting the exact wire-format messages client/extension/src/vscode/PanelSession.ts posts,
- * and reports per-scenario elapsed time and long-task cost as JSON at test-results/perf.json. Every
- * measurement is checked against scripts/perf/budgets.mjs; a breach exits non-zero.
+ * BUNDLE: never inferred from `pnpm run build`'s current output - built fresh into
+ * test-results/perf-bundles/<mode>/ so a run never overwrites the dev host's bundle. Default mode
+ * is the production/marketplace shape; `--dev-bundle` builds the unminified dev-workflow shape
+ * (reports breaches but does not gate on them, since it carries a fixed lazy-compilation cost the
+ * production budgets don't account for). A failed scenario still exits non-zero in either mode.
  *
- * This is the tool the performance cycle's optimisation stories prove themselves against, so it
- * measures the product rather than a model of it: the bundle is built, not stubbed, and the
- * messages are the extension's, not a simplification of them. CI integration is deliberately out of
- * scope, because CI skips Playwright's browser download (CODING_STANDARDS.md > Release & Publishing).
+ * MEASUREMENT: a scenario dispatches its messages, then waits for the board to settle (mounted card
+ * count reaches the expected total, or the commit probe goes quiet) plus two animation frames. Long
+ * tasks come from a buffered PerformanceObserver installed before the bundle evaluates.
  *
- * WHICH BUNDLE IS MEASURED. The runner never infers this from what `pnpm run build` happens to emit
- * today, because that has changed. It builds its own, into test-results/perf-bundles/<mode>/, so a
- * run never overwrites the bundle the VS Code dev host is serving:
+ * READING THE NUMBERS: `elapsed_ms` floors at ~50ms (three frames) from the settle definition, so a
+ * budget below ~60ms mostly measures the instrument - use `long_task_max_ms` instead.
+ * `long_task_max_ms` counts from the first dispatch, not first paint, so it includes the initial
+ * mount's own task; check its offset against `board_commit_offsets_ms` before treating a peak as a
+ * regression. `board_commits`/`conversions` don't vary with machine load, so trust the count over
+ * timing when they disagree.
  *
- * - default: NODE_ENV=production, SELFINSPECT_ENV cleared. webpack mode 'production' - minified,
- *   NOTETHINK_DEV false. The shape `pnpm run package` ships to the marketplace.
- * - `--dev-bundle`: SELFINSPECT_ENV=dev, NODE_ENV cleared. The shape `pnpm run build` and
- *   `pnpm run watch` produce for the dev host - webpack mode 'none', unminified, NOTETHINK_DEV
- *   true. Which React build it carries is webpack.config.js's business, not the runner's; the
- *   report states what it found in the bundle it measured. THIS MODE REPORTS BREACHES BUT DOES NOT
- *   GATE ON THEM: the budgets are production-bundle numbers, and the dev bundle carries a fixed
- *   lazy-compilation cost the production one does not (see gatesOnBreaches). A failed scenario
- *   still exits non-zero in either mode, because that is a broken run rather than a slow one.
+ * SCENARIOS: folder-progressive-N is a folder board filling via the batched discovery wire (200 is
+ * the extension's MAX_AGGREGATE_FILES cap); folder-progressive-50-unbatched is the pre-batching,
+ * one-message-per-file control; folder-interactions-N is a settled board taking a click, a caret
+ * move and an unbatched file change; single-file-100k/-400k is one kanban file opening then re-sent
+ * on a debounced edit; folder-long-files-10 is 10 files at the done.md scale, testing payload size
+ * under the batch cap.
  *
- * HOW A SCENARIO IS MEASURED. A scenario opens a fresh browser context with the view states it
- * needs pre-seeded into window.__vsCodeState, stages its messages into the page as one JSON string
- * (Playwright's structured argument walk hangs for minutes on a large mdast graph), and dispatches
- * them. A measurement runs from the first dispatch until the board settles: the `[data-flip-id]`
- * card count reaches the expected number, then two further animation frames. Long tasks come from a
- * buffered PerformanceObserver installed before the bundle evaluates, and each measurement counts
- * the ones that started inside its window. A progressive load yields a frame between messages,
- * because the extension posts one message per discovered file and the renderer paints between them.
+ * ADDING A SCENARIO (scripts/perf/scenarios.mjs): reuse an existing factory or return
+ * `{ id, label, metric_ids, async run(context) }`; give every measurement a unique metric id via
+ * measureStep; build a folder stream with discoveryMessages() rather than by hand, re-reading
+ * PanelSession's message grouping since it has changed before; budget it in budgets.mjs only once
+ * measured (a timing budget is the measurement plus 20%; a probe count is exact), with the baseline
+ * recorded via `--update-baseline`.
  *
- * READ THIS BEFORE WRITING A BUDGET OR AN ACCEPTANCE CRITERION AGAINST THESE NUMBERS.
+ * FLAGS (after the script name): `--dev-bundle`, `--no-build`, `--only <ids>`, `--list`,
+ * `--out <path>`, `--update-baseline`. A full run costs several minutes (the 200-file load
+ * dominates); use `--only`/`--no-build` while iterating, but run the whole set before trusting a
+ * result.
  *
- * - `elapsed_ms` carries a floor of roughly three animation frames, about 50ms, from the settle
- *   definition. A criterion below about 60ms elapsed is therefore mostly measuring the instrument,
- *   not the code. Write it against `long_task_max_ms`, which no frame boundary quantises and which
- *   is budgetable in its own right. This floor has already caused one acceptance criterion to be
- *   written against something this harness cannot resolve.
- * - `long_task_max_ms` counts from the FIRST DISPATCH, not from first paint. The task that produces
- *   the first paint is included, so this is STRICTER than a criterion phrased "no long task after
- *   the first paint": on a small folder the peak is the initial mount itself. That is deliberate,
- *   because the initial mount is real work a user waits through, but it means the two are not the
- *   same quantity. Check `long_task_max_offset_ms` against `board_commit_offsets_ms` before reading
- *   a peak as a breach - one sitting on the first commit is a first-paint cost.
- * - `board_commits` and `conversions` do not vary with machine load, so where a timing and a count
- *   disagree about whether something regressed, the count is the one to believe.
- *
- * THE SCENARIOS, and what each one stands for:
- *
- * - folder-progressive-20 / -50 / -100 / -200: a folder board filling from discovery, 8KB files of
- *   10 stories each, delivered the way the extension delivers them - a spinner-on, one merge update
- *   per flushed batch of up to DISCOVERY_BATCH_MAX_DOCS docs, the canonical aggregate replace, then
- *   spinner-off. 200 is the extension's own MAX_AGGREGATE_FILES cap. The series across file counts
- *   matters more than any single number, because it is what shows whether a load scales.
- * - folder-progressive-50-unbatched: the same 50 files delivered one message per file. That is the
- *   pre-batching wire, and still what a watcher-driven burst looks like, so it is the control the
- *   batched number is read against and the honest worst case for the renderer.
- * - folder-interactions-50 / -200: a settled board, then a card click, an editor caret move arriving
- *   as selectionChanged, and one file changing underneath as a single unbatched merge update (the
- *   watcher path does not batch). These are the costs a developer feels on every keystroke, and the
- *   200-file pair is where windowing will show up.
- * - single-file-100k / -400k: one file declaring `[](?nt_view=kanban)` opening, then the same file
- *   re-sent one keystroke later, which is what the extension does on every debounced edit.
- * - folder-long-files-10: 10 files of 400KB, the done.md scale, where payload size rather than file
- *   count is the cost. All ten sit under the batch cap, so batching is not expected to help here.
- *
- * ADDING A SCENARIO. In scripts/perf/scenarios.mjs:
- *   1. If an existing factory fits (folderProgressiveScenario, folderInteractionScenario,
- *      singleFileScenario), call it with new parameters and a new metric id. Otherwise write a
- *      factory returning `{ id, label, metric_ids, async run(context) }`, where `run` opens a page
- *      with openHarnessPage, measures through window.__perf, and returns `{ measurements, facts }`.
- *   2. Give every measurement a globally unique metric id, and record each one through measureStep
- *      so a failure is reported rather than losing the steps already taken.
- *   3. Add it to SCENARIOS in run order, cheapest first.
- *   4. Post the messages PanelSession posts, in the grouping it posts them. Build a folder stream
- *      with discoveryMessages() rather than by hand: it carries the spinner pair, the batch flushes
- *      and the aggregate. If the extension sends two messages for an event, send two; if it folds
- *      twenty docs into one, fold twenty. Re-read PanelSession when you touch this - the grouping
- *      has changed once already, and a stale model reports an optimisation as having done nothing.
- *   5. Give it a budget in budgets.mjs only once you have measured it, and record that baseline in
- *      baseline.json with `--update-baseline`. A timing budget is a measurement plus 20%, never a
- *      guess; a probe count is budgeted at what the code does, because it does not vary by machine.
- *   6. Mention it in THE SCENARIOS above, saying what it stands for rather than what it does.
- *
- * FLAGS, given straight after the script name (`pnpm run test-perf --dev-bundle`): `--dev-bundle`,
- * `--no-build` (reuse the bundle already built for that mode), `--only <ids>` (a comma-separated
- * list of scenario or metric ids), `--list`, `--out <path>`, `--update-baseline`.
- *
- * A whole run costs several minutes and the 200-file load is most of it, because measuring an
- * O(N^2) load means waiting for it. While iterating on one optimisation, name its scenarios with
- * `--only` and add `--no-build` once the bundle is current; run the whole set before believing a
- * result, since the series across file counts is what says whether a load got better or just
- * shifted.
- *
- * This file and its siblings print their report to stdout with console.log. That is the reporting
- * path of a CLI, and is confined to it: nothing under scripts/perf/ logs diagnostics that way.
+ * Reports print to stdout via console.log; nothing else under scripts/perf/ logs that way.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -121,7 +65,7 @@ const BASELINE_PATH = join(PERF_DIR, 'baseline.json');
  * discovery arrives one message per file or one per batch, so a ratchet that compares across two
  * values of this is comparing two different products. Change it whenever discoveryMessages changes.
  */
-const WIRE_MODEL = 'batched-discovery: spinner, one merge update per flushed batch, aggregate replace, spinner';
+const WIRE_MODEL = 'batched-discovery, text-only folder docs: spinner, one merge update per flushed batch (content omitted), aggregate replace, spinner';
 
 /*
  * What each measured field means, written into the report so the semantics travel with the numbers.
@@ -130,12 +74,17 @@ const WIRE_MODEL = 'batched-discovery: spinner, one merge update per flushed bat
  * opening at the first dispatch rather than at first paint - are invisible in a bare number.
  */
 const FIELD_NOTES = {
-    elapsed_ms: 'first dispatch until the board settles: card count reached, then two animation frames. Carries a floor of roughly three frames (~50ms), so a target below ~60ms is measuring the instrument. Use long_task_max_ms at that scale.',
+    elapsed_ms: 'first dispatch until the board settles, then two animation frames. For a single interaction that is DOM count reaching the target; for a progressive folder load it is story_count reaching the target AND commit quiescence; for a progressive single-file load (no merge probe) it is DOM count reaching the target OR commit quiescence. Carries a floor of roughly three frames (~50ms), so a target below ~60ms is measuring the instrument. Use long_task_max_ms at that scale.',
     long_task_max_ms: 'longest single long task in the window. Budgetable on its own, and unaffected by the settle floor.',
     long_task_max_offset_ms: 'when that task began, relative to the FIRST DISPATCH, not to first paint. The first-paint task is therefore counted, making this stricter than a criterion phrased "after the first paint". Read it against board_commit_offsets_ms: a peak sitting on the first commit is the initial mount.',
     board_commit_offsets_ms: 'when each board-level state commit landed, relative to the first dispatch. Correlate with long_task_max_offset_ms to attribute a long task to the commit that caused it.',
     board_commits: 'board-level state commits, from the webview probe. Does not vary with machine load; the webview folds messages landing in one frame, so a busy machine commits fewer, never more.',
     conversions: 'per-doc convertMdastToNoteHierarchy calls, from the merge probe. Does not vary with machine load. Where a timing and a count disagree about a regression, believe the count.',
+    cards: 'DOM nodes carrying [data-flip-id] at the end of the measured window. Once a lane is windowed this plateaus at roughly one screenful for any board wider than that; mounted_cards and story_count give the finer-grained reads on a virtualized board.',
+    mounted_cards: 'identical reading to cards, named for what it measures under virtualization: DOM nodes currently mounted, not the true story count. A virtualization budget asserts mounted_cards <= visible + overscan here.',
+    story_count: 'the merged tree\'s own top-level story count, from the merge probe - unaffected by virtualization, since it reads the data model rather than the DOM. null when the bundle carries no probe or it never ran (single-file mode). This, not cards/mounted_cards, is what a folder-mode settle() actually waits on.',
+    stalled: 'true when settle() gave up early because nothing progressed (no new commit, no growing story/card count) for STALL_MS, rather than running out the full settle_timeout_ms. A stalled result is worth investigating as a real regression; a non-stalled timeout just needs more budget or is a genuine slowdown.',
+    heap_used_mb: 'JS heap in use once the board settled, via a CDP Performance.getMetrics session (harness.mjs readHeapUsedMb), rounded to 0.1MB. null when the reading failed (a crashed or closed target). Varies enormously with file SHAPE, not just file count: a small number of large files can use far more heap than many small ones of the same total size, since mdast\'s own per-node representation dominates.',
 };
 
 function parseArgs(argv) {
@@ -191,7 +140,11 @@ function checkBudget(metric_id, measurement) {
         return { budget, breaches };
     }
     if (measurement.settled === false) {
-        breaches.push({ metric_id, field: 'settled', detail: `board reached ${measurement.cards} cards and stopped` });
+        // a stall (no progress before STALL_MS) is a more actionable finding than a timeout still progressing at the deadline
+        const detail = measurement.stalled
+            ? `stalled: no progress (commit/story-count) for several seconds - board reached ${measurement.cards} of ${measurement.story_count ?? '?'} cards/stories and stopped changing`
+            : `timed out still progressing: board reached ${measurement.cards} cards and ${measurement.story_count ?? '?'} stories at the settle_timeout_ms deadline`;
+        breaches.push({ metric_id, field: 'settled', detail });
     }
     if (!budget) { return { budget, breaches }; }
     for (const [field, limit] of Object.entries(budget)) {
@@ -333,6 +286,7 @@ async function writeBaseline(report) {
             board_commits: metric.board_commits,
             conversions: metric.conversions,
             merges: metric.merges,
+            story_count: metric.story_count,
         };
     }
     const { hostname: _hostname, ...environment } = report.environment;

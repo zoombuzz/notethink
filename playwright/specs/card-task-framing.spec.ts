@@ -77,7 +77,7 @@ test.describe('Clipped card frames the first incomplete task', () => {
         await setupFolderBoard(page, 'task-framing-other-grown.md');
         await expect(page.locator('[role="rowheader"]', { hasText: 'a note added while the other file sat untouched' })).toHaveCount(1);
 
-        // move the caret onto the story headline and off again: focus transitions re-run the framing, which is where a seq cached from before the renumber gets spent
+        // caret on then off the headline re-runs the framing, spending a seq cached before the renumber
         await simulateSelectionChanged(page, STORY_DOC, fixtureOffsetOf(STORY_FIXTURE, STORY_HEADLINE));
         await simulateSelectionCleared(page, STORY_DOC);
 

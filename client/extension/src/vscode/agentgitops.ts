@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { countLineDiff, looksBinary, type LineDiffCounts } from '../lib/agentlinediffops';
+import { AGENT_LINE_DIFF_MAX_BYTES, lineDiffFromBytes, looksBinary, type LineDiffCounts } from '../lib/agentlinediffops';
 import { parseGitReflog, type GitReflogCommit } from '../lib/agentgitreflogops';
 import { writeToLog } from '../lib/errorops';
 import type { ActivityChangedFile, ActivityChangeKind, ActivityTree } from '../types/AgentActivity';
@@ -168,13 +168,10 @@ async function readReflogText(root_uri: vscode.Uri): Promise<string | undefined>
         const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root_uri, '.git', 'logs', 'HEAD'));
         return new TextDecoder().decode(bytes);
     } catch {
-        // a repository with no reflog yet (a fresh clone with gc'd reflogs, or reflogs disabled) has no commits to list, which is a fact to report rather than a failure
+        // no reflog (a fresh gc'd clone, or reflogs disabled) means no commits, a fact to report rather than a failure
         return undefined;
     }
 }
-
-// either side of a diff larger than this is declined rather than decoded and diffed: the LCS-based counter (agentlinediffops.ts) is O(lines-in-one-side * lines-in-the-other), so an unbounded side could stall a scan the way an unbounded transcript read would
-const AGENT_LINE_DIFF_MAX_BYTES = 256 * 1024;
 
 /**
  * The committed side of an uncommitted file's diff, read live through the git extension's own `git:`
@@ -188,32 +185,48 @@ function gitHeadUri(root_uri: vscode.Uri, repo_relative_path: string): vscode.Ur
     return working_uri.with({ scheme: 'git', query: JSON.stringify({ path: working_uri.fsPath, ref: 'HEAD' }) });
 }
 
-// a side that does not exist (an added file's HEAD side, a deleted file's working-tree side) reads as undefined the same way a side that could not be read at all does; the two are told apart by the caller, which already knows which sides `change` promises exist
+// a nonexistent side and an unreadable side both read as undefined; the caller already knows which sides should exist
 async function readSideBytes(uri: vscode.Uri): Promise<Uint8Array | undefined> {
     try { return await vscode.workspace.fs.readFile(uri); }
     catch { return undefined; }
 }
 
+// undefined means that side never existed; 'declined' means a side `change` promises should exist could not be read
+export interface LineDiffSides {
+    head_bytes?: Uint8Array;
+    working_bytes?: Uint8Array;
+}
+
 /**
- * Line-level added/removed counts for one uncommitted file, HEAD vs the working tree: an added file
- * counts every line added, a deleted file every line removed. Declines (returns undefined) rather
- * than guessing whenever a side this file's own `change` promises should exist could not be read, is
- * over `AGENT_LINE_DIFF_MAX_BYTES`, or looks binary - the caller leaves `added`/`removed` off the file
- * rather than publish a partial or wrong count.
+ * Reads both sides of one uncommitted file's diff (HEAD vs working tree), with no compute of its
+ * own, so a host-only reader (`AgentAnalyser.ts`) can hand the bytes to a worker for `lineDiffFromBytes`.
+ * The working side is read first: one over `AGENT_LINE_DIFF_MAX_BYTES` or looking binary would be
+ * declined anyway, so its HEAD side, a `git show` per file, is never read.
+ */
+export async function readLineDiffSides(
+    root_uri: vscode.Uri,
+    file: Pick<ActivityChangedFile, 'path' | 'change' | 'previous_path'>,
+): Promise<LineDiffSides | 'declined'> {
+    const head_uri = file.change === 'added' ? undefined : gitHeadUri(root_uri, file.previous_path ?? file.path);
+    const working_uri = file.change === 'deleted' ? undefined : vscode.Uri.joinPath(root_uri, file.path);
+    const working_bytes = working_uri ? await readSideBytes(working_uri) : undefined;
+    if (working_uri && working_bytes === undefined) { return 'declined'; }
+    if (working_bytes && (working_bytes.byteLength > AGENT_LINE_DIFF_MAX_BYTES || looksBinary(working_bytes))) { return 'declined'; }
+    const head_bytes = head_uri ? await readSideBytes(head_uri) : undefined;
+    if (head_uri && head_bytes === undefined) { return 'declined'; }
+    return { head_bytes, working_bytes };
+}
+
+/**
+ * Line-level added/removed counts for one uncommitted file, HEAD vs the working tree. Declines
+ * (returns undefined) rather than guessing when a side can't be read, is too large, or looks binary.
+ * `AgentAnalyser.ts` uses this only as its fallback when the worker is unavailable.
  */
 export async function lineDiffForFile(
     root_uri: vscode.Uri,
     file: Pick<ActivityChangedFile, 'path' | 'change' | 'previous_path'>,
 ): Promise<LineDiffCounts | undefined> {
-    const head_uri = file.change === 'added' ? undefined : gitHeadUri(root_uri, file.previous_path ?? file.path);
-    const working_uri = file.change === 'deleted' ? undefined : vscode.Uri.joinPath(root_uri, file.path);
-    const head_bytes = head_uri ? await readSideBytes(head_uri) : undefined;
-    const working_bytes = working_uri ? await readSideBytes(working_uri) : undefined;
-    if (head_uri && head_bytes === undefined) { return undefined; }
-    if (working_uri && working_bytes === undefined) { return undefined; }
-    if ((head_bytes && head_bytes.byteLength > AGENT_LINE_DIFF_MAX_BYTES) || (working_bytes && working_bytes.byteLength > AGENT_LINE_DIFF_MAX_BYTES)) { return undefined; }
-    if ((head_bytes && looksBinary(head_bytes)) || (working_bytes && looksBinary(working_bytes))) { return undefined; }
-    const head_text = head_bytes ? new TextDecoder().decode(head_bytes) : undefined;
-    const working_text = working_bytes ? new TextDecoder().decode(working_bytes) : undefined;
-    return countLineDiff(head_text, working_text);
+    const sides = await readLineDiffSides(root_uri, file);
+    if (sides === 'declined') { return undefined; }
+    return lineDiffFromBytes(sides.head_bytes, sides.working_bytes);
 }

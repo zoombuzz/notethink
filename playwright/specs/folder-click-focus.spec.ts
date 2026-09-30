@@ -63,7 +63,7 @@ test.describe('Folder-mode click-focus and click-select (homogenisation)', () =>
         await setupFolderKanban(page);
         const card_b1 = page.locator('[role="row"][data-seq]:not([data-seq="0"])').filter({ hasText: 'Beta Task One' }).first();
         await expect(card_b1).toBeVisible({ timeout: 5000 });
-        // beta file: "# Todo\n\n### Beta Task One [](?status=backlog)\n+ [ ] queued\n…" - the H1 ends at offset 6, then a blank line ('\n\n' after the H1), so "### Beta Task One" starts at offset 8. Putting the caret at offset 15 lands inside the Beta Task One headline
+        // offset 15 lands inside the Beta Task One headline, past the H1 (ends at 6) and its blank line
         await simulateSelectionChanged(page, PATH_B, 15);
         await expect(card_b1).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
     });
@@ -84,7 +84,7 @@ test.describe('Current_file click-focus regression', () => {
         const card_a1 = page.locator('[role="row"][data-seq]:not([data-seq="0"])').filter({ hasText: 'Alpha Task One' }).first();
         const headline_a1 = card_a1.locator('[role="rowheader"]').first();
         await headline_a1.click({ force: true });
-        // either path lands focus: the per-view state we now write directly, OR the editor-driven path if a selectionChanged confirmation arrives
+        // either path lands focus: the per-view state written directly, or editor-driven once selectionChanged confirms
         await expect(card_a1).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
     });
 });

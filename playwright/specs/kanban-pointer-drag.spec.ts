@@ -63,10 +63,7 @@ test.describe('Kanban Pointer Drag and Drop', () => {
         // let any settle/projection-reconcile finish
         await page.waitForTimeout(700);
 
-        /*
-         * no card may be left with a residual inline transform (a FLIP invert that never cleared, or a
-         * dnd drop tween that got clobbered) - that is the visible "broken drag" symptom
-         */
+        // no card may keep a residual inline transform (an uncleared FLIP invert, or a clobbered dnd drop tween)
         const stuck = await page.evaluate(() => {
             const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-flip-id]'));
             return cards

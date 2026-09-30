@@ -2,13 +2,10 @@ import { test, expect } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 
-/*
- * regression guard: clicking a rendered task checkbox in the viewer must post an
- * editText that flips the source state char. This silently broke because (a) the
- * edit-computation regex only matched '-' bullets while these fixtures (and the repo
- * todo files) use '+' bullets, and (b) single-file mode posted an undefined docPath
- * the extension refuses. The list-bullets fixture is a flat file (no nested stories),
- * so the note carries no origin and the docPath must fall back to the view's own doc.
+/**
+ * Clicking a rendered task checkbox must post an editText that flips the source state char, for both
+ * '-' and '+' bullets. The list-bullets fixture is flat (no nested stories), so its note carries no
+ * origin and docPath must fall back to the view's own doc rather than posting undefined.
  */
 
 test.describe('Checkbox toggle', () => {

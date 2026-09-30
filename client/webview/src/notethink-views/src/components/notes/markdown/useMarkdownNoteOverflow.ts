@@ -49,7 +49,7 @@ export interface MarkdownNoteOverflowState {
 }
 
 /**
- * detects whether the body element has overflowed its width-bound height
+ * Detects whether the body element has overflowed its width-bound height
  * threshold and exposes the computed max_height to apply when clipping.
  *
  * Owns the overflow_state useState pair. Watches body_ref via ResizeObserver,

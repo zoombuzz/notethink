@@ -15,7 +15,7 @@ import view_specific_styles from "../ViewRenderer.module.scss";
 const debug = Debug("nodejs:notethink-views:useLineViewDrag");
 
 /*
- * stable reference for the FLIP hook's class_names option. The SCSS-module class strings are
+ * Stable reference for the FLIP hook's class_names option. The SCSS-module class strings are
  * import-constant, so hoisting this out of the render keeps the useFlipTransition effect's dep array
  * stable - without it a fresh object literal every render would re-fire the layout effect (and its
  * getBoundingClientRect reflow) on every LineView re-render, not only on real layout changes.
@@ -27,7 +27,7 @@ const FLIP_CLASS_NAMES = {
 };
 
 /**
- * inputs LineView threads into the drag lifecycle.
+ * Inputs LineView threads into the drag lifecycle.
  * - is_projecting: whether an optimistic post-drop projection is active (holds the FLIP gate open for it)
  * - columns / visible_columns: the full lane list (indexed by droppable id) and the populated subset the board renders (the FLIP registry)
  * - apply_optimistic_move: seeds the client-side projection so the dropped card does not snap back
@@ -48,7 +48,7 @@ export interface UseLineViewDragParams {
 }
 
 /**
- * the drag surface LineView renders against.
+ * The drag surface LineView renders against.
  * - content_ref: the lane content node useFlipTransition measures within (scope for the [data-flip-id] queries)
  * - drag_active: true from drag-start until just after drag-end; gates the container clear handler against the post-drop click
  * - handle_drag_start / handle_drag_end: the DragDropContext responders
@@ -61,43 +61,43 @@ export interface LineViewDragApi {
 }
 
 /**
- * the single-axis card-lane drag lifecycle: the FLIP gate + passive-transition layer, and the drag-start
+ * The single-axis card-lane drag lifecycle: the FLIP gate + passive-transition layer, and the drag-start
  * / drag-end responders that post the group-key rewrite through the inverse projection and seed the
  * optimistic hold. Extracted from LineView so the component body stays a short sequence of named steps.
+ * - flip_gate: marks a layout change as the user's own move (drag -> optimistic projection ->
+ *   authoritative echo) rather than a passive external edit, held open for the whole unbounded
+ *   round-trip so the dropped card is never re-animated on its own echo.
+ * - handle_drag_start: settles any in-flight FLIP move to its true box before the gate holds, so a
+ *   card grabbed mid-animation is at rest when dnd lifts it into its fixed drag clone, and holds the
+ *   gate for the drag's full duration (including the race before dnd's async drag-end fires).
+ * - handle_drag_end's post-drop click guard: the browser's post-mouseup `click` defeats dnd's own
+ *   click-suppression and would otherwise bubble to the container's clear handler and jump the caret
+ *   onto the next story's header; the guard only sets a flag and must never move the caret itself.
+ * - handle_drag_end: a thin React adapter around `buildKanbanDragEndPayload` that pulls the dragged
+ *   note and destination lane out of the drop result, applies the lock and no-destination guards,
+ *   then delegates payload assembly to the pure helper and posts whatever it returns. Reorders from
+ *   the authoritative notes rather than the projection, whose child_notes carry synthetic inherited
+ *   weights and a possibly-stale order that would diverge the written doc from what was projected.
+ * - the FLIP passive-transition layer animates the board on an external/AI edit; it is called
+ *   unconditionally to hold the rule of hooks, and the gate suppresses it on the post-drag
+ *   projection-commit render.
  */
 export function useLineViewDrag(params: UseLineViewDragParams): LineViewDragApi {
     const { is_projecting, columns, visible_columns, apply_optimistic_move, axis, group_field, drag_disabled, animate_enabled, view } = params;
     const drag_active = useRef(false);
     const content_ref = useRef<HTMLDivElement>(null);
-    /*
-     * the FLIP gate marks when a layout change is the user's own move (drag → optimistic projection →
-     * authoritative echo) rather than a passive external edit. useFlipGate holds it open for the whole
-     * projection lifetime - the round-trip is unbounded and outlasts any fixed timer - so the dropped
-     * card is never re-animated on its own echo. The handlers below drive the drag edges.
-     */
+    // marks a layout change as the user's own drag rather than a passive external edit
     const flip_gate = useFlipGate(is_projecting);
-    /**
-     * arm the post-drop click guard. The browser fires a `click` after the drop's mouseup; with the
-     * projection re-rendering the board, dnd's own click-suppression is defeated and that click bubbles
-     * to the container's clear handler, which reveals the focused note's end+1 (the next story's header)
-     * and jumps the editor caret onto it. The guarded container onClick swallows it. This handler must
-     * only set the flag - it must NOT move the caret (a drag-start reveal was the original jump bug).
-     */
+    // arms the post-drop click guard; must only set the flag, never move the caret itself
     const handle_drag_start = (_start: DragStart, _provided: ResponderProvided): void => {
         drag_active.current = true;
-        // snap any in-flight FLIP move to its true box BEFORE the gate holds, so a card grabbed mid-animation is at rest when dnd lifts it into a fixed drag clone (a leftover transform would jump the clone)
+        // settles any in-flight FLIP move to its true box first, so dnd's drag clone does not inherit a leftover transform
         if (content_ref.current) { settleFlipAnimations(content_ref.current); }
-        // hold the FLIP gate for the whole drag (any duration) so an update arriving mid-drag - or in the race before @hello-pangea/dnd's async drag-end fires - is never animated; drag-end releases it (projection hold then takes over)
         flip_gate.hold();
     };
-    /**
-     * thin React adapter around `buildKanbanDragEndPayload`: pulls the dragged note and
-     * destination lane out of the drop result, applies the lock + no-destination guards,
-     * then delegates payload assembly (group-field rewrite + ordering cascade + single-doc
-     * vs multi-doc routing) to the pure helper and posts whatever it returns.
-     */
+    // a thin React adapter around buildKanbanDragEndPayload's pure result, posted through postMessage
     const handle_drag_end = (result: DropResult, _provided: ResponderProvided): void => {
-        // release the drag-start hold and start the tail; if apply_optimistic_move fires below, the projection hold re-takes the gate, so the whole user-move lifecycle stays un-animated
+        // releases the drag-start hold; apply_optimistic_move below re-takes it via the projection hold if it fires
         flip_gate.release();
         // release the drag guard on the next macrotask, after the post-drop click has fired and been swallowed
         setTimeout(() => { drag_active.current = false; }, 0);
@@ -112,10 +112,7 @@ export function useLineViewDrag(params: UseLineViewDragParams): LineViewDragApi 
         if (!dragged_note) { return; }
         if (dragged_note.locked) { return; }
         if (!view.handlers?.postMessage) { return; }
-        /*
-         * compute the reorder from AUTHORITATIVE notes on the SAME basis the projection uses (notesInKanbanColumn over the real notes), keeping the edit and the projection in lockstep so projectionSatisfied reconciles
-         * the projected child_notes carry synthetic inherited weights (which defeat weight removal) and a possibly-stale order, so using them would diverge the written doc order from what was projected and leave the card stuck
-         */
+        // reorders from the authoritative notes, on the same basis the projection uses, so the two stay in lockstep
         const real_destination_children = notesInKanbanColumn(view.notes_within_parent_context || [], destination_column.value, axis);
         const payload = buildKanbanDragEndPayload({
             dragged_note,
@@ -135,12 +132,7 @@ export function useLineViewDrag(params: UseLineViewDragParams): LineViewDragApi 
             });
         }
     };
-    /*
-     * FLIP passive-transition layer: animate the board when an external/AI edit re-lays the cards.
-     * flip_ids is every card's stable_id (the data-flip-id registry key) in render order; column_ids
-     * is the visible lane values. The hook is called UNCONDITIONALLY so the rule-of-hooks holds; the
-     * gate suppresses animation on the post-drag projection-commit render.
-     */
+    // the FLIP passive-transition layer's inputs: flip_ids is the data-flip-id registry in render order
     const flip_ids = visible_columns.flatMap(c => (c.child_notes || []).map(n => kanbanDraggableId(n)));
     const column_ids = visible_columns.map(c => c.value);
     useFlipTransition({

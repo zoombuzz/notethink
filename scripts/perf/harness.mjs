@@ -58,7 +58,14 @@ async function rewriteHarnessPage(repo_root) {
     return html.replace(BUNDLED_SCRIPT_SRC, BUNDLE_ROUTE);
 }
 
-// serve the bundle route, the rewritten harness page, or any other repo file as-is
+/*
+ * Serves the bundle route, the rewritten harness page, a code-split chunk emitted beside the
+ * bundle, or any other repo file as-is.
+ *
+ * This harness never sets window.__notethinkChunkConfig, so chunk files load at a page-relative
+ * URL (chunkLoading.ts's __webpack_public_path__ defaults page-relative); without this fallback
+ * every chunk 404s, a ChunkLoadError indistinguishable from a real regression.
+ */
 async function serveRequest(request, response, repo_root, bundle_path, page_html) {
     const url_path = decodeURIComponent(request.url.split('?')[0]);
     if (url_path === BUNDLE_ROUTE) {
@@ -70,7 +77,21 @@ async function serveRequest(request, response, repo_root, bundle_path, page_html
         response.end(page_html);
         return;
     }
+    const chunk_path = join(dirname(bundle_path), url_path);
+    if (await sendFileIfExists(response, chunk_path, MIME[extname(url_path)] || 'application/octet-stream')) { return; }
     await sendFile(response, join(repo_root, url_path), MIME[extname(url_path)] || 'application/octet-stream');
+}
+
+// true (response sent) if file_path exists; false (untouched) so the caller falls through
+async function sendFileIfExists(response, file_path, content_type) {
+    try {
+        const data = await readFile(file_path);
+        response.writeHead(200, { 'Content-Type': content_type });
+        response.end(data);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 async function sendFile(response, file_path, content_type) {
@@ -108,10 +129,44 @@ export async function openHarnessPage(browser, page_url, view_states) {
     await page.addInitScript((seed) => { window.__vsCodeState = seed; }, { docs: {}, viewStates: view_states });
     // client/webview/src/lib/boardCommitProbe.ts is off unless this flag is set before the bundle evaluates, and names this harness as one of its readers
     await page.addInitScript(() => { globalThis.__NOTETHINK_COMMIT_PROBE__ = true; });
+    /*
+     * Mirrors notethinkEditor.ts's webview bootstrap, which chunkLoading.ts reads for the split
+     * chunks' base URL. Without this, __webpack_public_path__ stays unset and the parse worker is
+     * never even attempted, since useWorkerParsedDocs.ts's workerBundleUrl() reads the same global.
+     * `/` matches where serveRequest's chunk-file fallback already looks for an unrecognised request.
+     */
+    await page.addInitScript(() => { window.__notethinkChunkConfig = { publicPath: '/', nonce: 'perf-harness' }; });
     await page.addInitScript({ path: PAGE_AGENT_PATH });
     await page.goto(page_url);
     await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
     return { page, crash, close: () => closeQuietly(context) };
+}
+
+/**
+ * The page's JS heap in use, in MB, via CDP's `Performance.getMetrics` rather than
+ * `performance.memory` in-page, which can read back reduced precision or be absent depending on
+ * the Chromium build. Returns null on failure rather than throwing, since a memory reading is
+ * diagnostic and shouldn't mask the result it was describing.
+ *
+ * Forces a GC pass first: without it, the reading is whatever garbage V8 hasn't collected yet,
+ * which measured 64.5-139.5MB of noise across identical runs of the same scenario.
+ */
+export async function readHeapUsedMb(page) {
+    let client;
+    try {
+        client = await page.context().newCDPSession(page);
+        await client.send('HeapProfiler.enable');
+        await client.send('HeapProfiler.collectGarbage');
+        // getMetrics reports zeroed/empty Heap* entries until the Performance domain is enabled on this session
+        await client.send('Performance.enable');
+        const { metrics } = await client.send('Performance.getMetrics');
+        const entry = metrics.find((metric) => metric.name === 'JSHeapUsedSize');
+        return entry ? Math.round((entry.value / 1024 / 1024) * 10) / 10 : null;
+    } catch {
+        return null;
+    } finally {
+        if (client) { await client.detach().catch(() => {}); }
+    }
 }
 
 /*

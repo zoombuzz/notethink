@@ -13,21 +13,21 @@
  * renders the card, so every path it emits is already workspace-relative.
  */
 
-// state owns the card's colour; `unknown` is the honest value for a vendor that exposes no live status, and anything unrecognised coerces to it
+// state owns the card's colour; `unknown` fits a vendor with no live status, and unrecognised values coerce to it
 export const ACTIVITY_STATES = ['working', 'waiting', 'idle', 'ended', 'unknown'] as const;
 export type ActivityState = typeof ACTIVITY_STATES[number];
 export const ACTIVITY_STATE_UNKNOWN: ActivityState = 'unknown';
 
-// vendor is an open string so an unknown vendor draws a generic monogram rather than being dropped; these are the three this analyser reads
+// vendor is open so an unrecognised one draws a generic monogram instead of being dropped; these three are read today
 export const ACTIVITY_VENDOR_CLAUDE_CODE = 'claude-code';
 export const ACTIVITY_VENDOR_CODEX = 'codex';
 export const ACTIVITY_VENDOR_GROK = 'grok';
 export const ACTIVITY_KNOWN_VENDORS = [ACTIVITY_VENDOR_CLAUDE_CODE, ACTIVITY_VENDOR_CODEX, ACTIVITY_VENDOR_GROK] as const;
 
-// event kinds a reader renders; `kind` is an open string, so a kind outside this list is carried and ignored rather than rejected
+// event kinds a reader renders; `kind` is open, so an unlisted kind is carried and ignored rather than rejected
 export const ACTIVITY_EVENT_KINDS = ['tool_call', 'tool_result', 'message', 'question', 'answer', 'notice'] as const;
 
-// a session is bound to a story the moment one of its own write calls changes that story's section; `none` covers every session that has not, including one still running
+// a session binds to a story once its writes change that story's section; `none` covers one that has not
 export const ACTIVITY_STORY_BINDINGS = ['bound', 'none'] as const;
 export type ActivityStoryBinding = typeof ACTIVITY_STORY_BINDINGS[number];
 
@@ -46,10 +46,10 @@ export const ACTIVITY_CAPABILITY_UNSUPPORTED = 'unsupported';
 export type ActivityCapabilityState = typeof ACTIVITY_CAPABILITY_SUPPORTED | typeof ACTIVITY_CAPABILITY_UNSUPPORTED;
 export type ActivityCapabilities = Record<string, ActivityCapabilityState>;
 
-// capability names meaningful on a session; a reader ignores a name outside this list, so a later addition does not break an older build
+// capability names meaningful on a session; an unlisted name is ignored, so a later addition can't break an older build
 export const ACTIVITY_SESSION_CAPABILITIES = ['live_tool_call', 'question', 'file_attribution'] as const;
 
-// a producer obligation rather than a reader check: a reader truncates a long argument for display instead of dropping the session
+// a producer obligation, not a reader check: a reader truncates a long argument rather than dropping the session
 export const ACTIVITY_ARG_MAX_CHARS = 200;
 
 /**

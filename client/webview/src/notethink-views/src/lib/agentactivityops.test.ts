@@ -229,7 +229,7 @@ describe('joining a session to a card', () => {
     });
 
     it('joins a session bound by the extension host under a derived slug to the same card the webview key resolves to', () => {
-        // the extension host mirrors storyStableIdSlug byte-for-byte (agentstorybindingops.ts), so "### Ship the thing" derives 'ship-the-thing' on both sides
+        // the extension host mirrors storyStableIdSlug byte-for-byte, so both sides derive 'ship-the-thing' alike
         const snapshot = fixtureSnapshot({
             sessions: [{ root_path: ROOT_PATH, session: makeSession('claude-untagged', { story_binding: 'bound', stories: [{ doc_path: TODO_PATH, id: 'ship-the-thing' }] }) }],
         });

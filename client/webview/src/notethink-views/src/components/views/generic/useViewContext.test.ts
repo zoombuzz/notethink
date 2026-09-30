@@ -33,7 +33,7 @@ function makeViewProps(overrides: Partial<ViewProps> = {}): ViewProps {
 describe('useViewContext', () => {
 
     describe('per-doc + source_position matcher (folder mode editor → view direction)', () => {
-        // simulate a folder-mode merged tree: notes from two files, with origin.source_position carrying each note's source-file offsets (not the merged-tree offsets in `position`)
+        // folder-mode merged tree, two files: origin.source_position carries source-file offsets, not merged `position`
         const origin_a: NoteOrigin = { doc_id: 'a', doc_path: '/repo/a.md', source_position: { start: { offset: 10, line: 2 }, end: { offset: 30, line: 3 }, end_body: { offset: 50, line: 5 } } };
         const origin_b: NoteOrigin = { doc_id: 'b', doc_path: '/repo/b.md', source_position: { start: { offset: 100, line: 2 }, end: { offset: 130, line: 3 }, end_body: { offset: 200, line: 6 } } };
 
@@ -107,7 +107,7 @@ describe('useViewContext', () => {
     });
 
     describe('latest-click-wins with editor as tiebreaker (editor-derived wins; view-driven fills in when the editor has no opinion)', () => {
-        // root.position.end is the clamping ceiling for the in-tree caret match - set it past every child range so a caret beyond a child's end_body still resolves through the in-tree matcher
+        // root.position.end is the caret-match ceiling, set past every child's range so an out-of-range caret still resolves
         const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });
         const child = makeNote({ seq: 1, level: 1, stable_id: 'child', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
         const other = makeNote({ seq: 2, level: 1, stable_id: 'other', position: { start: { offset: 60, line: 3 }, end: { offset: 80, line: 4 }, end_body: { offset: 95, line: 5 } } });
@@ -125,7 +125,7 @@ describe('useViewContext', () => {
         it('editor-derived match overrides a stale view_focused_ids (latest click wins, editor priority)', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child, other],
-                // user clicked `child` in the view (view_focused_ids = [child]), then moved the editor caret into `other`'s range - editor wins
+                // user clicked `child` (view_focused_ids=[child]), then moved the editor caret into `other` - editor wins
                 selection: { main: { head: 70, anchor: 70 } },
                 active_editor_doc_path: '/repo/a.md',
                 display_options: { view_focused_ids: [child.stable_id!] },
@@ -168,7 +168,7 @@ describe('useViewContext', () => {
         it('editor range selection overrides a stale view_selected_ids', () => {
             const { result } = renderHook(() => useViewContext(makeViewProps({
                 notes: [root, child, other],
-                // user clicked `child` (view_selected_ids = [child]); then dragged a selection in the editor across `other`'s range - editor wins
+                // user clicked `child` (view_selected_ids=[child]); then dragged an editor selection across `other` - editor wins
                 selection: { main: { head: 60, anchor: 95 } },
                 active_editor_doc_path: '/repo/a.md',
                 display_options: { view_selected_ids: [child.stable_id!] },
@@ -273,7 +273,7 @@ describe('useViewContext', () => {
     });
 
     describe('editor-open vs editor-closed parity (single-caret ownership)', () => {
-        // one caret, two owners: with an identical view store, the resolved focus/selection must match whether the caret lives in a real editor (props.selection set) or is the board's virtual caret (props.selection undefined)
+        // one caret, two owners: with the same view store, focus/selection must match real vs virtual caret
         const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });
         const child = makeNote({ seq: 1, level: 1, stable_id: 'child', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
 
@@ -296,7 +296,7 @@ describe('useViewContext', () => {
         });
 
         it('parity holds off the virtual caret alone when the clicked note has no stable_id (findDeepestNote fallback)', () => {
-            // no view_focused_ids and a stable_id-less child: closed relies on the resolveFocusedNote caret fallback, open on the editor caret
+            // no view_focused_ids, stable_id-less child: closed uses the caret fallback, open uses the editor caret
             const no_id_child = makeNote({ seq: 1, level: 1, position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
             const view_store: NoteProps['display_options'] = { view_focused_ids: [], view_caret: 25 };
             const closed_render = renderHook(() => useViewContext(makeViewProps({
@@ -339,6 +339,31 @@ describe('useViewContext', () => {
                 selection: { main: { head: 10, anchor: 95 } },
             })));
             expect(result.current.display_options.selected_seqs).toEqual(expect.arrayContaining([note_a.seq, note_b.seq]));
+        });
+    });
+
+    describe('settings reference stability (useStableSettings)', () => {
+        /*
+         * display_options.settings is rebuilt from the cascade every render; a stable reference here
+         * keeps genericNoteEquality's reference compare from treating every render as a settings change.
+         */
+        it('keeps the same settings reference across a re-render carrying identical settings', () => {
+            const root = makeNote({ seq: 0, level: 0 });
+            const props = makeViewProps({ notes: [root], display_options: { settings: { showLineNumbers: true } } });
+            const { result, rerender } = renderHook((p: ViewProps) => useViewContext(p), { initialProps: props });
+            const first_settings = result.current.display_options.settings;
+            rerender(makeViewProps({ notes: [root], display_options: { settings: { showLineNumbers: true } } }));
+            expect(result.current.display_options.settings).toBe(first_settings);
+        });
+
+        it('publishes a new settings reference once a setting actually changes', () => {
+            const root = makeNote({ seq: 0, level: 0 });
+            const props = makeViewProps({ notes: [root], display_options: { settings: { showLineNumbers: true } } });
+            const { result, rerender } = renderHook((p: ViewProps) => useViewContext(p), { initialProps: props });
+            const first_settings = result.current.display_options.settings;
+            rerender(makeViewProps({ notes: [root], display_options: { settings: { showLineNumbers: false } } }));
+            expect(result.current.display_options.settings).not.toBe(first_settings);
+            expect(result.current.display_options.settings?.showLineNumbers).toBe(false);
         });
     });
 });

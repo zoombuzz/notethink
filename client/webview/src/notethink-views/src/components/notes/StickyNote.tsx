@@ -51,7 +51,7 @@ export default function StickyNote(props: NoteProps): ReactElement {
         ...note_props,
     };
     const sticky_hue = originHasProject(note.origin) ? hueForOrigin(note.origin) : STICKY_FALLBACK_HUE;
-    // the drag style, which may already carry the board's --nt-card-width, plus the paper's hue; React's style type names no custom properties, so it goes in untyped
+    // React's style type names no custom properties, so the hue and the drag style go in untyped
     const card_style: Record<string, unknown> = { ...(provided?.draggableProps?.style as Record<string, unknown> | undefined), '--nt-sticky-hue': sticky_hue };
     return (
         <div className={buildNoteStyles(note, [sticky_styles.stickyNote, ...(note.display_options?.additional_classes ?? [])]).join(' ')}

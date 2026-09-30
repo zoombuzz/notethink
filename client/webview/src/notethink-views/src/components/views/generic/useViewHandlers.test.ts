@@ -116,7 +116,7 @@ describe('useViewHandlers click dispatcher', () => {
                 postMessage: post_message,
             },
         });
-        // note.focused = true simulates the GenericNote enrichment from a prior focus; position.start.offset matches click_profile.from (click on the note's own headline) so the "second-click promotes" rule triggers via the view-state path
+        // focused simulates a prior enrichment; position.start.offset matches click_profile.from so second-click promotes
         const note = makeNote({ seq: 5, stable_id: 'n5', focused: true, position: { start: { offset: 10, line: 1 }, end: { offset: 20, line: 1 }, end_body: { offset: 50, line: 5 } } });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         result.current.handlers.click!(mockClickEvent(), note, click_profile);
@@ -201,7 +201,7 @@ describe('useViewHandlers click dispatcher', () => {
 
 describe('useViewHandlers virtual-caret parity (no editor)', () => {
 
-    // body click: caret offset (25) differs from the note headline start (0) so only the virtual caret, not the view-focused-headline path, can promote focus to select
+    // caret offset (25) differs from the headline start (0), so only the virtual caret can promote focus to select
     const body_click: ClickPositionInfo = { from: 25, to: 30, selection_from: 0, selection_to: 50, type: 'note_body' };
 
     it('a first click highlights the note and a second click at the same offset promotes to selected via the virtual caret', () => {
@@ -249,7 +249,7 @@ describe('useViewHandlers virtual-caret parity (no editor)', () => {
         const focused_note = makeNote({ seq: 5, stable_id: 'n5', focused: true, position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 }, end_body: { offset: 50, line: 5 } } });
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         result.current.handlers.click!(mockClickEvent(), focused_note, body_click);
-        // caret (25) != headline start (0) and no virtual caret -> isAlreadyFocusedClick false -> first-click branch keeps selection empty
+        // caret differs from headline start with no virtual caret, so the first-click branch keeps selection empty
         expect(set_view_managed_state).toHaveBeenLastCalledWith([{
             id: props.id,
             type: props.type,
@@ -327,7 +327,7 @@ describe('useViewHandlers setViewInteractionState', () => {
 describe('useViewHandlers setNoteExpanded', () => {
     it('appends to the ids already in view_expanded_ids and writes them to the canonical key', () => {
         const set_view_managed_state = jest.fn();
-        // folder mode routes the write to FOLDER_VIEW_STATE_ID rather than the view own id, the slot the focused/selected ids share
+        // folder mode routes the write to FOLDER_VIEW_STATE_ID, the slot the focused/selected ids also share
         const props = makeProps({
             display_options: { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: '/repo', view_expanded_ids: ['doc:a'] },
             handlers: {
@@ -486,7 +486,7 @@ describe('useViewHandlers revealNote', () => {
                 postMessage: post_message,
             },
         });
-        // the in-tree position is a synthetic merged offset (999); revealNote must use the pre-merge source_position offset (42) instead
+        // the in-tree position (999) is a synthetic merged offset; revealNote must use the pre-merge source_position (42)
         const note = makeNote({
             seq: 3,
             position: { start: { offset: 999, line: 1 }, end: { offset: 1000, line: 1 } },
@@ -531,7 +531,7 @@ describe('useViewHandlers.handle_apply_filters', () => {
         });
     }
 
-    // the include/exclude globs are config-tier cascade settings with a single source of truth (VS Code config, echoed back). Writing them to per-view state would let the drawer drift from the globs discovery actually used and would shadow the config the Reset buttons clear, so handle_apply_filters must NOT persist them to viewState
+    // the globs are config-tier settings; persisting them to per-view state would let the drawer drift from VS Code config
     it('does not write include/exclude globs to per-view state (only the webview-side maxNotesPerFile cap)', () => {
         const set_view_managed_state = jest.fn();
         const post_message = jest.fn();

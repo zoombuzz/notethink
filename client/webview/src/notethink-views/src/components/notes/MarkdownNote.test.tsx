@@ -89,12 +89,11 @@ function simulateOverflow(el: HTMLElement, scrollHeight: number, offsetWidth: nu
 }
 
 /*
- * stand-in for a real view: owns view_expanded_ids and supplies the setNoteExpanded handler that adds
- * and removes a stable_id, so the card's expansion is driven the way DocumentView and KanbanBoard drive
- * it rather than by component-instance state. The card is keyed by identity the way the views key it, and
- * the column wrapper is the kanban lane - changing it unmounts the card and remounts it in the new lane.
- * keyBySeq keys the card by seq rather than identity, so a renumber hands it a fresh instance and
- * only a view-owned expansion list can survive; without it the identity key hides that handover.
+ * Stand-in for a real view: owns view_expanded_ids and the setNoteExpanded handler, driving
+ * expansion the way DocumentView and KanbanBoard do rather than component-instance state. The
+ * column wrapper is the kanban lane, so changing it remounts the card in the new lane. keyBySeq
+ * switches the card to seq-keying, so a renumber gets a fresh instance and only the view-owned
+ * expansion list can survive the handover.
  */
 function ExpansionHost(props: { note: NoteProps; column?: string; keyBySeq?: boolean }): React.ReactElement {
     const [expanded_ids, setExpandedIds] = React.useState<string[]>([]);
@@ -121,10 +120,10 @@ function remeasuredBody(container: HTMLElement): HTMLElement {
     return body;
 }
 
-/*
- * render an overflowing top-level note inside the host and expand it via "Show more", returning the
- * handles a caller needs to drive the collapse rules: the body element (its inline maxHeight is the
- * clip), the container to re-query it from after a remount, the note, and rerender.
+/**
+ * Renders an overflowing top-level note inside the host and expands it via "Show more", returning
+ * the handles a caller needs to drive the collapse rules: the body element (its inline maxHeight is
+ * the clip), the container to re-query it after a remount, the note, and rerender.
  */
 function renderExpandedNote(key_by_seq = false): { body: HTMLElement; container: HTMLElement; rerender: (ui: React.ReactElement) => void; note: NoteProps } {
     const note = makeNote({
@@ -294,11 +293,7 @@ describe('MarkdownNote', () => {
     });
 
     it('collapses when the headline is edited', () => {
-        /*
-         * the implicit stable_id is the headline slug, so retitling mints an id nothing ever put in the
-         * list and the card falls back to clipped. Document view and kanban behave alike here; carrying
-         * an id across a rename is a re-parse concern, not this layer's.
-         */
+        // retitling mints a new implicit stable_id (the headline slug), so the card falls back to clipped
         const { container, rerender, note } = renderExpandedNote();
         rerender(<ExpansionHost note={{ ...note, headline_raw: '### Story title renamed', stable_id: 'story-title-renamed' }} />);
         const body = remeasuredBody(container);
@@ -325,11 +320,7 @@ describe('MarkdownNote', () => {
     });
 
     it('stays expanded when a story inserted above reassigns its seq', () => {
-        /*
-         * a global renumber moves every seq, and the card is deliberately keyed by seq here so the
-         * renumber costs it its instance. The expanded list holds stable_ids and lives in the view,
-         * so expansion survives the handover an identity key would have avoided in the first place.
-         */
+        // renumbering moves every seq; keying by seq here costs the card its instance despite stable_id tracking
         const { container, rerender, note } = renderExpandedNote(true);
         rerender(<ExpansionHost keyBySeq note={{
             ...note,

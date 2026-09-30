@@ -83,7 +83,7 @@ export const CARD_REGISTRY: CardRegistry = {
 };
 
 /*
- * component per concrete card id, keyed by the same ids the card registry declares. dynamic import() is
+ * Component per concrete card id, keyed by the same ids the card registry declares. Dynamic import() is
  * required by React.lazy for per-card code-splitting; static imports would pull every renderer into the
  * initial bundle. `auto` is not a registry node - it is the resolved meta-selection, so it never reaches
  * this map.
@@ -100,7 +100,7 @@ export function getCardNode(id: string, registry: CardRegistry = CARD_REGISTRY):
 }
 
 /**
- * the ancestor chain for a card node, deepest-first: the node itself, then its parent, up to the
+ * The ancestor chain for a card node, deepest-first: the node itself, then its parent, up to the
  * registry root. An unknown id yields an empty chain. Bounded by the node count so a malformed parent
  * cycle cannot loop.
  */
@@ -167,7 +167,7 @@ export function selectableCardIds(registry: CardRegistry = CARD_REGISTRY): strin
 }
 
 /**
- * the selectable card ids that can actually render, in tree order: every selectable registry card with a
+ * The selectable card ids that can actually render, in tree order: every selectable registry card with a
  * component wired in CARD_COMPONENTS. A registry card declared without a component is left out, so the
  * card tree can grow ahead of its renderers. These are the choices a view's default card type offers.
  */
@@ -215,7 +215,7 @@ export function cardRegistryWithViewSettings(settings: Partial<Record<SettingsCa
 }
 
 /**
- * the card type a view defaults to: the nearest declaration on the view's own ancestor chain in the VIEW
+ * The card type a view defaults to: the nearest declaration on the view's own ancestor chain in the VIEW
  * registry, so `kanban` answers for itself and every other view inherits the one declared at `root`. An
  * unknown or absent view type falls back to DEFAULT_CARD_TYPE.
  *
@@ -234,7 +234,7 @@ export function defaultCardTypeForView(view_type: string | undefined, user_types
 }
 
 /**
- * resolve a card-type selection to the concrete card that renders. A selectable id is taken as pinned; a
+ * Resolves a card-type selection to the concrete card that renders. A selectable id is taken as pinned; a
  * missing selection, `auto`, or an id with no renderer all fall through to the view's declared default.
  * The auto-resolution proper (the per-file nt_card majority vote) happens in AutoView and reaches this
  * function as an already-concrete selection.

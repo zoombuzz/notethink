@@ -694,7 +694,7 @@ describe('GenericView click state machine', () => {
         wrapper.appendChild(checkbox);
         wrapper.appendChild(text);
 
-        // calling the handler with the PARAGRAPH note (empty body_raw) should still work because createNoteClickHandler passes selectable_note (the heading) to the handler
+        // the PARAGRAPH note has empty body_raw, but createNoteClickHandler passes selectable_note (the heading) instead
         const click_profile: ClickPositionInfo = {
             from: 18, to: 30,
             selection_from: 18, selection_to: 30,
@@ -962,7 +962,7 @@ describe('GenericView navigation callback', () => {
         // 'docs' is an ancestor segment of the open file, so clicking it re-narrows the aggregation to that folder
         fireEvent.click(screen.getByText('docs'));
 
-        // dispatch must land on the canonical folder key so a later flip back to folder mode doesn't lose settings stored under a doc-path key
+        // dispatch lands on the canonical folder key, so a later flip back to folder mode keeps its settings
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: '__folder__',
             display_options: {
@@ -1228,11 +1228,7 @@ describe('GenericView navigation callback', () => {
                 },
             });
             fireEvent.click(await screen.findByTestId('view-settings-button'));
-            /*
-             * the natural order the two status notes produce is ['doing', 'done', 'untagged'], and the chips
-             * carry the raw slug while their labels are formatted - which is what proves the toolbar derived
-             * the order from these notes rather than from a stored value.
-             */
+            // natural order from these notes is ['doing', 'done', 'untagged']; chips carry the raw slug
             const chips = screen.getAllByTestId(/^column-order-chip-/);
             expect(chips.map(el => el.getAttribute('data-testid'))).toEqual([
                 'column-order-chip-doing',
@@ -1349,12 +1345,7 @@ describe('GenericView folder files drawer', () => {
 
         capturedOnApplyFilters!('**/users/**', '**/dist/**', 7);
 
-        /*
-         * only the webview-side merge cap is persisted to per-view state; the globs are config-tier
-         * cascade settings with a single source of truth (config, echoed back) and must NOT be copied
-         * into viewState, or the drawer can drift from the globs discovery used and shadow the config
-         * the Reset buttons clear
-         */
+        // only the merge cap persists to per-view state; globs are config-tier and must not be copied into it
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: 'test-view',
             display_options: {
@@ -1570,11 +1561,7 @@ describe('GenericView drawer tabs', () => {
         expect(await screen.findByTestId('view-settings-button')).toHaveTextContent('Kanban');
     });
 
-    /*
-     * A minted type's id is slugified so it can be written as an `nt_view=` linetag and saved as a
-     * settings key, so titling the tab with the id would state "User-next-up-by-project" over a tree that
-     * states the name its author typed. The tab reads the label, in both the pinned and the auto form.
-     */
+    // minted type ids are slugified for the nt_view= linetag; the tab title reads the label, not the id
     const MINTED_TYPE: UserViewType = {
         id: 'user-next-up-by-project', label: 'User next up by project', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' },
     };
@@ -1702,7 +1689,7 @@ describe('GenericView empty stories overlay', () => {
         note_count: 0,
     };
 
-    // wraps children in a PendingWorkProvider seeded with a fixed pending value, so the overlay's discovery-settled gate can be exercised without driving usePendingWork's real timers
+    // wraps children in a PendingWorkProvider with a fixed value, so the overlay's gate can be tested without real timers
     function withPending(pending: boolean, children: React.ReactElement): React.ReactElement {
         const api: UsePendingWorkApi = { pending, markPending: jest.fn(), clearPending: jest.fn(), clearAll: jest.fn() };
         return <PendingWorkProvider api={api}>{children}</PendingWorkProvider>;

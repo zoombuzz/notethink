@@ -33,19 +33,10 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         && props.display_options?.provided?.draggableProps?.style !== null
         && (props.display_options.provided.draggableProps.style as Record<string, unknown>).position === 'fixed';
     const overflow_state = useMarkdownNoteOverflow(body_ref, is_top_level, props.display_options?.card_target_height);
-    /*
-     * manual expand state is the view's, not this component's: "Show more" / "Show less" add and remove
-     * this note's stable_id from view_expanded_ids, and the flag is derived from that list every render.
-     * Expansion therefore belongs to the note, so it outlives a seq reassignment, a remount into another
-     * kanban column, and a reload. A headline rename mints a new implicit stable_id and so collapses the
-     * card - the id list is the note's identity and nothing re-derives it across the rename.
-     */
+    // manual expand lives in the view's view_expanded_ids keyed by stable_id, surviving a remount but resetting on a rename
     const manually_expanded = isNoteManuallyExpanded(props);
     const auto_expand = props.display_options?.settings?.autoExpandFocusedNote;
-    /*
-     * clip logic: auto-expand ON → expand on focus; OFF → respect manually_expanded;
-     * lock clip state during drag to prevent flash on drop
-     */
+    // clip logic: auto-expand favours focus, otherwise manually_expanded; locked during drag to avoid a flash on drop
     const should_clip_base = is_top_level && overflow_state.overflows && (
         auto_expand
             ? !props.focused
@@ -64,11 +55,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         body_raw: props.body_raw,
         caret_offset: props.display_options?.caret_offset as number | undefined,
     });
-    /*
-     * parse note and memoize at component level to limit the string and markdown parsing (heavy lifting)
-     * always strip linetag link nodes from MDAST - they render as invisible empty <a> elements;
-     * visible linetag badges are appended separately when showLinetagsInHeadlines is enabled
-     */
+    // memoized to limit markdown parsing; strips linetag link nodes from MDAST since visible badges are appended separately
     const memoized_headline = useMemo(() => {
         return renderMarkdownNoteHeadline(props, {
             render: 'strip_linetags',
@@ -79,7 +66,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
         props.checked,
         props.linetags_from,
     ]);
-    // get latest updates: always take the `props` version of `note` attributes, because memoized `parseNote` is only augmenting
+    // always take props' own attributes for `note`; memoized `parseNote` only augments them
     const note: NoteProps = {
         headline: memoized_headline,
         ...props
@@ -111,7 +98,7 @@ export default memo(function MarkdownNote(props: NoteProps): ReactElement {
     );
 }, areMarkdownNotePropsEqual);
 
-// a value that can be walked one level deeper, which an array is not: an array reaching the compare below is treated as changed
+// walkable one level deeper; an array is not, so it reaches the compare below as changed
 function isPropRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -172,18 +159,18 @@ export function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boo
     if (prev.display_options?.settings?.showLinetagsInHeadlines !== next.display_options?.settings?.showLinetagsInHeadlines) { return false; }
     if (prev.display_options?.settings?.showLineNumbers !== next.display_options?.settings?.showLineNumbers) { return false; }
     if (prev.display_options?.settings?.autoExpandFocusedNote !== next.display_options?.settings?.autoExpandFocusedNote) { return false; }
-    // the document view renders every story inside the root note's body, so a root that skips its re-render pins each story to the card component it first mounted with
+    // the document view renders every story inside the root's body, so skipping its re-render pins each story's card
     if (prev.display_options?.settings?.cardType !== next.display_options?.settings?.cardType) { return false; }
     // caret offset drives body scroll in clipped notes - only re-render focused notes
     if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
-    // one id list covers this note and the descendants it renders, so a parent repaints even when its own membership is unchanged
+    // one id list covers this note and its rendered descendants, so a parent repaints even with its own membership unchanged
     if (!arraysEqual(prev.display_options?.view_expanded_ids, next.display_options?.view_expanded_ids)) { return false; }
-    // children's focused/selected status flows through display_options.focused_seqs / selected_seqs; when those change, child notes need to re-render even if this note's own focused/selected didn't
+    // children's focused/selected flows through focused_seqs/selected_seqs, so they re-render even when this note's didn't
     if (!arraysEqual(prev.display_options?.focused_seqs, next.display_options?.focused_seqs)) { return false; }
     if (!arraysEqual(prev.display_options?.selected_seqs, next.display_options?.selected_seqs)) { return false; }
-    // a stacked lane's target height lands after the first measurement, so a card ignoring its change would keep the unclipped body it first rendered
+    // a lane's target height lands after the first measurement, so ignoring its change would keep the body first rendered
     if (prev.display_options?.card_target_height !== next.display_options?.card_target_height) { return false; }
-    // DnD: provided changes during drag (draggableProps.style contains transform), so compare what the bags hold and not which objects they are
+    // provided changes during drag (draggableProps.style carries transform), so compare what the bags hold, not their identity
     if (!providedPropsEqual(prev.display_options?.provided?.draggableProps, next.display_options?.provided?.draggableProps)) { return false; }
     if (!providedPropsEqual(prev.display_options?.provided?.dragHandleProps, next.display_options?.provided?.dragHandleProps)) { return false; }
     return true;

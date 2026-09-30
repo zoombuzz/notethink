@@ -384,15 +384,12 @@ export function convertMdastToNoteHierarchy(mdast: MdastInput, text: string): No
             direct_parent.child_notes.push(note);
         }
     }
-    /*
-     * lift front matter into the document root as linetags - the broadest, document-scoped layer
-     * computed before the inheritance pass so the root can act as the top ancestor; absent front matter leaves both fields undefined
-     */
+    // lifts front matter into the document root as linetags, the broadest ancestor layer, before inheritance runs
     const frontmatter_node = findFrontmatterNode(mdast_children);
     const root_frontmatter = frontmatter_node
         ? parseFrontmatterLinetags(frontmatter_node, text, 0)
         : {};
-    // propagate nt_child_*, nt_child2y_*, nt_childall_* linetags to descendants, with the root front matter as the broadest ancestor above the whole tree
+    // propagates nt_child_*, nt_child2y_*, nt_childall_* linetags to descendants from the root front matter
     applyChildAttributeInheritance(all_notes, root_frontmatter.linetags);
     // build the root note
     const root: NoteProps = {

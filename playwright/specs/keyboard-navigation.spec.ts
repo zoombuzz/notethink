@@ -52,7 +52,7 @@ test.describe('Keyboard Navigation', () => {
         await simulateSelectionChanged(page, reveal!.docPath || doc_path, reveal!.from!);
         await page.waitForTimeout(500);
 
-        // A note should now have aria-current="true" (focused)
+        // a note should now have aria-current="true" (focused)
         const focused = page.locator('[role="row"][aria-current="true"]');
         await expect(focused).toBeVisible({ timeout: 3000 });
     });
@@ -108,12 +108,7 @@ test.describe('Keyboard Navigation', () => {
         await sendCommand(page, 'navigate', { direction: 'drillIn' });
         await page.waitForTimeout(500);
 
-        /*
-         * The drill-in value is the whole point of the round trip, so it is compared rather than
-         * captured. Note getAttribute returns string | null: toBeDefined() holds on null and on a
-         * missing attribute alike, so every check here is an equality against a value read earlier
-         * in the same test.
-         */
+        // compares against an earlier read; getAttribute returns string | null so toBeDefined() would pass on null too
         const parent_after_drill = await data_parent.first().getAttribute('data-parent-content-seq');
         expect(parent_after_drill).not.toBeNull();
         expect(parent_after_drill).not.toBe(parent_before_drill);

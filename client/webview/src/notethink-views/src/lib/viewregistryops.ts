@@ -149,14 +149,12 @@ export const SETTING_HOMES = {
 } as const satisfies Record<SettingsCascadeKey, { node: string; path: string }>;
 
 /*
- * the dimensional ladder plus the settings homes and overrides. `axes` (the ordered group keys),
- * `groupOrder` (the per-axis lane order) and `groupBy` (the user-chosen axis key) home at grouped;
- * `orientation` homes at line; the generic settings and the view selection home at root. kanban FIXES
- * axes[0] to status (edit by selecting Line) and holds its own OPEN group order and group-by at the
- * kanban config paths, so a change made from kanban forks rather than moving the ancestor's value.
- * grouped's own group order carries no config_path because no shipped key persists it - only kanban's
- * columnOrder does. Every node owns settings, so every node is configurable; only the concrete rungs
- * are selectable.
+ * The dimensional ladder plus its settings homes and overrides. `axes`, `groupOrder` and `groupBy`
+ * home at grouped; `orientation` homes at line; generic settings and view selection home at root.
+ * Kanban fixes axes[0] to status and holds its own open group order and group-by, so editing from
+ * kanban forks rather than moving the ancestor's value; grouped's own group order has no config_path
+ * since only kanban's columnOrder persists it. Every node owns settings and is configurable; only
+ * concrete rungs are selectable.
  */
 export const VIEW_REGISTRY: ViewRegistry = {
     nodes: [
@@ -181,14 +179,13 @@ export const VIEW_REGISTRY: ViewRegistry = {
 };
 
 /*
- * the rows whose pill and offer are decided by a registry setting rather than by a flat home. A row has
- * two keys: its STRUCTURAL key is the registry setting carrying the override semantics, its WRITE key is
- * the cascade key the value persists to. Group by is the case that forces the split - both groupBy and
- * kanbanGroupBy carry a kanban OPEN override, so keying that row on its write key would put its pill on
- * Kanban and suppress the offer, while `axes` is the key kanban FIXES to status and departing from that
- * pin is exactly what saving a new view type means. Group order carries no such pin, so reordering
- * lanes is a preference kanban owns and offers nothing. Every key absent here has no registry presence
- * and answers from SETTING_HOMES.
+ * Rows whose pill and offer are decided by a registry setting rather than a flat home. Each row has a
+ * structural key (the registry setting carrying override semantics) and a write key (the cascade key
+ * the value persists to); groupBy and kanbanGroupBy force the split, since both carry a kanban open
+ * override, so keying on the write key would wrongly put the pill on kanban and suppress the offer.
+ * `axes` is the key kanban fixes to status, and departing from that pin is what saving a new view type
+ * means; group order carries no such pin. A key absent here has no registry presence and answers from
+ * SETTING_HOMES.
  */
 export const STRUCTURAL_SETTING_KEYS: Partial<Record<SettingsCascadeKey, string>> = {
     viewType: 'viewType',
@@ -204,7 +201,7 @@ export function getViewNode(id: string, registry: ViewRegistry = VIEW_REGISTRY):
 }
 
 /**
- * the ancestor chain for a node, deepest-first: the node itself, then its parent, up to the root. An
+ * The ancestor chain for a node, deepest-first: the node itself, then its parent, up to the root. An
  * unknown id yields an empty chain. Bounded by the node count so a malformed parent cycle cannot loop.
  */
 export function chainOf(id: string, registry: ViewRegistry = VIEW_REGISTRY): string[] {
@@ -231,7 +228,7 @@ export function isDescendantOf(id: string, ancestor: string, registry: ViewRegis
 }
 
 /**
- * true when a view renders lanes (it sits under `grouped`): line and kanban today. Drives the settings
+ * True when a view renders lanes (it sits under `grouped`): line and kanban today. Drives the settings
  * drawer's per-view dispatch (lane drawer vs document drawer) without a hardcoded `type ===` list.
  */
 export function isGroupedViewType(id: string, registry: ViewRegistry = VIEW_REGISTRY): boolean {
@@ -258,12 +255,11 @@ function nearestOverrideOnChain(chain: string[], key: string, registry: ViewRegi
 }
 
 /**
- * the ancestor that unlocks a fixed setting: the nearest node strictly above the fixing node that is
- * CONFIGURABLE and does not itself fix the key. undefined when nothing above can edit it. Configurable
- * rather than selectable, because the question this answers is "where is this setting editable", and the
- * settings tree offers a node's settings whether or not the board can render it. The two agree on today's
- * registry, where every rung that can be selected can also be configured; they part on an abstract owner
- * such as grouped, which holds the value but renders nothing.
+ * The ancestor that unlocks a fixed setting: the nearest node strictly above the fixing node that is
+ * configurable and does not itself fix the key, or undefined when nothing above can edit it. Configurable
+ * rather than selectable, since this answers "where is this setting editable" and the settings tree offers
+ * a node's settings whether or not the board can render it; they part on an abstract owner such as grouped,
+ * which holds the value but renders nothing.
  */
 function unlockingViewOnChain(chain: string[], fixed_at: string, key: string, registry: ViewRegistry): string | undefined {
     const start = chain.indexOf(fixed_at) + 1;
@@ -277,7 +273,7 @@ function unlockingViewOnChain(chain: string[], fixed_at: string, key: string, re
 }
 
 /**
- * resolve a setting for a node against an explicit registry (the pure, testable core). Walks the node's
+ * Resolves a setting for a node against an explicit registry (the pure, testable core). Walks the node's
  * ancestor chain deepest-first; the nearest override wins over the home default, a fixed override reports
  * the view that unlocks it, and a setting whose home is not on the chain does not apply to the node.
  */

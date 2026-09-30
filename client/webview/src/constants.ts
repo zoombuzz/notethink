@@ -1,7 +1,7 @@
 import { DEFAULT_CARD_RATIO, DEFAULT_LINE_BREADTH } from './notethink-views/src/components/views/kanban/columnwidthops';
 import type { SettingsCascadePayload } from './notethink-views/src/types/Messages';
 
-// webview-side mirror of the extension's folder-mode filter defaults (see client/extension/src/constants.ts); used until the extension echoes the effective globs back through the first update message
+// mirrors the extension's folder-mode filter defaults until the extension echoes the effective globs back
 export const DEFAULT_INCLUDE_FILTER = '**/*.md';
 export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**';
 

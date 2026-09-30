@@ -10,10 +10,8 @@ const TOML_SEPARATOR = '=';
 const FENCE_LINE = /^\s*(-{3,}|\+{3,})\s*$/;
 
 /**
- * a front-matter block lifted into LineTag-shaped objects, plus the block's
- * absolute start offset. Offsets on each LineTag are relative to linetags_from,
- * matching the heading-linetag convention so render / write-back machinery
- * treats them identically.
+ * A front-matter block lifted into LineTag-shaped objects, plus the block's absolute start offset.
+ * Offsets are relative to linetags_from, matching the heading-linetag convention.
  */
 export interface FrontmatterLinetags {
     linetags?: { [key: string]: LineTag };
@@ -26,10 +24,7 @@ interface ScalarValue {
     value_start: number;
 }
 
-/**
- * find the first child that is a front-matter node (yaml or toml), else undefined.
- * Accepts a parsed children array in either MdastNode or NoteProps form.
- */
+// finds the first front-matter child (yaml or toml), accepting either MdastNode or NoteProps children
 export function findFrontmatterNode(children: ReadonlyArray<MdastNode | NoteProps>): MdastNode | undefined {
     for (const child of children) {
         if (child.type === 'yaml' || child.type === 'toml') {
@@ -40,13 +35,10 @@ export function findFrontmatterNode(children: ReadonlyArray<MdastNode | NoteProp
 }
 
 /**
- * parse a front-matter node into key → LineTag, with real file offsets.
- *
- * Keys are stored verbatim (no prefix logic). Values are bare strings, with
- * matching quotes stripped; inline arrays are stored verbatim as their raw
- * string. Blank, comment, fence, malformed, and empty-value lines are skipped.
- * Offsets are computed by slicing `text` over `node.position` so they are real
- * file positions, then made relative to the block start (linetags_from).
+ * Parses a front-matter node into key → LineTag with real file offsets, sliced from `text` over
+ * `node.position` and made relative to the block start. Keys are verbatim; values are bare strings
+ * with matching quotes stripped, and inline arrays are kept verbatim. Skips blank, comment, fence,
+ * malformed and empty-value lines.
  */
 export function parseFrontmatterLinetags(
     node: MdastNode,
@@ -67,10 +59,7 @@ export function parseFrontmatterLinetags(
     return { linetags, linetags_from };
 }
 
-/**
- * parse one front-matter line into a LineTag, mutating `linetags` in place.
- * Skips blank / comment / fence / malformed / empty-value lines (logged, never thrown).
- */
+// parses one front-matter line into a LineTag, mutating `linetags` in place (logged and skipped on malformed input)
 function parseFrontmatterLine(
     line: string,
     line_offset: number,
@@ -97,10 +86,7 @@ function parseFrontmatterLine(
     linetags[key] = makeFrontmatterTag(key, scalar, line_offset, separator_at, note_seq);
 }
 
-/**
- * build a LineTag from a parsed key / scalar, computing offsets relative to
- * linetags_from. Mirrors parseLineTags numeric coercion.
- */
+// builds a LineTag from a key/scalar pair, offsets relative to linetags_from; mirrors parseLineTags's coercion
 function makeFrontmatterTag(
     key: string,
     scalar: ScalarValue,
@@ -122,11 +108,7 @@ function makeFrontmatterTag(
     return linetag;
 }
 
-/**
- * parse a single scalar / inline array, returning the stored value and the
- * offset of that value within the raw token. Returns undefined for an empty
- * value so the caller skips the key.
- */
+// parses a scalar or inline array, returning its stored value and offset; undefined for an empty value
 function parseScalarValue(raw: string): ScalarValue | undefined {
     const leading = leadingWhitespace(raw);
     const token = raw.trim();

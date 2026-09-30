@@ -18,30 +18,29 @@ import agent_styles from "./AgentNote.module.scss";
 import view_specific_styles from "../ViewRenderer.module.scss";
 
 /**
- * AgentNote, the agent card: which AI agents are working on this note's story, what each one is doing
- * now, what any of them is waiting on the operator for, and which files have changed.
+ * AgentNote, the agent card: which AI agents are working on this note's story, what each is doing
+ * now, what any is waiting on the operator for, and which files have changed. The third entry on
+ * the card axis, chosen independently of the view. It draws one note like every other card, and
+ * that note is either a parsed story or a virtual one minted for an agent on no story - the card
+ * cannot tell the two apart and does not ask.
  *
- * The third entry on the card axis, chosen independently of the view, so an agent card in a document
- * and an agent card in a kanban lane are the same card in two layouts. It draws one note like every
- * other card, and the note it draws is either a parsed story or a virtual one minted for an agent that
- * declared it is on no story - the card cannot tell the two apart and does not ask.
+ * The activity itself never rides on the note: NoteProps stays free of agent/git/process fields, so
+ * the card reads the workspace-wide snapshot the extension host posts and joins it here, at render,
+ * on the story's own document path and stable id. Both outbound requests (open diff, open chat)
+ * echo back identifiers the host itself published in the snapshot and construct none of them, so a
+ * path the snapshot never listed cannot be turned into a file to open.
  *
- * The activity itself never rides on the note. NoteProps is the mdast contract and stays free of
- * agent, git and process fields, so the card reads the workspace-wide snapshot the extension host
- * posts and joins it here, at render, on the story's own document path and stable id (its authored
- * id, or the slug derived from its headline).
+ * A session's conversation is never drawn on the card; clicking an agent row opens that session in
+ * VS Code instead. Colour is spent on one thing, an agent's state, so the vendor monogram and file
+ * bands stay unsaturated.
  *
- * Both outbound requests echo back identifiers the host itself published in the snapshot - the tree's
- * own root path and a file's own path for a diff request, the session's own vendor and session id for
- * a chat request - and construct none of them, so a path the snapshot never listed cannot be turned
- * into a file to open.
- *
- * A session's conversation is never drawn on the card: a card is the wrong place to read one. Clicking
- * an agent row opens that session in VS Code instead, in its vendor's own chat panel where there is
- * one, else as its transcript in an editor.
- *
- * Colour is spent on one thing: an agent's state. The vendor is a monospace monogram and the file
- * bands are unsaturated, so the only mark that draws the eye is the one worth acting on.
+ * While the card's very first scan is in progress, the snapshot is a growing subset of the eventual
+ * one: session rows, the question band and story binding draw as they arrive, token/cost totals draw
+ * dimmed, and the uncommitted-file band waits for the scan to finish (crediting a file needs every
+ * session's write calls). Every later scan is different: once a scan has ever completed, a later
+ * rescan is never reflected on the card at all - it keeps showing its last completed data untouched
+ * until the next one finishes and replaces it outright (`model.has_completed_scan` is this
+ * component's own backstop for that).
  */
 export default function AgentNote(props: NoteProps): React.ReactElement {
     const note_props = props;
@@ -68,7 +67,9 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
     const handleOpenChat = useCallback((vendor: string, session_id: string) => {
         post_message?.({ type: ACTIVITY_OPEN_CHAT_MESSAGE_TYPE, vendor, session_id });
     }, [post_message]);
-    // the card's manual expansion is the view's, on the same view_expanded_ids list the default card's Show more / Show less write
+    // 'scanning' means "no information yet" only before the first completed scan; has_completed_scan guards that
+    const scanning = !model.has_completed_scan && model.analyser?.state === 'scanning';
+    // manual expansion is the view's, on the same view_expanded_ids list the default card's Show more writes
     const expanded = isNoteManuallyExpanded(note_props);
     const stable_id = note_props.stable_id;
     const set_note_expanded = note_props.handlers?.setNoteExpanded;
@@ -100,7 +101,7 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
             <MarkdownNoteHeadline note={note} />
             <div className={`${view_specific_styles.body} ${agent_styles.agentBody}`}>
                 <AgentMetaRow model={model} />
-                <AgentUsageSummary sessions={model.sessions} storyKey={model.story_key} />
+                <AgentUsageSummary sessions={model.sessions} storyKey={model.story_key} scanning={scanning} />
                 <AgentActivityBanner model={model} />
                 <AgentSessionRows
                     sessions={model.sessions}
@@ -110,7 +111,8 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
                     onOpen={handleOpenChat}
                 />
                 <AgentQuestionBand sessions={model.sessions} />
-                {model.sessions.length > 0 && <AgentFileBands model={model} unavailable={unavailable} onOpenDiff={handleOpenDiff} expanded={expanded} onToggleExpanded={handleToggleExpanded} />}
+                {/* waits for a completed scan, since crediting a file needs every session's write calls */}
+                {model.sessions.length > 0 && (model.analyser?.state === 'live' || model.has_completed_scan) && <AgentFileBands model={model} unavailable={unavailable} onOpenDiff={handleOpenDiff} expanded={expanded} onToggleExpanded={handleToggleExpanded} />}
             </div>
         </div>
     );

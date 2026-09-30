@@ -419,6 +419,80 @@ describe('AgentNote file and commit bands', () => {
     });
 });
 
+describe('AgentNote while a scan is in progress', () => {
+
+    const scanning_tree: ActivityTree = {
+        generated_at: '2026-09-18T09:14:02Z',
+        branch: 'staging',
+        head_commit: 'ef11de8',
+        uncommitted: [{ path: 'a.ts', change: 'modified', session_id: 'claude-bound-busy' }],
+        committed: [],
+    };
+
+    it('dims the token and cost total while scanning, and draws it plainly once the scan is live', () => {
+        seed({ analyser: { state: 'scanning' }, sessions: [makeSessionState(makeSession())] });
+        const { rerender } = render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-usage-summary')).toHaveAttribute('data-scanning', 'true');
+        act(() => { resetActivitySnapshot(); seed({ sessions: [makeSessionState(makeSession())] }); });
+        rerender(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
+    });
+
+    it('keeps drawing session rows and a pending question while scanning, since neither needs the whole scan to be safe', () => {
+        seed({
+            analyser: { state: 'scanning' },
+            sessions: [makeSessionState(makeSession({
+                state: 'waiting',
+                question: { question_id: 'q-4417', asked_at: '2026-09-18T09:13:40Z', prompt: 'Apply the rename across all 14 call sites?', options: ['Yes', 'No'] },
+            }))],
+        });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-row')).toBeInTheDocument();
+        expect(screen.getByTestId('agent-question-prompt')).toHaveTextContent('Apply the rename across all 14 call sites?');
+    });
+
+    it('hides the uncommitted-file band while scanning, since crediting a file needs every session\'s write calls, and shows it once the scan is live', () => {
+        seed({
+            analyser: { state: 'scanning' },
+            sessions: [makeSessionState(makeSession())],
+            trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: scanning_tree }],
+        });
+        const { rerender } = render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.queryByTestId('agent-file-bands')).not.toBeInTheDocument();
+        act(() => {
+            resetActivitySnapshot();
+            seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: scanning_tree }] });
+        });
+        rerender(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-file-band-uncommitted')).toHaveTextContent('1 uncommitted');
+    });
+
+    // webview backstop: AgentAnalyser.ts enforces this host-side, in case 'scanning' arrives after 'live'
+    it('never re-enters the scanning presentation once it has shown a completed scan, even if a later snapshot claims scanning', () => {
+        seed({
+            sessions: [makeSessionState(makeSession())],
+            trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: scanning_tree }],
+        });
+        const { rerender } = render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
+        expect(screen.getByTestId('agent-file-band-uncommitted')).toHaveTextContent('1 uncommitted');
+        expect(screen.queryByTestId('agent-banner-notice')).not.toBeInTheDocument();
+
+        // has_completed_scan is latched, so a later 'scanning' snapshot shouldn't regress anything
+        act(() => {
+            setActivitySnapshot({
+                analyser: { state: 'scanning', refusals: [] },
+                sessions: [makeSessionState(makeSession())],
+                trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: scanning_tree }],
+            });
+        });
+        rerender(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
+        expect(screen.getByTestId('agent-file-band-uncommitted')).toHaveTextContent('1 uncommitted');
+        expect(screen.queryByTestId('agent-banner-notice')).not.toBeInTheDocument();
+    });
+});
+
 describe('AgentNote opens a session in VS Code, not on the card', () => {
 
     it('opens the session from a real control, echoing back the vendor and session id the host published', () => {
@@ -506,7 +580,7 @@ describe('AgentNote says plainly what it does not know', () => {
 
     it('still binds a story carrying no authored id linetag, under the slug derived from its headline', () => {
         seed({ sessions: [makeSessionState(makeSession())] });
-        // "### Agent activity card" derives the same slug as the authored id makeSession() binds under, so the session still shows rather than reading "no agent in 30 days"
+        // "### Agent activity card" derives the same slug makeSession() binds under, so the session still shows
         const { container } = render(<AgentNote {...makeStoryNote({ linetags: undefined })} />);
         expect(container.querySelector('[data-session-count="1"]')).toBeInTheDocument();
         expect(screen.getAllByTestId('agent-row')).toHaveLength(1);

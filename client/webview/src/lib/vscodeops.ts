@@ -3,29 +3,55 @@ import type { HashMapOf, Doc } from "../types/general";
 import type { ViewState } from "../hooks/usePersistedViewStates";
 
 /**
+ * Metadata-only projection of Doc kept in persisted webview state: enough to identify a doc and
+ * detect whether it changed, without the multi-MB text + mdast body a live Doc carries. The
+ * persisted board never renders from these fields alone on reload - useVscodeMessages re-requests
+ * full docs, which the extension host answers fast via its mtime-based unchanged-file skip.
+ */
+export type PersistedDocMeta = Pick<Doc, 'id' | 'path' | 'relative_path' | 'hash_sha256' | 'mtime'>;
+
+/**
  * VSCodeState is the persisted shape held under vscode.setState(...) for the NoteThink
  * webview. The camelCase key `viewStates` is the on-the-wire/persisted key (read by
  * migrateSavedState and produced by persistVscodeState) and must not be renamed.
  */
 export type VSCodeState = {
-    docs?: HashMapOf<Doc>;
+    docs?: HashMapOf<PersistedDocMeta>;
     viewStates?: Record<string, ViewState>;
 };
 
+// drops the text/content fields persisted state does not need
+export function toPersistedDocs(docs: HashMapOf<Doc>): HashMapOf<PersistedDocMeta> {
+    const result: HashMapOf<PersistedDocMeta> = {};
+    for (const [id, doc] of Object.entries(docs)) {
+        result[id] = {
+            id: doc.id,
+            path: doc.path,
+            relative_path: doc.relative_path,
+            hash_sha256: doc.hash_sha256,
+            mtime: doc.mtime,
+        };
+    }
+    return result;
+}
+
 /**
- * Normalise persisted viewState across past renames so downstream reads only see the
- * current shape. Migration ledger:
- * - the folder-mode viewState key '__aggregate__' → '__folder__'
- * - per-viewState display_options.integration_mode 'directory' → 'folder'
+ * Normalise persisted viewState across past renames so downstream reads only see the current shape.
+ * Migration ledger:
+ * - docs shrunk to PersistedDocMeta immediately, so a pre-diet state sheds its text/mdast on this
+ *   first read rather than lingering until the next persist
+ * - folder-mode viewState key '__aggregate__' → '__folder__'
+ * - display_options.integration_mode 'directory' → 'folder'
  * - legacy aggregate_* display_options fields → includeFilter / excludeFilter / maxNotesPerFile
- * - display_options.parent_context_seq dropped in favour of parent_context_id; the seq is a
- *   per-render value now, and a persisted one would outlive the parse that produced it
+ * - display_options.parent_context_seq dropped for parent_context_id, since seq is a per-render
+ *   value now and a persisted one would outlive the parse that produced it
  *
- * Returns the same `s` reference (mutated in place) so callers can chain or destructure.
- * Returns the input unchanged when there are no viewStates to migrate (undefined input,
- * or `{docs}`-only payloads from very-early sessions).
+ * Returns the same `s` reference (mutated in place); unchanged when there are no viewStates to migrate.
  */
 export function migrateSavedState(s: VSCodeState | undefined): VSCodeState | undefined {
+    if (s?.docs) {
+        s.docs = toPersistedDocs(s.docs);
+    }
     if (!s?.viewStates) { return s; }
     // rename the legacy folder-mode viewState key on the map
     if ('__aggregate__' in s.viewStates && !('__folder__' in s.viewStates)) {

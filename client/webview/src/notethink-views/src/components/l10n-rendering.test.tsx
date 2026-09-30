@@ -87,10 +87,7 @@ describe('l10n rendering with German bundle', () => {
 
     it('renders interpolated German aria-labels on the lane chips', () => {
         render(<SettingsViewDrawer {...DRAWER_PROPS} />);
-        /*
-         * German: "{0} neu anordnen" - the placeholder moves to the start
-         * the {0} substitution is the formatted column label (title-case), not the raw slug
-         */
+        // German: "{0} neu anordnen", placeholder at the start; {0} is the formatted label, not the raw slug
         expect(screen.getByLabelText('Backlog neu anordnen')).toBeInTheDocument();
         expect(screen.getByLabelText('Doing neu anordnen')).toBeInTheDocument();
     });

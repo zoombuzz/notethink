@@ -10,15 +10,10 @@ export interface UseJumpTargetsApi {
 }
 
 /**
- * holds the latest jumpTargets response from the extension.
- *
- * The webview posts a requestJumpTargets message and the extension replies asynchronously
- * with a jumpTargets message; the message reducer routes that reply here via setJumpTargets
- * so the jump drawer can render the entries. The drawer suppresses a stale slot by matching
- * jump_targets.path against the leaf it requested, so no explicit reset is needed.
- *
- * Returns snake_case `jump_targets` (a hook return value) alongside camelCase setJumpTargets
- * (a function name) per CODING_STANDARDS.md hook conventions.
+ * Holds the latest jumpTargets response from the extension. The webview posts requestJumpTargets and
+ * the extension replies asynchronously with jumpTargets; the message reducer routes it here via
+ * setJumpTargets so the jump drawer can render the entries. The drawer suppresses a stale slot by
+ * matching jump_targets.path against the leaf it requested, so no explicit reset is needed.
  */
 export function useJumpTargets(): UseJumpTargetsApi {
     const [jump_targets, setJumpTargetsState] = useState<JumpTargetsMessage | undefined>(undefined);

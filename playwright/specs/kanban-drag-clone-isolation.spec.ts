@@ -36,13 +36,11 @@ test.describe('Kanban drag clone isolation - card look survives, no transformed 
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
     }
 
-    /*
-     * find the live drag clone: the [data-rfd-draggable-id] element dnd has lifted to position:fixed (in place,
-     * under its column). Walk from it up to <body> collecting any ancestor whose computed transform is not
-     * 'none'; that offenders list must be empty. The clone itself is skipped - dnd translates it to follow the
-     * cursor, so it legitimately carries a transform. Also read the clone's own border so the caller can assert
-     * the card box styling is still applied. The ascent terminates by construction (parentElement shrinks depth,
-     * break at document.body).
+    /**
+     * Finds the live drag clone ([data-rfd-draggable-id], lifted to position:fixed in place under its
+     * column) and walks up to <body> collecting any ancestor whose computed transform is not 'none';
+     * that list must be empty. The clone itself is skipped, since dnd legitimately transforms it to
+     * follow the cursor. Also reads the clone's own border so the caller can assert card styling held.
      */
     async function inspectDragClone(page: Page): Promise<DragCloneResult> {
         return page.evaluate((): DragCloneResult => {

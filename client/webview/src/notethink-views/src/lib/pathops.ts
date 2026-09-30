@@ -152,7 +152,7 @@ export function resolveBreadcrumbFolderSegment(
  * at its first child).
  */
 export function splitPathSegments(doc_path: string, workspace_root?: string, doc_relative_path?: string): PathSegment[] {
-    // resolve the effective workspace root: extension-provided relative path is most reliable, then the workspace_root prop, then nothing
+    // resolves the effective workspace root: the extension-provided relative path first, then workspace_root, then nothing
     let effective_root: string | undefined;
     if (doc_relative_path) {
         const inferred = workspaceRootFromDocAndRelative(doc_path, doc_relative_path);

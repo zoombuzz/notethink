@@ -8,7 +8,7 @@ import type { NoteProps } from '../../types/NoteProps';
 // handed out once per mounted card and stamped into the DOM, so a test can tell a preserved instance from a remount
 let mock_next_mount_id = 0;
 
-// mock GenericNote so the document-strip tests render with a parent_context without pulling in the lazy MarkdownNote/CodeNote renderers; GenericNoteAttributes stays real (under test)
+// mocks GenericNote so document-strip tests render a parent_context without the lazy renderers
 jest.mock('../notes/GenericNote', () => ({
     __esModule: true,
     default: (props: NoteProps) => {
@@ -71,7 +71,7 @@ describe('DocumentView', () => {
 });
 
 /*
- * card keying: a seq is only valid within the render pass that derived it, and a React key crosses an
+ * Card keying: a seq is only valid within the render pass that derived it, and a React key crosses an
  * update boundary because reconciliation matches this render's key against the previous render's. Keying
  * a card by seq therefore hands a renumbered note the previous occupant's component instance along with
  * its state. Document view and kanban must key alike, by identity.
@@ -280,7 +280,7 @@ describe('DocumentView document-level linetag strip', () => {
     });
 
     it('dedups by seq when parent_context is a CLONE of the root (the pipeline hands the view a clone)', () => {
-        // useViewContext spreads notes[0] into parent_context, so the descended-strip dedup gates on seq (the root is seq 0), not object identity - otherwise the pills double
+        // useViewContext spreads notes[0] into parent_context, so the descended-strip dedup gates on seq, not identity
         const root = makeRoot({ status: status_tag });
         render(<DocumentView id="test-doc" type="document" nested={{ parent_context: { ...root }, ...docStrip(root) }} />);
         expect(screen.getAllByText('active')).toHaveLength(1);

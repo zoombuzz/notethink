@@ -3,6 +3,11 @@ import { formatColumnLabel } from "../../../lib/noteops";
 import type { NoteDisplayOptions } from "../../../types/NoteProps";
 import view_specific_styles from "../../ViewRenderer.module.scss";
 
+/**
+ * Props for one kanban column/lane.
+ * - notesRef: the `.notes` wrapper, the in-column portal target for a dragged clone; typed
+ *   structurally because two @types/react copies make React's Ref nominally distinct
+ */
 interface KanbanColumnProps {
     seq: number;
     value: string;
@@ -10,6 +15,7 @@ interface KanbanColumnProps {
     count?: number;
     display_options?: NoteDisplayOptions;
     children?: ReactNode;
+    notesRef?: ((instance: HTMLDivElement | null) => void) | { current: HTMLDivElement | null };
 }
 
 export default function KanbanColumn(props: KanbanColumnProps): ReactElement {
@@ -30,7 +36,7 @@ export default function KanbanColumn(props: KanbanColumnProps): ReactElement {
                     <span className={view_specific_styles.countBadge} data-testid="count-badge">{props.count}</span>
                 )}
             </div>
-            <div className={view_specific_styles.notes} data-column-cards="">
+            <div className={view_specific_styles.notes} data-column-cards="" ref={props.notesRef}>
                 {props.children}
             </div>
         </div>

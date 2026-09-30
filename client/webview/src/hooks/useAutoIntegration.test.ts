@@ -128,7 +128,7 @@ describe('useAutoIntegration', () => {
 
 describe('useAutoIntegration reactive follow', () => {
 
-    // a mutable-ref harness so a test can simulate the parent applying a dispatch (view_states_ref.current) then switch the active editor / edit the file via rerender
+    // a mutable-ref harness simulating the parent applying a dispatch, then switching editor/file via rerender
     function reactiveHarness(initial_doc: Doc): ReactiveHarness {
         const set_view_managed_state = jest.fn();
         const post_message = jest.fn();
@@ -174,7 +174,7 @@ describe('useAutoIntegration reactive follow', () => {
         h.view_states_ref.current = folderState('/repo/portfolio');
         h.post_message.mockClear();
         h.set_view_managed_state.mockClear();
-        // intro.md is NOT in the folder aggregate - in real folder mode the extension's sendDoc drops out-of-scope docs, so intro arrives only on the active_doc channel; the docs map still holds only the folder member. this is the real-extension path the prior in-aggregate test could not exercise
+        // intro.md is out of scope, so the docs map holds only the folder member; it arrives via active_doc alone
         const intro = parsedDoc('# Welcome', { id: 'intro', path: '/repo/intro.md', relative_path: 'intro.md', hash_sha256: 'h-intro' });
         h.rerender(h.makeProps('/repo/intro.md', { mobile: mobile() }, intro));
         expect(h.post_message).toHaveBeenCalledWith({ type: 'setIntegration', mode: 'current_file', path: undefined });

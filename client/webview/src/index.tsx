@@ -1,3 +1,4 @@
+import './chunkLoading';
 import Debug from 'debug';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -7,7 +8,7 @@ import './index.css';
 
 declare const NOTETHINK_DEV: boolean | undefined;
 
-// enable debug logging in dev mode; the webview iframe has its own localStorage so setting localStorage.debug in the VS Code dev tools 'top' frame has no effect
+// the webview iframe has its own localStorage, so setting localStorage.debug in the dev tools 'top' frame has no effect
 if (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV) {
     Debug.enable('nodejs:*');
 }

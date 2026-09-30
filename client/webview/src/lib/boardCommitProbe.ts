@@ -1,16 +1,11 @@
 /*
- * test-only probe for board-level state commits. OFF by default - every export is a no-op until the
- * probe is explicitly enabled, so there is no overhead and no global in production (no buffering, no
- * mirror array).
- *
- * useVscodeMessages drains its message queue once per animation frame and folds the batch into one
- * setState, so a board commit is one docs-state change and one board render however many wire messages
- * it carried. That is the unit a folder load's cost is counted in: 200 files used to commit ~200 times.
- * Jest enables the probe with enableBoardCommitProbe() and reads getBoardCommitEvents(); playwright and
- * the perf harness set globalThis.__NOTETHINK_COMMIT_PROBE__ = true before a load and read the mirror
- * array globalThis.__notethinkBoardCommits via page.evaluate.
- *
- * kept DOM-free on purpose: it is a pure in-memory event buffer, like the FLIP layer's animation probe.
+ * Test-only probe for board-level state commits: every export is a no-op until enabled, so
+ * there is no overhead or global state in production. useVscodeMessages batches its wire
+ * message queue once per animation frame into one setState, so a commit is counted per board
+ * render, however many messages it carried. Jest drives it with enableBoardCommitProbe() and
+ * getBoardCommitEvents(); Playwright and the perf harness set
+ * globalThis.__NOTETHINK_COMMIT_PROBE__ and read the globalThis.__notethinkBoardCommits mirror
+ * array via page.evaluate. A pure in-memory event buffer, kept DOM-free by design.
  */
 
 /**

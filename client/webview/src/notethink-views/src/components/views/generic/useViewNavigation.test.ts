@@ -147,7 +147,7 @@ describe('useViewNavigation', () => {
         expect(handlers.setParentContextId).toHaveBeenCalledWith('doc:epic');
     });
 
-    // undefined is the re-root signal: resolveParentContextNote returns undefined for it and useViewContext falls back to the seq-0 root
+    // undefined is the re-root signal: useViewContext falls back to the seq-0 root
     it('drillOut from a top-level scope clears the scope with undefined', () => {
         const navigation_command_ref: MutableRefObject<((direction: string) => void) | undefined> = { current: undefined };
         const parent_context = makeNote({ seq: 2, stable_id: 'doc:story' });

@@ -78,7 +78,7 @@ describe('useViewToolbar.handle_integration_change', () => {
         );
         act(() => { result.current.handle_integration_change('current_file'); });
         const updates = set_view_managed_state.mock.calls[0][0] as Array<Record<string, unknown>>;
-        // every dispatched update carries an explicit undefined for the interaction-state ids, so the persisted state's stale focused/selected from the previous mode is cleared on the flip
+        // each update carries an explicit undefined for the interaction-state ids, clearing the stale focused/selected
         for (const update of updates) {
             const dopts = update.display_options as NoteDisplayOptions;
             expect(dopts.view_focused_ids).toBeUndefined();
@@ -96,7 +96,7 @@ describe('useViewToolbar.handle_integration_change', () => {
         );
         act(() => { result.current.handle_integration_change('current_file'); });
         const updates = set_view_managed_state.mock.calls[0][0] as Array<Record<string, unknown>>;
-        // simulate the dispatcher's shallow merge over the supplied updates against a starting state that has stranded folder tags on every non-canonical key
+        // simulates the dispatcher's shallow merge against a starting state with stranded folder tags everywhere
         const starting_state: Record<string, { display_options?: NoteDisplayOptions }> = {
             [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'folder', integration_path: '/repo/sub' } },
             '/repo/sub/file.md': { display_options: { integration_mode: 'folder', integration_path: '/repo/sub' } },
@@ -165,7 +165,7 @@ describe('useViewToolbar.handle_integration_change', () => {
         );
         act(() => { result.current.handle_integration_change('folder'); });
         const updates = set_view_managed_state.mock.calls[0][0] as Array<Record<string, unknown>>;
-        // canonical key sets integration_mode/path + clears interaction state; non-canonical keys clear interaction state only (no integration_mode tag written)
+        // only the canonical key gets an integration_mode/path tag; every key still clears interaction state
         const canonical = updates.find((u) => u.id === FOLDER_VIEW_STATE_ID);
         expect(canonical).toBeDefined();
         expect((canonical!.display_options as NoteDisplayOptions).integration_mode).toBe('folder');

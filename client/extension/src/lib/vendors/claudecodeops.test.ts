@@ -243,7 +243,7 @@ describe('readClaudeCodeSession', () => {
     });
 
     describe('resumed (incremental) parsing equals a whole-file read', () => {
-        // a tail parse appends only its new records to the cached ones before building, so this asserts equivalence to a whole read for every possible split point
+        // a tail parse appends only new records to the cache; this asserts equivalence to a whole read at every split
         const lines = [
             '{"type":"user","timestamp":"2026-09-22T10:00:00.000Z","message":{"role":"user","content":"please fix the failing test"}}',
             '{"type":"assistant","timestamp":"2026-09-22T10:00:05.000Z","message":{"id":"msg_1","model":"claude-sonnet-5","role":"assistant","content":[{"type":"text","text":"Looking at the file now"},{"type":"tool_use","id":"tu_1","name":"Edit","input":{"file_path":"/repo/src/foo.ts","old_string":"foo","new_string":"bar"}}],"usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":10,"cache_creation_input_tokens":5}}}',

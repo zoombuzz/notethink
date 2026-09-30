@@ -6,7 +6,7 @@ When something misbehaves in NoteThink, the fastest path from "this is weird" to
 
 | Layer | Source files | Log mechanism | Where output lands |
 |-------|-------------|---------------|--------------------|
-| Extension host | `client/extension/**` | `writeToLog` / `writeToErrorLog` (winston, `lib/errorops.ts`) | **Output panel** (View → Output → "NoteThink" channel) **and**, in dev builds, mirrored to `<workspace>/notethink-extension.log` |
+| Extension host | `client/extension/**` | `writeToLog` / `writeToErrorLog` (`lib/errorops.ts`, a native `vscode.LogOutputChannel`) | **Output panel** (View → Output → "NoteThink" channel) **and**, in dev builds, mirrored to `notethink-extension.log` under the extension's own VS Code log directory (never the workspace folder) |
 | Webview | `client/webview/**` (incl. `notethink-views`) | `debug` library (`const debug = Debug("nodejs:...")`) | **DevTools Console** inside the webview iframe |
 
 The host-side file log only writes when the build flag `NOTETHINK_DEV` is true (set by the F5 / `pnpm run watch` dev launch). Packaged `.vsix` installs do not produce the file.
@@ -52,10 +52,13 @@ Reload the webview after changing the value.
 
 ## Grabbing the host log file
 
-In a dev session the file appears as `notethink-extension.log` in the workspace root of the dev-host window (the folder whose name ends in `notethink`, or the first workspace folder otherwise). It's a rolling 500-line buffer flushed every 1s - so capture it shortly after the repro and before doing anything else, otherwise older lines roll off.
+In a dev session the file is `notethink-extension.log` in the extension's own VS Code log directory, never the workspace folder; a copy in the repo root or a parent folder is stale and should be deleted, not read. VS Code starts a new session directory each launch, so resolve the newest one every time (Linux shown; on macOS the root is `~/Library/Application Support/Code/logs/`):
 
 ```bash
-tail -200 notethink-extension.log
+LOG=$(ls -t ~/.config/Code/logs/*/window*/exthost/webWorker/NoteThink.notethink/notethink-extension.log 2>/dev/null | head -1)
+tail -200 "$LOG"
 ```
+
+The file is a rolling buffer of the last `LOG_BUFFER_MAX` lines, rewritten `LOG_FLUSH_MS` after a write (both constants head `client/extension/src/lib/errorops.ts`), so capture it shortly after the repro, before older lines roll off.
 
 Paste the relevant slice into the bug report. Don't redact timestamps - they're how the host and webview events get correlated.

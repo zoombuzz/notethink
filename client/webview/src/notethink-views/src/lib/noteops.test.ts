@@ -39,6 +39,7 @@ import {
     findNoteBySeq,
     resolveParentContextNote,
 } from './noteops';
+import { makeVirtualNote } from './virtualnoteops';
 import type { NoteProps, NoteOrigin, TextSelection, LineTag } from '../types/NoteProps';
 
 function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
@@ -59,7 +60,7 @@ function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
 }
 
 describe('breadcrumbNoteForLabel', () => {
-    // the matching paragraph (seq 1) precedes the matching heading (seq 2) so the heading-only guard is load-bearing: without it, first-match iteration would return the paragraph's seq 1 instead of 2
+    // the matching paragraph (seq 1) precedes the matching heading (seq 2), so the heading-only guard is load-bearing
     const notes: NoteProps[] = [
         makeNote({ seq: 0, type: 'root', headline_raw: '' }),
         makeNote({ seq: 1, type: 'paragraph', headline_raw: 'Backend' }),
@@ -84,11 +85,7 @@ describe('breadcrumbNoteForLabel', () => {
 });
 
 describe('findNoteBySeq', () => {
-    /*
-     * the gap flattenSingleFileStories leaves: it lifts ### stories out from under their ## epics
-     * and re-links the walked tree to the lifted set without renumbering, so the dropped epic
-     * heading (seq 1) is absent and every note after it sits at an index one below its seq
-     */
+    // flattenSingleFileStories drops the epic heading without renumbering, so notes after it sit one index below their seq
     const gapped: NoteProps[] = [
         makeNote({ seq: 0, type: 'root', headline_raw: '' }),
         makeNote({ seq: 2, type: 'heading', headline_raw: '### Story A' }),
@@ -118,10 +115,7 @@ describe('resolveParentContextNote', () => {
         expect(resolveParentContextNote('doc:wire-alerts', notes)?.seq).toBe(2);
     });
 
-    /*
-     * the point of the whole change: the persisted id addresses the note, so a renumber that moves
-     * "Wire alerts" from seq 2 to seq 7 must follow it rather than scoping to whatever now holds 2
-     */
+    // the persisted id addresses the note, so a renumber moving it from seq 2 to seq 7 must follow it
     it('follows the note when a re-parse renumbers it', () => {
         const renumbered: NoteProps[] = [
             makeNote({ seq: 0, type: 'root', headline_raw: '' }),
@@ -309,7 +303,7 @@ describe('kanbanNoteOrder', () => {
     });
 
     it('falls back to merged seq (not document offset) when no weights', () => {
-        // a has the LARGER document offset but the SMALLER merged seq - e.g. a newest-at-bottom done.md story that mergeAggregateRoot reversed to the top. seq must win so the newest story sorts first in its column.
+        // a has the larger document offset but the smaller merged seq; seq must win so the newest story sorts first
         const a = makeNote({ seq: 1, position: { start: { offset: 900, line: 90 }, end: { offset: 920, line: 91 } } });
         const b = makeNote({ seq: 2, position: { start: { offset: 5, line: 1 }, end: { offset: 15, line: 2 } } });
         expect(kanbanNoteOrder(a, b)).toBeLessThan(0);
@@ -492,7 +486,7 @@ describe('kanbanNoteOrder cross-file', () => {
     }
 
     it('(weighted, weighted) across two origins: weight is decisive', () => {
-        // a has weight 1 on file-a; b has weight 2 on file-b. weight-1 should sort first regardless of file_rank/file_mtime ordering.
+        // a has weight 1 on file-a, b has weight 2 on file-b; weight-1 sorts first regardless of file rank or mtime
         const a = makeCrossFileNote(5, 'a.md', 5, 1_000, 1);
         const b = makeCrossFileNote(1, 'b.md', 0, 9_000, 2);
         expect(kanbanNoteOrder(a, b)).toBeLessThan(0);
@@ -1498,6 +1492,13 @@ describe('findStableIdCollisions', () => {
         const list_item = makeStoryNote({ seq: 1, type: 'listItem', headline_raw: 'Repeated body', depth: undefined });
         const list_item_dup = makeStoryNote({ seq: 2, type: 'listItem', headline_raw: 'Repeated body', depth: undefined });
         expect(findStableIdCollisions([root, list_item, list_item_dup])).toEqual([]);
+    });
+
+    it('excludes agent virtual notes even when several sessions share one self-description', () => {
+        // seq stamped past the highest parsed seq, matching what admitVirtualNotes would assign
+        const a = { ...makeVirtualNote({ namespace: 'agent', key: 'repo-a/session-1', headline: 'grok in active_development' }), seq: 1 };
+        const b = { ...makeVirtualNote({ namespace: 'agent', key: 'repo-b/session-2', headline: 'grok in active_development' }), seq: 2 };
+        expect(findStableIdCollisions([a, b])).toEqual([]);
     });
 
     it('orders groups by first-occurrence seq; notes within a group fall back to seq when source lines tie', () => {

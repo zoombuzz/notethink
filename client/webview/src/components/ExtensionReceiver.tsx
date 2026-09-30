@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as l10n from '@vscode/l10n';
 import { useVscodeMessages } from '../hooks/useVscodeMessages';
 import { useAutoIntegration } from '../hooks/useAutoIntegration';
@@ -15,7 +15,8 @@ import NoteRenderer from './NoteRenderer';
 // re-exported so NoteRenderer (and any other consumer) keeps importing ViewState from this module
 export type { ViewState };
 
-const saved_state = migrateSavedState(getVscodeApi().getState());
+// released once every hook has read its initial state, so the restored corpus isn't pinned in memory for the session
+let saved_state = migrateSavedState(getVscodeApi().getState());
 
 interface ExtensionReceiverProps {
     pendingWorkApi: UsePendingWorkApi;
@@ -46,7 +47,8 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         includeFilter,
         excludeFilter,
     } = useVscodeMessages({
-        initial_docs: saved_state?.docs,
+        // persisted docs are metadata-only placeholders with no body; wait for the extension's re-send instead
+        initial_docs: undefined,
         saved_view_states: saved_state?.viewStates,
         postMessage: postMessageToExtension,
         markConnected,
@@ -62,7 +64,9 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
     // effects
     useLinkInterceptor(postMessageToExtension);
     useVscodeStatePersistence(docs, view_states, persistVscodeState);
-    // integration-mode auto-resolution: resolve the opened file's nt_integration_mode / nt_breadcrumb_last and seed the first folder/scope dispatch while the view is automatic; the returned declaration is threaded into the view so the navigation handlers can reconcile congruence with the file
+    // nothing after mount reads saved_state again, so drop the reference rather than pin it for the session
+    useEffect(() => { saved_state = undefined; }, []);
+    // resolves the opened file's declared integration mode and seeds the first folder/scope dispatch
     const file_declared_integration = useAutoIntegration({
         docs,
         active_editor_doc_path,

@@ -10,12 +10,9 @@ interface MarkdownNoteContainerProps {
 }
 
 /**
- * render-only outer wrapper for a MarkdownNote: the note class string,
- * standard data props, debug data-* attributes, drag-and-drop spread
- * (draggableProps / dragHandleProps / style), and ARIA roles.
- *
- * State-less. The set_refs callback comes from the parent so the parent can
- * tee the same DOM node into both its measurement ref and the dnd library's
+ * Render-only outer wrapper for a MarkdownNote: note class string, standard data props, debug
+ * data-* attributes, drag-and-drop spread, and ARIA roles. Stateless; set_refs comes from the
+ * parent so it can tee the same DOM node into both its measurement ref and the dnd library's
  * innerRef.
  */
 export default function MarkdownNoteContainer(props: MarkdownNoteContainerProps): ReactElement {

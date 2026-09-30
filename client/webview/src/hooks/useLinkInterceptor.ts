@@ -21,7 +21,7 @@ export function useLinkInterceptor(postMessage: (message: unknown) => void): voi
                     postMessage({ type: 'openExternal', url });
                     return;
                 }
-                // a `?`-prefixed linetag is handled by linetagops, a bare `#fragment` scrolls in-page; everything else is a relative path the host resolves against the active doc and opens
+                // a `?` linetag is handled by linetagops, a bare `#fragment` scrolls in-page; everything else is a relative path
                 if (!url.startsWith('?') && !url.startsWith('#')) {
                     event.preventDefault();
                     event.stopPropagation();

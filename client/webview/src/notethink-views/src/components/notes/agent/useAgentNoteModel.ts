@@ -1,6 +1,6 @@
 import Debug from "debug";
 import { useMemo } from "react";
-import { useAgentActivity } from "../../../lib/activityhooks";
+import { useAgentActivity, useHasCompletedAgentScan } from "../../../lib/activityhooks";
 import {
     AGENT_VIRTUAL_NAMESPACE,
     attributedCommits,
@@ -64,10 +64,13 @@ export interface AgentCommitEntry {
  * - story_key: the pair this card joins on, undefined when the note carries no document path to join on
  * - root_path: the repository every row's request is echoed back to the host with, absent when this note sits in none the analyser has read a tree for
  * - winning_state: the most urgent state among `sessions`, undefined on a card drawing none; the meta-row chip is coloured and labelled by it
+ * - has_completed_scan: true once a 'live' snapshot has ever landed; distinguishes an empty first
+ *   scan from a later rescan that must not blank an already-populated card
  */
 export interface AgentNoteModel {
     heard_from_host: boolean;
     analyser: ActivityAnalyserState | undefined;
+    has_completed_scan: boolean;
     refusals: ActivityRefusal[];
     unreadable_session_ids: string[];
     is_virtual: boolean;
@@ -114,16 +117,13 @@ function committedEntriesFor(tree: ReturnType<typeof treeForDocPath>, sessions: 
 /** resolve the workspace-wide activity snapshot down to the one card this note draws */
 export function useAgentNoteModel(note: NoteProps): AgentNoteModel {
     const snapshot = useAgentActivity();
-    // the view's own document path, stamped by GenericView, is the single-file fallback for a note carrying no folder-mode origin
+    const has_completed_scan = useHasCompletedAgentScan();
+    // the view's document path, stamped by GenericView, is the single-file fallback for a note with no folder-mode origin
     const fallback_doc_path = note.display_options?.activity_doc_path as string | undefined;
     return useMemo(() => {
         const story_key = storyKeyForNote(note, fallback_doc_path);
         const sessions = sessionsForNote(snapshot, note, story_key);
-        /*
-         * A virtual note takes its repository from the session it was minted for; a story note takes
-         * it from its first bound session's root when one exists, else from its own document path,
-         * since a note with no bound session still sits in a repository.
-         */
+        // a virtual note's repo comes from its minting session; a story note's from its bound session, else its doc path
         const tree = sessions[0]
             ? treeForRoot(snapshot, sessions[0].root_path)
             : treeForDocPath(snapshot, note.origin?.relative_path ?? fallback_doc_path);
@@ -131,6 +131,7 @@ export function useAgentNoteModel(note: NoteProps): AgentNoteModel {
         return {
             heard_from_host: snapshot !== undefined,
             analyser: snapshot?.analyser,
+            has_completed_scan,
             refusals: snapshot?.analyser.refusals ?? [],
             unreadable_session_ids: [...new Set((snapshot?.analyser.refusals ?? []).map(r => r.session_id).filter((id): id is string => id !== undefined))],
             is_virtual: virtualNoteKeyOf(note, AGENT_VIRTUAL_NAMESPACE) !== undefined,
@@ -141,5 +142,5 @@ export function useAgentNoteModel(note: NoteProps): AgentNoteModel {
             uncommitted: uncommittedEntriesFor(tree, sessions),
             committed: committedEntriesFor(tree, sessions),
         };
-    }, [snapshot, note, fallback_doc_path]);
+    }, [snapshot, note, fallback_doc_path, has_completed_scan]);
 }

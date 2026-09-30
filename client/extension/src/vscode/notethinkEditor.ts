@@ -3,13 +3,16 @@ import { getNonce } from '../lib/cryptoops';
 import { NOTETHINK_VIEW_TYPE } from '../constants';
 import { AgentAnalyser } from './AgentAnalyser';
 import { PanelSession } from './PanelSession';
+import { ParsePool } from './ParsePool';
 
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
 	public static readonly viewType = NOTETHINK_VIEW_TYPE;
 	private activePanel: vscode.WebviewPanel | undefined;
-	// one analyser for the whole extension host, shared by every panel this provider opens; a panel demands and withdraws it, it never owns one
+	// one analyser for the whole extension host, shared by every panel this provider opens; no panel owns one
 	private readonly activity_analyser: AgentAnalyser;
+	// one parse worker pool shared by every panel, like activity_analyser; a pool per panel would multiply threads
+	private readonly parse_pool: ParsePool;
 
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
 		const provider = new NotethinkEditorProvider(context);
@@ -23,6 +26,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		this.activity_analyser = new AgentAnalyser(context);
+		this.parse_pool = new ParsePool(context);
 	}
 
 	public sendCommandToActiveWebview(command: string, payload?: Record<string, unknown>): void {
@@ -35,7 +39,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 	}
 
 	/**
-	 * wire a PanelSession onto a panel. initialDocument is optional: the openViewer command opens
+	 * Wires a PanelSession onto a panel. initialDocument is optional: the openViewer command opens
 	 * the panel docless when no .md editor is active, and the session then aggregates the workspace
 	 * root in folder mode instead of rendering one file. The custom-editor and deserializer paths
 	 * always have a real document.
@@ -44,7 +48,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		webviewPanel: vscode.WebviewPanel,
 		initialDocument?: vscode.TextDocument,
 	): Promise<void> {
-		// PanelSession owns all per-panel mutable state and behaviour; the provider only relays the active-panel reference for command posting
+		// PanelSession owns all per-panel state; the provider only relays the active-panel reference for posting
 		const session = new PanelSession(
 			webviewPanel,
 			initialDocument,
@@ -53,6 +57,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			(panel) => { this.activePanel = panel; },
 			(panel) => { if (this.activePanel === panel) { this.activePanel = undefined; } },
 			this.activity_analyser,
+			this.parse_pool,
 		);
 		await session.start();
 	}
@@ -77,10 +82,10 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		const client_dist_directory = 'client/webview/dist';
 		const script_uri = webview.asWebviewUri(vscode.Uri.joinPath(
 			this.context.extensionUri, client_dist_directory, 'index.js'));
-		/*
-		 * dev cache-buster: webview resources are cached by URL, so a rebuilt bundle can be served stale across reloads (the source of "my webview fix didn't take effect")
-		 * in dev a per-load query param forces a fresh fetch; production keeps the cacheable URL
-		 */
+		// base URL split-out chunks load from, since they resolve relative to this rather than index.js's own URL
+		const chunk_public_path = webview.asWebviewUri(vscode.Uri.joinPath(
+			this.context.extensionUri, client_dist_directory)).toString() + '/';
+		// dev cache-buster: a per-load query param forces a fresh fetch instead of a rebuilt bundle served stale by URL
 		const cache_bust = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV) ? `?v=${Date.now()}` : '';
 		const nonce = getNonce();
 		return /* html */`
@@ -88,7 +93,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; worker-src blob:; connect-src ${webview.cspSource};">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
 				<title>NoteThink</title>
 			</head>
@@ -96,6 +101,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				<div id="root"></div>
 				<script nonce="${nonce}">
 					(function() {
+						// read by chunkLoading.ts to set webpack's runtime chunk base URL and nonce before a split chunk loads
+						window.__notethinkChunkConfig = { publicPath: ${JSON.stringify(chunk_public_path)}, nonce: ${JSON.stringify(nonce)} };
 						// Disable React 19's component Performance Track by removing performance.measure
 						// BEFORE the webview bundle loads. React's supportsUserTiming flag is evaluated
 						// once at module-load time via "typeof performance.measure === 'function'"; when

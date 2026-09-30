@@ -52,7 +52,7 @@ test.describe('Single-file kanban story descent', () => {
     });
 
     test('a nested file with NO nt_view renders as a document and keeps its ## epic headings (descent is kanban-only)', async ({ page }) => {
-        // nested.md is `# Top Level -> ## Parent Note -> ### Child One/Two` with no nt_view: it must render as a document with its ## section intact, NOT a flattened board
+        // nested.md (Top Level -> Parent Note -> Child One/Two) has no nt_view, so it renders as a document with ## intact
         const { path: doc_path } = await injectDocsFromFixture(page, 'nested.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
         await simulateSelectionChanged(page, doc_path, 2);

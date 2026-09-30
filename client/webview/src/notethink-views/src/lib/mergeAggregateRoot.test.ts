@@ -174,7 +174,7 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('newest-at-bottom interleaves each project\'s newest-first across projects', () => {
-        // two done.md-style files: newest is the last story; cap 2 keeps the last two reversed (newest first), then interleave so the column shows each project's most-recent completion first
+        // cap 2 keeps each file's last two entries reversed to newest-first, then interleaves them
         const docA = orderedFile('id-a', 'a/done.md', 'A', 'newest-at-bottom', ['A1', 'A2', 'A3']);
         const docB = orderedFile('id-b', 'b/done.md', 'B', 'newest-at-bottom', ['B1', 'B2', 'B3']);
         const { root } = mergeAggregateRoot({ 'id-b': docB, 'id-a': docA }, '/repo/', 2);
@@ -244,12 +244,6 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('## epic wrapping ### stories: epic name carried as structural origin.epic on each story', () => {
-        /*
-         * # Todo
-         * ## Phase 3
-         * ### Build feature
-         * ### Test feature
-         */
         const text = '# Todo\n## Phase 3\n### Build feature\n### Test feature\n';
         const children: MdastNode[] = [
             mdastNode('heading', 0, 6, { depth: 1 }),
@@ -268,11 +262,6 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('## epic with id linetag: origin.epic carries id', () => {
-        /*
-         * # Todo
-         * ## New Relic [](?id=nr)
-         * ### Wire alerts
-         */
         const headline2 = '## New Relic [](?id=nr)';
         const text = `# Todo\n${headline2}\n### Wire alerts\n`;
         const h1_end = 6;
@@ -294,11 +283,6 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('direct epic= linetag overrides structural ## parent', () => {
-        /*
-         * # Todo
-         * ## Structural Epic
-         * ### Story [](?epic=Other)
-         */
         const story_headline = '### Story [](?epic=Other)';
         const text = `# Todo\n## Structural Epic\n${story_headline}\n`;
         const h1_end = 6;
@@ -321,11 +305,6 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('epic= linetag resolves by exact-name match within the same file', () => {
-        /*
-         * # Todo
-         * ## Foo Bar
-         * ### Story [](?epic=Foo+Bar)
-         */
         const story_headline = '### Story [](?epic=Foo+Bar)';
         const text = `# Todo\n## Foo Bar\n${story_headline}\n`;
         const h1_end = 6;
@@ -430,12 +409,7 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('origin stamped on descendants of a story (not just the story itself)', () => {
-        /*
-         * story with a sub-bullet child
-         * # Todo
-         * ### Story A
-         * + sub bullet
-         */
+        // story with a sub-bullet child
         const text = '# Todo\n### Story A\n+ sub bullet\n';
         const h1_end = 6;
         const h3_start = h1_end + 1;
@@ -498,7 +472,7 @@ describe('mergeAggregateRoot', () => {
         const { all_notes } = mergeAggregateRoot({ 'id-a': docA, 'id-b': docB }, '/repo/');
         const a1 = all_notes.find(n => n.headline_raw === '### A1')!;
         const b1 = all_notes.find(n => n.headline_raw === '### B1')!;
-        // both stories carry their own pre-merge offsets (which happen to coincide because both files have the same H1 length); the seqs are globally renumbered but source_position is not
+        // pre-merge offsets coincide here (equal H1 length); seqs are renumbered, source_position is not
         expect(a1.origin?.source_position?.start.offset).toBe(a1.position.start.offset);
         expect(b1.origin?.source_position?.start.offset).toBe(b1.position.start.offset);
         // the merge numbers a1 ahead of b1 (file a sorts first at rank 0) - source_position is unaffected
@@ -549,7 +523,7 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('keeps pill labels stable across folder descents when workspace_projects is provided', () => {
-        // simulates: at workspace root we see notethink + notebook + cobalt (label NT, NB, CO). After descending into notethink/ only the notethink doc is visible. Without workspace_projects, the disambiguation collapses and notethink's label flips to "NO" (next char). With workspace_projects, the universe is fixed and the label stays "NT"
+        // descending into notethink/ alone collapses its label to NO; workspace_projects holds it at NT
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
         const workspace_universe = ['cobalt', 'notebook', 'notethink'];
         const { root } = mergeAggregateRoot(
@@ -591,10 +565,10 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('falls back to visible-set derivation when workspace_projects is omitted (legacy)', () => {
-        // legacy callers (no workspace_projects argument) should see the original behaviour: labels derive from the visible set only
+        // legacy callers (no workspace_projects) see the original behaviour: labels derive from the visible set alone
         const docNt = simpleFile('id-nt', 'notethink/todo.md', 'Notethink', ['Nt1']);
         const { root } = mergeAggregateRoot({ 'id-nt': docNt }, '/repo/notethink');
-        // with only notethink visible and no universe, divergence collapses and we get the second char of the project name (NO) - preserving the old behaviour
+        // with only notethink visible and no universe, divergence collapses to the second char of the name (NO)
         expect(root.child_notes![0].origin?.project_label).toBe('NO');
     });
 
@@ -698,7 +672,7 @@ describe('mergeAggregateRoot', () => {
             const docA = orderedFile('id-a', 'a/todo.md', 'A', 'newest-at-top', ['A1', 'A2', 'A3', 'A4']);
             const docB = orderedFile('id-b', 'b/todo.md', 'B', 'newest-at-bottom', ['B1', 'B2', 'B3', 'B4']);
             const { root, all_notes } = mergeAggregateRoot({ 'id-b': docB, 'id-a': docA }, '/repo/', 2);
-            // a kept [A1,A2] (first 2), b kept [B4,B3] (last 2 reversed newest-first); round-robin in stable file order a/ then b/ → A1,B4,A2,B3
+            // a keeps first 2 [A1,A2], b keeps last 2 reversed [B4,B3]; stable file order round-robins A1,B4,A2,B3
             expect(root.child_notes!.map(n => n.headline_raw)).toEqual(
                 ['### A1', '### B4', '### A2', '### B3'],
             );
@@ -706,14 +680,7 @@ describe('mergeAggregateRoot', () => {
         });
 
         it('epic-nested stories are counted in the per-file cap', () => {
-            /*
-             * # Todo
-             * ### S1            (direct)
-             * ## Epic
-             * ### S2            (epic-nested)
-             * ### S3            (epic-nested)
-             * ### S4            (epic-nested)
-             */
+            // S1 sits directly under the H1; S2-S4 nest under Epic
             const h1 = '# Todo';
             const s1 = '### S1';
             const epic = '## Epic';
@@ -768,10 +735,6 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('file_view_type from H1 nt_view linetag is captured on every story of that file', () => {
-        /*
-         * # Todo [](?nt_view=kanban)
-         * ### Story
-         */
         const h1_text = '# Todo [](?nt_view=kanban)';
         const text = `${h1_text}\n### Story\n`;
         const h1_end = h1_text.length;
@@ -839,10 +802,6 @@ describe('mergeAggregateRoot', () => {
     });
 
     it('file_card_type from H1 nt_card linetag is captured on every story of that file', () => {
-        /*
-         * # Todo [](?nt_card=sticky)
-         * ### Story
-         */
         const h1_text = '# Todo [](?nt_card=sticky)';
         const text = `${h1_text}\n### Story\n`;
         const h1_end = h1_text.length;
@@ -1028,7 +987,7 @@ describe('mergeAggregateRoot', () => {
             const before_doc = simpleFile('id-a', 'a/todo.md', 'A', ['Existing']);
             const before = mergeAggregateRoot({ 'id-a': before_doc }, '/repo/');
             const before_existing = before.root.child_notes!.find(n => n.headline_raw === '### Existing')!;
-            // file after: # A / ### Inserted Before / ### Existing - the new sibling sits earlier in the file, so `Existing` has a higher offset than it did before
+            // the new sibling in `after_doc` sits earlier in the file, so `Existing` gets a higher offset
             const after_doc = simpleFile('id-a', 'a/todo.md', 'A', ['Inserted Before', 'Existing']);
             const after = mergeAggregateRoot({ 'id-a': after_doc }, '/repo/');
             const after_existing = after.root.child_notes!.find(n => n.headline_raw === '### Existing')!;
@@ -1051,7 +1010,7 @@ describe('mergeAggregateRoot', () => {
         });
 
         it('duplicate same-headline stories within a file are disambiguated', () => {
-            // two stories share the stripped headline "Dup" - the second must get a `#1` suffix so stable_ids remain unique within the file
+            // two stories share the stripped headline "Dup"; the second gets a `#1` suffix to stay unique
             const doc = simpleFile('id-a', 'a/todo.md', 'A', ['Dup', 'Dup']);
             const { root } = mergeAggregateRoot({ 'id-a': doc }, '/repo/');
             const ids = root.child_notes!.map(n => n.stable_id);
@@ -1108,7 +1067,7 @@ describe('anyViewInFolderMode', () => {
     });
 
     it('legacy rescue: returns true via stranded folder tag even when canonical is current_file (covers pre-fix persisted state until the next flip cleans up)', () => {
-        // the dispatcher's clearing-on-flip is what eventually purges stranded tags; until that happens the helper must keep rescuing legacy state so users who never explicitly flipped still see their folder view
+        // the dispatcher clears stranded tags on flip; until then this rescue keeps a never-flipped user's folder view visible
         const view_states = {
             [FOLDER_VIEW_STATE_ID]: { display_options: { integration_mode: 'current_file' } },
             '/repo/a.md': { display_options: { integration_mode: 'folder' } },
@@ -1200,7 +1159,7 @@ describe('stampSingleFileStableIds', () => {
         return { text, root };
     }
 
-    // single-file mode tree shape: root → H1 → [Story1, Story2, ...]. The H1 sits in root.child_notes and the depth-3 stories are H1's child_notes.
+    // single-file tree shape: root → H1 → [Story1, Story2, ...], depth-3 stories under H1's child_notes
     function findNoteByHeadline(root: ReturnType<typeof convertMdastToNoteHierarchy>, headline: string): ReturnType<typeof convertMdastToNoteHierarchy> | undefined {
         const stack = [...(root.child_notes ?? [])];
         while (stack.length > 0) {
@@ -1304,7 +1263,7 @@ describe('stampSingleFileStableIds', () => {
 });
 
 describe('flattenSingleFileStories', () => {
-    // build a single-file NoteProps tree from heading lines (text + depth), offsets assigned in document order so linetags + positions are real
+    // builds a single-file NoteProps tree from heading lines, with offsets assigned in document order
     function buildTree(lines: Array<{ text: string; depth: number }>): NoteProps {
         const text = lines.map(l => l.text).join('\n') + '\n';
         const children: MdastNode[] = [];
@@ -1432,7 +1391,7 @@ describe('flattenSingleFileStories', () => {
         ]);
         const before = root.child_notes!.map(n => n.headline_raw);
         flattenSingleFileStories(root, 'doc-1', '/repo/noh1.md');
-        // without exactly one # H1 the document root stays the scope and the ## epics stay its children; lifting stories there would make a single file look like a folder aggregate (isAggregateRoot)
+        // without exactly one H1, the root stays the scope; lifting stories here would look like a folder aggregate
         expect(root.child_notes!.map(n => n.headline_raw)).toEqual(before);
         expect(root.child_notes!.every(n => n.origin === undefined)).toBe(true);
     });
@@ -1513,6 +1472,14 @@ describe('mergeAggregateRoot incremental merges', () => {
         expect(conversionProbe().merges).toBe(1);
     });
 
+    it('the conversion probe carries the latest merge\'s top-level story count, one per single-story doc', () => {
+        resetConversionProbe();
+        mergeAggregateRoot(board(3), '/repo/');
+        expect(conversionProbe().story_count).toBe(3);
+        mergeAggregateRoot(board(50), '/repo/');
+        expect(conversionProbe().story_count).toBe(50);
+    });
+
     it('a re-merge of an untouched 50-doc board converts nothing', () => {
         const cache = new FolderMergeCache();
         mergeAggregateRoot(board(50), '/repo/', undefined, undefined, cache);
@@ -1526,6 +1493,22 @@ describe('mergeAggregateRoot incremental merges', () => {
         resetConversionProbe();
         mergeAggregateRoot(board(50, 7), '/repo/');
         expect(conversionProbe().conversions).toBe(50);
+    });
+
+    /*
+     * A doc awaiting its parse is stamped as an explicit `undefined` entry, never an omitted key, so
+     * retain() can tell "still on the board" apart from "removed" - otherwise its cache entry would
+     * be evicted, and the same content arriving moments later would reconvert from scratch.
+     */
+    it('a doc present as an explicit undefined entry (awaiting its parse) keeps its cached conversion for when its original content returns', () => {
+        const cache = new FolderMergeCache();
+        const initial = board(3);
+        mergeAggregateRoot(initial, '/repo/', undefined, undefined, cache);
+        const awaiting_parse = { ...initial, 'id-2': undefined };
+        mergeAggregateRoot(awaiting_parse, '/repo/', undefined, undefined, cache);
+        resetConversionProbe();
+        mergeAggregateRoot(initial, '/repo/', undefined, undefined, cache);
+        expect(conversionProbe().conversions).toBe(0);
     });
 
     it('an unchanged doc keeps its seqs and stable_ids when a sibling doc changes', () => {
@@ -1567,13 +1550,7 @@ describe('mergeAggregateRoot incremental merges', () => {
     });
 
     it('the file cap stays inside the seq grid, so no two files can share a slot', () => {
-        /*
-         * The bound that matters is silent when it breaks: a board of SEQ_FILE_SLOT_COUNT files or more gives the file
-         * at slot N the same seqs as the file at slot N - SEQ_FILE_SLOT_COUNT one rank up, and two notes answering to
-         * one seq is the identity-collision class CODING_STANDARDS records as having surfaced three times already.
-         * MAX_AGGREGATE_FILES is what holds it. It lives in the extension package, which this one cannot import, so
-         * the pin reads the declaration - raising the cap past the grid turns this red rather than corrupting a board.
-         */
+        // MAX_AGGREGATE_FILES (extension package) must stay below SEQ_FILE_SLOT_COUNT or files could share a seq slot
         const constants_path = path.resolve(__dirname, '..', '..', '..', '..', '..', 'extension', 'src', 'constants.ts');
         const source = fs.readFileSync(constants_path, 'utf8');
         const declaration = /export const MAX_AGGREGATE_FILES = (\d+);/.exec(source);
@@ -1604,25 +1581,27 @@ describe('mergeAggregateRoot incremental merges', () => {
         }
     });
 
-    it('the merge never writes to the parsed tree it caches', () => {
+    it('the merge never writes to the doc\'s own parsed tree, only to a clone', () => {
+        // parses independently, the same way convertCounted does internally, since FolderMergeCache keeps only the stamped result
         const cache = new FolderMergeCache();
         const docs = board(1);
-        const parsed = cache.convert(docs['id-0']);
-        const parsed_story = parsed.child_notes![0].child_notes![0];
-        const before = { seq: parsed_story.seq, level: parsed_story.level, origin: parsed_story.origin, stable_id: parsed_story.stable_id };
+        const independent_parse = convertMdastToNoteHierarchy(docs['id-0'].content, docs['id-0'].text);
+        const independent_story = independent_parse.child_notes![0].child_notes![0];
+        const before = { seq: independent_story.seq, level: independent_story.level, origin: independent_story.origin, stable_id: independent_story.stable_id };
         const { root } = mergeAggregateRoot(docs, '/repo/', undefined, undefined, cache);
-        expect(root.child_notes![0]).not.toBe(parsed_story);
-        expect(parsed_story.seq).toBe(before.seq);
-        expect(parsed_story.level).toBe(before.level);
-        expect(parsed_story.origin).toBe(before.origin);
-        expect(parsed_story.stable_id).toBe(before.stable_id);
+        // the independent parse has a different identity, so writes to the merge's own clone aren't observed here
+        expect(root.child_notes![0]).not.toBe(independent_story);
+        expect(independent_story.seq).toBe(before.seq);
+        expect(independent_story.level).toBe(before.level);
+        expect(independent_story.origin).toBe(before.origin);
+        expect(independent_story.stable_id).toBe(before.stable_id);
     });
 
     it('a doc that leaves the board is forgotten, and re-parsed if it comes back', () => {
         const cache = new FolderMergeCache();
         mergeAggregateRoot(board(3), '/repo/', undefined, undefined, cache);
         const without = board(3);
-        delete without['id-1'];
+        delete without['id-2'];
         mergeAggregateRoot(without, '/repo/', undefined, undefined, cache);
         resetConversionProbe();
         mergeAggregateRoot(board(3), '/repo/', undefined, undefined, cache);
@@ -1654,5 +1633,62 @@ describe('mergeAggregateRoot incremental merges', () => {
         const before = storiesByStableId(first.root).get('id-0:story-0')!;
         const after = storiesByStableId(second.root).get('id-0:story-0')!;
         expect(after.children).toBe(before.children);
+    });
+
+    /*
+     * fileStampKey deliberately excludes file_slot, so a sibling displacing this doc's slot does not
+     * force a re-parse - reseatFileSlot rewrites its seqs in place instead.
+     */
+    it('a sibling arriving before a doc in file order reseats its seqs without re-parsing it', () => {
+        const cache = new FolderMergeCache();
+        mergeAggregateRoot(board(3), '/repo/', undefined, undefined, cache);
+        // 'aaa/todo.md' sorts before every 'projN/todo.md' doc, so every existing file_slot shifts up by one
+        const with_new_sibling = { ...board(3), 'id-new': hashed(simpleFile('id-new', 'aaa/todo.md', 'New', ['Story new']), 'hash-new') };
+        resetConversionProbe();
+        const second = mergeAggregateRoot(with_new_sibling, '/repo/', undefined, undefined, cache);
+        expect(conversionProbe().conversions).toBe(1);
+        const seqs = second.all_notes.filter(n => n.seq !== 0).map(n => n.seq);
+        expect(new Set(seqs).size).toBe(seqs.length);
+    });
+
+    it('a doc that sheds its content after being stamped keeps contributing from the cache', () => {
+        const cache = new FolderMergeCache();
+        const docs = board(3);
+        const first = mergeAggregateRoot(docs, '/repo/', undefined, undefined, cache);
+        // mirrors useWorkerParsedDocs.ts's releaseFolderDocContent: the doc keeps its identity/hash but sheds `content`
+        const content_shed = { ...docs, 'id-1': { ...docs['id-1'], content: undefined } };
+        resetConversionProbe();
+        const second = mergeAggregateRoot(content_shed, '/repo/', undefined, undefined, cache);
+        expect(conversionProbe().conversions).toBe(0);
+        const before = storiesByStableId(first.root).get('id-1:story-1')!;
+        const after = storiesByStableId(second.root).get('id-1:story-1')!;
+        expect(after).toBe(before);
+    });
+
+    it('a content-shed doc whose file_slot also shifts reseats via the stale-cache fallback, never crashing on the missing content', () => {
+        const cache = new FolderMergeCache();
+        const docs = board(3);
+        mergeAggregateRoot(docs, '/repo/', undefined, undefined, cache);
+        const shifted_and_shed = {
+            ...docs,
+            'id-1': { ...docs['id-1'], content: undefined },
+            'id-new': hashed(simpleFile('id-new', 'aaa/todo.md', 'New', ['Story new']), 'hash-new'),
+        };
+        resetConversionProbe();
+        const second = mergeAggregateRoot(shifted_and_shed, '/repo/', undefined, undefined, cache);
+        // id-new is a genuine miss (1 conversion); id-1 has no content, so it must reseat from the stale stamp rather than convert
+        expect(conversionProbe().conversions).toBe(1);
+        expect(storiesByStableId(second.root).get('id-1:story-1')).toBeDefined();
+        const seqs = second.all_notes.filter(n => n.seq !== 0).map(n => n.seq);
+        expect(new Set(seqs).size).toBe(seqs.length);
+    });
+
+    it('a doc with neither content nor a prior stamp contributes nothing, rather than crashing', () => {
+        const cache = new FolderMergeCache();
+        const docs = board(2);
+        const awaiting_first_parse: AggregatedDocInput = { ...simpleFile('id-new', 'new/todo.md', 'New', ['Story new']), content: undefined, hash_sha256: 'hash-new' };
+        const { root } = mergeAggregateRoot({ ...docs, 'id-new': awaiting_first_parse }, '/repo/', undefined, undefined, cache);
+        expect(storiesByStableId(root).has('id-new:story-new')).toBe(false);
+        expect(root.child_notes!.length).toBe(2);
     });
 });

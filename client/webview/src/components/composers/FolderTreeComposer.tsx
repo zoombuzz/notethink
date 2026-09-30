@@ -1,14 +1,20 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { GenericView } from "../../notethink-views/src/components";
 import { mergeAggregateRoot, FolderMergeCache, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from "../../notethink-views/src/lib/mergeAggregateRoot";
 import { INTEGRATION_MODE_FOLDER } from "../../notethink-views/src/types/IntegrationMode";
 import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE } from "../../constants";
 import { buildViewDisplayOptions } from "../../lib/composerops";
+import { releaseFolderDocContent } from "../../hooks/useWorkerParsedDocs";
 import type { ReactElement } from "react";
 import type { HashMapOf, Doc } from "../../types/general";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
 import type { TextSelection } from "../../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../NoteRenderer";
+
+// must stay in sync with mergeAggregateRoot's docContentKey, the identity a stamp cache hit is keyed on
+function docContentKey(doc: Doc): string {
+    return doc.hash_sha256 ?? doc.text ?? '';
+}
 
 /**
  * FolderTreeComposer merges every loaded Doc into a single synthetic-root tree and
@@ -19,17 +25,17 @@ import type { NoteRendererProps } from "../NoteRenderer";
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function FolderTreeComposer({ docs, integration_path, props }: { docs: HashMapOf<Doc>; integration_path: string; props: NoteRendererProps }): ReactElement {
-    // this view's merge memory, so an incoming update re-parses and re-stamps only the doc that changed; one instance per mounted composer, created on first render and never replaced
+    // this view's merge memory: an update re-parses only the changed doc; one instance, created on first render
     const merge_cache = useRef<FolderMergeCache | undefined>(undefined);
     if (!merge_cache.current) { merge_cache.current = new FolderMergeCache(); }
-    // memoize merged root keyed on the joined content hashes of the docs - changes when any doc reparses
+    // merge key joins each doc's hash with whether content has arrived, since hash alone can lag content
     const merge_key = useMemo(() => {
         return Object.entries(docs)
-            .map(([id, d]) => `${id}:${d.hash_sha256 ?? ''}`)
+            .map(([id, d]) => `${id}:${d.hash_sha256 ?? ''}:${d.content ? '1' : '0'}`)
             .sort()
             .join('|');
     }, [docs]);
-    // folder mode reads and writes through the canonical FOLDER_VIEW_STATE_ID; the scan-by-tag fallback rescues any folder-tagged viewState stranded under a doc-path key
+    // canonical FOLDER_VIEW_STATE_ID; the scan-by-tag fallback rescues a folder viewState stranded under a doc-path key
     const view_state_id = FOLDER_VIEW_STATE_ID;
     const view_state = (() => {
         if (!props.viewStates) { return undefined; }
@@ -43,7 +49,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
         }
         return undefined;
     })();
-    // precedence for every cascading setting below: per-session viewState override > cascade resolved by the extension > webview built-in default
+    // precedence below: per-session viewState override > extension-resolved cascade > webview default
     const cascade = props.settingsCascade;
     const maxNotesPerFile = view_state?.display_options?.maxNotesPerFile
         ?? cascade?.maxNotesPerFile
@@ -53,7 +59,8 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
     const { merged_root, all_notes } = useMemo(() => {
         const input: { [key: string]: AggregatedDocInput | undefined } = {};
         for (const [id, d] of Object.entries(docs)) {
-            if (d.content && d.text !== undefined) {
+            if (d.text !== undefined) {
+                // `content` is undefined once shed; mergeAggregateRoot then reads its stamp cache instead
                 input[id] = {
                     id,
                     path: d.path,
@@ -63,17 +70,29 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
                     mtime: d.mtime,
                     hash_sha256: d.hash_sha256,
                 };
+            } else {
+                // awaiting its text; a present-but-undefined key keeps its merge cache from eviction
+                input[id] = undefined;
             }
         }
         const { root, all_notes } = mergeAggregateRoot(input, integration_path, maxNotesPerFile, workspace_projects, merge_cache.current);
         return { merged_root: root, all_notes };
     }, [merge_key, integration_path, maxNotesPerFile, workspace_projects_key]);
+    // sheds a doc's content once digested; an effect, so StrictMode's double-invoke can't drop content still needed
+    useEffect(() => {
+        for (const [id, d] of Object.entries(docs)) {
+            if (d.content === undefined) { continue; }
+            if (merge_cache.current!.hasContentKey(id, docContentKey(d))) {
+                releaseFolderDocContent(id, docContentKey(d));
+            }
+        }
+    }, [merge_key]);
     const { viewType, view_display_options } = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_FOLDER, integration_path);
     // number of source files actually loaded into the merged view (the breadcrumb shows this)
     const file_count = Object.keys(docs).length;
     // top-level stories merged into the synthetic root - the "X" in the breadcrumb "(X in Y files)"
     const note_count = merged_root.child_notes?.length ?? 0;
-    // the include/exclude globs are config-tier cascade settings with a SINGLE source of truth: the extension resolves them (workspace > user > built-in) and is the only thing that discovers files with them, then echoes the effective values back as props.{include,exclude}Filter. The drawer must mirror exactly what discovery used, so do NOT layer a per-view viewState override on top - that store can drift from (and silently shadow) the config the extension actually discovered with, leaving the box showing one glob while the loaded file set was filtered by another, and making the cascade Reset buttons (which only clear config) appear to do nothing. cascade is the fallback before the first echo arrives; `''` is a valid user value so ?? is correct (only null/undefined fall through)
+    // extension is the sole source for these globs (no per-view override); '' is valid, so ?? is deliberate
     const includeFilter = props.includeFilter ?? cascade?.includeFilter ?? DEFAULT_INCLUDE_FILTER;
     const excludeFilter = props.excludeFilter ?? cascade?.excludeFilter ?? DEFAULT_EXCLUDE_FILTER;
     // loaded source files (workspace-relative where known) for the Files drawer list, stable order
@@ -81,7 +100,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
         .map(d => d.relative_path ?? d.path)
         .sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
     const view_state_ids = props.viewStates ? Object.keys(props.viewStates) : undefined;
-    // pass the active editor's doc path + its current selection: the per-doc matcher in useViewContext uses these to find which merged note the editor caret currently sits inside
+    // active editor's doc path + selection: useViewContext's per-doc matcher finds the caret's merged note
     const active_editor_doc_path = props.activeEditorDocPath;
     const active_selection: TextSelection | undefined = active_editor_doc_path ? props.selections?.[active_editor_doc_path] : undefined;
     const view_props: ViewProps = {
@@ -119,7 +138,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
             revertAllViewsToDefaultState: () => {},
             onNavigationCommand: props.onNavigationCommand,
             postMessage: props.postMessage ? (message: unknown) => {
-                // folder mode click handlers attach docPath from note.origin; we don't stamp a synthetic doc here, so messages without origin context pass through and the extension drops anything it can't route
+                // click handlers attach docPath from note.origin; without it, the extension drops what it can't route
                 props.postMessage!(message);
             } : undefined,
         },

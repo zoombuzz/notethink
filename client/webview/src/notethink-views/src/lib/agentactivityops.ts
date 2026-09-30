@@ -60,9 +60,9 @@ const HOURS_PER_DAY = 24;
 const MS_PER_HOUR = 60 * 60 * 1000;
 // the analyser's usage window, the longest span a counter can state; it mirrors the extension host's AGENT_WINDOW_DAYS
 export const ACTIVITY_USAGE_WINDOW_DAYS = 30;
-// an elapsed clock reads in hours and minutes up to two days, then in whole days, because "448h 56m" is a date a reader has to work out
+// an elapsed clock reads in hours and minutes up to two days, then in whole days, since "448h 56m" needs working out
 const CLOCK_HOURS_BEFORE_DAYS = 48;
-// the one model-id prefix that repeats what the vendor monogram beside it already says; "grok-" is kept because a bare version number would not read as a model
+// the one model-id prefix repeating the vendor monogram beside it; "grok-" stays since a bare version isn't a model
 const REDUNDANT_MODEL_PREFIX = 'claude-';
 
 /*
@@ -489,6 +489,6 @@ export function totalActivityUsage(sessions: ReadonlyArray<ActivitySessionState>
         if (usage.cost_usd !== undefined) { cost_usd = (cost_usd ?? 0) + usage.cost_usd; } else { all_priced = false; }
         if (usage.is_estimate) { is_estimate = true; }
     }
-    // a total is priced only when every contributing usage is, so one unpriced session never understates the dollar figure against the tokens shown beside it
+    // a total is priced only when every contributing usage is, so one unpriced session never understates the dollar figure
     return { input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd: all_priced ? cost_usd : undefined, is_estimate };
 }

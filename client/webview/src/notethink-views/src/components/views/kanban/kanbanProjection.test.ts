@@ -176,7 +176,7 @@ describe('projectionSatisfied', () => {
     });
 
     it('returns false when the dragged note is in the right column but at the wrong index', () => {
-        // note_A has status 'done', note_D also has status 'done'; A should be at index 1 (after D) but we assert destination_index=0
+        // both note_A and note_D end up 'done'; A belongs at index 1 (after D), but the assertion claims index 0
         const done_A = withWeight(
             { ...NOTE_A, linetags: { status: { key: 'status', value: 'done', key_offset: 0, value_offset: 0, linktext_offset: 0, note_seq: NOTE_A.seq } } },
             2,
@@ -254,7 +254,7 @@ describe('applyKanbanMove - edge cases', () => {
         const doing_col = result
             .filter(n => n.linetags?.status?.value === 'doing')
             .sort((a, b) => (a.linetags?.nt_kanban_ordering_weight?.value_numeric ?? 0) - (b.linetags?.nt_kanban_ordering_weight?.value_numeric ?? 0));
-        // A should be last (clamped to end)
+        // clamped to the end of the column
         expect(doing_col[doing_col.length - 1].stable_id).toBe('a');
     });
 

@@ -80,10 +80,7 @@ describe('convertMdastToNoteHierarchy', () => {
     });
 
     it('multiple headings get incrementing seq numbers', () => {
-        /*
-         * "# A\n## B\n## C\n"
-         *  0123 45678 9...
-         */
+        // "# A\n## B\n## C\n" byte offsets: 0123 45678 9...
         const text = '# A\n## B\n## C\n';
         const mdast: MdastNode = {
             type: 'root',
@@ -102,10 +99,7 @@ describe('convertMdastToNoteHierarchy', () => {
     });
 
     it('nested headings get correct levels (h1=1, h2 under h1=2)', () => {
-        /*
-         * "# Title\n## Sub\nSome text\n"
-         *  01234567 89...14 15...
-         */
+        // "# Title\n## Sub\nSome text\n" byte offsets: 01234567 89...14 15...
         const text = '# Title\n## Sub\nSome text\n';
         const mdast: MdastNode = {
             type: 'root',
@@ -463,11 +457,7 @@ describe('makePosition line computation (binary search)', () => {
     });
 
     it('computes correct line numbers for multi-line text', () => {
-        /*
-         * line 1: "# A\n"  offsets 0-3, newline at 3
-         * line 2: "body\n"  offsets 4-8, newline at 8
-         * line 3: "# B\n"  offsets 9-12, newline at 12
-         */
+        // "# A\n" (0-3), "body\n" (4-8), "# B\n" (9-12); newlines at 3, 8, 12
         const text = '# A\nbody\n# B\n';
         const mdast: MdastNode = {
             type: 'root',
@@ -557,7 +547,7 @@ describe('nestChildNotes stack-based nesting', () => {
         const root = convertMdastToNoteHierarchy(mdast, text);
         const allNotes = flattenNotes(root);
 
-        // A has no parent_notes
+        // note A has no parent_notes
         expect(allNotes[0].parent_notes).toBeUndefined();
         // B's parent is A
         expect(allNotes[1].parent_notes).toHaveLength(1);
@@ -585,6 +575,44 @@ describe('nestChildNotes stack-based nesting', () => {
         expect(allNotes[1].level).toBe(1);
         expect(allNotes[0].parent_notes).toBeUndefined();
         expect(allNotes[1].parent_notes).toBeUndefined();
+    });
+});
+
+/*
+ * A note's `children` is a REFERENCE to the mdast node's `.children`, never a copy: a deep clone
+ * here would double or triple retained heap on a dense file. These tests pin the sharing against
+ * a "just spread it to be safe" edit.
+ */
+describe('children/children_body hold references, never copies (memory)', () => {
+
+    it('a heading note\'s children is the SAME array reference as its mdast node\'s children', () => {
+        const heading_children: MdastNode[] = [{ type: 'text', value: 'Title', position: { start: { offset: 2, line: 1 }, end: { offset: 7, line: 1 } } }];
+        const heading = mdastNode('heading', 0, 7, { depth: 1, children: heading_children });
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: 7, line: 1 } },
+            children: [heading],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, '# Title');
+        expect(root.child_notes![0].children).toBe(heading_children);
+    });
+
+    it('a list note\'s children is the SAME array reference as the list mdast node\'s children (the listItem nodes are not duplicated to build it)', () => {
+        const list_items: MdastNode[] = [
+            mdastNode('listItem', 2, 10, { children: [] }),
+            mdastNode('listItem', 11, 19, { children: [] }),
+        ];
+        const list = mdastNode('list', 2, 19, { children: list_items });
+        const heading = mdastNode('heading', 0, 1, { depth: 3 });
+        const mdast: MdastNode = {
+            type: 'root',
+            position: { start: { offset: 0, line: 1 }, end: { offset: 19, line: 3 } },
+            children: [heading, list],
+        };
+        const root = convertMdastToNoteHierarchy(mdast, '# x\n+ a\n+ b');
+        const list_note = root.child_notes![0].children_body!.find((n) => 'type' in n && (n as NoteProps).type === 'list') as NoteProps;
+        expect(list_note).toBeDefined();
+        expect(list_note.children).toBe(list_items);
     });
 });
 
@@ -654,7 +682,8 @@ describe('benchmark: large file parsing', () => {
         const root = convertMdastToNoteHierarchy(mdast, text);
         const elapsed = performance.now() - start;
 
-        expect(elapsed).toBeLessThan(50);
+        // 200ms: 1-30ms under parallel suite load, while an O(n^2) over 274 headings would take hundreds of ms
+        expect(elapsed).toBeLessThan(200);
         // verify correctness
         const all_notes = flattenNotes(root);
         expect(all_notes.length).toBe(274);

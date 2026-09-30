@@ -283,6 +283,11 @@
   margin: 0;
   font-size: 0.85em;
   color: var(--vscode-descriptionForeground, rgba(204, 204, 204, 0.7));
+
+  // a scan still in flight has not counted every session yet, so the total is provisional until it finishes
+  &[data-scanning="true"] {
+    opacity: 0.55;
+  }
 }
 
 .fileBands {

@@ -6,12 +6,13 @@ import styles from "../../ViewRenderer.module.scss";
 const debug = Debug("nodejs:notethink-views:ToolbarTab");
 
 /**
- * label: the tab's own current state, spelled out - a breadcrumb leaf, a file count, a view type. it
- *   gets its own `<testId>-label` element, so a test can read the state exactly without the chevron.
- * icon: optional node rendered after the label, for a tab whose state needs a glyph as well as words.
- * ariaLabel: overrides the accessible name when the visible label alone reads as cryptic out of context.
- * dataPath: the filesystem path a breadcrumb tab stands for, kept as data-path so path queries still find it.
- * hasPopup: marks the tab as opening a list of navigation targets rather than a settings panel.
+ * Props for one toolbar tab.
+ * - label: the tab's current state spelled out (a breadcrumb leaf, a file count, a view type); gets its
+ *   own `<testId>-label` element, so a test can read the state exactly without the chevron
+ * - icon: optional node rendered after the label, for a tab whose state needs a glyph as well as words
+ * - ariaLabel: overrides the accessible name when the visible label alone reads as cryptic out of context
+ * - dataPath: the filesystem path a breadcrumb tab stands for, kept as data-path so path queries find it
+ * - hasPopup: marks the tab as opening a list of navigation targets rather than a settings panel
  */
 interface ToolbarTabProps {
     label: string;

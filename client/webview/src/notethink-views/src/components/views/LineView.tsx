@@ -58,13 +58,17 @@ const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, dis
     />;
 };
 
+/**
+ * The axis (when not preset) resolves via the persisted select, else a focused-note / majority
+ * nt_group_by vote, else the first-level-folder default. The dropped layout renders optimistically
+ * client-side until the document round-trip lands, so there is no drop -> snap-back -> re-land flash;
+ * this is safe because KanbanBoard collapses the drop tween via transitionDuration rather than the
+ * old transition:'none' hack that broke dnd's transitionend and left cards stuck. Only lanes holding
+ * stories render, falling back to every lane when none do, so a stale lane order or an empty board
+ * never shows nothing.
+ */
 export default function LineView(props: LineViewProps): ReactElement {
-
-    /*
-     * the categorical axis the lanes group by. A preset (kanban) supplies its axis directly; otherwise
-     * Line resolves the group-by key - the persisted select, else a focused-note / majority nt_group_by
-     * vote, else the first-level-folder default - and builds a writable-or-read-only axis from it.
-     */
+    // resolves the group-by key and builds a writable-or-read-only axis when none is preset
     const axis: Axis = useMemo(() => {
         if (props.axis !== undefined) { return props.axis; }
         const key = resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, props.display_options?.settings?.groupBy);
@@ -78,16 +82,10 @@ export default function LineView(props: LineViewProps): ReactElement {
     const display_options: NoteDisplayOptions = {
         ...props.display_options,
     };
-    /*
-     * optimistic projection: hold the dropped layout client-side until the document round-trip lands, so there is no drop→snap-back→re-land flash
-     * safe to render the projected order during the drop animation because KanbanBoard collapses the drop tween via transitionDuration, not the old transition:'none' hack that broke dnd's transitionend and left cards stuck
-     */
+    // holds the dropped layout client-side until the document round-trip lands
     const { notes_to_render, applyOptimisticMove, is_projecting } = useProjectedNotes(props.notes_within_parent_context);
     const columns = useKanbanColumns(notes_to_render, display_options.settings?.columnOrder, axis);
-    /*
-     * only render lanes that contain stories (a stale lane order can list values no note currently uses)
-     * fall back to all lanes when nothing has stories so an empty board is never blank
-     */
+    // only lanes with stories render; falls back to every lane when none do
     const populated_columns = columns.filter(col => (col.child_notes?.length ?? 0) > 0);
     const visible_columns = populated_columns.length > 0 ? populated_columns : columns;
     // drag lifecycle: the FLIP gate + passive-transition layer and the drag responders that post the group-key rewrite
@@ -107,7 +105,7 @@ export default function LineView(props: LineViewProps): ReactElement {
     // virtual caret indicator: pulse-highlight the body item containing the editor caret
     useCaretIndicator(display_options, props.id, props.selection, view_specific_styles.caretTarget);
     const container_styles: Array<string> = [view_specific_styles.viewKanban, view_specific_styles.content];
-    // clear focus on a background click, but ignore the post-drop click (drag_active) that would otherwise jump the caret to the next story via the clear handler
+    // clears focus on a background click, but ignores the post-drop click that would jump the caret to the next story
     const clear_handler = display_options.focused_notes?.length
         ? props.handlers?.getClearHandler?.(display_options.focused_notes)
         : undefined;

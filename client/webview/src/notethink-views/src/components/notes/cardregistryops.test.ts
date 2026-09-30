@@ -224,11 +224,7 @@ describe('cardregistryops', () => {
 
     describe('offersNewCardType - the offer follows the pill, as it does on the view axis', () => {
 
-        /*
-         * A registry standing a rung above the built-in one, so `allcards` becomes an ordinary ancestor
-         * rather than the root. That is the only way to exercise the strict-ancestor half today, because
-         * every shipped card setting homes at the real root and the root is exempt.
-         */
+        // a registry standing a rung above the built-in one, so `allcards` is an ordinary ancestor, not the root
         const deeper: CardRegistry = {
             nodes: [
                 { id: 'everything', kind: 'abstract', selectable: false, label: 'Everything' },

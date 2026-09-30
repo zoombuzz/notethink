@@ -50,7 +50,7 @@ test.describe('Kanban Drag and Drop', () => {
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 
-        // Task B is in doing column. Driving the drag from `doing` rather than `backlog` keeps the test resilient to the settings cascade default column order, which puts backlog at the rightmost position so a right-drag from backlog would be a no-op
+        // dragging from `doing` rather than `backlog` stays resilient to the default order, where backlog sits rightmost
         const doing_column = page.locator('[role="region"][aria-label="doing"]');
         await expect(doing_column.getByRole('heading', { name: 'Task B' })).toBeVisible({ timeout: 3000 });
 
@@ -82,7 +82,7 @@ test.describe('Kanban Drag and Drop', () => {
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 
-        // Task B is in doing column. With the settings cascade default ordering [untagged, doing, done, backlog], doing is the column immediately to the right of untagged, so a left-drag of one column lands on untagged
+        // with the default ordering [untagged, doing, done, backlog], a one-column left-drag from doing lands on untagged
         const doing_column = page.locator('[role="region"][aria-label="doing"]');
         await expect(doing_column.getByRole('heading', { name: 'Task B' })).toBeVisible({ timeout: 3000 });
 
@@ -109,7 +109,7 @@ test.describe('Kanban Drag and Drop', () => {
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
         await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 
-        // drag Task B (doing) → done - a real cross-column move under the cascade-default ordering, so the drag actually completes rather than being a no-op
+        // doing → done is a real cross-column move under the default ordering, so the drag actually completes
         const doing_column = page.locator('[role="region"][aria-label="doing"]');
         const task_b_draggable = doing_column.locator('[data-rfd-drag-handle-draggable-id]').first();
         const has_draggable = await task_b_draggable.count() > 0;
@@ -141,10 +141,7 @@ test.describe('Kanban Drag and Drop', () => {
         const backlog_column = page.locator('[role="region"][aria-label="backlog"]');
         await expect(backlog_column.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 3000 });
 
-        /*
-         * simulate extension responding with updated doc (Task A moved to doing)
-         * re-inject the doc with modified fixture using the same path/id
-         */
+        // simulates the extension responding with an updated doc, by re-injecting the fixture at the same path/id
         await injectDocsFromFixture(page, 'kanban-moved.md', doc_path);
 
         await page.waitForTimeout(300);

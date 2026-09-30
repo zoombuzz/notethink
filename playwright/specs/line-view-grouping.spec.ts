@@ -5,7 +5,7 @@ import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-m
 
 const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
-// keyboard-based drag (@hello-pangea/dnd: Space to lift, arrows to move lanes, Space to drop) - the same wire boundary the kanban drag specs use
+// keyboard-based drag: Space lifts, arrows move lanes, Space drops - the same wire boundary the kanban drag specs use
 async function keyboardDrag(page: Page, handle: Locator, direction: 'right' | 'left', moves: number): Promise<void> {
     await handle.scrollIntoViewIfNeeded();
     await handle.focus();
@@ -27,7 +27,7 @@ function collectChanges(edit: { changes?: Array<{ insert: string }>; changes_by_
     return [];
 }
 
-// bring up a folder board of two files in distinct project folders (alpha, beta), each carrying an authored `assignee` attribute, then switch to the Line view
+// brings up a two-file folder board (alpha, beta) each with an authored assignee, then switches to Line view
 async function setupLineFolder(page: Page): Promise<void> {
     await injectMultipleDocsFromFixtures(page, [
         { fixture: 'line-view-a.md', doc_path: `${WORKSPACE_ROOT}/alpha/docstech/board.md`, relative_path: 'alpha/docstech/board.md' },
@@ -89,7 +89,7 @@ test.describe('Line view grouping and drag', () => {
         await clearCapturedMessages(page);
         await keyboardDrag(page, alex_handle, 'right', 1);
 
-        // the drop posts an editText that rewrites the GROUP field (assignee), not status: 'jo'/'sam' exist only as assignee values, so an insert of one proves the inverse projection wrote the group key end-to-end
+        // the drop rewrites the group field (assignee), not status: an inserted 'jo'/'sam' proves the group key was written
         const messages = await getCapturedMessages(page);
         const edit = messages.find((m: { type?: string }) => m.type === 'editText');
         expect(edit).toBeDefined();

@@ -1,12 +1,22 @@
 import React, { lazy } from 'react';
 import { DEFAULT_CARD_TYPE, cardComponentFor, cardRegistryWithViewSettings, resolveCardType } from "./cardregistryops";
+import { genericNoteAreEqual } from "./genericNoteEquality";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteWrapper from "../../components/notes/GenericNoteWrapper";
 
-// dynamic import() is required by React.lazy for per-note-type code-splitting; static imports would pull every renderer into the initial bundle
+// dynamic import() enables React.lazy per-note-type code-splitting; static imports would bloat the initial bundle
 const CodeNote = lazy(() => import('./CodeNote'));
 const MermaidNote = lazy(() => import('./MermaidNote'));
 
+/*
+ * genericNoteAreEqual replaces React.memo's default shallow-prop compare: every caller builds a fresh
+ * display_options object per render, so the default comparator never passed and this memo did nothing.
+ *
+ * Everything the node-type switch below does not claim renders as a card, chosen by a second, orthogonal
+ * axis resolved by the registry from the selection or the view's declared card type. The view's own
+ * container note is exempt, always rendering the full card since a compact card would take the whole
+ * document with it.
+ */
 export default React.memo(function GenericNote(props: NoteProps) {
     const note = props;
     let deepest_selectable_note = note;
@@ -26,7 +36,7 @@ export default React.memo(function GenericNote(props: NoteProps) {
             .filter((selected_note: NoteProps) => selected_note.level <= deepest_selectable_note.level)
             .map((selected_note: NoteProps) => selected_note.seq);
     }
-    // enrich selectable_note with selected/focused flags so click handlers can read the correct state (the original note ref lacks these flags)
+    // adds selected/focused flags for click handlers to read; the original note ref lacks them
     const enriched_selectable: NoteProps = {
         ...deepest_selectable_note,
         selected: !!(cropped_selected_seqs?.length && cropped_selected_seqs.includes(deepest_selectable_note.seq)),
@@ -62,21 +72,11 @@ export default React.memo(function GenericNote(props: NoteProps) {
                     return <CodeNote {...enriched_props} />;
             }
     }
-    /*
-     * everything the mdast switch above did not claim renders as a card, and which card is the second,
-     * orthogonal axis: the registry answers it from the resolved selection, falling back to the card type
-     * the rendered view declares. Code blocks, lists and list items are not on that axis - their renderer
-     * is decided by what the node IS, not by how the user wants notes drawn.
-     *
-     * The one note the axis must not reach is the view's own container - the note the view opens at, which
-     * DocumentView renders as its single child and whose BODY is where every note below it appears. Drawing
-     * that as a compact card would take the whole document with it, so it always renders the full card
-     * whatever the user picked; the cards inside it are the ones the choice is about.
-     */
+    // the view's own container note always gets the full card; the choice below is only about notes inside it
     const is_view_container = props.seq === props.display_options?.parent_context_seq;
     const card_type = is_view_container
         ? DEFAULT_CARD_TYPE
         : resolveCardType(props.display_options?.settings?.cardType, props.display_options?.settings?.viewType, undefined, cardRegistryWithViewSettings(props.display_options?.settings));
     const CardComponent = cardComponentFor(card_type);
     return <CardComponent {...enriched_props} />;
-});
+}, genericNoteAreEqual);

@@ -34,7 +34,7 @@ export default function AutoView(props: ViewProps): ReactElement {
         display_options: {},
     };
     const is_aggregate_root = isAggregateRoot(props.nested?.parent_context);
-    // folder mode: synthetic root has no single nt_view linetag on a top-level note, so apply a majority vote across originating files (one vote per file)
+    // a synthetic root has no single nt_view linetag, so vote across originating files (one vote per file)
     if (is_aggregate_root) {
         const majority = majorityNgView(props.notes);
         if (majority) { derived_attributes.type = majority; }
@@ -63,13 +63,7 @@ export default function AutoView(props: ViewProps): ReactElement {
             replaced_attributes.display_options.level = props.display_options?.level;
         }
     }
-    /*
-     * The card axis, resolved independently of the view and by the same rules: an explicit selection is
-     * pinned, and `auto` majority-votes nt_card across the originating files before falling back to the
-     * card type the resolved view declares. The result is stamped onto settings.cardType for the whole
-     * subtree, which is what carries it to every note - buildChildNoteDisplayOptions funnels the view's
-     * display_options onto each one, so no call site has to be taught about cards.
-     */
+    // resolved independently of the view, then stamped onto settings.cardType so it reaches every note in the subtree
     const voted_card_type = replaced_attributes.card_type === CARD_AUTO && is_aggregate_root
         ? majorityCardType(props.notes)
         : undefined;

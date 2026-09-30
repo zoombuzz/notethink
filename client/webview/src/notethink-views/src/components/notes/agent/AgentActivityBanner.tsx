@@ -5,19 +5,18 @@ import styles from "../AgentNote.module.scss";
 
 /**
  * What the card says when it has little or nothing to draw: an empty board must never read as idle
- * agents.
+ * agents. A story-level refusal is drawn first, whether or not the card has sessions, since an
+ * empty board over a failed read is worse than looking fine; a refusal naming a session draws on
+ * that session's own row instead. Below the refusals, one notice covers whichever applies:
+ * unreadable sessions, no host report yet, an unavailable analyser, still scanning, failed, or -
+ * for a real note - no activity in 30 days.
  *
- * A story-level refusal (naming no particular session) is drawn first, whether or not the card has
- * sessions, because an empty board over a failed read is a worse bug than looking fine; a refusal
- * naming a session is drawn on that session's own row instead. Below the refusals, one notice covers
- * whichever of these applies: sessions that could not be fully read, the host not having reported yet,
- * the analyser being unavailable, still scanning, having failed, or - for a real (non-virtual) note -
- * no agent activity in the last 30 days.
+ * The "still scanning" notice is gated on `!model.has_completed_scan`: once the card has ever shown
+ * a completed scan, a later rescan is never reflected on it, so the notice only fires before the
+ * first scan finishes. "failed" carries no such gate, since an operator watching a background
+ * rescan fail is worth telling regardless of whether the data underneath is still good.
  *
- * Each notice is one short line, with its full explanation carried as the line's `title` for a reader
- * who hovers.
- *
- * PATTERNS.md > Empty states: fix the error path before the presentation, which the ordering above is.
+ * Each notice is one short line, with its full explanation carried as the line's `title`.
  */
 export interface AgentActivityBannerProps {
     model: AgentNoteModel;
@@ -37,7 +36,8 @@ function emptyNotice(model: AgentNoteModel): EmptyNotice | undefined {
             detail: l10n.t('NoteThink cannot read local agent session files in this host. {0}', model.analyser.reason ?? l10n.t('This usually means a web host with no local disk.')),
         };
     }
-    if (model.analyser.state === 'scanning') {
+    // 'scanning' means "no information yet" only before the first completed scan, so this never blanks a populated card
+    if (model.analyser.state === 'scanning' && !model.has_completed_scan) {
         return { text: l10n.t('Scanning agent activity...'), detail: l10n.t('NoteThink is still scanning for local agent sessions.') };
     }
     if (model.analyser.state === 'failed') {

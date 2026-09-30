@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const debug = Debug("nodejs:notethink-views:usePendingWork");
 
-// delay-then-show policy: the spinner only becomes visible after `pending` has been continuously true for ≥150 ms; once shown, it stays visible for ≥250 ms. The 10 s safety net auto-clears any individual mark whose matching clear never arrives (dropped echo, unfinished extension work)
+// the safety net auto-clears a mark whose matching clear never arrives, such as a dropped echo
 export const PENDING_WORK_SHOW_DELAY_MS = 150;
 export const PENDING_WORK_MIN_VISIBLE_MS = 250;
 export const PENDING_WORK_SAFETY_NET_MS = 10000;

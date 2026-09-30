@@ -3,9 +3,6 @@ import type { NoteProps, ClickPositionInfo, NoteDisplayOptions } from "../types/
 import type { ViewProps } from "../types/ViewProps";
 import view_specific_styles from "../components/ViewRenderer.module.scss";
 
-/**
- * build the standard CSS class list for a note element
- */
 export function buildNoteStyles(note: NoteProps, extra_classes?: string[]): string[] {
     const styles = [view_specific_styles.note].concat(extra_classes || []);
     if (note.focused) { styles.push(view_specific_styles.focused); }
@@ -241,7 +238,7 @@ export function createNoteClickHandler(
  *   revealRange instead of promoting.
  */
 export function isAlreadyFocusedClick(note: NoteProps, caret_pos: number, current_head: number | undefined, view_caret?: number): boolean {
-    // editor head is authoritative when present; the virtual caret is the no-editor fallback and must never override a live editor head
+    // editor head is authoritative; the virtual caret is only a no-editor fallback and never overrides a live head
     const effective_head = current_head ?? view_caret;
     const is_focused_same_position = effective_head !== undefined && effective_head === caret_pos;
     const is_view_focused_headline_click = note.focused === true && caret_pos === note.position.start.offset;
@@ -264,7 +261,7 @@ export function buildChildNoteDisplayOptions(
         deepest: {
             ...view.display_options?.deepest,
             ...note?.display_options?.deepest,
-            // preserve the view-level selectable_level so only top-level notes are selectable; subnotes delegate clicks to their selectable parent
+            // preserves view-level selectable_level so only top-level notes are selectable; subnotes delegate to their parent
             selectable_level: view.display_options?.deepest?.selectable_level ?? note.level,
         },
     };

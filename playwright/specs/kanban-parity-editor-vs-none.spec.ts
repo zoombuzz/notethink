@@ -20,7 +20,7 @@ interface CardParityState {
 const KANBAN_FIXTURE: string = 'kanban.md';
 const BOARD_HEADING: string = 'Project Board';
 
-// caret offset inside the "# Project Board" H1 (offset 2 is within the heading) used to scope the board via an editor caret
+// caret offset inside the "# Project Board" H1, used to scope the board via an editor caret
 const BOARD_HEAD_OFFSET: number = 2;
 
 function backlogTaskACard(page: Page): Locator {
@@ -41,7 +41,7 @@ async function establishBoardViaVirtualCaret(page: Page): Promise<void> {
     await page.getByRole('rowheader', { name: BOARD_HEADING, exact: true }).click({ force: true });
     await expect(page.locator('[data-auto-selected-viewtype="kanban"]')).toBeVisible({ timeout: 5000 });
     await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
-    // reproduce the real no-editor signal: the extension used to pin a phantom (0,0) editor caret when no editor was open, which defeated the virtual caret; the fix sends a clear instead. feed the phantom then the clear so the click cycle below actually exercises the null-clear path - the old (0,0)-pinned behaviour would resolve the editor match to offset 0 and fail the highlight
+    // the no-editor signal is a phantom (0,0) caret then a clear; feeds both so the click cycle exercises the null-clear path
     await simulateSelectionChanged(page, doc_path, 0);
     await simulateSelectionCleared(page, doc_path);
 }
@@ -55,7 +55,7 @@ async function establishBoardViaEditorCaret(page: Page): Promise<void> {
     await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
 }
 
-// echo the click's captured revealRange back as the editor's selectionChanged, moving the editor caret onto the clicked story
+// echoes the click's captured revealRange back as the editor's selectionChanged, moving its caret onto the story
 async function echoEditorCaretFromReveal(page: Page): Promise<void> {
     await expect.poll(async () => (await findRevealMessage(page)) !== undefined, { timeout: 3000 }).toBe(true);
     const reveal = await findRevealMessage(page);
@@ -77,7 +77,7 @@ async function runTaskAClickCycle(page: Page, feed_editor_selection: boolean): P
     await expect(card).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
     const highlighted_seq = await onlyMarkedSeq(page, 'aria-current');
 
-    // second click at the same offset promotes the story to selected; the persisted editor caret keeps the open case authoritative
+    // second click promotes the story to selected; the persisted editor caret keeps the open case authoritative
     await headline.click({ force: true });
     await expect(card).toHaveAttribute('aria-selected', 'true', { timeout: 3000 });
     const selected_seq = await onlyMarkedSeq(page, 'aria-selected');

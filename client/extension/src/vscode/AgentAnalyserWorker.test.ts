@@ -1,4 +1,4 @@
-import { handleAgentAnalyserRequest, resetTailCacheForTest, setTailCacheMaxBytesForTest, setTranscriptMaxBytesForTest, tailCacheStatsForTest, type AgentAnalyserRawFile, type AgentAnalyserWorkerJob } from './AgentAnalyserWorker';
+import { handleAgentAnalyserRequest, resetTailCacheForTest, setTailCacheGlobalMaxBytesForTest, setTailCacheMaxBytesForTest, setTranscriptMaxBytesForTest, tailCacheStatsForTest, type AgentAnalyserRawFile, type AgentAnalyserWorkerJob } from './AgentAnalyserWorker';
 
 const NOW_MS = Date.parse('2026-09-22T12:00:00Z');
 const WINDOW_START_MS = NOW_MS - 30 * 24 * 60 * 60 * 1000;
@@ -11,7 +11,7 @@ function fileOf(text: string, path = '/t.jsonl', mode: AgentAnalyserRawFile['mod
     return { path, bytes: bytesOf(text), mode };
 }
 
-// one claude-code assistant line carrying a distinct message id and its own usage, so a session's total input_tokens across a test reveals exactly which lines the worker actually combined
+// a claude-code assistant line with a distinct message id and usage, so total input_tokens reveals which lines combined
 function claudeLine(message_id: string, input_tokens: number, at = '2026-09-22T11:00:00Z'): string {
     return JSON.stringify({
         type: 'assistant', timestamp: at,
@@ -104,7 +104,7 @@ describe('handleAgentAnalyserRequest', () => {
     it('turns one job throwing into a refusal entry for that session, never failing the whole batch', () => {
         const jobs: AgentAnalyserWorkerJob[] = [
             baseJob({ session_id: 'ok1' }),
-            // an unrecognised vendor id has no entry in VENDOR_READERS, so runJob's lookup throws (reader is undefined) exactly like an unexpected bug in a real reader would
+            // an unrecognised vendor id has no VENDOR_READERS entry, so runJob's lookup throws like a real reader bug would
             baseJob({ vendor: 'unknown-vendor' as AgentAnalyserWorkerJob['vendor'], session_id: 'poisoned' }),
             baseJob({ session_id: 'ok2' }),
         ];
@@ -117,7 +117,7 @@ describe('handleAgentAnalyserRequest', () => {
 });
 
 describe('bounding the retained line cache', () => {
-    // the line cache is module-level state shared across every request this worker instance handles; reset it so one test's cached sessions never leak into the next
+    // the line cache is module-level state shared across every request, so reset it between tests to stop leaks
     beforeEach(() => { resetTailCacheForTest(); });
     afterEach(() => { setTailCacheMaxBytesForTest(undefined); });
 
@@ -126,7 +126,7 @@ describe('bounding the retained line cache', () => {
         const whole_job = baseJob({ session_id, cacheable: false, transcript: fileOf(`${claudeLine('m1', 100)}\n`) });
         handleAgentAnalyserRequest({ request_id: 'a', jobs: [whole_job] });
 
-        // a later scan sends a 'tail' job for the same session and path - this should never happen per the host's own contract (AgentAnalyser.ts never tail-tracks a non-cacheable session), but it proves directly, rather than by absence of a symptom, that this worker genuinely held nothing for it
+        // a tail job for this session should never happen, but proves directly this worker held nothing for it
         const tail_job = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m2', 5)}\n`, '/t.jsonl', 'tail') });
         const response = handleAgentAnalyserRequest({ request_id: 'b', jobs: [tail_job] });
 
@@ -146,7 +146,7 @@ describe('bounding the retained line cache', () => {
     });
 
     it('the byte cap evicts the least-recently-touched session first, and reports it in evicted_session_ids', () => {
-        // each claudeLine is exactly 267 bytes with its trailing newline (measured); two cacheable sessions of one line each (534) fit the 1000 byte cap, but adding a third session's own line (801 -> 1068) does not, forcing an eviction
+        // each claudeLine is 267 bytes; two sessions (534) fit the 1000 byte cap, a third (1068) forces an eviction
         setTailCacheMaxBytesForTest(1000);
         const job_a = baseJob({ session_id: 'lru-a', cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n`) });
         const job_b = baseJob({ session_id: 'lru-b', cacheable: true, transcript: fileOf(`${claudeLine('m2', 1)}\n`) });
@@ -157,12 +157,12 @@ describe('bounding the retained line cache', () => {
         const tail_a = baseJob({ session_id: 'lru-a', cacheable: true, transcript: fileOf(`${claudeLine('m3', 1)}\n`, '/t.jsonl', 'tail') });
         handleAgentAnalyserRequest({ request_id: 'b', jobs: [tail_a] });
 
-        // a third cacheable session pushes the cache over the cap; lru-b, untouched since the first request, is evicted - lru-a survives
+        // a third session pushes the cache over the cap; lru-b, untouched since the first request, is evicted and lru-a survives
         const job_c = baseJob({ session_id: 'lru-c', cacheable: true, transcript: fileOf(`${claudeLine('m4', 1)}\n`) });
         const third = handleAgentAnalyserRequest({ request_id: 'c', jobs: [job_c] });
         expect(third.evicted_session_ids).toEqual(['lru-b']);
 
-        // the cap's own job is now proven; lift it before the follow-up checks below, which each grow the cache further and would otherwise trigger a SECOND eviction that this test is not about
+        // the cap is proven; lift it before the checks below, which grow the cache and would otherwise force an unrelated eviction
         setTailCacheMaxBytesForTest(undefined);
 
         // lru-b is gone: a tail job against it now combines from nothing, exactly like the non-cacheable case
@@ -184,6 +184,69 @@ describe('bounding the retained line cache', () => {
         const replay_job = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m2', 5)}\n`) });
         const response = handleAgentAnalyserRequest({ request_id: 'b', jobs: [replay_job], evict_session_ids: [session_id] });
         expect(response.sessions[0].usage.input_tokens).toBe(5);
+    });
+});
+
+describe('a pooled worker retains only its own share of the byte cap', () => {
+    beforeEach(() => { resetTailCacheForTest(); });
+
+    it('divides AGENT_TAIL_CACHE_MAX_BYTES by request.pool_size, but never evicts the one session left holding the cache', () => {
+        // enormous pool_size shrinks the budget; the lone survivor still isn't evicted, avoiding a re-read
+        const pooled_job = baseJob({ session_id: 'pooled', cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n`) });
+        const pooled = handleAgentAnalyserRequest({ request_id: 'a', jobs: [pooled_job], pool_size: 2_000_000 });
+        expect(pooled.evicted_session_ids).toBeUndefined();
+        expect(tailCacheStatsForTest().sessions).toBe(1);
+
+        resetTailCacheForTest();
+        // same session with no pool_size keeps the whole 128 MiB budget, nowhere near its cap
+        const unpooled_job = baseJob({ session_id: 'unpooled', cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n`) });
+        const unpooled = handleAgentAnalyserRequest({ request_id: 'b', jobs: [unpooled_job] });
+        expect(unpooled.evicted_session_ids).toBeUndefined();
+        expect(tailCacheStatsForTest().sessions).toBe(1);
+    });
+
+    it('still evicts an older session to make room for a newer one, once more than one session is cached', () => {
+        // even one session is already over its pool_size share, but with two cached the older still yields first
+        const older_job = baseJob({ session_id: 'older', cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n`) });
+        handleAgentAnalyserRequest({ request_id: 'a', jobs: [older_job], pool_size: 2_000_000 });
+        expect(tailCacheStatsForTest().sessions).toBe(1);
+
+        const newer_job = baseJob({ session_id: 'newer', cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n`) });
+        const response = handleAgentAnalyserRequest({ request_id: 'b', jobs: [newer_job], pool_size: 2_000_000 });
+        expect(response.evicted_session_ids).toEqual(['older']);
+        expect(tailCacheStatsForTest().sessions).toBe(1);
+    });
+
+    it('evicts the lone survivor too once its own size outgrows the whole UNPOOLED budget, not just its per-worker share', () => {
+        setTailCacheGlobalMaxBytesForTest(100);
+        try {
+            // this session exceeds the whole unpooled budget, not just its pool_size share
+            const job = baseJob({ session_id: 'oversized', cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n`) });
+            const response = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job], pool_size: 2_000_000 });
+            expect(response.evicted_session_ids).toEqual(['oversized']);
+            expect(tailCacheStatsForTest()).toEqual({ sessions: 0, total_source_bytes: 0 });
+        } finally {
+            setTailCacheGlobalMaxBytesForTest(undefined);
+        }
+    });
+
+    it('pool_size of 1 keeps the whole budget, the same as omitting pool_size entirely', () => {
+        const job = baseJob({ session_id: 'solo', cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n`) });
+        const response = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job], pool_size: 1 });
+        expect(response.evicted_session_ids).toBeUndefined();
+        expect(tailCacheStatsForTest().sessions).toBe(1);
+    });
+
+    it('a test-only override still wins over a request\'s own pool_size, so existing byte-cap tests need no change', () => {
+        setTailCacheMaxBytesForTest(100_000);
+        try {
+            const job = baseJob({ session_id: 'overridden', cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n`) });
+            // pool_size alone would evict this session; the test-only override still applies, so it survives
+            const response = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job], pool_size: 2_000_000 });
+            expect(response.evicted_session_ids).toBeUndefined();
+        } finally {
+            setTailCacheMaxBytesForTest(undefined);
+        }
     });
 });
 
@@ -228,7 +291,7 @@ describe('the transcript size cap applies the same way whole or tailed', () => {
         expect(second.evicted_session_ids).toEqual([session_id]);
         expect(tailCacheStatsForTest()).toEqual({ sessions: 0, total_source_bytes: 0 });
 
-        // nothing survived the refusal: a further tail job for the same session combines from nothing, exactly like a session this worker never cached at all
+        // nothing survived the refusal: a further tail job combines from nothing, like a session never cached at all
         const later_tail = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m3', 5)}\n`, '/t.jsonl', 'tail') });
         const third = handleAgentAnalyserRequest({ request_id: 'c', jobs: [later_tail] });
         expect(third.sessions[0].usage.input_tokens).toBe(5);
@@ -241,7 +304,7 @@ describe('the transcript size cap applies the same way whole or tailed', () => {
         const refused = handleAgentAnalyserRequest({ request_id: 'a', jobs: [oversize_job] });
         expect(refused.sessions[0].refusal?.code).toBe('too_large');
 
-        // the cap is lifted back to the real limit; a fresh whole job for the same session builds and caches normally, with nothing left over from the earlier refusal
+        // once the cap lifts, a fresh whole job for the session builds and caches normally, with nothing left from the refusal
         setTranscriptMaxBytesForTest(undefined);
         const small_job = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m3', 9)}\n`) });
         const recovered = handleAgentAnalyserRequest({ request_id: 'b', jobs: [small_job] });
@@ -254,7 +317,52 @@ describe('the transcript size cap applies the same way whole or tailed', () => {
         const session_id = 'noncacheable-oversize';
         const job = baseJob({ session_id, cacheable: false, transcript: fileOf(`${claudeLine('m1', 1)}\n${claudeLine('m2', 1)}\n`) });
         const response = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] });
-        // 534 bytes is over the test's 300 byte override, but under the real AGENT_TRANSCRIPT_MAX_BYTES the vendor reader itself checks against, so the reader accepts it
+        // 534 bytes exceeds the test's 300 byte override but stays under the real limit the vendor reader checks, so it accepts
         expect(response.sessions[0].refusal).toBeUndefined();
+    });
+});
+
+// AgentAnalyser.ts's second use of this worker: counting added/removed lines off the host's own thread
+describe('handleAgentAnalyserRequest line_diff_jobs', () => {
+    it('is absent from the response when the request carries none, the shape every ordinary session-only scan sends', () => {
+        const response = handleAgentAnalyserRequest({ request_id: 'r1', jobs: [] });
+        expect(response.line_diff_results).toBeUndefined();
+    });
+
+    it('counts added and removed lines for each job, keyed the same way the request keyed it', () => {
+        const response = handleAgentAnalyserRequest({
+            request_id: 'r1',
+            jobs: [],
+            line_diff_jobs: [
+                { key: 'src/a.ts', head_bytes: bytesOf('a\nb\nc\n'), working_bytes: bytesOf('a\nx\nc\n') },
+                { key: 'src/b.ts', head_bytes: undefined, working_bytes: bytesOf('new\nfile\n') },
+            ],
+        });
+        expect(response.line_diff_results).toEqual([
+            { key: 'src/a.ts', counts: { added: 1, removed: 1 } },
+            { key: 'src/b.ts', counts: { added: 2, removed: 0 } },
+        ]);
+    });
+
+    it('reports a declined job (binary, or over the byte cap) as a result with no counts, not a thrown error', () => {
+        const response = handleAgentAnalyserRequest({
+            request_id: 'r1',
+            jobs: [],
+            line_diff_jobs: [{ key: 'image.png', head_bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00]).buffer, working_bytes: bytesOf('a\n') }],
+        });
+        expect(response.line_diff_results).toEqual([{ key: 'image.png' }]);
+    });
+
+    it('isolates one bad job from the rest of the batch, the same guarantee runJobIsolated gives session jobs', () => {
+        const poisoned: ArrayBuffer = -1 as unknown as ArrayBuffer; // `new Uint8Array(-1)` throws RangeError rather than decoding anything
+        const response = handleAgentAnalyserRequest({
+            request_id: 'r1',
+            jobs: [],
+            line_diff_jobs: [
+                { key: 'bad', head_bytes: poisoned },
+                { key: 'good', head_bytes: bytesOf('a\n'), working_bytes: bytesOf('a\nb\n') },
+            ],
+        });
+        expect(response.line_diff_results).toEqual([{ key: 'bad' }, { key: 'good', counts: { added: 1, removed: 0 } }]);
     });
 });

@@ -7,12 +7,12 @@ import { sendCommand } from '../helpers/send-command';
 import { getCapturedMessages, clearCapturedMessages } from '../helpers/capture-messages';
 import { parse } from '../helpers/parse-markdown';
 
-/*
- * automated reproduction harness for the durable "source column collapses on drag" bug. renders the REAL
- * webview bundle (no VS Code, no cross-iframe focus artifact, so real pointer drags lift reliably here),
- * reproduces the user's drag -> undo -> drag sequence, and measures the DOING column geometry at rest vs
- * mid-lift. a healthy lift keeps the column height and holds a non-zero placeholder; a collapse drops the
- * height / zeros the placeholder and the remaining cards concertina up. no hand-testing in DevTools.
+/**
+ * Automated reproduction harness for the "source column collapses on drag" bug. Renders the real
+ * webview bundle (no VS Code, no cross-iframe focus artifact, so real pointer drags lift reliably),
+ * reproduces the user's drag -> undo -> drag sequence, and measures the DOING column geometry at
+ * rest vs mid-lift: a healthy lift keeps the height and a non-zero placeholder, a collapse drops
+ * both and the remaining cards concertina up.
  */
 
 const WORKSPACE_ROOT = '/mnt/workspace/in_development';
@@ -121,7 +121,8 @@ async function dumpFlipState(page: Page): Promise<Record<string, unknown>> {
 async function measureDoing(page: Page): Promise<Record<string, unknown>> {
     return page.evaluate(() => {
         const col = [...document.querySelectorAll('[role="region"]')].find((r) => (r.getAttribute('aria-label') || '').includes('doing'));
-        const ph = document.querySelector('[data-rfd-placeholder-context-id]');
+        // dnd's placeholder in standard mode, or the board's reserved-slot row in virtual mode
+        const ph = document.querySelector('[data-rfd-placeholder-context-id]') || document.querySelector('[data-testid="kanban-virtual-placeholder"]');
         const fixed = [...document.querySelectorAll('[data-rfd-draggable-id]')].filter((e) => getComputedStyle(e).position === 'fixed').length;
         const flow = col ? [...col.querySelectorAll('[data-rfd-draggable-id]')].filter((e) => getComputedStyle(e).position !== 'fixed') : [];
         const tops = flow.map((e) => Math.round(e.getBoundingClientRect().top));
@@ -175,11 +176,11 @@ test.describe('kanban drag collapse repro', () => {
             await pointerDrag(page, handle, done, REPRO_DRAG_SETTLE);
             const msgs = await getCapturedMessages(page);
             const edit = msgs.find((m) => m.type === 'editText') as Record<string, unknown> | undefined;
-            // every drag - including ones that follow a passive card glide - must register with dnd and post an edit. before the fill:'backwards' fix, cycle 2 posted nothing (dnd stalled on a filling FLIP transform)
+            // every drag, even after a passive card glide, must register with dnd and post an edit
             expect(edit, `cycle ${cycle} drag must post editText`).toBeDefined();
             const changesA = changesForDoc(edit, PATH_A);
             const newA = applyChangesToText(A0, changesA);
-            // reconcile: extension echoes the written doc (card now in done), then undo: editor Ctrl+Z reverts the file (card glides back)
+            // reconcile: extension echoes the written doc (card in done), then undo reverts the file (card glides back)
             await reinjectDoc(page, idA, PATH_A, REL_A, newA);
             await clearAnimationEvents(page);
             await reinjectDoc(page, idA, PATH_A, REL_A, A0);
@@ -190,7 +191,7 @@ test.describe('kanban drag collapse repro', () => {
             expect(flip.fixed, `cycle ${cycle}: no stuck drag clone`).toBe(0);
         }
 
-        // after two full cycles, a fresh lift must still be healthy: the source column holds its height and dnd keeps a real placeholder
+        // after two cycles, a fresh lift must stay healthy: the source column holds height, dnd keeps a real placeholder
         const handle = doing.locator('[data-rfd-drag-handle-draggable-id]').filter({ hasText: 'Alpha Task Two' }).first();
         const { rest, lifted } = await liftAndMeasure(page, handle) as { rest: { colH: number }; lifted: { colH: number; phH: number; clones: number } };
         expect(lifted.clones, 'exactly one clone lifts').toBe(1);

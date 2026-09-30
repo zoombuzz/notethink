@@ -116,7 +116,7 @@ export function isChildNote(child: NoteProps | MdastNode): boolean {
 }
 
 /*
- * lazy import to break circular dependency: renderops → GenericNote → MarkdownNote → renderops;
+ * Lazy import to break circular dependency: renderops → GenericNote → MarkdownNote → renderops;
  * declare require for webpack's runtime (avoids @types/node in this browser-targeted package)
  */
 declare const require: (id: string) => { default: React.ComponentType<NoteProps> };

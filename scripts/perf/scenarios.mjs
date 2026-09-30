@@ -21,7 +21,7 @@
  * Adding a scenario is documented in the run.mjs header.
  */
 import { buildFolderCorpus, buildSingleFileCorpus, buildWireDoc } from './corpus.mjs';
-import { openHarnessPage } from './harness.mjs';
+import { openHarnessPage, readHeapUsedMb } from './harness.mjs';
 
 const WORKSPACE_ROOT = '/workspace/perf';
 // mirrors DEFAULT_MAX_NOTES_PER_FILE in client/webview/src/constants.ts, which the harness's built-in settings echo back
@@ -171,15 +171,33 @@ async function stageAndDispatch(page, messages, options) {
 }
 
 /**
- * Progressive folder load: N files arrive as discovery posts them, and the measurement runs from the
- * first message to a settled board of N x cards-per-file.
- *
- * `batch_size` selects the delivery model, and it is the whole point of the scenario. At
- * DISCOVERY_BATCH_MAX_DOCS it is what the extension does today. At 1 it is the pre-batching wire,
- * one message per file, kept because that is still what a watcher-driven burst looks like and
- * because it is the honest worst case for the renderer.
+ * Regression guard for the acceptance criterion "a folder update's wire payload scales with the
+ * file's text and never carries mdast". Checks every doc a scenario built and reports the worst
+ * case, so a regression in any single file's shape isn't averaged away. `content_leaked` is 0/1;
+ * `payload_to_text_ratio` is the worst per-doc ratio, measured at ~1.01x once `content` is gone.
  */
-function folderProgressiveScenario({ id, label, metric_id, file_count, file_bytes, batch_size, settle_timeout_ms }) {
+function folderDocPayloadCheck(docs) {
+    let content_leaked = false;
+    let worst_ratio = 0;
+    for (const doc of docs) {
+        const wire_entry = { ...doc, updateSentAt: SENT_AT };
+        if (wire_entry.content !== undefined) { content_leaked = true; }
+        const text_bytes = Buffer.byteLength(doc.text);
+        const payload_bytes = Buffer.byteLength(JSON.stringify(wire_entry));
+        const ratio = text_bytes === 0 ? 0 : payload_bytes / text_bytes;
+        if (ratio > worst_ratio) { worst_ratio = ratio; }
+    }
+    return { content_leaked: content_leaked ? 1 : 0, payload_to_text_ratio: Math.round(worst_ratio * 10000) / 10000 };
+}
+
+/**
+ * Progressive folder load: N files arrive as discovery posts them, measured from the first message
+ * to a settled board of N x cards-per-file. `batch_size` selects the delivery model: at
+ * DISCOVERY_BATCH_MAX_DOCS it's what the extension does today, at 1 it's the pre-batching wire (a
+ * watcher-driven burst, and the renderer's worst case). `stories_per_file` defaults to the cap
+ * itself; a caller exercising FolderMergeCache's discard-past-the-cap path passes a real density.
+ */
+function folderProgressiveScenario({ id, label, metric_id, file_count, file_bytes, batch_size, settle_timeout_ms, stories_per_file = MAX_NOTES_PER_FILE }) {
     return {
         id,
         label,
@@ -188,7 +206,7 @@ function folderProgressiveScenario({ id, label, metric_id, file_count, file_byte
             const corpus = buildFolderCorpus({
                 workspace_root: WORKSPACE_ROOT,
                 file_count,
-                stories_per_file: MAX_NOTES_PER_FILE,
+                stories_per_file,
                 file_bytes,
                 max_notes_per_file: MAX_NOTES_PER_FILE,
             });
@@ -209,6 +227,12 @@ function folderProgressiveScenario({ id, label, metric_id, file_count, file_byte
                     expected_cards: corpus.expected_cards,
                     settle_timeout_ms,
                 }));
+                // a wire-shape check, not a timing one - runs even when the page never settles
+                if (measurements[metric_id] && !measurements[metric_id].error) {
+                    Object.assign(measurements[metric_id], folderDocPayloadCheck(corpus.docs));
+                    // heap once the board has settled: the "no renderer crash" criterion needs a number, not just the absence of one
+                    measurements[metric_id].heap_used_mb = await readHeapUsedMb(session.page);
+                }
             } finally {
                 await session.close();
             }
@@ -218,15 +242,15 @@ function folderProgressiveScenario({ id, label, metric_id, file_count, file_byte
 }
 
 /**
- * Interactions on a settled folder board: a card click, an editor caret move arriving as
- * selectionChanged, and one file changing on disk arriving as a single merge update. Each is
- * measured on the same board, in that order, so the three numbers are comparable with each other.
+ * Interactions on a settled folder board: a card click, a caret move (selectionChanged), one file
+ * changing on disk (a merge update), and opening the view-settings drawer. Measured in that order
+ * on the same board, so the four numbers are comparable with each other.
  */
 function folderInteractionScenario({ id, label, file_count, file_bytes, metric_ids, settle_timeout_ms }) {
     return {
         id,
         label,
-        metric_ids: [metric_ids.click, metric_ids.selection, metric_ids.merge],
+        metric_ids: [metric_ids.click, metric_ids.selection, metric_ids.merge, metric_ids.drawer],
         async run(context) {
             const corpus = buildFolderCorpus({
                 workspace_root: WORKSPACE_ROOT,
@@ -243,8 +267,10 @@ function folderInteractionScenario({ id, label, file_count, file_bytes, metric_i
                     expected_cards: corpus.expected_cards,
                     settle_timeout_ms,
                 });
+                // load.settled can be true with load.cards below expected_cards: a windowed board settles on story_count, not on mounting every card
                 if (!load.settled) {
-                    throw new Error(`board did not settle before the interactions: ${load.cards} of ${corpus.expected_cards} cards`);
+                    const reason = load.stalled ? 'stalled (no progress for several seconds)' : 'timed out still progressing';
+                    throw new Error(`board did not settle before the interactions (${reason}): ${load.cards} of ${corpus.expected_cards} cards mounted, ${load.story_count ?? '?'} of ${corpus.expected_cards} stories in the merged tree`);
                 }
                 await runFolderInteractions(session.page, corpus, projects, measurements, metric_ids, settle_timeout_ms);
                 return { measurements, facts: { files: file_count, expected_cards: corpus.expected_cards, load_ms: load.elapsed_ms } };
@@ -255,8 +281,9 @@ function folderInteractionScenario({ id, label, file_count, file_bytes, metric_i
     };
 }
 
-/** the three interactions, in the order a user meets them: click a card, move the caret, have a file change underneath */
+/** the four interactions, in the order a user meets them: click a card, move the caret, have a file change underneath, open the view-settings drawer */
 async function runFolderInteractions(page, corpus, projects, measurements, metric_ids, settle_timeout_ms) {
+    // expected_cards is unused here - clickCard/dispatchMessage target whatever is mounted - kept only as the settle_timeout_ms carrier
     const settle = { expected_cards: corpus.expected_cards, settle_timeout_ms };
     await measureStep(measurements, metric_ids.click, () => page.evaluate((opts) => window.__perf.clickCard(0, opts), settle));
     const first_doc = corpus.docs[0];
@@ -265,15 +292,21 @@ async function runFolderInteractions(page, corpus, projects, measurements, metri
         ({ json, opts }) => window.__perf.dispatchMessage(json, opts),
         { json: JSON.stringify(selectionChangedMessage(first_doc.path, caret_offset)), opts: settle },
     ));
+    // a folder-mode watcher re-send is text-only, like every other folder doc
     const edited = buildWireDoc({
         doc_path: first_doc.path,
         relative_path: first_doc.relative_path,
         text: `${first_doc.text}\n+ [ ] one more task, as a watcher event would deliver it\n`,
+        include_content: false,
     });
     // the watcher path is NOT batched: one changed file is still one merge update carrying one doc
     await measureStep(measurements, metric_ids.merge, () => page.evaluate(
         ({ json, opts }) => window.__perf.dispatchMessage(json, opts),
         { json: JSON.stringify(folderMergeMessage([edited], corpus.docs.length, projects)), opts: settle },
+    ));
+    // the operator-reported "drawer expansion feels sluggish" acceptance criterion
+    await measureStep(measurements, metric_ids.drawer, () => page.evaluate(
+        (opts) => window.__perf.clickTestId('view-settings-button', opts), settle,
     ));
 }
 
@@ -321,7 +354,7 @@ export const SCENARIOS = [
         label: 'click, caret move and one-file merge on a settled 50-file board',
         file_count: 50,
         file_bytes: 8192,
-        metric_ids: { click: 'folder-click-50', selection: 'folder-selection-50', merge: 'folder-merge-50' },
+        metric_ids: { click: 'folder-click-50', selection: 'folder-selection-50', merge: 'folder-merge-50', drawer: 'folder-drawer-open-50' },
         settle_timeout_ms: 180000,
     }),
     singleFileScenario({
@@ -341,6 +374,16 @@ export const SCENARIOS = [
         settle_timeout_ms: 180000,
     }),
     folderProgressiveScenario({ id: 'folder-long-files-10', label: 'folder progressive load, 10 files of 400KB (timer-governed, one doc per flush)', metric_id: 'folder-load-10x400k', file_count: 10, file_bytes: 409600, batch_size: 1, settle_timeout_ms: 300000 }),
+    // measures the acceptance criterion "folder-50-with-long-files settled <= 6s prod" directly
+    folderProgressiveScenario({ id: 'folder-long-files-50', label: 'folder progressive load, 50 files of 400KB (timer-governed, one doc per flush)', metric_id: 'folder-load-50x400k', file_count: 50, file_bytes: 409600, batch_size: 1, settle_timeout_ms: 300000 }),
+    /*
+     * folder-dense-10x400k is the regression guard for the FolderMergeCache stamp-cache-before-parse
+     * restructuring: folder-load-10x400k above holds exactly MAX_NOTES_PER_FILE stories per file, so
+     * it can't tell a fix that discards excess stories after stamping apart from one that keeps
+     * retaining them. 87 stories/400KB matches this repo's own measured done.md density, so most of
+     * each file's parsed content is discarded past the cap - exactly the shape the fix targets.
+     */
+    folderProgressiveScenario({ id: 'folder-dense-10x400k', label: 'folder progressive load, 10 dense files of 400KB (87 stories/file, this repo\'s own done.md density)', metric_id: 'folder-load-10x400k-dense', file_count: 10, file_bytes: 409600, stories_per_file: 87, batch_size: 1, settle_timeout_ms: 300000 }),
     folderProgressiveScenario({ id: 'folder-progressive-100', label: 'folder progressive load, 100 files of 8KB', metric_id: 'folder-load-100', file_count: 100, file_bytes: 8192, batch_size: DISCOVERY_BATCH_MAX_DOCS, settle_timeout_ms: 300000 }),
     folderProgressiveScenario({ id: 'folder-progressive-200', label: 'folder progressive load, 200 files of 8KB (the extension MAX_AGGREGATE_FILES cap)', metric_id: 'folder-load-200', file_count: 200, file_bytes: 8192, batch_size: DISCOVERY_BATCH_MAX_DOCS, settle_timeout_ms: 900000 }),
     folderInteractionScenario({
@@ -348,7 +391,7 @@ export const SCENARIOS = [
         label: 'click, caret move and one-file merge on a settled 200-file board',
         file_count: 200,
         file_bytes: 8192,
-        metric_ids: { click: 'folder-click-200', selection: 'folder-selection-200', merge: 'folder-merge-200' },
+        metric_ids: { click: 'folder-click-200', selection: 'folder-selection-200', merge: 'folder-merge-200', drawer: 'folder-drawer-open-200' },
         settle_timeout_ms: 900000,
     }),
 ];

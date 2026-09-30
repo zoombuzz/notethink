@@ -19,30 +19,33 @@ import ToolbarTab from "../drawers/ToolbarTab";
 import { viewTypeLabel } from "../viewTypeLabel";
 import master_view_styles from "../../ViewRenderer.module.scss";
 
-// the + trigger is hidden while it waits to return as a menu item; typed as boolean so the wiring below stays live code rather than a branch TS narrows away
+// the + trigger is hidden pending its return as a menu item; typed boolean so the wiring below stays live code
 const SHOW_INSERT_BUTTON: boolean = false;
 
 // one frozen empty list, so a cascade with no saved types hands the drawer one stable identity
 const EMPTY_USER_TYPES: UserViewType[] = [];
 
+/**
+ * Leaf-level toolbar props.
+ * - integrationSelection, integrationMode, onIntegrationChange: the integration-mode dropdown hosted
+ *   by the Jump to drawer; the change handler also serves the Files drawer's file click, pinning
+ *   current_file on a chosen file.
+ * - viewTypeSelection, autoResolvedType, onViewTypeChange: view type - persisted selection, the type
+ *   auto resolved to, and the settings tree's handler.
+ * - cardTypeSelection, resolvedCardType, onCardTypeChange: card type - the same three, on the axis
+ *   deciding how a note is drawn rather than laid out.
+ */
 interface GenericViewToolbarProps {
     props: ViewProps;
     handlers: ViewApi;
     displayOptions: NoteDisplayOptions;
     breadcrumbTrail: ReactElement;
-    /*
-     * integration-mode dropdown, hosted by the Jump to drawer: selection (may be auto), resolved
-     * concrete mode, change handler. The change handler also serves the Files drawer's file click,
-     * which pins current_file on a chosen file
-     */
     integrationSelection: IntegrationMode;
     integrationMode: ConcreteIntegrationMode;
     onIntegrationChange: (mode: IntegrationMode, target_file_path?: string) => void;
-    // view type: persisted selection, the type auto resolved to, and the settings tree's handler
     viewTypeSelection: string;
     autoResolvedType: string | undefined;
     onViewTypeChange: (view_type: string) => void;
-    // card type: the same three, on the axis deciding how a note is drawn rather than laid out
     cardTypeSelection: string;
     resolvedCardType: string;
     onCardTypeChange: (card_type: string) => void;
@@ -108,12 +111,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         onApplyFilters,
         onViewTypeChange,
     } = component_props;
-    /*
-     * the group-by control's candidates, enumerated once for whichever row the settings pane renders it
-     * on. The drawer decides which key that row writes from the node the user has selected in its tree,
-     * so nothing here needs to know whether the board is a kanban. Cheap - the enumeration is memoised
-     * on the notes identity.
-     */
+    // group-by candidates enumerated once here; the drawer decides which row writes them, not this code
     const user_view_types = displayOptions.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
     // the hierarchy the user's saved types are part of, which both the kanban-chain test and the tab's wording read
     const registry = registryWithUserTypes(user_view_types);

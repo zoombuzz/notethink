@@ -60,7 +60,7 @@ function changeLabel(change: string): string {
     }
 }
 
-// every row in the uncommitted band is a change, so the commonest kind needs no word: it takes git's own one-letter status and keeps the word for its tooltip
+// 'modified' is the commonest change, so it takes git's bare letter; the word stays for the tooltip
 function changeMark(change: string): string {
     switch (change) {
         case 'modified': return 'M';

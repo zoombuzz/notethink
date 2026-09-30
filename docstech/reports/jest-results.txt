@@ -1,42 +1,42 @@
 # Jest Test Results
-# Version: 0.4.4
-# Date: 2026-09-24T12:28:31+00:00
+# Version: 0.4.5
+# Date: 2026-09-30T18:53:06Z
 # Command: pnpm -C /mnt/secure/home/alex/git/github.com/active_development/notethink run test-jest
 # Exit status: 0
-# Tree: HEAD 57b2170 plus M AUTHORING_GUIDE.md;  M client/extension/src/lib/globMatch.test.ts;  M client/extension/src/lib/parseops.test.ts;  M client/extension/src/test/suite/extension.test.ts;  M client/extension/src/test/suite/index.ts;  M client/webview/src/hooks/useVscodeMessages.ts;  M client/webview/src/index.js;  M client/webview/src/notethink-views/jest.config.cjs;  M client/webview/src/notethink-views/src/components/ErrorBoundary.test.tsx;  M client/webview/src/notethink-views/src/components/ViewRenderer.module.scss;  M client/webview/src/notethink-views/src/components/notes/AgentNote.module.scss;  M client/webview/src/notethink-views/src/components/notes/MarkdownNote.tsx;  M client/webview/src/notethink-views/src/components/views/AutoView.test.tsx;  M client/webview/src/notethink-views/src/components/views/AutoView.tsx;  M client/webview/src/notethink-views/src/components/views/BreadcrumbTrail.test.tsx;  M client/webview/src/notethink-views/src/components/views/GenericView.test.tsx;  M client/webview/src/notethink-views/src/components/views/GenericView.tsx;  M client/webview/src/notethink-views/src/components/views/KanbanView.test.tsx;  M client/webview/src/notethink-views/src/components/views/drawers/FilesDrawer.test.tsx;  M client/webview/src/notethink-views/src/components/views/drawers/FilesDrawer.tsx;  M client/webview/src/notethink-views/src/components/views/generic/useInsertModal.test.ts;  M client/webview/src/notethink-views/src/components/views/kanban/useColumnWidth.ts;  M client/webview/src/notethink-views/src/inserts/en.test.ts;  M client/webview/src/notethink-views/src/inserts/insertRoundtrip.test.ts;  M client/webview/src/notethink-views/src/lib/animation/useFlipTransition.test.tsx;  M client/webview/src/notethink-views/src/lib/animation/useFlipTransition.ts;  M client/webview/src/notethink-views/src/lib/convertMdastToNoteHierarchy.test.ts;  M client/webview/src/notethink-views/src/lib/globMatch.test.ts;  M client/webview/src/notethink-views/src/lib/linetagops.test.ts;  M client/webview/src/notethink-views/src/lib/renderops.test.tsx;  M client/webview/src/notethink-views/src/types/Messages.ts;  M client/webview/src/setupEnv.js;  M docstech/reports/jest-results.txt;  M docstech/reports/playwright-dev-results.txt;  M docstech/users/alex.stanhope/todo.md;  M l10n/bundle.l10n.de.json;  M l10n/bundle.l10n.es.json;  M l10n/bundle.l10n.fr.json;  M l10n/bundle.l10n.it.json;  M l10n/bundle.l10n.json;  M package.json;  M playwright/helpers/inject-multi-docs.ts;  M playwright/specs/breadcrumb.spec.ts;  M playwright/specs/click-interaction.spec.ts;  M playwright/specs/document-view.spec.ts;  M playwright/specs/keyboard-navigation.spec.ts;  M playwright/specs/view-switching.spec.ts;  M sh/repro-drag.mjs;  M webpack.config.js; ?? client/webview/src/notethink-views/src/components/views/EmptyStoriesOverlay.test.tsx; ?? client/webview/src/notethink-views/src/components/views/EmptyStoriesOverlay.tsx; ?? playwright/fixtures/no-stories.md; ?? playwright/specs/empty-stories-note.spec.ts
+# Tree: HEAD 19ffa56 plus 293 changed or untracked paths
 # ---
-$ jest --config jest.config.cjs
-
-[1mTest Suites: [22m[1m[32m27 passed[39m[22m, 27 total
-[1mTests:       [22m[1m[32m582 passed[39m[22m, 582 total
-[1mSnapshots:   [22m0 total
-[1mTime:[22m        3.803 s
-[2mRan all test suites[22m[2m.[22m
-
-$ jest --config jest.config.cjs
-
-[1mTest Suites: [22m[1m[32m12 passed[39m[22m, 12 total
-[1mTests:       [22m[1m[32m157 passed[39m[22m, 157 total
-[1mSnapshots:   [22m0 total
-[1mTime:[22m        [1m[33m2.106 s[39m[22m
-[2mRan all test suites[22m[2m.[22m
-
-$ jest --config jest.config.cjs
-
-[1mTest Suites: [22m[1m[32m78 passed[39m[22m, 78 total
-[1mTests:       [22m[1m[32m1808 passed[39m[22m, 1808 total
-[1mSnapshots:   [22m0 total
-[1mTime:[22m        [1m[33m4.551 s[39m[22m
-[2mRan all test suites[22m[2m.[22m
-
-
-[1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
-[1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
-[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │    27 │ [32m   582[0m │ [2m     0[0m │ 3.803 s │
-│ webview          │    12 │ [32m   157[0m │ [2m     0[0m │ 2.106 s │
-│ notethink-views  │    78 │ [32m  1808[0m │ [2m     0[0m │ 4.551 s │
-[1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-[1m│ TOTAL            │   117 │[0m [32m  2547[0m [1m│[0m [2m     0[0m [1m│         │[0m
-[1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m
 $ bash scripts/test-jest.sh
+$ jest --config jest.config.cjs
+
+Test Suites: 30 passed, 30 total
+Tests:       662 passed, 662 total
+Snapshots:   0 total
+Time:        3.81 s, estimated 4 s
+Ran all test suites.
+
+$ jest --config jest.config.cjs
+
+Test Suites: 16 passed, 16 total
+Tests:       186 passed, 186 total
+Snapshots:   0 total
+Time:        2.096 s
+Ran all test suites.
+
+$ jest --config jest.config.cjs
+
+Test Suites: 87 passed, 87 total
+Tests:       1914 passed, 1914 total
+Snapshots:   0 total
+Time:        3.703 s
+Ran all test suites.
+
+
+┌──────────────────┬───────┬────────┬────────┬─────────┐
+│ Suite            │ Files │ Passed │ Failed │ Time    │
+├──────────────────┼───────┼────────┼────────┼─────────┤
+│ extension        │    30 │    662 │      0 │  3.81 s │
+│ webview          │    16 │    186 │      0 │ 2.096 s │
+│ notethink-views  │    87 │   1914 │      0 │ 3.703 s │
+├──────────────────┼───────┼────────┼────────┼─────────┤
+│ TOTAL            │   133 │   2762 │      0 │         │
+└──────────────────┴───────┴────────┴────────┴─────────┘

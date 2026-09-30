@@ -21,11 +21,11 @@ export interface UseProjectedNotesApi {
 }
 
 /**
- * hold a short-lived optimistic projection of kanban notes after a drag-drop, reconciling
+ * Holds a short-lived optimistic projection of kanban notes after a drag-drop, reconciling
  * against the authoritative document once the live notes catch up.
  *
- * while a projection is active, `notes_to_render` returns the projected notes so the drag
- * result is visible immediately with no snap-back. the hook auto-clears the projection by
+ * While a projection is active, `notes_to_render` returns the projected notes so the drag
+ * result is visible immediately with no snap-back. The hook auto-clears the projection by
  * two paths: (1) the reconcile effect detects that the authoritative notes satisfy the
  * projected move (document caught up - drop back to live notes seamlessly), or (2) the
  * KANBAN_PROJECTION_MAX_MS safety timeout fires (live state wins regardless).

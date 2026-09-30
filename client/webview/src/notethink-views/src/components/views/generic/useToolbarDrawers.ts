@@ -24,10 +24,10 @@ export interface ToolbarDrawers {
 export function useToolbarDrawers(view_id: string): ToolbarDrawers {
     const [active_drawer, setActiveDrawer] = useState<ActiveDrawer>('none');
     const gear_button_ref = useRef<HTMLButtonElement>(null);
-    // the element whose viewport position is held stable across the open/close animation (and refocused on Escape) - the gear for settings, the breadcrumb count for files
+    // held stable across the open/close animation and refocused on Escape: the gear for settings, breadcrumb count for files
     const anchor_el_ref = useRef<HTMLElement | null>(null);
     const anchor_top_ref = useRef<number | null>(null);
-    // toggle a drawer; capture the trigger element's viewport position so the scroll-anchor effect can keep it stable through the open/close animation
+    // toggle a drawer, capturing the trigger's viewport position so the scroll-anchor effect keeps it stable
     const toggleDrawer = useCallback((which: DrawerKind, anchor: HTMLElement | null): void => {
         if (anchor) {
             anchor_el_ref.current = anchor;
@@ -50,7 +50,7 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
     const toggle_jump = useCallback((anchor: HTMLElement): void => {
         toggleDrawer('jump', anchor);
     }, [toggleDrawer]);
-    // close whichever drawer is open (the in-drawer X button); hold the trigger's viewport position stable across the close animation, mirroring Escape
+    // closes the open drawer (the in-drawer X); holds the trigger's position stable across the close, mirroring Escape
     const close_drawer = useCallback((): void => {
         const anchor = anchor_el_ref.current;
         if (anchor) { anchor_top_ref.current = anchor.getBoundingClientRect().top; }
@@ -96,10 +96,7 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [active_drawer]);
-    /*
-     * outside-click closes whichever drawer is open; the trigger and the drawer body are excluded so the trigger's own onClick toggles cleanly and clicks inside the drawer don't dismiss
-     * pointerdown (not click) fires before any onClick on the click target, so the drawer is gone by the time the clicked control runs its handler; no focus restore here - focus follows the pointer
-     */
+    // outside-click closes the open drawer, excluding the trigger and drawer body; fires before the target's own onClick
     useEffect(() => {
         if (active_drawer === 'none') { return; }
         const drawer_id = `v${view_id}-${active_drawer}-drawer`;

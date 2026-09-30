@@ -17,17 +17,18 @@ const EMPTY_USER_TYPES: UserViewType[] = [];
  * What the toolbar and its drawers are driven by.
  * - handle_setting_change: the one write path every drawer control dispatches down, whatever node owns
  *   the setting it changed
+ * - the integration/view-type/card-type groups each pair a persisted selection with its resolved value
  */
 export interface ViewToolbar {
-    // integration-mode dropdown: persisted selection (may be auto), resolved concrete mode, change handler
+    // --- integration mode ---
     integration_selection: IntegrationMode;
     integration_mode: ConcreteIntegrationMode;
     handle_integration_change: (mode: IntegrationMode, target_file_path?: string) => void;
-    // view-type tree: same shape - persisted selection, auto-resolved concrete type, change handler
+    // --- view type ---
     view_type_selection: string;
     auto_resolved_type: string | undefined;
     handle_view_type_change: (view_type: string) => void;
-    // card-type tab: the same selection / resolved split, on the axis deciding how a note is drawn
+    // --- card type ---
     card_type_selection: string;
     resolved_card_type: string;
     handle_card_type_change: (card_type: string) => void;
@@ -106,17 +107,7 @@ export function useViewToolbar(
     // the user's minted view types, read from the cascade so a saved kanban type is still a lane view
     const user_view_types = display_options.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
     const { selection: card_type_selection, resolved: resolved_card_type } = readCardTypeState(props, display_options, user_view_types);
-    /*
-     * handle_integration_change - change the view's integration selection.
-     *  - 'auto' (explicit re-select) is a full reset: re-resolve mode + scope from the opened file's
-     *    declaration so the view follows the file again, exactly like picking "Auto" for view type.
-     *  - 'folder' / 'current_file' pin the user's explicit choice, overriding the file declaration.
-     * The integration tag is always dispatched to the canonical FOLDER_VIEW_STATE_ID (not props.id) so
-     * the folder viewState's other settings (columnOrder, filters, etc.) survive a flip and a flip-back.
-     * Per-view click-driven focused/selected state is transient and cleared on every change. On a
-     * resolve-to-current_file the per-state-id loop additionally clears stranded folder tags on
-     * doc-path keys (legacy pre-fix dispatch wrote them there) so the fallback scans no longer pin folder.
-     */
+    // dispatches to the canonical FOLDER_VIEW_STATE_ID so folder settings survive an integration flip and flip-back
     const handle_integration_change = useCallback((mode: IntegrationMode, target_file_path?: string): void => {
         // the auto reset re-resolves from the file; a concrete pin uses the file's own folder (folder pin) or none
         const decl = props.file_declared_integration;
@@ -138,26 +129,15 @@ export function useViewToolbar(
             target_file_path,
         });
         handlers.setViewManagedState(updates);
-        // a folder scope or any resolve-to-current_file posts setIntegration so the extension swaps folder discovery / re-sends just the active doc; target_file_path (a Files-drawer click) makes it open that file
+        // folder scope or a resolve-to-current_file posts setIntegration; target_file_path (a Files click) opens that file
         if (message) { handlers.postMessage?.(message); }
     }, [handlers, props.doc_path, props.view_state_ids, props.id, props.file_declared_integration]);
-    /*
-     * Natural lane order for the drawer's lane-order row: alphabetical, with 'untagged' last. Derived for
-     * ANY lane view rather than for kanban alone, because the drawer renders that row from the node the
-     * user selected in its tree rather than from the view the board happens to be showing.
-     */
+    // derived for any lane view, not kanban alone: the drawer renders from the tree node the user selected
     const natural_column_order = useMemo<string[]>(() => {
         if (!isGroupedViewType(props.type, registryWithUserTypes(user_view_types))) { return []; }
         return deriveNaturalColumnOrder(notes_within_parent_context);
     }, [props.type, notes_within_parent_context, user_view_types]);
-    /*
-     * cascade_write_setting - write one setting to VS Code config under notethink.settings.*, at the
-     * scope the extension picks (Workspace, falling back to User in a folderless window). This is the
-     * only way any setting is written, in any integration mode, so a change made in current_file mode
-     * is visible in folder mode and vice versa. Marks the per-setting key plus the 'settingsCascade'
-     * sentinel so the spinner appears if the round-trip is non-instantaneous; the echo reducer clears
-     * both keys when the new cascade arrives.
-     */
+    // writes one setting in every integration mode; marks it plus the settingsCascade sentinel for the spinner
     const cascade_write_setting = useCallback((setting: SettingsCascadeKey, value: unknown): void => {
         markPending(setting);
         markPending('settingsCascade');
@@ -167,29 +147,17 @@ export function useViewToolbar(
             value,
         });
     }, [handlers, markPending]);
-    /*
-     * handle_view_type_change - change the view type (auto / document / kanban). Mirrors
-     * handle_integration_change: dispatch the selection to this view's id, then cascade-write
-     * 'viewType' so the choice persists across integration modes (viewType is a view-type setting,
-     * not integration-specific - a type picked in current_file mode also applies in folder mode).
-     */
+    // viewType is not integration-specific, so a type picked in current_file mode also applies in folder mode
     const handle_view_type_change = useCallback((view_type: string): void => {
         handlers.setViewManagedState([{ id: props.id, type: view_type }]);
         cascade_write_setting('viewType', view_type);
     }, [handlers, props.id, cascade_write_setting]);
-    /*
-     * handle_card_type_change - pin the card type, or return it to auto. One cascade write and nothing
-     * else: the card reaches every note through the view's display_options, rebuilt from the cascade.
-     */
+    // one cascade write; the card reaches every note via display_options rebuilt from the cascade
     const handle_card_type_change = useCallback((card_type: string): void => {
         cascade_write_setting('cardType', card_type);
     }, [cascade_write_setting]);
     const default_actions = useDefaultActions(handlers);
-    /*
-     * handle_column_order_change - apply the Kanban column order. The cascade spells "natural order"
-     * as an empty array rather than an absent value, matching the package.json default's shape, so a
-     * board reordered back to natural stops pinning an order and picks up future natural-order changes.
-     */
+    // natural order is an empty array, matching the package.json default, so reverting stops pinning it
     const handle_column_order_change = useCallback((next_order: string[]): void => {
         const matches_natural = arraysEqual(next_order, natural_column_order);
         cascade_write_setting('columnOrder', matches_natural ? [] : next_order);

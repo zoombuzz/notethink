@@ -67,11 +67,7 @@ test.describe('manual check: settings survive a reload', () => {
             watchUnopenedFilesInViewer: false,
         });
 
-        /*
-         * The harness holds its settings in the page, so a reload wipes them where VS Code would not - the
-         * half that can be checked here is the read path: hand a fresh mount the same stored values and
-         * every control has to come back reading them rather than its default.
-         */
+        // the harness holds settings in the page, so this checks only the read path: a fresh mount must read the stored values
         const stored = await workspaceSettings(page);
         await page.reload();
         await page.waitForSelector('[data-testid="NoteRenderer"]', { state: 'attached' });
@@ -176,7 +172,8 @@ test.describe('manual check: the card type follows a mixed folder', () => {
         await expect(page.getByTestId('card-settings-drawer-grid')).toHaveAttribute('data-open', 'true');
 
         await page.getByTestId('card-radio-sticky').click();
-        await expect(page.locator('[data-card-type="sticky"]').first()).toBeVisible();
+        // 15s: the settings round trip takes about 6s under full-suite load against 2.3s alone, never a missing card
+        await expect(page.locator('[data-card-type="sticky"]').first()).toBeVisible({ timeout: 15000 });
 
         // the half the pin test misses: unpinning has to return the board to the voted answer
         await page.getByTestId('card-radio-auto').click();

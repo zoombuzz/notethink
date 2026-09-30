@@ -9,10 +9,10 @@ import type { OrderingChangeSet } from '../../lib/linetagops';
 // captured DragDropContext callbacks so tests can drive drag start/end directly
 const captured_dnd: { onDragStart?: (start: unknown, provided: unknown) => void; onDragEnd?: (result: unknown, provided: unknown) => void } = {};
 
-// per-test override for the ordering function - when set, the mocked linetagops module returns this value instead of running the real algorithm
+// per-test override: when set, the mocked linetagops module returns this instead of the real algorithm
 let mock_ordering_override: Array<OrderingChangeSet> | undefined;
 
-// mock linetagops: passthrough every export but allow tests to swap the ordering function's return value via mock_ordering_override
+// mocks linetagops: passthrough every export but let tests swap the ordering function's return value
 jest.mock('../../lib/linetagops', () => {
     const actual = jest.requireActual('../../lib/linetagops');
     return {
@@ -31,12 +31,21 @@ jest.mock('@hello-pangea/dnd', () => ({
         captured_dnd.onDragEnd = onDragEnd;
         return <div data-testid="drag-drop-context">{children}</div>;
     },
-    Droppable: ({ children, droppableId }: { children: (provided: unknown) => React.ReactNode; droppableId: string }) =>
+    Droppable: ({ children, droppableId }: { children: (provided: unknown, snapshot: unknown) => React.ReactNode; droppableId: string }) =>
         <div data-testid={`droppable-${droppableId}`}>{
-            (children as (provided: { droppableProps: Record<string, unknown>; innerRef: () => void; placeholder: null }) => React.ReactNode)({
+            (children as (
+                provided: { droppableProps: Record<string, unknown>; innerRef: () => void; placeholder: null },
+                snapshot: { isDraggingOver: boolean; draggingOverWith: null; draggingFromThisWith: null; isUsingPlaceholder: boolean },
+            ) => React.ReactNode)({
                 droppableProps: {},
                 innerRef: () => {},
                 placeholder: null,
+            }, {
+                // isUsingPlaceholder false: no test drives a placeholder drop; VirtualizedKanbanColumn sizes off it
+                isDraggingOver: false,
+                draggingOverWith: null,
+                draggingFromThisWith: null,
+                isUsingPlaceholder: false,
             })
         }</div>,
     Draggable: ({ children, draggableId }: { children: (provided: unknown, snapshot: unknown) => React.ReactNode; draggableId: string }) =>
@@ -524,7 +533,7 @@ describe('KanbanView dragEndHandler', () => {
     });
 
     it('single-file mode (no origin): posts legacy single-doc shape with docPath undefined', () => {
-        // status change drags doing -> done; no origin anywhere, ordering cascade returns a single set with doc_path undefined which we flatten into the legacy payload
+        // no origin anywhere: the ordering cascade's single doc_path-undefined set flattens into the legacy payload
         const doing_a = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -553,10 +562,7 @@ describe('KanbanView dragEndHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        /*
-         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) - 'doing' < 'done' lexicographically
-         * drag note seq=1 (status=doing) onto done column at index 0
-         */
+        // columns sort alphabetically (doing, done, untagged); drags note seq=1 onto the done column
         captured_dnd.onDragEnd!({
             draggableId: '1',
             destination: { droppableId: '1', index: 0 },
@@ -609,10 +615,7 @@ describe('KanbanView dragEndHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        /*
-         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2)
-         * drag note seq=1 (status=doing) onto done column at index 0
-         */
+        // columns sort alphabetically (doing, done, untagged); drags note seq=1 onto the done column
         captured_dnd.onDragEnd!({
             draggableId: '1',
             destination: { droppableId: '1', index: 0 },
@@ -655,7 +658,7 @@ describe('KanbanView dragEndHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        // drop doing_a back into the doing column; the merged changes_by_doc combines its file-A status change with the overridden file-A + file-B ordering edits
+        // drop back into doing: merged changes_by_doc combines the status change with the overridden ordering edits
         captured_dnd.onDragEnd!({
             draggableId: '1',
             destination: { droppableId: '0', index: 0 },
@@ -678,7 +681,7 @@ describe('KanbanView dragEndHandler', () => {
     });
 
     it('folder mode: cascade spans file-A and file-B posts changes_by_doc with both files (real-algorithm scenario)', () => {
-        // drop a file-A note into a done column holding a file-B note; tolerate either dispatch shape - the test guards the contract that cross-file edits, if emitted, are partitioned
+        // drops a file-A note into a done column holding a file-B note; either dispatch shape is acceptable
         const origin_a = makeOrigin({ doc_id: 'doc-a', doc_path: '/repo/file-a.md' });
         const origin_b = makeOrigin({ doc_id: 'doc-b', doc_path: '/repo/file-b.md' });
         // dragged note in doing column on file-A
@@ -725,10 +728,7 @@ describe('KanbanView dragEndHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        /*
-         * columns sorted alphabetically: doing (seq=0), done (seq=1), untagged (seq=2) - 'doing' < 'done'
-         * drag doing_a onto done at index 0 (above the existing done notes)
-         */
+        // columns sort alphabetically; drags doing_a onto done at index 0, above the existing done notes
         captured_dnd.onDragEnd!({
             draggableId: '1',
             destination: { droppableId: '1', index: 0 },
@@ -750,7 +750,7 @@ describe('KanbanView dragEndHandler', () => {
             const file_b_changes = msg.changes_by_doc['/repo/file-b.md'];
             expect(file_b_changes.length).toBeGreaterThan(0);
         } else {
-            // if the cascade did not actually touch file-B (no weight rewrite needed), the legacy single-doc shape is acceptable as long as it routes to file-A - status tag MUST land on file-A
+            // no weight rewrite needed: the legacy single-doc shape is fine as long as it routes to file-A
             expect(msg.docPath).toBe('/repo/file-a.md');
             expect(Array.isArray(msg.changes)).toBe(true);
         }
@@ -802,10 +802,7 @@ describe('KanbanView dragEndHandler', () => {
         });
         render(<KanbanView {...props} />);
 
-        /*
-         * doing column is the only populated named column → its seq is 0 from kanbanNoteOrder when alphabetical
-         * single status value 'doing' → seq=0 for doing; drag dragged_a (seq=1) to position 1 within doing
-         */
+        // doing is the only populated named column; drags doing_a (seq=1) to position 1 within it
         captured_dnd.onDragEnd!({
             draggableId: '1',
             destination: { droppableId: '0', index: 1 },
@@ -887,7 +884,7 @@ describe('KanbanView drag start does not move the caret', () => {
         });
         render(<KanbanView {...props} />);
 
-        // a drag-start responder exists (it arms the post-drop click guard) but must post no message - in particular no revealRange/selectRange that would move the editor caret
+        // arms the post-drop click guard but posts nothing, in particular no revealRange/selectRange
         expect(captured_dnd.onDragStart).toBeDefined();
         captured_dnd.onDragStart!({ draggableId: '1' }, {});
         expect(post_message).not.toHaveBeenCalled();

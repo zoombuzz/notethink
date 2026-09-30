@@ -2,15 +2,18 @@ import Debug from 'debug';
 
 const debug = Debug('nodejs:notethink-views:settleFlipAnimations');
 
-/*
- * single named operation (like mergeAggregateRoot.ts) - one export, no *ops barrel. Snaps every FLIP card
- * in `container` to its true layout box before @hello-pangea/dnd lifts it into a fixed drag clone: finish
- * any running Web Animation so the card settles to its identity box, drop the inline transform the FLIP
- * layer painted, and strip the transient flip classes. Called at drag-start so a card grabbed mid-animation
- * does not jump when it becomes the drag clone.
+/**
+ * Single named operation (like mergeAggregateRoot.ts) - one export, no *ops barrel. Snaps every
+ * FLIP card in `container` to its true layout box before @hello-pangea/dnd lifts it into a fixed
+ * drag clone: finishes any running Web Animation, drops the inline transform the FLIP layer
+ * painted, and strips the transient flip classes. Called at drag-start so a card grabbed
+ * mid-animation does not jump when it becomes the drag clone.
  */
 
-// the transient FLIP class bases; matched by substring so this works under both the jest identity-obj-proxy (token === base) and the production CSS-module hash (token contains base)
+/**
+ * The transient FLIP class bases, matched by substring so this works under both the jest
+ * identity-obj-proxy (token === base) and the production CSS-module hash (token contains base).
+ */
 const FLIP_CLASS_BASES = ['flipping', 'columnEntering', 'columnExiting'];
 
 // strip any live flip class from the card, snapshotting classList first so removal during iteration cannot skip a token

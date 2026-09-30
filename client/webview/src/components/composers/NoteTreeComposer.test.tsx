@@ -68,7 +68,7 @@ describe('NoteTreeComposer', () => {
         const note = buildDoc();
         render(<NoteTreeComposer note_id="doc-1" note={note} props={buildProps({ viewStates: { 'doc-1': { type: 'kanban' } } })} />);
         expect(flattenSingleFileStories).toHaveBeenCalledTimes(1);
-        // the descent receives the composer's converted root, the doc id, and the doc path so stories route + stamp against the one open file
+        // the converted root, doc id and doc path let stories route and stamp against the one open file
         expect(flattenSingleFileStories).toHaveBeenCalledWith(expect.objectContaining({ type: 'root' }), 'doc-1', '/repo/sub/file.md');
     });
 
@@ -88,7 +88,7 @@ describe('NoteTreeComposer', () => {
     });
 
     it('overrides a stranded `folder` integration_mode on the per-doc viewState', () => {
-        // legacy: the per-doc viewState was once stamped with `folder` by the pre-fix dispatch bug; the composer must surface `current_file` on its render regardless
+        // the composer surfaces `current_file` regardless of a stranded `folder` value on the per-doc viewState
         const note = buildDoc();
         const view_states = {
             'doc-1': { display_options: { integration_mode: 'folder', integration_path: '/repo/sub' } },

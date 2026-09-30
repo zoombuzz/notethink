@@ -14,7 +14,6 @@ import type { ViewApi, ViewProps } from '../../../types/ViewProps';
  */
 
 const UNBOUND_SESSION: ActivitySession = {
-    contract_version: '1.0.0',
     session_id: 'claude-no-story',
     vendor: 'claude-code',
     project: 'notethink',
@@ -23,28 +22,16 @@ const UNBOUND_SESSION: ActivitySession = {
     state: 'working',
     story_binding: 'none',
     capabilities: { live_tool_call: 'supported', question: 'supported', file_attribution: 'supported' },
+    usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, is_estimate: false },
 };
 
 const UNBOUND_STATE: ActivitySessionState = {
     root_path: '/w/notethink',
-    root_relative: 'notethink',
     session: UNBOUND_SESSION,
-    events: [],
 };
 
 const SEEDED_SNAPSHOT: ActivitySnapshot = {
-    contract_version: '1.0.0',
-    producers: [{
-        root_path: '/w/notethink',
-        root_relative: 'notethink',
-        project: 'notethink',
-        producer: { name: 'p', version: '1' },
-        live: true,
-        capabilities: {},
-        declared_session_ids: [UNBOUND_SESSION.session_id],
-        unreadable_session_ids: [],
-        refusals: [],
-    }],
+    analyser: { state: 'live', refusals: [] },
     sessions: [UNBOUND_STATE],
     trees: [],
 };

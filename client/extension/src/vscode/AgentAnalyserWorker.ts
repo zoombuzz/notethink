@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { lineDiffFromBytes, type LineDiffCounts } from '../lib/agentlinediffops';
 import { priceCalls, pricePerCallBounded, type AgentPricedUsageEntry } from '../lib/agentpricingops';
 import { AGENT_TRANSCRIPT_MAX_BYTES, capabilitiesForVendor, type AgentReadRefusal, type AgentSessionInput, type AgentSessionResult, type AgentSourceFile, type AgentToolInvocationEdit } from '../lib/vendors/agentvendorops';
 import { buildClaudeCodeResult, readClaudeCodeSession, type ClaudeTranscriptRecord } from '../lib/vendors/claudecodeops';
@@ -26,7 +27,9 @@ import { ACTIVITY_STATE_UNKNOWN, type ActivityCapabilities, type ActivityEventBo
  * already-parsed lines, keyed by session id, for as long as this worker instance lives - but ONLY a
  * session `AgentAnalyser.ts` marked `job.cacheable` (live, or one of its files changed recently; see
  * `AGENT_TAIL_CACHE_RECENT_MS` there), and only up to `AGENT_TAIL_CACHE_MAX_BYTES` in total across
- * every session at once, least-recently-touched evicted first. A job whose transcript is `'whole'`
+ * every session at once, divided across pooled workers by `request.pool_size` (one session may keep
+ * holding the whole cache alone rather than being evicted with nothing smaller left to replace it),
+ * least-recently-touched evicted first. A job whose transcript is `'whole'`
  * (first sight, a shrunk or rewritten file, this worker having just been restarted, or the session
  * simply isn't cacheable) is read through the vendor's own `readXSession`, on every file's full
  * current content. A job whose transcript is `'tail'` or `'none'` carries only the bytes appended
@@ -55,11 +58,17 @@ import { ACTIVITY_STATE_UNKNOWN, type ActivityCapabilities, type ActivityEventBo
  * is testable by direct import: a jest environment has no `Worker` global to round-trip postMessage
  * through, so the bottom of this file wires the same function to `self.onmessage` only when running
  * inside an actual worker context.
+ *
+ * A request's `line_diff_jobs` are a separate, unrelated kind of work this worker also does: counting
+ * added/removed lines between an uncommitted file's HEAD and working-tree bytes, an O(a*b) computation
+ * that could stall the host thread if run there. Their buffers are left un-detached (unlike a
+ * transcript's) since a structured-clone copy costs nothing next to the compute, and it lets the host
+ * recompute from the same bytes if the round trip fails.
  */
 
 export type AgentVendorId = 'claude-code' | 'codex' | 'grok';
 
-// the most priced-usage entries one session's output carries; a session past this many calls is folded into this many consecutive runs instead (pricePerCallBounded), so the turn-attribution list stays bounded the way every other list this worker returns is
+// cap on priced-usage entries per session; excess folds into this many runs (pricePerCallBounded)
 const AGENT_PRICED_USAGE_LIST_MAX = 200;
 
 const VENDOR_READERS: Record<AgentVendorId, (input: AgentSessionInput) => AgentSessionResult> = {
@@ -104,15 +113,41 @@ export interface AgentAnalyserWorkerJob {
 }
 
 /**
+ * One session's line-diff job: both sides' bytes as the host read them.
+ * - key: the host's own key for this job, unique within one request
+ * - head_bytes / working_bytes: absent means that side doesn't exist (a whole add or delete)
+ */
+export interface AgentLineDiffJob {
+    key: string;
+    head_bytes?: ArrayBuffer;
+    working_bytes?: ArrayBuffer;
+}
+
+/**
+ * One line-diff job's result.
+ * - counts: undefined when lineDiffFromBytes declined (over the byte cap, or either side binary)
+ */
+export interface AgentLineDiffResult {
+    key: string;
+    counts?: LineDiffCounts;
+}
+
+/**
  * One batch of jobs from the host.
  * - evict_session_ids: sessions the host has dropped since the last request (out of the 30 day
  *   window, a deleted file, or one that stopped qualifying as cacheable); their cached lines are freed
  *   before this request's own jobs run
+ * - line_diff_jobs: line counts for uncommitted files, independent of `jobs`/`evict_session_ids`; a
+ *   request may carry only these, with `jobs` left empty
+ * - pool_size: how many worker instances this worker's cache share is divided across; absent keeps
+ *   the whole budget
  */
 export interface AgentAnalyserWorkerRequest {
     request_id: string;
     jobs: AgentAnalyserWorkerJob[];
     evict_session_ids?: string[];
+    line_diff_jobs?: AgentLineDiffJob[];
+    pool_size?: number;
 }
 
 /**
@@ -161,11 +196,14 @@ export interface AgentAnalyserWorkerSessionOutput {
  *   whether the byte cap (AGENT_TAIL_CACHE_MAX_BYTES) forced them out or a transcript grew past
  *   AGENT_TRANSCRIPT_MAX_BYTES and was refused; the host must drop its own tail bookmark for each one,
  *   since resuming against it next time would build from a cache that no longer exists
+ * - line_diff_results: one entry per `line_diff_jobs` entry; absent (not empty) when the request
+ *   carried none
  */
 export interface AgentAnalyserWorkerResponse {
     request_id: string;
     sessions: AgentAnalyserWorkerSessionOutput[];
     evicted_session_ids?: string[];
+    line_diff_results?: AgentLineDiffResult[];
 }
 
 // a bare cwd (no trailing slash) joined to a relative file_path the way every vendor's own tool call declares one
@@ -191,7 +229,7 @@ function decodeFile(file: AgentAnalyserRawFile): AgentSourceFile {
     return { path: file.path, text: new TextDecoder().decode(file.bytes) };
 }
 
-// the minimal output a job's own refusal (a crash, or transcriptSizeRefusal) still owes the batch: enough for the row to draw, refused rather than thrown out of the whole batch handleAgentAnalyserRequest promises never to do
+// minimal output a refused job owes the batch so its row still draws, instead of throwing out the whole batch
 function refusalOutputFor(job: AgentAnalyserWorkerJob, refusal: AgentReadRefusal): AgentAnalyserWorkerSessionOutput {
     const now_iso = new Date(job.now_ms).toISOString();
     return {
@@ -209,19 +247,44 @@ function refusalOutputFor(job: AgentAnalyserWorkerJob, refusal: AgentReadRefusal
     };
 }
 
-// the most total source bytes (the JSONL text that produced the cached lines, never the parsed objects' own heap footprint, which this worker has no cheap way to measure) this worker instance keeps retained across every session's cache at once; over this, the least-recently-touched session is evicted first (enforceCacheByteCap)
+/**
+ * Total source bytes (the JSONL text, never the parsed objects' own heap footprint) this worker
+ * instance retains across every session's cache at once; past this, the least-recently-touched
+ * session is evicted first (enforceCacheByteCap).
+ */
 const AGENT_TAIL_CACHE_MAX_BYTES = 128 * 1024 * 1024;
 let tail_cache_max_bytes_override: number | undefined;
-// test-only: overrides AGENT_TAIL_CACHE_MAX_BYTES so the byte cap can be exercised without allocating a 128 MB fixture; call with undefined to restore the real limit. Never called from production code (self.onmessage's own path never reaches this)
+// test-only: overrides the byte cap so it can be exercised without a 128 MB fixture; undefined restores the real limit
 export function setTailCacheMaxBytesForTest(bytes: number | undefined): void { tail_cache_max_bytes_override = bytes; }
-function tailCacheMaxBytes(): number { return tail_cache_max_bytes_override ?? AGENT_TAIL_CACHE_MAX_BYTES; }
-// test-only: this worker's line cache is module-level state (deliberately - it must survive across every request this worker instance ever handles), so a jest file importing handleAgentAnalyserRequest directly across many `it()` blocks would otherwise leak one test's cached sessions into the next; clears every session's cache and the byte total. Never called from production code
+// this worker's own share of the byte cap: the whole budget alone, or 1/N when pooled across N workers
+function tailCacheMaxBytes(pool_size?: number): number {
+    const shared = pool_size && pool_size > 1 ? Math.floor(AGENT_TAIL_CACHE_MAX_BYTES / pool_size) : AGENT_TAIL_CACHE_MAX_BYTES;
+    return tail_cache_max_bytes_override ?? shared;
+}
+let tail_cache_global_max_bytes_override: number | undefined;
+// test-only: overrides the undivided ceiling the lone-survivor exception uses; undefined restores the real limit
+export function setTailCacheGlobalMaxBytesForTest(bytes: number | undefined): void { tail_cache_global_max_bytes_override = bytes; }
+// the whole unpooled budget a lone surviving session is held to, regardless of its own smaller per-worker share
+function tailCacheGlobalMaxBytes(): number { return tail_cache_global_max_bytes_override ?? AGENT_TAIL_CACHE_MAX_BYTES; }
+/**
+ * Test-only: the line cache is deliberate module-level state that must survive every request this
+ * worker instance handles, so a jest file calling handleAgentAnalyserRequest across many `it()`
+ * blocks would otherwise leak one test's cached sessions into the next. Clears every session's
+ * cache and the byte total; never called from production code.
+ */
 export function resetTailCacheForTest(): void { session_line_cache.clear(); total_cached_bytes = 0; touch_sequence = 0; }
-// test-only: a snapshot of what this worker instance is currently retaining, for a measurement (how much a real scan's cache would actually hold) or an assertion that would otherwise have no way to see past handleAgentAnalyserRequest's own return value into the cache behind it
+/**
+ * Test-only: a snapshot of what this worker instance currently retains, for measuring what a real
+ * scan's cache would hold or asserting past handleAgentAnalyserRequest's own return value into the
+ * cache behind it.
+ */
 export function tailCacheStatsForTest(): { sessions: number; total_source_bytes: number } { return { sessions: session_line_cache.size, total_source_bytes: total_cached_bytes }; }
 
 let transcript_max_bytes_override: number | undefined;
-// test-only: overrides AGENT_TRANSCRIPT_MAX_BYTES so transcriptSizeRefusal can be exercised without allocating a 64 MB fixture; call with undefined to restore the real limit. Never called from production code
+/**
+ * Test-only: overrides AGENT_TRANSCRIPT_MAX_BYTES so transcriptSizeRefusal can be exercised
+ * without a 64 MB fixture; undefined restores the real limit. Never called from production code.
+ */
 export function setTranscriptMaxBytesForTest(bytes: number | undefined): void { transcript_max_bytes_override = bytes; }
 function transcriptMaxBytes(): number { return transcript_max_bytes_override ?? AGENT_TRANSCRIPT_MAX_BYTES; }
 
@@ -252,7 +315,11 @@ function sessionCacheEntry(session_id: string): SessionLineCache {
     return entry;
 }
 
-// drops every cached line and byte-accounting entry belonging to one session, whether the host asked for it (evict_session_ids: out of the 30 day window, a deleted file, or it stopped being cacheable) or the byte cap forced it out on its own
+/**
+ * Drops every cached line and byte-accounting entry for one session, whether the host asked
+ * (evict_session_ids: outside the 30-day window, a deleted file, or no longer cacheable) or the
+ * byte cap forced it out on its own.
+ */
 function dropSessionCache(session_id: string): void {
     const entry = session_line_cache.get(session_id);
     if (!entry) { return; }
@@ -278,7 +345,10 @@ function parseJsonlLenient(text: string): unknown[] {
     return lines;
 }
 
-// sets one file's cached lines outright (a 'whole' read), replacing whatever it held before and adjusting the byte total by the difference rather than the new total, so a reseed of an already-cached file never double-counts its old bytes
+/**
+ * Sets one file's cached lines outright (a 'whole' read), adjusting the byte total by the
+ * difference rather than the new total, so reseeding an already-cached file never double-counts.
+ */
 function setFileLines(session_id: string, path_: string, lines: unknown[], source_bytes: number): void {
     const entry = sessionCacheEntry(session_id);
     const previous_bytes = entry.file_source_bytes.get(path_) ?? 0;
@@ -298,7 +368,12 @@ function appendFileLines(session_id: string, path_: string, new_lines: unknown[]
     total_cached_bytes += added_source_bytes;
 }
 
-// extends (or seeds) one file's own cached lines from this job's bytes, unless this session is not cacheable (AgentAnalyser.ts judged it neither live nor recently changed) - such a session's lines are built from this job's own bytes and then thrown away, never retained past this one request; a 'none' file leaves its cache untouched either way, since nothing new has arrived
+/**
+ * Extends (or seeds) one file's cached lines from this job's bytes, unless the session is not
+ * cacheable (AgentAnalyser.ts judged it neither live nor recently changed) - then the lines are
+ * built and thrown away, never retained past this request. A 'none' file's cache is untouched
+ * either way, since nothing new arrived.
+ */
 function updateLineCacheForFile(job: AgentAnalyserWorkerJob, file: AgentAnalyserRawFile): void {
     if (!job.cacheable || file.mode === 'none') { return; }
     const text = decodeFile(file).text;
@@ -311,7 +386,7 @@ function linesFor(session_id: string, path_: string): unknown[] {
     return session_line_cache.get(session_id)?.files.get(path_) ?? [];
 }
 
-// the UTF-8 byte length of the source text already cached for one session's file, 0 for a file never cached (first sight, or a session this worker never retained)
+// UTF-8 byte length of the source text already cached for a session's file, 0 if never cached
 function existingSourceBytes(session_id: string, path_: string): number {
     return session_line_cache.get(session_id)?.file_source_bytes.get(path_) ?? 0;
 }
@@ -342,21 +417,35 @@ function transcriptSizeRefusal(job: AgentAnalyserWorkerJob): AgentReadRefusal | 
  * Runs once per request, after every job in it has already updated the cache, so a burst of several
  * newly-cacheable big sessions in one scan is judged against the whole cache's final size rather than
  * evicted and re-admitted mid-batch.
+ *
+ * The single session left holding the whole cache is spared its own per-worker share, up to the whole
+ * unpooled budget: discarding it gains nothing since nothing smaller is left to replace it, but a
+ * session that outgrows even the unpooled budget is evicted anyway. Every other session still yields
+ * first, in least-recently-touched order.
+ *
+ * Worst case, this lets `pool_size` different sessions each hold a full unpooled budget across
+ * `pool_size` workers; not tightened further, since that ceiling is already well below what an editor
+ * host has to spare.
  */
-function enforceCacheByteCap(): string[] {
-    const max_bytes = tailCacheMaxBytes();
+function enforceCacheByteCap(pool_size?: number): string[] {
+    const max_bytes = tailCacheMaxBytes(pool_size);
     if (total_cached_bytes <= max_bytes) { return []; }
     const ordered = [...session_line_cache.entries()].sort((a, b) => a[1].last_touched - b[1].last_touched);
     const evicted: string[] = [];
     for (const [session_id] of ordered) {
         if (total_cached_bytes <= max_bytes) { break; }
+        if (session_line_cache.size <= 1 && total_cached_bytes <= tailCacheGlobalMaxBytes()) { break; }
         dropSessionCache(session_id);
         evicted.push(session_id);
     }
     return evicted;
 }
 
-// each vendor's buildXResult, normalised to the same unknown[]-in shape the incremental path works with; each build function's own line type is duck-typed from JSON.parse output, which is what the cache actually holds
+/**
+ * Each vendor's buildXResult, normalised to the same unknown[]-in shape the incremental path uses;
+ * each build function's line type is duck-typed from JSON.parse output, which is what the cache
+ * actually holds.
+ */
 const VENDOR_RESULT_BUILDERS: Record<AgentVendorId, (input: AgentSessionInput, records: unknown[], extra_records: unknown[][]) => AgentSessionResult> = {
     'claude-code': (input, records, extra_records) => buildClaudeCodeResult(input, records as ClaudeTranscriptRecord[], extra_records as ClaudeTranscriptRecord[][]),
     codex: (input, records) => buildCodexResult(input, records as CodexLine[]),
@@ -416,7 +505,7 @@ function runJobIncremental(job: AgentAnalyserWorkerJob): AgentAnalyserWorkerSess
         vendor_live: job.vendor_live,
         now_ms: job.now_ms,
         window_start_ms: job.window_start_ms,
-        // the transcript itself is never re-decoded here; VENDOR_RESULT_BUILDERS reads it from the line cache, not from `transcript.text`
+        // the transcript is never re-decoded here; VENDOR_RESULT_BUILDERS reads it from the line cache
         transcript: { path: job.transcript.path, text: '' },
         extra_files: job.extra_files.map(file => file.mode === 'whole' ? decodeFile(file) : { path: file.path, text: '' }),
     };
@@ -426,7 +515,11 @@ function runJobIncremental(job: AgentAnalyserWorkerJob): AgentAnalyserWorkerSess
     return buildOutputFrom(job, result);
 }
 
-// oversized is checked, and the session dropped, before either the cache or a reader ever sees this job's bytes: transcriptSizeRefusal judges the whole/tail/none job the same way, so a transcript over AGENT_TRANSCRIPT_MAX_BYTES is refused and never cached on any scan, not just its first
+/**
+ * Oversize is checked, and the session dropped, before the cache or a reader sees this job's
+ * bytes: transcriptSizeRefusal treats whole/tail/none jobs alike, so a transcript over
+ * AGENT_TRANSCRIPT_MAX_BYTES stays refused and uncached on every scan, not just its first.
+ */
 function runJob(job: AgentAnalyserWorkerJob, oversized_session_ids: Set<string>): AgentAnalyserWorkerSessionOutput {
     const size_refusal = transcriptSizeRefusal(job);
     if (size_refusal) {
@@ -439,10 +532,26 @@ function runJob(job: AgentAnalyserWorkerJob, oversized_session_ids: Set<string>)
     return job.transcript.mode === 'whole' ? runJobWhole(job) : runJobIncremental(job);
 }
 
-// runJob isolated per job: a reader's own refusal path already returns a normal result, so this only catches an exception runJob itself was not written to expect (priceCalls, capabilitiesForVendor, resolveCalls, or a reader bug), which would otherwise fail the whole batch and leave every OTHER session in it unreported too
+/**
+ * Isolates runJob per job: a reader's own refusal path already returns a normal result, so this
+ * only catches an exception runJob was not written to expect (priceCalls, capabilitiesForVendor,
+ * resolveCalls, or a reader bug) - one that would otherwise fail the whole batch and leave every
+ * other session in it unreported too.
+ */
 function runJobIsolated(job: AgentAnalyserWorkerJob, oversized_session_ids: Set<string>): AgentAnalyserWorkerSessionOutput {
     try { return runJob(job, oversized_session_ids); }
     catch (err) { return refusalOutputFor(job, { code: 'unreadable', reason: err instanceof Error ? err.message : String(err) }); }
+}
+
+// one line-diff job's bytes to lineDiffFromBytes's compute, isolated the same way runJobIsolated is
+function runLineDiffJobIsolated(job: AgentLineDiffJob): AgentLineDiffResult {
+    try {
+        const head_bytes = job.head_bytes ? new Uint8Array(job.head_bytes) : undefined;
+        const working_bytes = job.working_bytes ? new Uint8Array(job.working_bytes) : undefined;
+        return { key: job.key, counts: lineDiffFromBytes(head_bytes, working_bytes) };
+    } catch {
+        return { key: job.key };
+    }
 }
 
 /**
@@ -451,15 +560,22 @@ function runJobIsolated(job: AgentAnalyserWorkerJob, oversized_session_ids: Set<
  * cap and report anything IT had to evict - the byte cap's own evictions plus every session
  * `transcriptSizeRefusal` refused this request - so the host's next request never assumes a bookmark
  * this worker no longer backs, whether the worker dropped it for space or because the transcript itself
- * grew past its own bound.
+ * grew past its own bound. `line_diff_jobs`, when present, are computed the same pass, unrelated to
+ * the session jobs above.
  */
 export function handleAgentAnalyserRequest(request: AgentAnalyserWorkerRequest): AgentAnalyserWorkerResponse {
     for (const session_id of request.evict_session_ids ?? []) { dropSessionCache(session_id); }
     const oversized_session_ids = new Set<string>();
     const sessions = request.jobs.map(job => runJobIsolated(job, oversized_session_ids));
-    const cap_evicted = enforceCacheByteCap();
+    const cap_evicted = enforceCacheByteCap(request.pool_size);
     const evicted_session_ids = [...new Set([...oversized_session_ids, ...cap_evicted])];
-    return { request_id: request.request_id, sessions, evicted_session_ids: evicted_session_ids.length > 0 ? evicted_session_ids : undefined };
+    const line_diff_results = request.line_diff_jobs?.map(runLineDiffJobIsolated);
+    return {
+        request_id: request.request_id,
+        sessions,
+        evicted_session_ids: evicted_session_ids.length > 0 ? evicted_session_ids : undefined,
+        line_diff_results,
+    };
 }
 
 // wired only inside an actual worker context, so jest (which has no `self`/`onmessage`) never touches this

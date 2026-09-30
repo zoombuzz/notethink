@@ -1,4 +1,5 @@
-import { getVscodeApi, migrateSavedState, postMessageToExtension, persistVscodeState, type VSCodeState } from "./vscodeops";
+import { getVscodeApi, migrateSavedState, postMessageToExtension, persistVscodeState, toPersistedDocs, type VSCodeState } from "./vscodeops";
+import type { Doc, HashMapOf } from "../types/general";
 
 type VscodeApiMock = {
     getState: jest.Mock;
@@ -70,10 +71,71 @@ describe('vscodeops', () => {
 
     });
 
+    describe('toPersistedDocs', () => {
+
+        it('projects a Doc map down to id, path, relative_path, hash_sha256 and mtime, dropping content and text', () => {
+            const docs: HashMapOf<Doc> = {
+                'doc-1': {
+                    id: 'doc-1',
+                    path: '/a.md',
+                    relative_path: 'a.md',
+                    text: 'hello world',
+                    content: { type: 'root', children: [] },
+                    hash_sha256: 'abc123',
+                    mtime: 42,
+                    updatedAt: '2026-09-25T00:00:00Z',
+                },
+            };
+            const result = toPersistedDocs(docs);
+            expect(result['doc-1']).toEqual({
+                id: 'doc-1',
+                path: '/a.md',
+                relative_path: 'a.md',
+                hash_sha256: 'abc123',
+                mtime: 42,
+            });
+            expect(result['doc-1']).not.toHaveProperty('text');
+            expect(result['doc-1']).not.toHaveProperty('content');
+            expect(result['doc-1']).not.toHaveProperty('updatedAt');
+        });
+
+        it('projects an empty doc map to an empty object', () => {
+            expect(toPersistedDocs({})).toEqual({});
+        });
+
+    });
+
     describe('migrateSavedState', () => {
 
         it('returns undefined for undefined input', () => {
             expect(migrateSavedState(undefined)).toBeUndefined();
+        });
+
+        it('shrinks a legacy full-Doc persisted state to metadata on load', () => {
+            const input = {
+                docs: {
+                    'doc-1': {
+                        id: 'doc-1',
+                        path: '/a.md',
+                        text: 'hello',
+                        content: { type: 'root', children: [] },
+                        hash_sha256: 'h1',
+                        mtime: 1,
+                    },
+                },
+            } as unknown as VSCodeState;
+            const result = migrateSavedState(input);
+            expect(result?.docs?.['doc-1']).toEqual({ id: 'doc-1', path: '/a.md', hash_sha256: 'h1', mtime: 1 });
+            expect(result?.docs?.['doc-1']).not.toHaveProperty('text');
+            expect(result?.docs?.['doc-1']).not.toHaveProperty('content');
+        });
+
+        it('leaves an already-metadata-only docs map unchanged in shape', () => {
+            const input: VSCodeState = {
+                docs: { 'doc-1': { id: 'doc-1', path: '/a.md', hash_sha256: 'h1' } },
+            };
+            const result = migrateSavedState(input);
+            expect(result?.docs?.['doc-1']).toEqual({ id: 'doc-1', path: '/a.md', hash_sha256: 'h1' });
         });
 
         it('returns the input unchanged when viewStates is missing', () => {
@@ -113,10 +175,10 @@ describe('vscodeops', () => {
             expect(result?.viewStates).toHaveProperty('__aggregate__');
         });
 
-        /*
-         * a persisted seq outlives the parse that produced it, and handleSetViewManagedState merges by
+        /**
+         * A persisted seq outlives the parse that produced it, and handleSetViewManagedState merges by
          * spread, so without this drop a legacy value would survive forever and win useViewContext's
-         * scope ternary whenever parent_context_id is cleared - making drill-out-to-root a no-op
+         * scope ternary, making drill-out-to-root a no-op.
          */
         it('drops a legacy persisted parent_context_seq', () => {
             const input: VSCodeState = {

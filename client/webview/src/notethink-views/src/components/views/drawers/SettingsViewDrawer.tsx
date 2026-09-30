@@ -600,15 +600,13 @@ interface CustomViewTypesDisclosureProps {
  * something here changes state beyond this board, and the reader should have to open it before it can.
  * This one opens itself when an offer arrives, since an offer nobody can see is not an offer, and stays
  * wherever the reader leaves it afterwards. The caller renders it only when it holds something, so it is
- * never an empty panel explaining a feature the reader cannot reach from where they are standing.
+ * never an empty panel explaining a feature the reader cannot reach from where they are standing. The
+ * caller keys this component on the set of offer reasons, so a fresh offer is a fresh component and
+ * reader_open resets to undefined rather than needing an effect to sync it.
  */
 function CustomViewTypesDisclosure(props: CustomViewTypesDisclosureProps): React.ReactElement {
     const offer = props.offerRows[0];
-    /*
-     * Open by default whenever there is an offer, and wherever the reader last put it once they have said.
-     * No effect syncing one to the other: the caller keys this component on the set of reasons, so a fresh
-     * offer is a fresh component with the preference unset again.
-     */
+    // undefined defers to whether there is an offer; once set, it holds the reader's own choice
     const [reader_open, setReaderOpen] = useState<boolean | undefined>(undefined);
     const open = reader_open ?? offer !== undefined;
     return (
@@ -767,6 +765,15 @@ interface SettingsDrawerSelection {
     handle_delete_type: (id: string) => void;
 }
 
+/**
+ * Builds the drawer's selection handlers. handle_row_change writes into the selected user type's
+ * overrides when it holds the key, since a workspace write to such a key is ignored and the type's
+ * overrides paint over it on the next render. handle_save_new_type and handle_update_type both clear
+ * the written keys off the workspace scope afterwards: a type's overrides only apply while it is the
+ * rendered type, and values left in the workspace scope would strand the offer or duplicate on the
+ * next save. handle_delete_type hands the selection back to the deleted type's parent rather than
+ * falling through to `auto`, which would be a second, invisible choice about what renders.
+ */
 function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: ViewRegistry): SettingsDrawerSelection {
     const [picked_node, setPickedNode] = useState<string | undefined>(undefined);
     const selected_node = resolveSelectedNode(picked_node, props.currentType, registry);
@@ -779,11 +786,7 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
         onViewTypeChange(view_type);
         if (view_type !== AUTO_TYPE) { setPickedNode(view_type); }
     }, [onViewTypeChange]);
-    /*
-     * A row the selected type already holds is written into that type, because a workspace write to such a
-     * key is written, ignored and then painted over: the type's overrides layer over the whole cascade when
-     * the board renders. That is what made the control snap back to the type's value on the next echo.
-     */
+    // writes into the selected type's overrides when it holds the key, else through the normal cascade
     const handle_row_change = useCallback((def: SettingRowDef, value: unknown): void => {
         if (selected_user_type !== undefined && userTypeHoldsKey(selected_user_type, def.key)) {
             const write = settingWriteFor(userTypes, selected_user_type, def.key, value);
@@ -796,14 +799,7 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
             onSettingChange(def.key, value);
         }
     }, [onColumnOrderChange, onSettingChange, selected_user_type, userTypes]);
-    /*
-     * Saving is three writes, not one, because a minted type only means anything once the board renders as
-     * it: `applyUserTypeOverrides` layers a type's overrides while walking the RENDERED type's chain, so a
-     * type that is saved and not pinned contributes nothing. And the values have to come off the parent -
-     * the offer promises to keep the change "without altering the type it came from", which is only true
-     * once the workspace scope is cleared. Leaving them behind kept the row diverged, kept the offer
-     * standing over a change it had already captured, and minted a duplicate on the next save.
-     */
+    // mints the type, pins the board to it, then clears the copied keys off the workspace scope
     const handle_save_new_type = useCallback((label: string, overrides: Record<string, unknown>): void => {
         const keys = Object.keys(overrides) as SettingsCascadeKey[];
         if (keys.length === 0) { return; }
@@ -818,12 +814,7 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
         for (const key of keys) { onSettingChange(key, undefined); }
         setPickedNode(minted.id);
     }, [registry, selected_node, onSettingChange, onViewTypeChange, userTypes]);
-    /*
-     * Updating is the same shape as minting, less the mint: the diverged values move into the selected
-     * type's overrides and then off the workspace scope, which is the only thing that makes them the
-     * type's rather than this workspace's. The board is pinned to the type when it is showing something
-     * else, because a type's overrides apply only while it is the type being rendered.
-     */
+    // moves diverged values into the type's overrides and pins the board to it if showing something else
     const handle_update_type = useCallback((overrides: Record<string, unknown>): void => {
         const keys = Object.keys(overrides) as SettingsCascadeKey[];
         if (selected_user_type === undefined || keys.length === 0) { return; }
@@ -834,11 +825,7 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
     const handle_rename_type = useCallback((id: string, label: string): void => {
         onSettingChange('viewUserTypes', renameUserViewType(userTypes, id, label));
     }, [onSettingChange, userTypes]);
-    /*
-     * Deleting the type the board is rendering would leave the view-type setting naming a node the registry
-     * no longer builds, so the selection is handed back to the parent in the same act. Falling through to
-     * `auto` would be a second, invisible decision about what the board should show.
-     */
+    // hands the selection back to the deleted type's parent rather than falling through to auto
     const handle_delete_type = useCallback((id: string): void => {
         const doomed = userTypes.find(type => type.id === id);
         onSettingChange('viewUserTypes', removeUserViewType(userTypes, id));

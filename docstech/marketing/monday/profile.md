@@ -22,11 +22,17 @@ NoteThink is a VS Code extension (published as `NoteThink.notethink`) that rende
 
 ## Measurement
 
-- the Marketplace listing cannot carry GA4 or UTM parameters GA4 would see: it is a third-party site with its own install/rating counters only, and nothing on our side captures a `?utm_source=` appended to the listing URL even if VS Code's install click-through preserved it
-- once notethink.com has GA4, link posts to a notethink.com landing page so the visit lands in an owned property
-- notethink.com has no GA4 today and lives in the `notegit` repo (served by its `dulcet` app), so adding GA4 is `notegit` work, not `notethink` work
-- until then, the outcome proxy is the Marketplace install count, read weekly by WebFetch of the public listing, plus GitHub stars on `zoombuzz/notethink`, both public counters with no MCP or API access here
-- plainly: until notethink.com carries GA4, posts are measured on platform metrics (impressions, reactions, comments, link clicks reported by the publisher) and install/star deltas only, never sessions, new users or conversions
+- GA4 properties created 2026-09-29 (operator's signed-in browser, per the `ga4-notethink-com` story's recorded decision to keep the two sites on separate properties):
+  - notethink.com: `properties/556474696` ("notethink.com - GA4"), web stream "notethink.com - Web" (stream id 15866382830, `https://www.notethink.com`), measurement id `G-K3285X28QT`
+  - notegit.com: `properties/556502893` ("notegit.com - GA4"), web stream "notegit.com - Web" (stream id 15866287745, `https://www.notegit.com`), measurement id `G-R528DT102F`
+  - both Europe/London, GBP; no Measurement Protocol API secret exists yet (create one only if server-side event sends are needed, and reference it by env var name, never its value)
+  - wired prod-only into `notegit/terraform/prod/do-app-dulcet/main.tf` (`NEXT_PUBLIC_GA_MEASUREMENT_ID_NOTEGIT` / `_NOTETHINK`), read by `notegit/nodejs/dulcet/src/lib/sites.ts`'s per-site `SiteConfig`, and loaded client-side (Consent Mode v2, default-denied) by `notegit/nodejs/dulcet/src/lib/analyticsops.ts`; not deployed yet - staging never carries these vars, matching calfam's precedent
+  - the Marketplace listing cannot carry GA4 or UTM parameters GA4 would see: it is a third-party site with its own install/rating counters only, and nothing on our side captures a `?utm_source=` appended to the listing URL even if VS Code's install click-through preserved it
+  - the outbound Marketplace install link on the notethink.com landing page fires a `click_install_marketplace` GA4 event as a proxy for installs the Marketplace itself does not report back to us
+  - link posts to the notethink.com landing page so the visit lands in the owned property
+  - notethink.com's GA4 code lives in the `notegit` repo (served by its `dulcet` app) - this remains `notegit` work, not `notethink` work
+  - until the code above is deployed and verified against a real UTM-tagged visit, the outcome proxy stays the Marketplace install count, read weekly by WebFetch of the public listing, plus GitHub stars on `zoombuzz/notethink`, both public counters with no MCP or API access here
+  - plainly: until notethink.com's GA4 is deployed and confirmed live, posts are measured on platform metrics (impressions, reactions, comments, link clicks reported by the publisher) and install/star deltas only, never sessions, new users or conversions
 
 ## Audiences
 

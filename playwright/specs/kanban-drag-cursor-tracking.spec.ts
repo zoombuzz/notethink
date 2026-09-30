@@ -61,11 +61,7 @@ test.describe('Kanban drag cursor tracking - the clone follows the pointer', () 
             const pointer_x = from_x + (to_x - from_x) * ratio;
             const pointer_y = from_y + (to_y - from_y) * ratio;
             await page.mouse.move(pointer_x, pointer_y, { steps: 3 });
-            /*
-             * poll the clone centre until it settles under the pointer: dnd repositions the clone on the next
-             * animation frame, so expect.poll is the wait-for that absorbs that one-frame lag without a sleep.
-             * the metric is the larger of the two axis offsets, so a drift on either axis fails the step.
-             */
+            // polls the clone centre until it settles under the pointer, absorbing dnd's one-frame reposition lag
             await expect
                 .poll(async (): Promise<number> => {
                     const box = await clone.boundingBox();

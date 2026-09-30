@@ -73,10 +73,10 @@ function clampIndex(index: number, max: number): number {
 // --- public API ---
 
 /**
- * produce a NEW notes array reflecting the dropped layout. the dragged note is re-tagged
- * into destination_column_value and every note in the destination column receives a
- * synthetic monotonic nt_kanban_ordering_weight so kanbanNoteOrder reproduces the exact
- * dropped order. pure: never mutates input notes or their linetags objects.
+ * Produces a new notes array reflecting the dropped layout: the dragged note is re-tagged into
+ * destination_column_value, and every destination-column note gets a synthetic monotonic
+ * nt_kanban_ordering_weight so kanbanNoteOrder reproduces the dropped order. Pure: never mutates
+ * input notes or their linetags objects.
  */
 export function applyKanbanMove(notes: Array<NoteProps>, move: KanbanMove): Array<NoteProps> {
     const dragged_note = notes.find(n => n.stable_id === move.dragged_stable_id);
@@ -91,8 +91,9 @@ export function applyKanbanMove(notes: Array<NoteProps>, move: KanbanMove): Arra
 }
 
 /**
- * the destination column's ordered members after splicing the dragged note in at destination_index.
- * existing destination members exclude the dragged note (avoids duplication), sorted by kanbanNoteOrder.
+ * The destination column's ordered members after splicing the dragged note in at
+ * destination_index. Existing members exclude the dragged note (avoids duplication), sorted by
+ * kanbanNoteOrder.
  */
 function buildDestinationMembers(
     notes: Array<NoteProps>,
@@ -108,8 +109,8 @@ function buildDestinationMembers(
 }
 
 /**
- * build a map from note seq → clone for every note affected by the move.
- * the dragged note gets its status updated; every destination-column member gets a synthetic weight.
+ * Builds a map from note seq to clone for every note affected by the move: the dragged note gets
+ * its status updated, every destination-column member gets a synthetic weight.
  */
 function buildCloneMap(
     dragged_note: NoteProps,
@@ -132,9 +133,9 @@ function buildCloneMap(
 }
 
 /**
- * return true when the authoritative notes already reflect the move. checks only the dragged note's
- * column membership and sorted position within that column; unrelated churn elsewhere is ignored.
- * returns true when the dragged note is absent (note was removed - adopt the authoritative state).
+ * True when the authoritative notes already reflect the move: checks only the dragged note's
+ * column membership and sorted position, ignoring unrelated churn. Also true when the dragged
+ * note is absent (removed - adopt the authoritative state).
  */
 export function projectionSatisfied(notes: Array<NoteProps>, move: KanbanMove): boolean {
     const dragged_note = notes.find(n => n.stable_id === move.dragged_stable_id);

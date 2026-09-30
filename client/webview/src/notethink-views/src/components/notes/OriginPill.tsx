@@ -6,13 +6,14 @@ import styles from "./OriginPill.module.scss";
 interface OriginPillProps {
     origin: NoteOrigin;
     onClick?: (event: MouseEvent<HTMLElement>) => void;
-    // suppress the project pill and render only the epic chip; single-file story cards carry an epic but no project
     epicOnly?: boolean;
 }
 
 /**
  * Origin pill: shown next to a story's headline in folder mode (and on single-file story
  * cards, epic-chip only).
+ * - epicOnly: suppresses the project pill, showing only the epic chip; single-file story cards
+ *   carry an epic but no project
  *
  * Renders a project pill (two uppercase letters derived from origin.relative_path's
  * first path segment) followed by an optional epic pill (epic.name) when origin.epic
@@ -39,7 +40,7 @@ export default function OriginPill({ origin, onClick, epicOnly }: OriginPillProp
         return () => observer.disconnect();
     }, []);
     const project_name = projectNameFromRelativePath(origin.relative_path);
-    // folder mode stamps origin.project_label using the global divergence rule (see buildProjectLabels); single-file / legacy origins fall back to the project name's first+second characters
+    // folder mode stamps project_label globally; single-file origins fall back to the name's first two characters
     const label = origin.project_label ?? projectAbbreviation(project_name);
     // hueForOrigin is the one hue source shared with the sticky card, so a pill always matches the sticky it sits on
     const colour = pillColourForHue(hueForOrigin(origin), theme);

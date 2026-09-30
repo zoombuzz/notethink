@@ -26,6 +26,23 @@ declare module 'assert' {
     export = assert;
 }
 
+// webpack polyfill for `path` (path-browserify); posix-only, since callers use path.posix on uri.path strings
+declare module 'path' {
+    namespace posix {
+        function join(...paths: string[]): string;
+        function resolve(...paths: string[]): string;
+        function relative(from: string, to: string): string;
+        function dirname(path: string): string;
+        function basename(path: string, ext?: string): string;
+        function normalize(path: string): string;
+        function isAbsolute(path: string): boolean;
+        const sep: string;
+    }
+}
+
+// webpack's ProvidePlugin shims a global `process` (process/browser); only .env.NODE_ENV is read
+declare var process: { env: { NODE_ENV?: string } };
+
 // injected by webpack DefinePlugin - true for dev builds, false for production
 declare const NOTETHINK_DEV: boolean;
 

@@ -18,7 +18,12 @@ interface UseAutoIntegrationDeps {
     setViewManagedState: (updates: Array<Record<string, unknown>>) => void;
 }
 
-// the opened doc whose H1 declares the integration intent: prefer the active-editor doc - found in the folder aggregate when in-scope, else delivered on the dedicated active_doc channel when the active editor sits OUTSIDE the folder or the folder filters reject its file (sendDoc drops it from the aggregate) - then fall back to the most-recently-sent doc (the extension's notion of active). without the active_doc fallback, switching the editor to an out-of-scope file would resolve back to a folder member and the board could never exit; in current_file mode the active doc is always in the map, in folder mode it follows whichever file the editor is in
+/**
+ * The opened doc whose H1 declares the integration intent: the active-editor doc when in the
+ * folder aggregate, else the dedicated active_doc channel when the editor is outside the folder
+ * or filtered out, else the most-recently-sent doc. Without the active_doc fallback, switching to
+ * an out-of-scope file would resolve back to a folder member and the board could never exit.
+ */
 function pickOpenedDoc(docs: HashMapOf<Doc> | undefined, active_editor_doc_path: string | undefined, active_doc: Doc | undefined): Doc | undefined {
     if (active_editor_doc_path) {
         const match = docs ? Object.values(docs).find(d => d.path === active_editor_doc_path) : undefined;
@@ -59,7 +64,7 @@ export function useAutoIntegration(deps: UseAutoIntegrationDeps): FileIntegratio
         () => (opened_doc ? resolveFileIntegrationDeclaration(opened_doc, workspace_root) : undefined),
         [opened_doc?.id, opened_doc?.hash_sha256, workspace_root],
     );
-    // last opened-doc id + last derived target, so the reconcile tells an active-file switch / tag edit (re-derive) apart from in-board navigation (declaration unchanged); both stay undefined until the first reconcile so a pre-existing navigated path is preserved on mount rather than re-snapped
+    // last opened-doc id + target, unset until the first reconcile so mount doesn't re-snap a pre-existing path
     const last_opened_id_ref = useRef<string | undefined>(undefined);
     const last_decl_target_ref = useRef<string | undefined>(undefined);
     useEffect(() => {
@@ -76,7 +81,7 @@ export function useAutoIntegration(deps: UseAutoIntegrationDeps): FileIntegratio
         const folder_options = view_states_ref.current?.[FOLDER_VIEW_STATE_ID]?.display_options;
         const action = decideAutoIntegrationReconcile({
             decl,
-            // the inside/outside-scope exit gate keys on where the active editor actually is; prefer active_editor_doc_path (the true caret location) over a most-recently-sent fallback whose path may differ
+            // the exit gate keys on the editor's real location; prefer active_editor_doc_path over the recently-sent fallback
             opened_doc_path: active_editor_doc_path ?? opened_doc.path,
             persisted_raw_mode: folder_options?.integration_mode,
             persisted_concrete: resolveIntegrationMode(folder_options),

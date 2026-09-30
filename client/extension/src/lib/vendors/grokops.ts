@@ -130,9 +130,9 @@ function grokApiCallsFromUsage(usage_text: string, window_start_ms: number, now_
         const span_start_at = i > 0 ? turns[i - 1]?.endedAt : undefined;
         for (const [model_id, usage] of Object.entries(turn.modelUsage)) {
             if (!usage) { continue; }
-            // grok counts reasoning tokens separately from output tokens, and AgentApiCall has no separate slot, so this folds them together
+            // AgentApiCall has no separate slot, so reasoning tokens fold into output tokens
             const output_tokens = (usage.outputTokens ?? 0) + (usage.reasoningTokens ?? 0);
-            // costUsdTicks is not published: no source confirms its unit, so this is never surfaced as the vendor's own authoritative figure; the price table prices this call as an estimate instead, like every other vendor
+            // costUsdTicks has no confirmed unit, so the price table estimates this call like every other vendor
             calls.push({
                 model_id,
                 at: turn.endedAt,
@@ -218,7 +218,7 @@ export function buildGrokResult(input: AgentSessionInput, lines: GrokLine[]): Ag
                 shiftPending(permission_pending, line.tool_name);
                 break;
             default:
-                // an unrecognised or non-actionable type (loop_started, first_token, phase_changed, turn_started, turn_ended, mcp_*) is skipped, not rejected
+                // non-actionable line types are skipped, not rejected
                 break;
         }
     }
@@ -232,7 +232,7 @@ export function buildGrokResult(input: AgentSessionInput, lines: GrokLine[]): Ag
     const question: ActivityQuestion | undefined = latest_pending_permission && grokTsInWindow(latest_pending_permission.ts, input.window_start_ms, input.now_ms)
         ? { question_id: `${latest_pending_permission.tool_name}:${latest_pending_permission.ts}`, asked_at: latest_pending_permission.ts, prompt: `Grant ${latest_pending_permission.tool_name} permission?` }
         : undefined;
-    // waiting wins over working when both a pending tool and a pending permission request exist, since a pending permission blocks everything else
+    // waiting wins over working: a pending permission blocks everything else
     const state: ActivityState = input.vendor_live === false
         ? 'ended'
         : input.vendor_live === true
@@ -255,7 +255,7 @@ export function buildGrokResult(input: AgentSessionInput, lines: GrokLine[]): Ag
         model,
         question,
         calls,
-        // events.jsonl carries no command text to inspect, so neither a written file nor a git commit can ever be attributed from it
+        // events.jsonl carries no command text, so no file write or commit can be attributed from it
         tool_invocations: [],
     };
 }

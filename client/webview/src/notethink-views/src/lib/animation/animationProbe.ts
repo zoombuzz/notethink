@@ -1,15 +1,11 @@
 /*
- * test-only probe for the kanban FLIP layer. OFF by default - every export is a no-op until the
- * probe is explicitly enabled, so there is zero overhead in production (no buffering, no globals).
- *
- * the FLIP hook (useFlipTransition) calls emitAnimationEvent for every animation it SCHEDULES -
- * a move/enter/exit classification, a column slide, a gate/reduced-motion skip, or the global cap.
- * jest enables the probe with enableAnimationProbe() and asserts what WOULD animate by reading
- * getAnimationProbeEvents(), with no real requestAnimationFrame / Web Animations loop. Playwright
- * sets globalThis.__NOTETHINK_ANIM_PROBE__ = true before injecting docs and then reads the mirror
- * array globalThis.__notethinkAnimationEvents via page.evaluate.
- *
- * kept DOM-free on purpose: it is a pure in-memory event buffer.
+ * Test-only probe for the kanban FLIP layer: every export is a no-op until enabled, so there is
+ * zero overhead in production. useFlipTransition calls emitAnimationEvent for every animation it
+ * schedules, whether a move/enter/exit, a column slide, a gate/reduced-motion skip, or the global
+ * cap. Jest drives it with enableAnimationProbe() and getAnimationProbeEvents(), with no real
+ * animation-frame loop; Playwright sets globalThis.__NOTETHINK_ANIM_PROBE__ and reads the
+ * globalThis.__notethinkAnimationEvents mirror array via page.evaluate. A pure in-memory event
+ * buffer, kept DOM-free by design.
  */
 
 /**

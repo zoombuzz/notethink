@@ -46,7 +46,7 @@ test.describe('Kanban drag survives a passive mid-flight update - no abort, no f
         return doc_path;
     }
 
-    // read the live in-place drag clone (the [data-rfd-draggable-id] element dnd lifted to position:fixed): its presence proves the drag is not aborted, its box proves it did not fling
+    // reads the live drag clone (lifted to position:fixed); its presence and box prove the drag didn't abort or fling
     async function readCloneBox(page: Page): Promise<CloneBox> {
         return page.evaluate((): CloneBox => {
             const clone = Array.from(document.querySelectorAll<HTMLElement>('[data-rfd-draggable-id]')).find((el) => getComputedStyle(el).position === 'fixed') ?? null;
@@ -86,11 +86,11 @@ test.describe('Kanban drag survives a passive mid-flight update - no abort, no f
         await page.mouse.down();
         await page.mouse.move(from_x, from_y + 8, { steps: 5 });
 
-        // wait-for dnd to lift the grabbed card (it gains the 'dragging' class) - the drag signal, not a fixed sleep
+        // waits for dnd to lift the card ('dragging' class) as the drag signal, not a fixed sleep
         const clone = page.locator('[data-rfd-draggable-id].dragging');
         await expect(clone).toBeVisible({ timeout: 3000 });
 
-        // travel over the destination column and hold there (no mouse.up), so the passive update arrives during a genuinely live drag
+        // travels over the destination and holds (no mouse.up), so the update arrives during a live drag
         await page.mouse.move(to_x, to_y, { steps: 25 });
         await expect(clone).toBeVisible();
 
@@ -98,7 +98,7 @@ test.describe('Kanban drag survives a passive mid-flight update - no abort, no f
         expect(before.found, 'no live drag clone before the passive update').toBe(true);
         expect(before.position).toBe('fixed');
 
-        // inject the authoritative passive update WHILE the drag is live: reword a non-dragged backlog card's body; no card changes index, stable_id, size, or column
+        // injects the authoritative update while the drag is live: rewords a non-dragged card's body only
         await injectDocsFromFixture(page, 'kanban-midflight-edited.md', doc_path);
 
         // wait-for the authoritative update to land in the board mid-drag: the reworded Task A body renders
@@ -109,18 +109,14 @@ test.describe('Kanban drag survives a passive mid-flight update - no abort, no f
         expect(after.found, 'the passive mid-drag update aborted the drag - the clone left the portal').toBe(true);
         expect(after.position, 'the drag clone lost its fixed positioning after the passive update').toBe('fixed');
 
-        // no fling: the pointer never moved during the update, so the viewport-anchored clone must not have jumped despite the board relayout
+        // no fling: the pointer never moved, so the viewport-anchored clone must not jump despite the relayout
         expect(Math.abs(after.x - before.x), 'the drag clone flung horizontally on the passive update').toBeLessThanOrEqual(FLING_TOLERANCE_PX);
         expect(Math.abs(after.y - before.y), 'the drag clone flung vertically on the passive update').toBeLessThanOrEqual(FLING_TOLERANCE_PX);
 
         // capture only the drop's own outbound message
         await clearCapturedMessages(page);
 
-        /*
-         * continue the gesture and release: the extra moves after the mid-flight re-render let dnd refresh its drop
-         * target, and the short settle gives its rAF a frame to register the new target before mouse.up resolves the
-         * drop onto the destination.
-         */
+        // extra moves let dnd refresh its drop target; the settle gives its rAF a frame before mouse.up resolves the drop
         await page.mouse.move(to_x - 30, to_y, { steps: 5 });
         await page.mouse.move(to_x, to_y + 10, { steps: 5 });
         await page.waitForTimeout(150);

@@ -46,6 +46,17 @@ describe('AgentUsageSummary', () => {
         expect(screen.getByTestId('agent-usage-summary')).toHaveTextContent('5 tokens (30d)');
     });
 
+    it('marks the total busy and dims it while a scan is still counting, and draws it plainly once live', () => {
+        const sessions: ActivitySessionState[] = [{ root_path: '/a', session: makeSession() }];
+        const { rerender } = render(<AgentUsageSummary sessions={sessions} now={NOW} scanning />);
+        const summary = screen.getByTestId('agent-usage-summary');
+        expect(summary).toHaveAttribute('data-scanning', 'true');
+        expect(summary).toHaveAttribute('aria-busy', 'true');
+        rerender(<AgentUsageSummary sessions={sessions} now={NOW} scanning={false} />);
+        expect(summary).not.toHaveAttribute('data-scanning');
+        expect(summary).not.toHaveAttribute('aria-busy');
+    });
+
     it('counts only a session own split share for this story, not its whole usage, once a story key is given', () => {
         const story_a = { doc_path: 'todo.md', id: 'story-a' };
         const story_b = { doc_path: 'todo.md', id: 'story-b' };

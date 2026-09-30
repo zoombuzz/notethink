@@ -90,22 +90,32 @@ function parseLinetag(query: string): Record<string, string> {
     return params;
 }
 
-// one heading line found in a board document: its stable id (authored or derived), the 0-based line it sits on, and whether the id came from an authored linetag rather than a derived fallback
+/**
+ * One heading line found in a board document: its stable id (authored or derived), the 0-based
+ * line it sits on, and whether the id came from an authored linetag rather than a derived
+ * fallback.
+ */
 interface DocHeading {
     id: string;
     line_index: number;
     id_authored: boolean;
 }
 
-// a `##` to `####` markdown heading, with or without a trailing `[](?...)` linetag block - untagged headings (a backlog story with no status set yet) are real headings too
+/**
+ * A `##` to `####` markdown heading, with or without a trailing `[](?...)` linetag block -
+ * untagged headings (a backlog story with no status set yet) are real headings too.
+ */
 const HEADING_LINE = /^#{2,4}\s+(.*)$/;
 const TRAILING_LINETAG = /\[\]\(\?([^)]*)\)\s*$/;
-// an opening linetag marker with no matching TRAILING_LINETAG close is not an untagged heading, it is a truncated fragment: Claude Code's own Edit old_string/new_string is trimmed to only as much of a line as uniqueness needs, and can end mid-linetag (a heading's `[](?status=...&id=...)` linetag with no closing paren)
+/**
+ * An opening linetag marker with no matching close is a truncated fragment, not an untagged
+ * heading: Claude Code's own Edit old_string/new_string trims to only as much of a line as
+ * uniqueness needs, and can end mid-linetag.
+ */
 const OPEN_LINETAG = /\[\]\(\?/;
 
-/** every heading in one board document, in file order, each carrying the stable id a session binds to it under. A line that opens a linetag but never closes it is a truncated fragment, not a real heading (see OPEN_LINETAG), and is skipped rather than slugified into a nonsense id. */
-function headingsInDoc(text: string): DocHeading[] {
-    const lines = text.split('\n');
+/** every heading found in an already-split line array, in file order, each carrying the stable id a session binds to it under. A line that opens a linetag but never closes it is a truncated fragment, not a real heading (see OPEN_LINETAG), and is skipped rather than slugified into a nonsense id. */
+function headingsInLines(lines: ReadonlyArray<string>): DocHeading[] {
     const headings: DocHeading[] = [];
     for (let i = 0; i < lines.length; i++) {
         const match = HEADING_LINE.exec(lines[i]);
@@ -118,22 +128,77 @@ function headingsInDoc(text: string): DocHeading[] {
     return headings;
 }
 
-/** the nearest heading at or before this line, or undefined when the line sits above every heading in the document (a preamble) */
+/** every heading in one board document, in file order - see headingsInLines for the per-line rules */
+function headingsInDoc(text: string): DocHeading[] {
+    return headingsInLines(text.split('\n'));
+}
+
+/**
+ * One document's cached index, memoised against the exact text string that produced it: a
+ * StoryDocument is searched once per edit in a session's write calls, so caching its headings and
+ * line offsets avoids re-splitting the whole board (hundreds of KB for done.md) on every one.
+ * - line_starts: the 0-based offset each line starts at; line_starts[0] is always 0
+ */
+interface DocIndex {
+    text: string;
+    headings: DocHeading[];
+    line_starts: number[];
+}
+
+const doc_index_cache = new WeakMap<StoryDocument, DocIndex>();
+
+/** the offset each line of text starts at, for turning a match offset into a line number by binary search */
+function computeLineStarts(text: string): number[] {
+    const line_starts = [0];
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '\n') { line_starts.push(i + 1); }
+    }
+    return line_starts;
+}
+
+/** the 0-based line number the offset sits on: the index of the last line start at or before it */
+function lineForOffset(line_starts: ReadonlyArray<number>, offset: number): number {
+    let low = 0;
+    let high = line_starts.length - 1;
+    while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        if (line_starts[mid] <= offset) { low = mid; } else { high = mid - 1; }
+    }
+    return low;
+}
+
+/** doc's cached index, recomputed only when its own text no longer matches what was cached - a doc object must never serve a stale index */
+function docIndex(doc: StoryDocument): DocIndex {
+    const cached = doc_index_cache.get(doc);
+    if (cached && cached.text === doc.text) { return cached; }
+    const fresh: DocIndex = { text: doc.text, headings: headingsInDoc(doc.text), line_starts: computeLineStarts(doc.text) };
+    doc_index_cache.set(doc, fresh);
+    return fresh;
+}
+
+/** the nearest heading at or before this line, or undefined when the line sits above every heading in the document (a preamble) - binary search over headings, which are in ascending line_index order */
 function enclosingHeading(headings: ReadonlyArray<DocHeading>, line_index: number): DocHeading | undefined {
+    let low = 0;
+    let high = headings.length - 1;
     let best: DocHeading | undefined;
-    for (const heading of headings) {
-        if (heading.line_index > line_index) { break; }
-        best = heading;
+    while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        if (headings[mid].line_index <= line_index) {
+            best = headings[mid];
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
     }
     return best;
 }
 
-function isBoardPath(path: string): boolean {
+export function isBoardPath(path: string): boolean {
     return path.endsWith('/todo.md') || path.endsWith('/done.md') || path === 'todo.md' || path === 'done.md';
 }
 
-/** the sibling board in the same directory (todo.md <-> done.md), so a story moved between them in the same write is still found; undefined for a path this binder does not recognise as a board at all */
-function siblingBoardPath(doc_path: string): string | undefined {
+/** the sibling board (todo.md <-> done.md), so a story moved between them in the same write is still found; undefined for an unrecognised path */
+export function siblingBoardPath(doc_path: string): string | undefined {
     if (doc_path.endsWith('/todo.md')) { return `${doc_path.slice(0, -'/todo.md'.length)}/done.md`; }
     if (doc_path.endsWith('/done.md')) { return `${doc_path.slice(0, -'/done.md'.length)}/todo.md`; }
     if (doc_path === 'todo.md') { return 'done.md'; }
@@ -145,16 +210,26 @@ function documentAt(story_docs: ReadonlyArray<StoryDocument>, doc_path: string):
     return story_docs.find(doc => doc.doc_path === doc_path);
 }
 
-// a line short enough to be noise (a bare task-list marker, a blank line) is skipped as a fallback locator, since it is likely to match somewhere irrelevant
+/**
+ * A line short enough to be noise (a bare task-list marker, a blank line) is skipped as a
+ * fallback locator, since it is likely to match somewhere irrelevant.
+ */
 const MIN_DISTINCTIVE_LINE_LENGTH = 12;
-// this workspace's own story convention repeats a small set of bare section-divider bullets across nearly every story ("+ goal", "+ scope", "+ background", "+ out of scope", "+ acceptance criteria", STORY_STANDARDS.md > Content shape): long enough to clear MIN_DISTINCTIVE_LINE_LENGTH but never distinctive on their own, so a fallback match on one almost always lands on the wrong story - a divider bullet inserted by one story's own edit can fallback-match an identically-worded divider under a different, unrelated story elsewhere in the board. A bare 1-3 word bullet with no digit, backtick or colon-then-content is this shape; a real content bullet is either longer or carries something specific (a number, a code ref, a "label: detail" split) that survives this filter.
+/**
+ * This workspace's stories repeat a small set of bare section-divider bullets ("+ goal", "+
+ * scope", "+ background") that are long enough to clear MIN_DISTINCTIVE_LINE_LENGTH but never
+ * distinctive, so a fallback match on one usually lands on the wrong story. Matches a bare 1-3
+ * word bullet with no digit, backtick or colon-then-content; a real content bullet is longer or
+ * carries something specific enough to survive this filter.
+ */
 const GENERIC_SECTION_BULLET = /^\+\s+(?:[a-z][a-z'-]*\s*){1,3}:?$/i;
 
-function locateInText(text: string, snippet: string): number | undefined {
+/** the 0-based line snippet is found on within doc's current text, via doc's cached line offsets - undefined when not found */
+function locateInText(doc: StoryDocument, snippet: string): number | undefined {
     if (!snippet) { return undefined; }
-    const index = text.indexOf(snippet);
+    const index = doc.text.indexOf(snippet);
     if (index === -1) { return undefined; }
-    return text.slice(0, index).split('\n').length - 1;
+    return lineForOffset(docIndex(doc).line_starts, index);
 }
 
 /** the snippet's own lines, trimmed, long enough and specific enough to be a fallback locator - neither too short nor one of this workspace's own generic section-divider bullets (see GENERIC_SECTION_BULLET's header) */
@@ -166,10 +241,10 @@ function distinctiveLines(snippet: string): string[] {
 function locateEditInDoc(doc: StoryDocument, edit: AgentToolInvocationEdit): number | undefined {
     for (const candidate of [edit.new_text, edit.old_text]) {
         if (candidate === undefined) { continue; }
-        const direct = locateInText(doc.text, candidate);
+        const direct = locateInText(doc, candidate);
         if (direct !== undefined) { return direct; }
         for (const line of distinctiveLines(candidate)) {
-            const found = locateInText(doc.text, line);
+            const found = locateInText(doc, line);
             if (found !== undefined) { return found; }
         }
     }
@@ -196,8 +271,9 @@ function storiesForEdit(call_doc_path: string, edit: AgentToolInvocationEdit, st
     const refs: ActivityStoryRef[] = [];
     for (const candidate of [edit.new_text, edit.old_text]) {
         if (candidate === undefined) { continue; }
-        const last_line_index = candidate.split('\n').length - 1;
-        for (const heading of headingsInDoc(candidate)) {
+        const lines = candidate.split('\n');
+        const last_line_index = lines.length - 1;
+        for (const heading of headingsInLines(lines)) {
             if (heading.line_index === last_line_index && !heading.id_authored) { continue; }
             refs.push({ doc_path: call_doc_path, id: heading.id });
         }
@@ -208,7 +284,7 @@ function storiesForEdit(call_doc_path: string, edit: AgentToolInvocationEdit, st
         if (!doc) { continue; }
         const line_index = locateEditInDoc(doc, edit);
         if (line_index === undefined) { continue; }
-        const heading = enclosingHeading(headingsInDoc(doc.text), line_index);
+        const heading = enclosingHeading(docIndex(doc).headings, line_index);
         if (heading) { refs.push({ doc_path, id: heading.id }); }
         break;
     }

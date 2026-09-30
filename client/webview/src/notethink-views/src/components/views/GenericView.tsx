@@ -15,10 +15,10 @@ import { useGenericView } from "./generic/useGenericView";
 import view_styles from "../ViewRenderer.module.scss";
 
 /*
- * component per concrete view id, keyed by the same ids the view registry declares. dynamic import() is
- * required by React.lazy for per-view code-splitting; static imports would pull every view into the
- * initial bundle. `auto` is not a registry node - it is the majority-vote meta-selection that delegates
- * to a concrete type. Adding a view is one registry entry plus one line here.
+ * Component per concrete view id, keyed by the ids the view registry declares. Dynamic import()
+ * enables React.lazy per-view code-splitting; static imports would bloat the initial bundle. `auto`
+ * is not a registry node, but the majority-vote meta-selection that delegates to a concrete type.
+ * Adding a view is one registry entry plus one line here.
  */
 const VIEW_COMPONENTS: Record<string, React.ComponentType<ViewProps>> = {
     auto: lazy(() => import('./AutoView')),
@@ -63,17 +63,24 @@ function showsEmptyStoriesNote(show_toolbar: boolean, integration_mode: Concrete
         && (view_props.note_count ?? 0) === 0;
 }
 
+/**
+ * Renders one view's chrome (breadcrumb, toolbar, drawers) around its registry-resolved view component.
+ *
+ * The stamped display_options.settings.cardType is skipped at an `auto` level, because AutoView is
+ * about to stamp its own and reads this same field to recover the user's raw choice; stamping over it
+ * here would cost the card tab its "Auto (Sticky)" label. display_options.activity_doc_path is the
+ * single-file fallback for joining a story to agent activity: folder-mode notes carry an origin and
+ * need none, and a single-file note's contract binds on a workspace-relative path, so an absolute one
+ * is deliberately not substituted.
+ */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function GenericView(props: ViewProps): React.ReactElement {
-    // view_props is what every hook below, and every view beneath them, saw: virtual notes admitted and the handler surface guarded
+    // view_props carries admitted virtual notes and the guarded handler surface to every hook and view below
     const { view_props, view_context, handlers, handle_folder_click, handle_apply_filters, handle_file_jump, drawers, jump, collisions, toolbar, insert, auto_resolved_type } = useGenericView(props);
     const { display_options, parent_context, deepest, notes_within_parent_context } = view_context;
-    // the same discovery-settled signal the toolbar spinner reads (folderDiscovery et al.), so the empty-stories note never flashes mid-load
+    // same discovery-settled signal the toolbar spinner reads, so the empty-stories note never flashes mid-load
     const { pending } = usePendingWorkContext();
-    /*
-     * document-level front-matter strip: bound to the document root (notes[0]), single-file mode only
-     * built once here and handed to whichever leaf view renders it, so the views don't each re-derive it
-     */
+    // document-level front-matter strip, built once here for single-file mode so leaf views don't each re-derive it
     const document_root = documentRootForStrip(view_props.notes, display_options.integration_mode);
     const document_strip = document_root ? <GenericNoteAttributes {...document_root} /> : undefined;
     const breadcrumb_trail = (
@@ -89,24 +96,13 @@ export default function GenericView(props: ViewProps): React.ReactElement {
             onLeafClick={jump.open_jump_drawer}
         />
     );
-    // render the toolbar at the leaf level only - when type is 'auto', AutoView delegates to a concrete type that renders GenericView again with the toolbar
+    // toolbar renders only at the leaf level; 'auto' delegates to AutoView, which renders GenericView again
     const show_toolbar = view_props.type !== 'auto';
     // the registry-keyed component for this type, inheriting a minted type's renderer from its parent
     const ViewComponent = viewComponentFor(view_props.type, display_options.settings?.viewUserTypes ?? []);
     // the toolbar's integration_mode, so the note tracks the same mode the Files drawer it opens gates on
     const show_empty_stories = showsEmptyStoriesNote(show_toolbar, toolbar.integration_mode, pending, view_props);
-    /*
-     * The props the rendered view component receives.
-     * - display_options.settings.cardType: the resolved card, stamped here rather than in AutoView alone.
-     *   AutoView only mounts for `auto`, so pinning a view type used to take the stamp with it and every
-     *   note fell back to the view's default card. The stamp is skipped at an `auto` level, because the
-     *   AutoView below is about to do its own and reads this same field to recover the user's raw choice -
-     *   stamping over it there costs the card tab its "Auto (Sticky)" label.
-     * - display_options.activity_doc_path: the view's own workspace-relative document path, which is the
-     *   single-file fallback for joining a story to agent activity. Folder-mode notes carry an origin and
-     *   need none; a single-file note has no origin at all, and the contract binds on a workspace-relative
-     *   path, so an absolute one is deliberately not substituted.
-     */
+    // props for the rendered view component, enriched with the resolved card type and activity doc path
     const enriched_props: ViewProps = {
         ...view_props,
         display_options: {

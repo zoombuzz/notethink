@@ -82,11 +82,7 @@ test.describe('Pending-work spinner', () => {
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT });
 
-        /*
-         * a drawer toggle marks the setting key pending and posts updateSetting; the harness answers with
-         * a fresh cascade on the next tick, so the round-trip clears well inside the spinner's show-delay
-         */
-        // showLineNumbers is a card-drawn setting, so it lives on the card tab rather than the view tab
+        // a drawer toggle marks the key pending and answers next tick, well inside the show-delay; this setting is on the card tab
         await page.getByTestId('card-settings-button').click();
         const line_numbers_box = page.getByTestId('setting-control-showLineNumbers');
         // click plus a retrying expect, not .check(): the box holds its old value until the echo lands
@@ -107,7 +103,7 @@ test.describe('Pending-work spinner', () => {
         await page.waitForSelector('[data-folder-mode="true"]');
 
         await emitPendingChange(page, 'folderDiscovery', true);
-        // spinner appears in the toolbar after the show-delay (scoped to the toolbar to avoid clashing with the drawer spinner that also responds to the same context)
+        // spinner appears in the toolbar after the show-delay, scoped there to avoid clashing with the drawer's own spinner
         const toolbar_spinner = page.getByTestId('view-toolbar').getByTestId('pending-work-spinner');
         await expect(toolbar_spinner).toBeVisible({ timeout: 2000 });
         await emitPendingChange(page, 'folderDiscovery', false);

@@ -7,7 +7,7 @@ import type { NoteProps, NoteDisplayOptions } from '../../../types/NoteProps';
 const debug = Debug("nodejs:notethink-views:useKanbanColumns");
 
 /**
- * a kanban column derived from the set of notes currently visible in the view.
+ * A kanban column derived from the notes currently visible in the view.
  * - seq: stable position index used as the droppable id; populated as columns are appended
  * - value: the status linetag value the column represents ('done', 'doing', 'untagged', ...)
  * - type: 'pseudo' marks the synthetic 'untagged' bucket; undefined for real status values
@@ -22,23 +22,11 @@ export interface KanbanColumnDescriptor {
 }
 
 /**
- * derive the ordered list of kanban columns for the current view, each populated
- * with the notes that belong to that column.
- *
- * inputs:
- * - notes: the notes visible within the parent context (typically `props.notes_within_parent_context`)
- * - custom_order: optional explicit ordering of column values (typically `display_options.settings?.columnOrder`)
- *
- * column ordering:
- * - when `custom_order` is set: columns start in that order, then any newly-seen status values are appended alphabetically;
- *   the synthetic 'untagged' bucket is ensured at the end if not already named.
- * - otherwise: named columns alphabetically followed by 'untagged' last.
- *
- * note assignment: every lane carries the matching subset of `notes` sorted by `kanbanNoteOrder`.
- * A note with no value for the axis field lands in the absent-value ('untagged') pseudo-lane.
- *
- * `axis` selects which attribute the lanes group by; it defaults to the status axis so kanban is
- * unchanged, and a grouped view passes its own group-by axis.
+ * Derives the ordered kanban columns for the view, each populated with its matching notes (sorted by
+ * `kanbanNoteOrder`; a note with no value for `axis` lands in the 'untagged' pseudo-lane). With
+ * `custom_order` set, columns start in that order, then newly-seen values append alphabetically with
+ * 'untagged' ensured last; otherwise columns are alphabetical with 'untagged' last. `axis` defaults to
+ * status so kanban is unchanged, and a grouped view passes its own group-by axis.
  */
 export function useKanbanColumns(
     notes: Array<NoteProps> | undefined,
@@ -56,11 +44,8 @@ export function useKanbanColumns(
 }
 
 /**
- * derive the column descriptors (without note assignment) - pulled out so the hook body stays a short
- * sequence of named steps. Behaviour matches the column-ordering rules documented on `useKanbanColumns`.
- *
- * Delegates the base status-value enumeration to `deriveNaturalColumnOrder` (alphabetical + trailing 'untagged');
- * this helper only layers the optional `custom_order` on top and wraps the result in descriptor objects.
+ * Derives the column descriptors, without note assignment, matching `useKanbanColumns`'s ordering
+ * rules. Delegates base enumeration to `deriveNaturalColumnOrder` and layers `custom_order` on top.
  */
 function deriveColumnOrder(
     notes: Array<NoteProps> | undefined,

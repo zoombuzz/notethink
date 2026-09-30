@@ -80,7 +80,13 @@ test.describe('Kanban lane breadth', () => {
         await expect.poll(() => lanesInView(page)).toBe(LANE_COUNT);
     });
 
+    /*
+     * Reduced motion stops the lanes FLIP-animating after a resize: mid-transition, boundingBox() can read the
+     * separator hundreds of px away, so the pointerdown misses it and the drag never starts. A longer wait
+     * makes that worse, not better.
+     */
     test('dragging one boundary resizes every lane, and the drawer\'s text box shows the width during the drag', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
         await setupKanbanBoard(page);
         await sizeBoardTo(page, 760);
         await openKanbanSettings(page);

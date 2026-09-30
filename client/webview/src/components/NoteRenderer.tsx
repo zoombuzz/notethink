@@ -34,6 +34,7 @@ export function renderNodeUnified(node: MdastNodes): ReactElement {
 /**
  * Props plumbed from ExtensionReceiver into the rendered note/view tree.
  * - activeEditorDocPath: path of the doc whose editor is currently active (the last `selectionChanged` source); feeds the per-doc matcher in useViewContext so the caret-driven note focus works in folder mode where the rendered tree aggregates many files. Surfaces here in camelCase per the component-props naming rule; the composers translate to ViewProps.active_editor_doc_path at the data-shape boundary
+ * - fileDeclaredIntegration: the opened file's declared integration intent (folder/current_file + scope), resolved at the App layer and threaded through so navigation handlers can reconcile auto congruence
  */
 export interface NoteRendererProps {
     notes: HashMapOf<Doc>;
@@ -49,7 +50,6 @@ export interface NoteRendererProps {
     includeFilter?: string;
     excludeFilter?: string;
     settingsCascade?: SettingsCascadePayload;
-    // the opened file's declared integration intent (folder/current_file + scope), resolved at the App layer; threaded into the view so the navigation handlers can reconcile auto congruence
     fileDeclaredIntegration?: FileIntegrationDeclaration;
 }
 
@@ -71,7 +71,7 @@ export default function NoteRenderer(props: NoteRendererProps): ReactElement {
             stack: error.stack,
         });
     }, [props.postMessage]);
-    // folder mode: when any view state has integration_mode === 'folder', pick FolderTreeComposer to build a single merged tree across every loaded doc instead of stacking N per-doc composers
+    // folder mode: any 'folder' integration_mode view picks FolderTreeComposer over stacking per-doc composers
     const folder_mode = anyViewInFolderMode(props.viewStates);
     const integration_path = folder_mode ? firstIntegrationPath(props.viewStates) : undefined;
     if (folder_mode && integration_path) {

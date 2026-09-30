@@ -364,19 +364,19 @@ describe('createNoteClickHandler - offset-aware clicks', () => {
 
 describe('isAlreadyFocusedClick', () => {
     it('returns true via the editor-derived signal when current_head matches caret_pos (sub-heading of focused parent re-focuses)', () => {
-        // editor confirmed selection at the same offset as the click → editor-derived match wins regardless of view-side note.focused
+        // editor confirmed selection at the click's offset; editor-derived match wins regardless of note.focused
         const note = makeNote({ focused: false, position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 }, end_body: { offset: 50, line: 5 } } });
         expect(isAlreadyFocusedClick(note, 25, 25)).toBe(true);
     });
 
     it('returns true via the view-derived signal on a headline click of an already-focused note (folder-mode fallback)', () => {
-        // editor hasn't confirmed (no current_head) but the note is view-focused and the click lands at headline start → view-derived match
+        // no editor-confirmed current_head, but the note is view-focused and the click lands at headline start: view-derived match
         const note = makeNote({ focused: true, position: { start: { offset: 100, line: 1 }, end: { offset: 110, line: 1 }, end_body: { offset: 200, line: 5 } } });
         expect(isAlreadyFocusedClick(note, 100, undefined)).toBe(true);
     });
 
     it('returns false when the view-focused click lands on a sub-heading or body, not the note headline start', () => {
-        // gated on caret_pos === position.start.offset so sub-heading / body clicks still trigger revealRange, not promote to selected
+        // gated on caret_pos === position.start.offset, so sub-heading/body clicks trigger revealRange, not a selected promotion
         const note = makeNote({ focused: true, position: { start: { offset: 100, line: 1 }, end: { offset: 110, line: 1 }, end_body: { offset: 200, line: 5 } } });
         expect(isAlreadyFocusedClick(note, 150, undefined)).toBe(false);
     });

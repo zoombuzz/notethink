@@ -2,19 +2,12 @@ import { useEffect, useRef } from 'react';
 import { createPassiveUpdateGate, type PassiveUpdateGate } from './passiveUpdateGate';
 
 /**
- * own the FLIP passive-update gate's lifecycle for a kanban view. The gate exists to tell the FLIP
- * layer when a layout change is the user's OWN move (drag + optimistic projection + the authoritative
- * echo reconciling it) rather than a passive external edit, so the move is never re-animated.
- *
- * This hook creates the gate once and HOLDS it open for the entire optimistic-projection lifetime
- * (`is_projecting`), releasing only when the projection clears - `release()` starts a short tail that
- * also covers the reconcile-commit render (which clears the projection in the same tick). The
- * projection round-trip is unbounded, so a fixed timer cannot cover it; the hold can. The caller drives
- * the drag edges itself via the returned gate (`hold()` on drag-start, `release()` on drag-end); the
- * gate is cancelled on unmount.
- *
- * The hold/release here is a passive effect, so on the reconcile render the FLIP layout effect still
- * observes the gate held (layout effects run before passive effects); the release then starts the tail.
+ * Owns the FLIP passive-update gate's lifecycle for a kanban view, telling the FLIP layer when a layout
+ * change is the user's own move (drag + optimistic projection + reconciling echo) so it is never
+ * re-animated. Holds the gate open for the whole `is_projecting` lifetime, since that round-trip is
+ * unbounded and a fixed timer can't cover it; `release()` then starts a short tail covering the
+ * reconcile-commit render, which the FLIP layout effect still observes held (layout effects run before
+ * this passive one). The caller drives `hold()`/`release()` at the drag edges; the gate cancels on unmount.
  */
 export function useFlipGate(is_projecting: boolean): PassiveUpdateGate {
     const gate_ref = useRef<PassiveUpdateGate | null>(null);

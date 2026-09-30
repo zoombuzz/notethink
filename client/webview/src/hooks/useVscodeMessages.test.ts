@@ -14,7 +14,7 @@ interface QueueHarness {
     clearPending: jest.Mock;
 }
 
-// drive the real view-state reducer behind the hook, so a seed is asserted through the same map NoteRenderer reads to choose folder mode
+// drives the real view-state reducer, so a seed is asserted through the same map NoteRenderer reads
 function renderMessages(initial_view_states: Record<string, ViewState> = {}): ViewStatesResult {
     return renderHook(() => {
         const persisted = usePersistedViewStates(initial_view_states);
@@ -66,7 +66,7 @@ function renderMessageQueue(): QueueHarness {
     return { result, markPending, clearPending };
 }
 
-// run the frame the queue is waiting on: jsdom backs both requestAnimationFrame and the hook's fallback with timers, so yielding past the fallback covers whichever fires
+// runs past the fallback timeout, covering whichever of rAF or the hook's own fallback timer fires first
 async function flushMessageFrame(): Promise<void> {
     await act(async () => {
         await new Promise(resolve => setTimeout(resolve, MESSAGE_FLUSH_FALLBACK_MS + 5));
@@ -198,7 +198,7 @@ describe('useVscodeMessages update coalescing', () => {
         expect(commits.map(commit => commit.docs)).toEqual([2, 3]);
     });
 
-    // a hidden or backgrounded webview can have its frames throttled to a stop; a message that never commits is worse than one that commits late
+    // a backgrounded webview can throttle frames to a stop; a message that never commits is worse than a late one
     it('commits on the timeout fallback when no animation frame ever fires', async () => {
         const frame_spy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
         try {
@@ -228,7 +228,55 @@ describe('useVscodeMessages update coalescing', () => {
         expect(docIds(harness)).toEqual(['doc-b']);
     });
 
-    // the spinner must not drop a frame before the board it was covering fills, so the sentinel rides the same queue as the docs
+    /*
+     * The held doc here is metadata-only (no `text` or `content`), so useWorkerParsedDocs' own
+     * fallback parse never fires and can't mask whether mergeUpdatedDocs itself accepted the resend.
+     */
+    it('updates a held doc when a same-hash resend carries more body (merge strategy)', async () => {
+        const harness = renderMessageQueue();
+
+        postToWebview({
+            type: 'update',
+            merge_strategy: 'merge',
+            partial: { docs: { 'doc-a': { id: 'doc-a', path: '/workspace/doc-a.md', hash_sha256: 'h1' } } },
+        });
+        await flushMessageFrame();
+        expect(harness.result.current.docs?.['doc-a']?.text).toBeUndefined();
+
+        const wire_content = { type: 'root', children: [], marker: 'from-wire' };
+        postToWebview({
+            type: 'update',
+            merge_strategy: 'merge',
+            partial: { docs: { 'doc-a': { id: 'doc-a', path: '/workspace/doc-a.md', hash_sha256: 'h1', text: 'hello', content: wire_content } } },
+        });
+        await flushMessageFrame();
+
+        expect(harness.result.current.docs?.['doc-a']?.text).toBe('hello');
+        expect(harness.result.current.docs?.['doc-a']?.content).toBe(wire_content);
+    });
+
+    it('updates a held doc when a same-hash resend carries more body (replace strategy)', async () => {
+        const harness = renderMessageQueue();
+
+        postToWebview({
+            type: 'update',
+            partial: { docs: { 'doc-a': { id: 'doc-a', path: '/workspace/doc-a.md', hash_sha256: 'h1' } } },
+        });
+        await flushMessageFrame();
+        expect(harness.result.current.docs?.['doc-a']?.text).toBeUndefined();
+
+        const wire_content = { type: 'root', children: [], marker: 'from-wire' };
+        postToWebview({
+            type: 'update',
+            partial: { docs: { 'doc-a': { id: 'doc-a', path: '/workspace/doc-a.md', hash_sha256: 'h1', text: 'hello', content: wire_content } } },
+        });
+        await flushMessageFrame();
+
+        expect(harness.result.current.docs?.['doc-a']?.text).toBe('hello');
+        expect(harness.result.current.docs?.['doc-a']?.content).toBe(wire_content);
+    });
+
+    // the sentinel rides the same queue as the docs, so the spinner never drops a frame before the board fills
     it('clears the discovery sentinel in the commit that lands its docs, not before', async () => {
         const harness = renderMessageQueue();
 

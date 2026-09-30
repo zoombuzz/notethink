@@ -22,9 +22,9 @@ import {
  * answered from the other two, which is why they are three separate fields rather than one blob.
  */
 
-// a reader drops the transcript entirely if it exceeds this many UTF-8 bytes, refusing the session as too_large rather than parsing partway into a truncated line; held to half of AgentAnalyserWorker.ts's AGENT_TAIL_CACHE_MAX_BYTES so one oversized transcript can never claim most of the worker's retained cache on its own, and well under the parse time a whole read of even the largest transcripts on record needs to clear the worker's own timeout
+// a transcript over this many UTF-8 bytes is refused as too_large rather than parsed partway into a truncated line
 export const AGENT_TRANSCRIPT_MAX_BYTES = 64 * 1024 * 1024;
-// an edit snippet carried on AgentToolInvocation is bounded to this many characters: it exists only so the story binder can locate which board section a write call changed, never to reproduce the edit, and this content is host/worker-only and never crosses to the webview
+// bounds the edit snippet on AgentToolInvocation, which locates the changed board section and never crosses to the webview
 export const AGENT_EDIT_SNIPPET_MAX_CHARS = 4000;
 
 /** one file a reader was handed: its path, for refusal reporting, and its already-decoded text */
@@ -144,7 +144,7 @@ export interface AgentSessionResult {
 const AGENT_VENDOR_CAPABILITIES: Record<string, ActivityCapabilities> = {
     [ACTIVITY_VENDOR_CLAUDE_CODE]: { live_tool_call: 'supported', question: 'unsupported', file_attribution: 'supported' },
     [ACTIVITY_VENDOR_CODEX]: { live_tool_call: 'supported', question: 'unsupported', file_attribution: 'supported' },
-    // Grok's events.jsonl carries tool names but never their arguments (tool_started/tool_completed carry only tool_name, duration_ms and outcome), so the live line can name the tool and never a file it touched
+    // Grok's events.jsonl carries only tool_name, duration_ms and outcome, so the live line names the tool but never a file
     [ACTIVITY_VENDOR_GROK]: { live_tool_call: 'supported', question: 'supported', file_attribution: 'unsupported' },
 };
 

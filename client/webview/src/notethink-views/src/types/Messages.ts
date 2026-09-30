@@ -33,13 +33,11 @@ export interface EditTextChange {
 }
 
 /**
- * webview -> extension request to apply text changes to one or more docs.
- *
- * Two shapes are supported via a discriminator on the presence of `changes_by_doc`:
- * - single-doc: `docPath` + `changes` set, `changes_by_doc` omitted. The legacy shape used for kanban reorders that stay within a single file.
- * - multi-doc: `changes_by_doc` set (keyed by `docPath`), `docPath` + `changes` omitted. Used for folder-mode reorders that span multiple files; each entry is validated and applied independently and a failure on one doc does not abort the batch.
- *
- * exactly one of `changes` (paired with `docPath`) or `changes_by_doc` is set on any given message.
+ * Webview -> extension request to apply text changes to one or more docs; exactly one of `changes`
+ * (paired with `docPath`) or `changes_by_doc` is set.
+ * - single-doc: `docPath` + `changes` set. The legacy shape, used for kanban reorders within one file.
+ * - multi-doc: `changes_by_doc` set (keyed by `docPath`). Used for folder-mode reorders spanning files;
+ *   each entry applies independently, so a failure on one doc does not abort the batch.
  */
 export interface EditTextMessage {
     type: 'editText';
@@ -55,7 +53,9 @@ export interface OpenExternalMessage {
 }
 
 /**
- * webview -> extension request to open a relative .md link clicked in the rendered view. The extension resolves `href` against the active document's URI (scheme-preserving), validates workspace containment + the .md extension, and opens the target beside the panel.
+ * Webview -> extension request to open a relative .md link. The extension resolves `href` against
+ * the active document's URI, validates workspace containment and the .md extension, then opens the
+ * target beside the panel.
  */
 export interface OpenRelativeMessage {
     type: 'openRelative';
@@ -63,7 +63,10 @@ export interface OpenRelativeMessage {
 }
 
 /**
- * per-key write to a setting. Scope defaults to 'workspace' on the extension side when omitted (and falls back to the user scope in a folderless window, where a workspace write throws); 'global' is the promote path. This is the ONLY message that writes a setting - there is no second channel for a subset of keys.
+ * Per-key write to a setting. Scope defaults to 'workspace' on the extension side when omitted,
+ * falling back to the user scope in a folderless window where a workspace write throws; 'global'
+ * is the promote path. This is the only message that writes a setting; there is no second
+ * channel for a subset of keys.
  */
 export interface UpdateSettingMessage {
     type: 'updateSetting';
@@ -73,28 +76,34 @@ export interface UpdateSettingMessage {
 }
 
 /**
- * promote every currently-resolved cascade setting into User scope, then clear the Workspace overrides so the cascade reads from User next time.
+ * Promotes every currently-resolved cascade setting into User scope, then clears the Workspace
+ * overrides so the cascade reads from User next time.
  */
 export interface PromoteSettingsToUserMessage {
     type: 'promoteSettingsToUser';
 }
 
 /**
- * clear every Workspace-scope cascade override so the cascade falls back to User (or built-in default if no User override exists).
+ * Clears every Workspace-scope cascade override so the cascade falls back to User (or the built-in
+ * default if no User override exists).
  */
 export interface ResetSettingsToDefaultMessage {
     type: 'resetSettingsToDefault';
 }
 
 /**
- * clear every Workspace- AND User-scope cascade override so the cascade falls back to the extension's built-in (package.json) defaults. The recovery path when both the workspace and the user default have been edited away (e.g. a wiped exclude filter the user can't reconstruct by hand).
+ * Clears every Workspace- and User-scope cascade override so the cascade falls back to the built-in
+ * (package.json) defaults; the recovery path when both have been edited away (e.g. a wiped exclude
+ * filter the user can't reconstruct by hand).
  */
 export interface RestoreSettingsToBuiltinDefaultMessage {
     type: 'restoreSettingsToBuiltinDefault';
 }
 
 /**
- * webview -> extension request for the list of jump targets (folders/files) reachable from the breadcrumb terminal leaf. The extension replies asynchronously with a JumpTargetsMessage carrying the same mode/path so the webview can correlate the response.
+ * Webview -> extension request for the jump targets (folders/files) reachable from the breadcrumb
+ * terminal leaf. The extension replies asynchronously with a JumpTargetsMessage carrying the same
+ * mode/path so the webview can correlate the response.
  */
 export interface RequestJumpTargetsMessage {
     type: 'requestJumpTargets';
@@ -103,7 +112,7 @@ export interface RequestJumpTargetsMessage {
 }
 
 /**
- * webview -> extension request to open a file in the editor (e.g. a chosen jump target of kind 'file').
+ * Webview -> extension request to open a file in the editor (e.g. a chosen jump target of kind 'file').
  */
 export interface OpenFileMessage {
     type: 'openFile';
@@ -165,12 +174,18 @@ export interface UserViewType {
 }
 
 /**
- * resolved values for every notethink setting. The extension reads each key via vscode.workspace.getConfiguration() (built-in default → User → Workspace) under `notethink.settings.*` and sends this payload on requestInitialState and whenever onDidChangeConfiguration fires for any of the underlying keys. It is the ONLY channel carrying a setting into the webview - the value the webview renders is this one, with no per-session tier layered over it.
- * - diverged: the keys whose resolved value differs from their saved default (the user-scope value when one is set, else the built-in default); drives the drawer's M markers and its diverged count, and empties when the user saves or reverts the defaults
- * - hasWorkspaceOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace; drives whether "Revert to defaults" is enabled
- * - hasAnyOverrides: true iff at least one key has a value at ConfigurationTarget.Workspace OR ConfigurationTarget.Global (User); drives whether the Files drawer's built-in restore is enabled (nothing to restore when everything is already at built-in defaults)
+ * Resolved values for every notethink setting, sent on requestInitialState and whenever any underlying
+ * key changes. It is the only channel carrying a setting into the webview, with no per-session tier
+ * layered over it.
+ * - diverged: keys whose resolved value differs from their saved default; drives the drawer's M markers
+ *   and diverged count, emptying when the user saves or reverts the defaults
+ * - hasWorkspaceOverrides: true iff a key has a Workspace-scope value; drives "Revert to defaults"
+ * - hasAnyOverrides: true iff a key has a Workspace- or User-scope value; drives whether the built-in
+ *   restore is enabled, since there is nothing to restore when everything is already at built-in defaults
  *
- * Settings identifiers are camelCase end-to-end (TS keys, wire IDs, payload field names, VS Code config paths) - see client/extension/src/lib/settings.ts. This deviates from the project-wide snake_case-for-wire-data-fields convention because settings have a unique cross-boundary identity, and bridging two cases would mean every setting carries two names.
+ * Settings identifiers stay camelCase end-to-end (TS keys, wire IDs, payload fields, VS Code config
+ * paths), unlike the project-wide snake_case wire convention, since bridging the two cases would mean
+ * every setting carries two names.
  */
 export interface SettingsCascadePayload {
     viewType: string;
@@ -206,7 +221,11 @@ export interface SettingsCascadeMessage {
 }
 
 /**
- * extension-driven signal that some unit of work the user is waiting on has started or finished. Routed by the webview into the pending-work hook keyed by `key`; the spinner appears via the hook's delay-then-show policy after a short threshold so fast operations don't visibly flash. `key` is opaque (well-known values: 'folderDiscovery'); `on=true` marks pending, `on=false` clears it. Snake_case fields would be consistent with the rest of the wire format but `key`/`on` are short enough (and the camel-case message-type name `pendingChange` matches the existing extension-to-webview message naming convention) that this stays camelCase end-to-end like the settings messages
+ * Extension-driven signal that a unit of work the user is waiting on has started or finished.
+ * Routed into the pending-work hook keyed by `key` (opaque; 'folderDiscovery' is a well-known
+ * value), whose delay-then-show policy keeps a fast operation from visibly flashing. `on` marks
+ * pending (`true`) or clears it (`false`); fields stay camelCase, matching the other
+ * extension-to-webview message types.
  */
 export interface PendingChangeMessage {
     type: 'pendingChange';
@@ -215,7 +234,7 @@ export interface PendingChangeMessage {
 }
 
 /**
- * one reachable jump target from the breadcrumb terminal leaf.
+ * One reachable jump target from the breadcrumb terminal leaf.
  * - kind discriminates a directory ('folder') from a leaf file ('file'); the webview opens a file target via OpenFileMessage and descends a folder target via setIntegration
  */
 export interface JumpTarget {
@@ -225,7 +244,8 @@ export interface JumpTarget {
 }
 
 /**
- * extension -> webview async reply to RequestJumpTargetsMessage. Carries the originating mode/path back so the webview can match the response to the request that triggered it.
+ * Extension -> webview async reply to RequestJumpTargetsMessage, carrying the originating mode/path
+ * back so the webview can match the response to the request that triggered it.
  */
 export interface JumpTargetsMessage {
     type: 'jumpTargets';

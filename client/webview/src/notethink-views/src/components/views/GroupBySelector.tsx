@@ -4,8 +4,8 @@ import { formatColumnLabel } from "../../lib/noteops";
 import { viewTypeLabel } from "./viewTypeLabel";
 
 /**
- * a group-by key's display label: strip the internal nt_/ng_ prefix, turn underscores into words, and
- * title-case (via formatColumnLabel). 'assignee' -> 'Assignee'; 'nt_first_level_folder' -> 'First Level Folder'.
+ * A group-by key's display label: strips the internal nt_/ng_ prefix, turns underscores into words, and
+ * title-cases (via formatColumnLabel). 'assignee' -> 'Assignee'; 'nt_first_level_folder' -> 'First Level Folder'.
  */
 export function groupByKeyLabel(key: string): string {
     const bare = key.replace(/^(nt_|ng_)/, '');

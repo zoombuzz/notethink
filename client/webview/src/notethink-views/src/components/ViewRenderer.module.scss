@@ -1398,7 +1398,7 @@ body.disableAddressBarHidingOnScroll {
   .column {
     border-color: var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
   }
-  .column > div > .note {
+  .column .note:not(.note .note) {
     border-color: var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
     box-shadow: var(--nt-card-shadow, 0 1px 3px rgba(0, 0, 0, 0.3));
 
@@ -1732,8 +1732,14 @@ body.disableAddressBarHidingOnScroll {
        * value below reads a --nt-card-* custom property a card may set on itself, falling back to the full
        * card's look. That keeps the lane free of any branch on card type, the reverse direction of the
        * --nt-card-width the board hands down to a card.
+       *
+       * `.note:not(.note .note)` selects the top-level card only, never a nested sub-note rendered
+       * recursively inside its own `.body` (that gets the plain `> .note` rule below); it holds
+       * regardless of how many wrapper elements sit between `.column` and the card, so both the flex
+       * `.notes` path and a windowed lane's `.virtualNotes`/`.virtualRow` wrapper match without
+       * counting them.
        */
-      > div > .note {
+      .note:not(.note .note) {
         box-sizing: border-box;
         background: var(--nt-card-background, var(--vscode-editor-background));
         border: var(--nt-card-border-width, 1px) solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
@@ -1789,6 +1795,34 @@ body.disableAddressBarHidingOnScroll {
         gap: 20px;
         // room for focus/selection outline on the first card
         padding-top: 12px;
+      }
+
+      /*
+       * VirtualizedKanbanColumn's windowed-row container, this `.notes` div's only child in columns
+       * orientation, so `flex`/`gap` above do nothing and its own `padding-top` gives the first row
+       * its focus-ring clearance. Sized to its own full content height (set inline) rather than the
+       * viewport, since the page, not this container, is the lane's only scroller.
+       */
+      .virtualNotes {
+        position: relative;
+        width: 100%;
+      }
+
+      /*
+       * One virtualized row, absolutely positioned at its own solved offset and height
+       * (useCardHeightCache); the bottom padding is CARD_ROW_GAP, which an absolutely positioned
+       * sibling can't get from `.notes { gap }`. The 2px right padding is a safety margin, not
+       * spacing: dnd measures this droppable's width as an INTEGER but each card's width as a
+       * fraction, so on a fractional column width a card can measure wider than dnd's own rounded
+       * view, failing its containment check and silently breaking keyboard cross-column moves.
+       */
+      .virtualRow {
+        position: absolute;
+        left: 0;
+        right: 0;
+        box-sizing: border-box;
+        padding-bottom: 20px;
+        padding-right: 2px;
       }
 
       .heading {

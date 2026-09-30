@@ -124,7 +124,7 @@ describe('readRepositoryTree', () => {
 describe('lineDiffForFile', () => {
     const ROOT_URI = Uri.file(ROOT_PATH);
 
-    // wires readFile so a `git:` scheme URI answers as the HEAD side and every other URI as the working-tree side, matching how gitHeadUri distinguishes the two
+    // wires readFile so a `git:` scheme URI answers as HEAD and every other URI as the working tree
     function wireSides(head_bytes: Uint8Array | undefined, working_bytes: Uint8Array | undefined): void {
         (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
             if (uri.scheme === 'git') {
@@ -184,5 +184,18 @@ describe('lineDiffForFile', () => {
         wireSides(bytesOf('a'.repeat(300_000)), bytesOf('a\n'));
         const counts = await lineDiffForFile(ROOT_URI, { path: 'src/huge.ts', change: 'modified' });
         expect(counts).toBeUndefined();
+    });
+
+    // the HEAD side is a git show per file, so a working side that would be declined anyway never pays for one
+    it.each([
+        ['over the byte cap', 'a'.repeat(300_000)],
+        ['binary', '\u0000binary'],
+    ])('never reads the HEAD side when the working side is %s', async (_label, working_text) => {
+        (vscode.workspace.fs.readFile as jest.Mock).mockClear();
+        wireSides(bytesOf('a\n'), bytesOf(working_text));
+        const counts = await lineDiffForFile(ROOT_URI, { path: 'src/foo.ts', change: 'modified' });
+        expect(counts).toBeUndefined();
+        const schemes = (vscode.workspace.fs.readFile as jest.Mock).mock.calls.map(([uri]: [vscode.Uri]) => uri.scheme);
+        expect(schemes).not.toContain('git');
     });
 });

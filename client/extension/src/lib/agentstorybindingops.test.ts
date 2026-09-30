@@ -92,13 +92,13 @@ describe('bindSessionToStory', () => {
     });
 
     it('binds once, not twice, when a located edit is itself a truncated linetag fragment rather than a whole heading line', () => {
-        // Edit's old_string/new_string is trimmed to only as much of the heading line as uniqueness needs, and can end mid-linetag with no closing paren - this snippet is a verbatim prefix of the real "Second story" heading, so it locates that heading's own line, but must not ALSO be treated as "a heading line carried inside the edit itself" (it has no closing paren, so it is not a real heading)
+        // a prefix with no closing paren locates the heading's line but is not itself a real heading
         const calls = [call(TODO_PATH, { edits: [edit('### Second story [](?id=second-story')] })];
         expect(bindSessionToStory(calls, docs)).toEqual([{ doc_path: TODO_PATH, id: 'second-story' }]);
     });
 
     it('does not derive a wrong id from an edit boundary that ends exactly at an unrelated heading title, its own linetag left outside the edit', () => {
-        // an insertion's old_string/new_string can end exactly at an unrelated heading's bare title with no trailing linetag, because the edit only needed that much text as its insertion-point boundary; slugifying that bare title would derive a wrong id instead of the heading's real authored one
+        // an edit boundary at a bare title with no linetag must not slugify that title into a wrong id
         const calls = [call(TODO_PATH, { edits: [edit('# Todo\n\n\n### First story [](?id=first-story&status=code-review)\n\nsome new content\n\n\n### Second story')] })];
         const result = bindSessionToStory(calls, docs);
         expect(result).toEqual([{ doc_path: TODO_PATH, id: 'first-story' }]);
@@ -138,24 +138,18 @@ describe('bindSessionToStory', () => {
     });
 
     it('skips short, generic fallback lines within an unmatched multi-line snippet rather than matching board noise', () => {
-        // the whole snippet does not appear verbatim (its second line has since changed), and every one of its own lines is too short/generic to be a distinctive fallback locator, so this binds nothing rather than a wrong story
+        // no verbatim match, and every line is too short/generic to be a fallback locator, so this binds nothing
         const calls = [call(TODO_PATH, { edits: [edit('+ [ ]\n+ [X]')] })];
         expect(bindSessionToStory(calls, docs)).toEqual([]);
     });
 
     it('skips this workspace\'s own generic section-divider bullets as a fallback locator, even though they clear the length bound', () => {
-        /*
-         * A large inserted block's own "+ out of scope" line, long enough to clear
-         * MIN_DISTINCTIVE_LINE_LENGTH, can fallback-match an unrelated story's identically-worded
-         * divider bullet elsewhere in the board, since STORY_STANDARDS.md's own content shape repeats
-         * these bare labels across nearly every story. Board text carries "+ out of scope" only under
-         * Second story here.
-         */
+        // an inserted "+ out of scope" line could fallback-match an unrelated story's identical divider bullet
         const board_with_divider: StoryDocument[] = [{
             doc_path: TODO_PATH,
             text: TODO_TEXT.replace('+ [ ] still working', '+ [ ] still working\n+ out of scope\n  + nothing relevant here'),
         }];
-        // the whole snippet is not present verbatim anywhere (it describes brand new, unrelated content), and its only line long enough to be a fallback candidate is the generic divider itself
+        // no verbatim match; the only line long enough to be a fallback candidate is the generic divider itself
         const calls = [call(TODO_PATH, { edits: [edit('+ out of scope\n  + a completely different, unrelated concern this snippet is actually about')] })];
         expect(bindSessionToStory(calls, board_with_divider)).toEqual([]);
     });
@@ -164,10 +158,40 @@ describe('bindSessionToStory', () => {
         const calls = [call('README.md', { edits: [edit('some new readme text')] })];
         expect(bindSessionToStory(calls, docs)).toEqual([]);
     });
+
+    it('rebinds against new text when the same doc object has its text replaced, never serving a stale cached index', () => {
+        const doc: StoryDocument = { doc_path: TODO_PATH, text: TODO_TEXT };
+        const shared_docs: StoryDocument[] = [doc];
+        const before = bindSessionToStory([call(TODO_PATH, { edits: [edit('+ [ ] still working')] })], shared_docs);
+        expect(before).toEqual([{ doc_path: TODO_PATH, id: 'second-story' }]);
+        doc.text = '# Todo\n\n\n### Replaced story [](?id=replaced-story)\n\n+ [ ] still working\n';
+        const after = bindSessionToStory([call(TODO_PATH, { edits: [edit('+ [ ] still working')] })], shared_docs);
+        expect(after).toEqual([{ doc_path: TODO_PATH, id: 'replaced-story' }]);
+    });
+
+    it('does not bind an edit located above the first heading (a preamble line)', () => {
+        const calls = [call(TODO_PATH, { edits: [edit('# Todo')] })];
+        expect(bindSessionToStory(calls, docs)).toEqual([]);
+    });
+
+    it('locates an edit near the end of a long board and binds it to the right enclosing story', () => {
+        const story_count = 400;
+        let text = '# Done\n\n\n';
+        for (let i = 0; i < story_count; i++) {
+            text += `### Story ${i} [](?id=story-${i})\n\n`;
+            for (let line = 0; line < 8; line++) {
+                text += `+ [X] padding line ${line} for story ${i}\n`;
+            }
+            text += '\n\n';
+        }
+        const long_docs: StoryDocument[] = [{ doc_path: DONE_PATH, text }];
+        const calls = [call(DONE_PATH, { edits: [edit(`+ [X] padding line 3 for story ${story_count - 1}`)] })];
+        expect(bindSessionToStory(calls, long_docs)).toEqual([{ doc_path: DONE_PATH, id: `story-${story_count - 1}` }]);
+    });
 });
 
 describe('storiesForWriteCall', () => {
-    // the per-call counterpart bindSessionToStory folds across a whole session (AgentAnalyser.ts's per-turn usage split needs the per-call answer, not just the session-wide union)
+    // bindSessionToStory folds across a whole session; AgentAnalyser.ts's per-turn split needs the per-call answer
     const docs: StoryDocument[] = [{ doc_path: TODO_PATH, text: TODO_TEXT }];
 
     it('binds the one call to the story its edit is found in, same as bindSessionToStory would for a single-call session', () => {
@@ -208,11 +232,7 @@ describe('storiesForWriteCall', () => {
 });
 
 describe('bindSessionToStory mirrors the webview slug derivation', () => {
-    /*
-     * This table mirrors client/webview/src/notethink-views/src/lib/noteops.ts's own storyStableIdSlug
-     * test coverage: the extension-side storyStableIdSlug (agentstorybindingops.ts) must derive the
-     * identical id from the identical heading, since the two sides join on the same {doc_path, id} key.
-     */
+    // mirrors noteops.ts's storyStableIdSlug coverage: both sides must derive the same id, since they join on it
     const cases: Array<[string, string]> = [
         ['### Agent activity card [](?id=agent-activity-card&status=doing)', 'agent-activity-card'],
         ['### Save drawer changes into an existing custom view type', 'save-drawer-changes-into-an-existing-custom-view-type'],
@@ -221,7 +241,7 @@ describe('bindSessionToStory mirrors the webview slug derivation', () => {
         ['### Implement resolutions from last meeting', 'implement-resolutions-from-last-meeting'],
         ["### What's next? A question, punctuated!", 'what-s-next-a-question-punctuated'],
         ['### 🎉 Emoji-only headline 🎉', 'emoji-only-headline'],
-        // no ASCII alphanumeric survives stripping/slugifying an emoji-only headline, so the fallback is the heading's own 1-based line number in this fixture's fixed layout (line 4)
+        // no ASCII alphanumeric survives an emoji-only headline, so the fallback is its 1-based line number
         ['### 🎉🎉', 'headline-4'],
     ];
 

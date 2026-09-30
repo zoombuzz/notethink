@@ -73,7 +73,7 @@ function codexLineInWindow(line: CodexLine, window_start_ms: number, now_ms: num
     return at_ms >= window_start_ms && at_ms <= now_ms;
 }
 
-// the numeric usage fields on a token_usage_record line's own `payload.usage` (also `turn_token_usage`/`thread_token_usage`, both cumulative rather than per-call, so neither is read)
+// numeric fields on a usage record's payload.usage; turn/thread_token_usage are cumulative, not per-call, so unread
 interface CodexUsageFields {
     input_tokens?: number;
     cached_input_tokens?: number;
@@ -105,7 +105,7 @@ function codexApiCallFromTokenUsageRecord(line: CodexLine, current_model: string
     return {
         model_id: current_model ?? 'unknown',
         at: line.timestamp,
-        // OpenAI bills a reasoning token at the output rate, and AgentApiCall has no separate slot for it, so it is folded into output_tokens exactly as grokops.ts folds Grok's own reasoning tokens
+        // reasoning tokens bill at the output rate and have no separate slot, so fold into output_tokens
         input_tokens: fields.input_tokens ?? 0,
         output_tokens: (fields.output_tokens ?? 0) + (fields.reasoning_output_tokens ?? 0),
         cache_read_tokens: fields.cached_input_tokens ?? 0,
@@ -113,7 +113,11 @@ function codexApiCallFromTokenUsageRecord(line: CodexLine, current_model: string
     };
 }
 
-// a tool call as this reader best-effort extracts it from a response_item line; `content` is the call's own body - the current CLI's custom_tool_call `payload.input` verbatim (a JS exec snippet, or an apply_patch patch body), or the older function_call shape's decoded `.cmd`/`.command`
+/**
+ * A tool call best-effort extracted from a response_item line. `content` is the call's own body:
+ * the current CLI's custom_tool_call `payload.input` verbatim (a JS snippet or an apply_patch body),
+ * or the older function_call shape's decoded `.cmd`/`.command`.
+ */
 interface CodexToolCall {
     at: string;
     tool: string;
@@ -167,7 +171,7 @@ function isCodexMessageLine(line: CodexLine): boolean {
     return line.payload.type === 'message' || line.payload.type === 'agent_message';
 }
 
-// bounds one apply_patch hunk's text to the shared carry limit, the same bound claudecodeops.ts applies to a Claude Code edit
+// bounds one apply_patch hunk to the shared carry limit, as claudecodeops.ts bounds a Claude Code edit
 function boundedSnippet(text: string): string {
     return text.length > AGENT_EDIT_SNIPPET_MAX_CHARS ? text.slice(0, AGENT_EDIT_SNIPPET_MAX_CHARS) : text;
 }
@@ -179,7 +183,7 @@ interface ApplyPatchFileChange {
     edits: AgentToolInvocationEdit[];
 }
 
-// matches "*** Add File: <path>", "*** Update File: <path>" and "*** Delete File: <path>", the three change headers apply_patch's own format documents
+// matches apply_patch's three file-change headers: Add File, Update File, Delete File
 const APPLY_PATCH_FILE_HEADER = /^\*\*\* (Add File|Update File|Delete File): (.+)$/;
 
 /**
@@ -241,7 +245,7 @@ function codexToolInvocationsFor(call: CodexToolCall): AgentToolInvocation[] {
         const subject_match = command?.match(/-m\s+"([^"]+)"/) ?? command?.match(/-m\s+'([^']+)'/);
         return [{ at: call.at, is_commit: true, commit_subject: subject_match?.[1] }];
     }
-    // best-effort: a shell-shaped redirect or an apply_patch invoked as a literal command string rather than its own custom_tool_call (an older CLI shape not confirmed against a real rollout, so no edit content is extracted from it, only its target path)
+    // best-effort, unconfirmed shape: a shell redirect or a literal apply_patch command; extracts only the target path
     if (!command || (!command.includes('>') && !command.includes('apply_patch'))) { return []; }
     const redirect_match = command.match(/>>?\s*([^\s|&;]+)/);
     const patch_match = command.match(/apply_patch\s+([^\s|&;]+)/);
@@ -275,7 +279,7 @@ function walkCodexLines(lines: CodexLine[], window_start_ms: number, now_ms: num
     let current_model: string | undefined;
     for (const line of lines) {
         if (line.type === 'session_meta') {
-            // the caller already derived session_id and cwd from the filename, which is authoritative; session_meta carries nothing else this reader uses
+            // session_id and cwd are already derived from the filename and authoritative; session_meta adds nothing else
             continue;
         }
         const model = codexModelFromLine(line);
@@ -298,7 +302,7 @@ function walkCodexLines(lines: CodexLine[], window_start_ms: number, now_ms: num
             result.latest_in_window_is_tool_call = false;
         }
 
-        // an unrecognised or unhandled line type is skipped, not rejected: a transcript may contain line kinds this reader does not yet know
+        // an unrecognised line type is skipped, not rejected: a transcript may hold line kinds this reader doesn't know
     }
     return result;
 }

@@ -10,7 +10,7 @@
  * transfer to the worker, decode and parse, never the host's own disk read.
  */
 
-// how many bytes just before a bookmark's offset are hashed, to notice a rewrite that keeps the file at least as large and leaves its tail past the offset untouched
+// bytes just before a bookmark's offset that are hashed, to notice a rewrite whose tail past it looks untouched
 const HASH_WINDOW_BYTES = 256;
 
 /**
@@ -52,7 +52,7 @@ function hashWindow(bytes: Uint8Array, end: number): string {
     return fnv1a(bytes.subarray(Math.max(0, end - HASH_WINDOW_BYTES), end));
 }
 
-// the byte offset just after the last '\n' (0x0a) in `bytes`, or 0 when the whole buffer is one incomplete line with no newline at all
+// the byte offset just after the last '\n' in `bytes`, or 0 when the whole buffer is one incomplete line
 function lastLineBoundary(bytes: Uint8Array): number {
     for (let i = bytes.length - 1; i >= 0; i--) {
         if (bytes[i] === 0x0a) { return i + 1; }

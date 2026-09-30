@@ -42,7 +42,7 @@ describe('SettingsCascadeButtons', () => {
         expect(onRestoreBuiltinDefault).toHaveBeenCalledTimes(1);
     });
 
-    // the recovery case that motivated this button: a wiped user default leaves nothing at the Workspace scope, so "Reset to user default" is disabled - "Reset to built-in default" must remain the way back
+    // when a wiped user default disables "Reset to user default", "Reset to built-in default" must remain the way back
     it('keeps "Reset to built-in default" usable even when "Reset to user default" is disabled', () => {
         const onRestoreBuiltinDefault = jest.fn();
         renderButtons({ canResetToDefault: false, canRestoreBuiltinDefault: true, onRestoreBuiltinDefault });

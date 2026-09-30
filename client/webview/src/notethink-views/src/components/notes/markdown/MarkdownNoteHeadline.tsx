@@ -11,24 +11,18 @@ interface MarkdownNoteHeadlineProps {
 }
 
 /**
- * render-only headline row: optional line number badge, optional origin pill,
- * the rendered headline content, and inline linetag badges when
- * showLinetagsInHeadlines is enabled.
- *
- * State-less: all inputs come from the note prop. The click handler is built
- * via createNoteClickHandler so the same selection-mutation pathway used by
- * the rest of the note tree is preserved.
- *
- * The synthetic root container renders no headline row at all - empty rowheader
- * elements would otherwise be picked up by `[role="rowheader"]` selectors as
- * zero-height non-visible matches.
+ * Render-only headline row: optional line number badge, optional origin pill, headline content,
+ * and inline linetag badges when showLinetagsInHeadlines is enabled. Stateless; the click
+ * handler goes through createNoteClickHandler to share the note tree's selection-mutation
+ * pathway. Renders nothing for the root note, since an empty rowheader would still match
+ * `[role="rowheader"]` selectors as a zero-height, non-visible hit.
  */
 export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): ReactElement | null {
     const { note } = props;
     if (note.type === 'root') { return null; }
     const show_lineno = note.display_options?.settings?.showLineNumbers
         && note.level === note.display_options?.deepest?.selectable_level;
-    // folder-mode origins carry project metadata; single-file story cards carry only an epic (epic-chip only, no project pill). Render the pill only when there is something to show, so a single-file story with no epic shows no empty pill
+    // renders the pill only when there's something to show, so a single-file story with no epic shows none
     const has_project = originHasProject(note.origin);
     const show_origin = !!note.origin && note.level === 1 && (has_project || !!note.origin.epic);
     const show_inline_linetags = note.display_options?.settings?.showLinetagsInHeadlines && note.linetags;
@@ -45,12 +39,12 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
                     origin={note.origin!}
                     epicOnly={!has_project}
                     onClick={() => {
-                        // pill click is ADDITIVE on top of the headline click: it descends the folder view into the pill's project subfolder, AND the bubbling click also fires the headline's createNoteClickHandler so the editor opens the story at its position and the matching note gets highlighted (editor-derived match in useViewContext finds the story by origin.doc_path + source_position in the descended view, even though seq numbers are renumbered by mergeAggregateRoot). A file living directly at the workspace-folder root has no sub-project to descend into - projectFolderFromOrigin returns '' and the descend becomes a no-op, but the headline click still fires
+                        // additive to the headline click: descends into the project subfolder, matched by doc_path+position, not seq
                         const target_folder = projectFolderFromOrigin(note.origin!);
                         if (target_folder) {
                             note.handlers?.descendToFolder?.(target_folder);
                         }
-                        // intentionally do NOT stopPropagation: let the click bubble to the headline so the note-click handler fires alongside the descend
+                        // no stopPropagation: the click bubbles to the headline so its note-click handler fires too
                     }}
                 />
             )}

@@ -23,10 +23,10 @@ export interface PassiveUpdateGate {
 }
 
 /**
- * create a passive-update gate. `isHot()` reports `held || (timer still open)`. `arm()` (re)starts the
- * `window_ms` timer; `hold()` pins it hot until `release()`, which clears the hold and starts a final
- * `window_ms` tail; `cancel()` clears everything (so a post-unmount read can never report hot). Uses a
- * timer flag rather than Date.now() so jest fake timers drive it deterministically.
+ * Creates a passive-update gate. `isHot()` reports `held || (timer still open)`. `arm()` (re)starts
+ * the `window_ms` timer; `hold()` pins it hot until `release()`, which clears the hold and starts a
+ * final `window_ms` tail; `cancel()` clears everything (so a post-unmount read can never report
+ * hot). Uses a timer flag rather than Date.now() so jest fake timers drive it deterministically.
  * default window_ms = KANBAN_ANIMATION_DRAG_GATE_MS.
  */
 export function createPassiveUpdateGate(window_ms: number = KANBAN_ANIMATION_DRAG_GATE_MS): PassiveUpdateGate {

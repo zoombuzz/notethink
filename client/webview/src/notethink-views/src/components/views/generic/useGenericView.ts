@@ -77,15 +77,13 @@ function useAdmittedViewProps(props: ViewProps): ViewProps {
 }
 
 /**
- * orchestrates every hook a GenericView leaf needs - the virtual-note admission, view context, handlers, the
- * toolbar drawers, the jump drawer's requested leaf, duplicate-stable_id collisions, keyboard
- * navigation, the toolbar dispatchers, and the insert modal - and returns a flat model so the component body
- * stays render-only. keeping the Rules-of-Hooks cluster here (rather than inline) is the
- * prescribed React decomposition: a long component body shortens by lifting hooks into a
- * custom hook, never by splitting at an arbitrary line.
+ * Orchestrates every hook a GenericView leaf needs - virtual-note admission, view context,
+ * handlers, toolbar drawers, the jump drawer's requested leaf, duplicate-stable_id collisions,
+ * keyboard navigation, toolbar dispatchers, and the insert modal - returning a flat model so the
+ * component body stays render-only.
  *
- * `view_props` is returned as well as consumed, because every hook below saw it and the component body
- * has to render against the same set the hooks derived from, not the raw props.
+ * `view_props` is returned as well as consumed, since every hook below saw it and the component
+ * body must render against the same set the hooks derived from, not the raw props.
  */
 export function useGenericView(raw_props: ViewProps): GenericViewModel {
     const props = useAdmittedViewProps(raw_props);
@@ -94,7 +92,7 @@ export function useGenericView(raw_props: ViewProps): GenericViewModel {
     const { handlers, handle_folder_click, handle_apply_filters, handle_jump_request, handle_file_jump } = useViewHandlers(props, view_context.selection_ref);
     const drawers = useToolbarDrawers(props.id);
     const jump = useJumpDrawer(props, drawers.toggle_jump, handle_jump_request);
-    // collisions are mode-independent: props.notes is the merged set in folder mode, the single-file flat list in current_file mode
+    // collisions are mode-independent: props.notes is the merged set in folder mode, the flat list in current_file mode
     const collisions = useMemo(() => findStableIdCollisions(props.notes ?? []), [props.notes]);
     useViewNavigation({
         display_options,

@@ -35,7 +35,7 @@ export class Uri {
 		return new Uri(base.scheme, base.authority, normalizePosixPath(joined), '', '');
 	}
 
-	// scheme-preserving override: rebuilds the URI changing only the supplied components, mirroring vscode.Uri.with so folder-mode discovery keeps the workspace scheme
+	// rebuilds the URI changing only the supplied components, mirroring vscode.Uri.with
 	with(change: { scheme?: string; authority?: string; path?: string; query?: string; fragment?: string }): Uri {
 		return new Uri(
 			change.scheme ?? this.scheme,
@@ -51,7 +51,7 @@ export class Uri {
 	}
 }
 
-// collapse `.`/`..` segments in a POSIX path so the mock's joinPath matches vscode.Uri.joinPath normalization (so a `..`-escape resolves out of the base just like the real API)
+// collapses `.`/`..` segments so the mock's joinPath matches vscode.Uri.joinPath's normalization
 function normalizePosixPath(input: string): string {
 	const is_absolute = input.startsWith('/');
 	const out: string[] = [];
@@ -210,12 +210,7 @@ export enum ConfigurationTarget {
 	WorkspaceFolder = 3,
 }
 
-/*
- * Stubs for the vscode.window APIs the extension source calls.
- * - createOutputChannel: errorops opens its channel with {log: true}, so this returns a
- *   LogOutputChannel shape. The level methods are what winston-transport-vscode calls, and a stub
- *   without them makes every log line a TypeError rather than an assertable call.
- */
+// createOutputChannel stubs the LogOutputChannel level methods errorops calls directly
 export const window = {
 	createOutputChannel: jest.fn(() => ({
 		appendLine: jest.fn(),
@@ -265,7 +260,7 @@ export const workspace = {
 		const p = typeof u === 'string' ? u : u?.path || u?.toString?.() || '';
 		return p;
 	}),
-	// inspect() is part of the real WorkspaceConfiguration and the settings module calls it unconditionally; without it here every cascade read throws
+	// inspect() is part of the real WorkspaceConfiguration; without it, every cascade read throws
 	getConfiguration: jest.fn(() => ({
 		get: jest.fn(() => undefined),
 		update: jest.fn(async () => {}),
@@ -283,7 +278,7 @@ export const workspace = {
 	},
 };
 
-// no command is registered by default; a test that needs the git extension's `git.api.*` commands present replaces getCommands' and executeCommand's answers
+// no command is registered by default; tests needing git.api.* commands replace getCommands/executeCommand
 export const commands = {
 	registerCommand: jest.fn(),
 	executeCommand: jest.fn(),
@@ -295,7 +290,7 @@ export const env = {
 	openExternal: jest.fn(async () => true),
 };
 
-// t() returns the source string: the real API falls back to it when no bundle is loaded, so tests can assert on the literal
+// t() returns the source string: the real API falls back to it with no bundle loaded
 export const l10n = {
 	t: jest.fn((message: string) => message),
 };
@@ -321,6 +316,8 @@ export function createMockWebviewPanel(): MockWebviewPanelHelper {
 	const postedMessages: Array<Record<string, unknown>> = [];
 	const panel = {
 		active: true,
+		// visible by default, matching a real WebviewPanel in the active column; a hidden-panel test overrides it
+		visible: true,
 		webview: {
 			options: {},
 			html: '',

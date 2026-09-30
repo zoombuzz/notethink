@@ -4,7 +4,7 @@ import { ACTIVITY_DEMAND_MESSAGE_TYPE, ACTIVITY_WITHDRAW_MESSAGE_TYPE, AGENT_SCA
 import { PENDING_WORK_SAFETY_NET_MS, type UsePendingWorkApi } from "../hooks/usePendingWork";
 
 const debug = Debug("nodejs:notethink-views:activityhooks");
-// re-marks the scan key at half the safety net, so a first scan slower than the net keeps its spinner rather than losing it mid-read
+// re-marks the scan key at half the safety net, so a slow first scan keeps its spinner rather than losing it
 const AGENT_SCAN_REMARK_MS = PENDING_WORK_SAFETY_NET_MS / 2;
 
 /**
@@ -29,6 +29,8 @@ const AGENT_SCAN_REMARK_MS = PENDING_WORK_SAFETY_NET_MS / 2;
 
 let snapshot: ActivitySnapshot | undefined = undefined;
 let unavailable: ActivityUnavailable | undefined = undefined;
+// latched true on the first 'live' snapshot, never cleared: a backstop against a later snapshot regressing the card
+let has_completed_scan = false;
 const listeners = new Set<() => void>();
 let attached = false;
 
@@ -41,6 +43,7 @@ function onWindowMessage(event: MessageEvent): void {
     if (next) {
         debug('activity snapshot: %s, %d session(s), %d tree(s)', next.analyser.state, next.sessions.length, next.trees.length);
         snapshot = next;
+        if (next.analyser.state === 'live') { has_completed_scan = true; }
         publish();
         return;
     }
@@ -74,6 +77,11 @@ export function readActivityUnavailable(): ActivityUnavailable | undefined {
     return unavailable;
 }
 
+/** whether a 'live' snapshot has ever landed in this panel's lifetime */
+export function readHasCompletedAgentScan(): boolean {
+    return has_completed_scan;
+}
+
 /** subscribe to store changes; the returned function unsubscribes, detaching the listener with the last subscriber */
 export function subscribeToActivity(listener: () => void): () => void {
     listeners.add(listener);
@@ -87,6 +95,7 @@ export function subscribeToActivity(listener: () => void): () => void {
 /** replace the held snapshot and tell every subscriber; the seam a test drives without a window message */
 export function setActivitySnapshot(next: ActivitySnapshot | undefined): void {
     snapshot = next;
+    if (next?.analyser.state === 'live') { has_completed_scan = true; }
     publish();
 }
 
@@ -94,12 +103,22 @@ export function setActivitySnapshot(next: ActivitySnapshot | undefined): void {
 export function resetActivitySnapshot(): void {
     snapshot = undefined;
     unavailable = undefined;
+    has_completed_scan = false;
     publish();
 }
 
 /** the latest activity snapshot, re-rendering the caller when a new one arrives */
 export function useAgentActivity(): ActivitySnapshot | undefined {
     return useSyncExternalStore(subscribeToActivity, readActivitySnapshot, readActivitySnapshot);
+}
+
+/**
+ * Whether this panel has ever received a completed ('live') scan, latched for its lifetime and
+ * never reset by a later 'scanning' or 'failed' snapshot - a defensive backstop so a card with
+ * data already on it cannot regress to the "no information yet" presentation.
+ */
+export function useHasCompletedAgentScan(): boolean {
+    return useSyncExternalStore(subscribeToActivity, readHasCompletedAgentScan, readHasCompletedAgentScan);
 }
 
 /** the host's latest refusal of a row's request, re-rendering the caller when one arrives */
@@ -136,7 +155,7 @@ export function useAgentActivityDemand(post_message: ((message: Record<string, u
                 publish();
             }
         };
-        // deliberately empty: post_message is a stable per-panel function, and this must run exactly once per mount, or every re-render of every mounted card would double-count the demand
+        // deliberately empty: must run exactly once per mount, or every re-render would double-count the demand
     }, []);
 }
 

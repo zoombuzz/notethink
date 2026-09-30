@@ -21,7 +21,7 @@ function extractRuleBody(source: string, start_index: number): string {
     return source.slice(brace_open);
 }
 
-// collect every rule body whose selector text contains `selector` (the SCSS uses `> div > .note` in two theme variants)
+// collects every rule body matching `selector`, since the SCSS uses `.note:not(.note .note)` in two theme variants
 function extractAllRuleBodies(source: string, selector: string): Array<string> {
     const bodies: Array<string> = [];
     let search_from = 0;
@@ -36,7 +36,11 @@ function extractAllRuleBodies(source: string, selector: string): Array<string> {
 
 describe('kanban drag structural guards', () => {
 
-    // the card is dragged in place (no portal) so it keeps its column-scoped card styling; the geometry stays safe because the FLIP gate suppresses every card/column transform for the whole drag. drag-start must settle any in-flight FLIP first, so a card grabbed mid-animation is at its true box before dnd lifts it
+    /**
+     * The card drags in place (no portal), kept safe because the FLIP gate suppresses every card and
+     * column transform during the drag; drag-start settles any in-flight FLIP first so a card grabbed
+     * mid-animation starts from its true box.
+     */
     describe('drag-start settles in-flight FLIP before holding the gate', () => {
 
         it('imports settleFlipAnimations', () => {
@@ -58,7 +62,7 @@ describe('kanban drag structural guards', () => {
 
     describe('ViewRenderer .note rule has no transform transition', () => {
 
-        const note_rule_bodies = extractAllRuleBodies(view_renderer_scss, '> div > .note');
+        const note_rule_bodies = extractAllRuleBodies(view_renderer_scss, '.note:not(.note .note)');
 
         it('locates the card rule bodies', () => {
             expect(note_rule_bodies.length).toBeGreaterThan(0);

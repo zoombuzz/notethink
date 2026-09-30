@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -12,10 +12,10 @@
     "url": "https://github.com/zoombuzz/notethink/issues"
   },
   "engines": {
-    "vscode": "^1.137.0",
+    "vscode": "^1.138.0",
     "node": ">=22.18.0"
   },
-  "packageManager": "pnpm@12.3.4",
+  "packageManager": "pnpm@12.8.1",
   "categories": [
     "Visualization",
     "Other"
@@ -28,13 +28,18 @@
     "registry": "https://npm.pkg.github.com"
   },
   "keywords": [
-    "multi-root ready"
+    "markdown",
+    "kanban",
+    "todo",
+    "notes",
+    "linetags",
+    "agents",
+    "visualization",
+    "pkm"
   ],
   "activationEvents": [
-    "onLanguage:markdown",
     "onCustomEditor:notethink.viewer",
-    "onWebviewPanel:notethink",
-    "onStartupFinished"
+    "onWebviewPanel:notethink"
   ],
   "l10n": "./l10n",
   "browser": "./client/extension/dist/extension",
@@ -312,10 +317,11 @@
     "prepublishOnly": "pnpm run package",
     "bump-version": "npm version patch --no-git-tag-version",
     "test-jest": "bash scripts/test-jest.sh",
+    "test-mocha": "bash scripts/test-mocha.sh",
     "test-playwright": "pnpm run build && playwright test",
     "test-perf": "node scripts/perf/run.mjs",
-    "lint": "eslint . && tsc --noEmit -p client/extension && tsc --noEmit -p client/webview && tsc --noEmit -p client/webview/src/notethink-views",
-    "check": "pnpm run lint && pnpm run build-and-rollup && pnpm run test-jest",
+    "lint": "node --test 'eslint-rules/*.test.mjs' && eslint . && tsc --noEmit -p client/extension && tsc --noEmit -p client/webview && tsc --noEmit -p client/webview/src/notethink-views",
+    "check": "pnpm run lint && pnpm run build-and-rollup && pnpm run test-jest && pnpm run test-mocha",
     "build-and-rollup": "pnpm run build && cd client/webview/src/notethink-views && pnpm run rollup",
     "l10n-export": "vscode-l10n-dev export --outDir ./l10n ./client/extension/src ./client/webview/src",
     "check-updates": "ncu -u",
@@ -331,16 +337,11 @@
   },
   "COMMENT-dependencies-are-webpack-browser-polyfills-for-extension": "",
   "dependencies": {
-    "browserify-zlib": "^0.2.0",
     "buffer": "^6.0.3",
     "events": "^3.3.0",
-    "https-browserify": "^1.0.0",
-    "memfs": "^4.73.0",
+    "memfs": "^4.79.0",
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",
-    "stream-browserify": "^3.0.0",
-    "stream-http": "^3.2.0",
-    "url": "^0.11.4",
     "util": "^0.12.5"
   },
   "devDependencies": {
@@ -349,34 +350,34 @@
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/debug": "^4.1.13",
     "@types/mocha": "^10.0.10",
-    "@types/vscode": "^1.137.0",
+    "@types/vscode": "^1.138.0",
     "@types/webpack-env": "^1.18.8",
-    "@typescript-eslint/eslint-plugin": "^8.70.0",
-    "@typescript-eslint/parser": "^8.70.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/parser": "^8.71.0",
     "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-web": "^0.0.81",
-    "@vscode/vsce": "^3.9.2",
+    "@vscode/vsce": "^4.0.0",
     "assert": "^2.1.0",
     "copy-webpack-plugin": "14.0.0",
     "css-loader": "^7.1.5",
     "debug": "^4.4.3",
-    "eslint": "10.10.0",
+    "eslint": "10.11.0",
     "mdast-util-from-markdown": "^2.0.3",
     "mdast-util-frontmatter": "^2.0.1",
     "mdast-util-gfm": "^3.1.0",
     "micromark-extension-frontmatter": "^2.0.0",
     "micromark-extension-gfm": "^3.0.0",
-    "mocha": "^12.0.0",
+    "mocha": "^12.0.2",
     "npm-check-updates": "^23.1.0",
     "path-browserify": "^1.0.1",
     "process": "^0.11.10",
-    "sass": "^1.104.0",
+    "sass": "^1.105.0",
     "sass-loader": "^17.0.1",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.6.2",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.0",
-    "webpack": "^5.110.3",
+    "typescript-eslint": "^8.71.0",
+    "webpack": "^5.111.1",
     "webpack-cli": "^7.2.3"
   }
 }

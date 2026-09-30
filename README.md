@@ -1,40 +1,54 @@
 # NoteThink
 
-A VS Code extension that renders markdown files as interactive visualizations.
+Your `todo.md` is already a project board. NoteThink renders any markdown file - a plain
+checklist, a full `todo.md` / `done.md` pair, a whole folder of them - as a live Kanban board,
+a single-lane Line view, or a structured Document view, right inside VS Code. Nothing to sign
+up for, nothing to sync: it reads the markdown you already have, live. Drag a card or tick a
+checkbox and NoteThink writes exactly that change back to the file - nothing else changes
+unless you drag or tick something yourself; it is not a free-text editor.
+
+![NoteThink rendering a todo.md as a live Kanban board, then updating in place as the markdown changes](media/screenshots/kanban-demo.gif)
 
 > **Status:** Preview / Beta - this is an early release. Expect rough edges.
 
-## Features
-
-- **Custom Editor**: Open markdown files in a visual editor alongside the standard text editor
-- **Interactive Views**: Notes rendered as structured, interactive components
-- **Component Library**: Reusable React components for building note visualizations
-- **Live Updates**: File changes detected and re-rendered with debounce
-- **GFM Support**: Tables, strikethrough, task lists, footnotes
-- **Frontmatter**: YAML frontmatter parsed and handled
-- **Debug Support**: Built-in debug logging for development
-
-## Installation
-
-### From Marketplace
-
-Install **NoteThink** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=NoteThink.notethink):
+## Install
 
 - In VS Code, open the Extensions view (`Ctrl+Shift+X`), search for **NoteThink**, and click **Install**, or
-- From the command line:
+- From the command line: `code --install-extension NoteThink.notethink`
 
-  ```bash
-  code --install-extension NoteThink.notethink
-  ```
+Then open any `.md` file, right-click it and choose **Open With... -> NoteThink**.
 
-### From .vsix
+## Features
+
+- **Kanban and Line boards**: group stories by status, assignee, or any attribute you author - drag a card to rewrite its status (or grouping attribute) linetag in the file
+- **Document view**: the same file read top to bottom, nested and structured
+- **Folder mode**: aggregate every markdown file in a folder into one board
+- **Live Updates**: edit the file in the normal text editor and the view updates in place, debounced
+- **Agent activity**: see which AI coding agents (Claude Code, Codex, Grok) are working on which story, live, on desktop
+- **Linetags**: plain markdown links carry status, epic, and other attributes invisibly - see [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
+- **GFM + Frontmatter**: tables, strikethrough, task lists, footnotes, YAML/TOML frontmatter
+- **Writes back two things, precisely**: a card drag and a checkbox click, and nothing else - see [Known Limitations](#known-limitations)
+
+## Screenshots
+
+| Document | Kanban | Line |
+|---|---|---|
+| ![Document view](media/screenshots/document-view.png) | ![Kanban view](media/screenshots/kanban-view.png) | ![Line view](media/screenshots/line-view.png) |
+
+## Telemetry
+
+NoteThink sends no telemetry. Nothing about how you use the extension leaves your machine.
+
+## Full installation and setup
+
+### From a .vsix (no Marketplace)
 
 ```bash
 pnpm run package:vsix
 code --install-extension notethink-<version>.vsix
 ```
 
-## Usage
+### Opening a file
 
 1. Open any markdown file (`.md`)
 2. Use the command palette (`Ctrl+Shift+P`) and run "NoteThink: Open Viewer"
@@ -215,7 +229,7 @@ vendor with no such panel, as the session's transcript in an editor.
 
 ## Known Limitations
 
-- **Read-only**: No editing support yet - NoteThink is a viewer, not an editor
+- **Not a text editor**: NoteThink writes back exactly two kinds of change - dragging a card in Kanban or Line view rewrites its status (or grouping attribute) linetag, plus an `nt_kanban_ordering_weight` linetag to remember the drop position, and clicking a checkbox toggles it in the source. It never edits body text, headings, or anything else, and nothing changes unless you drag a card or tick a checkbox yourself
 
 ## Contributing
 

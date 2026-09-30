@@ -146,7 +146,7 @@ describe('calculateTextChangesForNewLinetagValue', () => {
         expect(changes[0].insert).toContain('priority=high');
     });
 
-    // regression: reordering a kanban card whose status is inherited from a parent's nt_child_status= attribute used to insert nt_kanban_ordering_weight= at document offset 0 (inherited tags carry key_offset 0 and the note has no linetags_from), corrupting the parent heading and wiping the inherited status off every sibling - the whole column vanished
+    // an inherited-only linetag carries key_offset 0 and no linetags_from, so writing there would corrupt the parent heading
     it('appends a fresh linetag block instead of writing to offset 0 when the only linetag is inherited', () => {
         const note = makeNote({
             linetags: {
@@ -412,23 +412,17 @@ describe('calculateTextChangesForOrdering', () => {
     });
 
     /*
-     * round-trip: a column is displayed unweighted by ascending seq (the
-     * implicit ordering kanbanNoteOrder now uses). simulate a drop the way
-     * KanbanView.dragEndHandler does (filter the dragged note out, splice it
-     * into the new index), feed the result to calculateTextChangesForOrdering,
-     * apply the produced nt_kanban_ordering_weight values back onto note copies,
-     * re-sort with kanbanNoteOrder, and assert the column holds the dropped
-     * order. this is the end-to-end correctness the drag code lacked.
+     * Simulates a kanban drop the way KanbanView.dragEndHandler does: filters the dragged note
+     * out, splices it into the new index, feeds the result through calculateTextChangesForOrdering,
+     * applies the produced nt_kanban_ordering_weight values back onto note copies, and re-sorts
+     * with kanbanNoteOrder to assert the column holds the dropped order.
      */
     function simulateDrop(initial: NoteProps[], from_index: number, to_index: number): number[] {
         const dragged = initial[from_index];
         const column = initial.filter(n => n.seq !== dragged.seq);
         column.splice(to_index, 0, dragged);
         const changes = flattenOrderingChangeSets(calculateTextChangesForOrdering(column, to_index, 'nt_kanban_ordering_weight'));
-        /*
-         * a brand-new linetag is inserted at note.position.start.offset + headline_raw.length, so map each change back to its note by that offset
-         * notes the algorithm assigned weight 0 (the default) get no change and stay unweighted - kanbanNoteOrder ranks them ahead of weighted cards, which is intended
-         */
+        // a new linetag inserts at position.start.offset + headline_raw.length, so map changes back to notes by that offset
         const weight_by_offset = new Map<number, number>();
         for (const c of changes) {
             const m = /nt_kanban_ordering_weight=(\d+)/.exec(c.insert);
@@ -483,12 +477,12 @@ describe('calculateTextChangesForOrdering', () => {
     }
 
     /*
-     * minimal + self-removing: weights exist only as long as they are needed to force a
+     * Minimal and self-removing: weights exist only as long as they are needed to force a
      * non-implicit order. A note that is back in its implicit slot has its stale weight removed;
      * the rest are minimised rather than cascaded ever-upward.
      */
     it('removes a now-unnecessary weight and minimises the rest (no upward cascade)', () => {
-        // desired order [pred(seq1,w5), new_child(seq3), successor(seq2,w5)]: seq1<seq3 is already implicit, so pred + new_child are the unweighted prefix; only successor needs a weight
+        // desired order [pred(w5), new_child, successor(w5)]: pred < new_child is implicit, so only successor needs a weight
         const predecessor = weighted(1, 5);
         const new_child = makeNote(3);
         const successor = weighted(2, 5);
@@ -505,15 +499,12 @@ describe('calculateTextChangesForOrdering', () => {
     });
 
     /*
-     * the acceptance test for "weights are minimal": drag a card out of its implicit slot
+     * The acceptance test for "weights are minimal": drag a card out of its implicit slot
      * (which mints weights), then drag it back - the column returns to implicit order and EVERY
      * nt_kanban_ordering_weight is stripped, leaving the file weight-free.
      */
     it('drag a card out of place then back to implicit order strips every weight', () => {
-        /*
-         * state after dragging seq40 to the top: 10→w1, 20→w2, 30→w3 (40 unweighted)
-         * now drag seq40 back to the bottom → desired order is the implicit [10,20,30,40]
-         */
+        // after dragging seq40 to the top (10->w1, 20->w2, 30->w3), drag it back to the implicit order
         const desired = [weighted(10, 1), weighted(20, 2), weighted(30, 3), makeNote(40)];
         const flat = flattenOrderingChangeSets(calculateTextChangesForOrdering(desired, 3, 'nt_kanban_ordering_weight'));
         // three weights to strip, and every emitted change is a removal - none re-applies a weight
@@ -555,7 +546,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
     }
 
     it('drops a file-B note between two weighted file-A notes via gap insertion (no cascade)', () => {
-        // weighted file-A notes at 10 and 20; drop a file-B note between them. gap 10..20 → integer 15 fits → only the new_child is written, file-A weights untouched.
+        // weighted file-A notes at 10 and 20; a dropped file-B note gap-inserts at 15, leaving file-A weights untouched
         const a_pred = weighted(makeNoteWithOrigin(1, 'a.md'), 10);
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const a_succ = weighted(makeNoteWithOrigin(3, 'a.md'), 20);
@@ -586,7 +577,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
     });
 
     it('partitions changes by doc_path when cascade naturally hits multiple files', () => {
-        // cascade steps through several b.md notes with a file-A note mid-column; the file-A note is skipped and only b.md is rewritten
+        // cascade steps through several b.md notes past a mid-column file-A note, which is skipped; only b.md is rewritten
         const b1 = weighted(makeNoteWithOrigin(1, 'b.md'), 1);
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const a_mid = weighted(makeNoteWithOrigin(3, 'a.md'), 2);
@@ -600,7 +591,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
     });
 
     it('weighted predecessor + unweighted successor cascades (successor blocks unweighted)', () => {
-        // an unweighted successor would sort before a weighted new_child, so a gap insert would invert the order - the cascade runs and stays bounded to b.md
+        // an unweighted successor would sort before a weighted new_child, inverting the order, so cascade runs bounded to b.md
         const a_pred = weighted(makeNoteWithOrigin(1, 'a.md'), 5);
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const a_succ = makeNoteWithOrigin(3, 'a.md');
@@ -612,12 +603,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
     });
 
     it('mints no weight for a top drop into an all-unweighted column (status change alone places it)', () => {
-        /*
-         * the reported bug: dragging a file into the top of a column whose cards are all
-         * unweighted must NOT weight the dragged card - a weight would sort it AFTER the
-         * unweighted successors (kanbanNoteOrder case 2) and sink it to the bottom. Implicit
-         * mtime order floats the just-saved file up, so the correct ordering edit set is empty.
-         */
+        // weighting a card dropped into an all-unweighted column would sink it below the unweighted successors, so emit nothing
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const succ1 = makeNoteWithOrigin(1, 'a.md');
         const succ2 = makeNoteWithOrigin(3, 'c.md');
@@ -627,7 +613,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
     });
 
     it('mints no weight for a mid drop between two unweighted notes (weight cannot express it)', () => {
-        // both neighbours unweighted → any weight on the dragged card jumps it below both; the placement is only expressible by implicit order, so emit nothing
+        // both neighbours unweighted; any weight jumps the card below both, so the placement is only expressible by implicit order
         const pred = makeNoteWithOrigin(1, 'a.md');
         const new_child = makeNoteWithOrigin(2, 'b.md');
         const succ = makeNoteWithOrigin(3, 'c.md');
@@ -637,10 +623,7 @@ describe('calculateTextChangesForOrdering cross-file', () => {
     });
 
     it('still weights a top drop above a weighted successor (genuinely expressive)', () => {
-        /*
-         * successor carries a weight, so a gap insert below it is meaningful - the guard must
-         * not suppress this. new_child should receive a weight strictly below the successor's.
-         */
+        // the successor carries a weight, so a gap insert below it is meaningful and must not be suppressed
         const new_child = makeNoteWithOrigin(1, 'b.md');
         const succ = weighted(makeNoteWithOrigin(2, 'a.md'), 5);
         const column = [new_child, succ];

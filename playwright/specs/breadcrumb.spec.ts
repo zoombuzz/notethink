@@ -44,11 +44,7 @@ test.describe('Breadcrumb workspace root stripping', () => {
     });
 
     test('uses relative_path for breadcrumb (symlink-safe), keeping the opened folder as root', async ({ page }) => {
-        /*
-         * simulate symlink mismatch: workspace opened via /home/dev/github.com/in_development
-         * but doc path resolves via /mnt/secure/home/dev/git/github.com/in_development
-         * workspace_root won't match doc_path, but relative_path from asRelativePath handles it
-         */
+        // simulates a symlink mismatch between workspace_root and doc_path; relative_path handles it
         const doc_path = '/mnt/secure/home/dev/git/github.com/in_development/cobalt/docs/todo.md';
         await injectDocsFromFixture(page, 'basic.md', doc_path, {
             workspace_root: '/home/dev/github.com/in_development',
@@ -133,7 +129,7 @@ test.describe('Toolbar row geometry', () => {
         ], { workspace_root: WORKSPACE_ROOT });
         await page.waitForSelector('[data-testid="NoteRenderer"]');
 
-        // single-file mode on a deep path: in_development > orbit > docstech > [todo.md], so ancestor text is there to set the height
+        // a deep path gives the trail an ancestor segment, which sets the height baseline
         await expect(page.getByTestId('breadcrumb-leaf').first()).toBeVisible({ timeout: 5000 });
         const with_ancestors = await toolbarHeight(page);
 

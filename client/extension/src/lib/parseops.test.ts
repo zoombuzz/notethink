@@ -270,7 +270,7 @@ describe('parseops', () => {
 			expect(headings).toHaveLength(150);
 		});
 
-		it('parses a 1500-line file in under 200ms', () => {
+		it('parses a 1500-line file in under 1s', () => {
 			const lines: string[] = [];
 			for (let i = 0; i < 150; i++) {
 				lines.push(`## Section ${i}`);
@@ -287,7 +287,8 @@ describe('parseops', () => {
 			const start = performance.now();
 			parse(markdown);
 			const elapsed = performance.now() - start;
-			expect(elapsed).toBeLessThan(400);
+			// 1s: a CPU-bound parse that runs 180-560ms under suite load, yet a regression still lands well above it
+			expect(elapsed).toBeLessThan(1000);
 		});
 	});
 

@@ -268,7 +268,7 @@ describe('AutoView', () => {
         });
 
         it('an aggregate root with zero stories defaults to kanban, not the single-file document default', () => {
-            // a synthetic root with no children at all - no story ever cast a file_view_type vote, and isAggregateRoot itself cannot recognise an empty root as aggregate, so this reads integration_mode instead
+            // an empty root casts no file_view_type vote and isAggregateRoot can't recognise it, so this reads integration_mode
             const root = makeAggregateRoot();
             const props = makeViewProps({
                 notes: [root],
@@ -291,10 +291,7 @@ describe('AutoView', () => {
         });
 
         it('multiple stories from same file vote only once', () => {
-            /*
-             * file 'a' has 3 stories, all carrying file_view_type=kanban; file 'b' has 1 story with document
-             * single-vote per file → 1 kanban vs 1 document → tie → falls back to document
-             */
+            // file 'a' has 3 kanban-voting stories counted once; file 'b' has 1 document vote, a tie that falls back to document
             const root = makeAggregateRoot();
             const stories = [
                 makeStory(1, 'a', 'kanban'),

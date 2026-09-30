@@ -6,7 +6,7 @@ import { setBreadthDraft } from "./useBreadthDraft";
 import view_specific_styles from "../../ViewRenderer.module.scss";
 
 /**
- * props for the gap between two lanes, which is the drag handle for every lane's breadth.
+ * Props for the gap between two lanes, which is the drag handle for every lane's breadth.
  * - viewId: the view whose in-flight breadth a drag publishes
  * - boardRef: the board the pointer is measured against, which is also what scrolls
  * - orientation: which way the lanes run; the gap resizes along the same axis
@@ -34,7 +34,7 @@ export default function LaneSeparator(props: LaneSeparatorProps): ReactElement {
     const columns = orientation === 'columns';
     const [dragging, setDragging] = useState(false);
     const last_breadth = useRef<number | undefined>(undefined);
-    // the board feeds the draft back in as `breadth` mid-drag, so what a release compares against is the breadth the drag began at
+    // the board feeds the draft back in as `breadth` mid-drag, so a release compares against the breadth the drag began at
     const start_breadth = useRef<number>(breadth);
     const breadthAt = (event: React.PointerEvent<HTMLDivElement>): number | undefined => {
         const board = boardRef.current;

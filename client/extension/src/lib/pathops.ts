@@ -8,7 +8,12 @@ interface IsPathWithinOptions {
     requireExtension?: string;
 }
 
-// security-critical workspace-containment check: a target is within a root iff path.relative(root, target) is '' (equal) or a non-absolute relative path that does not climb out via '..' - this rejects '..' traversal and sibling-prefix escapes (/ws-evil is NOT within /ws) which a naive startsWith would let through. Inputs are always POSIX uri.path strings (forward-slash, no drive letter), so the math runs through path.posix and stays correct on every host OS, not just where node's path module happens to be posix
+/**
+ * A target is within a root iff path.relative(root, target) is '' or a non-absolute relative path
+ * that does not climb out via '..'; this rejects both '..' traversal and sibling-prefix escapes
+ * (/ws-evil is NOT within /ws) that a naive startsWith would let through. Inputs are always POSIX
+ * uri.path strings, so the math runs through path.posix regardless of the host OS.
+ */
 export function isPathWithin(
     target_path: string,
     root_paths: string[],
@@ -32,7 +37,7 @@ export function isPathWithin(
     }
     const resolved_target = path.posix.resolve(target_path);
     for (const root of root_paths) {
-        // skip empty/garbage roots rather than resolving them (path.posix.resolve('') would yield cwd and falsely contain the target)
+        // skip empty roots: path.posix.resolve('') would yield cwd and falsely contain the target
         if (!root || root.trim() === '') {
             continue;
         }
@@ -51,11 +56,9 @@ export function isPathWithin(
 }
 
 /**
- * workspace-aware variant of isPathWithin: roots come from vscode.workspace.workspaceFolders
- * at the point of call. The pure isPathWithin helper stays vscode-free and unit-testable;
- * this wrapper bridges it to the live workspace so callers don't have to repeat the lookup.
- * Roots use uri.path (POSIX, scheme-agnostic), matching the uri.path targets callers pass -
- * fsPath would be lossy on non-file: schemes and OS-separator-bound on Windows.
+ * Live-workspace wrapper over the pure, testable isPathWithin. Roots use uri.path (POSIX,
+ * scheme-agnostic) to match the uri.path targets callers pass; fsPath would be lossy on
+ * non-file schemes and OS-separator-bound on Windows.
  */
 export function isWithinWorkspace(target_path: string, options?: IsPathWithinOptions): boolean {
     const root_paths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.path);

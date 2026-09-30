@@ -155,13 +155,7 @@ describe('readGrokSession', () => {
     });
 
     describe('resumed (incremental) parsing equals a whole-file read', () => {
-        /*
-         * AgentAnalyserWorker.ts appends only the newly tail-parsed lines to a cached lines array
-         * before calling buildGrokResult, so this asserts equivalence to a whole read for every
-         * possible split point. usage.json is never tail-parsed (it is rewritten whole each turn, not
-         * appended), so it is unaffected here and passed through on `input.extra_files` exactly as a
-         * whole read receives it.
-         */
+        // tail parsing appends only new lines to the cache, so this asserts equivalence to a whole read at every split point
         const events = [
             { ts: '2026-09-07T14:19:53.408Z', type: 'tool_started', tool_name: 'run_terminal_command' },
             { ts: '2026-09-07T14:19:53.560Z', type: 'tool_completed', tool_name: 'run_terminal_command', outcome: 'error' },

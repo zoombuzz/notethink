@@ -1,49 +1,19 @@
 import typescriptEslint from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
+import noConsecutiveLineComments from "./eslint-rules/no-consecutive-line-comments.mjs";
+import noMidfunctionBlockComments from "./eslint-rules/no-midfunction-block-comments.mjs";
+import commentStyle from "./eslint-rules/comment-style.mjs";
 
-/*
- * local rule enforcing CODING_STANDARDS.md > Comments: an inline line comment is exactly one line,
- * never two standalone `//` lines in a row. A wrapped thought, several stacked thoughts, or an
- * ASCII/structure illustration is too complex to be inline and belongs in a block (header) comment.
- * Skips directive comments (eslint-*, @ts-*, etc.) and trailing comments (a `//` after code on the
- * same line); only two standalone line comments on consecutive lines are reported.
- */
-const noConsecutiveLineComments = {
-    meta: {
-        type: "problem",
-        docs: { description: "an inline line comment is one line; stacked/wrapped comments belong in a block (header) comment" },
-        messages: { consecutive: "consecutive // comments - make it one line or lift to a block (header) comment" },
-        schema: [],
-    },
-    create(context) {
-        const source_code = context.sourceCode ?? context.getSourceCode();
-        const directive = /^\s*(eslint\b|eslint-|globals?\b|exported\b|@ts-|prettier-ignore|c8\b|istanbul\b|v8\b|@jsx)/;
-        const isStandalone = (comment) => {
-            const before = source_code.getTokenBefore(comment, { includeComments: true });
-            return !before || before.loc.end.line < comment.loc.start.line;
-        };
-        return {
-            Program() {
-                let prev = null;
-                for (const comment of source_code.getAllComments()) {
-                    if (comment.type !== "Line" || directive.test(comment.value) || !isStandalone(comment)) {
-                        prev = null;
-                        continue;
-                    }
-                    if (prev && comment.loc.start.line === prev.loc.end.line + 1) {
-                        context.report({ loc: comment.loc, messageId: "consecutive" });
-                    }
-                    prev = comment;
-                }
-            },
-        };
+const localPlugin = {
+    rules: {
+        "no-consecutive-line-comments": noConsecutiveLineComments,
+        "no-midfunction-block-comments": noMidfunctionBlockComments,
+        "comment-style": commentStyle,
     },
 };
 
-const localPlugin = { rules: { "no-consecutive-line-comments": noConsecutiveLineComments } };
-
 /*
- * shared selectors enforcing the log-source convention: the first argument to the structured logger
+ * Shared selectors enforcing the log-source convention: the first argument to the structured logger
  * is a source IDENTIFIER (the camelCase name of the enclosing function), never a sentence, and
  * writeToErrorLog carries an error object as its third argument. Winston indexes on the source
  * field, so a sentence there is unsearchable and a source shared by many call sites matches them
@@ -79,7 +49,7 @@ export default [
             "**/*.js",
             "**/*.cjs",
             "**/*.mjs",
-            // contract diff-side fixtures: stored file content a producer wrote, named by content hash, so they carry source extensions without being source
+            // diff-side fixtures: stored file content named by hash, with source extensions but not source
             "playwright/fixtures/activity/blobs/**",
         ],
     },
@@ -103,25 +73,17 @@ export default [
             eqeqeq: "warn",
             "no-throw-literal": "warn",
             semi: "warn",
-            /*
-             * a leading underscore is the opt-out marker for an argument, a variable or a caught error that is
-             * deliberately unused. notethink registers '@typescript-eslint' itself rather than inheriting it from
-             * eslint-config-next, so the rule goes in this block directly: the separate scoped block the five Next
-             * siblings need exists only to dodge that config's plugin registration, and there is nothing to dodge here.
-             */
+            // a leading underscore marks a deliberately unused argument, variable or caught error
             "@typescript-eslint/no-unused-vars": ["error", {
                 argsIgnorePattern: "^_",
                 varsIgnorePattern: "^_",
                 caughtErrorsIgnorePattern: "^_",
             }],
             "local/no-consecutive-line-comments": "error",
+            "local/no-midfunction-block-comments": "error",
+            "local/comment-style": ["error", { maxLineLength: 120, trailingPeriod: true }],
             "no-restricted-syntax": ["error", ...restrictedSyntax],
-            /*
-             * automated audit checks (coding-standards-audit-remediation) - kept at "warn" not "error".
-             * error-level would fail the gate on the test-side backlog (173 test `any`, ~1330 test missing
-             * return types), out of scope here. warn still surfaces violations in editors/CI and blocks
-             * casual new ones; bump to "error" once the test backlog is cleared
-             */
+            // warn, not error, until the test-side backlog of `any` and missing return types is cleared
             "@typescript-eslint/no-explicit-any": "warn",
             "@typescript-eslint/consistent-type-imports": "warn",
             "@typescript-eslint/explicit-function-return-type": ["warn", {
@@ -133,7 +95,7 @@ export default [
         },
     },
     {
-        // test-suite and playwright spec bodies are namespaces (describe/suite wrapping many tests, or end-to-end scenarios) - they do not fit the 80-line function-length cap, which is calibrated for production unit clarity
+        // suite and spec bodies are namespaces, not units, so the 80-line function cap does not fit them
         files: ["**/*.test.ts", "**/*.test.tsx", "**/test/suite/**/*.ts", "playwright/**/*.ts"],
         rules: {
             "max-lines-per-function": "off",

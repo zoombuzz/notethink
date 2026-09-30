@@ -6,9 +6,9 @@ const BUNDLE_DIR = path.join(PROJECT_ROOT, 'l10n');
 const LOCALES = ['fr', 'it', 'de', 'es'];
 
 /*
- * Values that are legitimately identical to their English key, measured 2026-09-10 against all four
- * bundles. Every entry carries the reason it is here, because an uncommented allowlist is
- * indistinguishable from an untranslated string somebody silenced.
+ * Values that are legitimately identical to their English key across all four bundles. Every entry
+ * carries the reason it is here, because an uncommented allowlist is indistinguishable from an
+ * untranslated string somebody silenced.
  *
  * The split matters. ALLOWED_SAME_EVERY_LOCALE is for strings with no translatable words in them at
  * all; ALLOWED_SAME_BY_LOCALE is for a string that happens to be the same word in one language, so
@@ -34,7 +34,7 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
     es: [
         // "Auto" is the accepted Spanish abbreviation of "automatico"; de and it use the full word
         'Auto ({0})',
-        // "tokens" is the loanword Spanish uses for model tokens, as its "{0} tokens ({1}d)" value already does; de/fr/it all differ
+        // "tokens" is the Spanish loanword its "{0} tokens ({1}d)" value already uses; de/fr/it all differ
         '{0} tokens',
     ],
     fr: [
@@ -46,7 +46,7 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         'Auto ({0})',
         // "Session" is the French word (a common loanword); de/es/it all differ
         'Session',
-        // "agent" is the French word too, and French pluralises an optional plural with the same "(s)" suffix English uses here; de/es/it all differ
+        // "agent" is the French word too, pluralised with the same "(s)" suffix English uses; de/es/it all differ
         '{0} agent(s)',
     ],
     it: [],

@@ -14,12 +14,20 @@ jest.mock('@hello-pangea/dnd', () => ({
         captured_dnd.onDragEnd = onDragEnd;
         return <div data-testid="drag-drop-context">{children}</div>;
     },
-    Droppable: ({ children, droppableId }: { children: (provided: unknown) => React.ReactNode; droppableId: string }) =>
+    Droppable: ({ children, droppableId }: { children: (provided: unknown, snapshot: unknown) => React.ReactNode; droppableId: string }) =>
         <div data-testid={`droppable-${droppableId}`}>{
-            (children as (provided: { droppableProps: Record<string, unknown>; innerRef: () => void; placeholder: null }) => React.ReactNode)({
+            (children as (
+                provided: { droppableProps: Record<string, unknown>; innerRef: () => void; placeholder: null },
+                snapshot: { isDraggingOver: boolean; draggingOverWith: null; draggingFromThisWith: null; isUsingPlaceholder: boolean },
+            ) => React.ReactNode)({
                 droppableProps: {},
                 innerRef: () => {},
                 placeholder: null,
+            }, {
+                isDraggingOver: false,
+                draggingOverWith: null,
+                draggingFromThisWith: null,
+                isUsingPlaceholder: false,
             })
         }</div>,
     Draggable: ({ children, draggableId }: { children: (provided: unknown, snapshot: unknown) => React.ReactNode; draggableId: string }) =>

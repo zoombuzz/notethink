@@ -7,12 +7,20 @@ import type { NoteProps, NoteOrigin, LineTag } from '../../types/NoteProps';
 // mock drag-and-drop library so the board renders in jsdom without the real dnd
 jest.mock('@hello-pangea/dnd', () => ({
     DragDropContext: ({ children }: { children: React.ReactNode }) => <div data-testid="drag-drop-context">{children}</div>,
-    Droppable: ({ children, droppableId }: { children: (provided: unknown) => React.ReactNode; droppableId: string }) =>
+    Droppable: ({ children, droppableId }: { children: (provided: unknown, snapshot: unknown) => React.ReactNode; droppableId: string }) =>
         <div data-testid={`droppable-${droppableId}`}>{
-            (children as (provided: { droppableProps: Record<string, unknown>; innerRef: () => void; placeholder: null }) => React.ReactNode)({
+            (children as (
+                provided: { droppableProps: Record<string, unknown>; innerRef: () => void; placeholder: null },
+                snapshot: { isDraggingOver: boolean; draggingOverWith: null; draggingFromThisWith: null; isUsingPlaceholder: boolean },
+            ) => React.ReactNode)({
                 droppableProps: {},
                 innerRef: () => {},
                 placeholder: null,
+            }, {
+                isDraggingOver: false,
+                draggingOverWith: null,
+                draggingFromThisWith: null,
+                isUsingPlaceholder: false,
             })
         }</div>,
     Draggable: ({ children, draggableId, isDragDisabled }: { children: (provided: unknown, snapshot: unknown) => React.ReactNode; draggableId: string; isDragDisabled?: boolean }) =>
@@ -178,7 +186,7 @@ describe('LineView group-by resolution (no axis preset)', () => {
 
 describe('LineView note handlers', () => {
     it('threads setNoteExpanded to the parent-context card so its manual expansion reaches the view', () => {
-        // the three views build their own note-handler bags, so each one has to be pinned separately or a view silently loses expansion
+        // each of the three views builds its own note-handler bag, so this must be pinned separately in each
         const parent_context = makeNote(9, 0);
         const setNoteExpanded = jest.fn();
         const props = makeViewProps([makeNote(1, 60)]);

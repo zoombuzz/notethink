@@ -15,7 +15,7 @@ function loggedLines(level: keyof ChannelSpy): Array<string> {
 	return channel[level].mock.calls.map((call: Array<unknown>) => String(call[0]));
 }
 
-// the transport reaches the channel through a stream, so a line is not there on the next statement
+// gives a pending microtask a turn before reading the mock, though logToChannel itself is synchronous
 function flushLogger(): Promise<void> {
 	return new Promise(resolve => setTimeout(resolve, 0));
 }
@@ -108,13 +108,7 @@ describe('errorops', () => {
 		});
 	});
 
-	/*
-	 * These assertions verify more than that the call does not throw. writeToLogAtLevel shifts
-	 * the source into winston's message slot, so every argument after it travels in splat, and both
-	 * the logger's `levels` and its `format` have to be wired for any of it to reach the channel.
-	 * Each test in this group exercises a different half of that requirement: drop `levels` and
-	 * the transport gate discards the record entirely; drop `format` and only the source survives.
-	 */
+	// writeToLogAtLevel formats source + args via util.format, routed to the matching channel method
 	describe('what actually reaches the output channel', () => {
 		it('renders the description that follows the source', async () => {
 			writeToLog('editText', '3 changes on /x/a.md');
@@ -142,7 +136,7 @@ describe('errorops', () => {
 			expect(loggedLines('info')).not.toContainEqual(expect.stringContaining('unknown setting foo'));
 		});
 
-		it('reaches the channel at trace, the level winston has no default for', async () => {
+		it('reaches the channel at trace', async () => {
 			writeToLogAtLevel('trace', 'caretProbe', 'offset 412');
 			await flushLogger();
 			expect(loggedLines('trace')).toContainEqual(expect.stringContaining('offset 412'));

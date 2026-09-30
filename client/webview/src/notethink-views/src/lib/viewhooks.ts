@@ -1,21 +1,19 @@
 import { useEffect, useRef } from 'react';
-import { findBodyItemElement } from './noteops';
+import { findBodyItemElement, kanbanDraggableId } from './noteops';
+import { scrollVirtualLaneToNoteId } from './virtualScrollRegistry';
 import type { NoteDisplayOptions, TextSelection } from '../types/NoteProps';
 
 // small extra so the story sits clear of the sticky header rather than flush against it
 const SCROLL_OCCLUDER_BUFFER_PX = 8;
-/*
- * the focused/selected story draws a dashed/solid outline ring (offset 6px + 2px width, 8px when nested) that getBoundingClientRect excludes
- * reserve this much clearance on every edge so the ring is never clipped against a scroll container's edge
+/**
+ * The focused/selected story draws a ring (offset 6px + 2px width, 8px when nested) that
+ * getBoundingClientRect excludes; reserve this much clearance so it's never clipped against a
+ * scroll container's edge.
  */
 const SCROLL_FOCUS_RING_PX = 12;
 
-/**
- * nearest scrollable ancestor in the given axis - the element scrollIntoView would scroll.
- * Falls back to the document scroller (the webview body scrolls the page). Walks ancestors
- * (including body) so the kanban board (overflow-x) and the page (overflow-y) each resolve.
- */
-function findScrollParent(el: HTMLElement, axis: 'x' | 'y'): HTMLElement {
+/** Nearest scrollable ancestor of `el` along `axis`; falls back to the document scroller. */
+export function findScrollParent(el: HTMLElement, axis: 'x' | 'y'): HTMLElement {
     const overflow_prop = axis === 'x' ? 'overflowX' : 'overflowY';
     let node: HTMLElement | null = el.parentElement;
     while (node) {
@@ -28,11 +26,10 @@ function findScrollParent(el: HTMLElement, axis: 'x' | 'y'): HTMLElement {
 }
 
 /**
- * the element that actually draws the focus/selection marquee for this note: the OUTERMOST
- * ancestor (or self) carrying a visible outline. focused_seqs is root-to-leaf, so the resolved
- * note element is the *deepest* focused note (the caret's sub-note, often indented and ringless);
- * the visible ring lives on the top-level story card above it. We frame the card, not the sub-note,
- * so its ring is what gets the clearance. Falls back to the element itself when nothing is outlined.
+ * The element that actually draws the focus/selection ring for this note: the outermost ancestor
+ * (or self) with a visible outline. `focused_seqs` resolves to the deepest, often ringless,
+ * sub-note, so this frames the ringed card above it instead. Falls back to the element itself when
+ * nothing is outlined.
  */
 function outermostRingedElement(deepest: HTMLElement): HTMLElement {
     let ringed = deepest;
@@ -46,10 +43,21 @@ function outermostRingedElement(deepest: HTMLElement): HTMLElement {
 }
 
 /**
- * signed scroll delta to frame [need_start, need_end] within [avail_start, avail_end].
- * When the need fits, reveal whichever edge is off-screen (and 0 when already wholly visible,
- * so an already-framed story is never yanked). When it doesn't fit, anchor the start edge -
- * top for the vertical axis, left for the horizontal - per the focused-note framing rule.
+ * Viewport span `v` clips to along `axis`. The root scroller's own rect spans its full, often
+ * taller, scrollable content rather than the visible window, so the root case uses
+ * `window.innerWidth`/`innerHeight` instead.
+ */
+function scrollerViewportBounds(v: HTMLElement, axis: 'x' | 'y'): { start: number; end: number } {
+    const root = (window.document.scrollingElement as HTMLElement | null) ?? window.document.body;
+    if (v === root) { return axis === 'x' ? { start: 0, end: window.innerWidth } : { start: 0, end: window.innerHeight }; }
+    const rect = v.getBoundingClientRect();
+    return axis === 'x' ? { start: rect.left, end: rect.right } : { start: rect.top, end: rect.bottom };
+}
+
+/**
+ * Signed scroll delta to frame [need_start, need_end] within [avail_start, avail_end]. When the
+ * need fits, reveals whichever edge is off-screen (0 when already visible, so a framed story is
+ * never yanked); when it doesn't fit, anchors the start edge per the focused-note framing rule.
  */
 function frameDelta(need_start: number, need_end: number, avail_start: number, avail_end: number): number {
     const avail_size = avail_end - avail_start;
@@ -118,33 +126,38 @@ export function useScrollToCaret(
     useEffect(() => {
         if (!display_options.settings?.scrollNoteIntoView || !display_options.focused_seqs?.length) { return; }
         cancelAnimationFrame(scroll_raf_ref.current);
-        scroll_raf_ref.current = requestAnimationFrame(() => {
+        const frameStory = (): void => {
             const resolved = resolveCaretTarget(display_options.focused_seqs, view_id, undefined);
             if (!resolved) { return; }
-            // frame the top-level story card (the element with the visible ring), not the deepest focused sub-note - the card's outline is what must stay clear of edges
+            // frames the top-level story card (the visible ring), not the deepest focused sub-note
             const story = outermostRingedElement(resolved.note_element);
             const rect = story.getBoundingClientRect();
             const ring = SCROLL_FOCUS_RING_PX;
             // sticky toolbar (and any open drawer) eat the top of the vertical scrollport
             const occluder_top = stickyOccluderBottomPx(view_id) + SCROLL_OCCLUDER_BUFFER_PX;
-            // vertical (page scroller): reserve the ring top/bottom, keep the top clear of the sticky header, anchor the top when the story is taller than the available room
+            // vertical: keep the ring clear of the sticky header; findScrollParent finds a virtual lane's own scrollport or the page
             const v = findScrollParent(story, 'y');
-            const v_rect = v.getBoundingClientRect();
-            const dy = frameDelta(rect.top - ring, rect.bottom + ring, Math.max(v_rect.top, occluder_top), v_rect.bottom);
+            const v_bounds = scrollerViewportBounds(v, 'y');
+            const dy = frameDelta(rect.top - ring, rect.bottom + ring, Math.max(v_bounds.start, occluder_top), v_bounds.end);
             if (dy !== 0) { v.scrollBy({ top: dy, behavior: 'smooth' }); }
-            /*
-             * horizontal (kanban board): reserve the ring left/right so the halo isn't clipped against the board edge, anchor the left when too wide
-             * a document view has no horizontal scroller, so dx resolves to 0 (no-op)
-             */
+            // horizontal: reserve the ring against the board edge; a document view has no x scroller, so dx is 0
             const h = findScrollParent(story, 'x');
-            const h_rect = h.getBoundingClientRect();
-            const dx = frameDelta(rect.left - ring, rect.right + ring, h_rect.left, h_rect.right);
+            const h_bounds = scrollerViewportBounds(h, 'x');
+            const dx = frameDelta(rect.left - ring, rect.right + ring, h_bounds.start, h_bounds.end);
             if (dx !== 0) { h.scrollBy({ left: dx, behavior: 'smooth' }); }
+        };
+        // a windowed-out card has no element yet: its lane scrolls it into range first, and frameStory waits a frame
+        const focused_note = display_options.focused_notes?.[display_options.focused_notes.length - 1];
+        const asked_virtualizer = focused_note !== undefined && scrollVirtualLaneToNoteId(view_id, kanbanDraggableId(focused_note));
+        scroll_raf_ref.current = requestAnimationFrame(() => {
+            if (!asked_virtualizer) { frameStory(); return; }
+            scroll_raf_ref.current = requestAnimationFrame(frameStory);
         });
         return () => cancelAnimationFrame(scroll_raf_ref.current);
     }, [
         display_options.settings?.scrollNoteIntoView,
         display_options.focused_seqs?.length && display_options.focused_seqs[display_options.focused_seqs.length - 1],
+        display_options.focused_notes,
         view_id,
         selection?.main.head,
     ]);
@@ -166,13 +179,13 @@ export function useCaretIndicator(
     useEffect(() => {
         const resolved = resolveCaretTarget(display_options.focused_seqs, view_id, selection?.main.head);
         if (!resolved) { return; }
-        // only flash when the caret is within a specific content element (headline or body item with data-offset-start/end); gaps between notes have no rendered content so nothing should flash
+        // only flashes within a specific content element; gaps between notes render nothing to flash
         const target = resolved.body_item;
         if (!target) { return; }
         // skip re-flash if the caret moved within the same element
         if (target === prev_target_ref.current) { return; }
         prev_target_ref.current = target;
-        // check if the target is already in the viewport; treat the sticky header stack as the effective top edge so a target hidden behind the toolbar/drawer counts as off-screen and we wait for the scroll
+        // checks the viewport, treating the sticky header stack as the top edge so a hidden target counts as off-screen
         const rect = target.getBoundingClientRect();
         const occluder_bottom = stickyOccluderBottomPx(view_id);
         const is_visible = rect.top >= occluder_bottom && rect.top < window.innerHeight && rect.bottom > occluder_bottom;

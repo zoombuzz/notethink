@@ -1,20 +1,18 @@
 import * as vscode from 'vscode';
 import { DEFAULT_COLUMN_ORDER, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER } from '../constants';
 
-/*
- * settings module. One canonical place to read, write, and inspect every notethink setting.
+/**
+ * Settings module: one canonical place to read, write and inspect every notethink setting. Each entry
+ * binds the TS identifier (camelCase; doubles as the wire setting ID and payload field name, a
+ * deliberate exception to the snake_case wire convention since settings need one cross-boundary name),
+ * its `notethink.settings.*` config path, its built-in default, and its owning registry node.
  *
- * Each entry binds: the TS identifier (camelCase, used in code as a SettingKey AND as the wire setting ID AND as the payload field name), the dotted config path under `notethink.settings.*` (matches package.json contributes), the built-in default, and the owning registry node (the tree node whose settings this belongs to - a view-registry id such as `root` / `line` / `kanban`, a card-registry id, or one of the NODE_GLOBAL / NODE_FILES sentinels below). Settings identifiers are camelCase end-to-end - this is a deliberate, scoped exception to the project-wide snake_case-for-wire-data-fields convention; settings have a unique cross-boundary identity (TS code, wire IDs, payload field names, VS Code config keys), and bridging conventions would mean every setting carries two names.
+ * Every setting has exactly ONE write path (workspace scope, or Global in a folderless window) and ONE
+ * comparison: "diverged" means differs from the saved default, where the saved default is the
+ * user-scope value if one exists, else the built-in default. Both default actions drive diverged to zero.
  *
- * There is exactly ONE write path and ONE comparison. Every setting is written to the workspace scope
- * as the user changes it (Global in a folderless window, where a workspace write would throw), promoted
- * wholesale to the user scope by "Save as default", and cleared back to the user scope by "Revert to
- * defaults". "Diverged" therefore means "differs from the saved default", where the saved default is the
- * user-scope value when one exists and the built-in default otherwise - so both default actions drive the
- * diverged count to zero.
- *
- * Adding a setting = one entry here plus a matching package.json contribution. The read/write helpers stay one-liners; the cascade payload, the override flags, the diverged set, and the promote/reset handlers all iterate this map.
- * The contribution declares `"scope": "window"`: every read here passes no resource, so a `resource` scope would promise per-folder values that nothing reads.
+ * Adding a setting is one entry here plus a matching package.json contribution (`"scope": "window"`,
+ * since every read here passes no resource).
  */
 
 /*

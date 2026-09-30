@@ -24,13 +24,13 @@ import type { NoteRendererProps } from "../NoteRenderer";
  */
 export default function NoteTreeComposer({ note_id, note, props }: { note_id: string; note: Doc; props: NoteRendererProps }): ReactElement {
     const view_state = props.viewStates?.[note_id] || props.viewStates?.['__default'];
-    // explicit `current_file` stamp makes the composer the single source of truth for the toolbar selector + breadcrumb (symmetric with FolderTreeComposer's `integration_mode: 'folder'` stamp); without it the toolbar's selector falls back to a hard-coded default and any stale stranded tag on this view's display_options can still register as folder
+    // the current_file stamp is this composer's source of truth for the toolbar selector, mirroring the folder stamp
     const { viewType, view_display_options } = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
     // memoize conversion keyed on content hash - avoids redundant work when only selection changes
     const root_note = useMemo(
         () => {
             const root = convertMdastToNoteHierarchy(note.content!, note.text!);
-            // descend a nested file (## epics -> ### stories) to story cards ONLY when it renders as a kanban (column-based) board - an explicit kanban viewType pick, or a file whose H1/front-matter declares nt_view=kanban. A plain nested document keeps its ## epic structure + prose. Run before the stable-id stamp so it keys off the final structure
+            // flattens epics into story cards for a kanban board; runs before the stable-id stamp to key off final structure
             if (viewType === 'kanban' || fileDeclaredViewType(root) === 'kanban') {
                 flattenSingleFileStories(root, note_id, note.path ?? '');
             }
@@ -77,7 +77,7 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
             postMessage: props.postMessage ? (message: unknown) => {
                 if (message && typeof message === 'object' && 'type' in message) {
                     const m = message as Record<string, unknown>;
-                    // respect docId/docPath already on the message: folder mode attaches the origin doc's path from note.origin, single-file mode has no per-note origin so we stamp the view's own docId/docPath
+                    // respects an existing docId/docPath; folder mode sets it from note.origin, single-file mode stamps this view's own
                     props.postMessage!({
                         ...m,
                         docId: m.docId ?? note_id,

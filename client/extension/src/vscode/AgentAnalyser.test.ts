@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { Uri } from '../__mocks__/vscode';
-import { AgentAnalyser } from './AgentAnalyser';
-import { handleAgentAnalyserRequest, setTranscriptMaxBytesForTest, type AgentAnalyserWorkerRequest, type AgentAnalyserWorkerResponse } from './AgentAnalyserWorker';
+import { AgentAnalyser, setFileStatMaxEntriesForTest } from './AgentAnalyser';
+import { handleAgentAnalyserRequest, resetTailCacheForTest, setTailCacheMaxBytesForTest, setTranscriptMaxBytesForTest, type AgentAnalyserWorkerRequest, type AgentAnalyserWorkerResponse } from './AgentAnalyserWorker';
 import * as errorops from '../lib/errorops';
 
 /**
@@ -23,7 +23,7 @@ function mockContext(log_path = '/home/test/.config/Code/logs/x/exthost/webWorke
 	} as unknown as vscode.ExtensionContext;
 }
 
-// a fake Worker that answers every postMessage synchronously (well, on the next microtask) through the real handler, so the round trip is exercised without a real worker thread
+// a fake Worker answering postMessage on the next microtask via the real handler, no real worker thread
 function fakeWorkerFactory(): { worker: () => Worker; terminate_calls: number[] } {
 	let terminated_count = 0;
 	const factory = (): Worker => {
@@ -57,7 +57,7 @@ function failingWorkerFactory(): () => Worker {
 	};
 }
 
-// a fake Worker whose first fail_count attempts fail and every attempt after that succeeds, so recovery out of "failed" can be driven deterministically without waiting on a real timeout
+// a fake Worker whose first fail_count attempts fail, so recovery out of "failed" is deterministic
 function flakyWorkerFactory(fail_count: number): () => Worker {
 	let attempts = 0;
 	return (): Worker => {
@@ -77,7 +77,7 @@ function flakyWorkerFactory(fail_count: number): () => Worker {
 	};
 }
 
-// a fake Worker that answers through the real handler like fakeWorkerFactory, but also records every request it was sent, so a test can inspect exactly what bytes/mode a scan transferred
+// like fakeWorkerFactory, but also records every request so a test can inspect what a scan transferred
 function recordingWorkerFactory(): { worker: () => Worker; requests: AgentAnalyserWorkerRequest[] } {
 	const requests: AgentAnalyserWorkerRequest[] = [];
 	const factory = (): Worker => {
@@ -97,7 +97,7 @@ function recordingWorkerFactory(): { worker: () => Worker; requests: AgentAnalys
 	return { worker: factory, requests };
 }
 
-// a recording worker whose first fail_count attempts fail (onerror) and every attempt after that succeeds through the real handler, so a restart's own request can be inspected the same way recordingWorkerFactory's can
+// combines flakyWorkerFactory's failure pattern with recordingWorkerFactory's request capture
 function recordingFlakyWorkerFactory(fail_count: number): { worker: () => Worker; requests: AgentAnalyserWorkerRequest[] } {
 	const requests: AgentAnalyserWorkerRequest[] = [];
 	let attempts = 0;
@@ -120,7 +120,43 @@ function recordingFlakyWorkerFactory(fail_count: number): { worker: () => Worker
 	return { worker: factory, requests };
 }
 
-// a fake Worker whose response is held back until the test calls release(), so a scan can be kept deliberately "in flight" while other triggers land; release('failure') answers via onerror instead of onmessage, so a crash can be driven from the same held-open request
+// answers every request except one for poison_session_id, which always fails - a transcript that always crashes the parser
+function poisonSessionWorkerFactory(poison_session_id: string): () => Worker {
+	return (): Worker => {
+		const worker = {
+			onmessage: null as ((event: MessageEvent<AgentAnalyserWorkerResponse>) => void) | null,
+			onerror: null as ((event: ErrorEvent) => void) | null,
+			postMessage: (message: AgentAnalyserWorkerRequest) => {
+				Promise.resolve().then(() => {
+					if (message.jobs.some(job => job.session_id === poison_session_id)) { worker.onerror?.({ message: 'boom' } as ErrorEvent); return; }
+					worker.onmessage?.({ data: handleAgentAnalyserRequest(message) } as MessageEvent<AgentAnalyserWorkerResponse>);
+				});
+			},
+			terminate: () => {},
+		};
+		return worker as unknown as Worker;
+	};
+}
+
+// answers session requests normally but fails every line_diff_jobs request, to drive the host fallback deterministically
+function lineDiffFailingWorkerFactory(): () => Worker {
+	return (): Worker => {
+		const worker = {
+			onmessage: null as ((event: MessageEvent<AgentAnalyserWorkerResponse>) => void) | null,
+			onerror: null as ((event: ErrorEvent) => void) | null,
+			postMessage: (message: AgentAnalyserWorkerRequest) => {
+				Promise.resolve().then(() => {
+					if (message.line_diff_jobs) { worker.onerror?.({ message: 'line diff boom' } as ErrorEvent); return; }
+					worker.onmessage?.({ data: handleAgentAnalyserRequest(message) } as MessageEvent<AgentAnalyserWorkerResponse>);
+				});
+			},
+			terminate: () => {},
+		};
+		return worker as unknown as Worker;
+	};
+}
+
+// a fake Worker holding its response until release() fires; release('failure') answers via onerror instead
 function controllableWorkerFactory(): { worker: () => Worker; release: (mode?: 'success' | 'failure') => void } {
 	let release_fn: ((mode: 'success' | 'failure') => void) | undefined;
 	const factory = (): Worker => {
@@ -140,7 +176,7 @@ function controllableWorkerFactory(): { worker: () => Worker; release: (mode?: '
 	return { worker: factory, release: (mode: 'success' | 'failure' = 'success') => release_fn?.(mode) };
 }
 
-// a single claude-code session under /home/test/.claude/projects/<project_dir>/<session_id>.jsonl, no subagents; readDirectory/stat/readFile are wired by path so the skip-unchanged-file cache (discoverClaudeCode) can be exercised against a real transcript the real reader parses
+// a single claude-code session; fs calls are wired by path so discoverClaudeCode's cache can be tested
 const CLAUDE_HOME = '/home/test/.claude';
 const CLAUDE_PROJECT_DIR = 'my-project';
 const CLAUDE_SESSION_ID = 'session-1';
@@ -191,7 +227,7 @@ function mockClaudeCodeSession(content: string | undefined, mtime: number, live?
 	});
 }
 
-// answers the git extension's cross-host `git.api.*` commands for these repositories, keyed by root path, in the plain shape the real commands return
+// answers git.api.* commands for these repositories, keyed by root path, in the shape the real commands return
 function wireGitCommands(repositories: Record<string, { workingTreeChanges: Array<{ path: string; status: string }>; HEAD?: { name?: string; commit?: string } }>): void {
 	(vscode.commands.getCommands as jest.Mock).mockResolvedValue(['git.api.getRepositories', 'git.api.getRepositoryState']);
 	(vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, root?: string) => {
@@ -243,13 +279,17 @@ describe('AgentAnalyser lifecycle', () => {
 
 	afterEach(() => { jest.useRealTimers(); });
 
-	// advances fake timers AND flushes the microtask queue in the right interleaved order, so a setTimeout(fn, 0) scheduled by the analyser and the fake worker's Promise.resolve().then(...) both settle before an assertion reads the result; called several times because the real chain (discover -> worker round trip -> fold -> post) is several timer/microtask hops deep
+	/**
+	 * Advances fake timers and flushes the microtask queue in interleaved order, so a setTimeout(fn, 0)
+	 * and a fake worker's Promise.resolve().then(...) both settle before an assertion reads the result;
+	 * called several times since discover -> worker round trip -> fold -> post is several hops deep.
+	 */
 	async function settle(): Promise<void> {
 		for (let i = 0; i < 5; i++) { await jest.advanceTimersByTimeAsync(0); }
 	}
 
 	it('looks up Codex session directories by the local calendar date, not UTC', async () => {
-		// a timezone far enough ahead of UTC that a late-UTC-day instant falls on the NEXT local day, so a UTC-based lookup and a local one name different directories
+		// a timezone far ahead of UTC so a late-UTC-day instant falls on the next local day
 		const original_tz = process.env.TZ;
 		process.env.TZ = 'Pacific/Kiritimati'; // UTC+14
 		try {
@@ -257,7 +297,7 @@ describe('AgentAnalyser lifecycle', () => {
 			const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
 			analyser.demand(jest.fn());
 			await settle();
-			// 2026/09/22 falls well inside the 30 day window either way, so it says nothing about which calendar is in use; the local-only "23" is what a UTC walk would never reach, since UTC has not turned that day yet at this instant
+			// 22 is inside the window either way; the local-only 23 is what a UTC walk could never reach yet
 			const requested = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(call => (call[0] as { path: string }).path);
 			expect(requested.some(path => path.endsWith('/.codex/sessions/2026/09/23'))).toBe(true);
 		} finally {
@@ -384,15 +424,15 @@ describe('AgentAnalyser lifecycle', () => {
 	});
 
 	it('recovers to live once a scan after "failed" succeeds, and resets the failure counter for the next crash', async () => {
-		// fails twice (the initial attempt and its one restart), so the third attempt - the next AGENT_RESCAN_INTERVAL_MS poll - is the recovery
+		// fails twice (initial attempt plus its one restart), so the third attempt - the next poll - is the recovery
 		const analyser = new AgentAnalyser(mockContext(), flakyWorkerFactory(2));
 		const posted: Array<Record<string, unknown>> = [];
 		analyser.demand(msg => posted.push(msg));
 		await settle();
-		// a large advance, mirroring "restarts the worker once..." above: it reliably drains the chained discover/postMessage/fold promise flushes that repeated 0ms nudges do not; kept under AGENT_RESCAN_INTERVAL_MS (15s) so it captures attempt 1 and its one restart without also reaching the next poll
+		// a large advance draining the chained promise flushes that repeated 0ms nudges do not; kept under the poll interval
 		await jest.advanceTimersByTimeAsync(5_000);
 		expect((posted[posted.length - 1].activity as { analyser: { state: string } }).analyser.state).toBe('failed');
-		// the analyser keeps polling at the normal interval rather than treating "failed" as terminal, and the next attempt succeeds
+		// the analyser keeps polling at the normal interval rather than treating "failed" as terminal
 		await jest.advanceTimersByTimeAsync(20_000);
 		expect((posted[posted.length - 1].activity as { analyser: { state: string } }).analyser.state).toBe('live');
 	});
@@ -429,11 +469,41 @@ describe('AgentAnalyser lifecycle', () => {
 		expect(run_scan_once).toHaveBeenCalledTimes(1);
 		controllable.release();
 		await settle();
-		await jest.advanceTimersByTimeAsync(1_000); // AGENT_MIN_SCAN_SPACING_MS floor before the queued follow-up starts
+		// minScanDelayMs scales with how long the first scan took, so the follow-up waits ~2s, not the flat 1s floor
+		await jest.advanceTimersByTimeAsync(2_000);
 		await settle();
 		controllable.release();
 		await settle();
 		// exactly one follow-up scan ran for the whole burst
+		expect(run_scan_once).toHaveBeenCalledTimes(2);
+	});
+
+	// a session under active write fires the watcher almost every turn, so without this floor scans would run back to back
+	it('a watcher-driven scan after a slow one waits proportionally to how long that scan took, not immediately', async () => {
+		const controllable = controllableWorkerFactory();
+		const analyser = new AgentAnalyser(mockContext(), controllable.worker);
+		const run_scan_once = jest.spyOn(analyser as unknown as { runScanOnce: () => Promise<void> }, 'runScanOnce');
+		analyser.demand(jest.fn());
+		await settle();
+		expect(run_scan_once).toHaveBeenCalledTimes(1);
+		// the first scan takes a simulated 3s with no burst, so the flat floor alone would let the next trigger start immediately
+		await jest.advanceTimersByTimeAsync(3_000);
+		controllable.release();
+		await settle();
+		expect(run_scan_once).toHaveBeenCalledTimes(1);
+
+		// the file change happens well after the first scan ended, clear of any overlap
+		const watcher_calls = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results;
+		const on_change: jest.Mock = watcher_calls[0].value.onDidChange.mock.calls[0][0];
+		on_change();
+		await jest.advanceTimersByTimeAsync(300); // AGENT_WATCH_DEBOUNCE_MS settles, so the trigger fires
+		await jest.advanceTimersByTimeAsync(500); // nowhere near the ~3s proportional floor the 3s-long first scan set
+		await settle();
+		expect(run_scan_once).toHaveBeenCalledTimes(1);
+
+		// once the full proportional gap has elapsed, the debounced scan starts
+		await jest.advanceTimersByTimeAsync(3_000);
+		await settle();
 		expect(run_scan_once).toHaveBeenCalledTimes(2);
 	});
 
@@ -444,18 +514,66 @@ describe('AgentAnalyser lifecycle', () => {
 		analyser.demand(jest.fn());
 		await settle();
 		expect(run_scan_once).toHaveBeenCalledTimes(1);
-		// a watcher fires while the first scan is still in flight, queuing a follow-up behind it rather than starting a second concurrent scan (already covered by the burst test above)
+		// a watcher fires while the first scan is in flight, queuing a follow-up rather than starting a second scan
 		const watcher_calls = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results;
 		const on_change: jest.Mock = watcher_calls[0].value.onDidChange.mock.calls[0][0];
 		on_change();
 		await jest.advanceTimersByTimeAsync(300);
-		// the in-flight scan then crashes; its own failure path (worker.terminate(), this.worker = undefined) must not also drop the queued follow-up
+		// the in-flight scan crashes; its failure path must not also drop the queued follow-up
 		controllable.release('failure');
 		await settle();
 		await jest.advanceTimersByTimeAsync(1_000); // AGENT_MIN_SCAN_SPACING_MS floor before the queued follow-up starts
 		await settle();
 		// exactly one follow-up ran once the crash finished processing - the trigger queued during it was not orphaned
 		expect(run_scan_once).toHaveBeenCalledTimes(2);
+	});
+
+	// once a completed scan has posted, an in-progress or twice-failed rescan must not blank or dim the last snapshot
+	it('a rescan that fails twice in a row keeps the last live snapshot visible, without ever posting failed', async () => {
+		const controllable = controllableWorkerFactory();
+		const analyser = new AgentAnalyser(mockContext(), controllable.worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		controllable.release('success');
+		await settle();
+		expect((posted[posted.length - 1].activity as { analyser: { state: string } }).analyser.state).toBe('live');
+		const before_rescan = posted.length;
+
+		// the poll triggers a rescan; its attempt fails, and its one immediate retry fails too
+		await jest.advanceTimersByTimeAsync(15_000); // AGENT_RESCAN_INTERVAL_MS
+		await settle();
+		controllable.release('failure');
+		await settle();
+		await jest.advanceTimersByTimeAsync(0); // the retry's scheduleScan(0)
+		await settle();
+		controllable.release('failure');
+		await settle();
+
+		// neither failure produced a single post: the card never showed 'failed', let alone blanked
+		expect(posted.slice(before_rescan)).toHaveLength(0);
+		expect((posted[posted.length - 1].activity as { analyser: { state: string } }).analyser.state).toBe('live');
+	});
+
+	// stopRunning/startRunning never clear this.sessions/this.trees, so reattaching sees completed data, not 'scanning'
+	it('a panel reattaching after a full stop/restart cycle sees the last live snapshot immediately, never scanning', async () => {
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), Date.now());
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const first_post = jest.fn();
+		analyser.demand(first_post);
+		await settle();
+		expect(first_post.mock.calls[first_post.mock.calls.length - 1][0].activity.analyser.state).toBe('live');
+		analyser.withdraw(first_post);
+		await jest.advanceTimersByTimeAsync(5_000); // AGENT_STOP_GRACE_MS, so stopRunning fires
+		await settle();
+
+		const second_post = jest.fn();
+		analyser.demand(second_post);
+		// the first message this subscriber gets is already 'live' with the session on it, never a bare 'scanning'
+		expect(second_post).toHaveBeenCalledTimes(1);
+		const first_message = second_post.mock.calls[0][0];
+		expect(first_message.activity.analyser.state).toBe('live');
+		expect(first_message.activity.sessions).toHaveLength(1);
 	});
 
 	describe('skipping unchanged files across scans', () => {
@@ -526,7 +644,7 @@ describe('AgentAnalyser lifecycle', () => {
 			const second_job = second_request.jobs.find(j => j.session_id === CLAUDE_SESSION_ID)!;
 			expect(second_job.transcript.mode).toBe('tail');
 			expect(new TextDecoder().decode(second_job.transcript.bytes)).toBe(`${second_line}\n`);
-			// the session output still reflects both calls - the resumed build combined the cached first line with the newly tail-parsed second one
+			// output still reflects both calls: the resumed build combined the cached first line with the tail-parsed second
 			expect(sessionIdsFrom(posted)).toEqual([CLAUDE_SESSION_ID]);
 		});
 
@@ -588,7 +706,7 @@ describe('AgentAnalyser lifecycle', () => {
 			const first_line = claudeTranscriptLine('Edit');
 			const second_line = claudeTranscriptLine('Write');
 			mockClaudeCodeSession(`${first_line}\n`, base_mtime);
-			// the first attempt at the SECOND scan fails (the worker crashes); AgentAnalyser retries once immediately, and that retry - a fresh worker instance - is the one under test
+			// the second scan's first attempt fails; AgentAnalyser retries once immediately with a fresh worker instance
 			const recording = recordingFlakyWorkerFactory(1);
 			const analyser = new AgentAnalyser(mockContext(), recording.worker);
 			const posted: Array<Record<string, unknown>> = [];
@@ -599,7 +717,7 @@ describe('AgentAnalyser lifecycle', () => {
 			mockClaudeCodeSession(`${first_line}\n${second_line}\n`, base_mtime + 1000);
 			await jest.advanceTimersByTimeAsync(15_000);
 			await settle();
-			// the crashed attempt and its immediate retry are both in `requests`; the retry (the request that actually got a response) is a 'whole' job, not 'tail', since the worker instance that held the cache for CLAUDE_SESSION_ID's tail bookmark is gone
+			// both attempts land in `requests`; the retry's job is 'whole', not 'tail', since the tail-cache-holding worker is gone
 			const later_requests = recording.requests.slice(1);
 			const retry_job = later_requests.map(r => r.jobs.find(j => j.session_id === CLAUDE_SESSION_ID)).find(j => j !== undefined)!;
 			expect(retry_job.transcript.mode).toBe('whole');
@@ -613,7 +731,7 @@ describe('AgentAnalyser lifecycle', () => {
 			mockClaudeCodeSession(`${first_line}\n`, base_mtime);
 			const requests: AgentAnalyserWorkerRequest[] = [];
 			let call_count = 0;
-			// a worker that answers through the real handler like recordingWorkerFactory, but on its SECOND response reports evicting CLAUDE_SESSION_ID - standing in for AgentAnalyserWorker.ts's own byte cap (enforceCacheByteCap), which this test does not need to actually fill with 128 MB of fixtures to exercise the host's own reaction to it
+			// answers like recordingWorkerFactory, but its second response reports evicting CLAUDE_SESSION_ID for the byte cap
 			const factory = (): Worker => {
 				const worker = {
 					onmessage: null as ((event: MessageEvent<AgentAnalyserWorkerResponse>) => void) | null,
@@ -642,7 +760,7 @@ describe('AgentAnalyser lifecycle', () => {
 			await settle();
 			expect(requests[1].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)?.transcript.mode).toBe('tail');
 
-			// third scan: the file grows again; since the host was told the worker evicted this session, it must never send a tail against a cache it knows is gone
+			// third scan: the file grows again; the host must never send a tail against a cache it knows is gone
 			const third_line = claudeTranscriptLine('Edit');
 			mockClaudeCodeSession(`${first_line}\n${second_line}\n${third_line}\n`, base_mtime + 2000);
 			await jest.advanceTimersByTimeAsync(15_000);
@@ -668,7 +786,7 @@ describe('AgentAnalyser lifecycle', () => {
 				expect(recording.requests[0].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)?.transcript.mode).toBe('whole');
 				expect(refusalCodeFor(posted, CLAUDE_SESSION_ID)).toBe('too_large');
 
-				// the file grows further; the refusal must have already dropped this session's cache and bookmark, so this scan sends it whole again rather than a tail built from a cache the worker never actually kept
+				// the file grows further; the refusal already dropped this session's cache, so this scan sends it whole again
 				const second_line = claudeTranscriptLine('Write');
 				mockClaudeCodeSession(`${first_line}\n${second_line}\n`, base_mtime + 1000);
 				await jest.advanceTimersByTimeAsync(15_000);
@@ -677,7 +795,7 @@ describe('AgentAnalyser lifecycle', () => {
 				expect(second_job.transcript.mode).toBe('whole');
 				expect(refusalCodeFor(posted, CLAUDE_SESSION_ID)).toBe('too_large');
 
-				// the cap lifts back to its real value, and the file changes again (a no-op re-scan of unchanged content is reused from the prior, still-refused output rather than re-read); the earlier refusal must have left nothing poisoned behind, so this scan builds the session normally and whole, since its bookmark was already dropped
+				// the cap lifts and the file changes again; the earlier refusal left nothing poisoned, so this scan builds whole
 				setTranscriptMaxBytesForTest(undefined);
 				const third_line = claudeTranscriptLine('Edit');
 				mockClaudeCodeSession(`${first_line}\n${second_line}\n${third_line}\n`, base_mtime + 2000);
@@ -711,7 +829,7 @@ describe('AgentAnalyser lifecycle', () => {
 			await settle();
 			expect(recording.requests[0].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)?.transcript.mode).toBe('whole');
 
-			// no file changes, so no job ever runs again for this session, but wall-clock time (the poll's own AGENT_RESCAN_INTERVAL_MS ticks) eventually pushes the file's mtime outside AGENT_TAIL_CACHE_RECENT_MS (10 minutes) with no live signal either - the session should be evicted purely by the clock, on the reused path
+			// wall-clock time alone pushes the mtime past the tail-cache recency window, evicting the session by the clock
 			await jest.advanceTimersByTimeAsync(11 * 60 * 1000);
 			await settle();
 			const eviction_request = recording.requests.find(r => (r.evict_session_ids ?? []).includes(CLAUDE_SESSION_ID));
@@ -725,6 +843,39 @@ describe('AgentAnalyser lifecycle', () => {
 			const later_job = recording.requests[recording.requests.length - 1].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)!;
 			expect(later_job.transcript.mode).toBe('whole');
 			expect(sessionIdsFrom(posted)).toEqual([CLAUDE_SESSION_ID]);
+		});
+
+		// AGENT_TAIL_CACHE_MAX_BYTES splits evenly across pool_size; a session bigger than its share must still keep a cache entry
+		it('keeps tailing a session bigger than its own per-worker cache share, rather than evicting it every request', async () => {
+			try {
+				// a tiny budget split two ways makes this small line outgrow one worker's share, mirroring a real oversized transcript
+				setTailCacheMaxBytesForTest(100);
+				const base_mtime = Date.now();
+				const first_line = claudeTranscriptLine('Edit');
+				mockClaudeCodeSession(`${first_line}\n`, base_mtime);
+				const recording = recordingWorkerFactory();
+				const analyser = new AgentAnalyser(mockContext(), recording.worker, 2);
+				const posted: Array<Record<string, unknown>> = [];
+				analyser.demand(msg => posted.push(msg));
+				await settle();
+				const first_job = recording.requests[0].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)!;
+				expect(first_job.transcript.mode).toBe('whole');
+				expect(recording.requests[0].evicted_session_ids ?? []).not.toContain(CLAUDE_SESSION_ID);
+
+				// this line is already bigger than the 50-byte share, so the next scan must find it cached and send only the delta
+				const second_line = claudeTranscriptLine('Write');
+				mockClaudeCodeSession(`${first_line}\n${second_line}\n`, base_mtime + 1000);
+				await jest.advanceTimersByTimeAsync(15_000);
+				await settle();
+				const later_requests = recording.requests.slice(1);
+				expect(later_requests.some(r => (r.evicted_session_ids ?? []).includes(CLAUDE_SESSION_ID))).toBe(false);
+				const second_job = later_requests[later_requests.length - 1].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)!;
+				expect(second_job.transcript.mode).toBe('tail');
+				expect(new TextDecoder().decode(second_job.transcript.bytes)).toBe(`${second_line}\n`);
+			} finally {
+				setTailCacheMaxBytesForTest(undefined);
+				resetTailCacheForTest();
+			}
 		});
 	});
 
@@ -821,7 +972,7 @@ describe('AgentAnalyser lifecycle', () => {
 			await settle();
 			expect(sessionStateFrom(posted, session_uuid)).not.toBe('ended');
 			(vscode.workspace.fs.readFile as jest.Mock).mockClear();
-			// the file itself never changes again (mtime pinned), but the clock now reads 6 minutes past it - past the 5-minute live window
+			// the file never changes again, but the clock now reads 6 minutes past mtime, past the 5-minute live window
 			await jest.advanceTimersByTimeAsync(6 * 60 * 1000);
 			await settle();
 			expect((vscode.workspace.fs.readFile as jest.Mock).mock.calls.some(call => (call[0] as vscode.Uri).path === rollout_path)).toBe(false);
@@ -883,7 +1034,7 @@ describe('AgentAnalyser story board discovery', () => {
 		});
 		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
 			if (uri.path === CLAUDE_TRANSCRIPT_PATH) { return { type: 1, ctime: 0, mtime: Date.parse('2026-09-22T11:00:00Z'), size: transcript_bytes.byteLength }; }
-			// no docstech/users directly under the workspace root itself: it is the multi-project umbrella, not a standalone project checkout
+			// no docstech/users directly under the workspace root: it's the multi-project umbrella, not a project checkout
 			throw new Error('not found');
 		});
 		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
@@ -980,6 +1131,29 @@ describe('AgentAnalyser line diff counts', () => {
 		expect(uncommittedFrom(posted)).toMatchObject([{ path: CHANGED_PATH, added: 1, removed: 1 }]);
 	});
 
+	// a git show per file must not hold the live post back; the counts follow in a later post
+	it('posts live before any HEAD side is read, then posts the counts once it is', async () => {
+		wireOneRepoWithModifiedFile('a\nb\nc\n', 'a\nx\nc\n');
+		let releaseHead: () => void = () => undefined;
+		const head_gate = new Promise<void>(resolve => { releaseHead = resolve; });
+		const read_mock = vscode.workspace.fs.readFile as jest.Mock;
+		const wired_read = read_mock.getMockImplementation()!;
+		read_mock.mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.scheme === 'git') { await head_gate; }
+			return wired_read(uri);
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect((posted[posted.length - 1].activity as { analyser: { state: string } }).analyser.state).toBe('live');
+		expect(uncommittedFrom(posted)[0]).not.toHaveProperty('added');
+
+		releaseHead();
+		await settle();
+		expect(uncommittedFrom(posted)).toMatchObject([{ path: CHANGED_PATH, added: 1, removed: 1 }]);
+	});
+
 	it('reuses a cached count across scans when the file has not changed, reading it only once', async () => {
 		wireOneRepoWithModifiedFile('a\nb\nc\n', 'a\nx\nc\n');
 		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
@@ -1019,6 +1193,167 @@ describe('AgentAnalyser line diff counts', () => {
 		await settle();
 		expect(uncommittedFrom(posted)[0].added).toBeUndefined();
 		expect(uncommittedFrom(posted)[0].removed).toBeUndefined();
+	});
+
+	// the O(a*b) LCS count must never run on this thread - it goes to the worker after the session round trip resolves files
+	it('sends the diff to the worker as a line_diff_jobs batch rather than computing it on the host', async () => {
+		wireOneRepoWithModifiedFile('a\nb\nc\n', 'a\nx\nc\n');
+		const recording = recordingWorkerFactory();
+		const analyser = new AgentAnalyser(mockContext(), recording.worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(uncommittedFrom(posted)).toMatchObject([{ path: CHANGED_PATH, added: 1, removed: 1 }]);
+		const line_diff_requests = recording.requests.filter(request => request.line_diff_jobs !== undefined);
+		expect(line_diff_requests).toHaveLength(1);
+		expect(line_diff_requests[0].jobs).toEqual([]);
+		expect(line_diff_requests[0].line_diff_jobs).toEqual([{ key: CHANGED_PATH, head_bytes: expect.any(ArrayBuffer), working_bytes: expect.any(ArrayBuffer) }]);
+	});
+
+	it('logs line diffs as wall time when two repositories diff in parallel, not the sum of their overlapping spans', async () => {
+		const SECOND_ROOT = '/ws2';
+		const changed_paths = [`${REPO_ROOT}/${CHANGED_PATH}`, `${SECOND_ROOT}/${CHANGED_PATH}`];
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(REPO_ROOT), name: 'ws', index: 0 }, { uri: Uri.file(SECOND_ROOT), name: 'ws2', index: 1 }];
+		const head = { name: 'staging', commit: 'a'.repeat(40) };
+		wireGitCommands({
+			[REPO_ROOT]: { workingTreeChanges: [{ path: changed_paths[0], status: 'MODIFIED' }], HEAD: head },
+			[SECOND_ROOT]: { workingTreeChanges: [{ path: changed_paths[1], status: 'MODIFIED' }], HEAD: head },
+		});
+		// each repository's identity stat takes 1000ms, so a serial sum would log about 2000ms
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (!changed_paths.includes(uri.path)) { throw new Error('not found'); }
+			await new Promise(resolve => setTimeout(resolve, 1000));
+			return { type: 1, ctime: 0, mtime: 1000, size: 6 };
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.scheme === 'git') { return new TextEncoder().encode('a\nb\nc\n'); }
+			if (changed_paths.includes(uri.path)) { return new TextEncoder().encode('a\nx\nc\n'); }
+			throw new Error('not found');
+		});
+		const log_spy = jest.spyOn(errorops, 'writeToLogAtLevel');
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		analyser.demand(jest.fn());
+		await settle();
+		await jest.advanceTimersByTimeAsync(1000);
+		await settle();
+		const scan_lines = log_spy.mock.calls.filter(call => call[0] === 'debug' && call[1] === 'runScan').map(call => String(call[2]));
+		expect(scan_lines).toHaveLength(1);
+		const line_diff_ms = Number(/line diffs (\d+)ms/.exec(scan_lines[0])?.[1]);
+		expect(line_diff_ms).toBeGreaterThanOrEqual(1000);
+		expect(line_diff_ms).toBeLessThan(2000);
+		log_spy.mockRestore();
+	});
+
+	it('falls back to computing the batch on the host when the line-diff worker round trip fails, without failing the rest of the scan', async () => {
+		wireOneRepoWithModifiedFile('a\nb\nc\n', 'a\nx\nc\n');
+		const analyser = new AgentAnalyser(mockContext(), lineDiffFailingWorkerFactory());
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(uncommittedFrom(posted)).toMatchObject([{ path: CHANGED_PATH, added: 1, removed: 1 }]);
+		expect((posted[posted.length - 1].activity as { analyser: { state: string } }).analyser.state).toBe('live');
+	});
+});
+
+describe('AgentAnalyser line diff cost across batches', () => {
+	const REPO_ROOT = '/ws';
+	const CHANGED_PATH = 'src/foo.ts';
+
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers();
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(REPO_ROOT), name: 'ws', index: 0 }];
+	});
+
+	afterEach(() => {
+		jest.useRealTimers();
+		(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
+		(vscode.commands.executeCommand as jest.Mock).mockReset();
+	});
+
+	// a batched scan is several timer/microtask hops deeper, so this settles longer than the single-batch helper elsewhere
+	async function settle(rounds = 20): Promise<void> {
+		for (let i = 0; i < rounds; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	// enough sessions to spill into a second batch (AGENT_FIRST_BATCH_MAX_JOBS 8), none touching the changed file
+	function mockManySessionsAndOneChangedFile(session_ids: string[], old_text: string, new_text: string): void {
+		const project_dir_for = (id: string): string => `proj-${id}`;
+		const transcript_path_for = (id: string): string => `${CLAUDE_PROJECTS_DIR}/${project_dir_for(id)}/${id}.jsonl`;
+		const bytes = new TextEncoder().encode(claudeTranscriptLine('Read'));
+		const now = Date.now();
+		const mtime_of = new Map(session_ids.map((id, i) => [id, now - i * 1000]));
+		wireGitCommands({ [REPO_ROOT]: { workingTreeChanges: [{ path: `${REPO_ROOT}/${CHANGED_PATH}`, status: 'MODIFIED' }], HEAD: { name: 'staging', commit: 'a'.repeat(40) } } });
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_PROJECTS_DIR) { return session_ids.map(id => [project_dir_for(id), vscode.FileType.Directory]); }
+			const owner = session_ids.find(id => uri.path === `${CLAUDE_PROJECTS_DIR}/${project_dir_for(id)}`);
+			return owner ? [[`${owner}.jsonl`, vscode.FileType.File]] : [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === `${REPO_ROOT}/${CHANGED_PATH}`) { return { type: 1, ctime: 0, mtime: 1000, size: new_text.length }; }
+			const owner = session_ids.find(id => uri.path === transcript_path_for(id));
+			if (owner) { return { type: 1, ctime: 0, mtime: mtime_of.get(owner), size: bytes.byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.scheme === 'git') { return new TextEncoder().encode(old_text); }
+			if (uri.path === `${REPO_ROOT}/${CHANGED_PATH}`) { return new TextEncoder().encode(new_text); }
+			const owner = session_ids.find(id => uri.path === transcript_path_for(id));
+			if (owner) { return bytes; }
+			throw new Error('not found');
+		});
+	}
+
+	function uncommittedFrom(posted: Array<Record<string, unknown>>): Array<{ path: string; added?: number; removed?: number }> {
+		const last = posted[posted.length - 1];
+		const trees = (last.activity as { trees: Array<{ tree: { uncommitted: Array<{ path: string; added?: number; removed?: number }> } }> }).trees;
+		return trees[0]?.tree.uncommitted ?? [];
+	}
+
+	it('diffs the working tree once per scan, not once per batch, when discovery spills into more than one batch', async () => {
+		const session_ids = Array.from({ length: 9 }, (_, i) => `s${i}`);
+		mockManySessionsAndOneChangedFile(session_ids, 'a\nb\nc\n', 'a\nx\nc\n');
+		const recording = recordingWorkerFactory();
+		const analyser = new AgentAnalyser(mockContext(), recording.worker, 1);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(sessionIdsFrom(posted).length).toBe(9);
+		// 9 sessions with AGENT_FIRST_BATCH_MAX_JOBS 8 means this scan's session round trip runs in exactly two batches
+		const session_batch_requests = recording.requests.filter(request => request.jobs.length > 0);
+		expect(session_batch_requests.length).toBe(2);
+		// the line-diff round trip is not per-batch: every batch shares the same fresh/stale flag, so 2 batches make one
+		const line_diff_requests = recording.requests.filter(request => request.line_diff_jobs !== undefined);
+		expect(line_diff_requests).toHaveLength(1);
+		expect(uncommittedFrom(posted)).toMatchObject([{ path: CHANGED_PATH, added: 1, removed: 1 }]);
+	});
+
+	// this analyser already has a completed scan, so the rescan's internal batches never reach an interim post
+	it('a rescan spanning two batches posts once, straight to live, with correct line diff counts', async () => {
+		// first scan: nine sessions is already two batches, and warms the line-diff cache
+		const first_session_ids = Array.from({ length: 9 }, (_, i) => `s${i}`);
+		mockManySessionsAndOneChangedFile(first_session_ids, 'a\nb\nc\n', 'a\nx\nc\n');
+		const recording = recordingWorkerFactory();
+		const analyser = new AgentAnalyser(mockContext(), recording.worker, 1);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(uncommittedFrom(posted)).toMatchObject([{ path: CHANGED_PATH, added: 1, removed: 1 }]);
+		const before_rescan = posted.length;
+
+		// second scan: nine original sessions are reused unchanged, and nine new ones spill into a second batch
+		const fresh_session_ids = Array.from({ length: 9 }, (_, i) => `fresh-${i}`);
+		mockManySessionsAndOneChangedFile([...first_session_ids, ...fresh_session_ids], 'a\nb\nc\n', 'a\nx\nc\n');
+		await jest.advanceTimersByTimeAsync(15_000); // AGENT_RESCAN_INTERVAL_MS
+		await settle();
+
+		const rescan_posts = posted.slice(before_rescan);
+		expect(rescan_posts).toHaveLength(1);
+		expect((rescan_posts[0].activity as { analyser: { state: string } }).analyser.state).toBe('live');
+		expect(uncommittedFrom(rescan_posts)).toMatchObject([{ path: CHANGED_PATH, added: 1, removed: 1 }]);
+		// the working file never changed between scans, so the cache stays valid and both scans total one round trip
+		const line_diff_requests_total = recording.requests.filter(request => request.line_diff_jobs !== undefined).length;
+		expect(line_diff_requests_total).toBe(1);
 	});
 });
 
@@ -1103,7 +1438,7 @@ describe('AgentAnalyser usage split by turn', () => {
 		});
 	}
 
-	// a turn that both edits the board and carries its own usage, mirroring how Claude Code's own message.usage sits on the same record as its tool_use content block
+	// a turn that edits the board and carries its own usage, like Claude Code's message.usage sitting on the tool_use record
 	function editLine(id: string, timestamp: string, input_tokens: number, old_string: string, new_string: string): string {
 		return JSON.stringify({
 			type: 'assistant', timestamp,
@@ -1115,7 +1450,7 @@ describe('AgentAnalyser usage split by turn', () => {
 		});
 	}
 
-	// a MultiEdit turn touching both stories' sections in one call, so it binds to both and its own usage should split evenly between them
+	// a MultiEdit touching both stories' sections in one call, splitting its usage evenly between them
 	function multiEditBothStoriesLine(id: string, timestamp: string, input_tokens: number): string {
 		return JSON.stringify({
 			type: 'assistant', timestamp,
@@ -1198,5 +1533,424 @@ describe('AgentAnalyser usage split by turn', () => {
 		const b = story_usage.find(entry => entry.story.id === 'story-b');
 		expect(a?.usage.input_tokens).toBe(50);
 		expect(b?.usage.input_tokens).toBe(50);
+	});
+});
+
+describe('AgentAnalyser newest-first batching', () => {
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers();
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
+	});
+
+	afterEach(() => { jest.useRealTimers(); });
+
+	// a batched scan is several hops deeper (one round trip per batch, folded before the next), so this settles longer
+	async function settle(rounds = 20): Promise<void> {
+		for (let i = 0; i < rounds; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	// one transcript per session, no subagents, no pid file - none of that matters to a test about ordering and posting
+	function mockClaudeCodeSessions(sessions: ReadonlyArray<{ id: string; mtime: number }>): void {
+		const project_dir_for = (id: string): string => `proj-${id}`;
+		const transcript_path_for = (id: string): string => `${CLAUDE_PROJECTS_DIR}/${project_dir_for(id)}/${id}.jsonl`;
+		const bytes = new TextEncoder().encode(claudeTranscriptLine('Edit'));
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_PROJECTS_DIR) { return sessions.map(s => [project_dir_for(s.id), vscode.FileType.Directory]); }
+			const match = sessions.find(s => uri.path === `${CLAUDE_PROJECTS_DIR}/${project_dir_for(s.id)}`);
+			if (match) { return [[`${match.id}.jsonl`, vscode.FileType.File]]; }
+			return [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const match = sessions.find(s => uri.path === transcript_path_for(s.id));
+			if (match) { return { type: 1, ctime: 0, mtime: match.mtime, size: bytes.byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const match = sessions.find(s => uri.path === transcript_path_for(s.id));
+			if (match) { return bytes; }
+			throw new Error('not found');
+		});
+	}
+
+	function statesFrom(posted: Array<Record<string, unknown>>): string[] {
+		return posted.map(p => (p.activity as { analyser: { state: string } }).analyser.state);
+	}
+
+	function sessionCountsFrom(posted: Array<Record<string, unknown>>): number[] {
+		return posted.map(p => (p.activity as { sessions: unknown[] }).sessions.length);
+	}
+
+	function totalInputTokensFrom(posted: Array<Record<string, unknown>>): number {
+		const last = posted[posted.length - 1];
+		const sessions = (last.activity as { sessions: Array<{ session: { usage?: { input_tokens?: number } } }> }).sessions;
+		return sessions.reduce((sum, s) => sum + (s.session.usage?.input_tokens ?? 0), 0);
+	}
+
+	it('posts the newest 8 sessions in a first, still-scanning batch, then the rest as a final live batch, with no session lost or duplicated', async () => {
+		const now = Date.now();
+		// s0 newest, s9 oldest by mtime; AGENT_FIRST_BATCH_MAX_JOBS (8) means the first batch is exactly s0-s7
+		const sessions = Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, mtime: now - i * 1000 }));
+		// wired reversed (oldest first) so passing only works if the analyser sorts by mtime, not discovery order
+		mockClaudeCodeSessions([...sessions].reverse());
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker, 1);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		const states = statesFrom(posted);
+		expect(states[states.length - 1]).toBe('live');
+		// exactly one intermediate post carried real sessions while still scanning - the newest batch
+		const first_batch_index = posted.findIndex((p, i) => states[i] === 'scanning' && sessionCountsFrom(posted)[i] > 0);
+		expect(first_batch_index).toBeGreaterThan(-1);
+		const first_batch_ids = sessionIdsFrom(posted.slice(0, first_batch_index + 1));
+		expect(new Set(first_batch_ids)).toEqual(new Set(sessions.slice(0, 8).map(s => s.id)));
+		// the final, live post carries every session exactly once
+		const final_ids = sessionIdsFrom(posted);
+		expect(final_ids.length).toBe(10);
+		expect(new Set(final_ids)).toEqual(new Set(sessions.map(s => s.id)));
+		// totals match a single-pass scan of the same fixture: input_tokens 10 per session, nothing lost or double-counted
+		expect(totalInputTokensFrom(posted)).toBe(10 * 10);
+	});
+
+	// reading pipelines one batch ahead: batch 2's files open once batch 1's read is collected, not after its round trip
+	it('reads the second batch while the first batch\'s own worker round trip is still pending, not after it returns', async () => {
+		const now = Date.now();
+		const sessions = Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, mtime: now - i * 1000 }));
+		mockClaudeCodeSessions(sessions);
+		const controllable = controllableWorkerFactory();
+		const analyser = new AgentAnalyser(mockContext(), controllable.worker, 1);
+		analyser.demand(jest.fn());
+		// discovery, the first batch's read and its postMessage all happen here, with the worker never released
+		await settle();
+		const read_paths = (vscode.workspace.fs.readFile as jest.Mock).mock.calls.map(call => (call[0] as vscode.Uri).path);
+		// s8 and s9 (batch 2, AGENT_FIRST_BATCH_MAX_JOBS 8) are already read, despite batch 1's round trip still being held open
+		expect(read_paths.some(path => path.endsWith('/s8.jsonl'))).toBe(true);
+		expect(read_paths.some(path => path.endsWith('/s9.jsonl'))).toBe(true);
+		controllable.release();
+		await settle();
+		controllable.release();
+		await settle();
+	});
+
+	// batching decides off each candidate's stat-reported size, never bytes read later, so a fake large size exercises the cap
+	it('sizes a later batch off the pool\'s own worker count, not a flat cap that ignores how many workers exist', async () => {
+		const now = Date.now();
+		const sessions = Array.from({ length: 9 }, (_, i) => ({ id: `s${i}`, mtime: now - i * 1000 }));
+		mockClaudeCodeSessions(sessions);
+		const FAKE_SESSION_BYTES = 5 * 1024 * 1024;
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const match = sessions.find(s => uri.path === `${CLAUDE_PROJECTS_DIR}/proj-${s.id}/${s.id}.jsonl`);
+			if (match) { return { type: 1, ctime: 0, mtime: match.mtime, size: FAKE_SESSION_BYTES }; }
+			throw new Error('not found');
+		});
+		// pool_size 4 gives a later batch a 4 x 32MB = 128MB cap, so 8 sessions at 5MB each (40MB) fit in one batch, not two
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker, 4);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		const states = statesFrom(posted);
+		expect(states[states.length - 1]).toBe('live');
+		// one intermediate 'scanning' post carries sessions: the oversized one gets its own batch, then the rest land in one
+		const scanning_batches_with_sessions = states.filter((s, i) => s === 'scanning' && sessionCountsFrom(posted)[i] > 0).length;
+		expect(scanning_batches_with_sessions).toBe(1);
+		expect(sessionIdsFrom(posted).length).toBe(9);
+	});
+
+	// a reused session folds into the rescan's first batch, but only the rescan's final post reaches a subscriber
+	it('a rescan spanning two batches posts once, straight to live, with the reused session included alongside every fresh one', async () => {
+		const now = Date.now();
+		const reused_id = 'reused-1';
+		// warm the cache for one session on an ordinary first scan
+		mockClaudeCodeSessions([{ id: reused_id, mtime: now - 100_000 }]);
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker, 1);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(sessionIdsFrom(posted)).toEqual([reused_id]);
+		const before_rescan = posted.length;
+
+		// nine new sessions arrive alongside the reused one, enough to spill into a second batch (AGENT_FIRST_BATCH_MAX_JOBS 8)
+		const fresh = Array.from({ length: 9 }, (_, i) => ({ id: `fresh-${i}`, mtime: now - i * 1000 }));
+		mockClaudeCodeSessions([{ id: reused_id, mtime: now - 100_000 }, ...fresh]);
+		await jest.advanceTimersByTimeAsync(15_000); // AGENT_RESCAN_INTERVAL_MS
+		await settle();
+
+		const rescan_posts = posted.slice(before_rescan);
+		expect(rescan_posts).toHaveLength(1);
+		expect((rescan_posts[0].activity as { analyser: { state: string } }).analyser.state).toBe('live');
+		expect(new Set(sessionIdsFrom(rescan_posts))).toEqual(new Set([reused_id, ...fresh.map(s => s.id)]));
+		expect(sessionIdsFrom(posted).length).toBe(10);
+	});
+
+	it('a session that deterministically crashes the parser fails the scan after one retry, never looping, and keeps whatever the last good batch already posted', async () => {
+		const now = Date.now();
+		// s0-s7 land in batch 1 (always succeeds); s8-s9 land in batch 2, which always fails because s8's job is poisoned
+		const sessions = Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, mtime: now - i * 1000 }));
+		mockClaudeCodeSessions(sessions);
+		const analyser = new AgentAnalyser(mockContext(), poisonSessionWorkerFactory('s8'), 1);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		// the retry's setTimeout needs an explicit elapsed-time jump to fire under fake timers, not settle()'s zero-ms bumps
+		await settle();
+		await jest.advanceTimersByTimeAsync(0);
+		await jest.advanceTimersByTimeAsync(5_000);
+		await settle();
+		const states = statesFrom(posted);
+		expect(states[states.length - 1]).toBe('failed');
+		// the board still shows the 8 sessions the last good batch posted, not wiped to empty by the failure
+		const final_ids = sessionIdsFrom(posted);
+		expect(new Set(final_ids)).toEqual(new Set(sessions.slice(0, 8).map(s => s.id)));
+		// bounded to two posts carrying those 8 sessions: the first attempt's batch-1 post, and the retry's failed-state post
+		const eight_session_posts = sessionCountsFrom(posted).filter(count => count === 8).length;
+		expect(eight_session_posts).toBe(2);
+	});
+});
+
+describe('AgentAnalyser session fold caching', () => {
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers();
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
+		(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [];
+	});
+
+	afterEach(() => { jest.useRealTimers(); });
+
+	async function settle(rounds = 10): Promise<void> {
+		for (let i = 0; i < rounds; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	// no subagents, no live pid file - none of that matters here; mtime is a param so a rescan can match what it cached
+	function mockClaudeCodeSessions(ids: string[], mtime = Date.now() - 60_000): void {
+		const project_dir_for = (id: string): string => `proj-${id}`;
+		const transcript_path_for = (id: string): string => `${CLAUDE_PROJECTS_DIR}/${project_dir_for(id)}/${id}.jsonl`;
+		const bytes = new TextEncoder().encode(claudeTranscriptLine('Edit'));
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_PROJECTS_DIR) { return ids.map(id => [project_dir_for(id), vscode.FileType.Directory]); }
+			const owner = ids.find(id => uri.path === `${CLAUDE_PROJECTS_DIR}/${project_dir_for(id)}`);
+			return owner ? [[`${owner}.jsonl`, vscode.FileType.File]] : [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const owner = ids.find(id => uri.path === transcript_path_for(id));
+			if (owner) { return { type: 1, ctime: 0, mtime, size: bytes.byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const owner = ids.find(id => uri.path === transcript_path_for(id));
+			if (owner) { return bytes; }
+			throw new Error('not found');
+		});
+	}
+
+	// a fold's expensive part scales with session history; session_fold_cache skips it when the file hasn't changed
+	it('skips re-binding a reused session to its story on a rescan where nothing changed', async () => {
+		mockClaudeCodeSessions(['s0', 's1', 's2']);
+		const bind_spy = jest.spyOn(AgentAnalyser.prototype as unknown as { toActivitySession: () => unknown }, 'toActivitySession');
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(bind_spy).toHaveBeenCalledTimes(3);
+		bind_spy.mockClear();
+
+		// a rescan where every session's file is byte-identical to last time, and no story board or repo root changed
+		await jest.advanceTimersByTimeAsync(15_000); // AGENT_RESCAN_INTERVAL_MS
+		await settle();
+		expect(bind_spy).toHaveBeenCalledTimes(0);
+		bind_spy.mockRestore();
+	});
+
+	// the git extension opens repositories after activation; one appearing must not re-bind every unchanged session
+	it('keeps a reused session\'s binding cached when a repository opens between scans', async () => {
+		mockClaudeCodeSessions(['s0', 's1']);
+		wireGitCommands({ '/repo-a': { workingTreeChanges: [] } });
+		const bind_spy = jest.spyOn(AgentAnalyser.prototype as unknown as { toActivitySession: () => unknown }, 'toActivitySession');
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		const treeCount = (): number => (posted[posted.length - 1].activity as { trees: unknown[] }).trees.length;
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(treeCount()).toBe(1);
+		expect(bind_spy).toHaveBeenCalledTimes(2);
+		bind_spy.mockClear();
+
+		wireGitCommands({ '/repo-a': { workingTreeChanges: [] }, '/repo-b': { workingTreeChanges: [] } });
+		await jest.advanceTimersByTimeAsync(15_000);
+		await settle();
+		expect(treeCount()).toBe(2);
+		expect(bind_spy).toHaveBeenCalledTimes(0);
+		bind_spy.mockRestore();
+	});
+
+	// one board-editing tool call, as an absolute path so workspaceRelative resolves regardless of cwd guessing
+	function claudeBoardEditLine(board_path: string): string {
+		return JSON.stringify({
+			type: 'assistant',
+			timestamp: '2026-09-22T11:00:00Z',
+			message: {
+				id: 'm1', role: 'assistant', model: 'claude-sonnet-5',
+				content: [{ type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: board_path, old_string: '+ [ ] task', new_string: '+ [X] task' } }],
+				usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+			},
+		});
+	}
+
+	// a board edit forces a re-bind only for sessions whose write call targets it; a different (or no) board is unaffected
+	it('recomputes a reused session\'s binding once the board it wrote to changes, but leaves an unrelated session\'s binding alone', async () => {
+		const mtime = Date.now() - 60_000;
+		const board_path = '/ws/docstech/users/alex/todo.md';
+		const board_line = claudeBoardEditLine(board_path);
+		const other_line = claudeTranscriptLine('Edit'); // targets src/foo.ts, no board at all
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
+		const transcript_for = (id: string): string => (id === 's0' ? board_line : other_line);
+		const wireSessions = (todo_text: string | undefined): void => {
+			(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+				if (uri.path === `${CLAUDE_PROJECTS_DIR}/proj-s0/s0.jsonl` || uri.path === `${CLAUDE_PROJECTS_DIR}/proj-s1/s1.jsonl`) {
+					const id = uri.path.includes('proj-s0') ? 's0' : 's1';
+					return { type: 1, ctime: 0, mtime, size: new TextEncoder().encode(transcript_for(id)).byteLength };
+				}
+				if (uri.path === '/ws/docstech/users') { return { type: 2, ctime: 0, mtime: 0, size: 0 }; }
+				throw new Error('not found');
+			});
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+				if (uri.path === CLAUDE_PROJECTS_DIR) { return ['s0', 's1'].map(id => [`proj-${id}`, vscode.FileType.Directory]); }
+				if (uri.path === `${CLAUDE_PROJECTS_DIR}/proj-s0` || uri.path === `${CLAUDE_PROJECTS_DIR}/proj-s1`) {
+					const id = uri.path.endsWith('s0') ? 's0' : 's1';
+					return [[`${id}.jsonl`, vscode.FileType.File]];
+				}
+				if (uri.path === '/ws/docstech/users') { return todo_text !== undefined ? [['alex', vscode.FileType.Directory]] : []; }
+				return [];
+			});
+			(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+				if (uri.path === `${CLAUDE_PROJECTS_DIR}/proj-s0/s0.jsonl`) { return new TextEncoder().encode(board_line); }
+				if (uri.path === `${CLAUDE_PROJECTS_DIR}/proj-s1/s1.jsonl`) { return new TextEncoder().encode(other_line); }
+				if (uri.path === board_path && todo_text !== undefined) { return new TextEncoder().encode(todo_text); }
+				throw new Error('not found');
+			});
+		};
+		wireSessions(undefined);
+		const bind_spy = jest.spyOn(AgentAnalyser.prototype as unknown as { toActivitySession: () => unknown }, 'toActivitySession');
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(bind_spy).toHaveBeenCalledTimes(2);
+		bind_spy.mockClear();
+
+		// the board s0 wrote to now exists with real content; s1 never touched any board
+		wireSessions('# Todo\n\n\n### A story [](?id=my-story)\n\n+ [ ] task\n');
+		await jest.advanceTimersByTimeAsync(15_000);
+		await settle();
+		// only s0 - whose write call targets this board - needs its binding recomputed; s1 stays cached
+		expect(bind_spy).toHaveBeenCalledTimes(1);
+		bind_spy.mockRestore();
+	});
+});
+
+describe('AgentAnalyser discovery concurrency', () => {
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers();
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [];
+	});
+
+	afterEach(() => { jest.useRealTimers(); });
+
+	// a batched, concurrent scan is several hops deeper, so this settles longer than the single-batch helper elsewhere
+	async function settle(rounds = 20): Promise<void> {
+		for (let i = 0; i < rounds; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	// no subagents, no live pid file - none of that matters here; this is only about discovery concurrency
+	function mockManySessions(ids: string[]): void {
+		const project_dir_for = (id: string): string => `proj-${id}`;
+		const transcript_path_for = (id: string): string => `${CLAUDE_PROJECTS_DIR}/${project_dir_for(id)}/${id}.jsonl`;
+		const bytes = new TextEncoder().encode(claudeTranscriptLine('Edit'));
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_PROJECTS_DIR) { return ids.map(id => [project_dir_for(id), vscode.FileType.Directory]); }
+			const owner = ids.find(id => uri.path === `${CLAUDE_PROJECTS_DIR}/${project_dir_for(id)}`);
+			return owner ? [[`${owner}.jsonl`, vscode.FileType.File]] : [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const owner = ids.find(id => uri.path === transcript_path_for(id));
+			if (owner) { return { type: 1, ctime: 0, mtime: Date.now(), size: bytes.byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const owner = ids.find(id => uri.path === transcript_path_for(id));
+			if (owner) { return bytes; }
+			throw new Error('not found');
+		});
+	}
+
+	// discovery cost dominates a warm rescan once the fold side is cheap, since a real history holds many sessions to stat
+	it('stats AGENT_DISCOVERY_STAT_CONCURRENCY sessions at once during a cold scan, not one at a time', async () => {
+		const ids = Array.from({ length: 100 }, (_, i) => `s${i}`);
+		mockManySessions(ids);
+		const pending: Array<() => void> = [];
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation((uri: vscode.Uri) => new Promise(resolve => {
+			const owner = ids.find(id => uri.path === `${CLAUDE_PROJECTS_DIR}/proj-${id}/${id}.jsonl`);
+			if (!owner) { resolve({ type: 1, ctime: 0, mtime: Date.now(), size: 1 }); return; }
+			pending.push(() => resolve({ type: 1, ctime: 0, mtime: Date.now(), size: 10 }));
+		}));
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		analyser.demand(jest.fn());
+		await settle();
+		// exactly one concurrency-wide batch of stats is ever in flight - neither all 100 at once nor one at a time
+		expect(pending.length).toBe(64); // AGENT_DISCOVERY_STAT_CONCURRENCY
+		for (const resolve of pending) { resolve(); }
+		await settle();
+	});
+
+	// the first post should pay only the slowest of discovery, story boards and git trees, not their sum
+	it('reads git trees while discovery is still statting sessions', async () => {
+		mockManySessions(['s0']);
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+		wireGitCommands({ '/repo-a': { workingTreeChanges: [] } });
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		analyser.demand(jest.fn());
+		await settle();
+		expect(vscode.commands.executeCommand).toHaveBeenCalledWith('git.api.getRepositories');
+	});
+
+	it('classifies every session correctly regardless of the order its own concurrent stat call resolves in', async () => {
+		const ids = Array.from({ length: 10 }, (_, i) => `s${i}`);
+		mockManySessions(ids);
+		const resolvers: Array<(value: { type: number; ctime: number; mtime: number; size: number }) => void> = [];
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation((uri: vscode.Uri) => new Promise(resolve => {
+			const owner = ids.find(id => uri.path === `${CLAUDE_PROJECTS_DIR}/proj-${id}/${id}.jsonl`);
+			if (!owner) { resolve({ type: 1, ctime: 0, mtime: 0, size: 0 }); return; }
+			resolvers.push(resolve);
+		}));
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		// stats resolve in reverse dispatch order, proving out-of-order completion still reads and posts every session
+		for (const resolve of [...resolvers].reverse()) { resolve({ type: 1, ctime: 0, mtime: Date.now(), size: 10 }); }
+		await settle();
+		expect(new Set(sessionIdsFrom(posted))).toEqual(new Set(ids));
+	});
+
+	it('bounds AGENT_FILE_STAT_MAX_ENTRIES to at most one concurrent batch of overshoot, never to the whole candidate set', async () => {
+		setFileStatMaxEntriesForTest(3);
+		try {
+			const ids = Array.from({ length: 100 }, (_, i) => `s${i}`);
+			mockManySessions(ids);
+			const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+			const posted: Array<Record<string, unknown>> = [];
+			analyser.demand(msg => posted.push(msg));
+			await settle();
+			// the cap is checked once per session; a batch already past it when crossed still lands, bounding it by concurrency
+			expect(sessionIdsFrom(posted).length).toBe(64); // AGENT_DISCOVERY_STAT_CONCURRENCY
+		} finally {
+			setFileStatMaxEntriesForTest(undefined);
+		}
 	});
 });

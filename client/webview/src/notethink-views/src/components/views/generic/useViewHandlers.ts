@@ -25,6 +25,14 @@ export interface ViewHandlers {
  * the clear-focus and caret handlers, plus the folder-click and apply-filters
  * dispatchers used by the breadcrumb and files drawer. The click handler reads the
  * live selection from selection_ref to avoid stale closures.
+ * - handle_folder_click: dispatches to FOLDER_VIEW_STATE_ID so integration_mode never lands on a
+ *   doc-path key in single-file mode; persists 'auto' when the opened file also declares folder so
+ *   the view keeps following it, else the concrete 'folder' pin.
+ * - handle_apply_filters: include/exclude globs round-trip through VS Code config (the cascade's
+ *   single source of truth, echoed back and mirrored by the drawer) and are never written to
+ *   per-view state, which would drift from what the extension discovered with and defeat the
+ *   cascade Reset buttons; maxNotesPerFile stays in view state as a webview-side merge cap instead.
+ *   Marks the 'integrationFilters' pending sentinel, cleared by the aggregate-payload echo reducer.
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useViewHandlers(
@@ -101,7 +109,7 @@ export function useViewHandlers(
                 const note_selected_ids = note.stable_id ? [note.stable_id] : [];
                 const is_already_focused = isAlreadyFocusedClick(note, caret_pos, current_head, view_caret);
                 if (event.detail === 2) {
-                    // double-click selects the note immediately; per-view state-of-truth, plus the editor reveal so the cursor follows opportunistically
+                    // double-click selects the note immediately and reveals it so the editor cursor follows
                     writeViewInteractionState(props, handlers, focused_chain, note_selected_ids, caret_pos);
                     props.handlers?.postMessage?.({
                         type: 'selectRange',
@@ -146,7 +154,7 @@ export function useViewHandlers(
         getClearHandler: (focused_notes: Array<NoteProps> | undefined) => {
             return ((event: MouseEvent<HTMLElement>) => {
                 if (event.stopPropagation) { event.stopPropagation(); }
-                // clear view-driven seqs FIRST so the view-driven-wins policy in useViewContext doesn't override the editor-derived state on the next render
+                // clears view-driven seqs first, since useViewContext's view-driven-wins policy would otherwise override this
                 writeViewInteractionState(props, handlers, [], []);
                 if (!focused_notes?.length) { return; }
                 const deepest_note = focused_notes[focused_notes.length - 1];
@@ -167,7 +175,7 @@ export function useViewHandlers(
             });
         },
 
-        // jump the editor to a note's source: folder mode uses the origin source offset + doc_path; single-file mode falls back to the in-tree position and the view's own doc_path (the extension no-ops a revealRange with no docPath, so single-file collisions must supply it)
+        // folder mode reveals via the origin source offset; single-file mode falls back to the in-tree position
         revealNote: (note: NoteProps) => {
             props.handlers?.postMessage?.({
                 type: 'revealRange',
@@ -179,14 +187,7 @@ export function useViewHandlers(
         postMessage: props.handlers?.postMessage,
 
     }, props.handlers);
-    /*
-     * handle breadcrumb folder click - switch to (or narrow within) folder integration mode. Dispatch
-     * targets FOLDER_VIEW_STATE_ID so the integration_mode tag never lands on a doc-path key in
-     * single-file mode. Congruence-seeking: the destination is always folder mode, so persist 'auto'
-     * when the opened file also declares folder (the view keeps following the file), and the concrete
-     * 'folder' pin only when the navigation diverges from a file that declares current_file - both
-     * resolve to folder for rendering.
-     */
+    // handles a breadcrumb folder click, switching to (or narrowing within) folder integration mode
     const handle_folder_click = useCallback((folder_path: string): void => {
         const next_mode = reconcileAutoIntegrationMode(INTEGRATION_MODE_FOLDER, props.file_declared_integration?.mode);
         handlers.setViewManagedState([{
@@ -202,23 +203,9 @@ export function useViewHandlers(
             path: folder_path,
         });
     }, [handlers, props.file_declared_integration]);
-    // expose the same folder-descent gesture on the ViewApi so the origin pill (which only sees note-level handlers) can descend into its project subfolder via the same pipeline the breadcrumb uses
+    // exposes the same folder-descent gesture so the origin pill can descend via the breadcrumb's own pipeline
     handlers.descendToFolder = handle_folder_click;
-    /*
-     * handle_apply_filters - apply the user's edited include/exclude globs + per-file
-     * story cap. Posts a background setIntegration so the extension re-discovers the
-     * folder set, and round-trips each cascading setting to VS Code config via
-     * updateSetting (config is the single source of truth for the cascade - the extension
-     * discovers with it and echoes the effective globs back, which the drawer mirrors).
-     * The include/exclude globs are deliberately NOT written to per-view state: a
-     * viewState copy can drift from the config the extension actually discovered with,
-     * shadowing it in the drawer and defeating the cascade Reset buttons (which only
-     * clear config). maxNotesPerFile stays in view state because it's a webview-side
-     * merge cap the drawer reads back from display_options, not a discovery filter.
-     * Marks the 'integrationFilters' sentinel so the spinner appears if the re-discovery
-     * is slow; the aggregate-payload echo reducer clears it, and the extension emits its
-     * own pendingChange for the folder-discovery sub-step.
-     */
+    // applies the user's edited include/exclude globs and per-file story cap
     const handle_apply_filters = useCallback((next_include: string, next_exclude: string, next_max_notes_per_file: number): void => {
         markPending('integrationFilters');
         handlers.setViewManagedState([{
@@ -244,7 +231,7 @@ export function useViewHandlers(
             handlers.postMessage?.({ type: 'updateSetting', setting: 'maxNotesPerFile', value: next_max_notes_per_file });
         }
     }, [handlers, props.id, props.display_options?.integration_path, props.display_options?.integration_mode, markPending]);
-    // request the list of jump targets reachable from the terminal breadcrumb leaf; mode is folder when aggregating a folder, else current-file (sibling .md files)
+    // requests jump targets reachable from the terminal breadcrumb leaf: folder mode, else sibling .md files
     const handle_jump_request = useCallback((leaf_path: string): void => {
         const mode = props.display_options?.integration_mode === INTEGRATION_MODE_FOLDER
             ? INTEGRATION_MODE_FOLDER

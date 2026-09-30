@@ -113,7 +113,7 @@ function measureAtProbeWidth(board: HTMLElement): Omit<CardModel, 'signature'> |
         visibility: 'hidden',
         pointerEvents: 'none',
     });
-    // force the probe side by side whatever the board does: the clone keeps the lane's class inside the live board, so stacked rules would size its cards from the last solve's `--nt-card-width` and the probe would measure its own output, the feedback loop the fixed probe width prevents
+    // forces the probe side by side: stacked rules would size cards from the last solve's width, a feedback loop
     Object.assign(probe_cards.style, { flexDirection: 'column', alignItems: 'stretch' });
     Array.prototype.forEach.call(probe_cards.children, (card: Element) => unclipProbeCard(card as HTMLElement));
     // clone order is query order, so the live card at index i is the one probed at index i
@@ -154,7 +154,10 @@ function readLanePadding(board: HTMLElement, lanes_side_by_side: boolean): numbe
  * once per content change and cached; the board's width changes constantly and costs no measurement.
  *
  * Returns undefined until the board has been measured, which is the board's signal to leave the
- * stylesheet's own fallback sizes in place rather than render a guess.
+ * stylesheet's own fallback sizes in place rather than render a guess. `available` is a dependency
+ * of the probe effect so a failed probe (nothing to read before first layout) gets another go rather
+ * than sitting on the fallback until the notes change; the failure is recorded as a zero area, a
+ * state the next resize is allowed to replace.
  * - signature: changes exactly when the rendered cards change, and is what invalidates the cached probe
  */
 function useColumnWidth(
@@ -176,12 +179,7 @@ function useColumnWidth(
         if (board === null) { return; }
         setLanePadding(readLanePadding(board, lanes_side_by_side));
     }, [board_ref, lanes_side_by_side, signature, available]);
-    /*
-     * `available` is a dependency so a failed probe gets another go. A board measured before its first
-     * real layout has nothing to read, and storing nothing meant the effect never ran again for that
-     * signature - the board sat on the stylesheet fallback until the notes themselves changed. The failure
-     * is recorded as a zero area instead, which is a state the next resize is allowed to replace.
-     */
+    // retries the probe whenever `available` changes, so a failed probe gets another go
     useEffect(() => {
         const board = board_ref.current;
         if (board === null || lanes_side_by_side) { return; }

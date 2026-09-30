@@ -10,7 +10,7 @@ export const ACTIVITY_MESSAGE_OPEN_CHAT = 'openActivityChat';
 export const ACTIVITY_MESSAGE_DEMAND = 'activityDemand';
 export const ACTIVITY_MESSAGE_WITHDRAW = 'activityWithdraw';
 
-// a session id is a vendor-chosen string that becomes an argument to a vendor command; bounded and pattern-checked so a malformed one is refused before it reaches executeCommand
+// a session id becomes an argument to a vendor command, so it is bounded and pattern-checked before executeCommand
 const ACTIVITY_SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 /*
@@ -177,7 +177,7 @@ export class ActivityCommands {
 		await this.openTranscript(session_id);
 	}
 
-	// the transcript path comes from the analyser's own last scan, never from the message, so the webview cannot name a file to open
+	// the transcript path comes from the analyser's last scan, never the message, so the webview cannot name a file to open
 	private async openTranscript(session_id: string): Promise<void> {
 		const transcript_path = this.lookup.transcriptPathFor(session_id);
 		if (!transcript_path) {

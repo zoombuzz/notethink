@@ -166,10 +166,7 @@ test.describe('Settings Toggle', () => {
         // the drawers are mutually exclusive, so only the open one's chevron ever points up
         await expect(page.getByTestId('breadcrumb-leaf-chevron')).toHaveAttribute('data-direction', 'down');
 
-        /*
-         * The card tab is a second drawer on the same row, so it is the case most likely to break the
-         * at-most-one-open invariant: opening it must hand the up chevron over rather than showing two.
-         */
+        // the card tab is a second drawer on the same row: opening it must hand the up chevron over too
         await card_tab.click();
         await expect(page.getByTestId('card-settings-drawer-grid')).toHaveAttribute('data-open', 'true');
         await expect(page.getByTestId('card-settings-button-chevron')).toHaveAttribute('data-direction', 'up');

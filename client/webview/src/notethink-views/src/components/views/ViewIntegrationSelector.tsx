@@ -10,10 +10,13 @@ function getConcreteModeLabels(): Record<ConcreteIntegrationMode, string> {
     };
 }
 
+/**
+ * Props for the integration-mode `<select>`.
+ * - currentSelection: the persisted selection, driving the select's value (auto/current_file/folder).
+ * - resolvedMode: the concrete mode auto resolved to, shown in parentheses for the auto option.
+ */
 interface ViewIntegrationSelectorProps {
-    // the persisted selection: drives the <select> value (auto / current_file / folder)
     currentSelection: IntegrationMode;
-    // the concrete mode auto resolved to, shown in parentheses for the auto option ("Auto (Folder)")
     resolvedMode: ConcreteIntegrationMode;
     onChange: (mode: IntegrationMode) => void;
 }

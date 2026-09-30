@@ -96,10 +96,10 @@ Always brace a control structure, a one-statement body included: `if (is_valid) 
 
 ### Comments
 
-Canonical: [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style, and the dash ban in > Dashes. `local/no-consecutive-line-comments` enforces one comment per line here. notethink extras:
+Canonical: [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style, and the dash ban in > Dashes. Lint enforces what is checkable (`eslint-rules/`): `local/no-consecutive-line-comments`, `local/no-midfunction-block-comments` and `local/comment-style`, whose header lists its checks. notethink extras:
 
 - a single-line `//` comment takes no trailing period unless it holds more than one sentence; a `/* */` or `/** */` header block is prose and takes normal capitalisation and punctuation
-- the section dividers the workspace rule permits inside a data structure (`// --- identity ---`, `// --- tree links ---`) are load-bearing in notethink's long interfaces, so keep them when sweeping for per-field comments. A divider introduces two or more fields with one purpose, and a comment grouping the deliberate absence of related fields (`// doc_path/doc_relative_path/doc_text intentionally undefined for the merged view`) also qualifies; a comment explaining one field moves to the type's header block
+- a section divider inside a data structure takes the `// --- purpose ---` shape and introduces two or more fields with one purpose, or groups the deliberate absence of related fields (`// --- intentionally undefined for the merged view: doc_path, doc_text ---`); a comment explaining one field moves to the type's header block
 
 ## TypeScript Guidelines
 
@@ -112,8 +112,8 @@ Canonical: [`TYPESCRIPT.md`](../lightenna-iac/docstech/standards/TYPESCRIPT.md) 
 
 Canonical: [`LOGGING.md`](../lightenna-iac/docstech/standards/LOGGING.md). notethink runs one stack per runtime:
 
-- **The extension host** (`client/extension/**`) logs through `writeToLog` / `writeToErrorLog` (winston, `client/extension/src/lib/errorops.ts`).
-- **The webview and `notethink-views`** have no winston and no output channel: they log through `debug`, and a render failure that should reach the host posts a `renderError` message to the extension.
+- **The extension host** (`client/extension/**`) logs through `writeToLog` / `writeToErrorLog` (`client/extension/src/lib/errorops.ts`, over a `vscode.LogOutputChannel`).
+- **The webview and `notethink-views`** have no output channel: they log through `debug`, and a render failure that should reach the host posts a `renderError` message to the extension.
 
 `console.*` is not the error utility in either (workspace `AGENTS.md` > No `console.log` in committed code). **A caught error that is intentionally non-fatal must still be logged, never silently swallowed:**
 
@@ -125,7 +125,7 @@ try {
     writeToErrorLog('pathops', 'riskyOperation failed', error);
 }
 
-// webview - no winston here, so log through the debug instance
+// webview - no LogOutputChannel here, so log through the debug instance
 try {
     await riskyOperation();
 } catch (error) {
@@ -236,7 +236,7 @@ Canonical: the header of `components/notes/cardregistryops.ts`, and `AutoView.ts
 
 | Root | What it is |
 |---|---|
-| `client/extension/src/` | the extension host - winston logging, VS Code API, no DOM |
+| `client/extension/src/` | the extension host - LogOutputChannel logging, VS Code API, no DOM |
 | `client/webview/src/` | the webview app - React, `debug` logging, no `fs` |
 | `client/webview/src/notethink-views/src/` | a **nested package** with its own `package.json`, `rollup.config.js`, tsconfig and `node_modules`: `components/views/`, `components/notes/`, `lib/`, `types/`, and the public exports in `index.ts` |
 
@@ -272,7 +272,7 @@ A small set of folder-view defaults is duplicated in `client/extension/src/const
 Canonical: [`TESTING.md`](../lightenna-iac/docstech/standards/TESTING.md), and workspace [`../AGENTS.md`](../AGENTS.md) > Testing conventions (no page reloads as workarounds, comment a spec out rather than `test.skip`). notethink deltas:
 
 - **Jest specs sit beside their source in three packages**, each with its own `jest.config.cjs`: `client/extension`, `client/webview` (which ignores the nested package) and `client/webview/src/notethink-views`. `pnpm run test-jest` at the root runs all three. Component tests use React Testing Library.
-- **Extension-host tests that need the live VS Code API** run under the `@vscode/test-electron` Mocha runner in the central `client/extension/src/test/suite/**`, not colocated: the runner discovers them by directory, and they need the real extension-host environment.
+- **Extension-host tests that need the live VS Code API** run under the `@vscode/test-web` Mocha runner in the central `client/extension/src/test/suite/**`, not colocated: the runner discovers them by directory, and they need the real extension-host environment.
 
 ## Working Style
 
@@ -311,14 +311,14 @@ The webview config in `webpack.config.js` sets `optimization.nodeEnv: 'productio
 
 ### After every code change
 
-Rebuild after every code change (`pnpm run build`, or `pnpm run check`) so the change can be previewed. **A webview or React source edit changes nothing on screen by itself**, because the extension serves the prebuilt `client/webview/dist/index.js`. After editing under `client/webview/src/`:
+Rebuild after every code change (`pnpm run build`, or `pnpm run check`) so the change can be previewed. **A webview or React source edit changes nothing on screen by itself**, because the extension serves the prebuilt `client/webview/dist/`. After editing under `client/webview/src/`:
 
 1. **Find the live code path first** where a component has several. The breadcrumb trail's single-file branch (`splitPathSegments`) and directory-aggregate branch (`integration_path`) both live in `breadcrumbSegmentsForView` in `notethink-views/src/lib/pathops.ts`, not in `BreadcrumbTrail.tsx`; edit the wrong one and nothing visible changes.
 2. Run `pnpm run build` (webpack compiles `notethink-views` from `src/`; `build-and-rollup` also refreshes `notethink-views/dist/esm`).
-3. **Confirm the edit landed in the bundle**: grep `client/webview/dist/index.js` for a token from it.
+3. **Confirm the edit landed in the bundle**: grep `client/webview/dist/*.js` for a token from it; `React.lazy()` components build into numbered chunks beside `index.js`.
 4. Ask the user to **reload the VS Code window**; an open webview keeps the old bundle until then.
 
-**Never report a UI change as done from a source edit alone.** When `NOTETHINK_DEV`, `getHtmlForWebview` appends a per-load `?v=<timestamp>` to the bundle URL so a dev reload fetches the fresh bundle (production keeps the cacheable URL). If a change still seems not to apply, confirm the running build through the file log and that the window really was reloaded.
+**Never report a UI change as done from a source edit alone.** When `NOTETHINK_DEV`, every bundle and chunk URL carries a per-load `?v=<timestamp>` (`getHtmlForWebview`, `chunkLoading.ts`), so a dev reload fetches fresh code; production keeps cacheable URLs. If a change still seems not to apply, confirm the running build through the file log and that the window really was reloaded.
 
 ## Release & Publishing
 

@@ -1,6 +1,6 @@
 import type { NoteOrigin } from "../types/NoteProps";
 
-// the <body> classes VS Code stamps on a webview for a light theme; mirrored as the light selectors in OriginPill.module.scss and StickyNote.module.scss
+// VS Code's <body> classes for a light theme, mirrored as light selectors in OriginPill/StickyNote scss
 export const VS_CODE_LIGHT_THEME_CLASSES = ['vscode-light', 'vscode-high-contrast-light'];
 
 /**

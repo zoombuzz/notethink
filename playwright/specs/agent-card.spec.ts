@@ -129,7 +129,7 @@ test.describe('Agent card', () => {
         await expect(other_repo_notice).toHaveAttribute('title', /No agent has worked on this story in the last 30 days/);
         await expect(other_repo.getByTestId('agent-row')).toHaveCount(0);
 
-        // a story with no id linetag still has a joinable key (the slug derived from its headline), so an untouched one reads as quiet like any other rather than reporting a special "cannot be declared" state
+        // a story with no id linetag still joins via its headline slug, so an untouched one reads as quiet like any other
         const undeclarable = cardFor(page, 'Story nobody can declare');
         await expect(undeclarable.getByTestId('agent-banner-notice')).toContainText('No agent activity in 30 days');
     });
@@ -182,7 +182,7 @@ test.describe('Agent card', () => {
         await expect(uncommitted.getByTestId('agent-file-row')).toHaveCount(3);
         await expect(uncommitted.locator('[data-attributed="false"]')).toHaveCount(1);
         await expect(uncommitted.locator('[data-attributed="false"]')).toContainText('unattributed');
-        // the two files credited to claude-bound-busy carry a line diff; the header sums only those, leaving the unattributed and undiffed third file out of the total
+        // the header sums only the two diffed files, leaving the unattributed and undiffed third file out
         await expect(uncommitted.getByTestId('agent-file-line-diff')).toHaveCount(2);
         await expect(uncommitted.getByTestId('agent-file-band-line-diff-uncommitted')).toContainText('+24');
         await expect(uncommitted.getByTestId('agent-file-band-line-diff-uncommitted')).toContainText('-0');
@@ -192,6 +192,43 @@ test.describe('Agent card', () => {
         const idle = cardFor(page, 'Kanban card ratio height');
         await expect(idle).toBeVisible();
         await expect(idle.getByTestId('agent-commit-band')).toHaveCount(0);
+    });
+
+    test('dims the token and cost total and hides the uncommitted band while scanning, then shows both once the scan is live', async ({ page }) => {
+        await pinAgentCard(page);
+        await folderBoard(page);
+        await injectActivity(page, { state: 'scanning' });
+        const bound = cardFor(page, 'Agent activity card');
+        await expect(bound).toBeVisible({ timeout: 5000 });
+        // session rows draw progressively, unlike the total and the file band below
+        await expect(bound.getByTestId('agent-row')).toHaveCount(1);
+        await expect(bound.getByTestId('agent-usage-summary')).toHaveAttribute('data-scanning', 'true');
+        await expect(bound.getByTestId('agent-file-band-uncommitted')).toHaveCount(0);
+
+        await injectActivity(page, { state: 'live' });
+        await expect(bound.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
+        await expect(bound.getByTestId('agent-file-band-uncommitted')).toBeVisible();
+    });
+
+    test('never dims the total or hides the uncommitted band on a rescan, once the card has already shown a completed one', async ({ page }) => {
+        await agentBoard(page);
+        const bound = cardFor(page, 'Agent activity card');
+        await expect(bound.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
+        await expect(bound.getByTestId('agent-file-band-uncommitted')).toBeVisible();
+        await expect(bound.getByTestId('agent-banner-notice')).toHaveCount(0);
+
+        // a rescan's interim snapshot arrives, carrying the same sessions and tree a real one would - nothing below should move
+        await injectActivity(page, { state: 'scanning' });
+        await expect(bound.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
+        await expect(bound.getByTestId('agent-file-band-uncommitted')).toBeVisible();
+        await expect(bound.getByTestId('agent-banner-notice')).toHaveCount(0);
+        await expect(bound.getByTestId('agent-row')).toHaveCount(1);
+
+        // the rescan completes; the card is unchanged throughout, not merely restored afterwards
+        await injectActivity(page, { state: 'live' });
+        await expect(bound.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
+        await expect(bound.getByTestId('agent-file-band-uncommitted')).toBeVisible();
+        await expect(bound.getByTestId('agent-banner-notice')).toHaveCount(0);
     });
 
     test('unfolds the capped uncommitted band from "and N more" and folds it back from "Show less"', async ({ page }) => {
@@ -239,7 +276,7 @@ test.describe('Agent card', () => {
         await expect(cardFor(page, 'Agent activity card').getByTestId('agent-row')).toHaveCount(1);
         await expect(page.locator('[data-card-type="agent"][data-virtual-note="true"]')).toHaveCount(1);
 
-        // the drawer is re-opened rather than left hanging: a view change re-keys the board, which remounts the toolbar with a fresh, closed drawer
+        // a view change re-keys the board, remounting the toolbar with a fresh, closed drawer
         await openViewSettings(page);
         await page.getByTestId('view-radio-kanban').click();
         await expect(page.locator('[role="columnheader"]').first()).toBeVisible({ timeout: 5000 });
@@ -247,7 +284,7 @@ test.describe('Agent card', () => {
         await expect(cardFor(page, 'Agent activity card').getByTestId('agent-row')).toHaveCount(1);
         await expect(page.locator('[data-card-type="agent"][data-virtual-note="true"]')).toHaveCount(1);
 
-        // the body carries the lane's shared padding rule rather than drawing its bands flush to the card edges; the CSS module class is hashed at build time, so the body is found via its own testid'd child rather than a literal '.body' selector
+        // the CSS module class is hashed at build time, so the body is found via its testid'd child, not a literal selector
         const body = cardFor(page, 'Agent activity card').getByTestId('agent-rows').locator('..');
         const padding_left = await body.evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
         const padding_right = await body.evaluate(el => parseFloat(getComputedStyle(el).paddingRight));
@@ -261,11 +298,11 @@ test.describe('Agent card', () => {
         await page.getByTestId('view-radio-kanban').click();
         await expect(page.locator('[role="columnheader"]').first()).toBeVisible({ timeout: 5000 });
         await page.keyboard.press('Escape');
-        // a board too narrow for its lanes holds each at the default breadth rather than stretching them to fill, as an editor column beside a file does
+        // a board too narrow for its lanes holds each at the default breadth rather than stretching to fill
         await page.setViewportSize({ width: 600, height: 900 });
         const card = cardFor(page, 'Agent activity card');
         const rows = card.getByTestId('agent-rows');
-        // the layout switches on the roster's own width, so the lane must actually be narrower than the one-line threshold for this to test anything
+        // the layout switches on the roster's own width, so the lane must be narrower than the one-line threshold
         await expect.poll(async () => (await rows.boundingBox())!.width).toBeLessThan(440);
         const cells = await rowCells(card.getByTestId('agent-row-button').first());
         for (const cell of cells) {

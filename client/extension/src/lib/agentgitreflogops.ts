@@ -15,9 +15,17 @@ export interface GitReflogCommit {
     subject: string;
 }
 
-// "commit:", "commit (initial):" and "commit (amend):" are the three shapes an ordinary or amended commit writes; every other reflog action (checkout, reset, pull, merge of a branch) is not a commit this session made and is skipped
+/**
+ * "commit:", "commit (initial):" and "commit (amend):" are the three shapes an ordinary or
+ * amended commit writes; every other reflog action (checkout, reset, pull, merge) is not a commit
+ * this session made and is skipped.
+ */
 const REFLOG_COMMIT_MESSAGE = /^commit(?:\s+\([^)]*\))?:\s*(.*)$/;
-// "<old-sha> <new-sha> <name> <email> <epoch-seconds> <tz>\t<message>"; the identity fields are free text and may themselves contain spaces, so the parse anchors on the two hashes at the front and the timestamp immediately before the tab-delimited message
+/**
+ * "<old-sha> <new-sha> <name> <email> <epoch-seconds> <tz>\t<message>"; identity fields are free
+ * text and may contain spaces, so the parse anchors on the two hashes at the front and the
+ * timestamp immediately before the tab-delimited message.
+ */
 const REFLOG_LINE = /^([0-9a-f]{7,40})\s+([0-9a-f]{7,40})\s+.*?(\d{10,})\s+[+-]\d{4}\t(.*)$/;
 
 /** every commit the reflog records, oldest first, exactly as git wrote them */

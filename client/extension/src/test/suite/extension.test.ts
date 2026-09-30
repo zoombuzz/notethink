@@ -19,11 +19,7 @@ suite('Web Extension Test Suite', () => {
 		vscode.window.showInformationMessage('Start all tests.');
 	});
 
-	/*
-	 * ---------------------------------------------------------------
-	 * Extension presence and activation
-	 * ---------------------------------------------------------------
-	 */
+	// extension presence and activation
 
 	suite('Extension Activation', () => {
 
@@ -32,18 +28,30 @@ suite('Web Extension Test Suite', () => {
 			assert.ok(extension, `Extension ${EXTENSION_ID} should be installed`);
 		});
 
-		test('Extension should activate when a markdown document is opened', async () => {
+		test('Opening a plain markdown document should not activate the extension', async () => {
+			const extension = vscode.extensions.getExtension(EXTENSION_ID);
+			assert.ok(extension, `Extension ${EXTENSION_ID} should be installed`);
+			assert.ok(!extension.isActive, 'Extension should not be active before any notethink-specific action - this test must run before any that force activation');
+
+			// activationEvents lists only onCustomEditor:notethink.viewer and onWebviewPanel:notethink, not plain text
+			const uri = vscode.Uri.parse('untitled:/plain-open-test.md');
+			const doc = await vscode.workspace.openTextDocument(uri);
+			await vscode.window.showTextDocument(doc);
+
+			assert.ok(!extension.isActive, 'Opening a plain markdown document should not activate the extension');
+		});
+
+		test('Opening the NoteThink custom editor should activate the extension', async () => {
 			const extension = vscode.extensions.getExtension(EXTENSION_ID);
 			assert.ok(extension, `Extension ${EXTENSION_ID} should be installed`);
 
-			// open a markdown document to trigger the onLanguage:markdown activation event
-			const uri = vscode.Uri.parse('untitled:activation-test.md');
-			await vscode.workspace.openTextDocument(uri);
+			const uris = await vscode.workspace.findFiles('**/*.md', undefined, 1);
+			assert.ok(uris.length > 0, 'Should find at least one .md file to open with the custom editor');
 
-			// give the extension a moment to activate
-			await new Promise(resolve => setTimeout(resolve, 500));
+			// opens with the custom editor, the onCustomEditor:notethink.viewer activation trigger
+			await vscode.commands.executeCommand('vscode.openWith', uris[0], VIEW_TYPE);
 
-			assert.ok(extension.isActive, 'Extension should be active after opening a markdown document');
+			assert.ok(extension.isActive, 'Extension should be active after opening the NoteThink custom editor');
 		});
 
 		test('Extension should export activate and deactivate functions', async () => {
@@ -60,11 +68,7 @@ suite('Web Extension Test Suite', () => {
 		});
 	});
 
-	/*
-	 * ---------------------------------------------------------------
-	 * Command registration
-	 * ---------------------------------------------------------------
-	 */
+	// command registration
 
 	suite('Command Registration', () => {
 
@@ -134,13 +138,29 @@ suite('Web Extension Test Suite', () => {
 				);
 			}
 		});
+
+		test('Every contributed command is registered, and every registered command is contributed', async () => {
+			const extension = vscode.extensions.getExtension(EXTENSION_ID);
+			assert.ok(extension, `Extension ${EXTENSION_ID} should be installed`);
+
+			// package.json's contributes.commands is authoritative over the expectedCommands list
+			const contributedCommands: string[] = extension.packageJSON.contributes.commands.map(
+				(c: { command: string }) => c.command
+			);
+			const registeredCommands = await vscode.commands.getCommands(true);
+
+			for (const cmd of contributedCommands) {
+				assert.ok(registeredCommands.includes(cmd), `Contributed command "${cmd}" should be registered at runtime`);
+			}
+
+			const registeredNotethinkCommands = registeredCommands.filter(c => c.startsWith('notethink.'));
+			for (const cmd of registeredNotethinkCommands) {
+				assert.ok(contributedCommands.includes(cmd), `Registered command "${cmd}" should be contributed in package.json`);
+			}
+		});
 	});
 
-	/*
-	 * ---------------------------------------------------------------
-	 * Custom editor contribution
-	 * ---------------------------------------------------------------
-	 */
+	// custom editor contribution
 
 	suite('Custom Editor Provider', () => {
 
@@ -194,11 +214,7 @@ suite('Web Extension Test Suite', () => {
 		});
 	});
 
-	/*
-	 * ---------------------------------------------------------------
-	 * Workspace root resolution (breadcrumb stripping)
-	 * ---------------------------------------------------------------
-	 */
+	// workspace root resolution (breadcrumb stripping)
 
 	suite('Workspace Root Resolution', () => {
 
@@ -250,29 +266,25 @@ suite('Web Extension Test Suite', () => {
 		});
 	});
 
-	/*
-	 * ---------------------------------------------------------------
-	 * Document API interactions
-	 * ---------------------------------------------------------------
-	 */
+	// document API interactions
 
 	suite('Document Handling', () => {
 
 		test('Should be able to open an untitled markdown document', async () => {
-			const uri = vscode.Uri.parse('untitled:test-document.md');
+			const uri = vscode.Uri.parse('untitled:/test-document.md');
 			const doc = await vscode.workspace.openTextDocument(uri);
 			assert.ok(doc, 'Should open document');
 			assert.strictEqual(doc.languageId, 'markdown', 'Language ID should be markdown');
 		});
 
 		test('Untitled markdown document should start empty', async () => {
-			const uri = vscode.Uri.parse('untitled:empty-test.md');
+			const uri = vscode.Uri.parse('untitled:/empty-test.md');
 			const doc = await vscode.workspace.openTextDocument(uri);
 			assert.strictEqual(doc.getText(), '', 'New untitled document should be empty');
 		});
 
 		test('Should be able to apply edits to a document via WorkspaceEdit', async () => {
-			const uri = vscode.Uri.parse('untitled:edit-test.md');
+			const uri = vscode.Uri.parse('untitled:/edit-test.md');
 			const doc = await vscode.workspace.openTextDocument(uri);
 
 			const edit = new vscode.WorkspaceEdit();
@@ -291,7 +303,7 @@ suite('Web Extension Test Suite', () => {
 		});
 
 		test('Document line count should reflect edits', async () => {
-			const uri = vscode.Uri.parse('untitled:linecount-test.md');
+			const uri = vscode.Uri.parse('untitled:/linecount-test.md');
 			const doc = await vscode.workspace.openTextDocument(uri);
 
 			const edit = new vscode.WorkspaceEdit();
@@ -302,7 +314,7 @@ suite('Web Extension Test Suite', () => {
 		});
 
 		test('Document getText with range should return correct substring', async () => {
-			const uri = vscode.Uri.parse('untitled:range-test.md');
+			const uri = vscode.Uri.parse('untitled:/range-test.md');
 			const doc = await vscode.workspace.openTextDocument(uri);
 
 			const edit = new vscode.WorkspaceEdit();
@@ -314,11 +326,7 @@ suite('Web Extension Test Suite', () => {
 		});
 	});
 
-	/*
-	 * ---------------------------------------------------------------
-	 * Extension configuration contribution
-	 * ---------------------------------------------------------------
-	 */
+	// extension configuration contribution
 
 	suite('Configuration', () => {
 
@@ -348,11 +356,7 @@ suite('Web Extension Test Suite', () => {
 		});
 	});
 
-	/*
-	 * ---------------------------------------------------------------
-	 * Keybindings contribution
-	 * ---------------------------------------------------------------
-	 */
+	// keybindings contribution
 
 	suite('Keybindings', () => {
 
@@ -425,11 +429,7 @@ suite('Web Extension Test Suite', () => {
 		});
 	});
 
-	/*
-	 * ---------------------------------------------------------------
-	 * Menu contribution
-	 * ---------------------------------------------------------------
-	 */
+	// menu contribution
 
 	suite('Menus', () => {
 

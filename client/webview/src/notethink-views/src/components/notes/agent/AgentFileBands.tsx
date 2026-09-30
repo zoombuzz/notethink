@@ -29,7 +29,7 @@ export interface AgentFileBandsProps {
     onToggleExpanded?: (expanded: boolean) => void;
 }
 
-// the header's own +added -removed: summed only across entries the analyser actually diffed, never guessed for one it declined or never reached
+// the header's +added/-removed sums only entries the analyser actually diffed, never guessed for one it skipped
 function totalLineDiffFor(entries: AgentFileBandsProps['model']['uncommitted']): { added: number; removed: number } | undefined {
     const diffed = entries.filter(entry => entry.file.added !== undefined && entry.file.removed !== undefined);
     if (diffed.length === 0) { return undefined; }

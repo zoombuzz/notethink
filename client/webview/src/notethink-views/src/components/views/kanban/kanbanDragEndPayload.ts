@@ -7,7 +7,7 @@ import type { EditTextChange, EditTextMessage } from '../../../types/Messages';
 const debug = Debug("nodejs:notethink-views:kanbanDragEndPayload");
 
 /**
- * inputs for the pure drag-end payload builder.
+ * Inputs for the pure drag-end payload builder.
  *
  * - dragged_note: the note being dropped; never null (caller validates)
  * - destination_column_value: the lane value the note lands in on the group axis (e.g. 'done', 'untagged')
@@ -26,7 +26,7 @@ export interface KanbanDragEndPayloadInput {
 }
 
 /**
- * build the post-message payload for a kanban drag-drop.
+ * Builds the post-message payload for a kanban drag-drop.
  *
  * Assemble the edits for a drop and route them per origin file. The group-field change
  * always targets the dragged note's origin file; the ordering cascade returns per-doc

@@ -102,10 +102,7 @@ describe('renderMarkdownNoteHeadline', () => {
     describe('strip_linetags', () => {
 
         it('strips linetag children by position', () => {
-            /*
-             * Simulates: ### My Task [](?status=doing)
-             * MDAST children: [text("My Task "), text("[](?status=doing)")]
-             */
+            // simulates `### My Task [](?status=doing)` as mdast children
             const children = [
                 mdastText('My Task ', 4, 12),
                 mdastText('[](?status=doing)', 12, 29),
@@ -123,10 +120,7 @@ describe('renderMarkdownNoteHeadline', () => {
         });
 
         it('preserves inline formatting (bold) before the linetag', () => {
-            /*
-             * Simulates: ### some **bold** text [](?status=doing)
-             * MDAST children: [text("some "), strong("bold"), text(" text "), text("[](?status=doing)")]
-             */
+            // simulates `### some **bold** text [](?status=doing)` as mdast children
             const children = [
                 mdastText('some ', 4, 9),
                 mdastStrong(

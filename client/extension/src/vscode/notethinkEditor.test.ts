@@ -11,6 +11,7 @@
 import * as vscode from 'vscode';
 import { createMockWebviewPanel, Position, RelativePattern, Selection, Uri } from '../__mocks__/vscode';
 import { NotethinkEditorProvider } from './notethinkEditor';
+import { PanelSession } from './PanelSession';
 import { SETTINGS, settingKeys } from '../lib/settings';
 import { DEFAULT_EXCLUDE_FILTER } from '../constants';
 
@@ -159,7 +160,7 @@ function folderWatcherCalls(): Array<[RelativePattern]> {
 	return (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.filter(call => call[0] instanceof RelativePattern);
 }
 
-// point the mocked workspace at the given roots so the host-side path-containment guard treats paths under them as in-workspace
+// points the mocked workspace at the given roots so the path-containment guard treats them as in-workspace
 function setWorkspaceRoots(roots: string[] | undefined): void {
 	(vscode.workspace as unknown as WorkspaceMutable).workspaceFolders = roots
 		? roots.map((root, index) => ({ uri: Uri.file(root), name: root, index }))
@@ -220,6 +221,12 @@ describe('NotethinkEditorProvider', () => {
 			expect(updates.length).toBeGreaterThanOrEqual(1);
 			// when getWorkspaceFolder returns undefined, workspace_root should be ''
 			expect(updates[0].workspace_root).toBe('');
+		});
+
+		// current_file mode ships the active doc with full mdast; only folder-mode docs travel as text only
+		it('the current_file initial document still ships mdast content', () => {
+			const doc_entries = Object.values(getUpdates(panelHelper.postedMessages)[0].partial.docs) as UpdateDocEntry[];
+			expect(doc_entries[0].content).toBeDefined();
 		});
 
 		it('sends an initial selectionChanged message for styled first render', () => {
@@ -458,7 +465,7 @@ describe('NotethinkEditorProvider', () => {
 			expect(selection.docPath).toBe(defaultDocPath);
 		});
 
-		// the edit clears the debounce timer so a queued onDidChangeTextDocument re-parse cannot re-emit a delayed stale update after the batch
+		// the edit clears the debounce timer so a queued re-parse cannot re-emit a delayed stale update after the batch
 		it('clears the pending change-debounce timer so no delayed update follows the edit', async () => {
 			const change_cb = (vscode.workspace.onDidChangeTextDocument as jest.Mock).mock.calls.slice(-1)[0][0];
 			const doc = mockTextDocument(defaultDocText, defaultDocPath);
@@ -560,7 +567,7 @@ describe('NotethinkEditorProvider', () => {
 			const bad_path = '/etc/shadow';
 			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editorA];
 			rigOpenByPath({ [docPathA]: docA });
-			// the refusal carries no error object, so it logs via writeToLogAtLevel('error', source, message) - see AGENTS.md > Log source convention
+			// the refusal carries no error object, so it logs via writeToLogAtLevel('error', source, message)
 			const errorLogSpy = jest.spyOn(require('../lib/errorops'), 'writeToLogAtLevel');
 
 			await panelHelper.simulateMessage({
@@ -663,10 +670,7 @@ describe('NotethinkEditorProvider', () => {
 				to: 8,
 			});
 
-			/*
-			 * when from !== to, Selection(end_pos, start_pos) is used
-			 * anchor = end_pos (8), active = start_pos (2)
-			 */
+			// when from !== to, Selection(end_pos, start_pos): anchor = end_pos (8), active = start_pos (2)
 			expect(editor.selection.anchor.character).toBe(8);
 			expect(editor.selection.active.character).toBe(2);
 			expect(editor.revealRange).toHaveBeenCalledTimes(1);
@@ -690,7 +694,7 @@ describe('NotethinkEditorProvider', () => {
 		const docPath = '/workspace/test.md';
 		const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
-		// make getConfiguration('notethink.settings').get(path, default) return overrides[path] when present, else the passed default (so readSetting yields the built-in defaults for un-overridden keys)
+		// getConfiguration(...).get(path, default) returns overrides[path] when present, else the passed default
 		function mockSettings(overrides: Record<string, unknown>): void {
 			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation(() => ({
 				get: jest.fn((key: string, def: unknown) => (key in overrides ? overrides[key] : def)),
@@ -766,11 +770,11 @@ describe('NotethinkEditorProvider', () => {
 			expect(open_call[1].viewColumn).toBe(vscode.ViewColumn.One);
 		});
 
-		// single-file mode (no folder integration): the clicked note's docPath is the board's own file, so the reveal path must never target the board's own column - when the user opts into openNewEditorIfNoneOpen it opens Beside, never over the board
+		// single-file mode: the clicked note's docPath is the board's own file, so reveal must never target the board's own column
 		it('single-file mode opens the source beside the board (never over it) when openNewEditorIfNoneOpen is on', async () => {
 			mockSettings({ 'view.generic.openNewEditorIfNoneOpen': true });
 			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
-			// the only tab open is our own NoteThink board, holding the same file the note comes from, in column One (the panel's column)
+			// the only open tab is our own board, holding the note's own file, in column One (the panel's column)
 			(panelHelper.panel as unknown as { viewColumn: vscode.ViewColumn }).viewColumn = vscode.ViewColumn.One;
 			(vscode.window as unknown as { tabGroups: unknown }).tabGroups = {
 				all: [{ viewColumn: vscode.ViewColumn.One, tabs: [{ input: { uri: Uri.file(docPath), viewType: 'notethink.viewer' } }] }],
@@ -782,7 +786,7 @@ describe('NotethinkEditorProvider', () => {
 
 			await panelHelper.simulateMessage({ type: 'revealRange', docPath, from: 0, to: 5 });
 
-			// board tab is skipped by findColumnWithDoc, so with no other group the note opens Beside rather than over the board's own column
+			// the board tab is skipped by findColumnWithDoc, so with no other group the note opens Beside, not over the board
 			expect(vscode.window.showTextDocument).toHaveBeenCalledTimes(1);
 			const open_call = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
 			expect(open_call[1].viewColumn).toBe(vscode.ViewColumn.Beside);
@@ -827,7 +831,7 @@ describe('NotethinkEditorProvider', () => {
 			expect(open_call[1].viewColumn).toBe(vscode.ViewColumn.Two);
 		});
 
-		// folderless window (a loose .md opened with no workspace folder): isWithinWorkspace fails closed, but the board's own file must still be revealable when the user opts into openNewEditorIfNoneOpen
+		// folderless window: isWithinWorkspace fails closed, but the board's own file must still be revealable
 		it('folderless window opens the board own file even with no workspace folder open', async () => {
 			setWorkspaceRoots(undefined);
 			mockSettings({ 'view.generic.openNewEditorIfNoneOpen': true });
@@ -914,10 +918,29 @@ describe('NotethinkEditorProvider', () => {
 			expect(find_call[1]).toBe('**/skip/**');
 		});
 
+		// the host skips parsing folder-mode docs entirely (skip_parse=true) rather than stripping content after
+		it('ships a folder doc without content (text only)', async () => {
+			const story_path = '/workspace/notes/todo.md';
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(story_path)]);
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => mockTextDocument('# a folder doc', u.path));
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			while (getUpdates(panelHelper.postedMessages).length < 1) { await flush(); }
+
+			const doc_entries = getUpdates(panelHelper.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[]);
+			expect(doc_entries.length).toBeGreaterThanOrEqual(1);
+			for (const entry of doc_entries) {
+				expect(entry.text).toBe('# a folder doc');
+				expect(entry.content).toBeUndefined();
+			}
+		});
+
 		it('drops a multi-segment excluded path (notegit/nodejs) when the board is rooted inside notegit, not at the workspace root', async () => {
 			const story_path = '/workspace/notegit/docstech/users/alex/todo.md';
 			const demo_path = '/workspace/notegit/nodejs/hostapp/content/notegit/welcome/ai-board/budget/todo.md';
-			// findFiles' brace-expanded exclude is unreliable, so assume it hands both back: the host-side post-filter is the deterministic gate and must match workspace-relative, or the notegit/ segment is missing and notegit/nodejs stops matching
+			// findFiles' brace-expanded exclude is unreliable, so the host-side post-filter is the deterministic gate
 			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(story_path), Uri.file(demo_path)]);
 			// distinct body per file: identical text hashes to one doc id, which would collapse the two entries and mask a leak
 			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => mockTextDocument(`# story in ${u.path}`, u.path));
@@ -943,7 +966,7 @@ describe('NotethinkEditorProvider', () => {
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/build/ws/notes' });
 			while (getUpdates(panelHelper.postedMessages).length < 1) { await flush(); }
 
-			// the absolute path carries a `build` segment the default exclude matches; the workspace-relative path (notes/todo.md) does not, and only the latter is the legitimate base
+			// the absolute path carries a `build` segment the default exclude matches; only the relative path is legitimate
 			const paths = getUpdates(panelHelper.postedMessages)
 				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
 				.map(d => d.path);
@@ -951,7 +974,7 @@ describe('NotethinkEditorProvider', () => {
 		});
 
 		it('retains the user filters across a breadcrumb re-narrow that omits them - read from the workspace cascade, not stale in-memory state', async () => {
-			// simulate the user's filters being persisted under notethink.settings.files.* (what the Files drawer's Apply does via updateSetting). The settings module reads via getConfiguration('notethink.settings') and dotted paths
+			// simulates the Files drawer's Apply persisting filters, read back via getConfiguration('notethink.settings')
 			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation((section: string) => {
 				if (section === 'notethink.settings') {
 					return {
@@ -972,7 +995,7 @@ describe('NotethinkEditorProvider', () => {
 				include: '**/users/**', exclude: '',
 			});
 			await flush();
-			// a breadcrumb segment click re-narrows to a subdirectory without carrying filters; the cascade is now the source of truth, so the same filters are picked up
+			// a breadcrumb click re-narrows without carrying filters; the cascade is the source of truth, so they are still picked up
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes/users' });
 			await flush();
 
@@ -1096,11 +1119,7 @@ describe('NotethinkEditorProvider', () => {
 				expect(counts.reduce((total, count) => total + count, 0)).toBe(25);
 			});
 
-			/*
-			 * hold one discovery load open so the batch stays queued and unflushed, hand back the watcher
-			 * callbacks, then let the caller land a watcher event in that window before releasing the load.
-			 * Returns the paths discovery was given, in the order it loads them.
-			 */
+			// holds one discovery load open so the batch stays queued, letting the caller land a watcher event before releasing it
 			const discoverHoldingOneFile = async (count: number): Promise<{ paths: string[]; release: () => void; watcher: MockFolderWatcher }> => {
 				const paths = Array.from({ length: count }, (_unused, index) => `/workspace/notes/f${index}.md`);
 				let release = (): void => {};
@@ -1114,14 +1133,9 @@ describe('NotethinkEditorProvider', () => {
 				panelHelper.postedMessages.length = 0;
 				await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
 				while ((vscode.workspace.openTextDocument as jest.Mock).mock.calls.length < count) { await flush(); }
-				/*
-				 * The unheld loads still have to finish hashing, which is genuinely async and which no host
-				 * call marks the end of, so they are drained generously rather than for a fixed few turns: a
-				 * small count is a race, and it started losing once the panel gained a second thing to do at
-				 * start-up. The drain is microseconds of real time, well inside the batch's own flush window.
-				 */
+				// unheld loads still hash async with no completion signal, so drain generously; it costs only microseconds
 				for (let turn = 0; turn < 200; turn++) { await flush(); }
-				// the scenario needs the batch still queued: a flush would have posted an update, and a delete landing after it would be testing nothing
+				// the scenario needs the batch still queued, since a flush would post an update and leave nothing for the delete to test
 				expect(getUpdates(panelHelper.postedMessages)).toEqual([]);
 				const watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value as MockFolderWatcher;
 				return { paths, release, watcher };
@@ -1544,7 +1558,7 @@ describe('NotethinkEditorProvider', () => {
 			await panelHelper.simulateMessage({ type: 'requestJumpTargets', mode: 'folder', path: '/workspace/notegit' });
 
 			const reply = findByType(panelHelper.postedMessages, 'jumpTargets') as JumpTargetsMessage;
-			// the exclude probe must be built from the workspace-relative path (notegit/nodejs/…); a bare-name probe (nodejs/…) can never match a multi-segment entry and would keep the folder
+			// the exclude probe must use the workspace-relative path; a bare-name probe can never match a multi-segment entry
 			expect(reply.entries).toEqual([
 				{ label: 'docstech', path: '/workspace/notegit/docstech', kind: 'folder' },
 			]);
@@ -1677,6 +1691,22 @@ describe('NotethinkEditorProvider', () => {
 			expect(html).toContain('<div id="root"></div>');
 			expect(html).toContain('nonce-');
 			expect(html).toContain('Content-Security-Policy');
+		});
+
+		it('CSP allows a blob: worker and a connect-src fetch to the webview origin, for the parse worker\'s fetch-then-blob load', () => {
+			const html = panelHelper.panel.webview.html as string;
+			expect(html).toContain('worker-src blob:');
+			expect(html).toContain(`connect-src ${panelHelper.panel.webview.cspSource}`);
+		});
+
+		it('sets window.__notethinkChunkConfig so chunkLoading.ts can wire split chunks before any React.lazy import fires', () => {
+			const html = panelHelper.panel.webview.html as string;
+			expect(html).toContain('window.__notethinkChunkConfig');
+			// the dist directory (not index.js itself), asWebviewUri'd, trailing slash so chunk filenames append cleanly
+			expect(html).toContain('publicPath: "file:///mock/extension/client/webview/dist/"');
+			const nonce_match = html.match(/nonce="([^"]+)"/);
+			expect(nonce_match).not.toBeNull();
+			expect(html).toContain(`nonce: "${nonce_match?.[1]}"`);
 		});
 	});
 
@@ -1915,7 +1945,7 @@ describe('NotethinkEditorProvider', () => {
 		});
 		afterEach(() => {
 			setWorkspaceRoots(undefined);
-			// restore the vscode mock's own default shape - dropping inspect() here leaks a config object the settings cascade throws on into every later test
+			// restores the mock's default shape; dropping inspect() here leaks a config object later tests throw on
 			(vscode.workspace.getConfiguration as jest.Mock).mockImplementation(() => ({
 				get: jest.fn(() => undefined),
 				update: jest.fn(async () => {}),
@@ -1936,10 +1966,7 @@ describe('NotethinkEditorProvider', () => {
 
 		it('does NOT arm a watcher when the active file is already visible in a text editor', async () => {
 			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockClear();
-			/*
-			 * the outer beforeEach already configured visibleTextEditors = [initialEditor] for defaultDocPath
-			 * since the default panelHelper's active path is visible, no watcher should be armed
-			 */
+			// the outer beforeEach already made defaultDocPath's editor visible, so no watcher should be armed here
 			expect((vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.length).toBe(0);
 		});
 
@@ -1954,7 +1981,7 @@ describe('NotethinkEditorProvider', () => {
 			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
 			const on_change_cb = watcher_instance.onDidChange.mock.calls[0][0];
 
-			// fs.readFile returns the fresh on-disk bytes; openTextDocument is rigged to a stale value to prove we are NOT going through that path
+			// fs.readFile returns fresh bytes; openTextDocument is rigged stale to prove that path isn't used
 			const fresh_text = '# Lonely updated';
 			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode(fresh_text));
 			const stale_doc = mockTextDocument('# Lonely (stale cache)', docPath);
@@ -1971,6 +1998,65 @@ describe('NotethinkEditorProvider', () => {
 			expect(doc_entries[0].createdBy).toBe('fsWatcher');
 		});
 
+		it('does not re-parse or post while the panel is hidden', async () => {
+			const { panel } = await setupUnvisitedDoc();
+			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_change_cb = watcher_instance.onDidChange.mock.calls[0][0];
+
+			(panel.panel as unknown as { visible: boolean }).visible = false;
+			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode('# Lonely updated while hidden'));
+
+			panel.postedMessages.length = 0;
+			await on_change_cb(Uri.file(docPath));
+
+			expect(getUpdates(panel.postedMessages)).toEqual([]);
+		});
+
+		it('skips the parse and post when the watcher fires but the on-disk content has not actually changed', async () => {
+			const { panel } = await setupUnvisitedDoc();
+			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_change_cb = watcher_instance.onDidChange.mock.calls[0][0];
+
+			// same content the doc was already built from at setup - a hash-gated no-op, not a genuine change
+			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode(docText));
+
+			panel.postedMessages.length = 0;
+			await on_change_cb(Uri.file(docPath));
+
+			expect(getUpdates(panel.postedMessages)).toEqual([]);
+		});
+
+		it('catches up the active doc from disk once the panel becomes visible again', async () => {
+			const { panel } = await setupUnvisitedDoc();
+			const watcher_instance = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_change_cb = watcher_instance.onDidChange.mock.calls[0][0];
+			const on_view_state_cb = (panel.panel as unknown as { onDidChangeViewState: jest.Mock }).onDidChangeViewState.mock.calls[0][0];
+
+			(panel.panel as unknown as { visible: boolean }).visible = false;
+			on_view_state_cb(); // records the hidden transition syncVisibility needs to recognise later
+			const fresh_text = '# Lonely updated while hidden';
+			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode(fresh_text));
+			panel.postedMessages.length = 0;
+			await on_change_cb(Uri.file(docPath));
+			expect(getUpdates(panel.postedMessages)).toEqual([]);
+
+			// syncVisibility does not await the refresh, so await the refresh's own promise rather than draining turns
+			const refresh_spy = jest.spyOn(PanelSession.prototype as unknown as { refreshAfterBecomingVisible: () => Promise<void> }, 'refreshAfterBecomingVisible');
+			try {
+				(panel.panel as unknown as { visible: boolean }).visible = true;
+				on_view_state_cb();
+				expect(refresh_spy).toHaveBeenCalledTimes(1);
+				await refresh_spy.mock.results[0].value;
+			} finally {
+				refresh_spy.mockRestore();
+			}
+
+			const updates = getUpdates(panel.postedMessages);
+			expect(updates.length).toBeGreaterThanOrEqual(1);
+			const doc_entries = Object.values(updates[updates.length - 1].partial.docs) as UpdateDocEntry[];
+			expect(doc_entries[0].text).toBe(fresh_text);
+		});
+
 		it('folder-mode watcher re-parses changed files from disk, bypassing the openTextDocument cache', async () => {
 			const file_path = '/workspace/notes/story.md';
 			// phase-1 discovery uses openTextDocument (initial load, cache is fresh from disk anyway)
@@ -1979,7 +2065,7 @@ describe('NotethinkEditorProvider', () => {
 			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_path)]);
 
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
-			// phase-1 loadOne uses crypto.subtle.digest in buildDoc which spans multiple event-loop cycles; wait until both phase-1 messages (per-file merge + Promise.allSettled.then canonical) have landed before clearing, otherwise a late-arriving v1 merge would race the watcher's v2 post and become updates[0]
+			// buildDoc's digest spans event-loop cycles; wait for both phase-1 messages, or a late v1 merge could race the v2 post
 			while (getUpdates(panelHelper.postedMessages).length < 2) {
 				await new Promise(resolve => setImmediate(resolve));
 			}
@@ -2004,6 +2090,49 @@ describe('NotethinkEditorProvider', () => {
 			const doc_entries = Object.values(updates[0].partial.docs) as UpdateDocEntry[];
 			expect(doc_entries[0].text).toBe(fresh_text);
 			expect(doc_entries[0].createdBy).toBe('fsWatcher');
+		});
+
+		it('folder-mode watcher skips the parse and post while the panel is hidden', async () => {
+			const file_path = '/workspace/notes/story.md';
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(mockTextDocument('# story v1', file_path));
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_path)]);
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			while (getUpdates(panelHelper.postedMessages).length < 2) {
+				await new Promise(resolve => setImmediate(resolve));
+			}
+
+			(panelHelper.panel as unknown as { visible: boolean }).visible = false;
+			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode('# story v2, but nobody is looking'));
+			const folder_watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_change_cb = folder_watcher.onDidChange.mock.calls[0][0];
+
+			panelHelper.postedMessages.length = 0;
+			await on_change_cb(Uri.file(file_path));
+
+			expect(getUpdates(panelHelper.postedMessages)).toEqual([]);
+			(panelHelper.panel as unknown as { visible: boolean }).visible = true;
+		});
+
+		it('folder-mode watcher skips the parse and post when the on-disk content has not actually changed', async () => {
+			const file_path = '/workspace/notes/story.md';
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(mockTextDocument('# story v1', file_path));
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_path)]);
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			while (getUpdates(panelHelper.postedMessages).length < 2) {
+				await new Promise(resolve => setImmediate(resolve));
+			}
+
+			// same content discovery already loaded - a hash-gated no-op, not a genuine change
+			(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode('# story v1'));
+			const folder_watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value;
+			const on_change_cb = folder_watcher.onDidChange.mock.calls[0][0];
+
+			panelHelper.postedMessages.length = 0;
+			await on_change_cb(Uri.file(file_path));
+
+			expect(getUpdates(panelHelper.postedMessages)).toEqual([]);
 		});
 
 		it('disposes the watcher when the setting flips off via configuration change', async () => {
@@ -2092,10 +2221,7 @@ describe('NotethinkEditorProvider', () => {
 		});
 	});
 
-	/*
-	 * ---- non-file: scheme folder mode (VS Code Web / custom FileSystemProvider) ----
-	 * shared vscode-vfs: fixtures for the non-file: scheme folder-mode + openRelative blocks below
-	 */
+	// ---- non-file: scheme folder mode (vscode-vfs fixtures for folder-mode + openRelative below) ----
 	const VFS_AUTHORITY = 'github';
 	const VFS_ROOT = '/zoombuzz/notethink';
 	const vfsUri = (p: string): Uri => Uri.parse(`vscode-vfs://${VFS_AUTHORITY}${p}`);
@@ -2103,7 +2229,7 @@ describe('NotethinkEditorProvider', () => {
 	describe('folder mode on a non-file: workspace scheme', () => {
 		const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
-		// stand up a fresh panel whose workspace folder + active doc both live on a vscode-vfs: scheme, so base_uri carries that scheme end-to-end
+		// stands up a panel whose workspace folder and active doc both live on a vscode-vfs: scheme
 		async function setupVfsPanel(): Promise<ReturnType<typeof createMockWebviewPanel>> {
 			const folder_uri = vfsUri(VFS_ROOT);
 			(vscode.workspace as unknown as WorkspaceMutable).workspaceFolders = [{ uri: folder_uri, name: 'notethink', index: 0 }];
@@ -2365,7 +2491,7 @@ describe('NotethinkEditorProvider', () => {
 			expect(folderFindCalls()).toEqual([]);
 		});
 
-		// the reload path restores its own scope by posting setIntegration BEFORE requestInitialState; the docless open must stay out of its way
+		// the reload path posts setIntegration before requestInitialState to restore scope; docless open must not interfere
 		it('does not override a folder scope the webview already restored', async () => {
 			const panel = await startDoclessPanel();
 
@@ -2393,7 +2519,7 @@ describe('NotethinkEditorProvider', () => {
 		});
 	});
 
-	// activityDemand/activityWithdraw dispatch onto the shared AgentAnalyser the provider owns; the analyser's own lifecycle (ref-counting, restart-once, watchers) is AgentAnalyser.test.ts's job, this only proves the panel's message reaches it and answers back
+	// activityDemand/activityWithdraw dispatch onto the shared AgentAnalyser; proves the panel's message reaches and answers
 	describe('agent activity demand dispatch', () => {
 		it('activityDemand gets an activity message posted back to this panel', async () => {
 			panelHelper.postedMessages.length = 0;

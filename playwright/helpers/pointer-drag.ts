@@ -8,7 +8,7 @@ export interface PointerDragOptions {
 }
 
 /*
- * gesture defaults. The settle waits give dnd's rAF-driven lift and drop phases time to run; a drag
+ * Gesture defaults. The settle waits give dnd's rAF-driven lift and drop phases time to run; a drag
  * driven without them races the sensor and drops on the source. Only the two either side of the
  * release, and the drop point's vertical inset, are overridable; nothing else has needed to move.
  */
@@ -20,7 +20,7 @@ const LIFT_SETTLE_MS = 150;
 const TRAVEL_SETTLE_MS = 150;
 
 /**
- * a point inside the visible part of a box, since a kanban lane or a card standing at the target
+ * A point inside the visible part of a box, since a kanban lane or a card standing at the target
  * card ratio can run off both edges of the window. The wanted offset is honoured whenever it lands
  * on screen, so a box that fits is unaffected; otherwise the point falls back to the middle of the
  * visible band. A box with no visible band at all throws, because a coordinate outside the viewport
@@ -37,7 +37,7 @@ function visiblePointY(box: { y: number; height: number }, offset: number, viewp
 }
 
 /**
- * drive @hello-pangea/dnd's pointer sensor with a real mouse gesture: press on the card, nudge past
+ * Drives @hello-pangea/dnd's pointer sensor with a real mouse gesture: press on the card, nudge past
  * the drag threshold, travel over the destination in steps so dnd tracks the move, settle, release.
  * This is a different code path from the keyboard sensor - it has a position:fixed clone, a
  * transform that follows the cursor, and a drop tween - so specs that care about drop behaviour

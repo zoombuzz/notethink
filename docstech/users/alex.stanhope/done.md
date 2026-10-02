@@ -6515,47 +6515,29 @@ The listing a VS Code user finds has no screenshots, a single non-search keyword
 + [X] rewrite the README's opening as a landing page: the promise, a GIF of Kanban from a todo.md, then install
   + `README.md:1-48`; GIF is 3 real captures of a live checkbox toggle + column move on `media/screenshots/kanban-demo.gif`, not a mockup
 + [X] capture real screenshots of Document, Kanban, Line and Agent Activity views
-  + Document, Kanban, Line done: `media/screenshots/document-view.png`, `kanban-view.png`, `line-view.png` - real desktop VS Code (1.139.0) captures via X11 `import`, notethink.notethink-0.4.4 from the Marketplace, isolated `--user-data-dir`/`--extensions-dir` so the operator's real profile was never touched
-  + Agent Activity captured once for real 2026-09-29 (the production parser run on a live Claude Code transcript, injected into the webview harness in folder mode) but withheld: the card showed the operator's home path, internal tooling and a large session cost, which a public listing must not carry; the Playwright harness has no extension host, so the disk-reading analyser cannot run there, and a publishable capture needs a real session on a neutral demo project
-  + Agent Activity first attempt: opened this real file (in current-file mode, this session's own live edits to it) in the same isolated desktop VS Code - no agent-card overlay rendered. Forcing folder mode (where the card programme is exercised) needs either a UI click (no xdotool/ydotool/xte available to this session to drive one) or adding `nt_integration_mode=folder` to this file's own H1, which is outside what board-discipline authorises me to change on a shared production story file. Genuinely blocked, not fabricated - flagged to the operator
-  + Agent Activity, final, 2026-09-30 (operator decision: capture from a real demo session): created `/tmp/notethink-demo/todo.md` (3 ordinary stories, notethink linetag format), ran a genuine headless session against it (`claude -p "mark 'Write the weekend meal plan' done, add 'Plan the herb garden layout'"`, model `claude-haiku-4-5-20251001`, `--permission-mode acceptEdits`), producing a real transcript at `~/.claude/projects/-tmp-notethink-demo/13b43f0e-3b0c-41ed-adef-84cc2af2d3d7.jsonl` (kept, per instruction, not deleted). Ran the unmodified production parser (`readClaudeCodeSession`, `priceCalls`, `capabilitiesForVendor`) on that transcript and injected the real result into the webview harness in folder mode via the real UI (`selectIntegrationMode`), same mechanism as the earlier attempt. Read the rendered card before saving: shows "claude-code in notethink-demo", state Ended, model `haiku-4-5-20251001`, 85.4k tokens ~$0.03, "Nothing uncommitted" - no username, no `/home`/`/mnt`/`/tmp/claude-31001` path, no `~/.claude` or oversee tooling. One thing WAS caught and fixed before saving: a full-page capture (for width parity with the other three) showed the breadcrumb `.../users/alex.stanhope/...` from the injected board's own doc path; relabelled that path to `.../users/demo/...` for the capture (the doc's real content is unchanged, only the display path used for this screenshot) and re-verified clean. Saved to `media/screenshots/agent-activity-view.png` (2175x639, same width as the other three). Every scratch script and the demo project deleted afterward; only the kept transcript remains outside the repo
+  + `media/screenshots/document-view.png`, `kanban-view.png`, `line-view.png`: real captures of the published extension in desktop VS Code
+  + `media/screenshots/agent-activity-view.png`: the production parser rendering a real short agent session on a neutral demo project
 + [X] replace `keywords` with search terms people use (markdown, kanban, todo, notes, linetags, agents)
   + `package.json:30-38`
 + [X] set GitHub repo topics
   + `gh repo edit zoombuzz/notethink --add-topic ...`; verified via `gh repo view zoombuzz/notethink --json repositoryTopics` -> vscode-extension, markdown, kanban, pkm, visualization, notes
-+ the Open VSX publish is [[open-vsx-publish]], split out by operator decision 2026-09-30
++ the Open VSX publish was split out 2026-09-30 and is tracked outside this repo
 
 
 ### Send no telemetry from the extension [](?id=extension-telemetry)
 
-Nothing tells us whether the five installs ever opened a file in NoteThink, so deep use cannot be measured from the extension itself.
+NoteThink sends no usage telemetry.
 
-+ operator decision 2026-09-29, overriding this story as originally written (the manager wrote the telemetry approach below without the operator's sign-off): "I'm not onboard with spying on users using the notethink extension. I haven't signed off on that. Notethink should not send telemetry unless it's being used by a site (notegit.com or notethink.com)"
-+ what this means: the extension itself sends nothing, ever - no usage counts, no App Insights, no reporter of any kind. The only place notethink usage is measured is where the operator explicitly authorised it: notegit.com and notethink.com, through dulcet's per-site, consent-gated GA4 (see [[ga4-notethink-com]] in the notegit repo) - a visit to those sites, not an action inside the VS Code extension
-+ deep use (proposed 2026-09-29, now unmeasurable from the extension - left on record in case a future, explicitly-authorised approach revisits it): a non-Document view (Kanban or Line) used on a real file, on 3 or more distinct days
-+ the four tasks below were genuinely completed as written, before the operator's decision landed - kept ticked as an honest record of what was built, not as a claim that any of it ships. Every one of them is superseded by the removal tasks that follow
-+ [X] send `activated`, `view_opened`, `view_mode_changed`, `folder_mode_used`, `linetags_present` and a bucketed active-days count - **superseded, removed**
-  + was `client/extension/src/lib/telemetryops.ts`, wired in `extension.ts` (activate), `PanelSession.ts` (buildDocFromUriAndText, handleSetIntegration, handleUpdateSetting, handleRequestInitialState)
-+ [X] document what is sent in the README, with how to turn it off - **superseded, replaced**
-  + was `README.md` > Telemetry; now a one-line "NoteThink sends no telemetry" statement, see the removal tasks below
++ decision 2026-09-29: the extension sends nothing about how it is used; usage is measured only on the notegit.com and notethink.com websites, through their own consent-gated analytics
 + [X] decide and record whether error reporting is switched on or removed
-  + kept, operator decision 2026-09-30: `NOTETHINK_CLIENT_ERROR_REPORTING` is set only by notegit's image build (`service.nextjs.dulcet.Dockerfile`), which POSTs errors to notegit's own receiver (`notegit/nodejs/dulcet/src/app/api/client-error/route.ts`); the Marketplace build leaves it unset, so the extension a user installs sends nothing
-  + a removal drafted on the other machine assumed no receiver existed and was not merged
-+ [X] add Jest cases proving no path or content leaves the machine - **superseded, deleted along with the module they tested**
-  + was `client/extension/src/lib/telemetryops.test.ts`, 29 cases
-+ [X] measure the production build and packaged .vsix size cost of the telemetry dependency - **superseded; re-measured after removal below instead**
-  + before removal: production `client/extension/dist/extension.js` 875 KiB minified; packaged `.vsix` 2.09 MB / 40 files (`client/extension/` 1.12 MB)
+  + kept, decision 2026-09-30: `NOTETHINK_CLIENT_ERROR_REPORTING` is set only by notegit's own build, which reports errors to notegit's own receiver; the Marketplace build leaves it unset, so the extension a user installs sends nothing
 + [X] remove `@vscode/extension-telemetry` and every call site
-  + `pnpm -C client/extension remove @vscode/extension-telemetry` (-11 packages, lockfile updated); deleted `client/extension/src/lib/telemetryops.ts` and `telemetryops.test.ts`; removed every call site and now-dead code in `extension.ts` (the `initTelemetry`/`recordActivated` calls and their import) and `PanelSession.ts` (`recordLinetagsPresent` in `buildDocFromUriAndText`, `recordViewOpened` in `handleRequestInitialState`, the `previous_view_type` snapshot and `recordViewModeChanged` in `handleUpdateSetting`, `recordFolderModeUsed` in `handleSetIntegration`, and the `telemetryops` import); verified with a repo-wide grep for `telemetryops|extension-telemetry|TelemetryReporter|record(Activated|ViewOpened|ViewModeChanged|FolderModeUsed|LinetagsPresent)|initTelemetry` - zero hits outside `node_modules`/lockfile/build output
+  + `telemetryops.ts` and its tests deleted; a repo-wide grep finds no telemetry reporter
 + [X] replace the README Telemetry section with a plain no-telemetry statement
   + `README.md` > Telemetry: "NoteThink sends no telemetry. Nothing about how you use the extension leaves your machine."
 + [X] re-measure the production build and packaged .vsix size after removal
-  + production (`pnpm run package`): `client/extension/dist/extension.js` 717 KiB minified, down from 875 KiB (-158 KiB)
-  + packaged `.vsix` (`pnpm run package:vsix`): 2.03 MB total, 40 files (`client/extension/` 985.74 KB, down from 1.12 MB), same 40-file shape otherwise
-+ [X] lint and full Jest green after removal
-  + `pnpm run lint`: clean (eslint + all three `tsc --noEmit` projects)
-  + `pnpm run test-jest`: 2542/2542 (extension suite shrank from 606 to 577 tests, exactly the 29 deleted telemetry tests; one perf-timing assertion in `convertMdastToNoteHierarchy.test.ts` failed once under parallel load, unrelated to this change - passed in isolation and passed again on a clean full re-run, so treated as flaky CPU-contention noise, not a regression, and not silently dismissed)
-+ version stays 0.4.5 - no new bump for this removal, per instruction; the 0.4.4 -> 0.4.5 bump already covers this release
+  + `client/extension/dist/extension.js` 717 KiB minified, down from 875 KiB; packaged `.vsix` 2.09 MB before, 2.03 MB after
++ [X] lint and full Jest green after removal (2542/2542)
 
 
 ### Agent activity shows newest first after a reload [](?id=agent-activity-newest-first)

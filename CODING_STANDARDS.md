@@ -170,7 +170,7 @@ Never route build output to `/tmp`: it is ephemeral, and each stream has one doc
 
 ## Security
 
-notethink has no server-side component, no database and no user accounts, so the auth, server-action and RLS sections of [`SECURITY.md`](../lightenna-iac/docstech/standards/SECURITY.md) do not apply. Its environment-variable rules do, for the build and publish scripts: never put a secret in `argv` or in a committed file. Anything the extension writes to a user's `settings.json` is public by construction (see [Permanent name check](#permanent-name-check)).
+notethink has no server-side component, no database and no user accounts, so the auth, server-action and RLS sections of [`SECURITY.md`](../lightenna-iac/docstech/standards/SECURITY.md) do not apply. Its environment-variable rules do, for the build and publish scripts: never put a secret in `argv` or in a committed file. The repository is public, so what may be committed at all, docs and story boards included, is governed by [`AGENTS.md`](AGENTS.md) > This repository is public. Anything the extension writes to a user's `settings.json` is public by construction (see [Permanent name check](#permanent-name-check)).
 
 ## Framework: VS Code extension and React webview
 

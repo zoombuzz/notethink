@@ -1,18 +1,6 @@
 # Todo [](?nt_view=kanban)
 
 
-### Publish NoteThink to Open VSX [](?id=open-vsx-publish)
-
-Editors built on Open VSX (VSCodium, Cursor, Gitpod and others) cannot find NoteThink: the Open VSX API answers "Extension not found: NoteThink.notethink".
-
-+ split out of [[marketplace-findability]] by operator decision 2026-09-30
-+ the token placeholder `general::notethink::ovsx::alex_publishonly_pat` (`TF_VAR_notethink_ovsx_alex_publishonly_pat`) is staged, uncommitted, in lightenna-iac's `secrets.eyaml` and `devdesktop-envvars.yaml`, beside the vsce PAT
-+ [ ] [](?work=manual) create an Open VSX access token on the account that owns the `NoteThink` namespace, paste it into the staged slot during `eyaml edit`, commit, and run puppet
-+ [ ] add an `ovsx` dev dependency and a `publish:openvsx` script shaped like `publish:marketplace`, reading `TF_VAR_notethink_ovsx_alex_publishonly_pat` by name
-+ [ ] claim the `NoteThink` namespace if it is unclaimed, then publish the current packaged `.vsix`, confirming each public write with the operator
-+ [ ] confirm the Open VSX API returns the extension and its listing shows the Marketplace README and screenshots
-
-
 ### Single-file kanban falls back to document view [](?id=single-file-kanban-auto-view)
 
 Opening a file tagged `[](?nt_view=kanban)` through NoteThink: Open Viewer draws a flat document instead of a board whenever the workspace holds other files. View settings resolve to "Auto (Document)" and no columns render.

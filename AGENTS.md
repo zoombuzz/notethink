@@ -8,6 +8,18 @@ This document provides essential information for AI agents working on the NoteTh
 
 NoteThink is a VS Code extension that renders markdown files as interactive visualizations. It uses a React webview for the UI and includes a reusable component library (`notethink-views`). The repo, `zoombuzz/notethink`, is public and ships to the VS Code Marketplace.
 
+## This repository is public: everything committed is published
+
+`zoombuzz/notethink` is a public GitHub repository. Everything committed here is published the moment it is pushed, including `docstech/` story boards, reports and test fixtures. Removing it in a later commit does not unpublish it, because it stays in git history and on GitHub. **This is a hard rule: before writing anything into this repo, and again before committing, ask whether it is safe and insensitive to publish.** Never commit:
+
+- **secrets, or where secrets are kept**: no tokens or keys, and no secret-store key names, `TF_VAR_*` names, or eyaml, puppet or hieradata paths. A build or publish script reads a credential from the environment by a generic name; where it is stored belongs in the private infrastructure repo.
+- **anything about the operator's machines, accounts or sessions**: home or other absolute paths, usernames, hostnames, uids, session ids, transcript paths, or the names of internal tools and scripts.
+- **commercial material**: notethink is a free VSCode extension, so there aren't any commercialisation plans, but promotion or marketing plans, audiences, channels, user or install counts beyond what the public Marketplace listing shows, analytics property or stream ids, and ad plans, are not stored here.
+- **the operator's private words or internal process**: a quote from a conversation, who decided what without whom, or an agent's mistakes and retries. Record the decision and what was built, not how the conversation went.
+- **links or paths into private repositories or tools** that a reader of this repo cannot open. The one exception is the agent instruction files (this file, `CLAUDE.md` and `CODING_STANDARDS.md`), which may point at the workspace's shared standards and at notegit by relative path, because that is how agents find them.
+
+Write a story as a contributor would read it: the problem, the decision and what shipped. **Stories containing any of the excluded material listed above are filed on notegit's `todo.md`, not here**, even when part of the code change lands in this repo; so is any note that can only be written by naming one of the above. Before committing, read the diff of `docstech/`, `README.md`, `media/` and any fixture against this list, and leave out whatever fails it.
+
 ### Architecture
 
 There is no root `src/`: the three source roots are described in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > File Organization.
@@ -48,7 +60,7 @@ See workspace [`../AGENTS.md`](../AGENTS.md) > Code conventions > Comment style,
 
 ## Cruft that only makes sense on one machine
 
-`zoombuzz/notethink` is public, so its next readers are contributors and users who have none of the tooling any given author happened to use. A reference that resolves only in one person's setup does not fail loudly for them: it reads as noise, or as a lead they follow and lose time on. This is not a hard rule, and nothing here wants auditing or sweeping. **The test is one question: would this line still mean something to someone who has just cloned the repo?**
+`zoombuzz/notethink` is public, so its next readers are contributors and users who have none of the tooling any given author happened to use. A reference that resolves only in one person's setup does not fail loudly for them: it reads as noise, or as a lead they follow and lose time on. This section is about usefulness, not safety: anything sensitive is already excluded by the hard rule above, and beyond that this is judgement, so nothing here wants auditing or sweeping. **The test is one question: would this line still mean something to someone who has just cloned the repo?**
 
 - **Pointers nobody else can follow** - a link to a page only the author's account can open, a path under `~/.claude/`, a session scratchpad directory, a workstation hostname, an absolute path out of one person's home. **Say the thing rather than point at it**: where a design exploration or a scratch document produced a decision, the decision belongs in the story or the comment, written out in full.
 - **Residue of how the work got done** - which tool ran what, where a copy was made to check something, how many attempts it took. Record what was decided and what it means; the method earns its place only when a future reader would have to repeat it.

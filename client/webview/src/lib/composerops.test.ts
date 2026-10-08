@@ -74,16 +74,17 @@ describe('composerops.buildViewDisplayOptions', () => {
             expect(result.viewType).toBe('kanban');
         });
 
-        it('attaches cascade columnOrder to settings.columnOrder when non-empty', () => {
-            const props = buildProps({ settingsCascade: buildCascade({ columnOrder: ['done', 'doing'] }) });
+        it('attaches cascade groupDisplay to settings.groupDisplay when non-empty', () => {
+            const entries = [{ value: 'done', shown: true }, { value: 'doing', shown: false }];
+            const props = buildProps({ settingsCascade: buildCascade({ groupDisplay: entries }) });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
-            expect(result.view_display_options.settings?.columnOrder).toEqual(['done', 'doing']);
+            expect(result.view_display_options.settings?.groupDisplay).toEqual(entries);
         });
 
-        it('does NOT attach columnOrder to settings when the cascade list is empty', () => {
-            const props = buildProps({ settingsCascade: buildCascade({ columnOrder: [] }) });
+        it('does NOT attach groupDisplay to settings when the cascade list is empty', () => {
+            const props = buildProps({ settingsCascade: buildCascade({ groupDisplay: [] }) });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
-            expect(result.view_display_options.settings?.columnOrder).toBeUndefined();
+            expect(result.view_display_options.settings?.groupDisplay).toBeUndefined();
         });
 
         it('a stale per-session viewState settings block no longer overrides the cascade', () => {
@@ -263,6 +264,18 @@ describe('composerops.buildViewDisplayOptions', () => {
             ] as unknown as UserViewType[];
             const settings = buildForType('user-no-overrides', malformed, { kanbanGroupBy: 'status' }).settings!;
             expect(settings.kanbanGroupBy).toBe('status');
+        });
+
+        /*
+         * A type minted before groupDisplay existed carries the legacy columnOrder shape alone. The
+         * board must still honour it, so applyUserTypeOverrides migrates it on the way onto the
+         * settings block rather than leaving a dead columnOrder key the renderer never reads.
+         */
+        it("migrates a minted type's legacy columnOrder override to groupDisplay", () => {
+            const legacy = { id: 'user-legacy', label: 'Legacy Order', parent: 'kanban', overrides: { columnOrder: ['done', 'doing'] } } as unknown as UserViewType;
+            const settings = buildForType('user-legacy', [legacy]).settings!;
+            expect(settings.groupDisplay).toEqual([{ value: 'done', shown: true }, { value: 'doing', shown: true }]);
+            expect(settings.columnOrder).toBeUndefined();
         });
 
     });

@@ -15,7 +15,7 @@ import type { SettingsCascadeKey } from "../../types/Messages";
  * two keys, `groupBy` at grouped and `kanbanGroupBy` at kanban. These tables are therefore the row spec,
  * and `SETTING_HOMES` decides where each row lands.
  */
-export type SettingControlKind = 'checkbox' | 'groupBy' | 'orientation' | 'columnOrder' | 'cardRatio' | 'cardType' | 'breadth';
+export type SettingControlKind = 'checkbox' | 'groupBy' | 'orientation' | 'groupDisplay' | 'cardRatio' | 'cardType' | 'breadth';
 
 /**
  * One declared row.
@@ -39,14 +39,14 @@ export type SettingRowValues = Partial<Record<SettingsCascadeKey, unknown>>;
 const AXIS_ALIAS = 'axis';
 
 /*
- * Declaration order is the within-node order the pane renders, so the kanban rows read group-by, column
- * order, card ratio, animate, default card type exactly as the drawer's design states them. Across nodes
+ * Declaration order is the within-node order the pane renders, so the kanban rows read group-by, group
+ * display, card ratio, animate, default card type exactly as the drawer's design states them. Across nodes
  * the chain decides the order, so this list needs no most-specific-first arrangement of its own.
  */
 export const VIEW_SETTING_ROWS: SettingRowDef[] = [
     { key: 'kanbanGroupBy', control: 'groupBy', fallback: 'auto', alias: AXIS_ALIAS },
     { key: 'groupBy', control: 'groupBy', fallback: 'auto', alias: AXIS_ALIAS },
-    { key: 'columnOrder', control: 'columnOrder', fallback: [] },
+    { key: 'groupDisplay', control: 'groupDisplay', fallback: [] },
     { key: 'kanbanCardRatio', control: 'cardRatio', fallback: DEFAULT_CARD_RATIO },
     { key: 'kanbanAnimateTransitions', control: 'checkbox', fallback: true },
     { key: 'kanbanDefaultCardType', control: 'cardType', fallback: DEFAULT_CARD_TYPE },
@@ -80,18 +80,19 @@ export function rowHome(def: SettingRowDef): string {
  * would never reach the bundle.
  *
  * Two of these are named for the thing rather than for the axis it happens to be drawn on. Orientation
- * transposes the board, so "column order" names nothing once the lanes are rows; the lanes are groups
- * whichever way they run. The breadth row is the exception, named for the axis it runs along: "Column
- * width" while the lanes are columns and "Row height" once they are rows, which is why the label takes the
- * orientation. The config paths still say `columnOrder` and `cardRatio` - a path is a permanent name on a
- * user's disk, so renaming a row moves what it is called and never where it is stored.
+ * transposes the board, so a "column" names nothing once the lanes are rows, and "Group display" calls
+ * them groups, which they are whichever way they run. The breadth row is the exception, named for the
+ * axis it runs along: "Column width" while the lanes are columns and "Row height" once they are rows,
+ * which is why the label takes the orientation. The card ratio's config path still says `cardRatio`: a
+ * path is a permanent name on a user's disk, so renaming a row moves what it is called and never where it
+ * is stored. `groupDisplay` is stored under its own name because it is a new key with a new shape.
  */
 export function settingRowLabel(key: SettingsCascadeKey, orientation?: unknown): string {
     switch (key) {
         case 'lineBreadth': return orientation === 'rows' ? l10n.t('Row height') : l10n.t('Column width');
         case 'groupBy':
         case 'kanbanGroupBy': return l10n.t('Group by');
-        case 'columnOrder': return l10n.t('Group order');
+        case 'groupDisplay': return l10n.t('Group display');
         case 'kanbanCardRatio': return l10n.t('Target card ratio');
         case 'kanbanAnimateTransitions': return l10n.t('Animate passive transitions');
         case 'kanbanDefaultCardType': return l10n.t('Default card type');
@@ -130,7 +131,7 @@ function deepestOfAlias(candidates: SettingRowDef[], alias: string, chain: strin
  *
  * The pill is the sort key rather than the storage home, because the pill is what the reader can see. The
  * two agree on every row but one: the lane axis is stored at kanban and pilled Grouped, since kanban pins
- * the axis rather than owning it, so sorting on the home put Group by above Group order under a pill
+ * the axis rather than owning it, so sorting on the home put Group by above Group display under a pill
  * saying it belonged further up the tree. Sorting on the pill makes the list read exactly as the pill
  * column reads - Kanban, Line, Grouped, All views - which is the tree upside down, and the tree is drawn
  * root-first directly above it.

@@ -14,7 +14,7 @@ const debug = Debug("nodejs:notethink-views:viewregistryops");
  * The settings model has three concerns and one engine:
  *  - storage: every setting has ONE home node where it is declared; a descendant may carry an override
  *  - an override is FIXED (child pins it as identity, read-only here, edit at the unlocking ancestor -
- *    kanban's group-by = status) or OPEN (child holds its own editable value - kanban's group order)
+ *    kanban's group-by = status) or OPEN (child holds its own editable value - kanban's group display)
  *  - resolution: the effective structural value for a node is the deepest override on its ancestor
  *    chain, else the home default; the runtime per-session viewState -> extension cascade -> built-in
  *    default layering (composerops) sits UNDER each node's value and is not modelled here
@@ -137,7 +137,7 @@ export const SETTING_HOMES = {
     orientation:                { node: 'line',      path: 'view.specific.line.orientation' },
     lineBreadth:                { node: 'line',      path: 'view.specific.line.lineBreadth' },
     kanbanGroupBy:              { node: 'kanban',    path: 'view.specific.kanban.groupBy' },
-    columnOrder:                { node: 'kanban',    path: 'view.specific.kanban.columnOrder' },
+    groupDisplay:               { node: 'kanban',    path: 'view.specific.kanban.groupDisplay' },
     kanbanCardRatio:            { node: 'kanban',    path: 'view.specific.kanban.cardRatio' },
     kanbanAnimateTransitions:   { node: 'kanban',    path: 'view.specific.kanban.animateTransitions' },
     kanbanDefaultCardType:      { node: 'kanban',    path: 'view.specific.kanban.defaultCardType' },
@@ -149,12 +149,12 @@ export const SETTING_HOMES = {
 } as const satisfies Record<SettingsCascadeKey, { node: string; path: string }>;
 
 /*
- * The dimensional ladder plus its settings homes and overrides. `axes`, `groupOrder` and `groupBy`
+ * The dimensional ladder plus its settings homes and overrides. `axes`, `groupDisplay` and `groupBy`
  * home at grouped; `orientation` homes at line; generic settings and view selection home at root.
- * Kanban fixes axes[0] to status and holds its own open group order and group-by, so editing from
- * kanban forks rather than moving the ancestor's value; grouped's own group order has no config_path
- * since only kanban's columnOrder persists it. Every node owns settings and is configurable; only
- * concrete rungs are selectable.
+ * Kanban fixes axes[0] to status and holds its own open group display and group-by, so editing from
+ * kanban forks rather than moving the ancestor's value; grouped's own group display has no
+ * config_path since only kanban's groupDisplay persists it. Every node owns settings and is
+ * configurable; only concrete rungs are selectable.
  */
 export const VIEW_REGISTRY: ViewRegistry = {
     nodes: [
@@ -167,13 +167,13 @@ export const VIEW_REGISTRY: ViewRegistry = {
     settings: [
         { key: 'viewType', home: 'root', default: 'auto', config_path: SETTING_HOMES.viewType.path },
         { key: 'axes', home: 'grouped', default: undefined },
-        { key: 'groupOrder', home: 'grouped', default: [] },
+        { key: 'groupDisplay', home: 'grouped', default: [] },
         { key: 'groupBy', home: 'grouped', default: 'auto', config_path: SETTING_HOMES.groupBy.path },
         { key: 'orientation', home: 'line', default: 'columns', config_path: SETTING_HOMES.orientation.path },
     ],
     overrides: [
         { node: 'kanban', key: 'axes', mode: 'fixed', value: ['status'] },
-        { node: 'kanban', key: 'groupOrder', mode: 'open', value: undefined, config_path: SETTING_HOMES.columnOrder.path },
+        { node: 'kanban', key: 'groupDisplay', mode: 'open', value: undefined, config_path: SETTING_HOMES.groupDisplay.path },
         { node: 'kanban', key: 'groupBy', mode: 'open', value: undefined, config_path: SETTING_HOMES.kanbanGroupBy.path },
     ],
 };
@@ -184,14 +184,14 @@ export const VIEW_REGISTRY: ViewRegistry = {
  * the value persists to); groupBy and kanbanGroupBy force the split, since both carry a kanban open
  * override, so keying on the write key would wrongly put the pill on kanban and suppress the offer.
  * `axes` is the key kanban fixes to status, and departing from that pin is what saving a new view type
- * means; group order carries no such pin. A key absent here has no registry presence and answers from
+ * means; group display carries no such pin. A key absent here has no registry presence and answers from
  * SETTING_HOMES.
  */
 export const STRUCTURAL_SETTING_KEYS: Partial<Record<SettingsCascadeKey, string>> = {
     viewType: 'viewType',
     groupBy: 'axes',
     kanbanGroupBy: 'axes',
-    columnOrder: 'groupOrder',
+    groupDisplay: 'groupDisplay',
     orientation: 'orientation',
 };
 
@@ -358,7 +358,7 @@ export function owningNodeFor(node_id: string, key: SettingsCascadeKey, registry
  * True when changing this row from the selected node departs from a value an ancestor owns, which is
  * when the drawer offers "Save as a new view type". The pill and the offer are one question asked twice:
  * the offer fires when the pill names a STRICT ancestor of the selected node, so no per-setting list is
- * needed - a row the node owns itself (kanban's column order) and a row with no owning type at all (a
+ * needed - a row the node owns itself (kanban's group display) and a row with no owning type at all (a
  * global) both fall out as false.
  *
  * Root is the one ancestor that does not offer. Its settings are the generic ones that reach every view,
@@ -381,14 +381,28 @@ function isUsableUserViewType(user_type: UserViewType, nodes: ViewNode[]): boole
 }
 
 /**
+ * Migrates a saved type's legacy `columnOrder: string[]` override to `groupDisplay`, every lane shown,
+ * when `groupDisplay` is absent. `columnOrder` predates lane visibility; a type minted before that
+ * change carries it alone, and this is the one place every reader of a saved type's overrides passes
+ * through, so the rest of the drawer, the minted-type offer and the board only ever see `groupDisplay`.
+ * Leaves `overrides` untouched once it already carries `groupDisplay`.
+ */
+export function normalizeGroupDisplayOverride(overrides: Record<string, unknown>): Record<string, unknown> {
+    if ('groupDisplay' in overrides || !Array.isArray(overrides.columnOrder)) { return overrides; }
+    const { columnOrder, ...rest } = overrides;
+    return { ...rest, groupDisplay: (columnOrder as string[]).map(value => ({ value, shown: true })) };
+}
+
+/**
  * The overrides a saved type declares, keyed by cascade key exactly as the drawer wrote them. The list
  * comes from a user's settings.json and is untrusted, so an entry carrying anything but an object reads
- * as declaring nothing rather than throwing.
+ * as declaring nothing rather than throwing. Migrates a legacy `columnOrder` override on the way out, so
+ * every caller - the registry, the drawer's offer, the board - reads `groupDisplay` alone.
  */
 function declaredOverrides(user_type: UserViewType | undefined): Record<string, unknown> {
     const declared = user_type?.overrides;
     if (typeof declared !== 'object' || declared === null) { return {}; }
-    return declared;
+    return normalizeGroupDisplayOverride(declared);
 }
 
 /**

@@ -55,7 +55,9 @@ function setWorkspaceRoots(roots: string[] | undefined): void {
 
 const EXCLUDE_PATH = SETTINGS.excludeFilter.path;
 const VIEW_TYPE_PATH = SETTINGS.viewType.path;
-const COLUMN_ORDER_PATH = SETTINGS.columnOrder.path;
+const GROUP_DISPLAY_PATH = SETTINGS.groupDisplay.path;
+// groupDisplay's predecessor: a plain string[] at a different config path, still read as a fallback
+const LEGACY_COLUMN_ORDER_PATH = 'view.specific.kanban.columnOrder';
 const LINETAGS_PATH = SETTINGS.showLinetagsInHeadlines.path;
 
 describe('SETTINGS is complete enough for the drawer to render and promote every key', () => {
@@ -80,7 +82,7 @@ describe('SETTINGS is complete enough for the drawer to render and promote every
         expect(SETTINGS.scrollNoteIntoView.node).toBe('root');
         expect(SETTINGS.orientation.node).toBe('line');
         expect(SETTINGS.groupBy.node).toBe('grouped');
-        expect(SETTINGS.columnOrder.node).toBe('kanban');
+        expect(SETTINGS.groupDisplay.node).toBe('kanban');
         expect(SETTINGS.kanbanAnimateTransitions.node).toBe('kanban');
         expect(SETTINGS.watchUnopenedFilesInViewer.node).toBe(NODE_GLOBAL);
         expect(SETTINGS.excludeFilter.node).toBe(NODE_FILES);
@@ -197,9 +199,53 @@ describe('writeSetting is the one write path', () => {
             update,
         });
 
-        await writeSetting('columnOrder', undefined, vscode.ConfigurationTarget.Workspace);
+        await writeSetting('excludeFilter', undefined, vscode.ConfigurationTarget.Workspace);
 
-        expect(update).toHaveBeenCalledWith(COLUMN_ORDER_PATH, undefined, vscode.ConfigurationTarget.Workspace);
+        expect(update).toHaveBeenCalledWith(EXCLUDE_PATH, undefined, vscode.ConfigurationTarget.Workspace);
+    });
+
+    // groupDisplay carries a legacy entry (its predecessor columnOrder); every other key does not
+    it('also clears the legacy path at the same target for a key that carries one', async () => {
+        const update = jest.fn(async () => {});
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: (_path: string, default_value: unknown) => default_value,
+            inspect: () => undefined,
+            update,
+        });
+
+        await writeSetting('groupDisplay', [{ value: 'done', shown: true }], vscode.ConfigurationTarget.Workspace);
+
+        expect(update).toHaveBeenNthCalledWith(1, GROUP_DISPLAY_PATH, [{ value: 'done', shown: true }], vscode.ConfigurationTarget.Workspace);
+        expect(update).toHaveBeenNthCalledWith(2, LEGACY_COLUMN_ORDER_PATH, undefined, vscode.ConfigurationTarget.Workspace);
+    });
+
+    // undefined is how revert and "restore built-in defaults" work, and the legacy clear runs then too
+    it('clears the legacy path even when the write itself is a clear (undefined)', async () => {
+        const update = jest.fn(async () => {});
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: (_path: string, default_value: unknown) => default_value,
+            inspect: () => undefined,
+            update,
+        });
+
+        await writeSetting('groupDisplay', undefined, vscode.ConfigurationTarget.Global);
+
+        expect(update).toHaveBeenNthCalledWith(1, GROUP_DISPLAY_PATH, undefined, vscode.ConfigurationTarget.Global);
+        expect(update).toHaveBeenNthCalledWith(2, LEGACY_COLUMN_ORDER_PATH, undefined, vscode.ConfigurationTarget.Global);
+    });
+
+    it('writes only the key path for a key with no legacy entry', async () => {
+        const update = jest.fn(async () => {});
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: (_path: string, default_value: unknown) => default_value,
+            inspect: () => undefined,
+            update,
+        });
+
+        await writeSetting('viewType', 'kanban', vscode.ConfigurationTarget.Workspace);
+
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(update).toHaveBeenCalledWith(VIEW_TYPE_PATH, 'kanban', vscode.ConfigurationTarget.Workspace);
     });
 });
 
@@ -212,7 +258,7 @@ describe('savedDefaultOf is the baseline divergence is measured against', () => 
     it('is the built-in default when the user scope holds no value', () => {
         mockConfigStore({});
         expect(savedDefaultOf('excludeFilter')).toBe(SETTINGS.excludeFilter.default);
-        expect(savedDefaultOf('columnOrder')).toEqual(SETTINGS.columnOrder.default);
+        expect(savedDefaultOf('groupDisplay')).toEqual(SETTINGS.groupDisplay.default);
         expect(savedDefaultOf('scrollNoteIntoView')).toBe(true);
     });
 
@@ -238,7 +284,7 @@ describe('isDivergedFromDefault', () => {
         mockConfigStore({});
         expect(isDivergedFromDefault('viewType')).toBe(false);
         expect(isDivergedFromDefault('excludeFilter')).toBe(false);
-        expect(isDivergedFromDefault('columnOrder')).toBe(false);
+        expect(isDivergedFromDefault('groupDisplay')).toBe(false);
     });
 
     it('is true for a workspace override that differs from the saved default', () => {
@@ -256,20 +302,30 @@ describe('isDivergedFromDefault', () => {
         expect(isDivergedFromDefault('viewType')).toBe(false);
     });
 
-    // columnOrder is array-valued, and a stored array is never === a fresh one
+    // groupDisplay is array-valued, and a stored array is never === a fresh one
     it('compares an array-valued key structurally, not by reference', () => {
-        mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: [...SETTINGS.columnOrder.default] } });
-        expect(isDivergedFromDefault('columnOrder')).toBe(false);
+        mockConfigStore({ [GROUP_DISPLAY_PATH]: { workspaceValue: [...SETTINGS.groupDisplay.default] } });
+        expect(isDivergedFromDefault('groupDisplay')).toBe(false);
     });
 
     it('is true for an array-valued key whose members are reordered', () => {
-        mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: [...SETTINGS.columnOrder.default].reverse() } });
-        expect(isDivergedFromDefault('columnOrder')).toBe(true);
+        mockConfigStore({ [GROUP_DISPLAY_PATH]: { workspaceValue: [...SETTINGS.groupDisplay.default].reverse() } });
+        expect(isDivergedFromDefault('groupDisplay')).toBe(true);
     });
 
     it('is true for an array-valued key of a different length', () => {
-        mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: ['doing'] } });
-        expect(isDivergedFromDefault('columnOrder')).toBe(true);
+        mockConfigStore({ [GROUP_DISPLAY_PATH]: { workspaceValue: [SETTINGS.groupDisplay.default[0]] } });
+        expect(isDivergedFromDefault('groupDisplay')).toBe(true);
+    });
+
+    // the entries are {value, shown} objects, so a changed `shown` with the same `value` order must register too
+    it('is true for an array of objects whose members are structurally different but same length', () => {
+        mockConfigStore({
+            [GROUP_DISPLAY_PATH]: {
+                workspaceValue: SETTINGS.groupDisplay.default.map((entry, index) => (index === 0 ? { ...entry, shown: false } : entry)),
+            },
+        });
+        expect(isDivergedFromDefault('groupDisplay')).toBe(true);
     });
 
     it('is true for a boolean override that flips the built-in default', () => {
@@ -294,10 +350,10 @@ describe('divergedKeys and the cascade payload it rides in', () => {
     it('reports exactly the keys whose resolved value differs from their saved default', () => {
         mockConfigStore({
             [VIEW_TYPE_PATH]: { workspaceValue: 'kanban' },
-            [COLUMN_ORDER_PATH]: { workspaceValue: ['done'] },
+            [GROUP_DISPLAY_PATH]: { workspaceValue: [{ value: 'done', shown: true }] },
             [EXCLUDE_PATH]: { globalValue: '**/{vendor}/**' },
         });
-        expect(divergedKeys().sort()).toEqual(['columnOrder', 'viewType']);
+        expect(divergedKeys().sort()).toEqual(['groupDisplay', 'viewType']);
     });
 
     it('carries the same set into the cascade payload the webview renders', () => {
@@ -321,10 +377,10 @@ describe('divergedKeys and the cascade payload it rides in', () => {
     it('a simulated promote drives the diverged count to zero', () => {
         mockConfigStore({
             [VIEW_TYPE_PATH]: { workspaceValue: 'kanban' },
-            [COLUMN_ORDER_PATH]: { workspaceValue: ['done', 'doing'] },
+            [GROUP_DISPLAY_PATH]: { workspaceValue: [{ value: 'done', shown: true }, { value: 'doing', shown: true }] },
             [EXCLUDE_PATH]: { workspaceValue: '**/{vendor}/**' },
         });
-        expect(divergedKeys().sort()).toEqual(['columnOrder', 'excludeFilter', 'viewType']);
+        expect(divergedKeys().sort()).toEqual(['excludeFilter', 'groupDisplay', 'viewType']);
 
         const promoted: Record<string, FakeConfigEntry> = {};
         for (const key of settingKeys()) {
@@ -374,5 +430,97 @@ describe('buildSettingsCascadePayload override flags', () => {
         const payload = buildSettingsCascadePayload();
         expect(payload.hasWorkspaceOverrides).toBe(true);
         expect(payload.hasAnyOverrides).toBe(true);
+    });
+});
+
+describe('groupDisplay falls back to its legacy columnOrder path', () => {
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('reads the legacy Workspace value, converted, when the new key has no Workspace value', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { workspaceValue: ['done', 'doing'] } });
+        expect(readSetting('groupDisplay')).toEqual([{ value: 'done', shown: true }, { value: 'doing', shown: true }]);
+    });
+
+    it('reads the legacy Global (User) value, converted, when the new key has no Global value', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { globalValue: ['done'] } });
+        expect(readSetting('groupDisplay')).toEqual([{ value: 'done', shown: true }]);
+    });
+
+    it('prefers a new-key Workspace value over a legacy value at either scope', () => {
+        mockConfigStore({
+            [GROUP_DISPLAY_PATH]: { workspaceValue: [{ value: 'testing', shown: false }] },
+            [LEGACY_COLUMN_ORDER_PATH]: { workspaceValue: ['done'], globalValue: ['doing'] },
+        });
+        expect(readSetting('groupDisplay')).toEqual([{ value: 'testing', shown: false }]);
+    });
+
+    it('prefers a new-key Global value over a legacy Global value, per scope, before falling to the built-in default', () => {
+        mockConfigStore({
+            [GROUP_DISPLAY_PATH]: { globalValue: [{ value: 'testing', shown: true }] },
+            [LEGACY_COLUMN_ORDER_PATH]: { globalValue: ['doing'] },
+        });
+        expect(readSetting('groupDisplay')).toEqual([{ value: 'testing', shown: true }]);
+    });
+
+    it('prefers a legacy Workspace value over a new-key Global value, since Workspace always wins at read time', () => {
+        mockConfigStore({
+            [GROUP_DISPLAY_PATH]: { globalValue: [{ value: 'testing', shown: true }] },
+            [LEGACY_COLUMN_ORDER_PATH]: { workspaceValue: ['doing'] },
+        });
+        expect(readSetting('groupDisplay')).toEqual([{ value: 'doing', shown: true }]);
+    });
+
+    it('drops a non-string item from the legacy array rather than failing the whole read', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { workspaceValue: ['done', 42, 'doing'] } });
+        expect(readSetting('groupDisplay')).toEqual([{ value: 'done', shown: true }, { value: 'doing', shown: true }]);
+    });
+
+    it('treats a non-array legacy value as absent, falling through to the built-in default', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { workspaceValue: 'not-an-array' } });
+        expect(readSetting('groupDisplay')).toEqual(SETTINGS.groupDisplay.default);
+    });
+
+    it('counts a legacy-only Workspace value as a Workspace override', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { workspaceValue: ['done'] } });
+        expect(hasWorkspaceOverride('groupDisplay')).toBe(true);
+        expect(hasOverride('groupDisplay')).toBe(true);
+    });
+
+    it('counts a legacy-only Global value as an override, without it being a Workspace override', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { globalValue: ['done'] } });
+        expect(hasWorkspaceOverride('groupDisplay')).toBe(false);
+        expect(hasOverride('groupDisplay')).toBe(true);
+    });
+
+    it('reports no override when the only legacy value present is not an array', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { workspaceValue: 'not-an-array' } });
+        expect(hasOverride('groupDisplay')).toBe(false);
+    });
+
+    it('resolves savedDefaultOf from the legacy Global value when the new key has none there', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { globalValue: ['done'] } });
+        expect(savedDefaultOf('groupDisplay')).toEqual([{ value: 'done', shown: true }]);
+    });
+
+    it('carries the converted value into the cascade payload under groupDisplay, never columnOrder', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { workspaceValue: ['done'] } });
+        const payload = buildSettingsCascadePayload();
+        expect(payload.groupDisplay).toEqual([{ value: 'done', shown: true }]);
+        expect(payload).not.toHaveProperty('columnOrder');
+        expect(payload.diverged).toContain('groupDisplay');
+        expect(payload.diverged as SettingKey[]).not.toContain('columnOrder');
+    });
+
+    // a revert clears the Workspace scope only; writeSetting's unconditional legacy clear is exercised separately above
+    it('a simulated revert that clears the Workspace scope stops honouring the legacy Workspace value too', () => {
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { workspaceValue: ['done'], globalValue: ['doing'] } });
+        expect(readSetting('groupDisplay')).toEqual([{ value: 'done', shown: true }]);
+
+        mockConfigStore({ [LEGACY_COLUMN_ORDER_PATH]: { globalValue: ['doing'] } });
+
+        expect(readSetting('groupDisplay')).toEqual([{ value: 'doing', shown: true }]);
     });
 });

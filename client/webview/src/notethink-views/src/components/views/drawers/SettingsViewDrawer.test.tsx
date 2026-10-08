@@ -37,15 +37,15 @@ jest.mock('@hello-pangea/dnd', () => ({
 function dropChip(from_index: number, to_index: number): void {
     act(() => {
         captured_drag_end?.({
-            source: { index: from_index, droppableId: 'v1-column-order' },
-            destination: { index: to_index, droppableId: 'v1-column-order' },
+            source: { index: from_index, droppableId: 'v1-group-display' },
+            destination: { index: to_index, droppableId: 'v1-group-display' },
         } as DropResult);
     });
 }
 
 /** the lane chips in the order the control lists them */
 function renderedChipValues(): string[] {
-    return screen.getAllByTestId(/^column-order-chip-/).map(el => el.getAttribute('data-testid')!.replace('column-order-chip-', ''));
+    return screen.getAllByTestId(/^group-display-chip-/).map(el => el.getAttribute('data-testid')!.replace('group-display-chip-', ''));
 }
 
 // one saved type, used wherever a case needs a node the user owns rather than a built-in rung
@@ -62,7 +62,7 @@ const default_props = {
     onViewTypeChange: jest.fn(),
     onSettingChange: jest.fn(),
     naturalColumnOrder: ['doing', 'done', 'untagged'],
-    onColumnOrderChange: jest.fn(),
+    onGroupDisplayChange: jest.fn(),
     groupByResolvedKey: 'status',
     groupByCandidateKeys: ['assignee', 'status'],
     onMakeDefault: jest.fn(),
@@ -168,7 +168,7 @@ describe('SettingsViewDrawer rows', () => {
         renderDrawer();
         // the list reads down the pill column, which is the tree above it upside down
         expect(renderedRowKeys()).toEqual([
-            'columnOrder',
+            'groupDisplay',
             'kanbanCardRatio',
             'kanbanAnimateTransitions',
             'kanbanDefaultCardType',
@@ -180,7 +180,7 @@ describe('SettingsViewDrawer rows', () => {
             'openNewEditorIfNoneOpen',
         ]);
         expect(screen.getByTestId('setting-pill-kanbanGroupBy')).toHaveTextContent('Grouped');
-        expect(screen.getByTestId('setting-pill-columnOrder')).toHaveTextContent('Kanban');
+        expect(screen.getByTestId('setting-pill-groupDisplay')).toHaveTextContent('Kanban');
         expect(screen.getByTestId('setting-pill-kanbanDefaultCardType')).toHaveTextContent('Kanban');
         expect(screen.getByTestId('setting-pill-orientation')).toHaveTextContent('Line');
         expect(screen.getByTestId('setting-pill-scrollNoteIntoView')).toHaveTextContent('All views');
@@ -314,21 +314,36 @@ describe('SettingsViewDrawer controls', () => {
         expect(screen.getByLabelText('Reorder Done')).toBeInTheDocument();
     });
 
-    it('routes a dropped lane through the column-order handler that normalises the natural order', () => {
-        const on_column_order_change = jest.fn();
+    it('routes a dropped lane through the group-display handler that normalises the natural order', () => {
+        const on_group_display_change = jest.fn();
         const on_setting_change = jest.fn();
-        renderDrawer({ onColumnOrderChange: on_column_order_change, onSettingChange: on_setting_change });
+        renderDrawer({ onGroupDisplayChange: on_group_display_change, onSettingChange: on_setting_change });
         dropChip(1, 0);
-        expect(on_column_order_change).toHaveBeenCalledWith(['done', 'doing', 'untagged']);
+        expect(on_group_display_change).toHaveBeenCalledWith([
+            { value: 'done', shown: true },
+            { value: 'doing', shown: true },
+            { value: 'untagged', shown: true },
+        ]);
         expect(on_setting_change).not.toHaveBeenCalled();
     });
 
     it('writes nothing when a lane is dropped outside the list, or back where it started', () => {
-        const on_column_order_change = jest.fn();
-        renderDrawer({ onColumnOrderChange: on_column_order_change });
-        act(() => { captured_drag_end?.({ source: { index: 1, droppableId: 'v1-column-order' }, destination: null } as DropResult); });
+        const on_group_display_change = jest.fn();
+        renderDrawer({ onGroupDisplayChange: on_group_display_change });
+        act(() => { captured_drag_end?.({ source: { index: 1, droppableId: 'v1-group-display' }, destination: null } as DropResult); });
         dropChip(1, 1);
-        expect(on_column_order_change).not.toHaveBeenCalled();
+        expect(on_group_display_change).not.toHaveBeenCalled();
+    });
+
+    it('toggling a lane\'s checkbox posts the shown flag flipped, without starting a drag', () => {
+        const on_group_display_change = jest.fn();
+        renderDrawer({ onGroupDisplayChange: on_group_display_change });
+        fireEvent.click(screen.getByTestId('group-display-shown-done'));
+        expect(on_group_display_change).toHaveBeenCalledWith([
+            { value: 'doing', shown: true },
+            { value: 'done', shown: false },
+            { value: 'untagged', shown: true },
+        ]);
     });
 
     it('toggles a checkbox row through the one setting-change path', () => {
@@ -536,8 +551,8 @@ describe('SettingsViewDrawer defaults and new view types', () => {
     });
 
     it('renders no panel for a divergence the selected node owns outright', () => {
-        renderDrawer({ diverged: ['columnOrder'] });
-        expect(screen.getByTestId('setting-pill-columnOrder')).toHaveTextContent('Kanban');
+        renderDrawer({ diverged: ['groupDisplay'] });
+        expect(screen.getByTestId('setting-pill-groupDisplay')).toHaveTextContent('Kanban');
         expect(screen.queryByTestId('custom-view-types')).not.toBeInTheDocument();
     });
 
@@ -738,15 +753,27 @@ describe('SettingsViewDrawer updating a custom view type', () => {
         expect(on_setting_change).toHaveBeenCalledWith('kanbanCardRatio', 2);
     });
 
-    it('routes a dropped lane into the type when the type holds the lane order', () => {
+    /*
+     * The saved type here carries the legacy columnOrder shape alone (a type minted before lane
+     * visibility existed), which userTypeHoldsKey's normalisation reports as holding groupDisplay -
+     * so a dropped lane still routes into the type, and the write that lands migrates the type off
+     * columnOrder entirely rather than leaving both keys on it.
+     */
+    it('routes a dropped lane into the type when the type holds the lane display, migrating a legacy columnOrder override on the way', () => {
         const on_setting_change = jest.fn();
-        const on_column_order_change = jest.fn();
+        const on_group_display_change = jest.fn();
         const holds_order: UserViewType = { ...MINTED, overrides: { columnOrder: ['done', 'doing'] } };
-        renderDrawer({ userTypes: [holds_order], onSettingChange: on_setting_change, onColumnOrderChange: on_column_order_change });
+        renderDrawer({ userTypes: [holds_order], onSettingChange: on_setting_change, onGroupDisplayChange: on_group_display_change });
         fireEvent.click(screen.getByTestId(`view-node-${holds_order.id}`));
         dropChip(1, 0);
-        expect(on_column_order_change).not.toHaveBeenCalled();
-        expect(mintedTypes(on_setting_change)[0].overrides.columnOrder).toEqual(['done', 'doing', 'untagged']);
+        expect(on_group_display_change).not.toHaveBeenCalled();
+        const written_overrides = mintedTypes(on_setting_change)[0].overrides;
+        expect(written_overrides.groupDisplay).toEqual([
+            { value: 'done', shown: true },
+            { value: 'doing', shown: true },
+            { value: 'untagged', shown: true },
+        ]);
+        expect(written_overrides.columnOrder).toBeUndefined();
     });
 });
 

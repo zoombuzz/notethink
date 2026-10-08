@@ -73,7 +73,7 @@
             orientation: 'columns',
             lineBreadth: 220,
             kanbanGroupBy: 'auto',
-            columnOrder: ['untagged', 'doing', 'code-review', 'testing', 'done'],
+            groupDisplay: ['untagged', 'doing', 'code-review', 'testing', 'done'].map(function(value) { return { value: value, shown: true }; }),
             kanbanCardRatio: 1.4,
             kanbanAnimateTransitions: true,
             kanbanDefaultCardType: 'card',
@@ -86,11 +86,16 @@
         var NOTETHINK_SETTING_KEYS = Object.keys(NOTETHINK_BUILTIN_SETTINGS);
         window.__nt_settings = window.__nt_settings || { user: {}, workspace: {} };
 
-        // structural comparison, so a fresh columnOrder array reads equal to the stored one
+        // structural comparison, so a fresh groupDisplay array (of {value, shown} entries) reads equal to the stored one
         function settingValuesEqual(a, b) {
             if (a === b) { return true; }
             if (Array.isArray(a) && Array.isArray(b)) {
-                return a.length === b.length && a.every(function(item, index) { return item === b[index]; });
+                return a.length === b.length && a.every(function(item, index) { return settingValuesEqual(item, b[index]); });
+            }
+            if (a && b && typeof a === 'object' && typeof b === 'object') {
+                var keys_a = Object.keys(a), keys_b = Object.keys(b);
+                if (keys_a.length !== keys_b.length) { return false; }
+                return keys_a.every(function(key) { return settingValuesEqual(a[key], b[key]); });
             }
             return false;
         }

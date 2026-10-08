@@ -2,7 +2,7 @@ import React from "react";
 import * as l10n from "@vscode/l10n";
 import type { ReactElement } from "react";
 import type { NoteDisplayOptions } from "../../../types/NoteProps";
-import type { SettingsCascadeKey, UserViewType } from "../../../types/Messages";
+import type { GroupDisplayEntry, SettingsCascadeKey, UserViewType } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 import type { StableIdCollision } from "../../../lib/noteops";
@@ -61,7 +61,7 @@ interface GenericViewToolbarProps {
     onCardsToggle: (anchor: HTMLElement) => void;
     onInsertOpen: () => void;
     onSettingChange: (key: SettingsCascadeKey, value: unknown) => void;
-    onColumnOrderChange: (next_order: string[]) => void;
+    onGroupDisplayChange: (next_display: GroupDisplayEntry[]) => void;
     onMakeDefault: () => void;
     onResetToDefault: () => void;
     onRestoreBuiltinDefault: () => void;
@@ -104,7 +104,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         onInsertOpen,
         onIntegrationChange,
         onSettingChange,
-        onColumnOrderChange,
+        onGroupDisplayChange,
         onMakeDefault,
         onResetToDefault,
         onRestoreBuiltinDefault,
@@ -179,7 +179,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                     onViewTypeChange={onViewTypeChange}
                     onSettingChange={onSettingChange}
                     naturalColumnOrder={naturalColumnOrder}
-                    onColumnOrderChange={onColumnOrderChange}
+                    onGroupDisplayChange={onGroupDisplayChange}
                     groupByResolvedKey={group_by_resolved_key}
                     groupByCandidateKeys={group_by_candidate_keys}
                     onMakeDefault={onMakeDefault}

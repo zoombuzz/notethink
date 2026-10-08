@@ -1334,13 +1334,15 @@ describe('NotethinkEditorProvider', () => {
 		it('writes an updateSetting to the workspace scope by default, whatever the value type', async () => {
 			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'viewType', value: 'kanban' });
 			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'showLinetagsInHeadlines', value: true });
-			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'columnOrder', value: ['done'] });
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'groupDisplay', value: [{ value: 'done', shown: true }] });
 			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'maxNotesPerFile', value: 25 });
 
 			expect(settings_updates).toEqual([
 				[SETTINGS.viewType.path, 'kanban', vscode.ConfigurationTarget.Workspace],
 				[SETTINGS.showLinetagsInHeadlines.path, true, vscode.ConfigurationTarget.Workspace],
-				[SETTINGS.columnOrder.path, ['done'], vscode.ConfigurationTarget.Workspace],
+				[SETTINGS.groupDisplay.path, [{ value: 'done', shown: true }], vscode.ConfigurationTarget.Workspace],
+				// writeSetting's unconditional legacy-path clear, so a stale columnOrder value can never resurface
+				['view.specific.kanban.columnOrder', undefined, vscode.ConfigurationTarget.Workspace],
 				[SETTINGS.maxNotesPerFile.path, 25, vscode.ConfigurationTarget.Workspace],
 			]);
 		});
@@ -1351,7 +1353,9 @@ describe('NotethinkEditorProvider', () => {
 				await panelHelper.simulateMessage({ type: 'updateSetting', setting: key, value: SETTINGS[key].default });
 			}
 
-			expect(settings_updates.map(([path]) => path)).toEqual(settingKeys().map(key => SETTINGS[key].path));
+			// filters out groupDisplay's extra legacy-clear write, which carries no key's own path
+			const primary_writes = settings_updates.filter(([path]) => settingKeys().some(key => SETTINGS[key].path === path));
+			expect(primary_writes.map(([path]) => path)).toEqual(settingKeys().map(key => SETTINGS[key].path));
 		});
 
 		it('falls back to the user scope for an updateSetting in a folderless window', async () => {
@@ -1382,7 +1386,9 @@ describe('NotethinkEditorProvider', () => {
 
 			await panelHelper.simulateMessage({ type: 'promoteSettingsToUser' });
 
-			expect(pathsWrittenTo(vscode.ConfigurationTarget.Global)).toEqual(settingKeys().map(key => SETTINGS[key].path));
+			// filters out groupDisplay's extra legacy-clear write, which carries no key's own path
+			const primary_global_writes = pathsWrittenTo(vscode.ConfigurationTarget.Global).filter(path => settingKeys().some(key => SETTINGS[key].path === path));
+			expect(primary_global_writes).toEqual(settingKeys().map(key => SETTINGS[key].path));
 			// the resolved workspace value is what gets promoted, not the built-in default it was shadowing
 			const promoted_view_type = settings_updates.find(([path, , target]) => path === SETTINGS.viewType.path && target === vscode.ConfigurationTarget.Global);
 			expect(promoted_view_type?.[1]).toBe('kanban');

@@ -6,7 +6,7 @@ import { isGroupedViewType, registryWithUserTypes } from "../../../lib/viewregis
 import { CARD_AUTO, cardRegistryWithViewSettings, resolveCardType } from "../../notes/cardregistryops";
 import { parentFolderOf } from "../../../lib/pathops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
-import type { SettingsCascadeKey, UserViewType } from "../../../types/Messages";
+import type { GroupDisplayEntry, SettingsCascadeKey, UserViewType } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 
@@ -34,7 +34,7 @@ export interface ViewToolbar {
     handle_card_type_change: (card_type: string) => void;
     natural_column_order: string[];
     handle_setting_change: (key: SettingsCascadeKey, value: unknown) => void;
-    handle_column_order_change: (next_order: string[]) => void;
+    handle_group_display_change: (next_display: GroupDisplayEntry[]) => void;
     handle_make_default: () => void;
     handle_reset_to_default: () => void;
     handle_restore_builtin_default: () => void;
@@ -157,10 +157,10 @@ export function useViewToolbar(
         cascade_write_setting('cardType', card_type);
     }, [cascade_write_setting]);
     const default_actions = useDefaultActions(handlers);
-    // natural order is an empty array, matching the package.json default, so reverting stops pinning it
-    const handle_column_order_change = useCallback((next_order: string[]): void => {
-        const matches_natural = arraysEqual(next_order, natural_column_order);
-        cascade_write_setting('columnOrder', matches_natural ? [] : next_order);
+    // natural order with every lane shown writes the empty-array unpin sentinel, so returning to it stops pinning anything
+    const handle_group_display_change = useCallback((next_display: GroupDisplayEntry[]): void => {
+        const matches_natural = arraysEqual(next_display.map(entry => entry.value), natural_column_order) && next_display.every(entry => entry.shown !== false);
+        cascade_write_setting('groupDisplay', matches_natural ? [] : next_display);
     }, [natural_column_order, cascade_write_setting]);
     return {
         integration_selection,
@@ -174,7 +174,7 @@ export function useViewToolbar(
         handle_card_type_change,
         natural_column_order,
         handle_setting_change: cascade_write_setting,
-        handle_column_order_change,
+        handle_group_display_change,
         ...default_actions,
     };
 }

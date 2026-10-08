@@ -9,6 +9,7 @@ import {
     isDescendantOf,
     isGroupedViewType,
     nodeSettingCount,
+    normalizeGroupDisplayOverride,
     offersNewViewType,
     owningNodeFor,
     registryWithUserTypes,
@@ -146,8 +147,8 @@ describe('fixed setting reports its value and unlocking ancestor', () => {
         expect(resolution.unlock_view).toBeUndefined();
     });
 
-    it('kanban holds its group order as an OPEN override, not fixed', () => {
-        const resolution = resolveSetting('kanban', 'groupOrder');
+    it('kanban holds its group display as an OPEN override, not fixed', () => {
+        const resolution = resolveSetting('kanban', 'groupDisplay');
         expect(resolution.fixed).toBe(false);
         expect(resolution.open_at).toBe('kanban');
     });
@@ -250,31 +251,31 @@ describe('per-node setting counts', () => {
     });
 
     it('names the keys a node owns in declaration order', () => {
-        expect(settingKeysForNode('kanban')).toEqual(['kanbanGroupBy', 'columnOrder', 'kanbanCardRatio', 'kanbanAnimateTransitions', 'kanbanDefaultCardType']);
+        expect(settingKeysForNode('kanban')).toEqual(['kanbanGroupBy', 'groupDisplay', 'kanbanCardRatio', 'kanbanAnimateTransitions', 'kanbanDefaultCardType']);
         expect(settingKeysForNode('line')).toEqual(['orientation', 'lineBreadth']);
         expect(settingKeysForNode('global')).toEqual(['watchUnopenedFilesInViewer', 'openNewEditorIfNoneOpen']);
     });
 
     it('narrows to the keys a settings payload actually carries when one is supplied', () => {
-        expect(settingKeysForNode('kanban', { columnOrder: [] })).toEqual(['columnOrder']);
-        expect(nodeSettingCount('kanban', { columnOrder: [] })).toBe(1);
+        expect(settingKeysForNode('kanban', { groupDisplay: [] })).toEqual(['groupDisplay']);
+        expect(nodeSettingCount('kanban', { groupDisplay: [] })).toBe(1);
         expect(nodeSettingCount('root', {})).toBe(0);
     });
 });
 
 
 describe('owningNodeFor - the node a settings row pill names', () => {
-    it('names Grouped for Group by at kanban and Kanban for Group order', () => {
-        // the pair the offer rule turns on: kanban pins the axis but owns the lane order
+    it('names Grouped for Group by at kanban and Kanban for Group display', () => {
+        // the pair the offer rule turns on: kanban pins the axis but owns the lane display
         expect(owningNodeFor('kanban', 'kanbanGroupBy')).toBe('grouped');
-        expect(owningNodeFor('kanban', 'columnOrder')).toBe('kanban');
+        expect(owningNodeFor('kanban', 'groupDisplay')).toBe('kanban');
     });
 
     it('keys Group by on axes, not on the config key it writes', () => {
         // both keys carry a kanban OPEN override, so keying on either would name Kanban and kill it
         expect(STRUCTURAL_SETTING_KEYS.groupBy).toBe('axes');
         expect(STRUCTURAL_SETTING_KEYS.kanbanGroupBy).toBe('axes');
-        expect(STRUCTURAL_SETTING_KEYS.columnOrder).toBe('groupOrder');
+        expect(STRUCTURAL_SETTING_KEYS.groupDisplay).toBe('groupDisplay');
     });
 
     it('resolves a registry-modelled row through the chain from any node on it', () => {
@@ -308,7 +309,7 @@ describe('owningNodeFor - the node a settings row pill names', () => {
 describe('offersNewViewType - the offer follows the pill', () => {
     it('offers on an ancestor-owned change and stays silent on a node-owned one', () => {
         expect(offersNewViewType('kanban', 'kanbanGroupBy')).toBe(true);
-        expect(offersNewViewType('kanban', 'columnOrder')).toBe(false);
+        expect(offersNewViewType('kanban', 'groupDisplay')).toBe(false);
         expect(offersNewViewType('kanban', 'kanbanAnimateTransitions')).toBe(false);
     });
 
@@ -413,6 +414,19 @@ describe('registryWithUserTypes - saved types become real nodes', () => {
         expect(owningNodeFor('assignee-rows', 'kanbanGroupBy', merged)).toBe('kanban-by-assignee');
         expect(offersNewViewType('assignee-rows', 'kanbanGroupBy', merged)).toBe(true);
     });
+
+    /*
+     * A type minted before groupDisplay existed carries the legacy columnOrder shape alone. The
+     * registry migrates it on the way in, so the OPEN override resolveSetting answers for is keyed
+     * groupDisplay like every other type's, with every lane shown.
+     */
+    it('migrates a legacy columnOrder override to groupDisplay, every lane shown', () => {
+        const legacy: UserViewType = { id: 'user-legacy', label: 'Legacy Order', parent: 'kanban', overrides: { columnOrder: ['done', 'doing'] } };
+        const merged = registryWithUserTypes([legacy]);
+        const resolution = resolveSettingIn(merged, 'user-legacy', 'groupDisplay');
+        expect(resolution.open_at).toBe('user-legacy');
+        expect(owningNodeFor('user-legacy', 'groupDisplay', merged)).toBe('user-legacy');
+    });
 });
 
 describe('editing the saved view types', () => {
@@ -496,7 +510,7 @@ describe('a custom type owns every key its overrides hold', () => {
         const merged = registryWithUserTypes([tall_cards]);
         expect(owningNodeFor('kanban', 'kanbanCardRatio', merged)).toBe('kanban');
         expect(owningNodeFor('kanban', 'kanbanGroupBy', merged)).toBe('grouped');
-        expect(owningNodeFor('kanban', 'columnOrder', merged)).toBe('kanban');
+        expect(owningNodeFor('kanban', 'groupDisplay', merged)).toBe('kanban');
     });
 });
 
@@ -551,5 +565,36 @@ describe('settingWriteFor', () => {
     it('writes any other key at workspace scope as a plain per-key write', () => {
         expect(settingWriteFor([held], held, 'kanbanCardRatio', 2)).toEqual({ setting: 'kanbanCardRatio', value: 2 });
         expect(settingWriteFor([held], undefined, 'lineBreadth', 400)).toEqual({ setting: 'lineBreadth', value: 400 });
+    });
+});
+
+describe('normalizeGroupDisplayOverride - migrating a legacy columnOrder override', () => {
+    it('maps a legacy columnOrder array to groupDisplay entries, every lane shown', () => {
+        expect(normalizeGroupDisplayOverride({ columnOrder: ['done', 'doing'] })).toEqual({
+            groupDisplay: [{ value: 'done', shown: true }, { value: 'doing', shown: true }],
+        });
+    });
+
+    it('drops columnOrder once migrated, leaving every other key untouched', () => {
+        expect(normalizeGroupDisplayOverride({ kanbanGroupBy: 'assignee', columnOrder: ['done'] })).toEqual({
+            kanbanGroupBy: 'assignee',
+            groupDisplay: [{ value: 'done', shown: true }],
+        });
+    });
+
+    it('leaves overrides alone once groupDisplay is already present, even beside a stale columnOrder', () => {
+        const overrides = { columnOrder: ['done'], groupDisplay: [{ value: 'doing', shown: false }] };
+        expect(normalizeGroupDisplayOverride(overrides)).toBe(overrides);
+    });
+
+    it('leaves overrides alone with neither key present', () => {
+        const overrides = { kanbanGroupBy: 'assignee' };
+        expect(normalizeGroupDisplayOverride(overrides)).toBe(overrides);
+    });
+
+    it('reports a legacy columnOrder override as holding groupDisplay, which is what routes a row change into it', () => {
+        const legacy: UserViewType = { id: 'user-legacy', label: 'Legacy', parent: 'kanban', overrides: { columnOrder: ['done', 'doing'] } };
+        expect(userTypeHoldsKey(legacy, 'groupDisplay')).toBe(true);
+        expect(userTypeHoldsKey(legacy, 'columnOrder')).toBe(false);
     });
 });

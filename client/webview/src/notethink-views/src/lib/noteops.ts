@@ -1,5 +1,6 @@
 import Debug from "debug";
 import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } from "../types/NoteProps";
+import type { GroupDisplayEntry } from "../types/Messages";
 import { INTEGRATION_MODE_CURRENT_FILE } from "../types/IntegrationMode";
 import { ABSENT_VALUE_BUCKET, FIRST_LEVEL_FOLDER_KEY, axisField, categoricalLaneFor, projectNoteOntoAxis, type Axis } from "./axisops";
 import { projectNameFromRelativePath } from "./originops";
@@ -516,18 +517,26 @@ export function deriveNaturalColumnOrder(notes: Array<NoteProps>, axis: Axis = '
 }
 
 /**
- * The lane order the settings drawer edits: the saved order first, then every live lane the saved order
- * does not name, so a status added since the order was saved is still reachable. This is the same
- * layering `useKanbanColumns` applies when it builds the board's lanes, so the editor lists exactly what
- * the board shows, in the order the board shows it.
+ * The lane order AND visibility the settings drawer edits: the saved entries first, then every live
+ * lane the saved list does not name, appended as shown, so a status added since the order was saved is
+ * still reachable and defaults to visible. This is the same layering `useKanbanColumns` applies when it
+ * builds the board's lanes (over the entries' values alone), so the editor lists the lanes in the order
+ * the board draws them. A hidden lane stays in this list, still reorderable, while the board leaves it out.
  */
-export function mergeSavedColumnOrder(saved: string[] | undefined, natural: string[]): string[] {
-    if (!saved || saved.length === 0) { return natural; }
-    return [...saved, ...natural.filter(value => !saved.includes(value))];
+export function mergeSavedGroupDisplay(saved: GroupDisplayEntry[] | undefined, natural: string[]): GroupDisplayEntry[] {
+    if (!saved || saved.length === 0) { return natural.map(value => ({ value, shown: true })); }
+    const saved_values = new Set(saved.map(entry => entry.value));
+    const appended = natural.filter(value => !saved_values.has(value)).map(value => ({ value, shown: true }));
+    return [...saved, ...appended];
+}
+
+/** `entries` with one lane's `shown` flipped, reading a missing flag as shown; an absent value changes nothing */
+export function toggleShownInDisplay(entries: GroupDisplayEntry[], value: string): GroupDisplayEntry[] {
+    return entries.map(entry => (entry.value === value ? { ...entry, shown: entry.shown === false } : entry));
 }
 
 /** the order with one entry moved to another index; an index outside the list returns the order unchanged */
-export function moveInOrder(order: string[], from_index: number, to_index: number): string[] {
+export function moveInOrder<T>(order: T[], from_index: number, to_index: number): T[] {
     if (from_index === to_index) { return order; }
     if (from_index < 0 || to_index < 0 || from_index >= order.length || to_index >= order.length) { return order; }
     const next = [...order];

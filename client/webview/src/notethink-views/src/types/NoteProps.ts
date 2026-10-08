@@ -1,6 +1,6 @@
 import type {ReactElement, MouseEvent} from "react";
 import type { Nodes as MdastNodesImport } from "mdast";
-import type { UserViewType } from "./Messages";
+import type { GroupDisplayEntry, UserViewType } from "./Messages";
 
 export interface ClickPositionInfo {
     from: number;
@@ -19,7 +19,7 @@ export type NoteClickHandler = (event: MouseEvent<HTMLElement>, note: NoteProps 
  * - parent_context_id / parent_context_seq: the note-hierarchy scope this view opens at. The id is the persisted half (a stable_id from a drill-in or breadcrumb click, else the authored nt_breadcrumb_last headline label) and is re-resolved against the current tree by resolveParentContextNote on every render; the seq is the resolved result, derived per render and never persisted
  * - settings: the resolved settings cascade, stamped by the composer from the single settingsCascade message the extension pushes; field names and value shapes mirror SETTINGS in client/extension/src/lib/settings.ts one for one, minus that payload's three aggregate fields. No per-view settings tier is layered over it, so a value read here is the value VS Code configuration resolved
  * - groupBy / kanbanGroupBy: the same lane-axis choice homed at two registry nodes, so a kanban board can carry an override the ancestor grouped view does not see; read whichever matches the rendered view type
- * - columnOrder: absent means the natural (derived) order, which is how the cascade's empty array arrives here
+ * - groupDisplay: each lane's order and visibility; absent means the natural (derived) order with every lane shown, which is how the cascade's empty array arrives here. A lane whose entry carries `shown: false` is dropped from both Kanban and Line view
  * - view_expanded_ids: stable_ids of the notes the user manually expanded past their clip height, newest last and capped by nextExpandedIds so the persisted list cannot grow without bound; the manual override layer under autoExpandFocusedNote, and the reason expansion outlives a remount
  */
 export interface NoteDisplayOptions {
@@ -38,7 +38,7 @@ export interface NoteDisplayOptions {
         orientation?: 'columns' | 'rows';
         lineBreadth?: number;
         kanbanGroupBy?: string;
-        columnOrder?: string[];
+        groupDisplay?: GroupDisplayEntry[];
         kanbanCardRatio?: number;
         kanbanAnimateTransitions?: boolean;
         kanbanDefaultCardType?: string;

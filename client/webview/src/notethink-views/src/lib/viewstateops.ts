@@ -17,7 +17,7 @@ export interface ViewStateLike {
 
 /**
  * Canonical viewState key for folder mode. All folder-mode reads and writes use this key so
- * settings (columnOrder, filters, view type, etc.) survive a flip to current_file mode and back.
+ * settings (groupDisplay, filters, view type, etc.) survive a flip to current_file mode and back.
  */
 export const FOLDER_VIEW_STATE_ID = '__folder__';
 

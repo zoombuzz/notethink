@@ -258,16 +258,33 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         expect(set_view_managed_state).not.toHaveBeenCalled();
     });
 
-    it('handle_column_order_change cascade-writes only, and spells natural order as an empty array', () => {
+    it('handle_group_display_change cascade-writes only, and spells natural order (every lane shown) as an empty array', () => {
         const { handlers, set_view_managed_state, post_message } = makeHandlers();
         const props = makeProps();
         const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
-        act(() => { result.current.handle_column_order_change(['done', 'doing']); });
-        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'columnOrder', value: ['done', 'doing'] });
-        // natural_column_order is [] for a non-kanban view, so an empty next_order matches natural
-        act(() => { result.current.handle_column_order_change([]); });
-        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'columnOrder', value: [] });
+        act(() => { result.current.handle_group_display_change([{ value: 'done', shown: true }, { value: 'doing', shown: true }]); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [{ value: 'done', shown: true }, { value: 'doing', shown: true }] });
+        // natural_column_order is [] for a non-kanban view, so an empty next_display matches natural
+        act(() => { result.current.handle_group_display_change([]); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [] });
         expect(set_view_managed_state).not.toHaveBeenCalled();
+    });
+
+    it('handle_group_display_change writes the full entry list when a lane is hidden, even if the order matches natural', () => {
+        const { handlers, post_message } = makeHandlers();
+        const line_props = makeProps({ type: 'line' });
+        const { result } = renderHook(() => useViewToolbar(line_props, handlers, line_props.display_options!, LANE_NOTES));
+        // natural_column_order is ['doing', 'done', 'untagged']; same order, but 'done' is hidden
+        act(() => { result.current.handle_group_display_change([
+            { value: 'doing', shown: true },
+            { value: 'done', shown: false },
+            { value: 'untagged', shown: true },
+        ]); });
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'updateSetting',
+            setting: 'groupDisplay',
+            value: [{ value: 'doing', shown: true }, { value: 'done', shown: false }, { value: 'untagged', shown: true }],
+        });
     });
 
     it('natural_column_order is derived for every lane view, not only kanban, so the drawer can offer the row from any node', () => {

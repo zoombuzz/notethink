@@ -304,7 +304,7 @@ describe('KanbanView', () => {
         expect(within(backlog_column).getByTestId('note-2')).toBeInTheDocument();
     });
 
-    it('respects custom columnOrder from display_options', () => {
+    it('respects custom groupDisplay order from display_options', () => {
         const doing_note = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -324,7 +324,7 @@ describe('KanbanView', () => {
             notes_within_parent_context: [doing_note, review_note],
             display_options: {
                 settings: {
-                    columnOrder: ['review', 'untagged', 'doing'],
+                    groupDisplay: [{ value: 'review', shown: true }, { value: 'untagged', shown: true }, { value: 'doing', shown: true }],
                 },
             },
         });
@@ -335,7 +335,7 @@ describe('KanbanView', () => {
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });
 
-    it('appends new status values not in columnOrder', () => {
+    it('appends new status values not in groupDisplay', () => {
         const doing_note = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -355,12 +355,12 @@ describe('KanbanView', () => {
             notes_within_parent_context: [doing_note, blocked_note],
             display_options: {
                 settings: {
-                    columnOrder: ['untagged', 'doing'],
+                    groupDisplay: [{ value: 'untagged', shown: true }, { value: 'doing', shown: true }],
                 },
             },
         });
         render(<KanbanView {...props} />);
-        // 'blocked' is not in columnOrder but should still appear; empty Untagged hidden
+        // 'blocked' is not in groupDisplay but should still appear; empty Untagged hidden
         expect(screen.getByTestId('column-blocked')).toBeInTheDocument();
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
         expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
@@ -416,7 +416,7 @@ describe('KanbanView', () => {
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });
 
-    it('hides an empty named column left over in a stale columnOrder', () => {
+    it('hides an empty named column left over in a stale groupDisplay', () => {
         const doing_note = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -429,7 +429,7 @@ describe('KanbanView', () => {
             display_options: {
                 settings: {
                     // 'done' and 'review' are remembered in the order but no note uses them now
-                    columnOrder: ['review', 'done', 'doing', 'untagged'],
+                    groupDisplay: [{ value: 'review', shown: true }, { value: 'done', shown: true }, { value: 'doing', shown: true }, { value: 'untagged', shown: true }],
                 },
             },
         });
@@ -445,7 +445,7 @@ describe('KanbanView', () => {
             notes_within_parent_context: [],
             display_options: {
                 settings: {
-                    columnOrder: ['done', 'doing', 'untagged'],
+                    groupDisplay: [{ value: 'done', shown: true }, { value: 'doing', shown: true }, { value: 'untagged', shown: true }],
                 },
             },
         });
@@ -453,6 +453,93 @@ describe('KanbanView', () => {
         expect(screen.getByTestId('column-done')).toBeInTheDocument();
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
         expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+    });
+
+    it('drops a lane whose groupDisplay entry is hidden, even while it holds stories', () => {
+        const doing_note = makeNote({
+            seq: 1,
+            headline_raw: '## Task A',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const done_note = makeNote({
+            seq: 2,
+            headline_raw: '## Task B',
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+            linetags: {
+                'status': { key: 'status', value: 'done', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [doing_note, done_note],
+            display_options: {
+                settings: {
+                    groupDisplay: [
+                        { value: 'doing', shown: true },
+                        { value: 'done', shown: false },
+                        { value: 'untagged', shown: true },
+                    ],
+                },
+            },
+        });
+        render(<KanbanView {...props} />);
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        expect(screen.queryByTestId('column-done')).not.toBeInTheDocument();
+    });
+
+    it('renders no lanes at all when every lane is hidden', () => {
+        const doing_note = makeNote({
+            seq: 1,
+            headline_raw: '## Task A',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [doing_note],
+            display_options: {
+                settings: {
+                    groupDisplay: [
+                        { value: 'doing', shown: false },
+                        { value: 'untagged', shown: false },
+                    ],
+                },
+            },
+        });
+        render(<KanbanView {...props} />);
+        expect(screen.queryByTestId('column-doing')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
+    });
+
+    it('shows a lane added since the display was saved, since an unnamed lane arrives shown', () => {
+        const doing_note = makeNote({
+            seq: 1,
+            headline_raw: '## Task A',
+            linetags: {
+                'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const blocked_note = makeNote({
+            seq: 2,
+            headline_raw: '## Task B',
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+            linetags: {
+                'status': { key: 'status', value: 'blocked', note_seq: 2, key_offset: 0, value_offset: 0, linktext_offset: 0 },
+            },
+        });
+        const props = makeViewProps({
+            notes_within_parent_context: [doing_note, blocked_note],
+            display_options: {
+                settings: {
+                    // 'blocked' postdates this saved display and carries no entry of its own
+                    groupDisplay: [{ value: 'doing', shown: true }],
+                },
+            },
+        });
+        render(<KanbanView {...props} />);
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        expect(screen.getByTestId('column-blocked')).toBeInTheDocument();
     });
 
     it('renders columns and cards without crashing when the FLIP transition hook is active', () => {

@@ -30,13 +30,13 @@ describe('settingRows - the view pane', () => {
 
     /*
      * The order is the pill column read downwards, which is the tree upside down. Group by lands under
-     * Orientation rather than above Group order because kanban PINS the lane axis rather than owning it,
+     * Orientation rather than above Group display because kanban PINS the lane axis rather than owning it,
      * so its pill says Grouped - and a row sorted anywhere other than where its own pill puts it reads as
      * a mistake to anyone looking at the two columns together.
      */
     it('orders a kanban board by the type each row is pilled to, kanban then line then grouped then root', () => {
         expect(keysFor('kanban')).toEqual([
-            'columnOrder',
+            'groupDisplay',
             'kanbanCardRatio',
             'kanbanAnimateTransitions',
             'kanbanDefaultCardType',

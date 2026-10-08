@@ -1,5 +1,5 @@
 import { FOLDER_VIEW_STATE_ID } from "../notethink-views/src/lib/viewstateops";
-import { chainOf, registryWithUserTypes } from "../notethink-views/src/lib/viewregistryops";
+import { chainOf, normalizeGroupDisplayOverride, registryWithUserTypes } from "../notethink-views/src/lib/viewregistryops";
 import { INTEGRATION_MODE_AUTO, type IntegrationMode } from "../notethink-views/src/types/IntegrationMode";
 import { DEFAULT_SETTINGS_CASCADE } from "../constants";
 import type { ViewState } from "../hooks/usePersistedViewStates";
@@ -29,7 +29,7 @@ function applyUserTypeOverrides(settings: Record<string, unknown>, view_type: st
     for (const node_id of [...chain].reverse()) {
         const minted = user_types.find(candidate => candidate?.id === node_id);
         if (!minted || typeof minted.overrides !== 'object' || minted.overrides === null) { continue; }
-        Object.assign(settings, minted.overrides);
+        Object.assign(settings, normalizeGroupDisplayOverride(minted.overrides));
     }
 }
 
@@ -83,9 +83,9 @@ export function buildViewDisplayOptions(
         cascade_settings[key] = value;
     }
     applyUserTypeOverrides(cascade_settings, viewType, cascade.viewUserTypes);
-    // the cascade spells natural order as an empty array and kanban as no columnOrder at all
-    if (Array.isArray(cascade_settings.columnOrder) && cascade_settings.columnOrder.length === 0) {
-        delete cascade_settings.columnOrder;
+    // the cascade spells natural order (every lane shown) as an empty array and kanban as no groupDisplay at all
+    if (Array.isArray(cascade_settings.groupDisplay) && cascade_settings.groupDisplay.length === 0) {
+        delete cascade_settings.groupDisplay;
     }
     const persisted_selection = props.viewStates?.[FOLDER_VIEW_STATE_ID]?.display_options?.integration_mode;
     const view_display_options: NoteDisplayOptions = {

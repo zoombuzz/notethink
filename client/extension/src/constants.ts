@@ -1,3 +1,5 @@
+import type { GroupDisplayEntry } from './lib/settings';
+
 /*
  * Hard cap on files loaded and parsed into one folder view. Past it, a large root fans out one
  * open+parse+postMessage cycle per file and re-runs mergeAggregateRoot on every message, saturating
@@ -17,8 +19,14 @@ export const DEFAULT_INCLUDE_FILTER = '**/*.md';
  */
 export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**';
 
-// ordering hint only: columns absent from the data are culled; mirrors package.json's kanban columnOrder default
-export const DEFAULT_COLUMN_ORDER: string[] = ['untagged', 'doing', 'code-review', 'testing', 'done'];
+// ordering and visibility hint only: lanes absent from the data are culled; mirrors package.json's kanban groupDisplay
+export const DEFAULT_GROUP_DISPLAY: GroupDisplayEntry[] = [
+    { value: 'untagged', shown: true },
+    { value: 'doing', shown: true },
+    { value: 'code-review', shown: true },
+    { value: 'testing', shown: true },
+    { value: 'done', shown: true },
+];
 
 // wire-format strings for the `setIntegration` message; mirrored byte-identical with notethink-views' IntegrationMode
 export const INTEGRATION_MODE_CURRENT_FILE = 'current_file';

@@ -7,8 +7,9 @@ import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
+import type { GroupDisplayEntry } from "../../types/Messages";
 import GenericNote from "../notes/GenericNote";
-import { useKanbanColumns } from "./kanban/useKanbanColumns";
+import { filterHiddenColumns, useKanbanColumns } from "./kanban/useKanbanColumns";
 import { useProjectedNotes } from "./kanban/useProjectedNotes";
 import { useLineViewDrag } from "./useLineViewDrag";
 import KanbanBoard from "./kanban/KanbanBoard";
@@ -16,6 +17,9 @@ import view_specific_styles from "../ViewRenderer.module.scss";
 
 declare const NOTETHINK_DEV: boolean | undefined;
 const debug = Debug("nodejs:notethink-views:LineView");
+
+// one frozen empty list, so a view with no saved display still hands useMemo a stable identity
+const EMPTY_GROUP_DISPLAY: GroupDisplayEntry[] = [];
 
 /**
  * LineView, the single-axis card-lane view. It groups the notes into lanes on one categorical axis
@@ -63,9 +67,11 @@ const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, dis
  * nt_group_by vote, else the first-level-folder default. The dropped layout renders optimistically
  * client-side until the document round-trip lands, so there is no drop -> snap-back -> re-land flash;
  * this is safe because KanbanBoard collapses the drop tween via transitionDuration rather than the
- * old transition:'none' hack that broke dnd's transitionend and left cards stuck. Only lanes holding
- * stories render, falling back to every lane when none do, so a stale lane order or an empty board
- * never shows nothing.
+ * old transition:'none' hack that broke dnd's transitionend and left cards stuck. A lane whose
+ * `groupDisplay` entry carries `shown: false` is dropped before the lane-with-stories rule runs, so a
+ * hidden lane never counts as a populated lane and never falls back into view; of what remains, only
+ * lanes holding stories render, falling back to every remaining lane when none do, so a stale lane
+ * order or an empty board still draws its lanes. Hiding every lane draws none.
  */
 export default function LineView(props: LineViewProps): ReactElement {
     // resolves the group-by key and builds a writable-or-read-only axis when none is preset
@@ -84,8 +90,16 @@ export default function LineView(props: LineViewProps): ReactElement {
     };
     // holds the dropped layout client-side until the document round-trip lands
     const { notes_to_render, applyOptimisticMove, is_projecting } = useProjectedNotes(props.notes_within_parent_context);
-    const columns = useKanbanColumns(notes_to_render, display_options.settings?.columnOrder, axis);
-    // only lanes with stories render; falls back to every lane when none do
+    const group_display = display_options.settings?.groupDisplay ?? EMPTY_GROUP_DISPLAY;
+    const order = group_display.length > 0 ? group_display.map(entry => entry.value) : undefined;
+    const hidden_values = useMemo(
+        () => new Set(group_display.filter(entry => entry.shown === false).map(entry => entry.value)),
+        [group_display],
+    );
+    const all_columns = useKanbanColumns(notes_to_render, order, axis);
+    // hidden lanes drop out before the populated-lane rule runs, so a hidden lane never falls back into view
+    const columns = useMemo(() => filterHiddenColumns(all_columns, hidden_values), [all_columns, hidden_values]);
+    // only lanes with stories render; falls back to every (non-hidden) lane when none do
     const populated_columns = columns.filter(col => (col.child_notes?.length ?? 0) > 0);
     const visible_columns = populated_columns.length > 0 ? populated_columns : columns;
     // drag lifecycle: the FLIP gate + passive-transition layer and the drag responders that post the group-key rewrite

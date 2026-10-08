@@ -27,7 +27,7 @@ const DRAWER_PROPS = {
     onViewTypeChange: jest.fn(),
     onSettingChange: jest.fn(),
     naturalColumnOrder: ['backlog', 'doing', 'done'],
-    onColumnOrderChange: jest.fn(),
+    onGroupDisplayChange: jest.fn(),
     groupByResolvedKey: 'nt_first_level_folder',
     groupByCandidateKeys: [] as string[],
     onMakeDefault: jest.fn(),

@@ -533,12 +533,12 @@ body.disableAddressBarHidingOnScroll {
 }
 
 /*
- * The lane order editor: one chip per lane, stacked down the page in board order. Side by side is what
- * the order means, but it does not fit - five lanes already overflow the control column and a sixth is
- * off the end of a scrollbar - so the list runs vertically, which also gives the drag one unambiguous
- * axis to reason about however many lanes the board has.
+ * The lane order + visibility editor: one chip per lane, stacked down the page in board order. Side by
+ * side is what the order means, but it does not fit - five lanes already overflow the control column and
+ * a sixth is off the end of a scrollbar - so the list runs vertically, which also gives the drag one
+ * unambiguous axis to reason about however many lanes the board has.
  */
-.settingsDrawerColumnOrder {
+.settingsDrawerGroupDisplay {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -547,7 +547,7 @@ body.disableAddressBarHidingOnScroll {
   padding: 1px 0;
 }
 
-.settingsDrawerColumnChip {
+.settingsDrawerGroupDisplayChip {
   display: inline-flex;
   align-items: center;
   gap: 0.3em;
@@ -567,8 +567,13 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
+// an unchecked lane: left in the list (still reorderable) but visibly dimmed, since it will not draw on the board
+.settingsDrawerGroupDisplayHidden {
+  opacity: 0.5;
+}
+
 // the drag affordance: two dotted columns, barely tightened - closer and the glyphs read as one
-.settingsDrawerColumnGrip {
+.settingsDrawerGroupDisplayGrip {
   font-size: 0.85em;
   letter-spacing: -0.06em;
   opacity: 0.55;

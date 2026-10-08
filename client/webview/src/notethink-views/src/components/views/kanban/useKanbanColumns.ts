@@ -73,3 +73,14 @@ function deriveColumnOrder(
         type: value === 'untagged' ? 'pseudo' : undefined,
     }));
 }
+
+/**
+ * Drops every lane named in `hidden_values` and renumbers the survivors' `seq` to their new index, so a
+ * hidden lane is absent from the board altogether (both Kanban and Line view) rather than merely
+ * undraggable. Renumbering keeps `seq` a dense 0..n-1 sequence matching array index, the invariant the
+ * drag-end lookup (`columns[destination_column_seq]`) and the droppable id both depend on.
+ */
+export function filterHiddenColumns(columns: Array<KanbanColumnDescriptor>, hidden_values: ReadonlySet<string>): Array<KanbanColumnDescriptor> {
+    if (hidden_values.size === 0) { return columns; }
+    return columns.filter(column => !hidden_values.has(column.value)).map((column, index) => ({ ...column, seq: index }));
+}

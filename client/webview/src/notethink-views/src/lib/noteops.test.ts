@@ -3,8 +3,9 @@ import {
     dispatchNoteExpanded,
     isNoteManuallyExpanded,
     deriveNaturalColumnOrder,
-    mergeSavedColumnOrder,
+    mergeSavedGroupDisplay,
     moveInOrder,
+    toggleShownInDisplay,
     withinNoteHeadlineOrBody,
     withinNoteHeadlineOrBodyUpTo,
     findDeepestNote,
@@ -1299,21 +1300,41 @@ describe('arraysEqual', () => {
     });
 });
 
-describe('mergeSavedColumnOrder', () => {
+describe('mergeSavedGroupDisplay', () => {
 
-    it('falls through to the natural order when nothing is saved', () => {
-        expect(mergeSavedColumnOrder(undefined, ['doing', 'done'])).toEqual(['doing', 'done']);
-        expect(mergeSavedColumnOrder([], ['doing', 'done'])).toEqual(['doing', 'done']);
+    it('falls through to the natural order, every lane shown, when nothing is saved', () => {
+        expect(mergeSavedGroupDisplay(undefined, ['doing', 'done'])).toEqual([{ value: 'doing', shown: true }, { value: 'done', shown: true }]);
+        expect(mergeSavedGroupDisplay([], ['doing', 'done'])).toEqual([{ value: 'doing', shown: true }, { value: 'done', shown: true }]);
     });
 
-    it('leads with the saved order and appends a lane the saved order never named', () => {
-        expect(mergeSavedColumnOrder(['done', 'doing'], ['doing', 'done', 'untagged']))
-            .toEqual(['done', 'doing', 'untagged']);
+    it('leads with the saved entries and appends a lane the saved display never named, shown', () => {
+        const saved = [{ value: 'done', shown: false }, { value: 'doing', shown: true }];
+        expect(mergeSavedGroupDisplay(saved, ['doing', 'done', 'untagged']))
+            .toEqual([{ value: 'done', shown: false }, { value: 'doing', shown: true }, { value: 'untagged', shown: true }]);
     });
 
-    it('keeps a saved lane no note currently uses, so a pinned order survives an empty lane', () => {
-        expect(mergeSavedColumnOrder(['done', 'blocked'], ['done', 'untagged']))
-            .toEqual(['done', 'blocked', 'untagged']);
+    it('keeps a saved lane no note currently uses, so a pinned display survives an empty lane', () => {
+        const saved = [{ value: 'done', shown: true }, { value: 'blocked', shown: false }];
+        expect(mergeSavedGroupDisplay(saved, ['done', 'untagged']))
+            .toEqual([{ value: 'done', shown: true }, { value: 'blocked', shown: false }, { value: 'untagged', shown: true }]);
+    });
+});
+
+describe('toggleShownInDisplay', () => {
+
+    it('flips the named lane\'s shown flag and leaves the rest untouched', () => {
+        const entries = [{ value: 'doing', shown: true }, { value: 'done', shown: true }];
+        expect(toggleShownInDisplay(entries, 'done')).toEqual([{ value: 'doing', shown: true }, { value: 'done', shown: false }]);
+    });
+
+    it('flips false back to true', () => {
+        const entries = [{ value: 'doing', shown: false }];
+        expect(toggleShownInDisplay(entries, 'doing')).toEqual([{ value: 'doing', shown: true }]);
+    });
+
+    it('leaves the list unchanged when the named lane is absent', () => {
+        const entries = [{ value: 'doing', shown: true }];
+        expect(toggleShownInDisplay(entries, 'done')).toEqual(entries);
     });
 });
 

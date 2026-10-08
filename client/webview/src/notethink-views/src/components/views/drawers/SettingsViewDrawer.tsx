@@ -4,7 +4,7 @@ import * as l10n from "@vscode/l10n";
 import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import type { ReactNode } from "react";
-import { formatColumnLabel, mergeSavedColumnOrder, moveInOrder } from "../../../lib/noteops";
+import { formatColumnLabel, mergeSavedGroupDisplay, moveInOrder, toggleShownInDisplay } from "../../../lib/noteops";
 import {
     VIEW_REGISTRY,
     childViewNodes,
@@ -21,7 +21,7 @@ import {
     type ViewNode,
     type ViewRegistry,
 } from "../../../lib/viewregistryops";
-import type { SettingsCascadeKey, SettingsCascadePayload, UserViewType } from "../../../types/Messages";
+import type { GroupDisplayEntry, SettingsCascadeKey, SettingsCascadePayload, UserViewType } from "../../../types/Messages";
 import styles from "../../ViewRenderer.module.scss";
 import { CARD_RATIOS, DEFAULT_CARD_RATIO, clampBreadth, parseBreadthInput } from "../kanban/columnwidthops";
 import { useBreadthDraft } from "../kanban/useBreadthDraft";
@@ -64,7 +64,7 @@ export interface SettingsViewDrawerProps {
     onViewTypeChange: (view_type: string) => void;
     onSettingChange: (key: SettingsCascadeKey, value: unknown) => void;
     naturalColumnOrder: string[];
-    onColumnOrderChange: (next_order: string[]) => void;
+    onGroupDisplayChange: (next_display: GroupDisplayEntry[]) => void;
     groupByResolvedKey: string;
     groupByCandidateKeys: string[];
     onMakeDefault: () => void;
@@ -123,57 +123,72 @@ export function newViewTypeNameHint(node_label: string, def: SettingRowDef, valu
     return l10n.t('{0} by {1}', node_label, formatColumnLabel(String(value)));
 }
 
-interface ColumnOrderControlProps {
+interface GroupDisplayControlProps {
     viewId: string;
-    saved: string[];
+    saved: GroupDisplayEntry[];
     natural: string[];
-    onReorder: (next_order: string[]) => void;
+    onChange: (next_display: GroupDisplayEntry[]) => void;
 }
 
 /**
- * The lane order editor: one draggable chip per lane, stacked in board order. Laying them out left to
- * right would mirror the board, and it does not fit - the control column runs out before five lanes do -
- * so the list reads top to bottom instead. Every column the board shows must be reorderable, which is
- * what `mergeSavedColumnOrder` guarantees: a status added since the order was saved would otherwise be
- * unreachable here.
+ * The lane order AND visibility editor: one draggable chip per lane, stacked in board order, each with
+ * its own show/hide checkbox. Laying them out left to right would mirror the board, but the control
+ * column runs out before five lanes do, so the list reads top to bottom instead. Every
+ * lane the board could show must be reorderable and toggleable, which is what `mergeSavedGroupDisplay`
+ * guarantees: a status added since the display was saved would otherwise be unreachable here, and it
+ * arrives shown by default.
  *
  * Drag comes from the same library the board drags cards with, so a chip is keyboard-reorderable for
- * free (space to lift, arrows to move, space to drop) and needs no pair of nudge buttons beside it. There
- * is deliberately no reset: no other row in this drawer carries one, and the revert under Change
- * defaults is the one place a change is undone wholesale.
+ * free (space to lift, arrows to move, space to drop) and needs no pair of nudge buttons beside it. The
+ * checkbox sits before the drag handle and is itself an interactive element, which @hello-pangea/dnd
+ * excludes from starting a drag by default, so unchecking a lane never lifts its chip. There is
+ * deliberately no reset: no other row in this drawer carries one, and the revert under Change defaults
+ * is the one place a change is undone wholesale.
  */
-function ColumnOrderControl(props: ColumnOrderControlProps): React.ReactElement {
-    const ordered = mergeSavedColumnOrder(props.saved, props.natural);
+function GroupDisplayControl(props: GroupDisplayControlProps): React.ReactElement {
+    const ordered = mergeSavedGroupDisplay(props.saved, props.natural);
     const handleDragEnd = (result: DropResult): void => {
         if (!result.destination) { return; }
         const next = moveInOrder(ordered, result.source.index, result.destination.index);
-        if (next !== ordered) { props.onReorder(next); }
+        if (next !== ordered) { props.onChange(next); }
+    };
+    const handleToggle = (value: string): void => {
+        props.onChange(toggleShownInDisplay(ordered, value));
     };
     return (
         <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId={`v${props.viewId}-column-order`}>
+            <Droppable droppableId={`v${props.viewId}-group-display`}>
                 {(provided_drop) => (
                     <div
-                        className={styles.settingsDrawerColumnOrder}
-                        data-testid="setting-control-columnOrder"
+                        className={styles.settingsDrawerGroupDisplay}
+                        data-testid="setting-control-groupDisplay"
                         ref={provided_drop.innerRef}
                         {...provided_drop.droppableProps}
                     >
-                        {ordered.map((column_name, index) => {
-                            const formatted_label = formatColumnLabel(column_name);
+                        {ordered.map((entry, index) => {
+                            const formatted_label = formatColumnLabel(entry.value);
+                            const shown = entry.shown !== false;
+                            const chip_classes = [styles.settingsDrawerGroupDisplayChip, ...(shown ? [] : [styles.settingsDrawerGroupDisplayHidden])];
                             return (
-                                <Draggable key={column_name} draggableId={`column-${column_name}`} index={index}>
+                                <Draggable key={entry.value} draggableId={`column-${entry.value}`} index={index}>
                                     {(provided_drag) => (
                                         <span
-                                            className={styles.settingsDrawerColumnChip}
-                                            data-testid={`column-order-chip-${column_name}`}
+                                            className={chip_classes.join(' ')}
+                                            data-testid={`group-display-chip-${entry.value}`}
                                             ref={provided_drag.innerRef}
                                             {...provided_drag.draggableProps}
                                             {...provided_drag.dragHandleProps}
                                             style={provided_drag.draggableProps.style as React.CSSProperties | undefined}
                                             aria-label={l10n.t('Reorder {0}', formatted_label)}
                                         >
-                                            <span className={styles.settingsDrawerColumnGrip} aria-hidden="true">&#8942;&#8942;</span>
+                                            <input
+                                                type="checkbox"
+                                                data-testid={`group-display-shown-${entry.value}`}
+                                                checked={shown}
+                                                aria-label={l10n.t('Show {0}', formatted_label)}
+                                                onChange={() => handleToggle(entry.value)}
+                                            />
+                                            <span className={styles.settingsDrawerGroupDisplayGrip} aria-hidden="true">&#8942;&#8942;</span>
                                             {formatted_label}
                                         </span>
                                     )}
@@ -307,13 +322,13 @@ function RowControl(props: RowControlProps): React.ReactElement {
                     <option value="rows">{l10n.t('Rows')}</option>
                 </select>
             );
-        case 'columnOrder':
+        case 'groupDisplay':
             return (
-                <ColumnOrderControl
+                <GroupDisplayControl
                     viewId={props.viewId}
-                    saved={Array.isArray(props.value) ? props.value as string[] : []}
+                    saved={Array.isArray(props.value) ? props.value as GroupDisplayEntry[] : []}
                     natural={props.naturalColumnOrder}
-                    onReorder={(next_order) => props.onChange(def, next_order)}
+                    onChange={(next_display) => props.onChange(def, next_display)}
                 />
             );
         case 'checkbox':
@@ -777,7 +792,7 @@ interface SettingsDrawerSelection {
 function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: ViewRegistry): SettingsDrawerSelection {
     const [picked_node, setPickedNode] = useState<string | undefined>(undefined);
     const selected_node = resolveSelectedNode(picked_node, props.currentType, registry);
-    const { onViewTypeChange, onSettingChange, onColumnOrderChange, userTypes } = props;
+    const { onViewTypeChange, onSettingChange, onGroupDisplayChange, userTypes } = props;
     const selected_user_type = userTypes.find(type => type.id === selected_node);
     const handle_highlight = useCallback((node_id: string): void => {
         setPickedNode(node_id);
@@ -793,12 +808,12 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
             onSettingChange(write.setting, write.value);
             return;
         }
-        if (def.control === 'columnOrder') {
-            onColumnOrderChange(value as string[]);
+        if (def.control === 'groupDisplay') {
+            onGroupDisplayChange(value as GroupDisplayEntry[]);
         } else {
             onSettingChange(def.key, value);
         }
-    }, [onColumnOrderChange, onSettingChange, selected_user_type, userTypes]);
+    }, [onGroupDisplayChange, onSettingChange, selected_user_type, userTypes]);
     // mints the type, pins the board to it, then clears the copied keys off the workspace scope
     const handle_save_new_type = useCallback((label: string, overrides: Record<string, unknown>): void => {
         const keys = Object.keys(overrides) as SettingsCascadeKey[];

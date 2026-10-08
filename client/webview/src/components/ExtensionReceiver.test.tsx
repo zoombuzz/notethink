@@ -515,7 +515,7 @@ describe('ExtensionReceiver', () => {
                         settings: {
                             ...DEFAULT_SETTINGS_CASCADE,
                             viewType: 'kanban',
-                            columnOrder: ['done', 'doing'],
+                            groupDisplay: [{ value: 'done', shown: true }, { value: 'doing', shown: true }],
                             includeFilter: '**/notes/**',
                             maxNotesPerFile: 5,
                             hasWorkspaceOverrides: true,
@@ -527,7 +527,7 @@ describe('ExtensionReceiver', () => {
             const renderer = screen.getByTestId('NoteRenderer');
             const settings = JSON.parse(renderer.getAttribute('data-settings-cascade') || '{}');
             expect(settings.viewType).toBe('kanban');
-            expect(settings.columnOrder).toEqual(['done', 'doing']);
+            expect(settings.groupDisplay).toEqual([{ value: 'done', shown: true }, { value: 'doing', shown: true }]);
             expect(settings.maxNotesPerFile).toBe(5);
             expect(settings.hasWorkspaceOverrides).toBe(true);
         });
@@ -582,7 +582,7 @@ describe('ExtensionReceiver', () => {
     describe('folder viewState survives integration_mode flip', () => {
         const FOLDER_KEY = '__folder__';
 
-        it('flipping folder → current_file → folder preserves columnOrder and filters', () => {
+        it('flipping folder → current_file → folder preserves groupDisplay and filters', () => {
             render(<ExtensionReceiver />);
             const last_call = mockNoteRendererProps.mock.calls[mockNoteRendererProps.mock.calls.length - 1][0];
 
@@ -603,7 +603,7 @@ describe('ExtensionReceiver', () => {
                     id: FOLDER_KEY,
                     type: 'kanban',
                     display_options: {
-                        settings: { columnOrder: ['done', 'doing', 'todo'] },
+                        settings: { groupDisplay: [{ value: 'done', shown: true }, { value: 'doing', shown: true }, { value: 'todo', shown: true }] },
                         includeFilter: '**/todo.md',
                         excludeFilter: '',
                         maxNotesPerFile: 5,
@@ -640,7 +640,7 @@ describe('ExtensionReceiver', () => {
             expect(folder_state.type).toBe('kanban');
             expect(folder_state.display_options.integration_mode).toBe('folder');
             expect(folder_state.display_options.integration_path).toBe('/repo/notes');
-            expect(folder_state.display_options.settings.columnOrder).toEqual(['done', 'doing', 'todo']);
+            expect(folder_state.display_options.settings.groupDisplay).toEqual([{ value: 'done', shown: true }, { value: 'doing', shown: true }, { value: 'todo', shown: true }]);
             expect(folder_state.display_options.includeFilter).toBe('**/todo.md');
             expect(folder_state.display_options.excludeFilter).toBe('');
             expect(folder_state.display_options.maxNotesPerFile).toBe(5);
@@ -657,7 +657,7 @@ describe('ExtensionReceiver', () => {
                     display_options: {
                         integration_mode: 'folder',
                         integration_path: '/repo',
-                        settings: { columnOrder: ['a', 'b'] },
+                        settings: { groupDisplay: [{ value: 'a', shown: true }, { value: 'b', shown: true }] },
                     },
                 }]);
             });
@@ -679,7 +679,7 @@ describe('ExtensionReceiver', () => {
             const keys = Object.keys(view_states);
             expect(keys).toEqual([FOLDER_KEY]);
             // settings preserved under the canonical key by the shallow merge in display_options
-            expect(view_states[FOLDER_KEY].display_options.settings.columnOrder).toEqual(['a', 'b']);
+            expect(view_states[FOLDER_KEY].display_options.settings.groupDisplay).toEqual([{ value: 'a', shown: true }, { value: 'b', shown: true }]);
             // tag flipped
             expect(view_states[FOLDER_KEY].display_options.integration_mode).toBe('current_file');
         });

@@ -1229,15 +1229,15 @@ describe('GenericView navigation callback', () => {
             });
             fireEvent.click(await screen.findByTestId('view-settings-button'));
             // natural order from these notes is ['doing', 'done', 'untagged']; chips carry the raw slug
-            const chips = screen.getAllByTestId(/^column-order-chip-/);
+            const chips = screen.getAllByTestId(/^group-display-chip-/);
             expect(chips.map(el => el.getAttribute('data-testid'))).toEqual([
-                'column-order-chip-doing',
-                'column-order-chip-done',
-                'column-order-chip-untagged',
+                'group-display-chip-doing',
+                'group-display-chip-done',
+                'group-display-chip-untagged',
             ]);
             expect(screen.getByLabelText('Reorder Done')).toBeInTheDocument();
             // opening the drawer writes nothing: the order lives in config, with no per-view state
-            expect(post_message).not.toHaveBeenCalledWith(expect.objectContaining({ setting: 'columnOrder' }));
+            expect(post_message).not.toHaveBeenCalledWith(expect.objectContaining({ setting: 'groupDisplay' }));
             expect(set_state).not.toHaveBeenCalled();
         });
 

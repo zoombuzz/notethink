@@ -1,5 +1,5 @@
 import { DEFAULT_CARD_RATIO, DEFAULT_LINE_BREADTH } from './notethink-views/src/components/views/kanban/columnwidthops';
-import type { SettingsCascadePayload } from './notethink-views/src/types/Messages';
+import type { GroupDisplayEntry, SettingsCascadePayload } from './notethink-views/src/types/Messages';
 
 // mirrors the extension's folder-mode filter defaults until the extension echoes the effective globs back
 export const DEFAULT_INCLUDE_FILTER = '**/*.md';
@@ -10,6 +10,9 @@ export const DEFAULT_MAX_NOTES_PER_FILE = 10;
 
 // mirror of client/extension/src/constants.ts; the cascade and the package.json default must match this
 export const DEFAULT_COLUMN_ORDER: string[] = ['untagged', 'doing', 'code-review', 'testing', 'done'];
+
+// the built-in lane order, every lane shown; mirror of client/extension/src/lib/settings.ts' groupDisplay default
+export const DEFAULT_GROUP_DISPLAY: GroupDisplayEntry[] = DEFAULT_COLUMN_ORDER.map(value => ({ value, shown: true }));
 
 /**
  * The settings the webview renders from until the extension's first settingsCascade arrives.
@@ -36,7 +39,7 @@ export const DEFAULT_SETTINGS_CASCADE: SettingsCascadePayload = {
     orientation: 'columns',
     lineBreadth: DEFAULT_LINE_BREADTH,
     kanbanGroupBy: 'auto',
-    columnOrder: DEFAULT_COLUMN_ORDER,
+    groupDisplay: DEFAULT_GROUP_DISPLAY,
     kanbanCardRatio: DEFAULT_CARD_RATIO,
     kanbanAnimateTransitions: true,
     kanbanDefaultCardType: 'card',

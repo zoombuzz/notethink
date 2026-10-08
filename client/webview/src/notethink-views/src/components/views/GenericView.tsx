@@ -147,7 +147,7 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     onCardsToggle={drawers.toggle_cards}
                     onInsertOpen={insert.open_insert_modal}
                     onSettingChange={toolbar.handle_setting_change}
-                    onColumnOrderChange={toolbar.handle_column_order_change}
+                    onGroupDisplayChange={toolbar.handle_group_display_change}
                     onMakeDefault={toolbar.handle_make_default}
                     onResetToDefault={toolbar.handle_reset_to_default}
                     onRestoreBuiltinDefault={toolbar.handle_restore_builtin_default}

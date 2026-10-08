@@ -6884,3 +6884,38 @@ it are edited by hand whenever a command is retired without anyone finding out w
 + acceptance criteria
   + `pnpm run test-mocha` exits non-zero on a deliberately broken assertion and zero otherwise
   + a retired command breaks the suite rather than being quietly edited out of it
+
+
+### Toggle lanes on and off in Group display [](?id=group-display-lane-toggle)
+
+A user can reorder a board's lanes from the settings drawer's "Group order" row, but cannot drop a lane they are not interested in. Every lane always shows.
+
++ decisions
+  + the row is renamed "Group display", because it now covers both the order of the lanes and whether each one shows
+  + each lane chip carries a checkbox, and an unchecked lane is left off the board
+  + every lane shows by default, including a lane that appears after the setting was saved
+  + the setting moves to `notethink.settings.view.specific.kanban.groupDisplay`, an array of `{ value, shown }` entries (permanent name, operator sign-off)
+  + an empty array still means natural order with every lane shown, so reverting stops pinning anything
+  + the old `view.specific.kanban.columnOrder` key is read as a fallback, per scope, until `groupDisplay` is written at that scope
+  + the old key stays contributed in `package.json` with a deprecation message, so VS Code does not flag existing values as unknown
+  + a saved view type whose overrides still hold `columnOrder` is read as the matching `groupDisplay`
+  + the authored `nt_group_order` file linetag is unchanged: it is a permanent name in users' markdown and sets order only
+  + the same setting drives the Line view's lanes, so hidden lanes drop off there too
++ new pattern: renaming a persisted VS Code setting key with a read-time, per-scope fallback to the old key, and clearing the old key at a scope whenever the new one is written there
+  + no `PATTERNS.md` entry covered it
++ [X] replace `columnOrder` with `groupDisplay` in the extension's settings module
+  + the legacy fallback covers reads, divergence, override detection and the saved default
+  + a write also clears the legacy key at the same scope
+  + `LEGACY_SETTINGS` and `resolvedAt` in `client/extension/src/lib/settings.ts`, so the next renamed key is one map entry
++ [X] contribute `groupDisplay` in `package.json` and every `package.nls*.json`, and deprecate `columnOrder`
++ [X] carry `groupDisplay` through the webview cascade, display options and saved view type overrides
+  + `normalizeGroupDisplayOverride` in `viewregistryops.ts` reads a legacy `columnOrder` override as `groupDisplay`
++ [X] leave hidden lanes off the Kanban and Line boards
+  + `filterHiddenColumns` in `useKanbanColumns.ts` drops hidden lanes and renumbers `seq`, which the drag-end lookup indexes by
++ [X] rename the drawer row to "Group display" and add a shown checkbox to each lane chip
++ [X] rename the registry key `groupOrder` to `groupDisplay`
++ [X] cover the change in Jest, Mocha and the view settings drawer Playwright spec
+  + no Mocha suite named `columnOrder`, so the coverage is in the extension's Jest `settings.test.ts`
++ [X] add the new strings to every l10n bundle
++ [X] bump the version
+  + 0.4.6

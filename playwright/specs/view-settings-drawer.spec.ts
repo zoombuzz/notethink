@@ -2,13 +2,14 @@ import { test, expect, type Page } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
 import { pointerDrag } from '../helpers/pointer-drag';
+import { simulateSelectionChanged } from '../helpers/simulate-selection';
 
 /*
  * The view settings tab, driven in the browser against the real bundle.
  *
- * These four cases are the ones the drawer's design turns on, and three of them are about the same
+ * These cases are the ones the drawer's design turns on, and several of them are about the same
  * rule seen from different sides: the "Save as a new view type" offer follows the row's owning-type
- * pill and needs no per-setting list. Group by is owned by an ancestor and offers; Group order is
+ * pill and needs no per-setting list. Group by is owned by an ancestor and offers; Group display is
  * owned by the selected node and does not; a Global setting has no owning type at all and does not.
  */
 
@@ -53,7 +54,7 @@ async function openSettingsDrawer(page: Page): Promise<void> {
 async function showKanbanSettings(page: Page): Promise<void> {
     await openSettingsDrawer(page);
     await page.getByTestId('view-node-kanban').click();
-    await expect(page.getByTestId('setting-row-columnOrder')).toBeVisible();
+    await expect(page.getByTestId('setting-row-groupDisplay')).toBeVisible();
 }
 
 test.describe('View settings drawer', () => {
@@ -109,9 +110,9 @@ test.describe('View settings drawer', () => {
      */
     test('dragging a lane chip writes the new order, and offers nothing because kanban owns it outright', async ({ page }) => {
         await showKanbanSettings(page);
-        await expect(page.getByTestId('setting-pill-columnOrder')).toHaveText('Kanban');
+        await expect(page.getByTestId('setting-pill-groupDisplay')).toHaveText('Kanban');
 
-        const chips = page.getByTestId(/^column-order-chip-/);
+        const chips = page.getByTestId(/^group-display-chip-/);
         await chips.first().scrollIntoViewIfNeeded();
         const before = await chips.allInnerTexts();
         expect(before.length).toBeGreaterThan(1);
@@ -120,7 +121,7 @@ test.describe('View settings drawer', () => {
         const inset = ((await second.boundingBox())?.height ?? 2) / 2;
         await pointerDrag(page, second, chips.nth(0), { destination_inset_y: inset });
 
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.columnOrder).not.toBeUndefined();
+        await expect.poll(async () => (await readHarnessSettings(page)).workspace.groupDisplay).not.toBeUndefined();
         // the dragged lane now leads the list, which is the order the cascade echoed back
         await expect.poll(async () => (await chips.allInnerTexts())[0]).toBe(before[1]);
         await expect(page.getByTestId('new-view-type-offer')).toHaveCount(0);
@@ -128,7 +129,7 @@ test.describe('View settings drawer', () => {
 
     test('a lane chip reorders from the keyboard too, since the chips carry no nudge buttons', async ({ page }) => {
         await showKanbanSettings(page);
-        const chips = page.getByTestId(/^column-order-chip-/);
+        const chips = page.getByTestId(/^group-display-chip-/);
         const before = await chips.allInnerTexts();
 
         // the list stacks, so the keyboard sensor's axis is up and down rather than left and right
@@ -138,7 +139,31 @@ test.describe('View settings drawer', () => {
         await page.keyboard.press('Space');
 
         await expect.poll(async () => (await chips.allInnerTexts())[0]).toBe(before[1]);
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.columnOrder).not.toBeUndefined();
+        await expect.poll(async () => (await readHarnessSettings(page)).workspace.groupDisplay).not.toBeUndefined();
+    });
+
+    /*
+     * Unchecking a lane's checkbox must not start a drag (@hello-pangea/dnd excludes interactive
+     * elements from its pointer sensor by default), and the hidden lane drops off the board itself -
+     * not merely its chip going quiet - which is what makes "Group display" a visibility control and
+     * not just a reorder one. A caret simulated into the heading is what makes AutoView pick up the
+     * fixture's nt_view=kanban linetag in current_file mode (kanban-view.spec.ts's setupKanbanView
+     * does the same); showKanbanSettings alone only moves the drawer's own highlight.
+     */
+    test('unchecking a lane chip hides that lane from the board and records shown: false', async ({ page }) => {
+        await simulateSelectionChanged(page, '/workspace/settings-drawer-board.md', 2);
+        await expect.poll(async () => laneValues(page)).toEqual(['doing', 'done']);
+        await showKanbanSettings(page);
+
+        await page.getByTestId('group-display-shown-doing').click();
+
+        await expect.poll(async () => laneValues(page)).toEqual(['done']);
+        await expect.poll(async () => {
+            const saved = (await readHarnessSettings(page)).workspace.groupDisplay as Array<{ value: string; shown: boolean }> | undefined;
+            return saved?.find(entry => entry.value === 'doing')?.shown;
+        }).toBe(false);
+        // the chip itself survives, still reorderable, just dimmed
+        await expect(page.getByTestId('group-display-chip-doing')).toBeVisible();
     });
 
     test('toggling a Global setting offers nothing, because it belongs to no view type', async ({ page }) => {

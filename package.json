@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -268,7 +268,35 @@
               "testing",
               "done"
             ],
-            "description": "%config.settings.view.specific.kanban.columnOrder.description%"
+            "description": "%config.settings.view.specific.kanban.columnOrder.description%",
+            "markdownDeprecationMessage": "%config.settings.view.specific.kanban.columnOrder.deprecationMessage%"
+          },
+          "notethink.settings.view.specific.kanban.groupDisplay": {
+            "type": "array",
+            "scope": "window",
+            "items": {
+              "type": "object",
+              "required": [
+                "value",
+                "shown"
+              ],
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "shown": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "default": [
+              { "value": "untagged", "shown": true },
+              { "value": "doing", "shown": true },
+              { "value": "code-review", "shown": true },
+              { "value": "testing", "shown": true },
+              { "value": "done", "shown": true }
+            ],
+            "description": "%config.settings.view.specific.kanban.groupDisplay.description%"
           },
           "notethink.settings.view.specific.kanban.cardRatio": {
             "type": "number",

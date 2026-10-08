@@ -158,6 +158,19 @@ export interface CommandMessage {
 }
 
 /**
+ * One lane's position and visibility in the group-display order, the cascade's `groupDisplay` entry
+ * shape. Mirrored from GroupDisplayEntry in client/extension/src/lib/settings.ts, which the webview
+ * cannot import - the two are separate webpack bundles with no shared module graph, so this
+ * duplication is the wire contract.
+ * - value: the lane's raw status/group value ('doing', 'done', 'untagged', ...)
+ * - shown: false removes the lane from the board (Kanban and Line view both read it); true (or absent) shows it
+ */
+export interface GroupDisplayEntry {
+    value: string;
+    shown: boolean;
+}
+
+/**
  * A view type the user minted by saving a change to a setting an ancestor owns. Mirrored from
  * UserViewTypeDef in client/extension/src/lib/settings.ts, which the webview cannot import - the two are
  * separate webpack bundles with no shared module graph, so this duplication is the wire contract.
@@ -199,7 +212,7 @@ export interface SettingsCascadePayload {
     orientation: 'columns' | 'rows';
     lineBreadth: number;
     kanbanGroupBy: string;
-    columnOrder: string[];
+    groupDisplay: GroupDisplayEntry[];
     kanbanCardRatio: number;
     kanbanAnimateTransitions: boolean;
     kanbanDefaultCardType: string;

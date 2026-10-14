@@ -29,6 +29,7 @@ jest.mock('../notethink-views/src/components', () => ({
     AutoView: (props: { id: string }) => <div data-testid={`autoview-${props.id}`}>AutoView</div>,
     BreadcrumbTrail: () => <div>BreadcrumbTrail</div>,
     ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    LoadingNote: () => <div data-testid="loading-note">Loading</div>,
 }));
 
 // import after mocks are set up
@@ -40,13 +41,17 @@ describe('NoteRenderer', () => {
         expect(screen.getByTestId('NoteRenderer')).toBeInTheDocument();
     });
 
-    it('skips notes without content', () => {
+    it('shows the loading note before any doc has arrived, rather than rendering blank', () => {
+        render(<NoteRenderer notes={{}} />);
+        expect(screen.getByTestId('loading-note')).toBeInTheDocument();
+    });
+
+    it('shows the loading note in place of a note with no content yet', () => {
         const notes: HashMapOf<Doc> = {
             'abc': { id: 'abc', path: '/test.md' },
         };
         render(<NoteRenderer notes={notes} />);
-        const container = screen.getByTestId('NoteRenderer');
-        expect(container.children).toHaveLength(0);
+        expect(screen.getByTestId('loading-note')).toBeInTheDocument();
     });
 
     it('renders GenericView when note has both content and text', () => {

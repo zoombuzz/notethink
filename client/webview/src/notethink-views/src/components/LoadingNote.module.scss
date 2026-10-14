@@ -1,0 +1,30 @@
+/*
+ * LoadingNote: a small, quiet note for content that has not loaded yet - no card, no border, no
+ * spinner, just short centred text. 'board' fills the nearest positioned ancestor (the view's
+ * content region); 'viewport' fills the whole window, for use before any view has mounted.
+ */
+
+.loadingNoteBoard {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loadingNoteViewport {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loadingNoteText {
+  margin: 0;
+  padding: 0 1.2em;
+  text-align: center;
+  color: var(--vscode-descriptionForeground, var(--vscode-foreground, inherit));
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: 13px;
+}

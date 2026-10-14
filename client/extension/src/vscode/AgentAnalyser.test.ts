@@ -317,7 +317,8 @@ describe('AgentAnalyser lifecycle', () => {
 		const posted: Array<Record<string, unknown>> = [];
 		analyser.demand(msg => posted.push(msg));
 		await settle();
-		expect(posted[posted.length - 1].activity).toMatchObject({ analyser: { state: 'unavailable' } });
+		// reason_code is what the webview actually translates from; reason is an English fallback only
+		expect(posted[posted.length - 1].activity).toMatchObject({ analyser: { state: 'unavailable', reason_code: 'no_local_access' } });
 	});
 
 	it('starts scanning on the first demand and goes live once the worker answers', async () => {
@@ -981,6 +982,207 @@ describe('AgentAnalyser lifecycle', () => {
 	});
 });
 
+/**
+ * In a Remote-SSH window the extension host still runs locally, so `context.logUri`'s own homes
+ * belong to the machine running the UI, not the host actually serving the workspace folder; reading
+ * them there would scan a different checkout's agent activity entirely. These cover the three
+ * `resolveVendorHome` outcomes: local (unchanged), remote (found by probing the workspace folder's
+ * ancestors), and remote with nothing found (an 'unavailable' card naming why, never a silent empty
+ * scan that would otherwise read exactly like "no agent activity in 30 days").
+ */
+describe('AgentAnalyser vendor home resolution', () => {
+	const REMOTE_AUTHORITY = 'ssh-remote+test-host';
+	const REMOTE_WORKSPACE_PATH = '/home/dev/github.com/in_development/notethink';
+
+	function remoteFolderUri(path: string = REMOTE_WORKSPACE_PATH): vscode.Uri {
+		return Uri.parse(`vscode-remote://${REMOTE_AUTHORITY}${path}`);
+	}
+
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers();
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
+		(vscode.workspace.fs.stat as jest.Mock).mockRejectedValue(new Error('not found'));
+	});
+
+	afterEach(() => {
+		jest.useRealTimers();
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = undefined;
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = undefined;
+	});
+
+	async function settle(): Promise<void> {
+		for (let i = 0; i < 5; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	function analyserStateFrom(posted: Array<Record<string, unknown>>): string {
+		return (posted[posted.length - 1].activity as { analyser: { state: string } }).analyser.state;
+	}
+
+	it('resolves the local home from context.logUri when the window is not remote, unchanged', async () => {
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [];
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(analyserStateFrom(posted)).toBe('live');
+		const requested = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(call => (call[0] as vscode.Uri).path);
+		expect(requested.some(path => path === '/home/test/.claude/projects')).toBe(true);
+	});
+
+	it('finds a remote home by probing the workspace folder\'s ancestors, ignoring the local logUri home entirely', async () => {
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = REMOTE_AUTHORITY;
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: remoteFolderUri(), name: 'notethink', index: 0 }];
+		// two levels up from the workspace folder is where the ancestor probe finds a session directory
+		const vendor_home_path = '/home/dev/github.com';
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === `${vendor_home_path}/.claude/projects`) { return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 }; }
+			throw new Error('not found');
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(analyserStateFrom(posted)).toBe('live');
+		const requested = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(call => (call[0] as vscode.Uri).path);
+		// discovery used the remote ancestor's home, carrying the workspace folder's own scheme and authority
+		expect(requested.some(path => path === `${vendor_home_path}/.claude/projects`)).toBe(true);
+		const scheme_used = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls
+			.map(call => call[0] as vscode.Uri)
+			.find(uri => uri.path === `${vendor_home_path}/.claude/projects`);
+		expect(scheme_used?.scheme).toBe('vscode-remote');
+		expect(scheme_used?.authority).toBe(REMOTE_AUTHORITY);
+		// never touches the local logUri's own home, which belongs to a different checkout entirely
+		expect(requested.some(path => path === '/home/test/.claude/projects')).toBe(false);
+	});
+
+	it('posts unavailable, naming the reason, when no ancestor and no conventional home root qualifies', async () => {
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = REMOTE_AUTHORITY;
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: remoteFolderUri(), name: 'notethink', index: 0 }];
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		const last = posted[posted.length - 1].activity as { analyser: { state: string; reason?: string; reason_code?: string } };
+		expect(last.analyser.state).toBe('unavailable');
+		expect(last.analyser.reason).toMatch(/remote workspace folder/);
+		// reason_code is what AgentActivityBanner.tsx actually renders translated copy from
+		expect(last.analyser.reason_code).toBe('remote_home_not_found');
+		// /home and /Users were listed looking for a conventional home, but no session scan ever ran
+		const listed = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(call => (call[0] as vscode.Uri).path);
+		expect(listed).toEqual(expect.arrayContaining(['/home', '/Users']));
+		expect(listed.some(path => path.endsWith('/.claude/projects'))).toBe(false);
+	});
+
+	it('bounds the ancestor probe rather than walking above the filesystem root', async () => {
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = REMOTE_AUTHORITY;
+		// a shallow workspace folder path reaches "/" long before AGENT_REMOTE_HOME_PROBE_MAX_DEPTH levels
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: remoteFolderUri('/a/b'), name: 'ws', index: 0 }];
+		const stat = vscode.workspace.fs.stat as jest.Mock;
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(analyserStateFrom(posted)).toBe('unavailable');
+		// nine ancestor calls across "/a/b", "/a" and "/", plus /root as the fallback candidate; it must not climb past root
+		const probed_paths = new Set(stat.mock.calls.map(call => (call[0] as vscode.Uri).path));
+		expect(probed_paths).toEqual(new Set([
+			'/a/b/.claude/projects', '/a/b/.codex/sessions', '/a/b/.grok/sessions',
+			'/a/.claude/projects', '/a/.codex/sessions', '/a/.grok/sessions',
+			'/.claude/projects', '/.codex/sessions', '/.grok/sessions',
+			'/root/.claude/projects', '/root/.codex/sessions', '/root/.grok/sessions',
+		]));
+	});
+
+	it('does not accept a settings-only .claude with no projects directory as a vendor home', async () => {
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = REMOTE_AUTHORITY;
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: remoteFolderUri(), name: 'notethink', index: 0 }];
+		// the workspace root's own .claude exists, but it is never stat'd directly any more - only .claude/projects is
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === `${REMOTE_WORKSPACE_PATH}/.claude`) { return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 }; }
+			throw new Error('not found');
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		const last = posted[posted.length - 1].activity as { analyser: { state: string; reason_code?: string } };
+		expect(last.analyser.state).toBe('unavailable');
+		expect(last.analyser.reason_code).toBe('remote_home_not_found');
+	});
+
+	it('finds a home outside the workspace folder\'s ancestors by listing the conventional /home root', async () => {
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = REMOTE_AUTHORITY;
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: remoteFolderUri('/mnt/data/project'), name: 'project', index: 0 }];
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === '/home') { return [['dev', vscode.FileType.Directory]]; }
+			return [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === '/home/dev/.claude/projects') { return { type: vscode.FileType.Directory, ctime: 0, mtime: 500, size: 0 }; }
+			throw new Error('not found');
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(analyserStateFrom(posted)).toBe('live');
+		const watcher_bases = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.map(call => (call[0] as { base: string }).base);
+		expect(watcher_bases).toContain('/home/dev/.claude');
+	});
+
+	it('ranks several qualifying candidates by a project directory naming the workspace, including through a symlinked alias', async () => {
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = REMOTE_AUTHORITY;
+		// the workspace is opened through /mnt/data/app, a symlinked alias of the real cwd Claude Code recorded
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: remoteFolderUri('/mnt/data/app'), name: 'app', index: 0 }];
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === '/home') { return [['realuser', vscode.FileType.Directory], ['otherguy', vscode.FileType.Directory]]; }
+			if (uri.path === '/home/realuser/.claude/projects') { return [['-home-realuser-work-app', vscode.FileType.Directory]]; }
+			if (uri.path === '/home/otherguy/.claude/projects') { return [['-home-otherguy-project', vscode.FileType.Directory]]; }
+			return [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === '/home/realuser/.claude/projects') { return { type: vscode.FileType.Directory, ctime: 0, mtime: 1_000, size: 0 }; }
+			// the unrelated candidate's session directory is far newer, but naming the workspace still wins
+			if (uri.path === '/home/otherguy/.claude/projects') { return { type: vscode.FileType.Directory, ctime: 0, mtime: 9_000_000, size: 0 }; }
+			throw new Error('not found');
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(analyserStateFrom(posted)).toBe('live');
+		const watcher_bases = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.map(call => (call[0] as { base: string }).base);
+		expect(watcher_bases).toContain('/home/realuser/.claude');
+		expect(watcher_bases).not.toContain('/home/otherguy/.claude');
+	});
+
+	it('picks the candidate with the newest session directory when several qualify and none names the workspace', async () => {
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = REMOTE_AUTHORITY;
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: remoteFolderUri('/mnt/data/somewhere/else'), name: 'else', index: 0 }];
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === '/home') { return [['older', vscode.FileType.Directory], ['newer', vscode.FileType.Directory]]; }
+			if (uri.path === '/home/older/.claude/projects') { return [['-home-older-project', vscode.FileType.Directory]]; }
+			if (uri.path === '/home/newer/.claude/projects') { return [['-home-newer-project', vscode.FileType.Directory]]; }
+			return [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === '/home/older/.claude/projects') { return { type: vscode.FileType.Directory, ctime: 0, mtime: 1_000, size: 0 }; }
+			if (uri.path === '/home/newer/.claude/projects') { return { type: vscode.FileType.Directory, ctime: 0, mtime: 9_000, size: 0 }; }
+			throw new Error('not found');
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(analyserStateFrom(posted)).toBe('live');
+		const watcher_bases = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls.map(call => (call[0] as { base: string }).base);
+		expect(watcher_bases).toContain('/home/newer/.claude');
+		expect(watcher_bases).not.toContain('/home/older/.claude');
+	});
+});
+
 describe('AgentAnalyser story board discovery', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
@@ -1077,6 +1279,204 @@ describe('AgentAnalyser story board discovery', () => {
 		analyser.demand(msg => posted.push(msg));
 		await settle();
 		expect(storiesFrom(posted, CLAUDE_SESSION_ID)).toEqual([{ doc_path: 'docstech/users/alex/todo.md', id: 'my-story' }]);
+	});
+});
+
+/**
+ * A workspace opened through a symlinked alias (the real-world case: `/home/dev/github.com` ->
+ * `/mnt/secure/home/dev/git/github.com`) never prefix-matches a session's own `cwd`, which every
+ * vendor records as the real path. These exercise `resolveAliasMapping`'s outcomes: an alias correctly
+ * bound after a confirming file probe, including the ordinary multi-project shape where the workspace
+ * folder is a parent directory and the session's cwd is a project folder nested inside it, and a
+ * touched file in a sibling project binding through the same mapping; an already-real path needing no
+ * aliasing at all; and a same-named but unrelated tree that must stay unbound rather than bind on a
+ * lookalike.
+ */
+describe('AgentAnalyser symlinked session binding', () => {
+	const REAL_ROOT = '/mnt/secure/home/dev/git/github.com/in_development/notethink';
+	const BOARD_RELATIVE = 'docstech/users/alex/todo.md';
+	const BOARD_TEXT = '# Todo\n\n\n### My story [](?id=my-story&status=doing)\n\n+ [ ] a task\n';
+
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers();
+	});
+
+	afterEach(() => { jest.useRealTimers(); });
+
+	async function settle(): Promise<void> {
+		for (let i = 0; i < 5; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	function storiesFrom(posted: Array<Record<string, unknown>>, session_id: string): unknown {
+		const last = posted[posted.length - 1];
+		const sessions = (last.activity as { sessions: Array<{ session: { session_id: string; stories?: unknown } }> }).sessions;
+		return sessions.find(s => s.session.session_id === session_id)?.session.stories;
+	}
+
+	function storyBindingFrom(posted: Array<Record<string, unknown>>, session_id: string): unknown {
+		const last = posted[posted.length - 1];
+		const sessions = (last.activity as { sessions: Array<{ session: { session_id: string; story_binding?: unknown } }> }).sessions;
+		return sessions.find(s => s.session.session_id === session_id)?.session.story_binding;
+	}
+
+	function editTranscriptLine(absolute_file_path: string): string {
+		return JSON.stringify({
+			type: 'assistant',
+			timestamp: '2026-09-22T11:00:00Z',
+			message: {
+				id: 'm1', role: 'assistant', model: 'claude-sonnet-5',
+				content: [{ type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: absolute_file_path, old_string: '+ [ ] a task', new_string: '+ [X] a task' } }],
+				usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+			},
+		});
+	}
+
+	/**
+	 * Wires one Claude Code session whose live pid file reports `session_cwd` editing a board at
+	 * `board_real_path` (absolute, as the session's own tool call reports it), plus a project root at
+	 * `project_root_for_boards` for `readStoryDocuments` to find `BOARD_RELATIVE` under - the same file
+	 * the session touched, so a successful alias confirmation and the story lookup land on one mock.
+	 */
+	function mockSessionEditingBoard(session_cwd: string, board_real_path: string, project_root_for_boards: string): void {
+		const transcript_bytes = new TextEncoder().encode(editTranscriptLine(board_real_path));
+		const board_path_under_project = `${project_root_for_boards}/${BOARD_RELATIVE}`;
+		const pid_bytes = new TextEncoder().encode(JSON.stringify({ sessionId: CLAUDE_SESSION_ID, cwd: session_cwd, status: 'idle' }));
+		const board_bytes = new TextEncoder().encode(BOARD_TEXT);
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_PROJECTS_DIR) { return [[CLAUDE_PROJECT_DIR, vscode.FileType.Directory]]; }
+			if (uri.path === CLAUDE_PROJECT_PATH) { return [[`${CLAUDE_SESSION_ID}.jsonl`, vscode.FileType.File]]; }
+			if (uri.path === CLAUDE_SESSIONS_DIR) { return [[CLAUDE_PID_FILE_NAME, vscode.FileType.File]]; }
+			if (uri.path === `${project_root_for_boards}/docstech/users`) { return [['alex', vscode.FileType.Directory]]; }
+			return [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_TRANSCRIPT_PATH) { return { type: 1, ctime: 0, mtime: Date.parse('2026-09-22T11:00:00Z'), size: transcript_bytes.byteLength }; }
+			// the workspace folder carries docstech/users directly, so it is its own single-project checkout
+			if (uri.path === `${project_root_for_boards}/docstech/users`) { return { type: 2, ctime: 0, mtime: 0, size: 0 }; }
+			if (uri.path === board_path_under_project) { return { type: 1, ctime: 0, mtime: 0, size: board_bytes.byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_TRANSCRIPT_PATH) { return transcript_bytes; }
+			if (uri.path === CLAUDE_PID_PATH) { return pid_bytes; }
+			if (uri.path === board_path_under_project) { return board_bytes; }
+			throw new Error('not found');
+		});
+	}
+
+	it('binds a session whose cwd reaches the workspace folder through a symlinked alias', async () => {
+		const alias_root = '/home/dev/github.com/in_development/notethink';
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(alias_root), name: 'notethink', index: 0 }];
+		mockSessionEditingBoard(REAL_ROOT, `${REAL_ROOT}/${BOARD_RELATIVE}`, alias_root);
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(storiesFrom(posted, CLAUDE_SESSION_ID)).toEqual([{ doc_path: BOARD_RELATIVE, id: 'my-story' }]);
+	});
+
+	it('still binds a session whose cwd already is the real, non-aliased workspace folder path', async () => {
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(REAL_ROOT), name: 'notethink', index: 0 }];
+		mockSessionEditingBoard(REAL_ROOT, `${REAL_ROOT}/${BOARD_RELATIVE}`, REAL_ROOT);
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(storiesFrom(posted, CLAUDE_SESSION_ID)).toEqual([{ doc_path: BOARD_RELATIVE, id: 'my-story' }]);
+	});
+
+	it('leaves a session unbound when its cwd only coincidentally shares trailing segments with an unrelated workspace folder', async () => {
+		// shares the final two segments ("in_development/notethink") with REAL_ROOT, but is a different tree with no such file
+		const lookalike_root = '/home/otheruser/backup/in_development/notethink';
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(lookalike_root), name: 'notethink', index: 0 }];
+		mockSessionEditingBoard(REAL_ROOT, `${REAL_ROOT}/${BOARD_RELATIVE}`, REAL_ROOT);
+		// the lookalike tree has no docstech/users of its own, and no file at the mapped board path either
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_TRANSCRIPT_PATH) { return { type: 1, ctime: 0, mtime: Date.parse('2026-09-22T11:00:00Z'), size: 1 }; }
+			throw new Error('not found');
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(storiesFrom(posted, CLAUDE_SESSION_ID)).toBeUndefined();
+		expect(storyBindingFrom(posted, CLAUDE_SESSION_ID)).toBe('none');
+	});
+
+	// the umbrella multi-project shape: the workspace folder is a parent directory, and each project is a child of it
+	const PARENT_REAL = '/mnt/secure/home/dev/git/github.com/in_development';
+	const PARENT_ALIAS = '/home/dev/github.com/in_development';
+	const OWN_PROJECT = 'notethink';
+	const SIBLING_PROJECT = 'other-project';
+
+	/**
+	 * Wires one Claude Code session whose real cwd is `${PARENT_REAL}/${OWN_PROJECT}`, a project folder
+	 * nested one level inside the real tree, with the workspace opened at the umbrella parent
+	 * `PARENT_ALIAS` rather than at the project folder itself - the shape that only an ancestor-walking
+	 * alias match reaches, since `PARENT_ALIAS` shares no trailing segment with the project folder.
+	 * `extra_edit_absolute_path`, when given, is a second tool-call edit outside the session's own cwd
+	 * (a sibling project's board), to prove the real-root mapping remaps every touched path, not only
+	 * the ones under the session's own cwd.
+	 */
+	function mockMultiProjectSession(extra_edit_absolute_path?: string): void {
+		const own_board_real_path = `${PARENT_REAL}/${OWN_PROJECT}/${BOARD_RELATIVE}`;
+		const own_board_alias_path = `${PARENT_ALIAS}/${OWN_PROJECT}/${BOARD_RELATIVE}`;
+		const sibling_board_alias_path = extra_edit_absolute_path ? `${PARENT_ALIAS}/${SIBLING_PROJECT}/${BOARD_RELATIVE}` : undefined;
+		const session_cwd = `${PARENT_REAL}/${OWN_PROJECT}`;
+		const edits = [editTranscriptLine(own_board_real_path), ...(extra_edit_absolute_path ? [editTranscriptLine(extra_edit_absolute_path)] : [])];
+		const transcript_bytes = new TextEncoder().encode(edits.join('\n'));
+		const pid_bytes = new TextEncoder().encode(JSON.stringify({ sessionId: CLAUDE_SESSION_ID, cwd: session_cwd, status: 'idle' }));
+		const board_bytes = new TextEncoder().encode(BOARD_TEXT);
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_PROJECTS_DIR) { return [[CLAUDE_PROJECT_DIR, vscode.FileType.Directory]]; }
+			if (uri.path === CLAUDE_PROJECT_PATH) { return [[`${CLAUDE_SESSION_ID}.jsonl`, vscode.FileType.File]]; }
+			if (uri.path === CLAUDE_SESSIONS_DIR) { return [[CLAUDE_PID_FILE_NAME, vscode.FileType.File]]; }
+			// the umbrella workspace folder holds its projects side by side as immediate children
+			if (uri.path === PARENT_ALIAS) { return [[OWN_PROJECT, vscode.FileType.Directory], [SIBLING_PROJECT, vscode.FileType.Directory]]; }
+			if (uri.path === `${PARENT_ALIAS}/${OWN_PROJECT}/docstech/users`) { return [['alex', vscode.FileType.Directory]]; }
+			if (uri.path === `${PARENT_ALIAS}/${SIBLING_PROJECT}/docstech/users`) { return [['alex', vscode.FileType.Directory]]; }
+			return [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_TRANSCRIPT_PATH) { return { type: 1, ctime: 0, mtime: Date.parse('2026-09-22T11:00:00Z'), size: transcript_bytes.byteLength }; }
+			// the umbrella parent carries no docstech/users of its own; each project under it does
+			if (uri.path === `${PARENT_ALIAS}/${OWN_PROJECT}/docstech/users`) { return { type: 2, ctime: 0, mtime: 0, size: 0 }; }
+			if (uri.path === `${PARENT_ALIAS}/${SIBLING_PROJECT}/docstech/users`) { return { type: 2, ctime: 0, mtime: 0, size: 0 }; }
+			if (uri.path === own_board_alias_path) { return { type: 1, ctime: 0, mtime: 0, size: board_bytes.byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_TRANSCRIPT_PATH) { return transcript_bytes; }
+			if (uri.path === CLAUDE_PID_PATH) { return pid_bytes; }
+			if (uri.path === own_board_alias_path) { return board_bytes; }
+			if (sibling_board_alias_path && uri.path === sibling_board_alias_path) { return board_bytes; }
+			throw new Error('not found');
+		});
+	}
+
+	it('binds a session whose cwd is a project folder nested inside an umbrella workspace folder opened through a symlinked alias', async () => {
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(PARENT_ALIAS), name: 'in_development', index: 0 }];
+		mockMultiProjectSession();
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(storiesFrom(posted, CLAUDE_SESSION_ID)).toEqual([{ doc_path: `${OWN_PROJECT}/${BOARD_RELATIVE}`, id: 'my-story' }]);
+	});
+
+	it('binds a session to a story touched in a sibling project inside the workspace, outside the session\'s own cwd', async () => {
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(PARENT_ALIAS), name: 'in_development', index: 0 }];
+		const sibling_board_real_path = `${PARENT_REAL}/${SIBLING_PROJECT}/${BOARD_RELATIVE}`;
+		mockMultiProjectSession(sibling_board_real_path);
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(storiesFrom(posted, CLAUDE_SESSION_ID)).toEqual([
+			{ doc_path: `${OWN_PROJECT}/${BOARD_RELATIVE}`, id: 'my-story' },
+			{ doc_path: `${SIBLING_PROJECT}/${BOARD_RELATIVE}`, id: 'my-story' },
+		]);
 	});
 });
 

@@ -524,3 +524,50 @@ describe('groupDisplay falls back to its legacy columnOrder path', () => {
         expect(readSetting('groupDisplay')).toEqual([{ value: 'doing', shown: true }]);
     });
 });
+
+/*
+ * An entry's optional axis field names the group-by key the board laned by when it was written; an entry
+ * with none belongs to the status axis. Nothing here filters it out, so it rides through read and write
+ * exactly as every other field does.
+ */
+describe('groupDisplay entries carry an optional axis field through unchanged', () => {
+
+    it('reads an axis-tagged entry back verbatim alongside an untagged (status) one', () => {
+        mockConfigStore({
+            [GROUP_DISPLAY_PATH]: {
+                workspaceValue: [
+                    { value: 'doing', shown: true },
+                    { value: 'alpha', shown: false, axis: 'nt_first_level_folder' },
+                ],
+            },
+        });
+        expect(readSetting('groupDisplay')).toEqual([
+            { value: 'doing', shown: true },
+            { value: 'alpha', shown: false, axis: 'nt_first_level_folder' },
+        ]);
+    });
+
+    it('writes an axis-tagged entry through unmodified', async () => {
+        const update = jest.fn(async () => {});
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: (_path: string, default_value: unknown) => default_value,
+            inspect: () => undefined,
+            update,
+        });
+        const written = [{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }];
+
+        await writeSetting('groupDisplay', written, vscode.ConfigurationTarget.Workspace);
+
+        expect(update).toHaveBeenNthCalledWith(1, GROUP_DISPLAY_PATH, written, vscode.ConfigurationTarget.Workspace);
+    });
+
+    it('carries the axis field into the settings cascade payload sent to the webview', () => {
+        mockConfigStore({
+            [GROUP_DISPLAY_PATH]: {
+                workspaceValue: [{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }],
+            },
+        });
+        const payload = buildSettingsCascadePayload();
+        expect(payload.groupDisplay).toEqual([{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }]);
+    });
+});

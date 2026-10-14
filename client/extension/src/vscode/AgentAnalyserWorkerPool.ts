@@ -26,6 +26,13 @@ interface Bucket {
     line_diff_jobs: AgentLineDiffJob[];
 }
 
+// one in-flight postToWorker call, tracked by its own request_id so a concurrent call cannot clobber it
+interface PendingRequest {
+    resolve: (response: AgentAnalyserWorkerResponse) => void;
+    reject: (err: unknown) => void;
+    timeout: ReturnType<typeof setTimeout>;
+}
+
 /**
  * A pool of up to `pool_size` nested `AgentAnalyserWorker.ts` instances, sharing scan work across
  * cores. Routing is STICKY: each session id always hashes to the same worker index, because a
@@ -33,9 +40,19 @@ interface Bucket {
  * time. `line_diff_jobs` carry no session id, so they spread round-robin instead. Workers spawn
  * lazily, one per bucket on first use, and a round trip that fails on any bucket resets every worker
  * so the caller resends the whole scan.
+ *
+ * `roundTrip` calls themselves run concurrently across repositories (`AgentAnalyser.ts`'s
+ * `attributeTrees` fires one line-diff `roundTrip` per repository in parallel), and a small job list
+ * round-robins onto the same low bucket index every time, so two of those calls regularly land on the
+ * SAME worker at once. `pending`, one map per bucket keyed by request_id, is what makes that safe: each
+ * worker gets exactly one `onmessage`/`onerror` pair, installed once, that looks up the right call's
+ * resolver instead of a single handler a later call would overwrite and silently drop the earlier
+ * response for (measured: concurrent repositories' line-diff round trips in a large multi-project
+ * workspace, several `agent analyser worker timed out` errors within the same second).
  */
 export class AgentAnalyserWorkerPool {
     private readonly slots: Array<Worker | undefined>;
+    private readonly pending: Array<Map<string, PendingRequest>>;
     // true once a worker fails to spawn at all; every bucket then runs inline rather than retry a spawn unlikely to succeed
     private spawn_failed = false;
 
@@ -44,6 +61,7 @@ export class AgentAnalyserWorkerPool {
         public readonly pool_size: number = defaultAgentAnalyserPoolSize(),
     ) {
         this.slots = new Array(Math.max(1, pool_size)).fill(undefined);
+        this.pending = this.slots.map(() => new Map());
     }
 
     // the worker index this session always routes to, so a tail job reaches the instance holding its cache
@@ -101,6 +119,7 @@ export class AgentAnalyserWorkerPool {
             try {
                 worker = this.worker_factory();
                 this.slots[bucket] = worker;
+                this.wireWorker(bucket, worker);
                 writeToLogAtLevel('debug', 'AgentAnalyserWorkerPool', `spawned agent analyser worker for bucket ${bucket + 1}/${this.slots.length}`);
             } catch (err) {
                 // spawning won't succeed retroactively: stop trying, and fall back to running every bucket inline from now on
@@ -109,25 +128,36 @@ export class AgentAnalyserWorkerPool {
                 return handleAgentAnalyserRequest(request);
             }
         }
-        return this.postToWorker(worker, request);
+        return this.postToWorker(bucket, worker, request);
     }
 
-    private postToWorker(worker: Worker, request: AgentAnalyserWorkerRequest): Promise<AgentAnalyserWorkerResponse> {
+    // installed once per worker: dispatches by request_id, so concurrent requests on this bucket resolve independently
+    private wireWorker(bucket: number, worker: Worker): void {
+        // onmessage/onerror, not addEventListener: the property form every Worker impl (and test double) supports
+        worker.onmessage = (event: MessageEvent<AgentAnalyserWorkerResponse>): void => {
+            const entry = this.pending[bucket].get(event.data.request_id);
+            if (!entry) { return; }
+            this.pending[bucket].delete(event.data.request_id);
+            clearTimeout(entry.timeout);
+            entry.resolve(event.data);
+        };
+        worker.onerror = (event: ErrorEvent): void => {
+            const inner = event.error instanceof Error ? event.error : new Error(event.message ?? 'agent analyser worker error');
+            // filename/lineno belong to the ErrorEvent, not the inner Error; attach them so the log shows where the worker died
+            Object.assign(inner, { filename: event.filename, lineno: event.lineno });
+            // a worker-level error cannot be attributed to one in-flight request, so every request still pending on it fails together
+            for (const entry of this.pending[bucket].values()) { clearTimeout(entry.timeout); entry.reject(inner); }
+            this.pending[bucket].clear();
+        };
+    }
+
+    private postToWorker(bucket: number, worker: Worker, request: AgentAnalyserWorkerRequest): Promise<AgentAnalyserWorkerResponse> {
         return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('agent analyser worker timed out')), AGENT_WORKER_TIMEOUT_MS);
-            // onmessage/onerror, not addEventListener: the property form every Worker impl (and test double) supports
-            worker.onmessage = (event: MessageEvent<AgentAnalyserWorkerResponse>): void => {
-                if (event.data.request_id !== request.request_id) { return; }
-                clearTimeout(timeout);
-                worker.onmessage = null;
-                resolve(event.data);
-            };
-            worker.onerror = (event: ErrorEvent): void => {
-                clearTimeout(timeout);
-                const inner = event.error instanceof Error ? event.error : new Error(event.message ?? 'agent analyser worker error');
-                // filename/lineno belong to the ErrorEvent, not the inner Error; attach them so the log shows where the worker died
-                reject(Object.assign(inner, { filename: event.filename, lineno: event.lineno }));
-            };
+            const timeout = setTimeout(() => {
+                this.pending[bucket].delete(request.request_id);
+                reject(new Error('agent analyser worker timed out'));
+            }, AGENT_WORKER_TIMEOUT_MS);
+            this.pending[bucket].set(request.request_id, { resolve, reject, timeout });
             // transferable ArrayBuffers move, not copy; line_diff_jobs stay behind so a retry can reuse them
             worker.postMessage(request, this.transferListFor(request));
         });
@@ -146,9 +176,13 @@ export class AgentAnalyserWorkerPool {
     public resetAll(): void {
         for (let i = 0; i < this.slots.length; i++) {
             const worker = this.slots[i];
-            if (!worker) { continue; }
-            try { worker.terminate(); } catch { /* already gone */ }
-            this.slots[i] = undefined;
+            if (worker) {
+                try { worker.terminate(); } catch { /* already gone */ }
+                this.slots[i] = undefined;
+            }
+            // a terminated worker never answers, so anything still awaiting it here would otherwise wait out its own timeout
+            for (const entry of this.pending[i].values()) { clearTimeout(entry.timeout); entry.reject(new Error('agent analyser worker pool reset')); }
+            this.pending[i].clear();
         }
     }
 

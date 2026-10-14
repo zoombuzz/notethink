@@ -39,6 +39,12 @@ describe('emptyActivitySnapshot', () => {
         expect(emptyActivitySnapshot('unavailable', 'no local file access in this host').analyser)
             .toEqual({ state: 'unavailable', reason: 'no local file access in this host', refusals: [] });
     });
+
+    // reason_code is what the webview actually translates from; reason stays only as an English fallback
+    it('carries a reason_code through alongside the English fallback reason', () => {
+        expect(emptyActivitySnapshot('unavailable', 'no .claude, .codex or .grok directory found', 'remote_home_not_found').analyser)
+            .toEqual({ state: 'unavailable', reason: 'no .claude, .codex or .grok directory found', reason_code: 'remote_home_not_found', refusals: [] });
+    });
 });
 
 describe('unreadableSessionIds', () => {

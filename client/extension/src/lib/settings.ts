@@ -65,10 +65,12 @@ export interface SettingDef<T> {
  * this shape is the wire contract between them.
  * - value: the raw lane slug the data groups by (e.g. 'code-review')
  * - shown: whether the lane is rendered
+ * - axis: the group-by key the board laned by when the entry was written; absent means status
  */
 export interface GroupDisplayEntry {
     value: string;
     shown: boolean;
+    axis?: string;
 }
 
 export const SETTINGS = {

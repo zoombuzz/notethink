@@ -28,6 +28,16 @@ function makeStatusNote(seq: number, status: string): NoteProps {
 
 const LANE_NOTES: NoteProps[] = [makeStatusNote(1, 'doing'), makeStatusNote(2, 'done')];
 
+// a note whose only lane signal is its originating file's first-level folder, for the folder-axis cases
+function makeFolderNote(seq: number, folder: string): NoteProps {
+    return {
+        seq, level: 1, children_body: [], children: [],
+        position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } },
+        headline_raw: '', body_raw: '', linetags: {},
+        origin: { doc_id: `${folder}-doc`, doc_path: `/ws/${folder}/file.md`, relative_path: `${folder}/file.md` },
+    };
+}
+
 function makeProps(overrides: Partial<ViewProps> = {}): ViewProps {
     return {
         id: 'doc-id-1',
@@ -260,19 +270,80 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
 
     it('handle_group_display_change cascade-writes only, and spells natural order (every lane shown) as an empty array', () => {
         const { handlers, set_view_managed_state, post_message } = makeHandlers();
-        const props = makeProps();
+        // kanban's auto axis is status, so these entries carry no axis and round-trip untagged
+        const props = makeProps({ type: 'kanban' });
         const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
         act(() => { result.current.handle_group_display_change([{ value: 'done', shown: true }, { value: 'doing', shown: true }]); });
         expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [{ value: 'done', shown: true }, { value: 'doing', shown: true }] });
-        // natural_column_order is [] for a non-kanban view, so an empty next_display matches natural
+        // writing an empty list removes the status axis's own entries, and there is nothing else stored to survive
         act(() => { result.current.handle_group_display_change([]); });
         expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [] });
         expect(set_view_managed_state).not.toHaveBeenCalled();
     });
 
+    it('writes to the status axis when the rendered view is not grouped at all (natural_column_order is empty)', () => {
+        const { handlers, post_message } = makeHandlers();
+        // 'document' is not a grouped view, so natural_column_order is [] even while the drawer highlights kanban's settings
+        const props = makeProps({ type: 'document' });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
+        act(() => { result.current.handle_group_display_change([{ value: 'done', shown: true }, { value: 'doing', shown: true }]); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [{ value: 'done', shown: true }, { value: 'doing', shown: true }] });
+    });
+
+    it('a write with no grouped view rendered keeps another axis\'s stored entries', () => {
+        const { handlers, post_message } = makeHandlers();
+        const folder_entry = { value: 'alpha', shown: false, axis: 'nt_first_level_folder' };
+        const display_options: NoteDisplayOptions = { integration_mode: 'folder', settings: { groupDisplay: [{ value: 'doing', shown: true }, folder_entry] } };
+        const props = makeProps({ type: 'document', display_options });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, display_options, []));
+        act(() => { result.current.handle_group_display_change([{ value: 'doing', shown: false }]); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [{ value: 'doing', shown: false }, folder_entry] });
+    });
+
+    it('a write on the folder axis keeps the stored status entries intact, tagging its own rows with the axis', () => {
+        const { handlers, post_message } = makeHandlers();
+        const folder_notes: NoteProps[] = [makeFolderNote(1, 'alpha'), makeFolderNote(2, 'beta')];
+        const display_options: NoteDisplayOptions = {
+            integration_mode: 'folder',
+            settings: { groupBy: 'nt_first_level_folder', groupDisplay: [{ value: 'doing', shown: false }, { value: 'done', shown: true }] },
+        };
+        const props = makeProps({ type: 'line', display_options });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, display_options, folder_notes));
+        act(() => { result.current.handle_group_display_change([{ value: 'beta', shown: true }, { value: 'alpha', shown: false }]); });
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'updateSetting',
+            setting: 'groupDisplay',
+            value: [
+                { value: 'beta', shown: true, axis: 'nt_first_level_folder' },
+                { value: 'alpha', shown: false, axis: 'nt_first_level_folder' },
+                { value: 'doing', shown: false },
+                { value: 'done', shown: true },
+            ],
+        });
+    });
+
+    it('writing natural order on the status axis (unpinning it) removes only its own stored entries, leaving the folder axis entries', () => {
+        const { handlers, post_message } = makeHandlers();
+        const display_options: NoteDisplayOptions = {
+            integration_mode: 'folder',
+            settings: { groupDisplay: [{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }, { value: 'beta', shown: false, axis: 'nt_first_level_folder' }] },
+        };
+        const props = makeProps({ type: 'kanban', display_options });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, display_options, LANE_NOTES));
+        // natural_column_order for LANE_NOTES on status is ['doing', 'done', 'untagged'], every lane shown
+        act(() => { result.current.handle_group_display_change([
+            { value: 'doing', shown: true }, { value: 'done', shown: true }, { value: 'untagged', shown: true },
+        ]); });
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'updateSetting',
+            setting: 'groupDisplay',
+            value: [{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }, { value: 'beta', shown: false, axis: 'nt_first_level_folder' }],
+        });
+    });
+
     it('handle_group_display_change writes the full entry list when a lane is hidden, even if the order matches natural', () => {
         const { handlers, post_message } = makeHandlers();
-        const line_props = makeProps({ type: 'line' });
+        const line_props = makeProps({ type: 'line', display_options: { integration_mode: 'folder', settings: { groupBy: 'status' } } });
         const { result } = renderHook(() => useViewToolbar(line_props, handlers, line_props.display_options!, LANE_NOTES));
         // natural_column_order is ['doing', 'done', 'untagged']; same order, but 'done' is hidden
         act(() => { result.current.handle_group_display_change([
@@ -289,9 +360,54 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
 
     it('natural_column_order is derived for every lane view, not only kanban, so the drawer can offer the row from any node', () => {
         const { handlers } = makeHandlers();
-        const line_props = makeProps({ type: 'line' });
+        const line_props = makeProps({ type: 'line', display_options: { integration_mode: 'folder', settings: { groupBy: 'status' } } });
         const { result } = renderHook(() => useViewToolbar(line_props, handlers, line_props.display_options!, LANE_NOTES));
         expect(result.current.natural_column_order).toEqual(['doing', 'done', 'untagged']);
+    });
+
+    it('a kanban board with no explicit group-by lanes by status, same as today', () => {
+        const { handlers } = makeHandlers();
+        const props = makeProps({ type: 'kanban' });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, LANE_NOTES));
+        expect(result.current.natural_column_order).toEqual(['doing', 'done', 'untagged']);
+    });
+
+    it('a kanban board grouped by first level folder lists the folder lanes, not the status ones', () => {
+        const { handlers } = makeHandlers();
+        const folder_notes: NoteProps[] = [
+            makeFolderNote(1, 'alpha'),
+            makeFolderNote(2, 'beta'),
+        ];
+        const props = makeProps({
+            type: 'kanban',
+            display_options: { integration_mode: 'folder', settings: { kanbanGroupBy: 'nt_first_level_folder' } },
+        });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, folder_notes));
+        expect(result.current.natural_column_order).toEqual(['alpha', 'beta', 'untagged']);
+    });
+
+    it('a non-kanban grouped view explicitly grouped by first level folder lists the folder lanes', () => {
+        const { handlers } = makeHandlers();
+        const folder_notes: NoteProps[] = [
+            makeFolderNote(1, 'alpha'),
+            makeFolderNote(2, 'beta'),
+        ];
+        const props = makeProps({
+            type: 'line',
+            display_options: { integration_mode: 'folder', settings: { groupBy: 'nt_first_level_folder' } },
+        });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, folder_notes));
+        expect(result.current.natural_column_order).toEqual(['alpha', 'beta', 'untagged']);
+    });
+
+    it('with no notes, the row lists just the absent-value bucket regardless of axis, exactly as today', () => {
+        const { handlers } = makeHandlers();
+        const props = makeProps({
+            type: 'kanban',
+            display_options: { integration_mode: 'folder', settings: { kanbanGroupBy: 'nt_first_level_folder' } },
+        });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
+        expect(result.current.natural_column_order).toEqual(['untagged']);
     });
 
     it('handle_make_default / handle_reset_to_default / handle_restore_builtin_default each post their cascade message', () => {

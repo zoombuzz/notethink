@@ -4,13 +4,13 @@ import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { sanitize } from "hast-util-sanitize";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { toHast } from "mdast-util-to-hast";
-import { ErrorBoundary } from "../notethink-views/src/components";
+import { ErrorBoundary, LoadingNote } from "../notethink-views/src/components";
 import { anyViewInFolderMode, firstIntegrationPath } from "../notethink-views/src/lib/mergeAggregateRoot";
 import { pickMostRecentlySentDoc } from "../lib/docops";
 import type { Nodes as MdastNodesType } from "mdast";
 import type { HashMapOf, Doc } from "../types/general";
 import type { TextSelection } from "../notethink-views/src/types/NoteProps";
-import type { SettingsCascadePayload } from "../notethink-views/src/types/Messages";
+import type { SettingsCascadePayload, DiscoveryProgress } from "../notethink-views/src/types/Messages";
 import type { FileIntegrationDeclaration } from "../lib/docops";
 import type { ViewState } from './ExtensionReceiver';
 import NoteTreeComposer from './composers/NoteTreeComposer';
@@ -47,6 +47,8 @@ export interface NoteRendererProps {
     workspace_root?: string;
     workspace_projects?: string[];
     aggregate_total_discovered?: number;
+    discovery_scanning?: boolean;
+    discovery_progress?: DiscoveryProgress;
     includeFilter?: string;
     excludeFilter?: string;
     settingsCascade?: SettingsCascadePayload;
@@ -61,6 +63,11 @@ export interface NoteRendererProps {
  * docs map (folder→current_file transition states, message races) must not stack up as
  * extra single-file views. Aggregate (folder) mode renders a single FolderTreeComposer
  * that merges every Doc into one synthetic root.
+ *
+ * rendered_note stays null before the active doc's content has arrived, including right after mount
+ * with no docs at all yet; in that gap the return below shows the same quiet LoadingNote every other
+ * "nothing to show yet" moment shows, filling the viewport since no toolbar or board exists yet to be
+ * "the board area".
  */
 export default function NoteRenderer(props: NoteRendererProps): ReactElement {
     const ref = useRef<HTMLDivElement>(null);
@@ -102,6 +109,6 @@ export default function NoteRenderer(props: NoteRendererProps): ReactElement {
         }
     }
     return <div ref={ref} data-testid="NoteRenderer">
-        {rendered_note}
+        {rendered_note ?? <LoadingNote fill="viewport" />}
     </div>;
 }

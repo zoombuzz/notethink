@@ -1109,6 +1109,15 @@ describe('NotethinkEditorProvider', () => {
 				expect(docCounts()).toEqual([3]);
 			});
 
+			it('posts a final discoveryProgress loading tick with every file read', async () => {
+				await discoverFiles(3);
+
+				// the throttle only guarantees the last tick; intermediate ones depend on real elapsed time and are not asserted
+				const loading_progress = panelHelper.postedMessages.filter(m => m.type === 'discoveryProgress' && m.phase === 'loading');
+				expect(loading_progress.length).toBeGreaterThan(0);
+				expect(loading_progress[loading_progress.length - 1]).toMatchObject({ files_loaded: 3, files_total: 3 });
+			});
+
 			it('flushes at the size cap, so no batch exceeds the cap and the board fills before the aggregate lands', async () => {
 				await discoverFiles(25);
 
@@ -1191,7 +1200,7 @@ describe('NotethinkEditorProvider', () => {
 			});
 		});
 
-		it('does NOT emit a pendingChange when the discovered set exactly matches the cached docs (fast path)', async () => {
+		it('still emits a pendingChange pair around a fast-path re-enter, since enumeration always runs even when the discovered set exactly matches the cached docs', async () => {
 			const file_a = '/workspace/notes/a.md';
 			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(mockTextDocument('# a', file_a));
 			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_a)]);
@@ -1204,17 +1213,61 @@ describe('NotethinkEditorProvider', () => {
 				await new Promise(resolve => setImmediate(resolve));
 			}
 
-			// second entry: same path, same files, same mtimes - fast path should skip the pendingChange + skip per-file loads
+			// second entry: same path, same files, same mtimes - fast path should still signal the scan, but skip per-file loads
 			panelHelper.postedMessages.length = 0;
 			(vscode.workspace.openTextDocument as jest.Mock).mockClear();
 			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
 			await flush();
 
 			const pending_changes = panelHelper.postedMessages.filter(m => m.type === 'pendingChange');
-			expect(pending_changes).toEqual([]);
+			expect(pending_changes).toEqual([
+				{ type: 'pendingChange', key: 'folderDiscovery', on: true },
+				{ type: 'pendingChange', key: 'folderDiscovery', on: false },
+			]);
 			// fast path: no per-file openTextDocument calls beyond the no-ops; the aggregate payload is sent without reloading
 			const aggregate = panelHelper.postedMessages.find(m => m.type === 'update' && (m as Record<string, unknown>).aggregate_total_discovered !== undefined);
 			expect(aggregate).toBeDefined();
+			// nothing reloads on the fast path, so there is no loading phase to report progress on
+			expect(panelHelper.postedMessages.some(m => m.type === 'discoveryProgress')).toBe(false);
+		});
+
+		it('still clears the pendingChange signal and logs the failure when enumeration throws', async () => {
+			(vscode.workspace.findFiles as jest.Mock).mockRejectedValue(new Error('search provider unavailable'));
+			const errorLogSpy = jest.spyOn(require('../lib/errorops'), 'writeToErrorLog');
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			await flush();
+
+			const pending_changes = panelHelper.postedMessages.filter(m => m.type === 'pendingChange');
+			expect(pending_changes).toEqual([
+				{ type: 'pendingChange', key: 'folderDiscovery', on: true },
+				{ type: 'pendingChange', key: 'folderDiscovery', on: false },
+			]);
+			expect(errorLogSpy).toHaveBeenCalledWith('discoverFolderDocs', expect.stringContaining('discovery failed'), expect.any(Error));
+			errorLogSpy.mockRestore();
+		});
+
+		it('still clears the pendingChange signal and logs the failure when the load-completion step throws', async () => {
+			const file_a = '/workspace/notes/a.md';
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(mockTextDocument('# a', file_a));
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([Uri.file(file_a)]);
+			const aggregateSpy = jest.spyOn(PanelSession.prototype as unknown as { sendAggregatePayload: () => void }, 'sendAggregatePayload')
+				.mockImplementation(() => { throw new Error('webview disposed'); });
+			const errorLogSpy = jest.spyOn(require('../lib/errorops'), 'writeToErrorLog');
+
+			await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
+			while (!panelHelper.postedMessages.some(m => m.type === 'pendingChange' && m.on === false)) {
+				await new Promise(resolve => setImmediate(resolve));
+			}
+
+			const pending_changes = panelHelper.postedMessages.filter(m => m.type === 'pendingChange');
+			expect(pending_changes).toEqual([
+				{ type: 'pendingChange', key: 'folderDiscovery', on: true },
+				{ type: 'pendingChange', key: 'folderDiscovery', on: false },
+			]);
+			expect(errorLogSpy).toHaveBeenCalledWith('discoverFolderDocs', expect.stringContaining('load completion failed'), expect.any(Error));
+			aggregateSpy.mockRestore();
+			errorLogSpy.mockRestore();
 		});
 
 		describe('filters gate every route into the aggregate, not just discovery', () => {
@@ -1694,9 +1747,16 @@ describe('NotethinkEditorProvider', () => {
 		it('returns HTML containing the nonce and script tag', () => {
 			const html = panelHelper.panel.webview.html as string;
 			expect(html).toContain('<!DOCTYPE html>');
-			expect(html).toContain('<div id="root"></div>');
+			expect(html).toContain('<div id="root">');
 			expect(html).toContain('nonce-');
 			expect(html).toContain('Content-Security-Policy');
+		});
+
+		it('seeds #root with a static loading placeholder, replaced once the bundle mounts', () => {
+			const html = panelHelper.panel.webview.html as string;
+			expect(html).toContain('data-testid="loading-note"');
+			expect(html).toContain('aria-busy="true"');
+			expect(html).toContain('NoteThink is loading…');
 		});
 
 		it('CSP allows a blob: worker and a connect-src fetch to the webview origin, for the parse worker\'s fetch-then-blob load', () => {
@@ -2318,6 +2378,97 @@ describe('NotethinkEditorProvider', () => {
 			expect(paths).not.toContain(`${VFS_ROOT}/welcome/node_modules/dep.md`);
 		});
 
+		it('prunes .venv and __pycache__ directories like node_modules', async () => {
+			mockVfsTree({
+				[VFS_ROOT]: [['welcome', vscode.FileType.Directory]],
+				[`${VFS_ROOT}/welcome`]: [['keep.md', vscode.FileType.File], ['.venv', vscode.FileType.Directory], ['__pycache__', vscode.FileType.Directory]],
+				[`${VFS_ROOT}/welcome/.venv`]: [['site-packages', vscode.FileType.Directory]],
+				[`${VFS_ROOT}/welcome/.venv/site-packages`]: [['pkg.md', vscode.FileType.File]],
+				[`${VFS_ROOT}/welcome/__pycache__`]: [['cached.md', vscode.FileType.File]],
+			});
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) =>
+				({ uri: u, getText: jest.fn(() => '# x'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) }),
+			);
+
+			const panel = await setupVfsPanel();
+			panel.postedMessages.length = 0;
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: `${VFS_ROOT}/welcome` });
+			while (getUpdates(panel.postedMessages).length < 1) { await flush(); }
+
+			// the walk never descends into .venv or __pycache__ (probe-prune), so neither readDirectory is ever called
+			const read_paths = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(c => (c[0] as Uri).path);
+			expect(read_paths).not.toContain(`${VFS_ROOT}/welcome/.venv`);
+			expect(read_paths).not.toContain(`${VFS_ROOT}/welcome/.venv/site-packages`);
+			expect(read_paths).not.toContain(`${VFS_ROOT}/welcome/__pycache__`);
+			const paths = getUpdates(panel.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+			expect(paths).toContain(`${VFS_ROOT}/welcome/keep.md`);
+			expect(paths).not.toContain(`${VFS_ROOT}/welcome/.venv/site-packages/pkg.md`);
+			expect(paths).not.toContain(`${VFS_ROOT}/welcome/__pycache__/cached.md`);
+		});
+
+		it('stops a superseded walk once a newer folder is entered, posting no further walking progress for it', async () => {
+			const FOLDER_A = `${VFS_ROOT}/alpha`;
+			const FOLDER_B = `${VFS_ROOT}/beta`;
+			let release_a: (() => void) | undefined;
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation((uri: Uri) => {
+				if (uri.path === FOLDER_A) {
+					return new Promise(resolve => { release_a = () => resolve([['child.md', vscode.FileType.File], ['sub', vscode.FileType.Directory]]); });
+				}
+				if (uri.path === FOLDER_B) { return Promise.resolve([['other.md', vscode.FileType.File]]); }
+				return Promise.resolve([]);
+			});
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) =>
+				({ uri: u, getText: jest.fn(() => '# x'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) }),
+			);
+
+			const panel = await setupVfsPanel();
+			panel.postedMessages.length = 0;
+
+			const first = panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: FOLDER_A });
+			// let the walk reach its gated readDirectory call for FOLDER_A before a newer folder supersedes it
+			while (!release_a) { await flush(); }
+
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: FOLDER_B });
+			const walking_before_release = panel.postedMessages.filter(m => m.type === 'discoveryProgress' && m.phase === 'walking').length;
+
+			release_a();
+			await first;
+			await flush();
+
+			// the superseded scan's gated read resolved, but it posted no further walking progress once stopped
+			const walking_after_release = panel.postedMessages.filter(m => m.type === 'discoveryProgress' && m.phase === 'walking').length;
+			expect(walking_after_release).toBe(walking_before_release);
+			// the superseded walk never descended into FOLDER_A's subdirectory once FOLDER_B took over
+			const read_paths = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(c => (c[0] as Uri).path);
+			expect(read_paths).not.toContain(`${FOLDER_A}/sub`);
+		});
+
+		it('posts a final discoveryProgress walking tick with the dirs walked and files found', async () => {
+			mockVfsTree({
+				[VFS_ROOT]: [['welcome', vscode.FileType.Directory]],
+				[`${VFS_ROOT}/welcome`]: [['main', vscode.FileType.Directory]],
+				[`${VFS_ROOT}/welcome/main`]: [['intro.md', vscode.FileType.File]],
+			});
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(
+				{ uri: vfsUri(`${VFS_ROOT}/welcome/main/intro.md`), getText: jest.fn(() => '# Intro'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) },
+			);
+
+			const panel = await setupVfsPanel();
+			panel.postedMessages.length = 0;
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: `${VFS_ROOT}/welcome` });
+			while (!panel.postedMessages.some(m => m.type === 'pendingChange' && m.on === false)) { await flush(); }
+
+			// the throttle only guarantees the last tick; intermediate ones depend on real elapsed time and are not asserted
+			const walking_progress = panel.postedMessages.filter(m => m.type === 'discoveryProgress' && m.phase === 'walking');
+			expect(walking_progress.length).toBeGreaterThan(0);
+			// welcome -> welcome/main visited (2 directories), welcome/main/intro.md matched the include filter (1 file)
+			expect(walking_progress[walking_progress.length - 1]).toMatchObject({ dirs_walked: 2, files_found: 1 });
+		});
+
 		it('does NOT throw when the provider watcher creation fails (static content)', async () => {
 			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
 			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockImplementation(() => {
@@ -2328,6 +2479,102 @@ describe('NotethinkEditorProvider', () => {
 			// folder entry must complete despite the throwing watcher; an update still ships
 			await expect(panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: `${VFS_ROOT}/welcome` })).resolves.toBeUndefined();
 			await flush();
+		});
+	});
+
+	// ---- vscode-remote: scheme folder mode (Remote-SSH registers a search provider, so findFiles is used, not the walk) ----
+	describe('folder mode on a vscode-remote workspace scheme', () => {
+		const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+		const REMOTE_AUTHORITY = 'ssh-remote+devbox';
+		const REMOTE_ROOT = '/home/dev/workspace';
+		const remoteUri = (p: string): Uri => Uri.parse(`vscode-remote://${REMOTE_AUTHORITY}${p}`);
+
+		// stands up a panel whose workspace folder and active doc both live on a vscode-remote: scheme
+		async function setupRemotePanel(): Promise<ReturnType<typeof createMockWebviewPanel>> {
+			const folder_uri = remoteUri(REMOTE_ROOT);
+			(vscode.workspace as unknown as WorkspaceMutable).workspaceFolders = [{ uri: folder_uri, name: 'notethink', index: 0 }];
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({ uri: folder_uri, name: 'notethink', index: 0 });
+			const doc_uri = remoteUri(`${REMOTE_ROOT}/notes/intro.md`);
+			const doc = { uri: doc_uri, getText: jest.fn(() => '# Intro'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) };
+			const editor = mockTextEditor(doc as unknown as MockTextDocument);
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [editor];
+			const local_provider = new NotethinkEditorProvider(mockExtensionContext());
+			const local_panel = createMockWebviewPanel();
+			await (local_provider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(local_panel.panel, doc);
+			await local_panel.simulateMessage({ type: 'requestInitialState' });
+			return local_panel;
+		}
+
+		afterEach(() => {
+			(vscode.workspace as unknown as WorkspaceMutable).workspaceFolders = undefined;
+			(vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue(undefined);
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+			(vscode.workspace.createFileSystemWatcher as jest.Mock).mockImplementation(() => ({
+				onDidCreate: jest.fn(), onDidChange: jest.fn(), onDidDelete: jest.fn(), dispose: jest.fn(),
+			}));
+		});
+
+		it('discovers via findFiles on a vscode-remote workspace folder, bypassing the readDirectory walk', async () => {
+			const story_path = `${REMOTE_ROOT}/notes/todo.md`;
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([remoteUri(story_path)]);
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) =>
+				({ uri: u, getText: jest.fn(() => '# todo'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) }),
+			);
+
+			const panel = await setupRemotePanel();
+			panel.postedMessages.length = 0;
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: `${REMOTE_ROOT}/notes` });
+			while (getUpdates(panel.postedMessages).length < 1) { await flush(); }
+
+			const find_call = (vscode.workspace.findFiles as jest.Mock).mock.calls.find(call => call[0] instanceof RelativePattern);
+			expect(find_call).toBeDefined();
+			expect(find_call[0].baseUri.scheme).toBe('vscode-remote');
+			// the integration folder itself is never walked; computeWorkspaceProjects separately lists the workspace root
+			const read_paths = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(c => (c[0] as Uri).path);
+			expect(read_paths).not.toContain(`${REMOTE_ROOT}/notes`);
+			const paths = getUpdates(panel.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+			expect(paths).toContain(story_path);
+		});
+
+		it('falls back to the readDirectory walk and logs a warning when findFiles throws on a vscode-remote folder', async () => {
+			(vscode.workspace.findFiles as jest.Mock).mockRejectedValue(new Error('search provider not ready'));
+			(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: Uri) => {
+				if (uri.path === `${REMOTE_ROOT}/notes`) { return [['todo.md', vscode.FileType.File]]; }
+				return [];
+			});
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) =>
+				({ uri: u, getText: jest.fn(() => '# todo'), positionAt: jest.fn((o: number) => new Position(0, o)), offsetAt: jest.fn((pos: Position) => pos.character) }),
+			);
+			const warnLogSpy = jest.spyOn(require('../lib/errorops'), 'writeToLogAtLevel');
+
+			const panel = await setupRemotePanel();
+			panel.postedMessages.length = 0;
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: `${REMOTE_ROOT}/notes` });
+			while (getUpdates(panel.postedMessages).length < 1) { await flush(); }
+
+			expect(warnLogSpy).toHaveBeenCalledWith('warn', 'discoverFolderDocs', expect.stringContaining('findFiles threw on scheme vscode-remote, falling back to the directory walk'), expect.any(Error));
+			// the walk found the file findFiles never got the chance to
+			const paths = getUpdates(panel.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+			expect(paths).toContain(`${REMOTE_ROOT}/notes/todo.md`);
+			warnLogSpy.mockRestore();
+		});
+
+		it('does not fall back to the walk when findFiles on a vscode-remote folder simply finds nothing', async () => {
+			(vscode.workspace.findFiles as jest.Mock).mockResolvedValue([]);
+
+			const panel = await setupRemotePanel();
+			panel.postedMessages.length = 0;
+			await panel.simulateMessage({ type: 'setIntegration', mode: 'folder', path: `${REMOTE_ROOT}/notes` });
+			await flush();
+
+			// an empty findFiles result is a genuinely empty folder, not a failure: the walk never runs as a fallback
+			const read_paths = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(c => (c[0] as Uri).path);
+			expect(read_paths).not.toContain(`${REMOTE_ROOT}/notes`);
 		});
 	});
 

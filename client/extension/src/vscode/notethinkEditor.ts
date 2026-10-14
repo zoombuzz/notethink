@@ -5,6 +5,20 @@ import { AgentAnalyser } from './AgentAnalyser';
 import { PanelSession } from './PanelSession';
 import { ParsePool } from './ParsePool';
 
+/**
+ * Static markup painted inside #root before the webview bundle has loaded and run. Mirrors LoadingNote
+ * (client/webview/src/notethink-views/src/components/LoadingNote.tsx) by hand, since nothing has run
+ * yet to render that component here; React replaces it entirely once the bundle mounts.
+ */
+function loadingPlaceholderHtml(): string {
+	return /* html */`
+		<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;" data-testid="loading-note">
+			<p role="status" aria-live="polite" aria-busy="true" style="margin:0;padding:0 1.2em;text-align:center;color:var(--vscode-descriptionForeground,var(--vscode-foreground));font-family:var(--vscode-font-family,sans-serif);font-size:13px;">
+				${vscode.l10n.t('NoteThink is loading…')}
+			</p>
+		</div>`;
+}
+
 export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider {
 
 	public static readonly viewType = NOTETHINK_VIEW_TYPE;
@@ -98,7 +112,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				<title>NoteThink</title>
 			</head>
 			<body>
-				<div id="root"></div>
+				<div id="root">${loadingPlaceholderHtml()}</div>
 				<script nonce="${nonce}">
 					(function() {
 						// read by chunkLoading.ts to set webpack's runtime chunk base URL and nonce before a split chunk loads

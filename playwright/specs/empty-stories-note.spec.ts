@@ -58,14 +58,17 @@ test.describe('Empty-stories note (folder mode, zero stories)', () => {
         await expect(instructions).toContainText('###');
     });
 
-    test('the note waits for the first aggregate, then shows when no file matches the filters at all', async ({ page }) => {
+    test('the note waits for the first aggregate, then names the include pattern when it matched no file at all', async ({ page }) => {
         // the host seeds folder scope before its file search runs, so for a moment the board is in folder mode with nothing loaded
         await sendCommand(page, 'setIntegrationScope', { mode: 'folder', path: WORKSPACE_ROOT });
         await expect(page.locator('[data-testid="NoteRenderer"]')).toHaveAttribute('data-folder-mode', 'true');
         await expect(page.getByTestId('empty-stories-overlay')).toHaveCount(0);
 
-        await injectMultipleDocsFromFixtures(page, [], { workspace_root: WORKSPACE_ROOT, aggregate_total_discovered: 0 });
-        await expect(page.getByTestId('empty-stories-overlay')).toBeVisible();
+        await injectMultipleDocsFromFixtures(page, [], { workspace_root: WORKSPACE_ROOT, aggregate_total_discovered: 0, include_filter: '**/{todo,done}.md' });
+        const note = page.getByTestId('empty-stories-overlay');
+        await expect(note).toBeVisible();
+        await expect(note).toContainText('No files matched');
+        await expect(note).toContainText('No markdown files matched the include pattern "**/{todo,done}.md".');
         for (const value of ['untagged', 'doing', 'code-review', 'testing', 'done']) {
             await expect(page.locator(`[role="region"][aria-label="${value}"]`)).toBeVisible();
         }

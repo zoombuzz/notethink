@@ -13,11 +13,13 @@ export const DEFAULT_INCLUDE_FILTER = '**/*.md';
 /*
  * Skip standard derived/dependency directories whose markdown files would flood the folder view,
  * overridable per-view from the Files drawer. `.claude` is included because agent worktrees mirror
- * the repo tree and would otherwise duplicate every story. `notegit/nodejs`, notegit's bundled Node
+ * the repo tree and would otherwise duplicate every story. `.venv` and `__pycache__` cover a Python
+ * project's virtualenv and bytecode cache, which the walk would otherwise descend into (measured:
+ * a `.venv/site-packages` tree in a Remote-SSH window). `notegit/nodejs`, notegit's bundled Node
  * runtime, is the only multi-segment entry, matched literally. Every entry is anchored at the
  * workspace root (PanelSession.toWorkspaceRelative), so it still matches when rooted on notegit itself.
  */
-export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**';
+export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,.venv,__pycache__,vendored}/**';
 
 // ordering and visibility hint only: lanes absent from the data are culled; mirrors package.json's kanban groupDisplay
 export const DEFAULT_GROUP_DISPLAY: GroupDisplayEntry[] = [

@@ -119,6 +119,29 @@ describe('LineView lane derivation under an axis', () => {
     });
 });
 
+describe('LineView group-display is scoped to the active axis', () => {
+    it('hiding a lane on one axis does not hide the same-named lane on another axis', () => {
+        const doing = makeNote(1, 0, { status: tag('status', 'doing', 1) });
+        const high_priority = makeNote(2, 60, { priority: tag('priority', 'high', 2) });
+        const notes = [doing, high_priority];
+        const group_display = [
+            { value: 'untagged', shown: false },
+            { value: 'untagged', shown: true, axis: 'priority' },
+        ];
+
+        const status_view = render(<LineView {...makeViewProps(notes, { display_options: { settings: { groupDisplay: group_display } } })} axis="status" />);
+        // the status axis's own entry hides its untagged lane (high_priority carries no status tag)
+        expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        status_view.unmount();
+
+        render(<LineView {...makeViewProps(notes, { display_options: { settings: { groupDisplay: group_display } } })} axis="priority" />);
+        // the priority axis's own entry leaves its untagged lane shown (doing carries no priority tag)
+        expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+        expect(screen.getByTestId('column-high')).toBeInTheDocument();
+    });
+});
+
 describe('LineView orientation', () => {
     function laneNames(container: HTMLElement): string[] {
         return Array.from(container.querySelectorAll('[data-testid^="column-"]'))

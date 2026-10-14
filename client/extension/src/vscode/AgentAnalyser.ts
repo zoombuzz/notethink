@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { agentVendorHomeFrom, type AgentVendorHome } from '../lib/agenthomeops';
+import { agentVendorHomeFrom, bestAgentHomeCandidate, homeDirectoryFromLogPath, type AgentHomeCandidate } from '../lib/agenthomeops';
+import { bestAliasMapping, remapUnderRoot, type AliasRootMapping } from '../lib/agentpathaliasops';
 import {
     buildActivitySnapshot,
     emptyAnalyserState,
@@ -9,8 +10,9 @@ import {
     type ActivityRefusal,
     type ActivitySessionState,
     type ActivityTreeState,
+    type AgentAnalyserUnavailableReasonCode,
 } from '../lib/agentanalyserops';
-import { writeToErrorLog, writeToLogAtLevel } from '../lib/errorops';
+import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
 import { attributeCommitsToSessions, attributeFilesToSessions, type AgentCommitCall, type AgentWriteCall } from '../lib/agentgitattributionops';
 import { lineDiffFromBytes, type LineDiffCounts } from '../lib/agentlinediffops';
 import type { AgentPricedUsageEntry } from '../lib/agentpricingops';
@@ -18,7 +20,7 @@ import { readLineDiffSides, readRepositoryTree, resolveGitApi, type GitApi, type
 import type { GitReflogCommit } from '../lib/agentgitreflogops';
 import { isBoardPath, siblingBoardPath, storiesForWriteCall, type StoryBindingWriteCall, type StoryDocument } from '../lib/agentstorybindingops';
 import { sliceTail, type TailBookmark } from '../lib/agenttailparseops';
-import type { AgentAnalyserRawFile, AgentAnalyserWorkerJob, AgentAnalyserWorkerRequest, AgentAnalyserWorkerResponse, AgentAnalyserWorkerSessionOutput, AgentLineDiffJob, AgentVendorId } from './AgentAnalyserWorker';
+import type { AgentAnalyserRawFile, AgentAnalyserResolvedCall, AgentAnalyserWorkerJob, AgentAnalyserWorkerRequest, AgentAnalyserWorkerResponse, AgentAnalyserWorkerSessionOutput, AgentLineDiffJob, AgentVendorId } from './AgentAnalyserWorker';
 import { AgentAnalyserWorkerPool, defaultAgentAnalyserPoolSize } from './AgentAnalyserWorkerPool';
 import { addActivityUsage, emptyActivityUsage, type ActivityChangedFile, type ActivitySession, type ActivityState, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
 import type { HashMapOf } from '../types/general';
@@ -62,8 +64,26 @@ const AGENT_LINE_DIFF_READ_CONCURRENCY = 8;
  * in the worker at once.
  */
 const AGENT_TAIL_CACHE_RECENT_MS = 10 * 60 * 1000;
+// how far above a remote workspace folder resolveVendorHome climbs looking for a vendor directory
+const AGENT_REMOTE_HOME_PROBE_MAX_DEPTH = 8;
+// the conventional multi-user home roots tried when no ancestor of the workspace folder qualifies
+const AGENT_REMOTE_HOME_ROOTS = ['/home', '/Users'] as const;
+// how many entries of a conventional home root (/home, /Users) are probed as home candidates, bounding a large box
+const AGENT_REMOTE_HOME_ROOT_MAX_ENTRIES = 50;
 
 type PostFn = (message: Record<string, unknown>) => void;
+
+/**
+ * The three vendor directories one scan reads, resolved to full URIs rather than bare paths so every
+ * discovery call carries the right scheme and authority: `vscode.Uri.file` always means the LOCAL
+ * disk, even inside a Remote-SSH window, so a remote-resolved home must be built by joining onto the
+ * workspace folder's own URI (`resolveVendorHome`) instead.
+ */
+interface ResolvedAgentVendorHome {
+    claudeCode: vscode.Uri;
+    codex: vscode.Uri;
+    grok: vscode.Uri;
+}
 
 /**
  * A worker job as discovery built it.
@@ -273,7 +293,8 @@ export class AgentAnalyser {
     private readonly pool: AgentAnalyserWorkerPool;
     // consecutive failed scan attempts, not round trips: a round-trip count would reset on other batches' successes
     private consecutive_scan_failures = 0;
-    private readonly vendor_home: AgentVendorHome | undefined;
+    // resolved once per start, since a remote home needs an async ancestor probe `demand()` cannot wait on
+    private vendor_home: ResolvedAgentVendorHome | undefined;
     private git_api: GitApi | undefined;
     private git_failure_logged = false;
     private readonly warned_unreadable = new Set<string>();
@@ -291,6 +312,8 @@ export class AgentAnalyser {
     private readonly session_fold_cache = new Map<string, SessionFoldCache>();
     // keyed by board doc_path: the last text seen and a version bumped on each change, so signatures stay small
     private readonly board_versions = new Map<string, { text: string; version: number }>();
+    // keyed by a session's own real cwd: the real-root/alias-root pairing it was confirmed to resolve through
+    private readonly cwd_alias_cache = new Map<string, AliasRootMapping>();
     private readonly watchers: vscode.FileSystemWatcher[] = [];
     private watch_debounce_timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -304,7 +327,6 @@ export class AgentAnalyser {
         worker_factory: () => Worker = () => new Worker(vscode.Uri.joinPath(context.extensionUri, 'client/extension/dist/agentAnalyserWorker.js').toString()),
         pool_size: number = defaultAgentAnalyserPoolSize(),
     ) {
-        this.vendor_home = context.logUri ? agentVendorHomeFrom(context.logUri.path) : undefined;
         this.pool = new AgentAnalyserWorkerPool(worker_factory, pool_size);
     }
 
@@ -360,17 +382,183 @@ export class AgentAnalyser {
     // a fresh start broadcasts 'scanning' immediately; a restart keeps the last snapshot while a new scan runs quietly
     private startRunning(): void {
         this.running = true;
-        if (!this.vendor_home) {
-            this.state = emptyAnalyserState('unavailable', 'This host has no local file access the analyser recognises (a web host, or an unrecognised user-data layout).');
-            this.postToAll();
-            return;
-        }
         if (!this.has_shown_live) {
             this.state = emptyAnalyserState('scanning');
             this.postToAll();
         }
-        this.armWatchers(this.vendor_home);
+        void this.resolveVendorHomeAndRun();
+    }
+
+    /**
+     * Resolves the vendor home asynchronously (a remote window's ancestor probe needs real I/O) and
+     * either starts watching and scanning it, or posts 'unavailable' naming why none was found.
+     * Guarded on `this.running`, since `withdraw()` can stop the analyser again while this await is
+     * still in flight.
+     */
+    private async resolveVendorHomeAndRun(): Promise<void> {
+        const resolved = await this.resolveVendorHome();
+        if (!this.running) { return; }
+        if (!resolved) {
+            this.vendor_home = undefined;
+            const unavailable = this.vendorHomeUnavailableReason();
+            this.state = emptyAnalyserState('unavailable', unavailable.reason, unavailable.reason_code);
+            this.postToAll();
+            return;
+        }
+        this.vendor_home = resolved.home;
+        writeToLog('resolveVendorHome', `resolved agent vendor home: ${resolved.description}`);
+        this.armWatchers(resolved.home);
         this.scheduleScan(0);
+    }
+
+    /**
+     * The reason posted on an 'unavailable' card when resolveVendorHome found nothing, local or
+     * remote. `reason_code` is the field the webview actually renders from, in fully translated copy;
+     * `reason` is an English fallback for a webview build that does not yet recognise the code, never
+     * meant to be shown verbatim beside translated text (`AgentActivityBanner.tsx` > `emptyNotice`).
+     */
+    private vendorHomeUnavailableReason(): { reason: string; reason_code: AgentAnalyserUnavailableReasonCode } {
+        if (vscode.env.remoteName) {
+            return { reason: 'No .claude/projects, .codex/sessions or .grok/sessions directory was found in this remote workspace folder, its ancestors, or the host\'s conventional home directories.', reason_code: 'remote_home_not_found' };
+        }
+        return { reason: 'This host has no local file access the analyser recognises (a web host, or an unrecognised user-data layout).', reason_code: 'no_local_access' };
+    }
+
+    /**
+     * Local: unchanged, derived from `context.logUri` (this desktop's own $HOME). Remote
+     * (`vscode.env.remoteName` set): the local `logUri` belongs to the machine running the UI, not the
+     * host serving the workspace, so its homes would be a DIFFERENT checkout's agent activity
+     * entirely; instead this probes the workspace folder's own ancestors, on its own scheme and
+     * authority, for a real session directory (a settings-only `.claude` does not qualify), then
+     * falls back to the host's conventional home roots when no ancestor does, so the home read is the
+     * one the workspace's own host actually has.
+     */
+    private async resolveVendorHome(): Promise<{ home: ResolvedAgentVendorHome; description: string } | undefined> {
+        if (!vscode.env.remoteName) {
+            const home_path = this.context.logUri ? homeDirectoryFromLogPath(this.context.logUri.path) : undefined;
+            const local = this.context.logUri ? agentVendorHomeFrom(this.context.logUri.path) : undefined;
+            if (!local) { return undefined; }
+            return {
+                home: { claudeCode: vscode.Uri.file(local.claudeCode), codex: vscode.Uri.file(local.codex), grok: vscode.Uri.file(local.grok) },
+                description: `local, ${home_path ?? '(unresolved)'}`,
+            };
+        }
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) { return undefined; }
+        const ancestor = await this.findRemoteAgentHomeAncestor(folder.uri);
+        const home = ancestor ?? (await this.findRemoteAgentHomeInConventionalRoots(folder.uri)).home;
+        if (!home) { return undefined; }
+        return {
+            home: { claudeCode: vscode.Uri.joinPath(home, '.claude'), codex: vscode.Uri.joinPath(home, '.codex'), grok: vscode.Uri.joinPath(home, '.grok') },
+            description: `remote, scheme ${home.scheme}, authority ${home.authority || '(none)'}, ${home.path}`,
+        };
+    }
+
+    // walks upward from the workspace folder, bounded, stopping at the first ancestor holding a session directory
+    private async findRemoteAgentHomeAncestor(start: vscode.Uri): Promise<vscode.Uri | undefined> {
+        let candidate = start;
+        for (let depth = 0; depth < AGENT_REMOTE_HOME_PROBE_MAX_DEPTH; depth++) {
+            if (await this.hasSessionDir(candidate)) {
+                writeToLog('resolveVendorHome', `remote agent home search: ancestor ${candidate.path} qualified`);
+                return candidate;
+            }
+            const parent_path = path.posix.dirname(candidate.path);
+            if (parent_path === candidate.path) { break; } // reached the filesystem root with nothing found
+            candidate = candidate.with({ path: parent_path });
+        }
+        return undefined;
+    }
+
+    // a candidate home qualifies only once it holds a real session directory, not merely a settings-only vendor directory
+    private async hasSessionDir(folder: vscode.Uri): Promise<boolean> {
+        return (await this.sessionDirStats(folder)).some(stat => stat !== undefined);
+    }
+
+    // each vendor's own session directory under `folder`, undefined where absent, unreadable or not a directory
+    private async sessionDirStats(folder: vscode.Uri): Promise<Array<{ mtime: number } | undefined>> {
+        return Promise.all([
+            this.statDirectory(vscode.Uri.joinPath(folder, '.claude', 'projects')),
+            this.statDirectory(vscode.Uri.joinPath(folder, '.codex', 'sessions')),
+            this.statDirectory(vscode.Uri.joinPath(folder, '.grok', 'sessions')),
+        ]);
+    }
+
+    private async statDirectory(uri: vscode.Uri): Promise<{ mtime: number } | undefined> {
+        try {
+            const stat = await vscode.workspace.fs.stat(uri);
+            return stat.type === vscode.FileType.Directory ? { mtime: stat.mtime } : undefined;
+        } catch { return undefined; }
+    }
+
+    /**
+     * Stats this candidate's three vendor session directories and, only when `.claude/projects`
+     * exists, lists its directory names for `bestAgentHomeCandidate` to rank by. `newest_session_
+     * mtime_ms` reuses the same stats rather than a separate read, taken as the latest mtime among
+     * whichever of the three directories exist.
+     */
+    private async probeAgentHomeCandidate(folder: vscode.Uri): Promise<AgentHomeCandidate & { qualifies: boolean }> {
+        const [claude_projects, codex_sessions, grok_sessions] = await this.sessionDirStats(folder);
+        const existing = [claude_projects, codex_sessions, grok_sessions].filter((stat): stat is { mtime: number } => stat !== undefined);
+        const claude_project_dir_names = claude_projects ? await this.listDirectoryNames(vscode.Uri.joinPath(folder, '.claude', 'projects')) : [];
+        return {
+            path: folder.path,
+            claude_project_dir_names,
+            newest_session_mtime_ms: existing.length > 0 ? Math.max(...existing.map(stat => stat.mtime)) : undefined,
+            qualifies: existing.length > 0,
+        };
+    }
+
+    private async listDirectoryNames(uri: vscode.Uri): Promise<string[]> {
+        try {
+            const entries = await vscode.workspace.fs.readDirectory(uri);
+            return entries.filter(([, type]) => type === vscode.FileType.Directory).map(([name]) => name);
+        } catch { return []; }
+    }
+
+    /**
+     * Every entry of `/home` and `/Users` (bounded by `AGENT_REMOTE_HOME_ROOT_MAX_ENTRIES`, and
+     * either root can be unreadable or simply absent - `/Users` does not exist on Linux), plus
+     * `/root` itself since it is already a home rather than a root holding many. `roots_read` counts
+     * only `/home`/`/Users` listings that actually succeeded, so the caller's log line can tell "no
+     * root could be listed" from "roots were listed, nothing in them qualified".
+     */
+    private async conventionalHomeRootCandidates(workspace_uri: vscode.Uri): Promise<{ candidates: vscode.Uri[]; roots_read: number }> {
+        const candidates: vscode.Uri[] = [];
+        let roots_read = 0;
+        for (const root_path of AGENT_REMOTE_HOME_ROOTS) {
+            const root_uri = workspace_uri.with({ path: root_path });
+            let entries: Array<[string, vscode.FileType]>;
+            try { entries = await vscode.workspace.fs.readDirectory(root_uri); }
+            catch { continue; }
+            roots_read++;
+            for (const [name, type] of entries.slice(0, AGENT_REMOTE_HOME_ROOT_MAX_ENTRIES)) {
+                if (type === vscode.FileType.Directory) { candidates.push(vscode.Uri.joinPath(root_uri, name)); }
+            }
+        }
+        candidates.push(workspace_uri.with({ path: '/root' }));
+        return { candidates, roots_read };
+    }
+
+    /**
+     * Tries the host's conventional home roots once no ancestor of the workspace folder itself
+     * qualified. Every qualifying candidate (holding at least one vendor's session directory) is
+     * ranked by `bestAgentHomeCandidate`: a `.claude/projects` directory naming this workspace folder
+     * (or a symlinked alias of it, or a folder inside it) wins, and otherwise the newest session
+     * directory does. Logs the candidates tried and the home chosen (or that none qualified), never
+     * any session content.
+     */
+    private async findRemoteAgentHomeInConventionalRoots(workspace_uri: vscode.Uri): Promise<{ home: vscode.Uri | undefined }> {
+        const { candidates, roots_read } = await this.conventionalHomeRootCandidates(workspace_uri);
+        const probes = await this.mapWithConcurrency(candidates, AGENT_DISCOVERY_STAT_CONCURRENCY, candidate => this.probeAgentHomeCandidate(candidate));
+        const qualifying = probes.filter(probe => probe.qualifies);
+        if (qualifying.length === 0) {
+            writeToLog('resolveVendorHome', `remote agent home search: no ancestor qualified, ${candidates.length} conventional candidate(s) tried across ${roots_read} readable root(s), none qualified`);
+            return { home: undefined };
+        }
+        const best = bestAgentHomeCandidate(qualifying, workspace_uri.path);
+        const home = best ? candidates.find(candidate => candidate.path === best.path) : undefined;
+        writeToLog('resolveVendorHome', `remote agent home search: no ancestor qualified, ${candidates.length} conventional candidate(s) tried across ${roots_read} readable root(s), ${qualifying.length} qualified, chose ${home?.path ?? '(none)'}`);
+        return { home };
     }
 
     private stopRunning(): void {
@@ -389,11 +577,11 @@ export class AgentAnalyser {
      * change a watcher misses. A burst of writes (a session file, its usage figures) triggers one
      * debounced scan rather than one per file.
      */
-    private armWatchers(home: AgentVendorHome): void {
+    private armWatchers(home: ResolvedAgentVendorHome): void {
         const globs = [
-            new vscode.RelativePattern(vscode.Uri.file(home.claudeCode), '**/*'),
-            new vscode.RelativePattern(vscode.Uri.file(home.codex), '**/*'),
-            new vscode.RelativePattern(vscode.Uri.file(home.grok), '**/*'),
+            new vscode.RelativePattern(home.claudeCode, '**/*'),
+            new vscode.RelativePattern(home.codex, '**/*'),
+            new vscode.RelativePattern(home.grok, '**/*'),
         ];
         for (const glob of globs) {
             try {
@@ -505,7 +693,7 @@ export class AgentAnalyser {
      * is collected, running concurrently with batch N's round trip, fold and post, so only the first
      * batch pays its read serially.
      */
-    private async runScanOnce(vendor_home: AgentVendorHome): Promise<void> {
+    private async runScanOnce(vendor_home: ResolvedAgentVendorHome): Promise<void> {
         const scan_started_ms = Date.now();
         const now_ms = scan_started_ms;
         const window_start_ms = now_ms - AGENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -562,7 +750,7 @@ export class AgentAnalyser {
             // a reused session needs no round trip, so it rides the FIRST batch's post; session_fold_cache makes folding it cheap too
             const batch_outputs = batch_index === 0 ? [...fresh, ...reused] : fresh;
             const fold_started_ms = Date.now();
-            sessions_acc = this.foldBatch(batch_outputs, story_docs, reads, sessions_acc, write_calls_by_repo, commit_calls_by_repo, reused_ids, board_versions, phases);
+            sessions_acc = await this.foldBatch(batch_outputs, story_docs, reads, sessions_acc, write_calls_by_repo, commit_calls_by_repo, reused_ids, board_versions, phases);
             phases.binding_ms += Date.now() - fold_started_ms;
             // every batch posts the last scan's cached line counts; fresh ones (a git read per file) follow the live post
             const trees_this_batch = await this.attributeTrees(reads, write_calls_by_repo, commit_calls_by_repo, false, phases);
@@ -620,7 +808,7 @@ export class AgentAnalyser {
      * row failing gives up for this poll, but only shows 'failed' on this instance's very first
      * scan; once a scan has ever completed, a later double failure is logged and retried silently.
      */
-    private handleBatchFailure(vendor_home: AgentVendorHome, phases: ScanPhaseTotals, scan_started_ms: number): void {
+    private handleBatchFailure(vendor_home: ResolvedAgentVendorHome, phases: ScanPhaseTotals, scan_started_ms: number): void {
         if (this.consecutive_scan_failures === 0) {
             this.consecutive_scan_failures = 1;
             writeToLogAtLevel('debug', 'runScan', this.scanTimingLine(vendor_home, phases, Date.now() - scan_started_ms));
@@ -639,7 +827,7 @@ export class AgentAnalyser {
     }
 
     // one debug line naming every phase this scan spent time in, plus time to first post
-    private scanTimingLine(vendor_home: AgentVendorHome, phases: ScanPhaseTotals, elapsed_ms: number): string {
+    private scanTimingLine(vendor_home: ResolvedAgentVendorHome, phases: ScanPhaseTotals, elapsed_ms: number): string {
         const {
             sessions_read, reused_count, bytes_read, bytes_transferred, discovery_ms, reading_ms, parsing_ms,
             fold_ms, story_docs_ms, git_trees_ms, binding_ms, binding_cache_hits, binding_cache_misses,
@@ -923,7 +1111,7 @@ export class AgentAnalyser {
      * expensive on a session with many turns, are skipped on a `session_fold_cache` hit.
      * `binding_cache_hits`/`misses` count this so a scan's log line says whether the cache helps at all.
      */
-    private foldBatch(
+    private async foldBatch(
         outputs: AgentAnalyserWorkerSessionOutput[],
         story_docs: StoryDocument[],
         reads: HashMapOf<RepositoryRead>,
@@ -933,10 +1121,14 @@ export class AgentAnalyser {
         reused_ids: ReadonlySet<string>,
         board_versions: ReadonlyMap<string, number>,
         phases: ScanPhaseTotals,
-    ): HashMapOf<ActivitySessionState> {
+    ): Promise<HashMapOf<ActivitySessionState>> {
         const sessions: HashMapOf<ActivitySessionState> = { ...sessions_acc };
         for (const output of outputs) {
-            const root = this.repositoryRootFor(output.cwd, reads);
+            // a workspace opened through a symlinked alias never prefix-matches a session's real cwd; resolve it once per session
+            const sample_absolute_path = this.sampleAbsolutePathUnderCwd(output.cwd, output.calls);
+            const alias_mapping = await this.resolveAliasMapping(output.cwd, sample_absolute_path);
+            const aliased_cwd = alias_mapping ? remapUnderRoot(output.cwd, alias_mapping.real_root, alias_mapping.alias_root) : output.cwd;
+            const root = this.repositoryRootFor(aliased_cwd, reads);
             const write_calls: StoryBindingWriteCall[] = [];
             const timed_write_calls: TimedWriteCall[] = [];
             const repo_write_calls: AgentWriteCall[] = [];
@@ -947,14 +1139,15 @@ export class AgentAnalyser {
                     continue;
                 }
                 if (!call.absolute_path) { continue; }
-                const workspace_relative = this.workspaceRelative(call.absolute_path);
+                const absolute_path = alias_mapping ? remapUnderRoot(call.absolute_path, alias_mapping.real_root, alias_mapping.alias_root) : call.absolute_path;
+                const workspace_relative = this.workspaceRelative(absolute_path);
                 if (workspace_relative) {
                     const write_call: StoryBindingWriteCall = { doc_path: workspace_relative, edits: call.edits, whole_file: call.whole_file };
                     write_calls.push(write_call);
                     timed_write_calls.push({ at_ms: Date.parse(call.at), call: write_call });
                 }
                 if (root) {
-                    const repo_relative = path.posix.relative(root, call.absolute_path);
+                    const repo_relative = path.posix.relative(root, absolute_path);
                     if (!repo_relative.startsWith('..')) { repo_write_calls.push({ session_id: output.session_id, repo_relative_path: repo_relative, at_ms: Date.parse(call.at) }); }
                 }
             }
@@ -1266,6 +1459,46 @@ export class AgentAnalyser {
         return undefined;
     }
 
+    /**
+     * Resolves a session's real `cwd` onto the real-root/alias-root pairing that reaches the same tree
+     * through a workspace folder opened via a symlinked alias, so `repositoryRootFor`/`workspaceRelative`
+     * can match `cwd`, and every other path the session touched, by ordinary prefix once remapped
+     * through it. `bestAliasMapping` only proposes a pairing by trailing path segments - considering
+     * `cwd`'s ancestors as well as `cwd` itself, so a project folder nested inside the aliased tree
+     * still resolves even though it shares no trailing segment with the workspace folder itself - and
+     * this confirms the proposal by checking that `sample_absolute_path` (a file this session is known
+     * to have touched, already known to sit under `cwd`) resolves under the candidate alias root too,
+     * so a same-named but unrelated tree elsewhere on disk never binds. Returns `undefined`, and caches
+     * nothing, when `cwd` already resolves directly, when there is no candidate, or when nothing
+     * confirms it - a later call for the same `cwd` with a different sample can still succeed. Memoized
+     * once confirmed, since the same `cwd` recurs across a session's whole history and confirmation
+     * costs a real stat round trip.
+     */
+    private async resolveAliasMapping(cwd: string, sample_absolute_path: string | undefined): Promise<AliasRootMapping | undefined> {
+        if (this.workspaceRelative(cwd) !== undefined) { return undefined; }
+        const cached = this.cwd_alias_cache.get(cwd);
+        if (cached !== undefined) { return cached; }
+        if (!sample_absolute_path) { return undefined; }
+        const folders = vscode.workspace.workspaceFolders ?? [];
+        const mapping = bestAliasMapping(cwd, folders.map(folder => folder.uri.path));
+        const folder = mapping && folders.find(f => f.uri.path === mapping.alias_root);
+        if (!mapping || !folder) { return undefined; }
+        const remapped_sample = remapUnderRoot(sample_absolute_path, mapping.real_root, mapping.alias_root);
+        if (remapped_sample === sample_absolute_path) { return undefined; }
+        try {
+            await vscode.workspace.fs.stat(folder.uri.with({ path: remapped_sample }));
+        } catch {
+            return undefined;
+        }
+        this.cwd_alias_cache.set(cwd, mapping);
+        return mapping;
+    }
+
+    // a write call's absolute_path this session is known to have touched under its own cwd, for resolveAliasMapping to confirm
+    private sampleAbsolutePathUnderCwd(cwd: string, calls: ReadonlyArray<AgentAnalyserResolvedCall>): string | undefined {
+        return calls.find(call => !call.is_commit && call.absolute_path !== undefined && (call.absolute_path === cwd || call.absolute_path.startsWith(`${cwd}/`)))?.absolute_path;
+    }
+
     private async readStoryDocuments(): Promise<StoryDocument[]> {
         const docs: StoryDocument[] = [];
         for (const folder of vscode.workspace.workspaceFolders ?? []) {
@@ -1453,10 +1686,10 @@ export class AgentAnalyser {
      * so up to `AGENT_DISCOVERY_STAT_CONCURRENCY` sessions already past that check can still land - a
      * small, bounded overshoot traded for not serialising the stat pass to one session at a time.
      */
-    private async discoverClaudeCode(home: string, now_ms: number, window_start_ms: number): Promise<DiscoveryResult> {
+    private async discoverClaudeCode(home: vscode.Uri, now_ms: number, window_start_ms: number): Promise<DiscoveryResult> {
         const stat_started_ms = Date.now();
         const live = await this.claudeLiveSessions(home);
-        const projects_uri = vscode.Uri.file(`${home}/projects`);
+        const projects_uri = vscode.Uri.joinPath(home, 'projects');
         let project_dirs: Array<[string, vscode.FileType]>;
         try { project_dirs = await vscode.workspace.fs.readDirectory(projects_uri); }
         catch { return { candidates: [], reused: [] }; }
@@ -1513,9 +1746,9 @@ export class AgentAnalyser {
     }
 
     // `status` is the pid file's own field mapped by CLAUDE_PID_STATUS_STATES, undefined for an unrecognised value
-    private async claudeLiveSessions(home: string): Promise<Map<string, { cwd: string; status?: ActivityState }>> {
+    private async claudeLiveSessions(home: vscode.Uri): Promise<Map<string, { cwd: string; status?: ActivityState }>> {
         const map = new Map<string, { cwd: string; status?: ActivityState }>();
-        const sessions_uri = vscode.Uri.file(`${home}/sessions`);
+        const sessions_uri = vscode.Uri.joinPath(home, 'sessions');
         let entries: Array<[string, vscode.FileType]>;
         try { entries = await vscode.workspace.fs.readDirectory(sessions_uri); }
         catch { return map; }
@@ -1557,11 +1790,11 @@ export class AgentAnalyser {
     }
 
     // two concurrent passes: every date's listing first (a fixed 30, most empty), then each rollout's stat-and-classify step
-    private async discoverCodex(home: string, now_ms: number, window_start_ms: number): Promise<DiscoveryResult> {
+    private async discoverCodex(home: vscode.Uri, now_ms: number, window_start_ms: number): Promise<DiscoveryResult> {
         const stat_started_ms = Date.now();
         const dates = this.datesInWindow(window_start_ms, now_ms);
         const listings = await this.mapWithConcurrency(dates, AGENT_DISCOVERY_STAT_CONCURRENCY, async date => {
-            const day_uri = vscode.Uri.file(`${home}/sessions/${date}`);
+            const day_uri = vscode.Uri.joinPath(home, 'sessions', date);
             try {
                 const entries = await vscode.workspace.fs.readDirectory(day_uri);
                 return entries
@@ -1624,10 +1857,10 @@ export class AgentAnalyser {
     }
 
     // two concurrent passes: every cwd's directory listed first, then each session's stats and classify step
-    private async discoverGrok(home: string, now_ms: number, window_start_ms: number): Promise<DiscoveryResult> {
+    private async discoverGrok(home: vscode.Uri, now_ms: number, window_start_ms: number): Promise<DiscoveryResult> {
         const stat_started_ms = Date.now();
         const live = await this.grokLiveSessionIds(home);
-        const sessions_uri = vscode.Uri.file(`${home}/sessions`);
+        const sessions_uri = vscode.Uri.joinPath(home, 'sessions');
         let project_dirs: Array<[string, vscode.FileType]>;
         try { project_dirs = await vscode.workspace.fs.readDirectory(sessions_uri); }
         catch { return { candidates: [], reused: [] }; }
@@ -1678,9 +1911,9 @@ export class AgentAnalyser {
         return { job, bytes_read: built.bytes_read };
     }
 
-    private async grokLiveSessionIds(home: string): Promise<Set<string>> {
+    private async grokLiveSessionIds(home: vscode.Uri): Promise<Set<string>> {
         // this per-host metadata file is small and host-only, never sent to the worker, so decoding it here is cheap
-        const bytes = await this.readBytes(vscode.Uri.file(`${home}/active_sessions.json`));
+        const bytes = await this.readBytes(vscode.Uri.joinPath(home, 'active_sessions.json'));
         if (!bytes) { return new Set(); }
         try {
             const parsed = JSON.parse(this.peekText(bytes, bytes.length)) as Array<{ session_id?: string }>;

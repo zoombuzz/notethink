@@ -164,10 +164,12 @@ export interface CommandMessage {
  * duplication is the wire contract.
  * - value: the lane's raw status/group value ('doing', 'done', 'untagged', ...)
  * - shown: false removes the lane from the board (Kanban and Line view both read it); true (or absent) shows it
+ * - axis: the group-by key the board laned by when the entry was written; absent means status
  */
 export interface GroupDisplayEntry {
     value: string;
     shown: boolean;
+    axis?: string;
 }
 
 /**
@@ -247,6 +249,26 @@ export interface PendingChangeMessage {
 }
 
 /**
+ * Extension -> webview progress ticks during folder discovery, bracketed by the pendingChange
+ * folderDiscovery signal. 'walking' only ticks on the non-file: readDirectory walk, where findFiles
+ * gives no incremental progress; 'loading' covers the per-file read that follows discovery on every
+ * scheme. Throttled on the extension side to roughly one message per quarter second, plus a final
+ * tick for each phase, so a large folder does not mean a message per directory or file. The webview
+ * clears its own copy on the matching pendingChange rather than waiting for an explicit clear message.
+ */
+export interface DiscoveryProgress {
+    phase: 'walking' | 'loading';
+    dirs_walked?: number;
+    files_found?: number;
+    files_loaded?: number;
+    files_total?: number;
+}
+
+export interface DiscoveryProgressMessage extends DiscoveryProgress {
+    type: 'discoveryProgress';
+}
+
+/**
  * One reachable jump target from the breadcrumb terminal leaf.
  * - kind discriminates a directory ('folder') from a leaf file ('file'); the webview opens a file target via OpenFileMessage and descends a folder target via setIntegration
  */
@@ -273,4 +295,5 @@ export type ExtensionToWebviewMessage =
     | CommandMessage
     | SettingsCascadeMessage
     | PendingChangeMessage
+    | DiscoveryProgressMessage
     | JumpTargetsMessage;

@@ -1,7 +1,6 @@
 import React, { lazy } from "react";
-import { documentRootForStrip } from "../../lib/noteops";
-import { chainOf, registryWithUserTypes } from "../../lib/viewregistryops";
-import { usePendingWorkContext } from "../../hooks/PendingWorkContext";
+import { documentRootForStrip, hasVisibleCard } from "../../lib/noteops";
+import { chainOf, isGroupedViewType, registryWithUserTypes } from "../../lib/viewregistryops";
 import { INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode } from "../../types/IntegrationMode";
 import type { UserViewType } from "../../types/Messages";
 import type { ViewProps } from "../../types/ViewProps";
@@ -10,7 +9,7 @@ import GenericNoteAttributes from "../notes/GenericNoteAttributes";
 import InsertModal from "../InsertModal";
 import GenericViewBreadcrumb from "./generic/GenericViewBreadcrumb";
 import GenericViewToolbar from "./generic/GenericViewToolbar";
-import EmptyStoriesOverlay from "./EmptyStoriesOverlay";
+import EmptyStoriesOverlay, { type FolderStatusMode } from "./EmptyStoriesOverlay";
 import { useGenericView } from "./generic/useGenericView";
 import view_styles from "../ViewRenderer.module.scss";
 
@@ -49,18 +48,28 @@ function viewComponentFor(view_type: string, user_types: UserViewType[]): React.
 }
 
 /**
- * Whether to lay the empty-stories note over the board. Folder mode only: a single file opened
- * deliberately with no ### headings is unremarkable, so it takes no note, while folder mode's columns
- * render empty rather than blank and the note says why. It waits for discovery to settle (`pending`) and
- * for the first aggregate to land (aggregate_total_discovered stays undefined until then), because the
- * host seeds folder scope before its file search runs and raises `pending` only once that search returns.
+ * The folder-aggregate status note to lay over the board, or undefined for none. Folder mode only:
+ * a single file opened deliberately with no ### headings is unremarkable, so current_file mode never
+ * shows one, while folder mode's columns render empty rather than blank and the note says why.
+ * - scanning: discovery_scanning is set from the start of a discovery run until its first aggregate
+ *   payload lands, but only while no card is actually VISIBLE yet - a per-file merge update can land
+ *   notes well before the scan settles, and a doc whose every note sits in a lane the group-display
+ *   hides must not drop the panel for an empty-looking board; while it shows, the board is not
+ *   rendered at all, so no empty lane headings appear under it, and it never covers a board already
+ *   showing a card. The same mode also covers the narrower window before discovery_scanning has even
+ *   been raised yet - a folder-mode view restored from persisted state renders before any message
+ *   from the extension host has arrived, so aggregate_total_discovered is undefined there too; without
+ *   this the board flashed empty columns for a frame on every reopen
+ * - no_match: discovery settled and the include pattern matched zero files
+ * - no_stories: discovery settled, files were found, but none held a story or task heading
  */
-function showsEmptyStoriesNote(show_toolbar: boolean, integration_mode: ConcreteIntegrationMode, pending: boolean, view_props: ViewProps): boolean {
-    return show_toolbar
-        && integration_mode === INTEGRATION_MODE_FOLDER
-        && !pending
-        && view_props.aggregate_total_discovered !== undefined
-        && (view_props.note_count ?? 0) === 0;
+function resolveFolderStatus(show_toolbar: boolean, integration_mode: ConcreteIntegrationMode, view_props: ViewProps, has_visible_card: boolean): FolderStatusMode | undefined {
+    if (!show_toolbar || integration_mode !== INTEGRATION_MODE_FOLDER) { return undefined; }
+    const has_notes = (view_props.note_count ?? 0) > 0;
+    if (view_props.discovery_scanning) { return has_visible_card ? undefined : 'scanning'; }
+    if (view_props.aggregate_total_discovered === undefined) { return has_visible_card ? undefined : 'scanning'; }
+    if (view_props.aggregate_total_discovered === 0) { return 'no_match'; }
+    return has_notes ? undefined : 'no_stories';
 }
 
 /**
@@ -78,8 +87,6 @@ export default function GenericView(props: ViewProps): React.ReactElement {
     // view_props carries admitted virtual notes and the guarded handler surface to every hook and view below
     const { view_props, view_context, handlers, handle_folder_click, handle_apply_filters, handle_file_jump, drawers, jump, collisions, toolbar, insert, auto_resolved_type } = useGenericView(props);
     const { display_options, parent_context, deepest, notes_within_parent_context } = view_context;
-    // same discovery-settled signal the toolbar spinner reads, so the empty-stories note never flashes mid-load
-    const { pending } = usePendingWorkContext();
     // document-level front-matter strip, built once here for single-file mode so leaf views don't each re-derive it
     const document_root = documentRootForStrip(view_props.notes, display_options.integration_mode);
     const document_strip = document_root ? <GenericNoteAttributes {...document_root} /> : undefined;
@@ -100,8 +107,11 @@ export default function GenericView(props: ViewProps): React.ReactElement {
     const show_toolbar = view_props.type !== 'auto';
     // the registry-keyed component for this type, inheriting a minted type's renderer from its parent
     const ViewComponent = viewComponentFor(view_props.type, display_options.settings?.viewUserTypes ?? []);
+    // whether a card is actually visible now: any note at all outside a grouped view, else one outside a hidden lane
+    const is_grouped_view = isGroupedViewType(view_props.type, registryWithUserTypes(display_options.settings?.viewUserTypes ?? []));
+    const has_visible_card = hasVisibleCard(notes_within_parent_context, is_grouped_view, toolbar.active_axis_key, display_options.settings?.groupDisplay);
     // the toolbar's integration_mode, so the note tracks the same mode the Files drawer it opens gates on
-    const show_empty_stories = showsEmptyStoriesNote(show_toolbar, toolbar.integration_mode, pending, view_props);
+    const folder_status = resolveFolderStatus(show_toolbar, toolbar.integration_mode, view_props, has_visible_card);
     // props for the rendered view component, enriched with the resolved card type and activity doc path
     const enriched_props: ViewProps = {
         ...view_props,
@@ -155,8 +165,15 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                 />
             )}
             <div className={view_styles.viewContentRegion}>
-                {ViewComponent && <ViewComponent {...enriched_props} />}
-                {show_empty_stories && <EmptyStoriesOverlay onOpenFilesDrawer={drawers.toggle_files} />}
+                {/* while scanning with no visible card the panel stands in for the board, so no empty lane headings show */}
+                {ViewComponent && folder_status !== 'scanning' && <ViewComponent {...enriched_props} />}
+                {folder_status && (
+                    <EmptyStoriesOverlay
+                        mode={folder_status}
+                        includeFilter={view_props.includeFilter}
+                        onOpenFilesDrawer={drawers.toggle_files}
+                    />
+                )}
             </div>
             <InsertModal
                 opened={insert.insert_modal_open}

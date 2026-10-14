@@ -1,11 +1,14 @@
 import type {MouseEvent, MutableRefObject, ReactElement} from "react";
 import type {NoteProps, NoteDisplayOptions, NoteHandlers, TextSelection} from "../types/NoteProps";
 import type {ConcreteIntegrationMode} from "./IntegrationMode";
+import type {DiscoveryProgress} from "./Messages";
 
 /**
  * ViewProps is the props shape every view consumes; one instance per rendered view (a kanban board, a document view, the synthetic folder root, etc.) built by the composers and threaded through GenericView.
  * - active_editor_doc_path: path of the doc whose editor selection backs `selection`; the per-doc matcher in useViewContext uses this to filter aggregated notes by origin.doc_path before locating the caret in source-file offsets
  * - file_declared_integration: the opened file's declared integration intent (from nt_integration_mode / nt_breadcrumb_last) resolved at the App layer; the congruence-seeking navigation handlers compare a gesture's resulting mode against this to decide whether to keep auto or pin a concrete mode
+ * - discovery_scanning: folder mode only, true from the start of a folder discovery run until its first aggregate payload lands; distinct from the generic pending-work spinner, which also covers unrelated extension round-trips
+ * - discovery_progress: folder mode only, the latest discoveryProgress tick for the run discovery_scanning brackets; undefined before the first tick lands or once the run has cleared
  */
 export interface ViewProps {
     id: string;
@@ -17,6 +20,8 @@ export interface ViewProps {
     workspace_root?: string;
     file_count?: number;
     aggregate_total_discovered?: number;
+    discovery_scanning?: boolean;
+    discovery_progress?: DiscoveryProgress;
     note_count?: number;
     includeFilter?: string;
     excludeFilter?: string;

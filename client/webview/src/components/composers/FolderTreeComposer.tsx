@@ -111,6 +111,8 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
         // --- folder aggregate metadata ---
         file_count,
         aggregate_total_discovered: props.aggregate_total_discovered,
+        discovery_scanning: props.discovery_scanning,
+        discovery_progress: props.discovery_progress,
         note_count,
         aggregate_loaded_files,
         // --- settings-cascade mirror: camelCase (not snake_case) because these carry VS Code config values whose keys (notethink.settings.*) are camelCase end-to-end, unlike the snake_case note-tree wire data ---

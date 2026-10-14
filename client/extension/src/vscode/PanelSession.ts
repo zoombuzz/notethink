@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, NOTETHINK_VIEW_TYPE } from '../constants';
 import { generateIdentifier } from '../lib/cryptoops';
+import { createThrottledProgressSender, type DiscoveryLogDetails, drainWorklist, formatDiscoveryLogLine, resolveDiscoveryMethod } from '../lib/discoveryops';
 import { type TextChange, firstInvalidChange, logEditTextChanges, offsetDeltaBefore } from '../lib/editops';
 import { debug, writeToLog, writeToLogAtLevel, writeToErrorLog } from '../lib/errorops';
 import { globMatches } from '../lib/globMatch';
@@ -22,6 +23,8 @@ const DISCOVERY_BATCH_MAX_DOCS = 20;
 const ALLOWED_EXTERNAL_SCHEMES = ['http', 'https', 'mailto'] as const;
 // bounds the non-file: scheme readDirectory walk, so a symlink cycle or pathological provider can't loop forever
 const MAX_WALK_ENTRIES = 5000;
+// directories processed at once during the walk, so a remote host's round-trip latency is paid in parallel, not serially
+const WALK_CONCURRENCY = 8;
 // asks an exclude glob "would you drop everything inside this directory?"; globs end in /** so they only match a file path
 const EXCLUDE_PROBE_FILE = '__probe__.md';
 /*
@@ -946,7 +949,7 @@ export class PanelSession {
 		}
 	}
 
-	// scheme: file - VS Code's native findFiles honours the RelativePattern and its glob exclude
+	// VS Code's native findFiles honours the RelativePattern and its glob exclude on a scheme with a search provider
 	private async discoverViaFindFiles(pattern: vscode.RelativePattern): Promise<Array<vscode.Uri>> {
 		// an empty exclude becomes null, so findFiles applies no default exclusions either
 		const find_exclude = this.integration_exclude.trim() === '' ? null : this.integration_exclude;
@@ -954,41 +957,68 @@ export class PanelSession {
 	}
 
 	/**
-	 * Non-file: scheme: findFiles ignores a custom-scheme RelativePattern, so this walks the
+	 * A scheme with no search provider: findFiles ignores its RelativePattern, so this walks the
 	 * folder with the provider's own readDirectory (the API the Explorer uses) and applies the
 	 * include glob directly. Excluded directories are pruned so the walk never descends into
 	 * node_modules/.git/etc; the surviving list still passes discoverFolderDocs's exclude filter.
+	 *
+	 * Up to WALK_CONCURRENCY directories are read at once (drainWorklist), since each readDirectory
+	 * is a round trip to the remote host and running them one at a time pays that latency serially.
+	 * Result order is not meaningful: discoverFolderDocs sorts the combined set before using it.
+	 *
+	 * onProgress fires once per directory visited, with the running dirs-walked and files-found
+	 * counts; the caller throttles it, since a 4800-directory walk would otherwise mean 4800 posts.
+	 * The walk stops taking new directories, without posting further progress, once folder_path no
+	 * longer matches integration_path - a newer enterFolderMode has moved on, so this scan is stale.
 	 */
-	private async discoverViaReadDirectoryWalk(base_uri: vscode.Uri, folder_path: string): Promise<Array<vscode.Uri>> {
+	private async discoverViaReadDirectoryWalk(
+		base_uri: vscode.Uri,
+		folder_path: string,
+		onProgress: (dirs_walked: number, files_found: number) => void = () => {},
+	): Promise<{ uris: Array<vscode.Uri>; dirs_walked: number; stopped: boolean }> {
 		const results: Array<vscode.Uri> = [];
-		const stack: Array<vscode.Uri> = [base_uri];
-		let visited = 0;
-		while (stack.length > 0 && visited < MAX_WALK_ENTRIES) {
-			visited++;
-			const dir = stack.pop()!;
-			let entries: Array<[string, vscode.FileType]>;
-			try {
-				entries = await vscode.workspace.fs.readDirectory(dir);
-			} catch (err) {
-				writeToErrorLog('discoverViaReadDirectoryWalk', `readDirectory failed for ${dir.path}`, err);
-				continue;
-			}
-			for (const [name, type] of entries) {
-				const child = vscode.Uri.joinPath(dir, name);
-				// the include glob is folder-relative, mirroring findFiles' RelativePattern; the exclude matches workspace-root-relative
-				const child_rel = path.posix.relative(folder_path, child.path);
-				if (type === vscode.FileType.Directory) {
-					// prune dirs whose contents the exclude would drop so the walk never descends into node_modules/.git/etc
-					if (!this.isExcludedDirectory(child.path)) { stack.push(child); }
-				} else if (type === vscode.FileType.File && globMatches(child_rel, this.integration_include, '')) {
-					results.push(child);
-				}
-			}
-		}
-		if (visited >= MAX_WALK_ENTRIES) {
+		const outcome = await drainWorklist<vscode.Uri>(
+			[base_uri],
+			async (dir) => this.readWalkDirectory(dir, folder_path, results),
+			{
+				concurrency: WALK_CONCURRENCY,
+				max_items: MAX_WALK_ENTRIES,
+				isStopped: () => this.integration_path !== folder_path,
+				onItemProcessed: (processed_count) => onProgress(processed_count, results.length),
+			},
+		);
+		if (outcome.capped) {
 			writeToLog('discoverViaReadDirectoryWalk', `walk cap hit: stopped after ${MAX_WALK_ENTRIES} directories under ${folder_path}`);
 		}
-		return results;
+		return { uris: results, dirs_walked: outcome.processed_count, stopped: outcome.stopped };
+	}
+
+	/**
+	 * One drainWorklist item for discoverViaReadDirectoryWalk: reads one directory, appends its
+	 * matching files to the shared results array, and returns its subdirectories as the children
+	 * for the pool to pick up next.
+	 */
+	private async readWalkDirectory(dir: vscode.Uri, folder_path: string, results: Array<vscode.Uri>): Promise<Array<vscode.Uri>> {
+		let entries: Array<[string, vscode.FileType]>;
+		try {
+			entries = await vscode.workspace.fs.readDirectory(dir);
+		} catch (err) {
+			writeToErrorLog('discoverViaReadDirectoryWalk', `readDirectory failed for ${dir.path}`, err);
+			return [];
+		}
+		const children: Array<vscode.Uri> = [];
+		for (const [name, type] of entries) {
+			const child = vscode.Uri.joinPath(dir, name);
+			// the include glob is folder-relative, mirroring findFiles' RelativePattern; the exclude matches workspace-root-relative
+			const child_rel = path.posix.relative(folder_path, child.path);
+			if (type === vscode.FileType.Directory) {
+				// prune dirs whose contents the exclude would drop so the walk never descends into node_modules/.git/etc
+				if (!this.isExcludedDirectory(child.path)) { children.push(child); }
+			} else if (type === vscode.FileType.File && globMatches(child_rel, this.integration_include, '')) {
+				results.push(child);
+			}
+		}
+		return children;
 	}
 
 	/**
@@ -996,49 +1026,111 @@ export class PanelSession {
 	 * as it completes so a slow file never blocks the others. After all settle, a
 	 * replace update ships the canonical map, pruning stale docs from a saved session.
 	 *
+	 * The pendingChange { key: 'folderDiscovery' } signal brackets the whole call: raised
+	 * before enumeration starts, since the walk itself is the slow part in a remote
+	 * workspace, and cleared on every path out, below - the fast path included, since
+	 * enumeration still runs there even though the per-file reload is skipped, and a thrown
+	 * failure too, logged rather than left spinning forever.
+	 *
 	 * Fast-path detection: stat each discovered URI and compare the {path, mtime} set
 	 * against integration_docs. When they match exactly (no new files, no missing files,
 	 * no mtime changes - typical for a breadcrumb re-enter, an integration-mode toggle,
-	 * or a filter edit that doesn't change the result set), skip the per-file reload
-	 * AND skip the pendingChange emit. The aggregated payload still ships so the webview
-	 * re-runs its merge with the cached docs.
+	 * or a filter edit that doesn't change the result set), skip the per-file reload.
+	 * The aggregated payload still ships so the webview re-runs its merge with the cached docs.
+	 *
+	 * A discoveryProgress message rides alongside the pendingChange bracket: 'walking' ticks during
+	 * the readDirectory walk (dirs searched, files found), 'loading' ticks during the
+	 * per-file read that follows on every scheme (files read of the total about to load). Both are
+	 * throttled (createThrottledProgressSender) so the message volume stays small regardless of how
+	 * many directories or files are involved; the fast path sends neither, since nothing reloads.
 	 */
 	private async discoverFolderDocs(pattern: vscode.RelativePattern, folder_path: string, previous_docs: HashMapOf<Doc>): Promise<void> {
-		// findFiles only honours a RelativePattern on the file: scheme; any other scheme falls back to the readDirectory walk
-		const base_uri = this.resolveWorkspaceUri(folder_path);
-		const discovered = base_uri.scheme === 'file'
-			? await this.discoverViaFindFiles(pattern)
-			: await this.discoverViaReadDirectoryWalk(base_uri, folder_path);
-		// defense in depth: findFiles' brace-expanded exclude has edge cases, and the watcher armed below has no exclude at all
-		const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri.path));
-		// deterministic order so the capped subset is stable across reloads
-		const sorted_uris = [...filtered].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-		// stored on the session so later watcher-driven incremental updates re-send the same totals
-		this.integration_total_discovered = sorted_uris.length;
-		this.integration_truncated = sorted_uris.length > MAX_AGGREGATE_FILES;
-		const uris = sorted_uris.slice(0, MAX_AGGREGATE_FILES);
-		debug('setIntegration folder: %d discovered, loading %d (cap %d, truncated=%s) in %s', this.integration_total_discovered, uris.length, MAX_AGGREGATE_FILES, this.integration_truncated, folder_path);
-		if (this.integration_truncated) {
-			writeToLog('discoverFolderDocs', `cap hit: discovered ${this.integration_total_discovered}, loading first ${MAX_AGGREGATE_FILES} of ${folder_path}`);
+		this.sendPendingChange('folderDiscovery', true);
+		let uris: Array<vscode.Uri>;
+		let cache_hit: boolean;
+		try {
+			// resolveDiscoveryMethod decides findFiles vs. the readDirectory walk; a findFiles throw below can still fall back
+			const base_uri = this.resolveWorkspaceUri(folder_path);
+			const discovery_started_at = Date.now();
+			let method: DiscoveryLogDetails['method'] = resolveDiscoveryMethod(base_uri.scheme);
+			let discovered: Array<vscode.Uri> = [];
+			let dirs_walked: number | undefined;
+			if (method === 'findFiles') {
+				try {
+					discovered = await this.discoverViaFindFiles(pattern);
+				} catch (err) {
+					// the file: scheme is known-good, so its failure is a real error, not a wrong inference; only a non-file scheme falls back
+					if (base_uri.scheme === 'file') { throw err; }
+					writeToLogAtLevel('warn', 'discoverFolderDocs', `findFiles threw on scheme ${base_uri.scheme}, falling back to the directory walk`, err);
+					method = 'walk';
+				}
+			}
+			if (method === 'walk') {
+				// findFiles gives no incremental progress at all, so the walk is the only path with a 'walking' phase to report
+				const walk_progress = createThrottledProgressSender<{ dirs_walked: number; files_found: number }>(
+					({ dirs_walked: dw, files_found }) => this.sendDiscoveryProgress({ phase: 'walking', dirs_walked: dw, files_found }),
+				);
+				const walked = await this.discoverViaReadDirectoryWalk(base_uri, folder_path, (dw, files_found) => walk_progress.tick({ dirs_walked: dw, files_found }));
+				discovered = walked.uris;
+				dirs_walked = walked.dirs_walked;
+				// a newer enterFolderMode already superseded this scan; its own final tick would misreport this abandoned one's tally
+				if (!walked.stopped) { walk_progress.final({ dirs_walked, files_found: discovered.length }); }
+			}
+			// defense in depth: findFiles' brace-expanded exclude has edge cases, and the watcher armed below has no exclude at all
+			const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri.path));
+			// deterministic order so the capped subset is stable across reloads
+			const sorted_uris = [...filtered].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+			// stored on the session so later watcher-driven incremental updates re-send the same totals
+			this.integration_total_discovered = sorted_uris.length;
+			this.integration_truncated = sorted_uris.length > MAX_AGGREGATE_FILES;
+			writeToLog('discoverFolderDocs', formatDiscoveryLogLine({
+				method,
+				scheme: base_uri.scheme,
+				discovered_count: this.integration_total_discovered,
+				dirs_walked,
+				elapsed_ms: Date.now() - discovery_started_at,
+			}));
+			uris = sorted_uris.slice(0, MAX_AGGREGATE_FILES);
+			debug('setIntegration folder: %d discovered, loading %d (cap %d, truncated=%s) in %s', this.integration_total_discovered, uris.length, MAX_AGGREGATE_FILES, this.integration_truncated, folder_path);
+			if (this.integration_truncated) {
+				writeToLog('discoverFolderDocs', `cap hit: discovered ${this.integration_total_discovered}, loading first ${MAX_AGGREGATE_FILES} of ${folder_path}`);
+			}
+			cache_hit = await this.discoveredSetMatchesCache(uris, previous_docs);
+		} catch (err) {
+			writeToErrorLog('discoverFolderDocs', `discovery failed for ${folder_path}`, err);
+			this.sendPendingChange('folderDiscovery', false);
+			return;
 		}
-		const cache_hit = await this.discoveredSetMatchesCache(uris, previous_docs);
 		if (cache_hit) {
 			debug('setIntegration folder: fast-path - discovered set matches cached docs, skipping reload');
 			// restores integration_docs, cleared by enterFolderMode before discovery, so the payload carries the cached map
 			for (const [id, doc] of Object.entries(previous_docs)) { this.integration_docs[id] = doc; }
 			this.sendAggregatePayload();
+			this.sendPendingChange('folderDiscovery', false);
 			return;
 		}
-		// only when there is actual loading to do, so the spinner never flashes on a no-op breadcrumb click
-		this.sendPendingChange('folderDiscovery', true);
-		// the arrow wrapper isolates loadFolderDoc from .map's (value, index, array) trio
-		const load_promises = uris.map(uri => this.loadFolderDoc(uri, { batched: true }));
+		// files-read-of-total progress applies to the loading phase on every scheme, unlike the walk-only 'walking' phase above
+		const load_progress = createThrottledProgressSender<{ files_loaded: number; files_total: number }>(
+			({ files_loaded, files_total }) => this.sendDiscoveryProgress({ phase: 'loading', files_loaded, files_total }),
+		);
+		let files_loaded = 0;
+		// isolates loadFolderDoc from .map's (value, index, array) trio; it never rejects, so every entry still ticks
+		const load_promises = uris.map(uri => this.loadFolderDoc(uri, { batched: true }).then(() => {
+			files_loaded++;
+			load_progress.tick({ files_loaded, files_total: uris.length });
+		}));
 		Promise.allSettled(load_promises).then(() => {
-			debug('setIntegration folder: load complete, %d docs', Object.keys(this.integration_docs).length);
-			// flushes whatever the last interval left queued before the canonical map lands
-			this.flushDiscoveryBatch();
-			this.sendAggregatePayload();
-			this.sendPendingChange('folderDiscovery', false);
+			try {
+				debug('setIntegration folder: load complete, %d docs', Object.keys(this.integration_docs).length);
+				// flushes whatever the last interval left queued before the canonical map lands
+				this.flushDiscoveryBatch();
+				load_progress.final({ files_loaded, files_total: uris.length });
+				this.sendAggregatePayload();
+			} catch (err) {
+				writeToErrorLog('discoverFolderDocs', `load completion failed for ${folder_path}`, err);
+			} finally {
+				this.sendPendingChange('folderDiscovery', false);
+			}
 		});
 	}
 
@@ -1082,6 +1174,16 @@ export class PanelSession {
 
 	private sendPendingChange(key: string, on: boolean): void {
 		this.webviewPanel.webview.postMessage({ type: 'pendingChange', key, on });
+	}
+
+	/**
+	 * One discovery progress tick, bracketed by the pendingChange folderDiscovery signal: 'walking'
+	 * only occurs on the non-file: readDirectory walk, where findFiles gives no incremental progress;
+	 * 'loading' covers the per-file read that follows discovery on every scheme. The webview clears its
+	 * own progress state on the matching pendingChange, so no explicit clear message is needed here.
+	 */
+	private sendDiscoveryProgress(progress: { phase: 'walking' | 'loading'; dirs_walked?: number; files_found?: number; files_loaded?: number; files_total?: number }): void {
+		this.webviewPanel.webview.postMessage({ type: 'discoveryProgress', ...progress });
 	}
 
 	/**

@@ -1,5 +1,6 @@
 import React from "react";
 import * as l10n from "@vscode/l10n";
+import type { ActivityAnalyserUnavailableReasonCode } from "../../../lib/agentactivityops";
 import type { AgentNoteModel } from "./useAgentNoteModel";
 import styles from "../AgentNote.module.scss";
 
@@ -25,16 +26,38 @@ export interface AgentActivityBannerProps {
 /** a one-line notice with its full explanation kept for a hover */
 type EmptyNotice = { text: string; detail: string };
 
+/**
+ * Fully translated copy per `reason_code`, so an 'unavailable' card never splices the host's own
+ * English `reason` sentence into a translated one (a German UI showing an English clause). A code
+ * this build does not recognise - absent, or from a newer host - falls back to the free-text
+ * `reason`, the one place it is still shown verbatim.
+ */
+function unavailableNotice(reason_code: ActivityAnalyserUnavailableReasonCode | undefined, reason: string | undefined): EmptyNotice {
+    if (reason_code === 'remote_home_not_found') {
+        return {
+            text: l10n.t('Agent activity unavailable on the remote host'),
+            detail: l10n.t('No .claude, .codex or .grok directory was found on the remote host for this workspace.'),
+        };
+    }
+    if (reason_code === 'no_local_access') {
+        return {
+            text: l10n.t('Agent activity unavailable'),
+            detail: l10n.t('NoteThink cannot read local agent session files on this host, such as a web host with no local disk or an unrecognised user-data layout.'),
+        };
+    }
+    return {
+        text: l10n.t('Agent activity unavailable'),
+        detail: l10n.t('NoteThink cannot read local agent session files in this host. {0}', reason ?? l10n.t('This usually means a web host with no local disk.')),
+    };
+}
+
 /** the notice for a card with no sessions to draw, or undefined when there is nothing to say */
 function emptyNotice(model: AgentNoteModel): EmptyNotice | undefined {
     if (!model.heard_from_host || !model.analyser) {
         return { text: l10n.t('Waiting for agent activity'), detail: l10n.t('Waiting for NoteThink to report agent activity.') };
     }
     if (model.analyser.state === 'unavailable') {
-        return {
-            text: l10n.t('Agent activity unavailable'),
-            detail: l10n.t('NoteThink cannot read local agent session files in this host. {0}', model.analyser.reason ?? l10n.t('This usually means a web host with no local disk.')),
-        };
+        return unavailableNotice(model.analyser.reason_code, model.analyser.reason);
     }
     // 'scanning' means "no information yet" only before the first completed scan, so this never blanks a populated card
     if (model.analyser.state === 'scanning' && !model.has_completed_scan) {

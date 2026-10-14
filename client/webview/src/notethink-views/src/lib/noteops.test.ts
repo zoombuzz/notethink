@@ -4,6 +4,8 @@ import {
     isNoteManuallyExpanded,
     deriveNaturalColumnOrder,
     mergeSavedGroupDisplay,
+    groupDisplayForAxis,
+    replaceGroupDisplayForAxis,
     moveInOrder,
     toggleShownInDisplay,
     withinNoteHeadlineOrBody,
@@ -36,6 +38,7 @@ import {
     formatColumnLabel,
     findStableIdCollisions,
     collisionNoteLocation,
+    hasVisibleCard,
     breadcrumbNoteForLabel,
     findNoteBySeq,
     resolveParentContextNote,
@@ -1320,6 +1323,45 @@ describe('mergeSavedGroupDisplay', () => {
     });
 });
 
+describe('groupDisplayForAxis', () => {
+
+    const STORED = [
+        { value: 'untagged', shown: false },
+        { value: 'doing', shown: true },
+        { value: 'calfam', shown: true, axis: 'nt_first_level_folder' },
+        { value: 'untagged', shown: true, axis: 'nt_first_level_folder' },
+    ];
+
+    it('reads an entry with no axis as a status entry, so an older list and the default stay the status display', () => {
+        expect(groupDisplayForAxis(STORED, 'status')).toEqual([{ value: 'untagged', shown: false }, { value: 'doing', shown: true }]);
+    });
+
+    it('gives another axis only the entries written under it, with its own shown flags', () => {
+        expect(groupDisplayForAxis(STORED, 'nt_first_level_folder').map(entry => [entry.value, entry.shown]))
+            .toEqual([['calfam', true], ['untagged', true]]);
+    });
+
+    it('returns nothing for an axis with no stored entries, or no list at all', () => {
+        expect(groupDisplayForAxis(STORED, 'priority')).toEqual([]);
+        expect(groupDisplayForAxis(undefined, 'status')).toEqual([]);
+    });
+});
+
+describe('replaceGroupDisplayForAxis', () => {
+
+    it('replaces one axis\'s entries, tags them with that axis, and keeps every other axis\'s entries', () => {
+        const stored = [{ value: 'doing', shown: true }, { value: 'calfam', shown: true, axis: 'nt_first_level_folder' }];
+        expect(replaceGroupDisplayForAxis(stored, 'nt_first_level_folder', [{ value: 'calfam', shown: false }]))
+            .toEqual([{ value: 'calfam', shown: false, axis: 'nt_first_level_folder' }, { value: 'doing', shown: true }]);
+    });
+
+    it('writes status entries without an axis, so the status display keeps the default\'s shape', () => {
+        const stored = [{ value: 'calfam', shown: true, axis: 'nt_first_level_folder' }];
+        expect(replaceGroupDisplayForAxis(stored, 'status', [{ value: 'done', shown: false, axis: 'status' }]))
+            .toEqual([{ value: 'done', shown: false }, { value: 'calfam', shown: true, axis: 'nt_first_level_folder' }]);
+    });
+});
+
 describe('toggleShownInDisplay', () => {
 
     it('flips the named lane\'s shown flag and leaves the rest untouched', () => {
@@ -1564,5 +1606,42 @@ describe('collisionNoteLocation', () => {
             relative_path: '',
             line: 9,
         });
+    });
+});
+
+describe('hasVisibleCard', () => {
+    function statusNote(value: string): NoteProps {
+        return makeNote({
+            linetags: { 'status': { key: 'status', value, note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 } },
+        });
+    }
+
+    it('returns false for an empty note list, grouped or not', () => {
+        expect(hasVisibleCard([], true, 'status', undefined)).toBe(false);
+        expect(hasVisibleCard([], false, 'status', undefined)).toBe(false);
+    });
+
+    it('counts any note as visible in a non-grouped (document) view', () => {
+        expect(hasVisibleCard([statusNote('doing')], false, 'status', [{ value: 'doing', shown: false }])).toBe(true);
+    });
+
+    it('counts a note as visible in a grouped view when nothing is hidden', () => {
+        expect(hasVisibleCard([statusNote('doing')], true, 'status', undefined)).toBe(true);
+        expect(hasVisibleCard([statusNote('doing')], true, 'status', [])).toBe(true);
+    });
+
+    it('does not count a note whose only lane the group-display hides', () => {
+        const hidden = [{ value: 'doing', shown: false }];
+        expect(hasVisibleCard([statusNote('doing')], true, 'status', hidden)).toBe(false);
+    });
+
+    it('counts a note once any note sits in a lane the group-display does not hide', () => {
+        const hidden = [{ value: 'doing', shown: false }];
+        expect(hasVisibleCard([statusNote('doing'), statusNote('done')], true, 'status', hidden)).toBe(true);
+    });
+
+    it('reads only the entries belonging to the live axis, ignoring another axis\'s hidden lanes', () => {
+        const other_axis_hidden = [{ value: 'doing', shown: false, axis: 'nt_first_level_folder' }];
+        expect(hasVisibleCard([statusNote('doing')], true, 'status', other_axis_hidden)).toBe(true);
     });
 });

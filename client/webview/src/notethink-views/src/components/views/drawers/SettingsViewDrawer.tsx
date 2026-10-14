@@ -4,7 +4,8 @@ import * as l10n from "@vscode/l10n";
 import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import type { ReactNode } from "react";
-import { formatColumnLabel, mergeSavedGroupDisplay, moveInOrder, toggleShownInDisplay } from "../../../lib/noteops";
+import { formatColumnLabel, groupDisplayForAxis, mergeSavedGroupDisplay, moveInOrder, toggleShownInDisplay } from "../../../lib/noteops";
+import { KANBAN_AXIS_KEY } from "../../../lib/axisops";
 import {
     VIEW_REGISTRY,
     childViewNodes,
@@ -127,16 +128,29 @@ interface GroupDisplayControlProps {
     viewId: string;
     saved: GroupDisplayEntry[];
     natural: string[];
+    axisKey: string;
     onChange: (next_display: GroupDisplayEntry[]) => void;
 }
 
 /**
  * The lane order AND visibility editor: one draggable chip per lane, stacked in board order, each with
  * its own show/hide checkbox. Laying them out left to right would mirror the board, but the control
- * column runs out before five lanes do, so the list reads top to bottom instead. Every
- * lane the board could show must be reorderable and toggleable, which is what `mergeSavedGroupDisplay`
- * guarantees: a status added since the display was saved would otherwise be unreachable here, and it
- * arrives shown by default.
+ * column runs out before five lanes do, so the list reads top to bottom instead.
+ *
+ * The rows are the active axis's own stored entries (`groupDisplayForAxis`) merged with that axis's
+ * natural lanes (`mergeSavedGroupDisplay`), the status axis included: a status entry carries no `axis`
+ * field, so the kanban-rung default (Untagged, Doing, Code Review, Testing, Done, contributed in
+ * package.json) reads as the status axis's own stored list and shows in full even on an empty board,
+ * with nothing live to filter it against. Every lane the board could show on the active axis is
+ * reorderable and toggleable here; a lane added since the display was saved is still reachable, shown by
+ * default. A write carries only the active axis's own rows - `onChange` hands the raw list up, and the
+ * caller folds it back against what every OTHER axis has stored (`replaceGroupDisplayForAxis`), so this
+ * control never has to see or preserve another axis's entries.
+ *
+ * An empty `natural` means the rendered view isn't a grouped one at all - the reader can still be
+ * looking at a highlighted node's settings that differ from what is actually on screen - so there is no
+ * live axis to filter against. The row then shows the status axis's entries, the axis the kanban node
+ * lanes by, and the caller writes them back to that axis alone.
  *
  * Drag comes from the same library the board drags cards with, so a chip is keyboard-reorderable for
  * free (space to lift, arrows to move, space to drop) and needs no pair of nudge buttons beside it. The
@@ -145,8 +159,13 @@ interface GroupDisplayControlProps {
  * deliberately no reset: no other row in this drawer carries one, and the revert under Change defaults
  * is the one place a change is undone wholesale.
  */
+function groupDisplayLanes(saved: GroupDisplayEntry[], natural: string[], axis_key: string): GroupDisplayEntry[] {
+    const lane_axis = natural.length === 0 ? KANBAN_AXIS_KEY : axis_key;
+    return mergeSavedGroupDisplay(groupDisplayForAxis(saved, lane_axis), natural);
+}
+
 function GroupDisplayControl(props: GroupDisplayControlProps): React.ReactElement {
-    const ordered = mergeSavedGroupDisplay(props.saved, props.natural);
+    const ordered = groupDisplayLanes(props.saved, props.natural, props.axisKey);
     const handleDragEnd = (result: DropResult): void => {
         if (!result.destination) { return; }
         const next = moveInOrder(ordered, result.source.index, result.destination.index);
@@ -328,6 +347,7 @@ function RowControl(props: RowControlProps): React.ReactElement {
                     viewId={props.viewId}
                     saved={Array.isArray(props.value) ? props.value as GroupDisplayEntry[] : []}
                     natural={props.naturalColumnOrder}
+                    axisKey={props.groupByResolvedKey}
                     onChange={(next_display) => props.onChange(def, next_display)}
                 />
             );

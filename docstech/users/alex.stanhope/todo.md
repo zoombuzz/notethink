@@ -1,6 +1,29 @@
 # Todo [](?nt_view=kanban)
 
 
+### Watcher applies dependency and config changes [](?id=watch-restarts-on-config)
+
+`pnpm run watch` recompiles on source changes, including those a `git pull` lands. A pull that changes a `package.json`, a `pnpm-lock.yaml`, `webpack.config.js` or a `tsconfig*.json` is not applied: the bundles keep building against stale config or modules until someone restarts the watcher by hand.
+
++ background
+  + `watch` is `SELFINSPECT_ENV=dev webpack --watch` (`package.json` scripts); it logs to `test-results/dev.log`
+  + inferred, untested: webpack watches only its module graph, so it never re-reads `webpack.config.js` or ts-loader's `tsconfig`
+  + there are four lockfiles: root, `client/extension`, `client/webview` and `client/webview/src/notethink-views`, the last three installed by the root `postinstall`
+  + no PATTERNS.md entry for a self-restarting watcher; new pattern
++ approach
+  + a `scripts/watch.mjs` supervisor runs webpack in watch mode as a child and watches the config and dependency files itself
+  + a lockfile or `package.json` change stops webpack, runs `pnpm install --frozen-lockfile`, then restarts webpack
+  + a `webpack.config.js` or `tsconfig*.json` change restarts webpack only
+  + changes are debounced, so a pull touching many files causes one restart
+  + a failed install is logged loudly and webpack is not restarted against half-installed modules
+  + SIGTERM and SIGINT are forwarded to the child, so stopping the watcher by PID stops everything
++ [ ] add `scripts/watch.mjs` and point the `watch` script at it, keeping `SELFINSPECT_ENV=dev`
++ [ ] keep the child's command line matching `webpack --watch` with the repo root as cwd, which is how a running watcher is found
++ [ ] cover the decision logic with tests: which changed path means install and restart, restart only, or nothing
++ [ ] verify against a running watcher: rewrite `webpack.config.js` unchanged, touch a lockfile, and read each restart and the new compile in `test-results/dev.log`
++ [ ] bump the patch version
+
+
 ### Single-file kanban falls back to document view [](?id=single-file-kanban-auto-view)
 
 Opening a file tagged `[](?nt_view=kanban)` through NoteThink: Open Viewer draws a flat document instead of a board whenever the workspace holds other files. View settings resolve to "Auto (Document)" and no columns render.

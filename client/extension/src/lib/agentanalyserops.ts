@@ -19,6 +19,18 @@ export const AGENT_ANALYSER_STATES = ['unavailable', 'scanning', 'live', 'failed
 export type AgentAnalyserState = typeof AGENT_ANALYSER_STATES[number];
 
 /**
+ * Machine-readable reason an 'unavailable' state carries, so the webview renders fully translated
+ * copy instead of embedding the host's own English `reason` sentence into a translated one (that
+ * sentence stays on the wire as a fallback only, for a webview build that does not yet know a given
+ * code - `AgentActivityBanner.tsx` > `emptyNotice`). Transient message field, not a persisted name.
+ * - no_local_access: this host (local, or a web host) has no file access the analyser recognises
+ * - remote_home_not_found: a remote window probed the workspace folder's ancestors and found no
+ *   `.claude`, `.codex` or `.grok` directory on the remote host
+ */
+export const AGENT_ANALYSER_UNAVAILABLE_REASON_CODES = ['no_local_access', 'remote_home_not_found'] as const;
+export type AgentAnalyserUnavailableReasonCode = typeof AGENT_ANALYSER_UNAVAILABLE_REASON_CODES[number];
+
+/**
  * ActivityRefusal is one vendor session file the analyser could not read, carried to the webview so
  * an empty board over a failed read never looks like an idle one.
  * - file: the file at fault, named for a reader rather than as an absolute path (the vendor and a
@@ -58,8 +70,8 @@ export interface ActivitySessionState {
 /**
  * ActivityAnalyserState answers "is the analyser working at all", which is the first thing an
  * otherwise empty board has to say.
- * - unavailable: this host cannot read local files (a web host, or a user-data layout the analyser
- *   does not recognise) - reason names which
+ * - unavailable: this host (local or remote) cannot read an agent vendor's files - `reason_code`
+ *   names which, for the webview to translate; `reason` is an English fallback only
  * - scanning: the first read of every vendor is still in flight; nothing has been posted about a
  *   session yet
  * - live: at least one scan has completed, whether or not it found anything
@@ -68,6 +80,7 @@ export interface ActivitySessionState {
 export interface ActivityAnalyserState {
     state: AgentAnalyserState;
     reason?: string;
+    reason_code?: AgentAnalyserUnavailableReasonCode;
     refusals: ActivityRefusal[];
 }
 
@@ -83,12 +96,12 @@ export interface ActivitySnapshot {
     trees: ActivityTreeState[];
 }
 
-export function emptyAnalyserState(state: AgentAnalyserState, reason?: string): ActivityAnalyserState {
-    return { state, reason, refusals: [] };
+export function emptyAnalyserState(state: AgentAnalyserState, reason?: string, reason_code?: AgentAnalyserUnavailableReasonCode): ActivityAnalyserState {
+    return { state, reason, reason_code, refusals: [] };
 }
 
-export function emptyActivitySnapshot(state: AgentAnalyserState = 'scanning', reason?: string): ActivitySnapshot {
-    return { analyser: emptyAnalyserState(state, reason), sessions: [], trees: [] };
+export function emptyActivitySnapshot(state: AgentAnalyserState = 'scanning', reason?: string, reason_code?: AgentAnalyserUnavailableReasonCode): ActivitySnapshot {
+    return { analyser: emptyAnalyserState(state, reason, reason_code), sessions: [], trees: [] };
 }
 
 /** every session id the analyser declared it could not fully read, deduped and sorted for a stable snapshot */

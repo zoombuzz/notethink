@@ -314,6 +314,22 @@ describe('SettingsViewDrawer controls', () => {
         expect(screen.getByLabelText('Reorder Done')).toBeInTheDocument();
     });
 
+    it('on the status axis, an untouched kanban-rung default lists in full, exactly as today, even with lanes no note currently uses', () => {
+        // the kanban rung's own package.json default; the status axis never filters by current population
+        renderDrawer({
+            settings: {
+                groupDisplay: [
+                    { value: 'untagged', shown: true },
+                    { value: 'doing', shown: true },
+                    { value: 'code-review', shown: true },
+                    { value: 'testing', shown: true },
+                    { value: 'done', shown: true },
+                ],
+            },
+        });
+        expect(renderedChipValues()).toEqual(['untagged', 'doing', 'code-review', 'testing', 'done']);
+    });
+
     it('routes a dropped lane through the group-display handler that normalises the natural order', () => {
         const on_group_display_change = jest.fn();
         const on_setting_change = jest.fn();
@@ -342,6 +358,131 @@ describe('SettingsViewDrawer controls', () => {
         expect(on_group_display_change).toHaveBeenCalledWith([
             { value: 'doing', shown: true },
             { value: 'done', shown: false },
+            { value: 'untagged', shown: true },
+        ]);
+    });
+
+    it('with no notes, lists just the absent-value bucket, same as a status-grouped board today', () => {
+        renderDrawer({ naturalColumnOrder: ['untagged'] });
+        expect(renderedChipValues()).toEqual(['untagged']);
+    });
+
+    it('grouped by first level folder, lists the folder lanes rather than any saved status chips', () => {
+        renderDrawer({
+            groupByResolvedKey: 'nt_first_level_folder',
+            naturalColumnOrder: ['alpha', 'beta', 'untagged'],
+            // these entries carry no axis, so they belong to status and are invisible on the folder axis
+            settings: { groupDisplay: [{ value: 'doing', shown: false }, { value: 'done', shown: true }] },
+        });
+        expect(renderedChipValues()).toEqual(['alpha', 'beta', 'untagged']);
+    });
+
+    it('an untouched default groupDisplay off the status axis is ignored entirely, not read as stale status chips', () => {
+        // the kanban rung's own package.json default, carrying no axis, so it belongs to status alone
+        renderDrawer({
+            groupByResolvedKey: 'nt_first_level_folder',
+            naturalColumnOrder: ['alpha', 'beta', 'untagged'],
+            settings: {
+                groupDisplay: [
+                    { value: 'untagged', shown: true },
+                    { value: 'doing', shown: true },
+                    { value: 'code-review', shown: true },
+                    { value: 'testing', shown: true },
+                    { value: 'done', shown: true },
+                ],
+            },
+        });
+        expect(renderedChipValues()).toEqual(['alpha', 'beta', 'untagged']);
+    });
+
+    it('an empty natural (the rendered type is not a grouped one, e.g. a highlighted node that is not what is on screen) still lists the untouched default in full, never nothing', () => {
+        renderDrawer({
+            groupByResolvedKey: 'nt_first_level_folder',
+            naturalColumnOrder: [],
+            settings: {
+                groupDisplay: [
+                    { value: 'untagged', shown: true },
+                    { value: 'doing', shown: true },
+                    { value: 'code-review', shown: true },
+                    { value: 'testing', shown: true },
+                    { value: 'done', shown: true },
+                ],
+            },
+        });
+        expect(renderedChipValues()).toEqual(['untagged', 'doing', 'code-review', 'testing', 'done']);
+    });
+
+    it('an empty natural lists only the status entries, never another axis\'s', () => {
+        renderDrawer({
+            groupByResolvedKey: 'nt_first_level_folder',
+            naturalColumnOrder: [],
+            settings: {
+                groupDisplay: [
+                    { value: 'doing', shown: true },
+                    { value: 'alpha', shown: true, axis: 'nt_first_level_folder' },
+                    { value: 'done', shown: false },
+                ],
+            },
+        });
+        expect(renderedChipValues()).toEqual(['doing', 'done']);
+    });
+
+    it('a mixed stored list shows only the entries tagged for the active axis, folder lanes merged with the untagged ones of its own', () => {
+        renderDrawer({
+            groupByResolvedKey: 'nt_first_level_folder',
+            naturalColumnOrder: ['alpha', 'beta', 'untagged'],
+            settings: {
+                groupDisplay: [
+                    { value: 'untagged', shown: false },
+                    { value: 'doing', shown: true },
+                    { value: 'beta', shown: false, axis: 'nt_first_level_folder' },
+                    { value: 'alpha', shown: true, axis: 'nt_first_level_folder' },
+                ],
+            },
+        });
+        expect(renderedChipValues()).toEqual(['beta', 'alpha', 'untagged']);
+    });
+
+    it('on the status axis, a folder-axis entry in a mixed stored list is excluded', () => {
+        renderDrawer({
+            settings: {
+                groupDisplay: [
+                    { value: 'doing', shown: false },
+                    { value: 'alpha', shown: true, axis: 'nt_first_level_folder' },
+                ],
+            },
+        });
+        expect(renderedChipValues()).toEqual(['doing', 'done', 'untagged']);
+    });
+
+    it('reordering a folder lane writes only the folder axis entries, independent of any stored status chips', () => {
+        const on_group_display_change = jest.fn();
+        renderDrawer({
+            groupByResolvedKey: 'nt_first_level_folder',
+            naturalColumnOrder: ['alpha', 'beta', 'untagged'],
+            settings: { groupDisplay: [{ value: 'doing', shown: false }, { value: 'done', shown: true }] },
+            onGroupDisplayChange: on_group_display_change,
+        });
+        dropChip(1, 0);
+        expect(on_group_display_change).toHaveBeenCalledWith([
+            { value: 'beta', shown: true },
+            { value: 'alpha', shown: true },
+            { value: 'untagged', shown: true },
+        ]);
+    });
+
+    it('hiding a folder lane writes only the folder axis entries, independent of any stored status chips', () => {
+        const on_group_display_change = jest.fn();
+        renderDrawer({
+            groupByResolvedKey: 'nt_first_level_folder',
+            naturalColumnOrder: ['alpha', 'beta', 'untagged'],
+            settings: { groupDisplay: [{ value: 'doing', shown: false }, { value: 'done', shown: true }] },
+            onGroupDisplayChange: on_group_display_change,
+        });
+        fireEvent.click(screen.getByTestId('group-display-shown-alpha'));
+        expect(on_group_display_change).toHaveBeenCalledWith([
+            { value: 'alpha', shown: false },
+            { value: 'beta', shown: true },
             { value: 'untagged', shown: true },
         ]);
     });

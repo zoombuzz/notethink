@@ -24,7 +24,7 @@ Then open any `.md` file, right-click it and choose **Open With... -> NoteThink*
 - **Document view**: the same file read top to bottom, nested and structured
 - **Folder mode**: aggregate every markdown file in a folder into one board
 - **Live Updates**: edit the file in the normal text editor and the view updates in place, debounced
-- **Agent activity**: see which AI coding agents (Claude Code, Codex, Grok) are working on which story, live, on desktop
+- **Agent activity**: see which AI coding agents (Claude Code, Codex, Grok) are working on which story, live, on desktop - including a remote window, where it reads the sessions on the host serving the workspace
 - **Linetags**: plain markdown links carry status, epic, and other attributes invisibly - see [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
 - **GFM + Frontmatter**: tables, strikethrough, task lists, footnotes, YAML/TOML frontmatter
 - **Writes back two things, precisely**: a card drag and a checkbox click, and nothing else - see [Known Limitations](#known-limitations)
@@ -202,9 +202,11 @@ notethink/
 ## Agent activity
 
 The `agent` card type shows which AI coding agents are working on a story, live, by reading each
-vendor's own local session files directly on disk - desktop only, and only while a panel is drawing
-an `agent` card. NoteThink reads no network endpoint for this and no vendor is asked to write
-anything for NoteThink to find. The files read, when present:
+vendor's own session files directly on disk - desktop only (a browser host has no file access to
+them), and only while a panel is drawing an `agent` card. In a remote window (Remote-SSH and
+similar), it reads the sessions on the host serving the workspace rather than the desktop running
+VS Code. NoteThink reads no network endpoint for this and no vendor is asked to write anything for
+NoteThink to find. The files read, when present:
 
 - **Claude Code**: `~/.claude/sessions/*.json` (which sessions are live, and whether each is working,
   idle or waiting on you) and `~/.claude/projects/*/*.jsonl` (each session's transcript, including

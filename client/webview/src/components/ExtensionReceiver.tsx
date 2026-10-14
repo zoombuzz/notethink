@@ -44,6 +44,8 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         workspace_root,
         workspace_projects,
         aggregate_total_discovered,
+        discovery_scanning,
+        discovery_progress,
         includeFilter,
         excludeFilter,
     } = useVscodeMessages({
@@ -98,6 +100,8 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         workspace_root={workspace_root}
         workspace_projects={workspace_projects}
         aggregate_total_discovered={aggregate_total_discovered}
+        discovery_scanning={discovery_scanning}
+        discovery_progress={discovery_progress}
         includeFilter={includeFilter}
         excludeFilter={excludeFilter}
         settingsCascade={settings_cascade}

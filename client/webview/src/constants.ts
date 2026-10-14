@@ -3,7 +3,7 @@ import type { GroupDisplayEntry, SettingsCascadePayload } from './notethink-view
 
 // mirrors the extension's folder-mode filter defaults until the extension echoes the effective globs back
 export const DEFAULT_INCLUDE_FILTER = '**/*.md';
-export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**';
+export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,.venv,__pycache__,vendored}/**';
 
 // webview-only cap on top-level stories taken per source file when merging; not round-tripped to the extension
 export const DEFAULT_MAX_NOTES_PER_FILE = 10;

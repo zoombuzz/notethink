@@ -75,6 +75,16 @@ const REDUNDANT_MODEL_PREFIX = 'claude-';
 export const ACTIVITY_ANALYSER_STATES = ['unavailable', 'scanning', 'live', 'failed'] as const;
 export type ActivityAnalyserLiveness = typeof ACTIVITY_ANALYSER_STATES[number];
 
+/**
+ * Machine-readable reason an 'unavailable' state carries, mirrored from the host's own type, so a
+ * card renders fully translated copy per code (`AgentActivityBanner.tsx` > `emptyNotice`) instead of
+ * splicing the host's English `reason` sentence into a translated one. An `ActivityAnalyserState`
+ * without a recognised code (an older host, or a state this build does not know) falls back to that
+ * `reason` sentence as-is.
+ */
+export const ACTIVITY_ANALYSER_UNAVAILABLE_REASON_CODES = ['no_local_access', 'remote_home_not_found'] as const;
+export type ActivityAnalyserUnavailableReasonCode = typeof ACTIVITY_ANALYSER_UNAVAILABLE_REASON_CODES[number];
+
 /*
  * What a reader may honestly say about one fact on one session. `reported` is a value to draw,
  * `quiet` is a supported capability with nothing to report, and `unsupported` is a vendor that
@@ -105,6 +115,7 @@ export interface ActivityRefusal {
 export interface ActivityAnalyserState {
     state: ActivityAnalyserLiveness;
     reason?: string;
+    reason_code?: ActivityAnalyserUnavailableReasonCode;
     refusals: ActivityRefusal[];
 }
 

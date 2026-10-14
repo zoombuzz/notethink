@@ -6,7 +6,7 @@ import { anyViewInFolderMode, resolveIntegrationMode, FOLDER_VIEW_STATE_ID } fro
 import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { TextSelection } from '../notethink-views/src/types/NoteProps';
-import type { SettingsCascadePayload, JumpTargetsMessage } from '../notethink-views/src/types/Messages';
+import type { SettingsCascadePayload, JumpTargetsMessage, DiscoveryProgress } from '../notethink-views/src/types/Messages';
 import type { ViewState } from './usePersistedViewStates';
 
 const debug = Debug("nodejs:notethink:useVscodeMessages");
@@ -18,8 +18,22 @@ const debug = Debug("nodejs:notethink:useVscodeMessages");
  * and whichever fires first drains the queue.
  */
 export const MESSAGE_FLUSH_FALLBACK_MS = 50;
-// types coalesced into one flush: the doc stream and its bracketing pending sentinel, so the spinner clears with the docs
-const QUEUED_MESSAGE_TYPES: readonly string[] = ['update', 'docDeleted', 'pendingChange'];
+/*
+ * Types coalesced into one flush, in arrival order: the doc stream and its bracketing pending sentinel
+ * (so the spinner clears with the docs), and discoveryProgress alongside it - the pendingChange that
+ * brackets a run and a tick for that same run must process in the order they were posted, which only
+ * the shared queue guarantees; processed immediately outside it, a tick posted after the bracketing
+ * pendingChange but flushed into an earlier React commit would have its reset run AFTER it instead of
+ * before, clobbering a tick that is chronologically newer.
+ */
+const QUEUED_MESSAGE_TYPES: readonly string[] = ['update', 'docDeleted', 'pendingChange', 'discoveryProgress'];
+/*
+ * usePendingWork auto-clears a mark with no matching clear after PENDING_WORK_SAFETY_NET_MS (the
+ * safety net for a dropped echo), which a folder discovery run can outlive on a slow walk, clearing
+ * the breadcrumb spinner well before PanelSession's own pendingChange { on: false } arrives. A live
+ * discoveryProgress tick is proof the run is still going, so drainMessageQueue re-marks folderDiscovery
+ * on every one - the same fix useAgentScanPending's remark interval applies in activityhooks.ts.
+ */
 
 // a wire message that has passed isMessageValid; each consumer narrows the fields it reads
 type WireMessage = { type: string; [key: string]: unknown };
@@ -56,6 +70,8 @@ interface VscodeMessagesState {
     workspace_root: string;
     workspace_projects: string[];
     aggregate_total_discovered: number | undefined;
+    discovery_scanning: boolean;
+    discovery_progress: DiscoveryProgress | undefined;
     includeFilter: string | undefined;
     excludeFilter: string | undefined;
 }
@@ -96,6 +112,12 @@ function isMessageValid(message: { type?: unknown; [key: string]: unknown }): bo
     if (message.type === 'pendingChange') {
         if (typeof message.key !== 'string' || typeof message.on !== 'boolean') {
             debug('discarding pendingChange message with invalid key/on %O', message);
+            return false;
+        }
+    }
+    if (message.type === 'discoveryProgress') {
+        if (message.phase !== 'walking' && message.phase !== 'loading') {
+            debug('discarding discoveryProgress message with invalid phase %O', message);
             return false;
         }
     }
@@ -257,6 +279,10 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
     const [workspace_projects, setWorkspaceProjects] = useState<string[]>([]);
     // total files discovered before MAX_AGGREGATE_FILES truncated the set; drives the "(N of M)" breadcrumb
     const [aggregate_total_discovered, setAggregateTotalDiscovered] = useState<number | undefined>(undefined);
+    // true from discovery's start until its first aggregate lands; bypasses the pending-work hook's show-delay
+    const [discovery_scanning, setDiscoveryScanning] = useState<boolean>(false);
+    // the latest discoveryProgress tick for the run discovery_scanning brackets; reset on either edge of that signal
+    const [discovery_progress, setDiscoveryProgress] = useState<DiscoveryProgress | undefined>(undefined);
     // folder mode: the effective include/exclude globs the extension is using, echoed back so the Files drawer can show them
     const [includeFilter, setIncludeFilter] = useState<string | undefined>(undefined);
     const [excludeFilter, setExcludeFilter] = useState<string | undefined>(undefined);
@@ -276,11 +302,12 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         if (typeof message.aggregate_total_discovered === 'number') {
             setAggregateTotalDiscovered(message.aggregate_total_discovered);
         }
-        if (typeof message.includeFilter === 'string') {
-            setIncludeFilter(message.includeFilter);
+        // snake_case on the wire like every other field here; sendAggregatePayload names them include_filter/exclude_filter
+        if (typeof message.include_filter === 'string') {
+            setIncludeFilter(message.include_filter);
         }
-        if (typeof message.excludeFilter === 'string') {
-            setExcludeFilter(message.excludeFilter);
+        if (typeof message.exclude_filter === 'string') {
+            setExcludeFilter(message.exclude_filter);
         }
         // a bulk-replace update carrying aggregate totals is the apply-filters echo; clears the filter-edit sentinel
         if (!message.merge_strategy && typeof message.aggregate_total_discovered === 'number') {
@@ -293,6 +320,22 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
             if (message.type === 'update') { applyUpdateMetadata(message); }
             if (message.type === 'pendingChange') {
                 if (message.on) { markPending(message.key as string); } else { clearPending(message.key as string); }
+                if (message.key === 'folderDiscovery') {
+                    setDiscoveryScanning(!!message.on);
+                    // reset on either edge: a stale tick from the run that just finished must not bleed into the next one
+                    setDiscoveryProgress(undefined);
+                }
+            }
+            if (message.type === 'discoveryProgress') {
+                // a live tick is proof the scan is still running, so it refreshes the mark too
+                markPending('folderDiscovery');
+                setDiscoveryProgress({
+                    phase: message.phase as DiscoveryProgress['phase'],
+                    dirs_walked: message.dirs_walked as number | undefined,
+                    files_found: message.files_found as number | undefined,
+                    files_loaded: message.files_loaded as number | undefined,
+                    files_total: message.files_total as number | undefined,
+                });
             }
         }
         pending_message_count.current += queued.length;
@@ -436,6 +479,8 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         workspace_root,
         workspace_projects,
         aggregate_total_discovered,
+        discovery_scanning,
+        discovery_progress,
         includeFilter,
         excludeFilter,
     };

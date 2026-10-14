@@ -6919,3 +6919,305 @@ A user can reorder a board's lanes from the settings drawer's "Group order" row,
 + [X] add the new strings to every l10n bundle
 + [X] bump the version
   + 0.4.6
+
+
+### Find the remote host's real agent home [](?id=remote-agent-home-lookup)
+
+In a Remote-SSH window every story card still says "No agent activity in 30 days" with [[remote-agent-activity]] built and loaded. The ancestor probe stops at the workspace's own project-level `.claude` directory, which holds settings and no sessions, and the host's real home is not above the workspace at all.
+
++ background
+  + measured in the NoteThink log, 2026-10-13: `resolved agent vendor home: remote` names the workspace folder itself as the home
+  + measured in the same log: every scan of that home reports `0 session(s) (0 read, 0 skipped)`, with no warning or error
+  + measured on the remote host: the workspace root holds a `.claude` directory containing only a settings file
+  + measured in code: `hasAnyVendorDir` accepts any directory named `.claude`, `.codex` or `.grok` (`AgentAnalyser.ts:463-471`)
+  + measured in code: `findRemoteAgentHomeAncestor` returns the first ancestor that passes, starting at the folder itself (`AgentAnalyser.ts:452-461`)
+  + a project-level `.claude` is ordinary in any repository Claude Code has worked in, so this is not one machine's layout
+  + measured in code: sessions are read from `.claude/projects`, and from `sessions` under `.codex` and `.grok` (`AgentAnalyser.ts:1596`, `1655`, `1767`)
+  + measured on the remote host: the workspace sits on a mount outside the user's home, which reaches it through a symlink
+  + so no ancestor of the workspace folder holds a session directory, at any depth
+  + measured on the remote host: the home's `.claude/projects` holds session files written within the last two days
+  + a home counted as found, so the `remote_home_not_found` state never showed (`AgentAnalyser.ts:397-403`)
+  + inferred, untested: `vscode.workspace.fs` lists and reads directories outside the workspace folder on its `vscode-remote` authority
+  + the log cannot settle that: every read so far was inside the folder
++ approach
+  + accept a candidate home only when it holds a session directory, not merely a vendor directory
+  + after the ancestors, try the host's conventional home roots on the workspace authority: each entry of `/home` and `/Users`, then `/root`
+  + prefer the candidate whose `.claude/projects` holds a directory named after this workspace folder or a folder inside it
+    + Claude Code names each project directory after the session's working directory, with `/` replaced by `-`
+    + that name records the real path, so match by trailing segments as [[symlinked-session-binding]] does
+  + when several candidates qualify and none names the workspace, take the one with the newest session directory
+  + when none qualifies, the existing `remote_home_not_found` state shows
+  + follows PATTERNS.md > "Empty states": fix the error path before the presentation
+  + a setting naming the remote home stays a fallback only; its name is permanent and needs operator sign-off first
+  + if the first task shows the remote file system refuses reads outside the folder, [[remote-host-placement]] becomes the route
++ [X] confirm in a Remote-SSH window that a directory outside the workspace folder can be listed and read
+  + measured 2026-10-13: `no ancestor qualified, 4 conventional candidate(s) tried across 1 readable root(s), 1 qualified`, then the scan read from the home it chose
+  + so `vscode.workspace.fs` lists and reads outside the folder on its `vscode-remote` authority, and the inference in the background holds
++ [X] require a session directory before accepting a candidate home
+  + `hasSessionDir` in `AgentAnalyser.ts` stats `.claude/projects`, `.codex/sessions` and `.grok/sessions`; a bare vendor directory no longer qualifies
++ [X] search the conventional home roots when no ancestor qualifies
+  + `conventionalHomeRootCandidates` lists `/home` and `/Users` on the folder's authority, capped per root, then adds `/root`; an unreadable root is skipped
++ [X] rank qualifying candidates by a project directory naming the workspace, then by newest session
+  + `bestAgentHomeCandidate` in `lib/agenthomeops.ts`; the newest-session test reads each session directory's own mtime, not the files inside it
++ [X] log the candidates tried and the home chosen at info level, with no session content
+  + `remote agent home search: ...` lines from `resolveVendorHome`, telling roots that could not be listed from roots that held nothing
++ [X] cover the settings-only directory, a home outside the ancestors, several homes and no home with Jest tests
+  + `AgentAnalyser vendor home resolution` in `AgentAnalyser.test.ts`, plus `agenthomeops.test.ts`
++ [X] verify in a Remote-SSH window that the scan log counts sessions and a running agent's session appears on its story card
+  + this is also the one open task on [[remote-agent-activity]]
+  + measured 2026-10-13: the first scan read `831 session(s) (831 read, 0 skipped)` in about 19s to 24s, with no warning or error
+  + 16 of 19 story cards drew sessions, 11 of them live, where every card had read "No agent activity in 30 days"
+  + the first sessions reached a card about 2s after the viewer opened; later scans re-read one session in about 2s
++ [X] update the README's Agent activity section to say a remote window reads the workspace host's sessions
+  + the feature bullet and the `## Agent activity` section of `README.md`
++ [X] bump the patch version
+  + 0.4.7, one bump for this batch of stories
+
+
+### Group display lists the lanes the board shows [](?id=group-display-follows-group-by)
+
+A kanban view grouped by anything other than status draws the right lanes, but its Group display row in the view settings drawer still lists the status columns Untagged, Doing, Code Review, Testing and Done. With Group by set to First Level Folder the board shows one lane per folder, so those lanes cannot be toggled or reordered from the drawer.
+
++ background
+  + measured in code: the row renders `mergeSavedGroupDisplay(saved, natural)` (`SettingsViewDrawer.tsx:148-204`)
+  + measured in code: `natural` comes from `deriveNaturalColumnOrder(notes_within_parent_context)` with no axis (`useViewToolbar.ts:138`)
+  + so it takes the default `axis = 'status'` (`noteops.ts:510`) whatever the view groups by
+  + measured in code: the board already resolves the live axis (`KanbanView.tsx:22-29`, `LineView.tsx:76-80`)
+  + measured in code: the board already applies `groupDisplay` order and hidden lanes on any axis (`LineView.tsx:88-98`)
+  + measured in code: `GenericViewToolbar.tsx:119-127` already computes the resolved key and passes it to the drawer as `groupByResolvedKey`
+  + so only the drawer's list is wrong; the fix needs no new plumbing
+  + measured in code: `groupDisplay` is one unkeyed `{value, shown}` array (`settings.ts:86`), not scoped by axis
+  + measured in code: `mergeSavedGroupDisplay` unions and never prunes (`noteops.ts:526-531`)
+  + inferred: entries saved under one axis would linger as inert chips after a switch to another
+  + the toggle shipped in "Toggle lanes on and off in Group display" (`done.md`), whose decisions cover only the status axis
++ approach
+  + derive the row's natural list on the same axis the board uses, from `groupByResolvedKey`
+  + with no notes, or grouped by status, the row lists the default kanban columns exactly as today
+  + when the viewed files produce other lanes, such as folder names or extra status values, the row lists those
+  + saved order and shown flags apply to the lanes the active axis produces
+  + saved entries that the active axis does not produce stay stored but are not listed
+  + this keeps the persisted shape of `groupDisplay` unchanged; scoping it by axis would need operator sign-off
++ [X] pass the resolved group-by axis into the drawer's natural column order
+  + `resolveLiveGroupByAxis` in `useViewToolbar.ts` mirrors the toolbar's `group_by_resolved_key`, fed to `deriveNaturalColumnOrder`
++ [X] list only the active axis's lanes in Group display, with saved order and shown flags applied
+  + `groupDisplayLanes` in `SettingsViewDrawer.tsx`; off the status axis, the untouched contributed default is ignored, and stored entries for other lanes are kept and written back
++ [X] cover status, first level folder and empty-notes cases with Jest tests in `useViewToolbar.test.ts` and `SettingsViewDrawer.test.tsx`
++ [X] extend `view-settings-drawer.spec.ts` to group a kanban view by first level folder
++ [X] in that spec, assert that the row lists the folder lanes and that hiding one removes it from the board
+  + test "grouping a kanban board by first level folder lists the folder lanes in Group display, and hiding one removes it from the board"
++ decision: each stored entry carries an optional `axis`, so every axis keeps its own order and hidden flags
+  + an entry with no `axis` is a status entry, so the contributed default and older lists read unchanged
+  + found in use: one shared list mixed folder and status entries, so a status board listed and drew folder lanes
++ [X] tag stored entries with their axis, an absent `axis` reading as status
+  + `groupDisplayForAxis` and `replaceGroupDisplayForAxis` in `noteops.ts`; `axis` added to both `GroupDisplayEntry` mirrors
++ [X] list and write only the active axis's entries in Group display, on the status axis too
+  + `groupDisplayLanes` in `SettingsViewDrawer.tsx` reads `groupDisplayForAxis`; `handle_group_display_change` in `useViewToolbar.ts` writes `replaceGroupDisplayForAxis`
+  + with no grouped view rendered, the row reads and writes the status axis, the kanban node's own
++ [X] draw only the active axis's lanes on the board, so a folder entry never becomes a status lane
+  + `LineView.tsx` takes order and hidden lanes from `groupDisplayForAxis(groupDisplay, group_field)`
++ [X] accept the optional `axis` in the `groupDisplay` schema and the extension's settings sanitiser
+  + `axis` added to the item schema in `package.json`; `settings.ts` passes entries through whole, covered by `settings.test.ts`
++ [X] cover a switch between a status board and a folder-grouped saved type in Jest and Playwright
+  + Jest: `SettingsViewDrawer.test.tsx`, `useViewToolbar.test.ts`, `LineView.test.tsx`; Playwright: the first level folder test in `view-settings-drawer.spec.ts` hides a lane on each axis and switches back and forth
++ [X] bump the patch version
+  + 0.4.7, one bump for this batch of stories
+
+
+### Show the board is loading until the first scan lands [](?id=folder-scan-loading-state)
+
+Opening the viewer on a large folder paints an empty kanban board, every column at 0 and the breadcrumb at `(0 in 0 files)`, with no sign that anything is happening. Cards appear only when discovery finishes, about 30 seconds later in a Remote-SSH window, so the first impression is a board with no tickets.
+
++ background
+  + measured in code: the only loading signal is `pendingChange` with key `folderDiscovery`, raised after discovery returns (`PanelSession.ts:1033`)
+  + nothing therefore covers the enumeration itself, which is where the wait is
+  + measured in code: `(0 in 0 files)` is one render for "still scanning" and "genuinely empty" (`BreadcrumbTrail.tsx:60-68`)
+  + measured in code: the webview restores `viewStates` at mount but starts with no docs (`ExtensionReceiver.tsx:50-51`)
+  + so the breadcrumb path renders at once while the board stays empty
+  + [[latest-folder-scan-wins]] is a race between overlapping scans; this story is the missing state, not the race
++ approach
+  + raise a scanning state when discovery starts, before `findFiles` or the directory walk
+  + clear it only when the first aggregate payload lands
+  + while scanning, the board shows a status line in place of empty columns
+  + while scanning, the breadcrumb count reads as scanning rather than `(0 in 0 files)`
+  + an empty board after a finished scan says the include pattern matched nothing, and names the pattern
+  + deviates from PATTERNS.md > "Telling the user something is loading": a webview has no route segment
+  + it still keeps `role="status"`, `aria-live="polite"`, `aria-busy` and a translated message
++ [X] send a scanning signal from the start of folder discovery, on the walk and `findFiles` paths alike
+  + `pendingChange` `folderDiscovery` raised as the first statement of `discoverFolderDocs`, read directly as `discovery_scanning` in `useVscodeMessages.ts`
++ [X] render the scanning state on the board and in the breadcrumb count, with l10n strings
+  + `EmptyStoriesOverlay` scanning mode (`role="status"`, `aria-live="polite"`, `aria-busy`) while no card has landed; breadcrumb reads `(scanning…)` only where it would read `(0 in 0 files)`
+  + the signal clears on every exit from `discoverFolderDocs`, a thrown enumeration or load completion included
+  + fixed on the way: the webview now reads the `include_filter` and `exclude_filter` wire fields the extension sends, so the no-match message names the pattern in use
++ [X] distinguish a finished empty scan from a scan in progress
+  + `resolveFolderStatus` in `GenericView.tsx` returns `scanning`, `no_match` (names the include pattern) or `no_stories`; `EmptyStoriesOverlay` renders each
++ [X] cover the message order and the breadcrumb label with Jest tests
+  + `notethinkEditor.test.ts` (signal pairs, failure paths), `BreadcrumbTrail.test.tsx`, `EmptyStoriesOverlay.test.tsx`, `GenericView.test.tsx`, `useVscodeMessages.test.ts`
++ [X] add a Playwright spec that holds discovery open, asserts the scanning state, then asserts the cards
+  + `playwright/specs/folder-scan-loading-state.spec.ts`, including a doc streaming in before discovery settles
++ decision: the loading panel stays up until a card is visible, then cards stream in under a slim progress line
+  + found in use: a file streamed in early with every note in a hidden lane, so the panel dropped and empty lane headings showed
++ [X] keep the loading panel up while scanning until a card is visible, not merely loaded
+  + `hasVisibleCard` in `noteops.ts` feeds `resolveFolderStatus` in `GenericView.tsx`; while the panel shows, the board is not rendered, so no empty lane headings appear
++ [X] report discovery progress: directories searched and story files found during the walk, then files read of the total
+  + `discoveryProgress` message, throttled by `createThrottledProgressSender` in `discoveryops.ts`, sent from `discoverFolderDocs` in `PanelSession.ts`
++ [X] show that progress in the loading panel and in a slim line above the board once cards show, with l10n strings
+  + `discoveryProgressText.ts`, `DiscoveryProgressLine.tsx` and `EmptyStoriesOverlay.tsx`; three strings in every l10n bundle
++ [X] cover the progress messages and the visible-card rule with Jest tests and the Playwright spec
+  + `discoveryops.test.ts`, `notethinkEditor.test.ts`, `useVscodeMessages.test.ts`, `GenericView.test.tsx`, `noteops.test.ts`; `folder-scan-loading-state.spec.ts` asserts no lane while scanning, the hidden-lane case and both progress surfaces
++ decision: progress has one home, the breadcrumb's file count tab and the spinner beside it; the board area shows only a small centred note until a card is visible
+  + found in use: a second spinner and a second count line under the toolbar repeated the breadcrumb's, while the breadcrumb spinner itself did not show during the scan
+  + found in use: opening the viewer showed a blank panel until the first data arrived
++ [X] show discovery progress in the breadcrumb's file count tab, with its spinner up for the whole run
+  + the spinner dropped after 10s: `usePendingWork`'s safety net clears a mark with no clear, and a long walk outlived it
+  + each `discoveryProgress` tick now re-marks `folderDiscovery` in `useVscodeMessages.ts`, as `useAgentScanPending` does for the agent scan
+  + `BreadcrumbTrail.tsx` reads `({0} files found…)` while walking, fills the total into `(X in Y of M files)` while loading, and puts the folders searched in the tooltip
++ [X] drop the slim progress line, and the board note's own spinner and counts
+  + `DiscoveryProgressLine` and `discoveryProgressText` deleted; `EmptyStoriesOverlay` scanning mode renders `LoadingNote` alone
++ [X] show one small note, centred in the board area, from the moment the viewer opens until a card is visible
+  + `LoadingNote.tsx`, used for scanning in `EmptyStoriesOverlay`, before any doc in `NoteRenderer.tsx`, and before the first aggregate in `GenericView.tsx`, never over a visible card
+  + `getHtmlForWebview` in `notethinkEditor.ts` seeds the same note into the page, so it shows before the script runs
++ [X] cover the header progress, the note and the first open with Jest tests and the Playwright spec
+  + `BreadcrumbTrail.test.tsx`, `useVscodeMessages.test.ts` (real `usePendingWork` past the 10s safety net), `LoadingNote.test.tsx`, `GenericView.test.tsx`, `NoteRenderer.test.tsx`, `notethinkEditor.test.ts`; `folder-scan-loading-state.spec.ts` checks the header spinner mid-scan and the centred note before any message
++ [X] bump the patch version
+  + 0.4.7, one bump for this batch of stories
+
+
+### Fast folder discovery in remote workspaces [](?id=remote-folder-discovery)
+
+In a Remote-SSH window, folder discovery on a workspace of about 2200 markdown files takes about 30 seconds.
+
++ background
+  + measured in code: a workspace folder in a Remote-SSH window has the `vscode-remote` scheme
+  + so `discoverFolderDocs` skips `findFiles` for the `readDirectory` walk (`PanelSession.ts:1006-1012`)
+  + measured in code: the walk awaits one `readDirectory` per directory in series, up to `MAX_WALK_ENTRIES`
+  + each of those calls is a round trip to the remote host
+  + measured in the NoteThink log, 2026-10-08: the walk descended into a Python `.venv` `site-packages` tree
+  + `DEFAULT_EXCLUDE_FILTER` (`constants.ts:20`) prunes `node_modules` but not `.venv` or `__pycache__`
+  + inferred, untested: `findFiles` honours a `RelativePattern` on `vscode-remote` folders
+  + the reasoning: Remote-SSH registers a search provider that runs beside the files; the walk exists for schemes with none
+  + discovery logs its counts only at debug level, so its timing cannot be read from a normal log
++ approach
+  + use `findFiles` for `file` and `vscode-remote` folders
+  + keep the walk for schemes with no search provider
+  + run the walk with bounded concurrency instead of one directory at a time
++ [X] log discovery's method, discovered count and elapsed time at info level
+  + `formatDiscoveryLogLine` in `lib/discoveryops.ts`, written once per `discoverFolderDocs` run; no paths, covered by `discoveryops.test.ts`
++ [X] measure discovery time in a Remote-SSH window before the change
+  + NoteThink log, 2026-10-13: `discovery via walk (scheme vscode-remote): found 24 docs in 33959ms, walked 4862 directories`
++ [X] use `findFiles` for `vscode-remote` workspace folders
+  + `resolveDiscoveryMethod` in `lib/discoveryops.ts`; a `findFiles` that throws on a non-`file` scheme logs a warning and falls back to the walk
+  + measured in a Remote-SSH window: `findFiles` honours the pattern on a `vscode-remote` folder, so the inference in the background holds
+  + measured: `findFiles` follows a symlinked directory and the walk does not, so a remote folder now lists the same files a local one does
++ [X] run the fallback walk with bounded concurrency
+  + `drainWorklist` in `lib/discoveryops.ts`, eight directories in flight from `discoverViaReadDirectoryWalk`; the entry cap and pruning are unchanged
+  + a walk whose folder has been left stops reading and posts no further progress
++ [X] prune `.venv` and `__pycache__` in `DEFAULT_EXCLUDE_FILTER`
+  + the default in both `constants.ts` files and the `excludeFilter` setting default in `package.json`; a customised exclude setting is untouched
++ [X] cover the scheme dispatch and the concurrent walk with Jest tests
+  + `discoveryops.test.ts` (`resolveDiscoveryMethod`, `drainWorklist`) and `notethinkEditor.test.ts` (`folder mode on a vscode-remote workspace scheme`)
++ [X] measure again in the same window and record both timings here
+  + measured 2026-10-13 in one scripted Remote-SSH window, same workspace and include filter
+  + before: `discovery via walk (scheme vscode-remote): found 24 docs in 34606ms, walked 4871 directories`
+  + after: `discovery via findFiles (scheme vscode-remote): found 26 docs`, in 131ms, 993ms, 134ms, 1455ms and 141ms over five loads
+  + the two extra files sit under a symlinked project directory, which the walk never entered
++ [X] bump the patch version
+  + 0.4.7, one bump for this batch of stories
+
+
+### Bind sessions recorded under a symlinked path [](?id=symlinked-session-binding)
+
+A workspace opened through a symlink never matches agent sessions recorded under the real path, so their activity does not reach its story cards.
+
++ background
+  + measured in code: `repositoryRootFor` and `workspaceRelative` match a session `cwd` to workspace folders by string prefix (`AgentAnalyser.ts:1251-1267`)
+  + nothing in `client/extension/src` resolves a symlink
+  + Claude Code records the real path, both as `cwd` and in its project directory name
+  + an unmatched session still renders, as an unbound card (`useAgentNoteModel.ts:63`)
+  + so its activity is lost from its story rather than hidden
+  + the web worker host has no `realpath`: `vscode.workspace.fs.stat` reports a symbolic link but not its target
++ approach, inferred and confirmed by the first task
+  + when the prefix test fails, map a session `cwd` onto a workspace folder by the folder's trailing path segments
+  + confirm the mapping by finding a file the session touched at the mapped path, so a lookalike tree does not bind
++ [X] confirm the approach against a workspace opened at a symlinked alias, or replace it with a better identity test
+  + confirmed: Claude Code, Codex and Grok all record the real path as the session `cwd`, and touched files resolve under it, so the trailing-segment map plus a touched-file probe holds
++ [X] bind sessions whose `cwd` reaches a workspace folder through a symlink
+  + `lib/agentpathaliasops.ts` picks the alias candidate; `AgentAnalyser.resolveAliasMapping` confirms it by stat-ing a touched file and memoizes the result
++ [X] cover alias, real-path and lookalike-tree cases with Jest tests
+  + `AgentAnalyser symlinked session binding` in `AgentAnalyser.test.ts`, plus `agentpathaliasops.test.ts`
++ found in a Remote-SSH window, 2026-10-13: a multi-project workspace opened through its alias bound one card, against 16 at the real path
+  + measured in code: the alias match compared the session `cwd` itself against the folder, so a `cwd` inside the aliased folder shared no trailing segment
+  + touched paths were remapped from the `cwd`, so an edit elsewhere in the workspace would not bind either
++ [X] bind a session whose `cwd` is a folder inside the aliased workspace folder
+  + `bestAliasMapping` in `lib/agentpathaliasops.ts` tries the `cwd` and each of its ancestors, and returns the real root with the alias root it maps to
++ [X] bind a touched file that sits inside the aliased workspace but outside the session `cwd`
+  + `foldBatch` remaps every touched path through that real root, not through the `cwd`; both cases covered in `AgentAnalyser symlinked session binding`
++ [X] verify in a Remote-SSH window opened through the alias that the cards match the real-path window
+  + measured 2026-10-13 on one build: 17 of 20 cards drew sessions and 29 session rows showed, at the alias and at the real path alike
++ [X] bump the patch version
+  + 0.4.7, one bump for this batch of stories
+
+
+### Read agent activity from the workspace's host [](?id=remote-agent-activity)
+
+In a Remote-SSH window every story card says "No agent activity in 30 days", even while agents are working in that workspace. The agents run on the remote host and write their transcripts to its home directory, but NoteThink reads the home directory of the machine running the VS Code window.
+
++ background
+  + measured: `package.json:45` declares only a `browser` entry, so the extension runs in the web worker extension host
+  + measured: in a Remote-SSH window its log appears only on the local side, so that host runs locally
+  + measured in code: `agenthomeops.ts:39-47` derives `~/.claude`, `~/.codex` and `~/.grok` from `context.logUri`
+  + those homes are then read as `vscode.Uri.file` paths, so from the local disk
+  + inferred: the Grok cards seen in that window came from the local machine's own sessions
+  + measured in code: "No agent activity in 30 days" renders whenever a card has no sessions (`AgentActivityBanner.tsx:50-52`)
+  + so a home that is missing or wrong looks identical to a quiet one
+  + measured in the NoteThink log, 2026-10-08: four `agent analyser worker timed out` errors during the same remote load
+  + inferred, untested: `vscode.workspace.fs` reads any path under the workspace folder's `vscode-remote` authority, not only inside the folder
++ approach
+  + in a remote window (`vscode.env.remoteName` set), build vendor home URIs on the workspace folder's scheme and authority
+  + find the remote home by probing the workspace folder's ancestors for `.claude`, `.codex` or `.grok`
+  + read only the workspace host's homes in a remote window, since local sessions belong to another checkout
+  + when no home is found, say so on the cards instead of "No agent activity in 30 days"
+  + follows PATTERNS.md > "Empty states": fix the error path before the presentation
+  + a setting naming the remote home is a fallback only; its name is permanent and needs operator sign-off first
+  + no PATTERNS.md entry for reading a remote host's files from a web extension; new pattern
++ [X] resolve vendor homes on the workspace folder's authority in a remote window
+  + every home read takes a `vscode.Uri` built with `Uri.joinPath`, so the folder's scheme and authority carry through; the local `logUri` home is ignored in a remote window
++ [X] probe the folder's ancestors for the remote home, and log the home used at info level
+  + `findRemoteAgentHomeAncestor` in `AgentAnalyser.ts`, bounded at 8 levels and the filesystem root; logs `resolved agent vendor home: ...`
++ [X] show an unavailable state naming the reason when no agent home is found
+  + the analyser posts a transient `reason_code` (`remote_home_not_found`, `no_local_access`); `AgentActivityBanner.tsx` renders translated text per code, covered by `AgentActivityBanner.test.tsx`
++ [X] find why the agent analyser worker timed out during the remote load, and fix it
+  + cause, read from the code against the log: concurrent `computeLineDiffs` round trips shared a pooled worker, and each call overwrote the worker's `onmessage`, so the earlier request waited out its timeout
+  + fixed: `AgentAnalyserWorkerPool` keeps a per-worker map of pending requests keyed by `request_id`; regression test in `AgentAnalyserWorkerPool.test.ts`
++ [X] cover home resolution for local, remote and not-found cases with Jest tests
+  + `AgentAnalyser vendor home resolution` in `AgentAnalyser.test.ts`
++ [X] verify in a Remote-SSH window that a running agent's session appears on its story card
+  + needs [[symlinked-session-binding]] where that window opens the workspace through a symlink
+  + measured 2026-10-13 once [[remote-agent-home-lookup]] found the home: 17 of 20 cards drew sessions, 13 of the 29 session rows live
+  + the same counts showed with the workspace opened through a symlink
++ [X] bump the patch version
+  + 0.4.7, one bump for this batch of stories
+
+
+### Decide where the extension host runs in remote windows [](?id=remote-host-placement)
+
+NoteThink ships only a web worker bundle, so in a Remote-SSH window every file read crosses the connection. A Node `main` entry would let VS Code run it on the remote host, beside the files and the agents' home directories.
+
++ background
+  + measured: `package.json:45` declares `browser` with no `main` and no `extensionKind`
+  + the web worker build is deliberate: it is the only host on vscode.dev, and `agentgitops.ts:11` relies on it
+  + measured: a copy installed on the remote server is never activated there
+  + inferred, to confirm against VS Code's extension host documentation: with a `main` entry, a desktop window prefers the Node host locally as well as remotely
++ go/no-go criteria, all three must hold
+  + a measured Remote-SSH window still falls short after [[remote-folder-discovery]] and [[remote-agent-activity]]
+  + one source tree builds both bundles, with no per-host fork of `AgentAnalyser` or `PanelSession`
+  + vscode.dev keeps working from the web worker bundle
++ [X] measure the remote experience against these criteria once the two stories above land
+  + measured 2026-10-13 in a scripted Remote-SSH window on a local network: 26 story files, 831 sessions in the 30-day window
+  + folder discovery took 0.1s to 1.5s, and the first agent session reached a card about 2s after the viewer opened
+  + the first full agent scan took 19s to 24s, reading 1.19 GB across the connection
+  + each later scan took about 2s and re-read one session
+  + no warning or error reached the log across seven loads
++ [X] record the go or no-go decision here, before any implementation task is filed
+  + no-go: the first criterion fails, since the measured window does not fall short
+  + the second and third criteria were not assessed, as all three must hold
+  + reopen if the first scan proves slow on a slower link, since it carries the whole 30-day window across the connection

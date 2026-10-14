@@ -1,13 +1,12 @@
 import Debug from 'debug';
 import React, { type ReactElement, Profiler, useMemo } from "react";
-import { withinNoteHeadlineOrBodyUpTo } from "../../lib/noteops";
+import { groupDisplayForAxis, withinNoteHeadlineOrBodyUpTo } from "../../lib/noteops";
 import { axisField, isAxisWritable, type Axis } from "../../lib/axisops";
 import { axisForGroupByKey, resolveGroupByAxisKey } from "../../lib/groupbyops";
 import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
-import type { GroupDisplayEntry } from "../../types/Messages";
 import GenericNote from "../notes/GenericNote";
 import { filterHiddenColumns, useKanbanColumns } from "./kanban/useKanbanColumns";
 import { useProjectedNotes } from "./kanban/useProjectedNotes";
@@ -17,9 +16,6 @@ import view_specific_styles from "../ViewRenderer.module.scss";
 
 declare const NOTETHINK_DEV: boolean | undefined;
 const debug = Debug("nodejs:notethink-views:LineView");
-
-// one frozen empty list, so a view with no saved display still hands useMemo a stable identity
-const EMPTY_GROUP_DISPLAY: GroupDisplayEntry[] = [];
 
 /**
  * LineView, the single-axis card-lane view. It groups the notes into lanes on one categorical axis
@@ -90,7 +86,11 @@ export default function LineView(props: LineViewProps): ReactElement {
     };
     // holds the dropped layout client-side until the document round-trip lands
     const { notes_to_render, applyOptimisticMove, is_projecting } = useProjectedNotes(props.notes_within_parent_context);
-    const group_display = display_options.settings?.groupDisplay ?? EMPTY_GROUP_DISPLAY;
+    // only this axis's own stored entries apply; an entry saved on another axis is never read here
+    const group_display = useMemo(
+        () => groupDisplayForAxis(display_options.settings?.groupDisplay, group_field),
+        [display_options.settings?.groupDisplay, group_field],
+    );
     const order = group_display.length > 0 ? group_display.map(entry => entry.value) : undefined;
     const hidden_values = useMemo(
         () => new Set(group_display.filter(entry => entry.shown === false).map(entry => entry.value)),

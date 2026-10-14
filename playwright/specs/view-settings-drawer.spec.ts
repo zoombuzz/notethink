@@ -27,6 +27,11 @@ async function laneValues(page: Page): Promise<string[]> {
     return page.locator('[data-flip-column-id]').evaluateAll(els => els.map(el => el.getAttribute('data-flip-column-id') ?? ''));
 }
 
+/** the Group display row's chip values, in the order the row lists them (read from the testid, not the label text) */
+async function groupDisplayChipValues(page: Page): Promise<string[]> {
+    return page.getByTestId(/^group-display-chip-/).evaluateAll(els => els.map(el => (el.getAttribute('data-testid') ?? '').replace('group-display-chip-', '')));
+}
+
 /** put a value at the workspace scope and re-publish the cascade, the way a reopened window arrives already diverged */
 async function seedWorkspaceSetting(page: Page, key: string, value: unknown): Promise<void> {
     await page.evaluate(([setting_key, setting_value]) => {
@@ -164,6 +169,47 @@ test.describe('View settings drawer', () => {
         }).toBe(false);
         // the chip itself survives, still reorderable, just dimmed
         await expect(page.getByTestId('group-display-chip-doing')).toBeVisible();
+    });
+
+    /*
+     * Grouping the board by first level folder lanes it by project rather than status, and Group display
+     * has to follow that switch: it lists the folder lanes the board is actually drawing, not the status
+     * chips a different axis left behind, and hiding a folder lane drops it from the board itself, the
+     * same contract the status case above exercises. Switching back then proves the two axes' stored
+     * displays never overwrite one another: the status hide from before the switch is still in effect,
+     * untouched by what the folder axis did meanwhile.
+     */
+    test('grouping a kanban board by first level folder lists the folder lanes in Group display, and hiding one removes it from the board', async ({ page }) => {
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'settings-drawer-board.md', doc_path: '/workspace/alpha/todo.md', relative_path: 'alpha/todo.md' },
+            { fixture: 'settings-board-b.md', doc_path: '/workspace/beta/todo.md', relative_path: 'beta/todo.md' },
+        ], { workspace_root: '/workspace' });
+        await selectFolderMode(page);
+        await page.waitForSelector('[data-folder-mode="true"]');
+        await showKanbanSettings(page);
+        await expect.poll(async () => laneValues(page)).toEqual(['doing', 'done']);
+
+        // hide a status lane before switching axes, so switching away and back can prove it survives
+        await page.getByTestId('group-display-shown-doing').click();
+        await expect.poll(async () => laneValues(page)).toEqual(['done']);
+
+        await page.getByTestId('group-by-selector').selectOption('nt_first_level_folder');
+
+        // the board now lanes by folder, and the row lists exactly those lanes, not the status ones
+        await expect.poll(async () => laneValues(page)).toEqual(['alpha', 'beta']);
+        await expect.poll(async () => groupDisplayChipValues(page)).toEqual(['alpha', 'beta', 'untagged']);
+
+        await page.getByTestId('group-display-shown-alpha').click();
+
+        await expect.poll(async () => laneValues(page)).toEqual(['beta']);
+        // the chip itself survives, still reorderable, just dimmed - same contract as the status case above
+        await expect(page.getByTestId('group-display-chip-alpha')).toBeVisible();
+
+        await page.getByTestId('group-by-selector').selectOption('auto');
+
+        // the status axis is exactly as left: 'doing' is still hidden, and the folder axis's hide of 'alpha' never touched it
+        await expect.poll(async () => laneValues(page)).toEqual(['done']);
+        await expect.poll(async () => groupDisplayChipValues(page)).toEqual(['untagged', 'doing', 'code-review', 'testing', 'done']);
     });
 
     test('toggling a Global setting offers nothing, because it belongs to no view type', async ({ page }) => {

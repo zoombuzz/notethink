@@ -2,7 +2,7 @@ import Debug from "debug";
 import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } from "../types/NoteProps";
 import type { GroupDisplayEntry } from "../types/Messages";
 import { INTEGRATION_MODE_CURRENT_FILE } from "../types/IntegrationMode";
-import { ABSENT_VALUE_BUCKET, FIRST_LEVEL_FOLDER_KEY, axisField, categoricalLaneFor, projectNoteOntoAxis, type Axis } from "./axisops";
+import { ABSENT_VALUE_BUCKET, FIRST_LEVEL_FOLDER_KEY, KANBAN_AXIS_KEY, axisField, categoricalLaneFor, projectNoteOntoAxis, type Axis } from "./axisops";
 import { projectNameFromRelativePath } from "./originops";
 import { isVirtualNote } from "./virtualnoteops";
 
@@ -530,6 +530,26 @@ export function mergeSavedGroupDisplay(saved: GroupDisplayEntry[] | undefined, n
     return [...saved, ...appended];
 }
 
+/**
+ * The stored group-display entries that belong to one axis. An entry with no `axis` belongs to status,
+ * so a list saved before entries carried an axis, and the contributed default, read as the status
+ * display unchanged. Every other axis sees only the entries written while the board laned by it.
+ */
+export function groupDisplayForAxis(entries: GroupDisplayEntry[] | undefined, axis_key: string): GroupDisplayEntry[] {
+    return (entries ?? []).filter(entry => (entry.axis ?? KANBAN_AXIS_KEY) === axis_key);
+}
+
+/**
+ * The stored list with one axis's entries replaced by `next`, every other axis's entries kept as they
+ * were. Status entries are written without an `axis`, so the status display keeps the contributed
+ * default's shape; every other axis's entries carry their axis key.
+ */
+export function replaceGroupDisplayForAxis(entries: GroupDisplayEntry[] | undefined, axis_key: string, next: GroupDisplayEntry[]): GroupDisplayEntry[] {
+    const tagged = next.map(({ value, shown }) => (axis_key === KANBAN_AXIS_KEY ? { value, shown } : { value, shown, axis: axis_key }));
+    const others = (entries ?? []).filter(entry => (entry.axis ?? KANBAN_AXIS_KEY) !== axis_key);
+    return [...tagged, ...others];
+}
+
 /** `entries` with one lane's `shown` flipped, reading a missing flag as shown; an absent value changes nothing */
 export function toggleShownInDisplay(entries: GroupDisplayEntry[], value: string): GroupDisplayEntry[] {
     return entries.map(entry => (entry.value === value ? { ...entry, shown: entry.shown === false } : entry));
@@ -718,4 +738,23 @@ export function collisionNoteLocation(note: NoteProps): CollisionNoteLocation {
     const headline = stripHeadlineLinetags(note.headline_raw ?? '');
     const relative_path = note.origin?.relative_path ?? note.origin?.doc_path ?? '';
     return { headline, relative_path, line: collisionNoteLine(note) };
+}
+
+/**
+ * Whether at least one note in `notes` would actually render as a visible card. A document view has
+ * no lanes, so any note counts; a grouped view (line, kanban) hides a note whose lane on `axis_key`
+ * the group-display marks `shown: false`, so a doc that streamed in with every note in a hidden lane
+ * does not count until a visible lane holds one. Drives whether folder discovery's loading panel can
+ * give way to the board, rather than just whether any note has loaded.
+ */
+export function hasVisibleCard(notes: Array<NoteProps>, is_grouped_view: boolean, axis_key: string, group_display: GroupDisplayEntry[] | undefined): boolean {
+    if (notes.length === 0) { return false; }
+    if (!is_grouped_view) { return true; }
+    const hidden = new Set(
+        groupDisplayForAxis(group_display, axis_key)
+            .filter(entry => entry.shown === false)
+            .map(entry => entry.value),
+    );
+    if (hidden.size === 0) { return true; }
+    return notes.some(note => !hidden.has(kanbanColumnValue(note, axis_key)));
 }

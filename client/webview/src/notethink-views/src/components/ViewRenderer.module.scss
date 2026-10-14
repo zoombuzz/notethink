@@ -985,9 +985,15 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
-// positions EmptyStoriesOverlay against the rendered view rather than the page
+/*
+ * positions EmptyStoriesOverlay (and the loading note it draws while scanning) against the rendered
+ * view rather than the page. min-height is a floor, not a cap: with no board mounted yet there is no
+ * in-flow content to size this region from, so an absolute-positioned note would otherwise collapse
+ * to zero height; a board's own (taller) content overrides it exactly as it already did at 0.
+ */
 .viewContentRegion {
   position: relative;
+  min-height: calc(100vh - #{$toolbar_height});
 }
 
 /*

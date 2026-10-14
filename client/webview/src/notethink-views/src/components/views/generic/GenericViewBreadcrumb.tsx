@@ -48,6 +48,8 @@ export default function GenericViewBreadcrumb(component_props: GenericViewBreadc
             file_count={props.file_count}
             note_count={props.note_count}
             aggregate_total_discovered={props.aggregate_total_discovered}
+            discovery_scanning={props.discovery_scanning}
+            discovery_progress={props.discovery_progress}
             has_collisions={hasCollisions}
             onFolderClick={onFolderClick}
             onFileCountClick={onFileCountClick}

@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -286,6 +286,9 @@
                 },
                 "shown": {
                   "type": "boolean"
+                },
+                "axis": {
+                  "type": "string"
                 }
               }
             },
@@ -327,7 +330,7 @@
           "notethink.settings.files.excludeFilter": {
             "type": "string",
             "scope": "window",
-            "default": "**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**",
+            "default": "**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,.venv,__pycache__,vendored}/**",
             "description": "%config.settings.files.excludeFilter.description%"
           },
           "notethink.settings.files.maxNotesPerFile": {

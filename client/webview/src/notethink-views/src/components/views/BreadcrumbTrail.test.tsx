@@ -567,6 +567,74 @@ describe('BreadcrumbTrail', () => {
             expect(screen.getByTestId('breadcrumb-file-count-chevron')).toHaveAttribute('data-direction', 'up');
         });
 
+        it('shows "(scanning…)" instead of a count while discovery is still enumerating', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/dev/github.com/in_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/carbon'}
+                file_count={0}
+                note_count={0}
+                discovery_scanning={true}
+            />);
+            expect(screen.getByText('(scanning…)')).toBeInTheDocument();
+            expect(screen.queryByText(/in 0 files/)).not.toBeInTheDocument();
+        });
+
+        it('shows the real counts, not "(scanning…)", once a doc has streamed in mid-scan', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/dev/github.com/in_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/carbon'}
+                file_count={1}
+                note_count={3}
+                discovery_scanning={true}
+            />);
+            expect(screen.queryByText('(scanning…)')).not.toBeInTheDocument();
+            expect(screen.getByText('(3 in 1 files)')).toBeInTheDocument();
+        });
+
+        it('stops showing the scanning label once discovery_scanning clears', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/dev/github.com/in_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/carbon'}
+                file_count={17}
+                note_count={214}
+                discovery_scanning={false}
+            />);
+            expect(screen.queryByText('(scanning…)')).not.toBeInTheDocument();
+            expect(screen.getByText('(214 in 17 files)')).toBeInTheDocument();
+        });
+
+        it('announces scanning rather than a stale count in the Files tab aria-label', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/dev/github.com/in_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/carbon'}
+                file_count={0}
+                note_count={0}
+                discovery_scanning={true}
+            />);
+            expect(screen.getByTestId('breadcrumb-file-count')).toHaveAttribute('aria-label', 'Scanning for files - open the Files panel');
+        });
+
+        it('announces the real counts once a doc has streamed in mid-scan', () => {
+            const current = makeNote({ seq: 0 });
+            const workspace_root = '/home/dev/github.com/in_development';
+            render(<BreadcrumbTrail {...current}
+                workspace_root={workspace_root}
+                integration_path={workspace_root + '/carbon'}
+                file_count={1}
+                note_count={3}
+                discovery_scanning={true}
+            />);
+            expect(screen.getByTestId('breadcrumb-file-count')).toHaveAttribute('aria-label', '3 notes in 1 files - open the Files panel');
+        });
+
         it('does not render a count when file_count is undefined', () => {
             const current = makeNote({ seq: 0 });
             const workspace_root = '/home/dev/github.com/in_development';
@@ -575,6 +643,100 @@ describe('BreadcrumbTrail', () => {
                 integration_path={workspace_root + '/carbon'}
             />);
             expect(container.textContent).not.toMatch(/\(\d/);
+        });
+
+        describe('discoveryProgress label and tooltip', () => {
+            const workspace_root = '/home/dev/github.com/in_development';
+
+            it('shows a walking-phase variant naming files found so far, in place of "(scanning…)"', () => {
+                const current = makeNote({ seq: 0 });
+                render(<BreadcrumbTrail {...current}
+                    workspace_root={workspace_root}
+                    integration_path={workspace_root + '/carbon'}
+                    file_count={0}
+                    note_count={0}
+                    discovery_scanning={true}
+                    discovery_progress={{ phase: 'walking', dirs_walked: 42, files_found: 7 }}
+                />);
+                expect(screen.getByText('(7 files found…)')).toBeInTheDocument();
+                expect(screen.queryByText('(scanning…)')).not.toBeInTheDocument();
+            });
+
+            it('falls back to "(scanning…)" for a loading-phase tick that arrives before anything has streamed in', () => {
+                const current = makeNote({ seq: 0 });
+                render(<BreadcrumbTrail {...current}
+                    workspace_root={workspace_root}
+                    integration_path={workspace_root + '/carbon'}
+                    file_count={0}
+                    note_count={0}
+                    discovery_scanning={true}
+                    discovery_progress={{ phase: 'loading', files_loaded: 0, files_total: 50 }}
+                />);
+                expect(screen.getByText('(scanning…)')).toBeInTheDocument();
+            });
+
+            it('shows "(X in Y of M files)" from a loading-phase tick\'s total before the aggregate payload lands', () => {
+                const current = makeNote({ seq: 0 });
+                render(<BreadcrumbTrail {...current}
+                    workspace_root={workspace_root}
+                    integration_path={workspace_root + '/carbon'}
+                    file_count={2}
+                    note_count={5}
+                    discovery_progress={{ phase: 'loading', files_loaded: 2, files_total: 12 }}
+                />);
+                expect(screen.getByText('(5 in 2 of 12 files)')).toBeInTheDocument();
+            });
+
+            it('prefers the aggregate total over a loading-phase tick once the aggregate has landed', () => {
+                const current = makeNote({ seq: 0 });
+                render(<BreadcrumbTrail {...current}
+                    workspace_root={workspace_root}
+                    integration_path={workspace_root + '/carbon'}
+                    file_count={17}
+                    note_count={214}
+                    aggregate_total_discovered={615}
+                    discovery_progress={{ phase: 'loading', files_loaded: 17, files_total: 200 }}
+                />);
+                expect(screen.getByText('(214 in 17 of 615 files)')).toBeInTheDocument();
+            });
+
+            it('falls back to today\'s labels when no progress tick has arrived', () => {
+                const current = makeNote({ seq: 0 });
+                render(<BreadcrumbTrail {...current}
+                    workspace_root={workspace_root}
+                    integration_path={workspace_root + '/carbon'}
+                    file_count={17}
+                    note_count={214}
+                />);
+                expect(screen.getByText('(214 in 17 files)')).toBeInTheDocument();
+            });
+
+            it('puts the folders-searched count in the tab tooltip, not the label', () => {
+                const current = makeNote({ seq: 0 });
+                render(<BreadcrumbTrail {...current}
+                    workspace_root={workspace_root}
+                    integration_path={workspace_root + '/carbon'}
+                    file_count={0}
+                    note_count={0}
+                    discovery_scanning={true}
+                    discovery_progress={{ phase: 'walking', dirs_walked: 42, files_found: 7 }}
+                />);
+                const tab = screen.getByTestId('breadcrumb-file-count');
+                expect(tab).toHaveAttribute('title', 'Searched 42 folders - File settings');
+                expect(tab).not.toHaveTextContent('42');
+            });
+
+            it('falls back to the plain "File settings" tooltip once the loading phase drops dirs_walked', () => {
+                const current = makeNote({ seq: 0 });
+                render(<BreadcrumbTrail {...current}
+                    workspace_root={workspace_root}
+                    integration_path={workspace_root + '/carbon'}
+                    file_count={2}
+                    note_count={5}
+                    discovery_progress={{ phase: 'loading', files_loaded: 2, files_total: 12 }}
+                />);
+                expect(screen.getByTestId('breadcrumb-file-count')).toHaveAttribute('title', 'File settings');
+            });
         });
     });
 

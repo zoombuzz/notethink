@@ -1660,7 +1660,8 @@ describe('GenericView document-level strip', () => {
         const root = rootWithFrontMatter();
         render(
             <Suspense fallback={<div>loading</div>}>
-                <GenericView {...makeViewProps({ type: 'document', notes: [root], display_options: { integration_mode: 'folder' } })} />
+                {/* aggregate_total_discovered settled, so the loading note doesn't suppress the view under test here */}
+                <GenericView {...makeViewProps({ type: 'document', notes: [root], aggregate_total_discovered: 1, display_options: { integration_mode: 'folder' } })} />
             </Suspense>
         );
         await waitFor(() => expect(mockDocViewRender).toHaveBeenCalled());
@@ -1708,19 +1709,99 @@ describe('GenericView empty stories overlay', () => {
         expect(screen.getByTestId('empty-stories-overlay')).toHaveTextContent('No stories found');
     });
 
-    it('does not show the note while discovery is still pending, even with zero stories so far', async () => {
+    it('does not show the "no stories" note while discovery is still scanning, even with zero stories so far', async () => {
         render(
-            withPending(true, (
+            withPending(false, (
                 <Suspense fallback={<div>loading</div>}>
-                    <GenericView {...makeViewProps(FOLDER_ZERO_STORIES)} />
+                    <GenericView {...makeViewProps({ ...FOLDER_ZERO_STORIES, discovery_scanning: true })} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(screen.getByTestId('loading-note')).toBeInTheDocument());
+        expect(screen.queryByText('No stories found')).not.toBeInTheDocument();
+    });
+
+    it('shows the loading note in place of the board while discovery_scanning is set, with no spinner, so no lane headings show', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({ ...FOLDER_ZERO_STORIES, discovery_scanning: true })} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(screen.getByTestId('loading-note')).toHaveTextContent('NoteThink is loading…'));
+        expect(screen.queryByTestId('kanban-view')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('pending-work-spinner')).not.toBeInTheDocument();
+        expect(mockKanbanViewRender).not.toHaveBeenCalled();
+    });
+
+    it('shows the loading note in a non-kanban view too', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({ ...FOLDER_ZERO_STORIES, type: 'document', discovery_scanning: true })} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(screen.getByTestId('loading-note')).toHaveTextContent('NoteThink is loading…'));
+        expect(mockDocViewRender).not.toHaveBeenCalled();
+    });
+
+    it('hides the loading note once a card is visible, even while discovery_scanning is still set', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({
+                        ...FOLDER_ZERO_STORIES,
+                        discovery_scanning: true,
+                        note_count: 3,
+                        aggregate_total_discovered: undefined,
+                        notes: [makeNote({ seq: 1, headline_raw: '### Visible card' })],
+                    })} />
                 </Suspense>
             )),
         );
         await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
-        expect(screen.queryByTestId('empty-stories-overlay')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('loading-note')).not.toBeInTheDocument();
+        expect(screen.getByTestId('kanban-view')).toBeInTheDocument();
     });
 
-    it('does not show the note before the first aggregate lands, while the host is still searching for files', async () => {
+    it('keeps the loading note up while every streamed-in note sits in a lane the group-display hides', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({
+                        ...FOLDER_ZERO_STORIES,
+                        discovery_scanning: true,
+                        note_count: 1,
+                        aggregate_total_discovered: undefined,
+                        notes: [makeNote({
+                            seq: 1,
+                            headline_raw: '### Hidden lane card',
+                            linetags: { 'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 } },
+                        })],
+                        display_options: { integration_mode: 'folder', integration_path: '/workspace/project', settings: { groupDisplay: [{ value: 'doing', shown: false }] } },
+                    })} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(screen.getByTestId('loading-note')).toHaveTextContent('NoteThink is loading…'));
+        expect(screen.queryByTestId('kanban-view')).not.toBeInTheDocument();
+    });
+
+    it('names the include pattern when discovery settles with zero files matched', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({ ...FOLDER_ZERO_STORIES, aggregate_total_discovered: 0, includeFilter: '**/{todo,done}.md' })} />
+                </Suspense>
+            )),
+        );
+        await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
+        expect(screen.getByTestId('empty-stories-overlay')).toHaveTextContent('No markdown files matched the include pattern "**/{todo,done}.md".');
+    });
+
+    it('shows the loading note, not an empty board, before the first aggregate lands while the host is still searching for files', async () => {
         render(
             withPending(false, (
                 <Suspense fallback={<div>loading</div>}>
@@ -1728,8 +1809,26 @@ describe('GenericView empty stories overlay', () => {
                 </Suspense>
             )),
         );
+        await waitFor(() => expect(screen.getByTestId('loading-note')).toBeInTheDocument());
+        expect(screen.queryByTestId('kanban-view')).not.toBeInTheDocument();
+        expect(mockKanbanViewRender).not.toHaveBeenCalled();
+    });
+
+    it('never covers a visible card with the loading note, even before the first aggregate lands', async () => {
+        render(
+            withPending(false, (
+                <Suspense fallback={<div>loading</div>}>
+                    <GenericView {...makeViewProps({
+                        ...FOLDER_ZERO_STORIES,
+                        aggregate_total_discovered: undefined,
+                        note_count: 1,
+                        notes: [makeNote({ seq: 1, headline_raw: '### Visible card' })],
+                    })} />
+                </Suspense>
+            )),
+        );
         await waitFor(() => expect(mockKanbanViewRender).toHaveBeenCalled());
-        expect(screen.queryByTestId('empty-stories-overlay')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('loading-note')).not.toBeInTheDocument();
     });
 
     it('does not show the note once stories are found', async () => {

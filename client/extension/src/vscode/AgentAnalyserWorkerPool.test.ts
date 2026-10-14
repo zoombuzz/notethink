@@ -45,6 +45,29 @@ function recordingWorkerFactory(): { factory: () => Worker; workers: AgentAnalys
     return { factory, workers };
 }
 
+// a fake Worker that holds every request until `release(request_id)`, so one bucket's round trips can be interleaved
+function gatedWorkerFactory(): { factory: () => Worker; release: (request_id: string) => void } {
+    let worker: { onmessage: ((event: MessageEvent<AgentAnalyserWorkerResponse>) => void) | null; onerror: ((event: ErrorEvent) => void) | null } | undefined;
+    const held = new Map<string, AgentAnalyserWorkerRequest>();
+    const factory = (): Worker => {
+        const instance = {
+            onmessage: null as ((event: MessageEvent<AgentAnalyserWorkerResponse>) => void) | null,
+            onerror: null as ((event: ErrorEvent) => void) | null,
+            postMessage: (message: AgentAnalyserWorkerRequest) => { held.set(message.request_id, message); },
+            terminate: () => {},
+        };
+        worker = instance;
+        return instance as unknown as Worker;
+    };
+    const release = (request_id: string): void => {
+        const message = held.get(request_id);
+        if (!message) { throw new Error(`no held request ${request_id}`); }
+        held.delete(request_id);
+        worker!.onmessage?.({ data: handleAgentAnalyserRequest(message) } as MessageEvent<AgentAnalyserWorkerResponse>);
+    };
+    return { factory, release };
+}
+
 // a fake Worker whose every postMessage fails, so a mid-request crash can be driven deterministically
 function failingWorkerFactory(): { factory: () => Worker; terminate_calls: number } {
     let terminate_calls = 0;
@@ -160,6 +183,31 @@ describe('AgentAnalyserWorkerPool routing and merging', () => {
         pool.resetAll();
         await pool.roundTrip({ request_id: 'r2', jobs: [jobFor('a')] });
         expect(workers).toHaveLength(2);
+    });
+
+    /**
+     * `attributeTrees` fires one line-diff round trip per repository concurrently, and a short job
+     * list round-robins onto the same low bucket index every time, so two calls regularly share one
+     * worker while both are still in flight. Before `wireWorker` tracked requests by id, the second
+     * call's `postToWorker` overwrote the worker's single `onmessage` handler, so the first call's
+     * response arrived at a handler expecting a different request_id, was silently dropped, and that
+     * call only ever surfaced as a 20-second timeout - measured as several `agent analyser worker timed
+     * out` errors within the same second in a workspace with more than one repository, and the one bug
+     * this test pins down.
+     */
+    it('resolves two concurrent round trips sharing one bucket independently, instead of the first response being silently dropped', async () => {
+        const gated = gatedWorkerFactory();
+        const pool = new AgentAnalyserWorkerPool(gated.factory, 1);
+        const first = pool.roundTrip({ request_id: 'r1', jobs: [], line_diff_jobs: [{ key: 'a.ts' }] });
+        const second = pool.roundTrip({ request_id: 'r2', jobs: [], line_diff_jobs: [{ key: 'b.ts' }] });
+        // both calls have reached the same single-bucket worker, neither answered yet; release the first one second
+        gated.release('r2\u00000');
+        gated.release('r1\u00000');
+        const [first_response, second_response] = await Promise.all([first, second]);
+        expect(first_response.request_id).toBe('r1');
+        expect(first_response.line_diff_results?.map(result => result.key)).toEqual(['a.ts']);
+        expect(second_response.request_id).toBe('r2');
+        expect(second_response.line_diff_results?.map(result => result.key)).toEqual(['b.ts']);
     });
 
     it('times out a bucket that never answers, so the caller is not left awaiting a round trip forever', async () => {

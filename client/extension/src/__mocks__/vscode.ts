@@ -287,6 +287,8 @@ export const commands = {
 
 export const env = {
 	appName: '',
+	// undefined means a local window; a test sets it to simulate a Remote-SSH / WSL / dev-container window
+	remoteName: undefined as string | undefined,
 	openExternal: jest.fn(async () => true),
 };
 

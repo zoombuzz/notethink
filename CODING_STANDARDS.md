@@ -15,7 +15,7 @@
 
 **notethink is a VS Code extension**, so [`NEXTJS.md`](../lightenna-iac/docstech/standards/NEXTJS.md) and [`DATABASE.md`](../lightenna-iac/docstech/standards/DATABASE.md) do not apply, and only the environment-variable part of [`SECURITY.md`](../lightenna-iac/docstech/standards/SECURITY.md) does. The extension host and the webview are different runtimes with different logging stacks, which is where most of the deltas below come from.
 
-**notethink deliberately leads the fleet on `eslint` majors, as a canary**: a new major meets our flat configs here first, where there is no deployed surface. Do not pin it back in a dependency wave (operator decision).
+**notethink leads the fleet on `eslint` majors, as a canary**: workspace [`../AGENTS.md`](../AGENTS.md) > Projects.
 
 notethink carries the worked examples behind the workspace `<noun>ops.ts` rule; see [Library organisation](#library-organisation).
 
@@ -272,7 +272,7 @@ A small set of folder-view defaults is duplicated in `client/extension/src/const
 Canonical: [`TESTING.md`](../lightenna-iac/docstech/standards/TESTING.md), and workspace [`../AGENTS.md`](../AGENTS.md) > Testing conventions (no page reloads as workarounds, comment a spec out rather than `test.skip`). notethink deltas:
 
 - **Jest specs sit beside their source in three packages**, each with its own `jest.config.cjs`: `client/extension`, `client/webview` (which ignores the nested package) and `client/webview/src/notethink-views`. `pnpm run test-jest` at the root runs all three. Component tests use React Testing Library.
-- **Extension-host tests that need the live VS Code API** run under the `@vscode/test-web` Mocha runner in the central `client/extension/src/test/suite/**`, not colocated: the runner discovers them by directory, and they need the real extension-host environment.
+- **Extension-host tests that need the live VS Code API** run under the `@vscode/test-web` Mocha runner (`pnpm run test-mocha`) in the central `client/extension/src/test/suite/**`, not colocated: the runner discovers them by directory, and they need the real extension-host environment. `client/extension/src/test/suite/lib/cryptoops.test.ts` is a representative suite.
 
 ## Working Style
 
@@ -286,7 +286,7 @@ When working through a story's planned phases, do not invent feature specs, phas
 
 ## Pre-Push Verification
 
-Canonical: [`VERIFICATION.md`](../lightenna-iac/docstech/standards/VERIFICATION.md). All tests must pass locally before pushing; CI runs lint and build only. After any session that changed files, run `pnpm run check`: lint (eslint + `tsc --noEmit` over all three tsconfigs), the webpack build, the `notethink-views` rollup, then Jest across all three packages.
+Canonical: [`VERIFICATION.md`](../lightenna-iac/docstech/standards/VERIFICATION.md). All tests must pass locally before pushing; CI runs lint and build only. After any session that changed files, run `pnpm run check`; `package.json`'s `scripts.check` is the authoritative list of what it chains.
 
 | What | Command |
 |------|---------|
@@ -294,12 +294,13 @@ Canonical: [`VERIFICATION.md`](../lightenna-iac/docstech/standards/VERIFICATION.
 | Build | `pnpm run build` |
 | Rollup | `pnpm -C client/webview/src/notethink-views run rollup` |
 | Jest | `pnpm run test-jest` |
+| Mocha | `pnpm run test-mocha` |
 | Playwright E2E | `pnpm run test-playwright` |
-| Lint, build, rollup and Jest | `pnpm run check` |
+| Lint, build, rollup, Jest and Mocha | `pnpm run check` |
 
 ### No web dev server
 
-notethink has no `dev` script and no HTTP server, so there is no port to probe. It is not an exception to the workspace dev-server start pattern: `/open-dev` launches `pnpm run watch` (webpack) with `systemd-run --user --scope --slice=devservers.slice`. The bundles are previewed in an ordinary VS Code window through the `notethink-dev` symlink in [`AGENTS.md` > Dev Server](AGENTS.md#dev-server), or manually through the F5 Extension Development Host. The Playwright harness (`playwright.config.ts` starts `playwright/harness/serve.mjs` on port 9123 for the run and tears it down) is test infrastructure, not a dev server.
+notethink has no `dev` script and no HTTP server, so there is no port to probe: see [`AGENTS.md` > Dev Server](AGENTS.md#dev-server). The Playwright harness (`playwright.config.ts` starts `playwright/harness/serve.mjs` on port 9123 for the run and tears it down) is test infrastructure, not a dev server.
 
 ### Every build runs production React; the extension bundle keeps NODE_ENV unset
 

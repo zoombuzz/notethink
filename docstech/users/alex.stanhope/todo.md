@@ -1,6 +1,16 @@
 # Todo [](?nt_view=kanban)
 
 
+### Give each notethink rule one home [](?status=code-review&id=one-home-per-rule)
+
+notethink's AGENTS.md restates six rules its CODING_STANDARDS.md already holds, several beside its own pointer to them, CODING_STANDARDS.md re-explains the workspace eslint-canary note, and its verification sentence omits `test-mocha`, which `check` runs. Two copies of a rule eventually disagree; each copy becomes a pointer.
+
++ [X] replace AGENTS.md's restated rules with pointers to their CODING_STANDARDS.md sections - AGENTS.md's Architecture tree, Naming Conventions, Import Organization, Debug Logging and Testing Guidelines sections now each point to their CODING_STANDARDS.md section
++ [X] point CODING_STANDARDS.md's eslint-canary paragraph at the workspace AGENTS.md - CODING_STANDARDS.md now reads "workspace `../AGENTS.md` > Projects" in place of the restated paragraph
++ [X] make CODING_STANDARDS.md's verification sentence match what `check` runs, `test-mocha` included - sentence now points at `package.json`'s `scripts.check`, and the table gained a Mocha row and a corrected summary row
++ acceptance: each rule has one home, both files are shorter (AGENTS.md 1401 -> 1116 words, CODING_STANDARDS.md 4929 -> 4867 words, `wc -w`), and the standards checker reports no new finding
+
+
 ### Watcher applies dependency and config changes [](?id=watch-restarts-on-config)
 
 `pnpm run watch` recompiles on source changes, including those a `git pull` lands. A pull that changes a `package.json`, a `pnpm-lock.yaml`, `webpack.config.js` or a `tsconfig*.json` is not applied: the bundles keep building against stale config or modules until someone restarts the watcher by hand.

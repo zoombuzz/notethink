@@ -24,22 +24,6 @@ Write a story as a contributor would read it: the problem, the decision and what
 
 There is no root `src/`: the three source roots are described in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > File Organization.
 
-```
-notethink/
-├── client/
-│   ├── extension/src/            # extension host - VS Code API, LogOutputChannel logging, no DOM
-│   │   ├── extension.ts          # activation
-│   │   ├── vscode/               # VS Code integration, incl. notethinkEditor.ts (custom editor provider)
-│   │   ├── lib/                  # utility modules, each with a colocated test
-│   │   └── test/                 # Mocha suite against the live VS Code API
-│   └── webview/src/              # React webview app - debug logging, no fs
-│       ├── components/           # base/App.tsx, ExtensionReceiver.tsx, NoteRenderer.tsx
-│       └── notethink-views/src/  # nested component-library package
-├── eslint.config.mjs
-├── webpack.config.js
-└── package.json
-```
-
 | Component | Entry Point |
 |-----------|-------------|
 | Extension | `client/extension/src/extension.ts` |
@@ -48,11 +32,11 @@ notethink/
 
 ## Naming Conventions
 
-Canonical: [`NAMING.md`](../lightenna-iac/docstech/standards/NAMING.md) plus [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Naming Conventions. In short: `snake_case` for locals, hook returns and wire-format data fields; `camelCase` for functions, event handlers and props; `PascalCase` for types, interfaces and components; `SCREAMING_SNAKE_CASE` for constants. A name that persists outside the codebase (a config key, a persisted-state key, a published API name) needs the operator's sign-off before it is introduced or renamed.
+Canonical: [`NAMING.md`](../lightenna-iac/docstech/standards/NAMING.md) and [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Naming Conventions.
 
 ## Import Organization
 
-All `import` statements go at the top of the file, one statement per module, and grouping is freeform: [`CODE_LAYOUT.md`](../lightenna-iac/docstech/standards/CODE_LAYOUT.md) > Import organisation.
+Canonical: [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Import Organization.
 
 ## Comment Style
 
@@ -70,12 +54,11 @@ Two things this deliberately does not cover: agent instruction files (this file,
 
 ## Debug Logging
 
-The webview bundles log through `debug`, namespaced by area (`Debug("nodejs:notethink:ModuleName")`, `Debug("nodejs:notethink-views:ComponentName")`); the extension host logs through `vscode.LogOutputChannel` directly. Enable webview output with `localStorage.debug = 'nodejs:*'` in the webview devtools console. The rules, and where each log stream lands: [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Logging and Error Handling.
+Canonical: [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Logging and Error Handling.
 
 ## Testing Guidelines
 
-- **Extension tests (Mocha)** live in `client/extension/src/test/suite/` and run under `@vscode/test-web`, headless, via `pnpm run test-mocha` (part of `pnpm run check`) or the VS Code launch configuration; `client/extension/src/test/suite/lib/cryptoops.test.ts` is a representative suite.
-- **Jest specs** sit next to their source in three packages, each with its own `jest.config.cjs`: `client/extension`, `client/webview` (which ignores the nested package) and `client/webview/src/notethink-views`. Run all three from the repo root with `pnpm run test-jest`, which is `scripts/test-jest.sh`; the root has no `test` script, and `pnpm test` inside one package runs that package alone.
+Canonical: [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Testing Standards.
 
 ## Workflow and Commit Messages
 

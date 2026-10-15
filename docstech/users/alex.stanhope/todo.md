@@ -1,6 +1,15 @@
 # Todo [](?nt_view=kanban)
 
 
+### Confirm notethink's standards name test-mocha [](?status=code-review&id=standards-name-test-mocha)
+
+The standards review found test-mocha missing from the documented verification scripts, though `check` runs it.
+
++ from the 2026-10-15 standards review; commit 8d8ce0b ([[one-home-per-rule]]) may already cover it
++ [X] confirm notethink's CODING_STANDARDS.md names test-mocha, ticking from 8d8ce0b's evidence if it already does - `CODING_STANDARDS.md:289` points verification at `package.json`'s `scripts.check`, landed by 8d8ce0b
++ [X] verify notethink's own standards doc names test-mocha - `CODING_STANDARDS.md:297` has a `| Mocha | pnpm run test-mocha |` table row, and `:299` names Mocha in the combined check row; `:275` already documented `pnpm run test-mocha` before 8d8ce0b
+
+
 ### Give each notethink rule one home [](?status=code-review&id=one-home-per-rule)
 
 notethink's AGENTS.md restates six rules its CODING_STANDARDS.md already holds, several beside its own pointer to them, CODING_STANDARDS.md re-explains the workspace eslint-canary note, and its verification sentence omits `test-mocha`, which `check` runs. Two copies of a rule eventually disagree; each copy becomes a pointer.

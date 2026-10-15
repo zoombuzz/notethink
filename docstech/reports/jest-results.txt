@@ -1,9 +1,9 @@
 # Jest Test Results
-# Version: 0.4.7
-# Date: 2026-10-13T12:19:08Z
+# Version: 0.4.8
+# Date: 2026-10-15T20:04:30Z
 # Command: pnpm run test-jest
 # Exit status: 0
-# Tree: HEAD 2eb6be5 plus 64 changed paths
+# Tree: HEAD plus docstech/users/alex.stanhope/todo.md
 # ---
 $ bash scripts/test-jest.sh
 $ jest --config jest.config.cjs
@@ -11,7 +11,7 @@ $ jest --config jest.config.cjs
 [1mTest Suites: [22m[1m[32m32 passed[39m[22m, 32 total
 [1mTests:       [22m[1m[32m752 passed[39m[22m, 752 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        3.652 s
+[1mTime:[22m        8.423 s, estimated 10 s
 [2mRan all test suites[22m[2m.[22m
 
 $ jest --config jest.config.cjs
@@ -19,7 +19,7 @@ $ jest --config jest.config.cjs
 [1mTest Suites: [22m[1m[32m16 passed[39m[22m, 16 total
 [1mTests:       [22m[1m[32m200 passed[39m[22m, 200 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        2.987 s, estimated 3 s
+[1mTime:[22m        [1m[33m5.373 s[39m[22m
 [2mRan all test suites[22m[2m.[22m
 
 $ jest --config jest.config.cjs
@@ -27,16 +27,16 @@ $ jest --config jest.config.cjs
 [1mTest Suites: [22m[1m[32m89 passed[39m[22m, 89 total
 [1mTests:       [22m[1m[32m1990 passed[39m[22m, 1990 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        3.791 s
+[1mTime:[22m        6.699 s
 [2mRan all test suites[22m[2m.[22m
 
 
 [1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
 [1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │    32 │ [32m   752[0m │ [2m     0[0m │ 3.652 s │
-│ webview          │    16 │ [32m   200[0m │ [2m     0[0m │ 2.987 s │
-│ notethink-views  │    89 │ [32m  1990[0m │ [2m     0[0m │ 3.791 s │
+│ extension        │    32 │ [32m   752[0m │ [2m     0[0m │ 8.423 s │
+│ webview          │    16 │ [32m   200[0m │ [2m     0[0m │ 5.373 s │
+│ notethink-views  │    89 │ [32m  1990[0m │ [2m     0[0m │ 6.699 s │
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
 [1m│ TOTAL            │   137 │[0m [32m  2942[0m [1m│[0m [2m     0[0m [1m│         │[0m
 [1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

@@ -244,4 +244,26 @@ describe('readCodexSession', () => {
             expect(resumed).toEqual(whole);
         });
     });
+
+    describe('active_ms', () => {
+        it('sums the gaps across every line carrying a timestamp, session_meta included', () => {
+            const lines = [
+                SESSION_META_LINE,
+                threadSettingsLine('2026-09-04T08:33:12.047Z', 1, 'gpt-5-codex'),
+                messageLine('2026-09-04T08:34:12.047Z', 2, 'starting work on the story'),
+            ];
+            const result = readCodexSession(baseInput(lines.join('\n')));
+            // 60s from session_meta to thread_settings, 60s from thread_settings to the message line
+            expect(result.active_ms).toBe(120_000);
+        });
+
+        it('leaves out a gap over the five minute idle threshold', () => {
+            const lines = [
+                threadSettingsLine('2026-09-04T08:30:00.000Z', 0, 'gpt-5-codex'),
+                messageLine('2026-09-04T08:40:00.000Z', 1, 'ten minutes later'),
+            ];
+            const result = readCodexSession(baseInput(lines.join('\n')));
+            expect(result.active_ms).toBe(0);
+        });
+    });
 });

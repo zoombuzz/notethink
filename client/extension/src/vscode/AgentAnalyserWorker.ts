@@ -171,6 +171,7 @@ export interface AgentAnalyserResolvedCall {
  *   folded into that many consecutive runs) and kept in write order, so the host can attribute usage
  *   to whichever story a turn near a call's own timestamp bound to; host/worker-only, never carried
  *   onto ActivitySession
+ * - active_ms: passed through from the reader's own `AgentSessionResult.active_ms` unchanged
  */
 export interface AgentAnalyserWorkerSessionOutput {
     session_id: string;
@@ -183,6 +184,7 @@ export interface AgentAnalyserWorkerSessionOutput {
     current?: ActivityEventBody;
     question?: ActivityQuestion;
     model?: string;
+    active_ms?: number;
     usage: ActivityUsage;
     priced_calls: AgentPricedUsageEntry[];
     capabilities: ActivityCapabilities;
@@ -464,6 +466,7 @@ function buildOutputFrom(job: AgentAnalyserWorkerJob, result: AgentSessionResult
         current: result.current,
         question: result.question,
         model: result.model,
+        active_ms: result.active_ms,
         usage: priceCalls(result.calls),
         priced_calls: pricePerCallBounded(result.calls, AGENT_PRICED_USAGE_LIST_MAX),
         capabilities: capabilitiesForVendor(job.vendor),

@@ -1,11 +1,11 @@
-import { rowSizeFor, laneListHeight, totalContentHeight, rowOffsets, visibleRowRange, scrollOffsetForIndex, clampScrollOffset, laneNeedsVirtualization, DEFAULT_ESTIMATED_CARD_HEIGHT, CARD_ROW_GAP, MIN_LANE_LIST_HEIGHT, LANE_LIST_BOTTOM_MARGIN } from "./virtualCardSizingOps";
+import { rowSizeFor, groupListHeight, totalContentHeight, rowOffsets, visibleRowRange, scrollOffsetForIndex, clampScrollOffset, groupNeedsVirtualization, DEFAULT_ESTIMATED_CARD_HEIGHT, CARD_ROW_GAP, MIN_GROUP_LIST_HEIGHT, GROUP_LIST_BOTTOM_MARGIN } from "./virtualCardSizingOps";
 
 describe('rowSizeFor', () => {
     it('uses the measured height plus the gap', () => {
         expect(rowSizeFor(200, 180)).toBe(200 + CARD_ROW_GAP);
     });
 
-    it('falls back to the lane target height when nothing has been measured yet', () => {
+    it('falls back to the group target height when nothing has been measured yet', () => {
         expect(rowSizeFor(undefined, 180)).toBe(180 + CARD_ROW_GAP);
     });
 
@@ -14,21 +14,21 @@ describe('rowSizeFor', () => {
     });
 });
 
-describe('laneListHeight', () => {
+describe('groupListHeight', () => {
     it('subtracts the bottom margin from the available space', () => {
-        expect(laneListHeight(500)).toBe(500 - LANE_LIST_BOTTOM_MARGIN);
+        expect(groupListHeight(500)).toBe(500 - GROUP_LIST_BOTTOM_MARGIN);
     });
 
     it('never answers below the floor', () => {
-        expect(laneListHeight(50)).toBe(MIN_LANE_LIST_HEIGHT);
+        expect(groupListHeight(50)).toBe(MIN_GROUP_LIST_HEIGHT);
     });
 
     it('answers the floor when nothing has been measured yet', () => {
-        expect(laneListHeight(undefined)).toBe(MIN_LANE_LIST_HEIGHT);
+        expect(groupListHeight(undefined)).toBe(MIN_GROUP_LIST_HEIGHT);
     });
 
     it('answers the floor for a non-finite reading', () => {
-        expect(laneListHeight(Number.NaN)).toBe(MIN_LANE_LIST_HEIGHT);
+        expect(groupListHeight(Number.NaN)).toBe(MIN_GROUP_LIST_HEIGHT);
     });
 });
 
@@ -130,14 +130,14 @@ describe('clampScrollOffset', () => {
     });
 });
 
-describe('laneNeedsVirtualization', () => {
-    it('is false for an empty lane', () => {
-        expect(laneNeedsVirtualization(0, 500)).toBe(false);
+describe('groupNeedsVirtualization', () => {
+    it('is false for an empty group', () => {
+        expect(groupNeedsVirtualization(0, 500)).toBe(false);
     });
 
-    it('is false for a small fixture-sized lane that comfortably fits the ceiling', () => {
+    it('is false for a small fixture-sized group that comfortably fits the ceiling', () => {
         // 2 cards at ~180px/row = 360px, well under a 900px ceiling
-        expect(laneNeedsVirtualization(2, 900)).toBe(false);
+        expect(groupNeedsVirtualization(2, 900)).toBe(false);
     });
 
     /*
@@ -145,25 +145,25 @@ describe('laneNeedsVirtualization', () => {
      * solved card-target height - a short two-line card is a fraction of that target, so estimating
      * from the target mis-virtualized it in a real fixture.
      */
-    it('is false for a short lane even on a board whose solved card-target height is large', () => {
-        expect(laneNeedsVirtualization(2, 675)).toBe(false);
+    it('is false for a short group even on a board whose solved card-target height is large', () => {
+        expect(groupNeedsVirtualization(2, 675)).toBe(false);
     });
 
     it('is true once the estimated total exceeds the ceiling', () => {
         // 400 cards at ~180px/row = 72000px, nowhere near a 900px ceiling
-        expect(laneNeedsVirtualization(400, 900)).toBe(true);
+        expect(groupNeedsVirtualization(400, 900)).toBe(true);
     });
 
     it('is exactly on the boundary at equal height (not virtualized - equal is not "exceeds")', () => {
-        expect(laneNeedsVirtualization(5, 5 * (DEFAULT_ESTIMATED_CARD_HEIGHT + CARD_ROW_GAP))).toBe(false);
+        expect(groupNeedsVirtualization(5, 5 * (DEFAULT_ESTIMATED_CARD_HEIGHT + CARD_ROW_GAP))).toBe(false);
     });
 
     /*
      * Regression guard: falling back to the floored list_height (instead of treating undefined as "not
-     * measured yet") spuriously virtualized a 2-card lane for one render, breaking a keyboard drag racing it.
+     * measured yet") spuriously virtualized a 2-card group for one render, breaking a keyboard drag racing it.
      */
-    it('is false before the board has ever been measured, however many cards the lane holds', () => {
-        expect(laneNeedsVirtualization(400, undefined)).toBe(false);
-        expect(laneNeedsVirtualization(2, undefined)).toBe(false);
+    it('is false before the board has ever been measured, however many cards the group holds', () => {
+        expect(groupNeedsVirtualization(400, undefined)).toBe(false);
+        expect(groupNeedsVirtualization(2, undefined)).toBe(false);
     });
 });

@@ -47,6 +47,10 @@ test.describe('manual check: settings survive a reload', () => {
      * webview cannot reload VS Code, but the thing being checked is that a change reaches configuration
      * rather than living in component state - so the assertion is that every toggle lands at the workspace
      * scope, which is the layer a reload restores from, and that a fresh mount reads them all back.
+     * scrollNoteIntoView (root-homed) and orientation (Line-homed) are per-view, and Kanban is neither of
+     * their homes, so Kanban's own edit lands in its own `views.kanban` cell, not the home node's;
+     * animateTransitions and cardRatio are per-view too, but Kanban IS their own home - so all four land
+     * in the one `views.kanban` bag entry together.
      */
     test('every control the drawer changes lands at the workspace scope and is read back on a fresh mount', async ({ page }) => {
         await harness(page);
@@ -54,17 +58,15 @@ test.describe('manual check: settings survive a reload', () => {
         await openViewSettings(page);
 
         await page.getByTestId('setting-control-scrollNoteIntoView').click();
-        await page.getByTestId('setting-control-kanbanAnimateTransitions').click();
+        await page.getByTestId('setting-control-animateTransitions').click();
         await page.selectOption('[data-testid="setting-control-orientation"]', 'rows');
-        await page.selectOption('[data-testid="setting-control-kanbanCardRatio"]', '2');
+        await page.selectOption('[data-testid="setting-control-cardRatio"]', '2');
         await page.getByTestId('setting-control-watchUnopenedFilesInViewer').click();
 
+        // every per-view edit made while Kanban is on screen lands in kanban's own views bag entry
         await expect.poll(async () => workspaceSettings(page)).toMatchObject({
-            scrollNoteIntoView: false,
-            kanbanAnimateTransitions: false,
-            orientation: 'rows',
-            kanbanCardRatio: 2,
             watchUnopenedFilesInViewer: false,
+            views: { kanban: { animateTransitions: false, cardRatio: 2, scrollNoteIntoView: false, orientation: 'rows' } },
         });
 
         // the harness holds settings in the page, so this checks only the read path: a fresh mount must read the stored values
@@ -79,9 +81,9 @@ test.describe('manual check: settings survive a reload', () => {
         await kanbanBoard(page);
         await openViewSettings(page);
         await expect(page.getByTestId('setting-control-scrollNoteIntoView')).not.toBeChecked();
-        await expect(page.getByTestId('setting-control-kanbanAnimateTransitions')).not.toBeChecked();
+        await expect(page.getByTestId('setting-control-animateTransitions')).not.toBeChecked();
         await expect(page.locator('[data-testid="setting-control-orientation"]')).toHaveValue('rows');
-        await expect(page.locator('[data-testid="setting-control-kanbanCardRatio"]')).toHaveValue('2');
+        await expect(page.locator('[data-testid="setting-control-cardRatio"]')).toHaveValue('2');
         await expect(page.getByTestId('setting-control-watchUnopenedFilesInViewer')).not.toBeChecked();
     });
 });
@@ -187,7 +189,9 @@ test.describe('manual check: the M marker takes the modified-file colour', () =>
      * The manual wording is "compare the M colour against a modified file in the VS Code explorer side by
      * side". A browser cannot make that comparison, but it can check the half that would make it fail: the
      * marker has to take its colour from the same token VS Code paints a modified filename with, rather
-     * than from a literal that merely looks close in one theme.
+     * than from a literal that merely looks close in one theme. M is a pill now, matching the inherited
+     * and VS pills' own shape - a tinted background with contrasting text, rather than tinted text alone -
+     * so the token is read off backgroundColor, not color.
      */
     test('the marker and its label read from the gitDecoration modified token', async ({ page }) => {
         await harness(page);
@@ -198,7 +202,7 @@ test.describe('manual check: the M marker takes the modified-file colour', () =>
 
         const painted = await page.getByTestId('setting-marker-scrollNoteIntoView').evaluate((el) => {
             const token = getComputedStyle(document.documentElement).getPropertyValue('--vscode-gitDecoration-modifiedResourceForeground').trim();
-            return { colour: getComputedStyle(el).color, token };
+            return { colour: getComputedStyle(el).backgroundColor, token };
         });
         expect(painted.token).not.toBe('');
         // the harness stubs the token to Dark+'s own value, so a marker reading the token resolves to it

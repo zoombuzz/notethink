@@ -161,6 +161,8 @@ export function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boo
     if (prev.display_options?.settings?.autoExpandFocusedNote !== next.display_options?.settings?.autoExpandFocusedNote) { return false; }
     // the document view renders every story inside the root's body, so skipping its re-render pins each story's card
     if (prev.display_options?.settings?.cardType !== next.display_options?.settings?.cardType) { return false; }
+    // each story's agent card reads the clock mode inside the root's body, so skipping its re-render pins the clock
+    if (prev.display_options?.settings?.clockMode !== next.display_options?.settings?.clockMode) { return false; }
     // caret offset drives body scroll in clipped notes - only re-render focused notes
     if (next.focused && prev.display_options?.caret_offset !== next.display_options?.caret_offset) { return false; }
     // one id list covers this note and its rendered descendants, so a parent repaints even with its own membership unchanged
@@ -168,7 +170,7 @@ export function areMarkdownNotePropsEqual(prev: NoteProps, next: NoteProps): boo
     // children's focused/selected flows through focused_seqs/selected_seqs, so they re-render even when this note's didn't
     if (!arraysEqual(prev.display_options?.focused_seqs, next.display_options?.focused_seqs)) { return false; }
     if (!arraysEqual(prev.display_options?.selected_seqs, next.display_options?.selected_seqs)) { return false; }
-    // a lane's target height lands after the first measurement, so ignoring its change would keep the body first rendered
+    // a group's target height lands after the first measurement, so ignoring its change would keep the body first rendered
     if (prev.display_options?.card_target_height !== next.display_options?.card_target_height) { return false; }
     // provided changes during drag (draggableProps.style carries transform), so compare what the bags hold, not their identity
     if (!providedPropsEqual(prev.display_options?.provided?.draggableProps, next.display_options?.provided?.draggableProps)) { return false; }

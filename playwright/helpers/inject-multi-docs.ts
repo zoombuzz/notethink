@@ -8,11 +8,14 @@ import { parse } from './parse-markdown';
  * - fixture: filename in playwright/fixtures
  * - doc_path: absolute path the doc should claim
  * - relative_path: workspace-relative path, driving the breadcrumb and origin pill
+ * - mtime: epoch ms, stamped by mergeAggregateRoot onto every story's origin as `file_mtime`; omitted
+ *   leaves it undefined, same as a doc the harness never bothered to date
  */
 interface DocSpec {
     fixture: string;
     doc_path: string;
     relative_path?: string;
+    mtime?: number;
 }
 
 /**
@@ -42,6 +45,7 @@ export async function injectMultipleDocsFromFixtures(
             text,
             hash_sha256: hash,
             mdast,
+            mtime: d.mtime,
         };
     });
 
@@ -55,6 +59,7 @@ export async function injectMultipleDocsFromFixtures(
                 text: d.text,
                 hash_sha256: d.hash_sha256,
                 ...(d.mdast === undefined ? {} : { content: d.mdast }),
+                ...(d.mtime === undefined ? {} : { mtime: d.mtime }),
             };
         }
         window.dispatchEvent(new MessageEvent('message', {

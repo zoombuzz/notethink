@@ -85,7 +85,7 @@ describe('l10n rendering with German bundle', () => {
         expect(screen.getByTestId('global-settings-heading')).toHaveTextContent('Globale Einstellungen');
     });
 
-    it('renders interpolated German aria-labels on the lane chips', () => {
+    it('renders interpolated German aria-labels on the group chips', () => {
         render(<SettingsViewDrawer {...DRAWER_PROPS} />);
         // German: "{0} neu anordnen", placeholder at the start; {0} is the formatted label, not the raw slug
         expect(screen.getByLabelText('Backlog neu anordnen')).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe('l10n rendering with Spanish bundle', () => {
         expect(screen.getByTestId('change-defaults-summary')).toHaveTextContent('Cambiar valores predeterminados');
     });
 
-    it('renders interpolated Spanish aria-labels on the lane chips', () => {
+    it('renders interpolated Spanish aria-labels on the group chips', () => {
         render(<SettingsViewDrawer {...DRAWER_PROPS} />);
         // the {0} substitution is the formatted column label (title-case), not the raw slug
         expect(screen.getByLabelText('Reordenar Backlog')).toBeInTheDocument();

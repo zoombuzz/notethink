@@ -4,33 +4,37 @@ import * as l10n from "@vscode/l10n";
 import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import type { ReactNode } from "react";
-import { formatColumnLabel, groupDisplayForAxis, mergeSavedGroupDisplay, moveInOrder, toggleShownInDisplay } from "../../../lib/noteops";
+import { formatColumnLabel, groupDisplayForAxis, mergeSavedGroupDisplay, moveInOrder, recombineGroupDisplay, replaceGroupDisplayForAxis, splitGroupDisplayByPresence, toggleShownInDisplay } from "../../../lib/noteops";
 import { KANBAN_AXIS_KEY } from "../../../lib/axisops";
+import { useAgentActivity } from "../../../lib/activityhooks";
+import { GROUP_ORDERS, GROUP_ORDER_DEFAULT, groupOrderLabel, orderGroupValues, resolveGroupOrderMode, type GroupOrderMode, type NoteTimestampFn } from "../../../lib/grouporderops";
 import {
     VIEW_REGISTRY,
     childViewNodes,
+    doomedUserTypeIds,
     getViewNode,
+    isPerViewKey,
     nodeSettingCount,
-    offersNewViewType,
+    ownBagFor,
     owningNodeFor,
     registryWithUserTypes,
-    removeUserViewType,
-    renameUserViewType,
+    resolveTreeRow,
+    resolveViewSetting,
     settingWriteFor,
-    updateUserViewTypeOverrides,
-    userTypeHoldsKey,
     type ViewNode,
+    type ViewOverridesMap,
     type ViewRegistry,
 } from "../../../lib/viewregistryops";
-import type { GroupDisplayEntry, SettingsCascadeKey, SettingsCascadePayload, UserViewType } from "../../../types/Messages";
+import type { GroupDisplayEntry, ResolvedSettingsCascade, SettingsCascadeKey, UserViewType } from "../../../types/Messages";
+import type { NoteProps } from "../../../types/NoteProps";
 import styles from "../../ViewRenderer.module.scss";
 import { CARD_RATIOS, DEFAULT_CARD_RATIO, clampBreadth, parseBreadthInput } from "../kanban/columnwidthops";
 import { useBreadthDraft } from "../kanban/useBreadthDraft";
-import { DEFAULT_CARD_TYPE, renderableCardIds } from "../../notes/cardregistryops";
+import { DEFAULT_CARD_TYPE, noteOrderTimestampFn, renderableCardIds } from "../../notes/cardregistryops";
 import GroupBySelector from "../GroupBySelector";
 import SettingsRow from "../SettingsRow";
 import { viewTypeLabel } from "../viewTypeLabel";
-import { divergedCountLabel, globalSettingRows, settingRowLabel, viewRowsForNode, VIEW_SETTING_ROWS, type SettingRowDef, type SettingRowValues } from "../settingRows";
+import { divergedCountLabel, globalSettingRows, rowHome, settingRowLabel, viewRowsForNode, VIEW_SETTING_ROWS, type SettingRowDef, type SettingRowValues } from "../settingRows";
 import DrawerTree, { type DrawerTreeNode } from "./DrawerTree";
 
 const debug = Debug("nodejs:notethink-views:SettingsViewDrawer");
@@ -63,11 +67,14 @@ export interface SettingsViewDrawerProps {
     viewTypeSelection: string;
     autoResolvedType?: string;
     onViewTypeChange: (view_type: string) => void;
-    onSettingChange: (key: SettingsCascadeKey, value: unknown) => void;
+    onSettingChange: (key: SettingsCascadeKey | 'views' | 'cards', value: unknown) => void;
     naturalColumnOrder: string[];
     onGroupDisplayChange: (next_display: GroupDisplayEntry[]) => void;
     groupByResolvedKey: string;
     groupByCandidateKeys: string[];
+    notesWithinParentContext: NoteProps[];
+    fallbackDocPath?: string;
+    resolvedCardType: string;
     onMakeDefault: () => void;
     onResetToDefault: () => void;
     canResetToDefault?: boolean;
@@ -85,8 +92,14 @@ function nodeLabel(node: ViewNode, registry: ViewRegistry): string {
 }
 
 /** the pill's text for a row, or undefined when the row belongs to no view type and so shows none */
-function ownerLabelFor(selected_node: string, def: SettingRowDef, registry: ViewRegistry): string | undefined {
-    const owner_id = owningNodeFor(selected_node, def.key, registry);
+function ownerLabelFor(
+    selected_node: string,
+    def: SettingRowDef,
+    registry: ViewRegistry,
+    user_types: UserViewType[] = [],
+    view_overrides: ViewOverridesMap = {},
+): string | undefined {
+    const owner_id = owningNodeFor(selected_node, def.key, registry, user_types, view_overrides);
     if (owner_id === undefined) { return undefined; }
     const owner = getViewNode(owner_id, registry);
     return owner ? nodeLabel(owner, registry) : owner_id;
@@ -110,18 +123,9 @@ export function mintUserViewTypeId(label: string, registry: ViewRegistry): strin
     return candidate;
 }
 
-/**
- * The name the save form opens pre-filled with: the node the user is looking at plus what they changed,
- * so the offer that follows a group-by change reads "Kanban by Assignee". A boolean has no value worth
- * naming, so it names the setting instead and says which way it went.
- */
-export function newViewTypeNameHint(node_label: string, def: SettingRowDef, value: unknown): string {
-    if (typeof value === 'boolean') {
-        return value
-            ? l10n.t('{0} with {1}', node_label, settingRowLabel(def.key))
-            : l10n.t('{0} without {1}', node_label, settingRowLabel(def.key));
-    }
-    return l10n.t('{0} by {1}', node_label, formatColumnLabel(String(value)));
+/** the name the save form opens pre-filled with: the view the user is looking at, named as a copy of it */
+export function newViewTypeNameHint(node_label: string): string {
+    return l10n.t('{0} copy', node_label);
 }
 
 interface GroupDisplayControlProps {
@@ -129,50 +133,103 @@ interface GroupDisplayControlProps {
     saved: GroupDisplayEntry[];
     natural: string[];
     axisKey: string;
+    mode: GroupOrderMode;
+    notes: NoteProps[];
+    fallbackDocPath?: string;
+    resolvedCardType: string;
     onChange: (next_display: GroupDisplayEntry[]) => void;
+    onReorder: (next_display: GroupDisplayEntry[]) => void;
 }
 
 /**
- * The lane order AND visibility editor: one draggable chip per lane, stacked in board order, each with
+ * The group order AND visibility editor: one draggable chip per group, stacked in board order, each with
  * its own show/hide checkbox. Laying them out left to right would mirror the board, but the control
- * column runs out before five lanes do, so the list reads top to bottom instead.
+ * column runs out before five groups do, so the list reads top to bottom instead.
  *
  * The rows are the active axis's own stored entries (`groupDisplayForAxis`) merged with that axis's
- * natural lanes (`mergeSavedGroupDisplay`), the status axis included: a status entry carries no `axis`
- * field, so the kanban-rung default (Untagged, Doing, Code Review, Testing, Done, contributed in
- * package.json) reads as the status axis's own stored list and shows in full even on an empty board,
- * with nothing live to filter it against. Every lane the board could show on the active axis is
- * reorderable and toggleable here; a lane added since the display was saved is still reachable, shown by
- * default. A write carries only the active axis's own rows - `onChange` hands the raw list up, and the
- * caller folds it back against what every OTHER axis has stored (`replaceGroupDisplayForAxis`), so this
- * control never has to see or preserve another axis's entries.
+ * natural, LIVE groups (`mergeSavedGroupDisplay`), the status axis included: a status entry carries no
+ * `axis` field, so the grouped-rung default (Untagged, Doing, Code Review, Testing, Done, contributed
+ * in package.json, shared by Line and Kanban) reads as the status axis's own stored list and shows in
+ * full even on an empty board,
+ * with nothing live to filter it against. A stored entry naming a group no current note carries (a
+ * deleted project folder, a status nothing uses any more) lists no chip here, but is never dropped from
+ * storage: every write carries it through unchanged, at its stored position, via
+ * `splitGroupDisplayByPresence` and `recombineGroupDisplay`, so a merely transient absence (a filter, a
+ * single-file view, folder discovery still streaming in) never loses its position or hidden flag. A group
+ * added since the display was saved is still reachable, shown by default. A write carries only the
+ * active axis's own rows - `onChange` hands the raw list up, and the caller folds it back against what
+ * every OTHER axis has stored (`replaceGroupDisplayForAxis`), so this control never has to see or
+ * preserve another axis's entries.
  *
  * An empty `natural` means the rendered view isn't a grouped one at all - the reader can still be
  * looking at a highlighted node's settings that differ from what is actually on screen - so there is no
  * live axis to filter against. The row then shows the status axis's entries, the axis the kanban node
- * lanes by, and the caller writes them back to that axis alone.
+ * groups by, and the caller writes them back to that axis alone.
  *
  * Drag comes from the same library the board drags cards with, so a chip is keyboard-reorderable for
  * free (space to lift, arrows to move, space to drop) and needs no pair of nudge buttons beside it. The
  * checkbox sits before the drag handle and is itself an interactive element, which @hello-pangea/dnd
- * excludes from starting a drag by default, so unchecking a lane never lifts its chip. There is
+ * excludes from starting a drag by default, so unchecking a group never lifts its chip. There is
  * deliberately no reset: no other row in this drawer carries one, and the revert under Change defaults
  * is the one place a change is undone wholesale.
+ *
+ * `mode` decides what order the chips read in, independent of what they are stored under: `custom`
+ * reads the stored order as it always has (`groupDisplayGroups`), while an automatic mode recomputes the
+ * order fresh from `notes` (through `timestamp_of`, bound to whichever card type is actually on
+ * screen) via the same `orderGroupValues` the board itself draws groups with, so the chips and the board
+ * can never disagree.
+ * The checkbox always writes against the STORED order regardless of mode - toggling a group's visibility
+ * never seeds a new custom order or switches the mode - while a drag writes against whatever is ON
+ * SCREEN, which is what lets it capture an automatic order with the one group moved.
  */
-function groupDisplayLanes(saved: GroupDisplayEntry[], natural: string[], axis_key: string): GroupDisplayEntry[] {
-    const lane_axis = natural.length === 0 ? KANBAN_AXIS_KEY : axis_key;
-    return mergeSavedGroupDisplay(groupDisplayForAxis(saved, lane_axis), natural);
+function groupDisplayGroups(saved: GroupDisplayEntry[], natural: string[], axis_key: string): GroupDisplayEntry[] {
+    const group_axis = natural.length === 0 ? KANBAN_AXIS_KEY : axis_key;
+    return mergeSavedGroupDisplay(groupDisplayForAxis(saved, group_axis), natural);
+}
+
+/**
+ * The chip order for an automatic mode: `orderGroupValues` over the live group values alone, so a stored
+ * entry for a value no note carries draws no chip here either, each remaining group's shown flag carried
+ * over from what is actually stored. An empty `natural` is the "no live axis" sentinel, so it falls back
+ * to the saved-for-axis values themselves rather than ordering nothing. `timestamp_of` is bound to the
+ * card type actually on screen, exactly as the board itself orders by.
+ */
+function automaticGroupDisplayOrder(
+    saved_for_axis: GroupDisplayEntry[],
+    natural: string[],
+    axis_key: string,
+    mode: GroupOrderMode,
+    notes: NoteProps[],
+    timestamp_of: NoteTimestampFn,
+): GroupDisplayEntry[] {
+    const group_values = natural.length === 0 ? saved_for_axis.map(entry => entry.value) : natural;
+    const shown_by_value = new Map(saved_for_axis.map(entry => [entry.value, entry.shown !== false]));
+    const ordered_values = orderGroupValues(group_values, notes, axis_key, mode, saved_for_axis, timestamp_of);
+    return ordered_values.map(value => ({ value, shown: shown_by_value.get(value) ?? true }));
 }
 
 function GroupDisplayControl(props: GroupDisplayControlProps): React.ReactElement {
-    const ordered = groupDisplayLanes(props.saved, props.natural, props.axisKey);
+    const group_axis = props.natural.length === 0 ? KANBAN_AXIS_KEY : props.axisKey;
+    const saved_for_axis = groupDisplayForAxis(props.saved, group_axis);
+    // the axis's own entries naming a group no current note carries, carried through every write unchanged
+    const { absent } = splitGroupDisplayByPresence(saved_for_axis, props.natural);
+    // what a toggle writes back: unaffected by display mode, so hiding a group never seeds a new order
+    const stored = groupDisplayGroups(props.saved, props.natural, props.axisKey);
+    const snapshot = useAgentActivity();
+    const timestamp_of = useMemo(
+        () => noteOrderTimestampFn(props.resolvedCardType, { snapshot, fallback_doc_path: props.fallbackDocPath }),
+        [props.resolvedCardType, snapshot, props.fallbackDocPath],
+    );
+    const ordered = props.mode === 'custom'
+        ? stored
+        : automaticGroupDisplayOrder(saved_for_axis, props.natural, group_axis, props.mode, props.notes, timestamp_of);
     const handleDragEnd = (result: DropResult): void => {
         if (!result.destination) { return; }
         const next = moveInOrder(ordered, result.source.index, result.destination.index);
-        if (next !== ordered) { props.onChange(next); }
+        if (next !== ordered) { props.onReorder(recombineGroupDisplay(next, absent)); }
     };
     const handleToggle = (value: string): void => {
-        props.onChange(toggleShownInDisplay(ordered, value));
+        props.onChange(recombineGroupDisplay(toggleShownInDisplay(stored, value), absent));
     };
     return (
         <DragDropContext onDragEnd={handleDragEnd}>
@@ -222,19 +279,30 @@ function GroupDisplayControl(props: GroupDisplayControlProps): React.ReactElemen
     );
 }
 
+/**
+ * RowControlProps.
+ * - inheritedValue: the value this row would inherit if it held none of its own; undefined for a row
+ *   with no such concept
+ */
 interface RowControlProps {
     viewId: string;
     def: SettingRowDef;
     value: unknown;
+    inheritedValue?: unknown;
     groupByResolvedKey: string;
     groupByCandidateKeys: string[];
     naturalColumnOrder: string[];
+    groupOrderMode: GroupOrderMode;
+    notesWithinParentContext: NoteProps[];
+    fallbackDocPath?: string;
+    resolvedCardType: string;
     orientation: unknown;
     onChange: (def: SettingRowDef, value: unknown) => void;
+    onReorderGroups: (next_display: GroupDisplayEntry[]) => void;
 }
 
 /**
- * The lane breadth as a pixel text box, the non-drag path to the number a lane boundary sets. It follows a
+ * The group breadth as a pixel text box, the non-drag path to the number a group boundary sets. It follows a
  * drag live by reading the shared draft, and writes only when the user commits: Enter or leaving the box.
  * Something that is not a number is dropped and the box goes back to the setting, and a number under the
  * floor is held to it.
@@ -271,7 +339,7 @@ function CardRatioControl(props: { value: unknown; label: string; onChange: (rat
     return (
         <select
             className={styles.settingsSelect}
-            data-testid="setting-control-kanbanCardRatio"
+            data-testid="setting-control-cardRatio"
             value={String(typeof props.value === 'number' ? props.value : DEFAULT_CARD_RATIO)}
             aria-label={props.label}
             title={l10n.t('Pick the height-to-width shape you want cards to land near: a card holding more than that shape allows clips its own body to reach it.')}
@@ -284,10 +352,48 @@ function CardRatioControl(props: { value: unknown; label: string; onChange: (rat
     );
 }
 
+/** an option's testid-free label, with "(inherited)" appended when its value is what the row would inherit */
+function withInheritedLabel(label: string, option_value: unknown, inherited_value: unknown): string {
+    return option_value === inherited_value ? l10n.t('{0} (inherited)', label) : label;
+}
+
+/** the orientation select: columns or rows, labelling whichever matches the inherited value */
+function OrientationControl(props: { value: unknown; inheritedValue: unknown; onChange: (orientation: string) => void }): React.ReactElement {
+    return (
+        <select
+            className={styles.settingsSelect}
+            data-testid="setting-control-orientation"
+            value={props.value === 'rows' ? 'rows' : 'columns'}
+            aria-label={l10n.t('Orientation')}
+            onChange={(e) => props.onChange(e.target.value)}
+        >
+            <option value="columns">{withInheritedLabel(l10n.t('Columns'), 'columns', props.inheritedValue)}</option>
+            <option value="rows">{withInheritedLabel(l10n.t('Rows'), 'rows', props.inheritedValue)}</option>
+        </select>
+    );
+}
+
+/** the group order select: the four GROUP_ORDERS, labelled by groupOrderLabel so the row and the board's own chip order never word a mode differently */
+function GroupOrderControl(props: { value: unknown; inheritedValue: unknown; label: string; onChange: (mode: GroupOrderMode) => void }): React.ReactElement {
+    return (
+        <select
+            className={styles.settingsSelect}
+            data-testid="setting-control-groupOrder"
+            value={resolveGroupOrderMode(props.value)}
+            aria-label={props.label}
+            onChange={(e) => props.onChange(e.target.value as GroupOrderMode)}
+        >
+            {GROUP_ORDERS.map(mode => (
+                <option key={mode} value={mode}>{withInheritedLabel(groupOrderLabel(mode), mode, resolveGroupOrderMode(props.inheritedValue))}</option>
+            ))}
+        </select>
+    );
+}
+
 /**
  * The third column's control for one row. Group by is editable wherever it is rendered, including from
- * a kanban board: the axis kanban pins is what makes it a kanban, so departing from it is a new view
- * type rather than a locked control, and the offer beneath the rows is how that departure is saved.
+ * a kanban board: the axis kanban pins is what makes it a kanban, and an edit writes directly into that
+ * view's own value (`settingWriteFor`); there is nothing left here to lock.
  */
 function RowControl(props: RowControlProps): React.ReactElement {
     const def = props.def;
@@ -298,6 +404,7 @@ function RowControl(props: RowControlProps): React.ReactElement {
                     selection={typeof props.value === 'string' ? props.value : AUTO_TYPE}
                     resolvedKey={props.groupByResolvedKey}
                     candidateKeys={props.groupByCandidateKeys}
+                    inheritedValue={typeof props.inheritedValue === 'string' ? props.inheritedValue : undefined}
                     onChange={(group_by_key) => props.onChange(def, group_by_key)}
                 />
             );
@@ -329,18 +436,7 @@ function RowControl(props: RowControlProps): React.ReactElement {
             );
         }
         case 'orientation':
-            return (
-                <select
-                    className={styles.settingsSelect}
-                    data-testid="setting-control-orientation"
-                    value={props.value === 'rows' ? 'rows' : 'columns'}
-                    aria-label={l10n.t('Orientation')}
-                    onChange={(e) => props.onChange(def, e.target.value)}
-                >
-                    <option value="columns">{l10n.t('Columns')}</option>
-                    <option value="rows">{l10n.t('Rows')}</option>
-                </select>
-            );
+            return <OrientationControl value={props.value} inheritedValue={props.inheritedValue} onChange={(orientation) => props.onChange(def, orientation)} />;
         case 'groupDisplay':
             return (
                 <GroupDisplayControl
@@ -348,9 +444,16 @@ function RowControl(props: RowControlProps): React.ReactElement {
                     saved={Array.isArray(props.value) ? props.value as GroupDisplayEntry[] : []}
                     natural={props.naturalColumnOrder}
                     axisKey={props.groupByResolvedKey}
+                    mode={props.groupOrderMode}
+                    notes={props.notesWithinParentContext}
+                    fallbackDocPath={props.fallbackDocPath}
+                    resolvedCardType={props.resolvedCardType}
                     onChange={(next_display) => props.onChange(def, next_display)}
+                    onReorder={props.onReorderGroups}
                 />
             );
+        case 'groupOrder':
+            return <GroupOrderControl value={props.value} inheritedValue={props.inheritedValue} label={settingRowLabel(def.key)} onChange={(mode) => props.onChange(def, mode)} />;
         case 'checkbox':
         default:
             return (
@@ -375,7 +478,7 @@ interface TypeTreeContext {
     selected_node: string;
     view_type_selection: string;
     auto_resolved_type?: string;
-    counted_settings: Partial<SettingsCascadePayload>;
+    counted_settings: Partial<ResolvedSettingsCascade>;
     radio_name: string;
     onHighlight: (node_id: string) => void;
     onPickType: (view_type: string) => void;
@@ -440,121 +543,173 @@ interface SettingsPaneProps {
     registry: ViewRegistry;
     settings: SettingRowValues;
     diverged: string[];
+    userTypes: UserViewType[];
+    viewOverrides: ViewOverridesMap;
     naturalColumnOrder: string[];
     groupByResolvedKey: string;
     groupByCandidateKeys: string[];
+    notesWithinParentContext: NoteProps[];
+    fallbackDocPath?: string;
+    resolvedCardType: string;
     onRowChange: (def: SettingRowDef, value: unknown) => void;
+    onReorderGroups: (next_display: GroupDisplayEntry[]) => void;
 }
 
 /**
- * The right pane: one four-column grid holding the selected node's chain rows and then the global rows
- * under their own heading. Everything sits in a single grid so the two groups share one set of column
- * widths and the names and controls stay aligned across the heading. The columns carry no heads of their
- * own - the "View settings" heading above the pane says what the rows are, and the pill column reads as
- * provenance unlabelled.
+ * Everything the pane needs for one row's value and its pill state, resolved once per row through
+ * `resolveTreeRow` - the one engine a view row and a card row both resolve through - so a pill, a
+ * dropdown's "(inherited)" option, the M marker and the control's own value can never disagree.
+ * - value: the control's own value - resolved for the selected node when the key is per-view, else the
+ *   flat cascade value, exactly as before
+ * - inherited: the value the row would inherit if it held none of its own; undefined for a non-per-view key
+ * - ownerLabel: the view the effective value comes from (the rightmost column)
+ * - inheritedFrom / specificFrom: which state pill to render, if any (mutually exclusive)
+ * - diverged: whether the value the row actually shows diverges from ITS OWN saved default - the flat
+ *   key's divergence when the value is inherited from the home, else the owning view's own cell
+ *   (`views:<node>:<key>`) published in `props.diverged`
+ */
+interface ResolvedRow {
+    value: unknown;
+    inherited: unknown;
+    ownerLabel: string | undefined;
+    inheritedFrom: string | undefined;
+    inheritedIsBuiltinDefault: boolean;
+    specificFrom: string | undefined;
+    diverged: boolean;
+}
+
+/** a node id into its drawer label, or undefined through, for the pills resolveTreeRow names by id */
+function labelOf(node_id: string | undefined, registry: ViewRegistry): string | undefined {
+    if (node_id === undefined) { return undefined; }
+    return nodeLabel(getViewNode(node_id, registry) ?? registry.nodes[0], registry);
+}
+
+function resolveRow(def: SettingRowDef, props: SettingsPaneProps): ResolvedRow {
+    const home_value = props.settings[def.key] ?? def.fallback;
+    const owner_label = ownerLabelFor(props.selectedNode, def, props.registry, props.userTypes, props.viewOverrides);
+    const resolved = resolveTreeRow(
+        props.registry,
+        'views',
+        isPerViewKey(def.key),
+        props.selectedNode,
+        def.key,
+        home_value,
+        props.userTypes,
+        props.viewOverrides,
+        props.diverged,
+    );
+    return {
+        value: resolved.value,
+        inherited: resolved.inherited,
+        ownerLabel: owner_label,
+        inheritedFrom: labelOf(resolved.inheritedFromId, props.registry),
+        inheritedIsBuiltinDefault: resolved.inheritedIsBuiltinDefault,
+        specificFrom: labelOf(resolved.specificFromId, props.registry),
+        diverged: resolved.diverged,
+    };
+}
+
+/**
+ * The right pane: one five-column grid holding the selected node's chain rows, banded by home, and then
+ * the global rows under their own heading. Everything sits in a single grid so the groups share one set
+ * of column widths and the names and controls stay aligned across the heading. The columns carry no
+ * heads of their own - the "View settings" heading above the pane says what the rows are, and the pill
+ * column reads as provenance unlabelled. groupOrder and orientation are per-view, so the chip mode and
+ * the breadth row's label and aria-label are resolved for the SELECTED node, never read off the flat value.
  */
 function SettingsPane(props: SettingsPaneProps): React.ReactElement {
-    const renderRow = (def: SettingRowDef, owner_label: string | undefined): React.ReactElement => (
+    const group_order_home_value = props.settings.groupOrder ?? GROUP_ORDER_DEFAULT;
+    const resolved_group_order = resolveViewSetting(props.registry, props.selectedNode, 'groupOrder', group_order_home_value, props.userTypes, props.viewOverrides).value;
+    const group_order_mode = resolveGroupOrderMode(resolved_group_order);
+    const orientation_home_value = props.settings.orientation ?? 'columns';
+    const resolved_orientation = resolveViewSetting(props.registry, props.selectedNode, 'orientation', orientation_home_value, props.userTypes, props.viewOverrides).value;
+    const renderRow = (def: SettingRowDef, resolved: ResolvedRow): React.ReactElement => (
         <SettingsRow
             key={def.key}
             rowKey={def.key}
-            label={settingRowLabel(def.key, props.settings.orientation)}
-            ownerLabel={owner_label}
-            diverged={props.diverged.includes(def.key)}
+            label={settingRowLabel(def.key, resolved_orientation)}
+            ownerLabel={resolved.ownerLabel}
+            diverged={resolved.diverged}
+            inheritedFrom={resolved.inheritedFrom}
+            inheritedIsBuiltinDefault={resolved.inheritedIsBuiltinDefault}
+            specificFrom={resolved.specificFrom}
             control={
                 <RowControl
                     viewId={props.viewId}
                     def={def}
-                    value={props.settings[def.key] ?? def.fallback}
+                    value={resolved.value}
+                    inheritedValue={resolved.inherited}
                     groupByResolvedKey={props.groupByResolvedKey}
                     groupByCandidateKeys={props.groupByCandidateKeys}
                     naturalColumnOrder={props.naturalColumnOrder}
-                    orientation={props.settings.orientation}
+                    groupOrderMode={group_order_mode}
+                    notesWithinParentContext={props.notesWithinParentContext}
+                    fallbackDocPath={props.fallbackDocPath}
+                    resolvedCardType={props.resolvedCardType}
+                    orientation={resolved_orientation}
                     onChange={props.onRowChange}
+                    onReorderGroups={props.onReorderGroups}
                 />
             }
         />
     );
+    const resolved_rows = props.rows.map(def => resolveRow(def, props));
     return (
         <div className={styles.settingsRowGrid} data-testid="settings-rows">
-            {props.rows.map(def => renderRow(def, ownerLabelFor(props.selectedNode, def, props.registry)))}
+            {props.rows.flatMap((def, index) => {
+                const row = renderRow(def, resolved_rows[index]);
+                // a thin rule opens each run of rows homed at a different view, so the views read as bands
+                if (index === 0 || rowHome(def) === rowHome(props.rows[index - 1])) { return [row]; }
+                return [<div key={`owner-divider-${def.key}`} className={styles.settingsOwnerDivider} data-testid="settings-owner-divider" aria-hidden="true" />, row];
+            })}
             {props.globalRows.length > 0 && (
                 <div className={styles.settingsGroupHeading} data-testid="global-settings-heading">{l10n.t('Global settings')}</div>
             )}
-            {props.globalRows.map(def => renderRow(def, undefined))}
+            {props.globalRows.map(def => renderRow(def, resolveRow(def, props)))}
         </div>
     );
 }
 
-interface NewTypeOfferProps {
-    def: SettingRowDef;
-    ownerLabel: string | undefined;
+interface SaveAsNewTypeButtonProps {
     nameHint: string;
-    updateTypeLabel?: string;
-    onUpdate?: () => void;
     onSave: (label: string) => void;
 }
 
 /**
- * The sentence above the offer's buttons: which setting moved, which type up the tree owns it, and what
- * can be done about it. Two literals rather than one assembled from parts, because `vscode-l10n-dev
- * export` reads `l10n.t('...')` statically and a sentence stitched together would never reach the bundle.
+ * The explicit "Save as new view type" control: mints a type parented on the selected view, starting
+ * with an empty bag of its own. Replaces the old automatic offer that fired only when a change landed on
+ * a setting an ancestor owned - which had nothing to say about a built-in view's own declared keys,
+ * since that write never touches an ancestor at all. The name is taken inline rather than through
+ * `window.prompt`, which a VS Code webview does not honour, and opens pre-filled so accepting is one
+ * click.
  */
-function offerReason(def: SettingRowDef, owner_label: string | undefined, update_type_label: string | undefined): string {
-    const owner = owner_label ?? l10n.t('another view type');
-    if (update_type_label === undefined) {
-        return l10n.t('{0} is owned by {1}. Save your change as a new view type to keep it without altering the type it came from.', settingRowLabel(def.key), owner);
-    }
-    return l10n.t('{0} is owned by {1}. Update {2} to keep the change in it, or save it as a new view type instead.', settingRowLabel(def.key), owner, update_type_label);
-}
-
-/**
- * The offer to keep a change that landed on a setting an ancestor owns. It leads with WHY - which setting
- * moved and which type up the tree owns it - because the bare button that shipped first asked a question
- * nothing on screen answered. On a type the user owns there are two ways to keep the change, and updating
- * the type they are standing on leads, because minting a second type beside it is the larger act. The name
- * is taken inline rather than through `window.prompt`, which a VS Code webview does not honour, and opens
- * pre-filled so accepting is one click.
- */
-function NewTypeOffer(props: NewTypeOfferProps): React.ReactElement {
+function SaveAsNewTypeButton(props: SaveAsNewTypeButtonProps): React.ReactElement {
     const [draft, setDraft] = useState<string | undefined>(undefined);
-    return (
-        <div className={styles.settingsNewTypeOffer} data-testid="new-view-type-offer">
-            <p className={styles.settingsCustomTypesNote} data-testid="new-view-type-reason">
-                {offerReason(props.def, props.ownerLabel, props.updateTypeLabel)}
-            </p>
-            {draft === undefined ? (
-                <div className={styles.settingsCustomTypesRow}>
-                    {props.onUpdate !== undefined && (
-                        <button type="button" data-testid="user-view-type-update" onClick={props.onUpdate}>
-                            {l10n.t('Update this view type')}
-                        </button>
-                    )}
-                    <button type="button" data-testid="new-view-type-open" onClick={() => setDraft(props.nameHint)}>
-                        {l10n.t('Save as a new view type')}
-                    </button>
-                </div>
-            ) : (
-                <div className={styles.settingsCustomTypesRow}>
-                    <label>
-                        {l10n.t('Name the new view type')}
-                        {' '}
-                        <input
-                            type="text"
-                            className={styles.settingsNewTypeName}
-                            data-testid="new-view-type-name"
-                            value={draft}
-                            onChange={(e) => setDraft(e.target.value)}
-                        />
-                    </label>
-                    <button type="button" data-testid="new-view-type-save" disabled={draft.trim().length === 0} onClick={() => props.onSave(draft)}>
-                        {l10n.t('Save')}
-                    </button>
-                    <button type="button" data-testid="new-view-type-cancel" onClick={() => setDraft(undefined)}>
-                        {l10n.t('Cancel')}
-                    </button>
-                </div>
-            )}
+    return draft === undefined ? (
+        <div className={styles.settingsCustomTypesRow}>
+            <button type="button" data-testid="new-view-type-open" onClick={() => setDraft(props.nameHint)}>
+                {l10n.t('Save as new view type')}
+            </button>
+        </div>
+    ) : (
+        <div className={styles.settingsCustomTypesRow}>
+            <label>
+                {l10n.t('Name the new view type')}
+                {' '}
+                <input
+                    type="text"
+                    className={styles.settingsNewTypeName}
+                    data-testid="new-view-type-name"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                />
+            </label>
+            <button type="button" data-testid="new-view-type-save" disabled={draft.trim().length === 0} onClick={() => props.onSave(draft)}>
+                {l10n.t('Save')}
+            </button>
+            <button type="button" data-testid="new-view-type-cancel" onClick={() => setDraft(undefined)}>
+                {l10n.t('Cancel')}
+            </button>
         </div>
     );
 }
@@ -616,39 +771,28 @@ function UserTypeControls(props: UserTypeControlsProps): React.ReactElement {
 }
 
 interface CustomViewTypesDisclosureProps {
-    offerRows: SettingRowDef[];
-    offerOwnerLabel: string | undefined;
     nameHint: string;
-    overrides: Record<string, unknown>;
     selectedUserType: UserViewType | undefined;
-    onSave: (label: string, overrides: Record<string, unknown>) => void;
-    onUpdate: (overrides: Record<string, unknown>) => void;
+    onSave: (label: string) => void;
     onRename: (id: string, label: string) => void;
     onDelete: (id: string) => void;
 }
 
 /**
- * Everything about the user's own view types, behind one disclosure under Change defaults: what they are,
- * the offer to mint one, and the controls for the one currently selected.
+ * Everything about the user's own view types, behind one disclosure under Change defaults: what they
+ * are, the explicit button to mint one, and the controls for the one currently selected.
  *
  * The two disclosures are deliberately the same shape, because they answer the same kind of question -
  * something here changes state beyond this board, and the reader should have to open it before it can.
- * This one opens itself when an offer arrives, since an offer nobody can see is not an offer, and stays
- * wherever the reader leaves it afterwards. The caller renders it only when it holds something, so it is
- * never an empty panel explaining a feature the reader cannot reach from where they are standing. The
- * caller keys this component on the set of offer reasons, so a fresh offer is a fresh component and
- * reader_open resets to undefined rather than needing an effect to sync it.
+ * Closed by default: nothing here fires automatically any more, so there is no event to open it for.
  */
 function CustomViewTypesDisclosure(props: CustomViewTypesDisclosureProps): React.ReactElement {
-    const offer = props.offerRows[0];
-    // undefined defers to whether there is an offer; once set, it holds the reader's own choice
-    const [reader_open, setReaderOpen] = useState<boolean | undefined>(undefined);
-    const open = reader_open ?? offer !== undefined;
+    const [reader_open, setReaderOpen] = useState(false);
     return (
         <details
             className={styles.settingsCustomTypes}
             data-testid="custom-view-types"
-            open={open}
+            open={reader_open}
             onToggle={(e) => setReaderOpen((e.currentTarget as HTMLDetailsElement).open)}
         >
             <summary data-testid="custom-view-types-summary">
@@ -658,16 +802,7 @@ function CustomViewTypesDisclosure(props: CustomViewTypesDisclosureProps): React
                 <p className={styles.settingsDivergedNote}>
                     {l10n.t('A custom view type is a built-in one plus your own settings. It sits in the tree beside the type it came from and can be switched to like any other.')}
                 </p>
-                {offer !== undefined && (
-                    <NewTypeOffer
-                        def={offer}
-                        ownerLabel={props.offerOwnerLabel}
-                        nameHint={props.nameHint}
-                        updateTypeLabel={props.selectedUserType?.label}
-                        onUpdate={props.selectedUserType === undefined ? undefined : () => props.onUpdate(props.overrides)}
-                        onSave={(label) => props.onSave(label, props.overrides)}
-                    />
-                )}
+                <SaveAsNewTypeButton nameHint={props.nameHint} onSave={props.onSave} />
                 {props.selectedUserType !== undefined && (
                     <UserTypeControls key={props.selectedUserType.id} userType={props.selectedUserType} onRename={props.onRename} onDelete={props.onDelete} />
                 )}
@@ -750,29 +885,13 @@ function resolveSelectedNode(picked: string | undefined, current_type: string, r
     return VIEW_REGISTRY.nodes[0].id;
 }
 
-/**
- * The rows that make this board something other than its parent: the ones that differ from their saved
- * default AND belong to a type above the selected node. Those are exactly the departures a new view type
- * would capture, so they are the reasons to offer minting one.
- *
- * Asked of the settings rather than remembered from a click, which is the whole point. The offer used to
- * be a note of the row the user last touched, so a board reopened with orientation already on rows had
- * nothing to remember and made no offer until the control was touched again.
- */
-function useOfferRows(rows: SettingRowDef[], diverged: string[], selected_node: string, registry: ViewRegistry): SettingRowDef[] {
-    return useMemo(
-        () => rows.filter(def => diverged.includes(def.key) && offersNewViewType(selected_node, def.key, registry)),
-        [rows, diverged, selected_node, registry],
-    );
-}
-
 /** the cascade narrowed to the keys this drawer renders, so a node's count states what clicking it shows */
-function countedSettings(settings: SettingRowValues): Partial<SettingsCascadePayload> {
+function countedSettings(settings: SettingRowValues): Partial<ResolvedSettingsCascade> {
     const narrowed: Record<string, unknown> = {};
     for (const def of VIEW_SETTING_ROWS) {
         if (def.key in settings) { narrowed[def.key] = settings[def.key]; }
     }
-    return narrowed as Partial<SettingsCascadePayload>;
+    return narrowed as Partial<ResolvedSettingsCascade>;
 }
 
 /**
@@ -794,21 +913,80 @@ interface SettingsDrawerSelection {
     handle_highlight: (node_id: string) => void;
     handle_pick_type: (view_type: string) => void;
     handle_row_change: (def: SettingRowDef, value: unknown) => void;
-    handle_save_new_type: (label: string, overrides: Record<string, unknown>) => void;
-    handle_update_type: (overrides: Record<string, unknown>) => void;
+    handle_group_order_drag: (next_display: GroupDisplayEntry[]) => void;
+    handle_save_new_type: (label: string) => void;
     handle_rename_type: (id: string, label: string) => void;
     handle_delete_type: (id: string) => void;
 }
 
 /**
- * Builds the drawer's selection handlers. handle_row_change writes into the selected user type's
- * overrides when it holds the key, since a workspace write to such a key is ignored and the type's
- * overrides paint over it on the next render. handle_save_new_type and handle_update_type both clear
- * the written keys off the workspace scope afterwards: a type's overrides only apply while it is the
- * rendered type, and values left in the workspace scope would strand the offer or duplicate on the
- * next save. handle_delete_type hands the selection back to the deleted type's parent rather than
- * falling through to `auto`, which would be a second, invisible choice about what renders.
+ * Builds the drawer's selection handlers. handle_row_change routes every write through settingWriteFor
+ * (the selected view's own cell - a saved type's or a built-in's own entry in the `views` bag - else the
+ * home's own cell), so there is nothing left to clear off an ancestor afterwards. handle_save_new_type
+ * mints a type parented on the selected view, with no values of its own: everything the selected view
+ * holds, stored or built-in, is already reachable through that parent link, so copying it into the new
+ * type's own bag would only bake in a redundant explicit entry that can drift from its source later.
+ * handle_delete_type hands the selection back to the deleted type's parent rather than falling through
+ * to `auto`, which would be a second, invisible choice about what renders.
  */
+// the two rows a group-order drag can touch, looked up once rather than re-found on every drag
+const GROUP_DISPLAY_ROW = VIEW_SETTING_ROWS.find(def => def.key === 'groupDisplay') as SettingRowDef;
+const GROUP_ORDER_ROW = VIEW_SETTING_ROWS.find(def => def.key === 'groupOrder') as SettingRowDef;
+
+/**
+ * The groupDisplay value to actually store in `selected_node`'s own bag entry: `next_display` (one
+ * axis's present-plus-absent entries, already reconstructed by `GroupDisplayControl`) merged against
+ * whatever that SAME entry already holds, so a different axis's entries already saved there survive
+ * untouched. Only called below the home - a write at the home goes through `onGroupDisplayChange`
+ * instead, since the home's own cell and the flat cascade value are the same storage and its axis-merge
+ * already reads straight off the flat value.
+ */
+function groupDisplayWriteValue(
+    selected_node: string,
+    user_types: UserViewType[],
+    view_overrides: ViewOverridesMap,
+    axis: string,
+    next_display: GroupDisplayEntry[],
+): GroupDisplayEntry[] {
+    const own_existing = ownBagFor(selected_node, user_types, view_overrides).groupDisplay as GroupDisplayEntry[] | undefined;
+    return replaceGroupDisplayForAxis(own_existing, axis, next_display);
+}
+
+/**
+ * What a chip drag in a group-order select writes. `custom` is an ordinary groupDisplay change, routed
+ * through `handle_row_change` exactly like any other (which does its own per-bag axis merge). An
+ * automatic mode also switches groupOrder to custom: whenever the selected node is a saved type, both
+ * keys land in ONE `views` bag delta (two cells in the same `sets` array), because two separate
+ * round-trips risk one clobbering the other's write to the same entry; a built-in node's two cells are
+ * written as two independent, scope-safe deltas, so they are not combined.
+ */
+function dispatchGroupDrag(
+    next_display: GroupDisplayEntry[],
+    mode: GroupOrderMode,
+    selected_node: string,
+    selected_user_type: UserViewType | undefined,
+    user_types: UserViewType[],
+    view_overrides: ViewOverridesMap,
+    axis: string,
+    handle_row_change: (def: SettingRowDef, value: unknown) => void,
+    on_setting_change: (key: SettingsCascadeKey | 'views', value: unknown) => void,
+): void {
+    if (mode === 'custom') {
+        handle_row_change(GROUP_DISPLAY_ROW, next_display);
+        return;
+    }
+    if (selected_user_type !== undefined) {
+        const merged_display = groupDisplayWriteValue(selected_node, user_types, view_overrides, axis, next_display);
+        on_setting_change('views', { sets: [
+            { node_id: selected_node, key: 'groupDisplay', value: merged_display },
+            { node_id: selected_node, key: 'groupOrder', value: GROUP_ORDER_DEFAULT },
+        ] });
+        return;
+    }
+    handle_row_change(GROUP_DISPLAY_ROW, next_display);
+    handle_row_change(GROUP_ORDER_ROW, GROUP_ORDER_DEFAULT);
+}
+
 function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: ViewRegistry): SettingsDrawerSelection {
     const [picked_node, setPickedNode] = useState<string | undefined>(undefined);
     const selected_node = resolveSelectedNode(picked_node, props.currentType, registry);
@@ -821,49 +999,56 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
         onViewTypeChange(view_type);
         if (view_type !== AUTO_TYPE) { setPickedNode(view_type); }
     }, [onViewTypeChange]);
-    // writes into the selected type's overrides when it holds the key, else through the normal cascade
+    // the selected view's own bag; settingWriteFor routes every write through it
+    const view_overrides = (props.settings.viewOverrides as ViewOverridesMap | undefined) ?? {};
+    // the axis a groupDisplay write edits, mirroring GroupDisplayControl's own "no live axis" fallback
+    const group_axis = props.naturalColumnOrder.length === 0 ? KANBAN_AXIS_KEY : props.groupByResolvedKey;
     const handle_row_change = useCallback((def: SettingRowDef, value: unknown): void => {
-        if (selected_user_type !== undefined && userTypeHoldsKey(selected_user_type, def.key)) {
-            const write = settingWriteFor(userTypes, selected_user_type, def.key, value);
-            onSettingChange(write.setting, write.value);
+        const home_value = props.settings[def.key] ?? def.fallback;
+        const home = rowHome(def);
+        if (def.control === 'groupDisplay' && selected_node === home) {
+            // the home's own cell IS the flat value, so this goes through the toolbar's own axis-scoped write
+            onGroupDisplayChange(value as GroupDisplayEntry[]);
             return;
         }
-        if (def.control === 'groupDisplay') {
-            onGroupDisplayChange(value as GroupDisplayEntry[]);
-        } else {
-            onSettingChange(def.key, value);
-        }
-    }, [onGroupDisplayChange, onSettingChange, selected_user_type, userTypes]);
-    // mints the type, pins the board to it, then clears the copied keys off the workspace scope
-    const handle_save_new_type = useCallback((label: string, overrides: Record<string, unknown>): void => {
-        const keys = Object.keys(overrides) as SettingsCascadeKey[];
-        if (keys.length === 0) { return; }
-        const minted: UserViewType = {
-            id: mintUserViewTypeId(label, registry),
-            label: label.trim(),
-            parent: selected_node,
-            overrides,
-        };
-        onSettingChange('viewUserTypes', [...userTypes, minted]);
-        onViewTypeChange(minted.id);
-        for (const key of keys) { onSettingChange(key, undefined); }
-        setPickedNode(minted.id);
-    }, [registry, selected_node, onSettingChange, onViewTypeChange, userTypes]);
-    // moves diverged values into the type's overrides and pins the board to it if showing something else
-    const handle_update_type = useCallback((overrides: Record<string, unknown>): void => {
-        const keys = Object.keys(overrides) as SettingsCascadeKey[];
-        if (selected_user_type === undefined || keys.length === 0) { return; }
-        onSettingChange('viewUserTypes', updateUserViewTypeOverrides(userTypes, selected_user_type.id, overrides));
-        if (props.viewTypeSelection !== selected_user_type.id) { onViewTypeChange(selected_user_type.id); }
-        for (const key of keys) { onSettingChange(key, undefined); }
-    }, [onSettingChange, onViewTypeChange, props.viewTypeSelection, selected_user_type, userTypes]);
+        const write_value = def.control === 'groupDisplay'
+            ? groupDisplayWriteValue(selected_node, userTypes, view_overrides, group_axis, value as GroupDisplayEntry[])
+            : value;
+        const write = settingWriteFor(registry, userTypes, view_overrides, selected_node, def.key, write_value, home_value);
+        onSettingChange(write.setting, write.value);
+    }, [group_axis, onGroupDisplayChange, onSettingChange, props.settings, registry, selected_node, userTypes, view_overrides]);
+    const handle_group_order_drag = useCallback((next_display: GroupDisplayEntry[]): void => {
+        const group_order_home_value = props.settings.groupOrder ?? GROUP_ORDER_DEFAULT;
+        const resolved_group_order = resolveViewSetting(registry, selected_node, 'groupOrder', group_order_home_value, userTypes, view_overrides).value;
+        dispatchGroupDrag(
+            next_display,
+            resolveGroupOrderMode(resolved_group_order),
+            selected_node,
+            selected_user_type,
+            userTypes,
+            view_overrides,
+            group_axis,
+            handle_row_change,
+            onSettingChange,
+        );
+    }, [handle_row_change, group_axis, onSettingChange, props.settings.groupOrder, registry, selected_node, selected_user_type, userTypes, view_overrides]);
+    // mints a type parented on the selected view with an empty bag of its own, and pins the board to it
+    const handle_save_new_type = useCallback((label: string): void => {
+        const minted_id = mintUserViewTypeId(label, registry);
+        onSettingChange('views', { sets: [{ node_id: minted_id, key: null, value: { parent: selected_node, label: label.trim() } }] });
+        onViewTypeChange(minted_id);
+        setPickedNode(minted_id);
+    }, [registry, selected_node, onSettingChange, onViewTypeChange]);
     const handle_rename_type = useCallback((id: string, label: string): void => {
-        onSettingChange('viewUserTypes', renameUserViewType(userTypes, id, label));
-    }, [onSettingChange, userTypes]);
+        const trimmed = label.trim();
+        if (trimmed.length === 0) { return; }
+        onSettingChange('views', { sets: [{ node_id: id, key: 'label', value: trimmed }] });
+    }, [onSettingChange]);
     // hands the selection back to the deleted type's parent rather than falling through to auto
     const handle_delete_type = useCallback((id: string): void => {
         const doomed = userTypes.find(type => type.id === id);
-        onSettingChange('viewUserTypes', removeUserViewType(userTypes, id));
+        const doomed_ids = doomedUserTypeIds(userTypes, id);
+        onSettingChange('views', { sets: doomed_ids.map(doomed_id => ({ node_id: doomed_id, key: null, value: undefined })) });
         if (props.viewTypeSelection === id) { onViewTypeChange(doomed?.parent ?? AUTO_TYPE); }
         setPickedNode(doomed?.parent);
     }, [onSettingChange, onViewTypeChange, props.viewTypeSelection, userTypes]);
@@ -873,11 +1058,17 @@ function useSettingsDrawerSelection(props: SettingsViewDrawerProps, registry: Vi
         handle_highlight,
         handle_pick_type,
         handle_row_change,
+        handle_group_order_drag,
         handle_save_new_type,
-        handle_update_type,
         handle_rename_type,
         handle_delete_type,
     };
+}
+
+/** whether a row's M would show, for the tally: the flat key's divergence for a non-per-view row, else the resolved owner's own cell */
+function rowDiverged(def: SettingRowDef, selected_node: string, registry: ViewRegistry, props: SettingsViewDrawerProps, view_overrides: ViewOverridesMap): boolean {
+    const home_value = props.settings[def.key] ?? def.fallback;
+    return resolveTreeRow(registry, 'views', isPerViewKey(def.key), selected_node, def.key, home_value, props.userTypes, view_overrides, props.diverged).diverged;
 }
 
 function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement {
@@ -886,7 +1077,8 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
     const { selected_node, selected_user_type } = drawer;
     const chain_rows = useMemo(() => viewRowsForNode(selected_node, registry), [selected_node, registry]);
     const global_rows = useMemo(() => globalSettingRows(), []);
-    const diverged_count = [...chain_rows, ...global_rows].filter(def => props.diverged.includes(def.key)).length;
+    const view_overrides = (props.settings.viewOverrides as ViewOverridesMap | undefined) ?? {};
+    const diverged_count = [...chain_rows, ...global_rows].filter(def => rowDiverged(def, selected_node, registry, props, view_overrides)).length;
     debug('selected=%s rows=%d diverged=%d', selected_node, chain_rows.length, diverged_count);
     const tree_nodes = buildTypeTreeNodes(undefined, {
         registry,
@@ -899,7 +1091,6 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
         onPickType: drawer.handle_pick_type,
     });
     const selected_label = nodeLabel(getViewNode(selected_node, registry) ?? registry.nodes[0], registry);
-    const offer_rows = useOfferRows(chain_rows, props.diverged, selected_node, registry);
     return (
         <div className={`${styles.drawerBody} ${styles.settingsDrawerBody}`} data-testid="settings-drawer-view">
             <div className={styles.settingsPanes}>
@@ -922,10 +1113,16 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
                         registry={registry}
                         settings={props.settings}
                         diverged={props.diverged}
+                        userTypes={props.userTypes}
+                        viewOverrides={(props.settings.viewOverrides as ViewOverridesMap | undefined) ?? {}}
                         naturalColumnOrder={props.naturalColumnOrder}
                         groupByResolvedKey={props.groupByResolvedKey}
                         groupByCandidateKeys={props.groupByCandidateKeys}
+                        notesWithinParentContext={props.notesWithinParentContext}
+                        fallbackDocPath={props.fallbackDocPath}
+                        resolvedCardType={props.resolvedCardType}
                         onRowChange={drawer.handle_row_change}
+                        onReorderGroups={drawer.handle_group_order_drag}
                     />
                     <div className={styles.settingsDisclosures}>
                         <ChangeDefaultsDisclosure
@@ -934,22 +1131,15 @@ function SettingsViewDrawer(props: SettingsViewDrawerProps): React.ReactElement 
                             onResetToDefault={props.onResetToDefault}
                             canResetToDefault={props.canResetToDefault}
                         />
-                        {/* the panel earns its place only with something in it: an offer, or a type to rename or delete */}
-                        {(offer_rows.length > 0 || selected_user_type !== undefined) && (
                         <CustomViewTypesDisclosure
-                            /* a fresh set of reasons is a fresh offer, so the panel reopens and the name form starts over */
-                            key={offer_rows.map(def => def.key).join('|') || 'none'}
-                            offerRows={offer_rows}
-                            offerOwnerLabel={offer_rows[0] && ownerLabelFor(selected_node, offer_rows[0], registry)}
-                            nameHint={offer_rows[0] ? newViewTypeNameHint(selected_label, offer_rows[0], props.settings[offer_rows[0].key] ?? offer_rows[0].fallback) : ''}
-                            overrides={Object.fromEntries(offer_rows.map(def => [def.key, props.settings[def.key] ?? def.fallback]))}
+                            /* a fresh selection is a fresh panel, so the name form starts over when the tree selection changes */
+                            key={selected_node}
+                            nameHint={newViewTypeNameHint(selected_label)}
                             selectedUserType={selected_user_type}
                             onSave={drawer.handle_save_new_type}
-                            onUpdate={drawer.handle_update_type}
                             onRename={drawer.handle_rename_type}
                             onDelete={drawer.handle_delete_type}
                         />
-                        )}
                     </div>
                 </div>
             </div>

@@ -11,6 +11,9 @@ import {
     resolveFocusedNote,
     resolveParentContextNote,
 } from "../../../lib/noteops";
+import { findFileH1 } from "../../../lib/mergeAggregateRoot";
+import { isGroupedViewType, registryWithUserTypes } from "../../../lib/viewregistryops";
+import { INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
 import type { ViewProps } from "../../../types/ViewProps";
 
@@ -64,6 +67,14 @@ export interface ViewContext {
  * once flattenSingleFileStories has lifted stories out from under their epics. The visible note set is
  * sorted on a copy inside a memo keyed on the source array, so sorting never mutates the tree's own
  * cached child_notes or re-runs on an unrelated render.
+ *
+ * default_scope_note: a grouped view (kanban/line) with no scope chosen, on a single current_file
+ * document with a lone H1, defaults to that H1 rather than the document root, so its CHILDREN become
+ * the cards - matching the AUTHORING_GUIDE's "H1 wraps the board" shape (the same shape
+ * flattenSingleFileStories and fileDeclaredViewType read structurally, not from the caret). Without
+ * this, explicitly pinning any view type away from auto - a built-in rung or a saved type alike, since
+ * AutoView's own caret-driven parent_context_seq derivation runs only while still resolving auto -
+ * stranded the scope on the root, so the whole document rendered as one undifferentiated card.
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useViewContext(props: ViewProps): ViewContext {
@@ -74,7 +85,7 @@ export function useViewContext(props: ViewProps): ViewContext {
     const settings = useStableSettings({
         showLineNumbers: false,
         watchUnopenedFilesInViewer: true,
-        kanbanAnimateTransitions: true,
+        animateTransitions: true,
         openNewEditorIfNoneOpen: false,
         scrollNoteIntoView: true,
         autoExpandFocusedNote: false,
@@ -88,10 +99,18 @@ export function useViewContext(props: ViewProps): ViewContext {
         ...props.display_options,
         settings,
     };
-    // scope resolves via parent_context_id when persisted, else the upstream-derived parent_context_seq
+    // whether a focused-note jump, a folder drill or a restored view state already chose a scope
+    const has_explicit_scope = display_options?.parent_context_id !== undefined || (display_options?.parent_context_seq ?? 0) !== 0;
+    const root_note = useMemo(() => findNoteBySeq(props.notes, 0), [props.notes]);
+    const registry = useMemo(() => registryWithUserTypes(props.display_options?.settings?.viewUserTypes ?? []), [props.display_options?.settings?.viewUserTypes]);
+    const is_current_file = props.display_options?.integration_mode !== INTEGRATION_MODE_FOLDER;
+    const default_scope_note = (!has_explicit_scope && is_current_file && root_note && isGroupedViewType(props.type, registry))
+        ? findFileH1(root_note)
+        : undefined;
+    // scope: parent_context_id, else parent_context_seq, else the H1 default above, else the root
     const resolved_parent_context: NoteProps | undefined = display_options?.parent_context_id
         ? resolveParentContextNote(display_options.parent_context_id, props.notes)
-        : findNoteBySeq(props.notes, display_options?.parent_context_seq || 0);
+        : findNoteBySeq(props.notes, display_options?.parent_context_seq || default_scope_note?.seq || 0);
     if (!resolved_parent_context && (display_options?.parent_context_seq ?? 0) !== 0) {
         debug('parent_context_seq %d resolved to no note in this parse, scoping to the root', display_options.parent_context_seq);
     }

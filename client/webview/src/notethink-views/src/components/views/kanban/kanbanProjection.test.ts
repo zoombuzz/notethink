@@ -279,7 +279,7 @@ describe('applyKanbanMove / projectionSatisfied with a non-status group_field', 
         return { ...note, linetags: { ...(note.linetags ?? {}), [field]: tag } };
     }
 
-    it('re-tags the dragged note on the group field when moved to another lane', () => {
+    it('re-tags the dragged note on the group field when moved to another group', () => {
         const alex = withField(makeNote({ seq: 1, stable_id: 'a' }), 'assignee', 'alex');
         const sam = withField(makeNote({ seq: 2, stable_id: 'b' }), 'assignee', 'sam');
         const move: KanbanMove = { dragged_stable_id: 'a', destination_column_value: 'sam', destination_index: 0, group_field: 'assignee' };
@@ -287,14 +287,14 @@ describe('applyKanbanMove / projectionSatisfied with a non-status group_field', 
         expect(moved.linetags?.assignee?.value).toBe('sam');
     });
 
-    it('deletes the group field linetag when moved to the absent-value lane', () => {
+    it('deletes the group field linetag when moved to the absent-value group', () => {
         const alex = withField(makeNote({ seq: 1, stable_id: 'a' }), 'assignee', 'alex');
         const move: KanbanMove = { dragged_stable_id: 'a', destination_column_value: 'untagged', destination_index: 0, group_field: 'assignee' };
         const moved = applyKanbanMove([alex], move).find(n => n.stable_id === 'a')!;
         expect(moved.linetags?.assignee).toBeUndefined();
     });
 
-    it('reads lane membership on the group field, not status', () => {
+    it('reads group membership on the group field, not status', () => {
         const sam = withField(makeNote({ seq: 1, stable_id: 'a' }), 'assignee', 'sam');
         const move: KanbanMove = { dragged_stable_id: 'a', destination_column_value: 'sam', destination_index: 0, group_field: 'assignee' };
         expect(projectionSatisfied([sam], move)).toBe(true);

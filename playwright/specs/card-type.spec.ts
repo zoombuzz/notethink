@@ -63,7 +63,7 @@ test.describe('Card type axis', () => {
 
     test('the card axis resolves independently of the view axis', async ({ page }) => {
         await setupCardFolder(page, 'card-sticky-kanban-a.md', 'card-sticky-kanban-b.md');
-        // both axes are voted from the same two files: kanban lanes drawn with sticky cards
+        // both axes are voted from the same two files: kanban groups drawn with sticky cards
         await expect(page.locator('[data-auto-selected-viewtype="kanban"]')).toHaveCount(1, { timeout: 5000 });
         await expect(page.locator('[data-auto-selected-cardtype="sticky"]')).toHaveCount(1);
         await expect(page.locator('[data-card-type="sticky"]').first()).toBeVisible();

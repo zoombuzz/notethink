@@ -75,9 +75,15 @@ export function classifyTransitions(prev_ids: Iterable<string>, next_ids: Iterab
     return { entering, moving, exiting };
 }
 
-/** True when a classification's combined moving+entering+exiting count meets the bulk-load threshold. */
-export function isBulkTransition(classification: TransitionClassification): boolean {
-    return classification.moving.length + classification.entering.length + classification.exiting.length >= KANBAN_ANIMATION_BULK_THRESHOLD;
+/**
+ * True when the combined entering + moving + exiting count meets the bulk-load threshold. Takes the
+ * three counts directly rather than a `TransitionClassification`, because the caller counts only
+ * GENUINE card moves here - a card riding along with its own group's move (no position change once the
+ * group's own delta is subtracted out) is not a move for this purpose, so a group reorder that leaves
+ * every card's relative position alone never trips the guard on card count alone.
+ */
+export function isBulkTransition(entering_count: number, moving_count: number, exiting_count: number): boolean {
+    return entering_count + moving_count + exiting_count >= KANBAN_ANIMATION_BULK_THRESHOLD;
 }
 
 /**
@@ -104,6 +110,18 @@ export function buildMoveKeyframes(delta: FlipDelta): Keyframe[] {
         { transform: `translate(${delta.dx}px, ${delta.dy}px) rotate(0deg) scale(1)`, offset: 0 },
         { transform: `translate(${delta.dx / 2}px, ${delta.dy / 2}px) rotate(2deg) scale(1.02)`, offset: 0.5 },
         { transform: 'translate(0px, 0px) rotate(0deg) scale(1)', offset: 1 },
+    ];
+}
+
+/**
+ * Web Animations keyframes for a group (column) move: a plain inverse translate to identity, with no
+ * rotate/scale lift - that lift is a card affordance, mimicking the manual-drag lift, and a group is
+ * never dragged by hand.
+ */
+export function buildColumnMoveKeyframes(delta: FlipDelta): Keyframe[] {
+    return [
+        { transform: `translate(${delta.dx}px, ${delta.dy}px)`, offset: 0 },
+        { transform: 'translate(0px, 0px)', offset: 1 },
     ];
 }
 

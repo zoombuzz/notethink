@@ -58,9 +58,9 @@ export interface MarkdownNoteOverflowState {
  * the element has zero width (during initial layout or a hidden tab - leaving
  * the previous reading in place rather than collapsing max_height to 0).
  *
- * `card_target_height` inverts which dimension decides the clip, and is what a kanban lane passes in,
- * whichever way its lanes run. Left off, the body clips at its own width, so a card is about as tall as it
- * is wide and a lane of them comes out even because they all share a width. Set, the body clips at
+ * `card_target_height` inverts which dimension decides the clip, and is what a kanban group passes in,
+ * whichever way its groups run. Left off, the body clips at its own width, so a card is about as tall as it
+ * is wide and a group of them comes out even because they all share a width. Set, the body clips at
  * whatever is left of the target once this card's own chrome is taken off - so a card carrying three
  * linetags and a four-line headline gets a shorter body than its neighbour and the two still finish the
  * same height, which is what lands a card on the board's target ratio side by side and makes a stacked row
@@ -70,7 +70,7 @@ export interface MarkdownNoteOverflowState {
  * Dependencies:
  * - body_ref: ref to the body DOM node; safe when null (no-op)
  * - is_top_level: only top-level notes clip; child notes report no overflow
- * - card_target_height: the height every card in this lane is aiming at, when something is aiming them
+ * - card_target_height: the height every card in this group is aiming at, when something is aiming them
  */
 export function useMarkdownNoteOverflow(
     body_ref: React.RefObject<HTMLDivElement | null>,

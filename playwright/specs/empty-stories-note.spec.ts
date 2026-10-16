@@ -5,8 +5,9 @@ import { sendCommand } from '../helpers/send-command';
 const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 
 /*
- * "NoteThink: Open Viewer" on a folder with no stories must still show the default kanban columns
- * (LineView's populated-columns fallback), plus a note explaining why the board is empty and a link
+ * "NoteThink: Open Viewer" on a folder with no stories must still show the untagged column, empty
+ * rather than absent (LineView's populated-columns fallback; the other default groups name no current
+ * note and so draw no column of their own), plus a note explaining why the board is empty and a link
  * into the Files drawer, whose own instructions say how to point the Include/Exclude filters at the
  * files that hold stories. Covers GenericView's empty-stories gate (folder mode, discovery settled,
  * zero notes) and the FilesDrawer instructions block (noteCount 0).
@@ -25,9 +26,10 @@ test.describe('Empty-stories note (folder mode, zero stories)', () => {
         await sendCommand(page, 'setIntegrationScope', { mode: 'folder', path: WORKSPACE_ROOT });
         await expect(page.locator('[data-testid="NoteRenderer"]')).toHaveAttribute('data-folder-mode', 'true');
 
-        // the default column order still renders, empty, rather than a blank board
-        for (const value of ['untagged', 'doing', 'code-review', 'testing', 'done']) {
-            await expect(page.locator(`[role="region"][aria-label="${value}"]`)).toBeVisible();
+        // untagged still renders, empty, rather than a blank board; the other default groups draw no column
+        await expect(page.locator('[role="region"][aria-label="untagged"]')).toBeVisible();
+        for (const value of ['doing', 'code-review', 'testing', 'done']) {
+            await expect(page.locator(`[role="region"][aria-label="${value}"]`)).toHaveCount(0);
         }
 
         const note = page.getByTestId('empty-stories-overlay');
@@ -69,8 +71,10 @@ test.describe('Empty-stories note (folder mode, zero stories)', () => {
         await expect(note).toBeVisible();
         await expect(note).toContainText('No files matched');
         await expect(note).toContainText('No markdown files matched the include pattern "**/{todo,done}.md".');
-        for (const value of ['untagged', 'doing', 'code-review', 'testing', 'done']) {
-            await expect(page.locator(`[role="region"][aria-label="${value}"]`)).toBeVisible();
+        // untagged still renders, empty, rather than a blank board; the other default groups draw no column
+        await expect(page.locator('[role="region"][aria-label="untagged"]')).toBeVisible();
+        for (const value of ['doing', 'code-review', 'testing', 'done']) {
+            await expect(page.locator(`[role="region"][aria-label="${value}"]`)).toHaveCount(0);
         }
     });
 

@@ -24,6 +24,7 @@ notethink carries the worked examples behind the workspace `<noun>ops.ts` rule; 
 Canonical: [`NAMING.md`](../lightenna-iac/docstech/standards/NAMING.md). notethink deltas:
 
 - **snake_case for data, camelCase for behaviour.** Fields on the note, view and message shapes (`NoteProps`, `ViewProps`, `NoteOrigin`, the `*Message` types) are `snake_case` (`doc_path`, `include_filter`), because they mirror the extension-webview wire format, which is snake_case end to end. A parameter that carries one of those values keeps the snake_case name (`processNote(note_id: string)`). Other parameters and props are camelCase, and so are UI event-handler props (`onClick`, `onNoteChange`) and callbacks (`setViewManagedState`, `postMessage`), which are functions.
+- **A grouped board draws groups, never lanes**: in setting labels and descriptions, l10n strings, README, stories, messages to the operator, and code (identifiers, file names, test ids, comments and test titles). The one exception is a persisted name a rename would break, which keeps its spelling until a migration story moves it.
 - **Constants known at compile time are `SCREAMING_SNAKE_CASE`, exported ones included** (`DEFAULT_COLUMN_ORDER`, `NOTETHINK_VIEW_TYPE`); notethink does not use NAMING.md's PascalCase form for exported configuration constants. A value computed at runtime is a snake_case local, not a constant.
 
 ### Permanent name check
@@ -224,8 +225,8 @@ The recurring regression is a ring cropped on the left edge of a card flush agai
 
 A view decides how notes are laid out and a card decides how one note is drawn, and the two are chosen independently, so any card type must work in any view. [`AUTHORING_GUIDE.md`](AUTHORING_GUIDE.md) > Card types makes that promise to users; this is what it asks of the code.
 
-- **Design a view to take any card.** A view may give each card room, such as the target height and width a lane solves, but never branches on which card type fills it.
-- **Design a card to sit in any view.** A card draws one note and never assumes the lane, column or document flow around it.
+- **Design a view to take any card.** A view may give each card room, such as the target height and width a group solves, but never branches on which card type fills it.
+- **Design a card to sit in any view.** A card draws one note and never assumes the group, column or document flow around it.
 - **The first view a card type is tried in is a test surface, not its home** (operator decision). A card type is finished when it works in every view.
 
 Canonical: the header of `components/notes/cardregistryops.ts`, and `AutoView.tsx`, which resolves the card axis independently of the view.

@@ -1,3 +1,4 @@
+import { activeMsFromTimestamps } from './agentclockops';
 import {
     AGENT_TRANSCRIPT_MAX_BYTES,
     type AgentApiCall,
@@ -254,6 +255,7 @@ export function buildGrokResult(input: AgentSessionInput, lines: GrokLine[]): Ag
         current,
         model,
         question,
+        active_ms: activeMsFromTimestamps(lines.map((line) => line.ts)),
         calls,
         // events.jsonl carries no command text, so no file write or commit can be attributed from it
         tool_invocations: [],

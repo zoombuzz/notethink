@@ -14,27 +14,27 @@ import VirtualizedKanbanColumn from "./VirtualizedKanbanColumn";
 import { renderBoardCard } from "./renderKanbanCard";
 import type { KanbanColumnDescriptor } from "./useKanbanColumns";
 import { cardSignature } from "./columnwidthops";
-import { useLaneBreadth } from "./useLaneBreadth";
+import { useGroupBreadth } from "./useGroupBreadth";
 import { useBoardColumnStyle } from "./useColumnWidth";
-import { useLaneListHeight } from "./useLaneListHeight";
-import { laneNeedsVirtualization } from "./virtualCardSizingOps";
-import LaneSeparator from "./LaneSeparator";
+import { useGroupListHeight } from "./useGroupListHeight";
+import { groupNeedsVirtualization } from "./virtualCardSizingOps";
+import GroupSeparator from "./GroupSeparator";
 import view_specific_styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:KanbanBoard");
 
 /**
  * Props for the kanban board subtree.
- * - visible_columns: filtered + ordered lanes to render
+ * - visible_columns: filtered + ordered groups to render
  * - display_options: cascaded into each rendered note
  * - view: owning view's ViewProps, source of per-note handlers
- * - orientation: 'columns' lays lanes side by side (the default); 'rows' stacks them
- * - dragDisabled: true for a read-only group axis - lanes render, but accept no drops
+ * - orientation: 'columns' lays groups side by side (the default); 'rows' stacks them
+ * - dragDisabled: true for a read-only group axis - groups render, but accept no drops
  * - onDragStart / onDragEnd: drag responders owned by the parent LineView
  *
- * A 'columns' lane windows through VirtualizedKanbanColumn only once its content exceeds the
+ * A 'columns' group windows through VirtualizedKanbanColumn only once its content exceeds the
  * board's height ceiling; 'rows' always uses the plain Droppable + KanbanColumn path, since a
- * stacked lane scrolls with the board rather than in a scrollport of its own.
+ * stacked group scrolls with the board rather than in a scrollport of its own.
  */
 export interface KanbanBoardProps {
     visible_columns: Array<KanbanColumnDescriptor>;
@@ -47,19 +47,19 @@ export interface KanbanBoardProps {
 }
 
 /**
- * Renders the kanban board: a `<DragDropContext>` wrapping one lane per visible column - a
+ * Renders the kanban board: a `<DragDropContext>` wrapping one group per visible column - a
  * `VirtualizedKanbanColumn` side by side, a plain `Droppable` + `KanbanColumn` stacked.
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement {
     const { visible_columns, display_options, view, orientation, dragDisabled, onDragStart, onDragEnd } = boardProps;
     const board_ref = useRef<HTMLDivElement | null>(null);
-    const lanes_side_by_side = (orientation ?? 'columns') === 'columns';
+    const groups_side_by_side = (orientation ?? 'columns') === 'columns';
     const layout = `${orientation ?? 'columns'}/${display_options.settings?.cardType ?? 'auto'}`;
     const signature = useMemo(() => cardSignature(visible_columns, layout), [visible_columns, layout]);
-    const ratio = display_options.settings?.kanbanCardRatio;
-    const { breadth, commitBreadth } = useLaneBreadth(view, display_options);
-    const board = useBoardColumnStyle(board_ref, lanes_side_by_side, ratio, breadth, visible_columns.length, signature);
+    const ratio = display_options.settings?.cardRatio;
+    const { breadth, commitBreadth } = useGroupBreadth(view, display_options);
+    const board = useBoardColumnStyle(board_ref, groups_side_by_side, ratio, breadth, visible_columns.length, signature);
     // one stable handlers object per board, so memoised GenericNote cards don't see a changed prop
     const handlers = useMemo(() => ({
         click: view.handlers?.click,
@@ -69,8 +69,8 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
         setNoteExpanded: view.handlers?.setNoteExpanded,
     }), [view.handlers?.click, view.handlers?.setCaretPosition, view.handlers?.postMessage, view.handlers?.descendToFolder, view.handlers?.setNoteExpanded]);
     // floored height to render; unfloored `available` drives the virtualize decision; undefined pre-measurement
-    const { list_height, available: available_list_height } = useLaneListHeight(board_ref);
-    debug('rendering %d lanes as %s', visible_columns.length, orientation ?? 'columns');
+    const { list_height, available: available_list_height } = useGroupListHeight(board_ref);
+    debug('rendering %d groups as %s', visible_columns.length, orientation ?? 'columns');
     return (
         <div
             className={view_specific_styles.board}
@@ -84,17 +84,17 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                 {visible_columns.map((column: KanbanColumnDescriptor, i: number) => (
                     <React.Fragment key={column.value}>
                     {i > 0 && (
-                        <LaneSeparator
+                        <GroupSeparator
                             viewId={view.id}
                             boardRef={board_ref}
                             orientation={orientation ?? 'columns'}
-                            lanesBefore={i}
+                            groupsBefore={i}
                             breadth={breadth}
                             onCommit={commitBreadth}
                         />
                     )}
                     {/* keyed by the column's stable status value: an index key would remap surviving columns onto each other's DOM subtrees when one empties, corrupting the FLIP layer's measurement */}
-                    {lanes_side_by_side && laneNeedsVirtualization(column.child_notes?.length ?? 0, available_list_height) ? (
+                    {groups_side_by_side && groupNeedsVirtualization(column.child_notes?.length ?? 0, available_list_height) ? (
                         <VirtualizedKanbanColumn
                             view_id={view.id}
                             column={column}

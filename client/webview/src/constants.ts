@@ -1,4 +1,3 @@
-import { DEFAULT_CARD_RATIO, DEFAULT_LINE_BREADTH } from './notethink-views/src/components/views/kanban/columnwidthops';
 import type { GroupDisplayEntry, SettingsCascadePayload } from './notethink-views/src/types/Messages';
 
 // mirrors the extension's folder-mode filter defaults until the extension echoes the effective globs back
@@ -11,38 +10,26 @@ export const DEFAULT_MAX_NOTES_PER_FILE = 10;
 // mirror of client/extension/src/constants.ts; the cascade and the package.json default must match this
 export const DEFAULT_COLUMN_ORDER: string[] = ['untagged', 'doing', 'code-review', 'testing', 'done'];
 
-// the built-in lane order, every lane shown; mirror of client/extension/src/lib/settings.ts' groupDisplay default
+// the built-in group order, every group shown; mirror of client/extension/src/lib/settings.ts' groupDisplay default
 export const DEFAULT_GROUP_DISPLAY: GroupDisplayEntry[] = DEFAULT_COLUMN_ORDER.map(value => ({ value, shown: true }));
 
 /**
- * The settings the webview renders from until the extension's first settingsCascade arrives.
- *
- * Every value mirrors the built-in default of the matching SETTINGS entry in
+ * The raw cascade the webview renders from until the extension's first settingsCascade arrives: empty
+ * bags and the five flat settings at their built-in default, mirroring `FLAT_SETTINGS` in
  * client/extension/src/lib/settings.ts, which is the single source of truth. The extension and the
- * webview are separate webpack bundles with no shared module graph, so this copy is the wire
- * contract rather than a second opinion - keep it in lockstep with SETTINGS and with the
- * package.json contributions those defaults are declared in.
+ * webview are separate webpack bundles with no shared module graph, so this copy is the wire contract
+ * rather than a second opinion - keep it in lockstep with FLAT_SETTINGS and with the package.json
+ * contributions those defaults are declared in. `resolvedSettingsFromCascade` (viewregistryops.ts)
+ * unpacks this into the flat shape every view and drawer actually reads, filling every bag-homed key in
+ * from its own built-in default - there is nothing to duplicate here for those.
  *
  * The three aggregates describe an untouched workspace: nothing diverges from its saved default and
  * nothing sits at either configuration scope, so both reset actions render disabled until the real
  * cascade lands.
  */
 export const DEFAULT_SETTINGS_CASCADE: SettingsCascadePayload = {
-    viewType: 'auto',
-    cardType: 'auto',
-    viewUserTypes: [],
-    showLinetagsInHeadlines: false,
-    scrollNoteIntoView: true,
-    autoExpandFocusedNote: false,
-    showLineNumbers: false,
-    groupBy: 'auto',
-    orientation: 'columns',
-    lineBreadth: DEFAULT_LINE_BREADTH,
-    kanbanGroupBy: 'auto',
-    groupDisplay: DEFAULT_GROUP_DISPLAY,
-    kanbanCardRatio: DEFAULT_CARD_RATIO,
-    kanbanAnimateTransitions: true,
-    kanbanDefaultCardType: 'card',
+    views: {},
+    cards: {},
     watchUnopenedFilesInViewer: true,
     openNewEditorIfNoneOpen: false,
     includeFilter: DEFAULT_INCLUDE_FILTER,

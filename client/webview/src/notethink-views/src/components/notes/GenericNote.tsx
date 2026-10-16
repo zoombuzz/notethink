@@ -1,5 +1,5 @@
 import React, { lazy } from 'react';
-import { DEFAULT_CARD_TYPE, cardComponentFor, cardRegistryWithViewSettings, resolveCardType } from "./cardregistryops";
+import { DEFAULT_CARD_TYPE, cardComponentFor, cardRegistryWithViewSettings, resolveCardType, resolvedSettingsForCard } from "./cardregistryops";
 import { genericNoteAreEqual } from "./genericNoteEquality";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteWrapper from "../../components/notes/GenericNoteWrapper";
@@ -78,5 +78,12 @@ export default React.memo(function GenericNote(props: NoteProps) {
         ? DEFAULT_CARD_TYPE
         : resolveCardType(props.display_options?.settings?.cardType, props.display_options?.settings?.viewType, undefined, cardRegistryWithViewSettings(props.display_options?.settings));
     const CardComponent = cardComponentFor(card_type);
-    return <CardComponent {...enriched_props} />;
+    // resolves the card-drawn settings for this note's own card type chain
+    const prior_settings = enriched_props.display_options?.settings ?? {};
+    const resolved_settings = resolvedSettingsForCard(card_type, prior_settings);
+    // the common case (no card type holds its own override) keeps the same reference, skipping a fresh props object
+    const card_props: NoteProps = resolved_settings === prior_settings
+        ? enriched_props
+        : { ...enriched_props, display_options: { ...enriched_props.display_options, settings: resolved_settings } };
+    return <CardComponent {...card_props} />;
 }, genericNoteAreEqual);

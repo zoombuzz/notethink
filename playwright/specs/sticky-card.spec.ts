@@ -10,7 +10,7 @@ const STICKY_FALLBACK_HUE = '52';
 /*
  * The sticky card and the view's default card type, driven in the browser against the real bundle.
  *
- * Jest proves the hue arithmetic and the registry resolution. What only a browser can show is that the lane
+ * Jest proves the hue arithmetic and the registry resolution. What only a browser can show is that the group
  * really gives up its card surface to the paper, that the paper and its curled corner are painted, that the
  * theme class VS Code stamps on the body changes them, and that the Kanban setting lands in the drawer where
  * its view puts it and changes what Auto draws.
@@ -83,7 +83,7 @@ test.describe('Sticky card', () => {
         await harness(page);
     });
 
-    test('a sticky in a project takes its hue, and the lane gives up its card surface to the paper', async ({ page }) => {
+    test('a sticky in a project takes its hue, and the group gives up its card surface to the paper', async ({ page }) => {
         await stickyFolderBoard(page);
         const alpha = page.locator('[data-card-type="sticky"]').filter({ hasText: 'Alpha one' });
         const beta = page.locator('[data-card-type="sticky"]').filter({ hasText: 'Beta one' });
@@ -176,12 +176,12 @@ test.describe('Default card type as a Kanban view setting', () => {
         await openViewSettings(page);
         const drawer = page.getByTestId('settings-drawer-grid');
         const row_keys = await drawer.locator('[data-testid^="setting-row-"]').evaluateAll(rows => rows.map(row => row.getAttribute('data-testid')));
-        const default_row = row_keys.indexOf('setting-row-kanbanDefaultCardType');
-        expect(default_row).toBe(row_keys.indexOf('setting-row-kanbanAnimateTransitions') + 1);
+        const default_row = row_keys.indexOf('setting-row-defaultCardType');
+        expect(default_row).toBe(row_keys.indexOf('setting-row-animateTransitions') + 1);
         expect(default_row).toBeLessThan(row_keys.indexOf('setting-row-orientation'));
-        await expect(drawer.getByTestId('setting-pill-kanbanDefaultCardType')).toHaveText('Kanban');
+        await expect(drawer.getByTestId('setting-pill-defaultCardType')).toHaveText('Kanban');
 
-        const control = drawer.getByTestId('setting-control-kanbanDefaultCardType');
+        const control = drawer.getByTestId('setting-control-defaultCardType');
         await expect(control).toBeVisible();
         await expect(control).toHaveValue('card');
         // every renderable card is offered, because a view may default to any of them
@@ -191,10 +191,10 @@ test.describe('Default card type as a Kanban view setting', () => {
     test('choosing Sticky makes Auto draw yellow stickies, and the card tab says so', async ({ page }) => {
         await expect(page.locator('[data-card-type="sticky"]')).toHaveCount(0);
         await openViewSettings(page);
-        await page.getByTestId('setting-control-kanbanDefaultCardType').selectOption('sticky');
+        await page.getByTestId('setting-control-defaultCardType').selectOption('sticky');
 
-        // round-trip order, so a failure names the broken link: write, render, label
-        await expect.poll(async () => (await workspaceSettings(page)).kanbanDefaultCardType).toBe('sticky');
+        // round-trip order, so a failure names the broken link: write, render, label; kanban is defaultCardType's own home
+        await expect.poll(async () => ((await workspaceSettings(page)).views as Record<string, Record<string, unknown>> | undefined)?.kanban?.defaultCardType).toBe('sticky');
         const sticky = page.locator('[data-card-type="sticky"]').first();
         await expect(sticky).toBeVisible({ timeout: 5000 });
         // a single file carries no project, so the paper is the fallback yellow
@@ -205,7 +205,7 @@ test.describe('Default card type as a Kanban view setting', () => {
 
     test('a card type pinned on the card tab still wins over the view default', async ({ page }) => {
         await openViewSettings(page);
-        await page.getByTestId('setting-control-kanbanDefaultCardType').selectOption('sticky');
+        await page.getByTestId('setting-control-defaultCardType').selectOption('sticky');
         await expect(page.locator('[data-card-type="sticky"]').first()).toBeVisible({ timeout: 5000 });
 
         await openCardSettings(page);

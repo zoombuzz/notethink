@@ -1,13 +1,13 @@
 import React from "react";
 import * as l10n from "@vscode/l10n";
 import type { ReactElement } from "react";
-import type { NoteDisplayOptions } from "../../../types/NoteProps";
+import type { NoteDisplayOptions, NoteProps } from "../../../types/NoteProps";
 import type { GroupDisplayEntry, SettingsCascadeKey, UserViewType } from "../../../types/Messages";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 import type { StableIdCollision } from "../../../lib/noteops";
-import { enumerateGroupByCandidates, resolveGroupByAxisKey, resolveKanbanAxisKey } from "../../../lib/groupbyops";
-import { chainOf, registryWithUserTypes } from "../../../lib/viewregistryops";
+import { enumerateGroupByCandidates, resolveGroupByAxisKey } from "../../../lib/groupbyops";
+import { registryWithUserTypes, resolveViewSetting } from "../../../lib/viewregistryops";
 import type { ActiveDrawer } from "./useToolbarDrawers";
 import CollisionsDrawer from "../drawers/CollisionsDrawer";
 import FilesDrawer from "../drawers/FilesDrawer";
@@ -50,6 +50,7 @@ interface GenericViewToolbarProps {
     resolvedCardType: string;
     onCardTypeChange: (card_type: string) => void;
     naturalColumnOrder: string[];
+    notesWithinParentContext: NoteProps[];
     collisions: StableIdCollision[];
     activeDrawer: ActiveDrawer;
     requestedJumpPath: string | undefined;
@@ -60,7 +61,7 @@ interface GenericViewToolbarProps {
     onSettingsToggle: () => void;
     onCardsToggle: (anchor: HTMLElement) => void;
     onInsertOpen: () => void;
-    onSettingChange: (key: SettingsCascadeKey, value: unknown) => void;
+    onSettingChange: (key: SettingsCascadeKey | 'views' | 'cards', value: unknown) => void;
     onGroupDisplayChange: (next_display: GroupDisplayEntry[]) => void;
     onMakeDefault: () => void;
     onResetToDefault: () => void;
@@ -92,6 +93,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         resolvedCardType,
         onCardTypeChange,
         naturalColumnOrder,
+        notesWithinParentContext,
         collisions,
         activeDrawer,
         requestedJumpPath,
@@ -113,18 +115,20 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
     } = component_props;
     // group-by candidates enumerated once here; the drawer decides which row writes them, not this code
     const user_view_types = displayOptions.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
-    // the hierarchy the user's saved types are part of, which both the kanban-chain test and the tab's wording read
+    // the hierarchy the user's saved types are part of, which the tab's wording reads
     const registry = registryWithUserTypes(user_view_types);
-    // a kanban board, or a type minted from one, overrides the axis at the kanban node
-    const on_kanban_chain = chainOf(props.type, registry).includes('kanban');
-    const group_by_selection = (on_kanban_chain
-        ? props.display_options?.settings?.kanbanGroupBy
-        : props.display_options?.settings?.groupBy) ?? 'auto';
+    // a kanban board, or a type minted from one, resolves its own group axis, status being kanban's built-in default
+    const group_by_selection = resolveViewSetting(
+        registry,
+        props.type,
+        'groupBy',
+        props.display_options?.settings?.groupBy ?? 'auto',
+        user_view_types,
+        props.display_options?.settings?.viewOverrides ?? {},
+    ).value as string;
     const group_by_candidate_keys = enumerateGroupByCandidates(props.notes).filter(c => c.kind === 'categorical').map(c => c.key);
-    // the "Auto (...)" label names the axis the board lanes by, and kanban's auto is status
-    const group_by_resolved_key = on_kanban_chain
-        ? resolveKanbanAxisKey(group_by_selection)
-        : resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, group_by_selection);
+    // the "Auto (...)" label names the axis the board groups by; a kanban chain's selection is never auto here
+    const group_by_resolved_key = resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, group_by_selection);
     return (
         <>
             <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
@@ -179,6 +183,9 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                     onViewTypeChange={onViewTypeChange}
                     onSettingChange={onSettingChange}
                     naturalColumnOrder={naturalColumnOrder}
+                    notesWithinParentContext={notesWithinParentContext}
+                    fallbackDocPath={props.doc_relative_path}
+                    resolvedCardType={resolvedCardType}
                     onGroupDisplayChange={onGroupDisplayChange}
                     groupByResolvedKey={group_by_resolved_key}
                     groupByCandidateKeys={group_by_candidate_keys}

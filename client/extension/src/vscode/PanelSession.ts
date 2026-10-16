@@ -4,10 +4,22 @@ import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, IN
 import { generateIdentifier } from '../lib/cryptoops';
 import { createThrottledProgressSender, type DiscoveryLogDetails, drainWorklist, formatDiscoveryLogLine, resolveDiscoveryMethod } from '../lib/discoveryops';
 import { type TextChange, firstInvalidChange, logEditTextChanges, offsetDeltaBefore } from '../lib/editops';
+import { chooseTargetColumn, type TargetColumnGroup } from '../lib/chooseTargetColumn';
 import { debug, writeToLog, writeToLogAtLevel, writeToErrorLog } from '../lib/errorops';
 import { globMatches } from '../lib/globMatch';
 import { isPathWithin, isWithinWorkspace } from '../lib/pathops';
-import { isSettingKey, readSetting, writeSetting, hasWorkspaceOverride, hasOverride, settingKeys, editTarget, buildSettingsCascadePayload } from '../lib/settings';
+import {
+    applyBagDelta,
+    buildSettingsCascadePayload,
+    editTarget,
+    isFlatSettingKey,
+    promoteSettingsToUser,
+    readFlatSetting,
+    resetSettingsToDefault,
+    restoreBuiltinDefaults,
+    writeFlatSetting,
+    type SettingsBag,
+} from '../lib/settings';
 import type { HashMapOf, Doc } from '../types/general';
 import { ActivityCommands } from './ActivityCommands';
 import type { AgentAnalyser } from './AgentAnalyser';
@@ -139,7 +151,7 @@ export class PanelSession {
 		this.base_uri = workspace_folder?.uri ?? initialDocument?.uri ?? INERT_BASE_URI;
 		this.extension_version = this.context.extension.packageJSON.version as string || '';
 		this.post_to_webview = (message: Record<string, unknown>): void => { this.webviewPanel.webview.postMessage(message); };
-		this.activity_commands = new ActivityCommands(this.base_uri, this.activity_analyser, this.post_to_webview);
+		this.activity_commands = new ActivityCommands(this.base_uri, this.activity_analyser, this.post_to_webview, () => this.activityTargetColumn());
 	}
 
 	// rebuilds an absolute path into a URI carrying the workspace scheme, so discovery and opens never assume file:
@@ -362,7 +374,7 @@ export class PanelSession {
 		// folder mode has integration_watcher; double-armed watchers would re-parse the same file twice
 		if (this.integration_path) { return; }
 		if (!this.active_path) { return; }
-		if (!readSetting('watchUnopenedFilesInViewer')) { return; }
+		if (!readFlatSetting('watchUnopenedFilesInViewer')) { return; }
 		// a visible editor already drives onDidChangeTextDocument; this only fills the gap when there is none
 		const visible = vscode.window.visibleTextEditors.find(ed => ed.document.uri.path === this.active_path);
 		if (visible) { return; }
@@ -618,19 +630,39 @@ export class PanelSession {
 		});
 	}
 
+	/**
+	 * `setting === 'views'` / `'cards'` carries a `BagDelta` (`{sets: [{node_id, key, value}, ...]}`)
+	 * rather than the whole bag: the bag spans both scopes merged node by node and key by key, which
+	 * only the extension can read apart, so the webview sends the cells that changed and `applyBagDelta`
+	 * applies every one of them against `target`'s own scope alone, in one atomic write, leaving the
+	 * other scope and every other node's entry untouched.
+	 */
+	private async handleUpdateBag(bag: SettingsBag, delta: unknown, target: vscode.ConfigurationTarget): Promise<void> {
+		const sets = (delta as Record<string, unknown> | undefined)?.sets;
+		if (!Array.isArray(sets)) {
+			writeToLogAtLevel('error', 'handleUpdateBag', `malformed ${bag} delta ${JSON.stringify(delta)}`);
+			return;
+		}
+		await applyBagDelta(bag, sets, target);
+	}
+
 	private async handleUpdateSetting(e: Record<string, unknown>): Promise<void> {
 		// scope defaults to the edit target so a change stays local; "Save as default" sends 'global'
 		const setting = e.setting as unknown;
 		const value = e.value as unknown;
 		const scope = (e.scope as 'workspace' | 'global' | undefined) ?? 'workspace';
 		try {
-			if (!isSettingKey(setting)) {
+			const target = scope === 'global' ? vscode.ConfigurationTarget.Global : editTarget();
+			if (setting === 'views' || setting === 'cards') {
+				await this.handleUpdateBag(setting, value, target);
+				return;
+			}
+			if (!isFlatSettingKey(setting)) {
 				writeToLogAtLevel('error', 'handleUpdateSetting', `unknown setting ${String(setting)}`);
 				return;
 			}
-			const target = scope === 'global' ? vscode.ConfigurationTarget.Global : editTarget();
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- value's union widens to unknown at the wire boundary
-			await writeSetting(setting, value as any, target);
+			await writeFlatSetting(setting, value as any, target);
 		} catch (err) {
 			writeToErrorLog('handleUpdateSetting', `writeSetting failed for ${String(setting)}`, err);
 		}
@@ -638,39 +670,19 @@ export class PanelSession {
 
 	/**
 	 * Promote every resolved setting to the user scope, so this window's choices become the default in
-	 * every other one. Snapshot first, because workspace may shadow user; write each to Global; then clear
-	 * Workspace, so the user scope is the value's only home rather than one of two agreeing copies.
+	 * every other one.
 	 */
 	private async handlePromoteSettings(): Promise<void> {
 		try {
-			const keys = settingKeys();
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- per-key value types are heterogeneous; the snapshot is opaque
-			const resolved: Record<string, any> = {};
-			for (const key of keys) {
-				resolved[key] = readSetting(key);
-			}
-			for (const key of keys) {
-				await writeSetting(key, resolved[key], vscode.ConfigurationTarget.Global);
-			}
-			// Workspace, not editTarget(): a folderless window has nothing at that scope to clear anyway
-			for (const key of keys) {
-				if (hasWorkspaceOverride(key)) {
-					await writeSetting(key, undefined, vscode.ConfigurationTarget.Workspace);
-				}
-			}
+			await promoteSettingsToUser();
 		} catch (err) {
 			writeToErrorLog('handlePromoteSettings', 'failed to promote settings to user scope', err);
 		}
 	}
 
 	private async handleResetSettings(): Promise<void> {
-		// clear every Workspace-scope override so each setting falls back to User then built-in
 		try {
-			for (const key of settingKeys()) {
-				if (hasWorkspaceOverride(key)) {
-					await writeSetting(key, undefined, vscode.ConfigurationTarget.Workspace);
-				}
-			}
+			await resetSettingsToDefault();
 		} catch (err) {
 			writeToErrorLog('handleResetSettings', 'failed to clear workspace overrides', err);
 		}
@@ -684,11 +696,7 @@ export class PanelSession {
 	 */
 	private async handleRestoreBuiltinDefaults(): Promise<void> {
 		try {
-			for (const key of settingKeys()) {
-				if (!hasOverride(key)) { continue; }
-				await writeSetting(key, undefined, vscode.ConfigurationTarget.Workspace);
-				await writeSetting(key, undefined, vscode.ConfigurationTarget.Global);
-			}
+			await restoreBuiltinDefaults();
 		} catch (err) {
 			writeToErrorLog('handleRestoreBuiltinDefaults', 'failed to clear workspace and user overrides', err);
 		}
@@ -727,7 +735,7 @@ export class PanelSession {
 			const switch_editor = true;
 			if (this.revealInVisibleEditor(doc_path, from, to, switch_editor)) { return; }
 			const force_open = e.forceOpen === true;
-			await this.revealByOpening(doc_path, from, to, force_open || readSetting('openNewEditorIfNoneOpen'));
+			await this.revealByOpening(doc_path, from, to, force_open || readFlatSetting('openNewEditorIfNoneOpen'));
 		} catch (err) {
 			writeToErrorLog('handleRevealRange', `${String(e.type)} failed for ${doc_path}`, err);
 		}
@@ -759,18 +767,10 @@ export class PanelSession {
 	 */
 	private async revealByOpening(target: string | vscode.Uri, from: number, to: number, open_new_if_none: boolean): Promise<void> {
 		const uri = typeof target === 'string' ? this.resolveWorkspaceUri(target) : target;
-		let target_column = this.findColumnWithDoc(uri.path);
+		const target_column = chooseTargetColumn(this.webviewPanel.viewColumn, this.targetColumnGroups(), uri.path, open_new_if_none ? 'beside' : 'none');
 		if (target_column === undefined) {
-			const notethink_column = this.webviewPanel.viewColumn;
-			const other_group = vscode.window.tabGroups?.all?.find(g => g.viewColumn !== notethink_column);
-			if (other_group) {
-				target_column = other_group.viewColumn;
-			} else if (open_new_if_none) {
-				target_column = vscode.ViewColumn.Beside;
-			} else {
-				// the board is the only editor group open, and openNewEditorIfNoneOpen (off by default) is not set
-				return;
-			}
+			// the board is the only editor group open, and openNewEditorIfNoneOpen (off by default) is not set
+			return;
 		}
 		const document = await vscode.workspace.openTextDocument(uri);
 		const start_pos = document.positionAt(from);
@@ -786,21 +786,26 @@ export class PanelSession {
 		editor.revealRange(new vscode.Range(start_pos, end_pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 	}
 
-	private findColumnWithDoc(doc_path: string): vscode.ViewColumn | undefined {
+	// the live tabGroups API reduced to what chooseTargetColumn needs; empty on an older host that lacks it
+	private targetColumnGroups(): TargetColumnGroup[] {
 		try {
-			for (const group of vscode.window.tabGroups.all) {
-				for (const tab of group.tabs) {
-					const input = tab.input as { uri?: vscode.Uri; viewType?: string } | undefined;
+			return vscode.window.tabGroups.all.map(group => ({
+				view_column: group.viewColumn,
+				doc_paths: group.tabs
+					.map(tab => tab.input as { uri?: vscode.Uri; viewType?: string } | undefined)
 					// skips the board's own tab, or a single-file reveal would replace the rendered view with a plain text editor
-					if (input?.viewType === NOTETHINK_VIEW_TYPE) { continue; }
-					if (input?.uri?.path === doc_path) { return group.viewColumn; }
-				}
-			}
+					.filter(input => input?.viewType !== NOTETHINK_VIEW_TYPE && input?.uri !== undefined)
+					.map(input => (input as { uri: vscode.Uri }).uri.path),
+			}));
 		} catch (err) {
-			// tabGroups API may be unavailable on older hosts - caller falls back to a beside column
-			debug('findColumnWithDoc: tabGroups unavailable: %O', err);
+			debug('targetColumnGroups: tabGroups unavailable: %O', err);
+			return [];
 		}
-		return undefined;
+	}
+
+	// an activity open always gets a group, beside the viewer when it is alone, whatever openNewEditorIfNoneOpen says
+	private activityTargetColumn(): vscode.ViewColumn {
+		return chooseTargetColumn(this.webviewPanel.viewColumn, this.targetColumnGroups(), undefined, 'beside') ?? vscode.ViewColumn.Beside;
 	}
 
 	private async handleSetIntegration(e: Record<string, unknown>): Promise<void> {
@@ -850,8 +855,8 @@ export class PanelSession {
 	// cascade precedence: built-in default -> user -> workspace config -> explicit message override
 	private adoptFolderFilters(e: Record<string, unknown>): void {
 		// every read funnels through the settings module, so this cannot drift from the webview's view
-		this.integration_include = readSetting('includeFilter');
-		this.integration_exclude = readSetting('excludeFilter');
+		this.integration_include = readFlatSetting('includeFilter');
+		this.integration_exclude = readFlatSetting('excludeFilter');
 		// an empty include is degenerate and falls back to the default; an empty exclude legitimately means "exclude nothing"
 		if (typeof e.include === 'string') {
 			this.integration_include = e.include.trim() === '' ? DEFAULT_INCLUDE_FILTER : e.include;

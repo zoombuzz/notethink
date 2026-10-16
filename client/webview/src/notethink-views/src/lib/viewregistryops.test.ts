@@ -1,30 +1,38 @@
+import fs from 'fs';
+import path from 'path';
+import { CARD_REGISTRY, cardChainOf, isPerCardKey } from '../components/notes/cardregistryops';
 import {
+    ROOT_NODE,
     SETTING_HOMES,
-    STRUCTURAL_SETTING_KEYS,
     VIEW_REGISTRY,
     ancestorsOf,
+    builtinViewOverridesFromViews,
     chainOf,
     childViewNodes,
+    divergedKeyFor,
+    doomedUserTypeIds,
     getViewNode,
+    inheritedViewSetting,
     isDescendantOf,
     isGroupedViewType,
+    isPerViewKey,
     nodeSettingCount,
-    normalizeGroupDisplayOverride,
-    offersNewViewType,
+    ownBagFor,
     owningNodeFor,
     registryWithUserTypes,
-    removeUserViewType,
     renameUserViewType,
-    resolveSetting,
-    resolveSettingIn,
+    resolveViewSetting,
+    resolvedSettingsFromCascade,
     selectableViewIds,
     settingKeysForNode,
+    settingWriteFor,
     updateUserViewTypeOverrides,
     userTypeHoldsKey,
-    type ViewRegistry,
-    settingWriteFor,
+    userViewTypesFromViews,
+    viewSettingValuesEqual,
+    type ViewOverridesMap,
 } from './viewregistryops';
-import type { UserViewType } from '../types/Messages';
+import type { SettingsCascadePayload, UserViewType } from '../types/Messages';
 
 describe('view tree structure', () => {
     it('root -> {document, grouped}; grouped -> line; line -> kanban', () => {
@@ -82,163 +90,151 @@ describe('isDescendantOf / isGroupedViewType', () => {
         expect(isDescendantOf('document', 'grouped')).toBe(false);
     });
 
-    it('isGroupedViewType is true for the lane views and false for document', () => {
+    it('isGroupedViewType is true for the group views and false for document', () => {
         expect(isGroupedViewType('kanban')).toBe(true);
         expect(isGroupedViewType('line')).toBe(true);
         expect(isGroupedViewType('document')).toBe(false);
     });
 });
 
-describe('settings resolution - deepest override wins', () => {
-    it('kanban resolves axes to its own fixed override, not the grouped home default', () => {
-        const at_kanban = resolveSetting('kanban', 'axes');
-        expect(at_kanban.value).toEqual(['status']);
-        expect(at_kanban.fixed_at).toBe('kanban');
-        expect(at_kanban.home).toBe('grouped');
-    });
-
-    it('line resolves axes to the grouped home default (no override on its chain)', () => {
-        const at_line = resolveSetting('line', 'axes');
-        expect(at_line.applies).toBe(true);
-        expect(at_line.value).toBeUndefined();
-        expect(at_line.fixed).toBe(false);
-    });
-
-    it('a root-homed setting resolves at a deep leaf by walking the whole chain', () => {
-        expect(resolveSetting('kanban', 'viewType').value).toBe('auto');
-        expect(resolveSetting('document', 'viewType').value).toBe('auto');
-    });
-
-    it('a setting does not apply to a node whose chain excludes its home', () => {
-        const at_document = resolveSetting('document', 'axes');
-        expect(at_document.applies).toBe(false);
-    });
-
-    it('picks the nearest override when a chain carries overrides at two depths', () => {
-        const registry: ViewRegistry = {
-            nodes: [
-                { id: 'root', kind: 'abstract', selectable: false, configurable: true, label: 'Root' },
-                { id: 'mid', parent: 'root', kind: 'abstract', selectable: false, configurable: true, label: 'Mid' },
-                { id: 'leaf', parent: 'mid', kind: 'concrete', selectable: true, configurable: true, label: 'Leaf' },
-            ],
-            settings: [{ key: 'k', home: 'root', default: 'root-default' }],
-            overrides: [
-                { node: 'mid', key: 'k', mode: 'fixed', value: 'mid-value' },
-                { node: 'leaf', key: 'k', mode: 'fixed', value: 'leaf-value' },
-            ],
-        };
-        expect(resolveSettingIn(registry, 'leaf', 'k').value).toBe('leaf-value');
-        expect(resolveSettingIn(registry, 'mid', 'k').value).toBe('mid-value');
-        expect(resolveSettingIn(registry, 'root', 'k').value).toBe('root-default');
-    });
-});
-
-describe('fixed setting reports its value and unlocking ancestor', () => {
-    it('kanban group-by (axes) is fixed to status and unlocked by selecting Line', () => {
-        const resolution = resolveSetting('kanban', 'axes');
-        expect(resolution.fixed).toBe(true);
-        expect(resolution.value).toEqual(['status']);
-        expect(resolution.unlock_view).toBe('line');
-    });
-
-    it('line does not fix axes, so it has no unlocking view', () => {
-        const resolution = resolveSetting('line', 'axes');
-        expect(resolution.fixed).toBe(false);
-        expect(resolution.unlock_view).toBeUndefined();
-    });
-
-    it('kanban holds its group display as an OPEN override, not fixed', () => {
-        const resolution = resolveSetting('kanban', 'groupDisplay');
-        expect(resolution.fixed).toBe(false);
-        expect(resolution.open_at).toBe('kanban');
-    });
-
-    it('unlocks at a configurable ancestor even when no ancestor above the fixing node is selectable', () => {
-        const registry: ViewRegistry = {
-            nodes: [
-                { id: 'root', kind: 'abstract', selectable: false, configurable: true, label: 'Root' },
-                { id: 'mid', parent: 'root', kind: 'abstract', selectable: false, configurable: true, label: 'Mid' },
-                { id: 'leaf', parent: 'mid', kind: 'concrete', selectable: true, configurable: true, label: 'Leaf' },
-            ],
-            settings: [{ key: 'k', home: 'root', default: 'root-default' }],
-            overrides: [{ node: 'leaf', key: 'k', mode: 'fixed', value: 'leaf-value' }],
-        };
-        expect(resolveSettingIn(registry, 'leaf', 'k').unlock_view).toBe('mid');
-    });
-
-    it('skips an ancestor that is configurable but fixes the key itself', () => {
-        const registry: ViewRegistry = {
-            nodes: [
-                { id: 'root', kind: 'abstract', selectable: false, configurable: true, label: 'Root' },
-                { id: 'mid', parent: 'root', kind: 'abstract', selectable: false, configurable: true, label: 'Mid' },
-                { id: 'leaf', parent: 'mid', kind: 'concrete', selectable: true, configurable: true, label: 'Leaf' },
-            ],
-            settings: [{ key: 'k', home: 'root', default: 'root-default' }],
-            overrides: [
-                { node: 'mid', key: 'k', mode: 'fixed', value: 'mid-value' },
-                { node: 'leaf', key: 'k', mode: 'fixed', value: 'leaf-value' },
-            ],
-        };
-        expect(resolveSettingIn(registry, 'leaf', 'k').unlock_view).toBe('root');
-    });
-
-    it('reports no unlocking view when nothing above the fixing node is configurable', () => {
-        const registry: ViewRegistry = {
-            nodes: [
-                { id: 'root', kind: 'abstract', selectable: false, configurable: false, label: 'Root' },
-                { id: 'leaf', parent: 'root', kind: 'concrete', selectable: true, configurable: true, label: 'Leaf' },
-            ],
-            settings: [{ key: 'k', home: 'root', default: 'root-default' }],
-            overrides: [{ node: 'leaf', key: 'k', mode: 'fixed', value: 'leaf-value' }],
-        };
-        expect(resolveSettingIn(registry, 'leaf', 'k').unlock_view).toBeUndefined();
-    });
-});
-
-describe('existing view settings resolve as today (regression)', () => {
-    it('every registry setting declares a home node that exists in the tree', () => {
-        for (const setting of VIEW_REGISTRY.settings) {
-            expect(getViewNode(setting.home)).toBeDefined();
+describe('isPerViewKey', () => {
+    it('accepts every key whose home is a real view-tree node', () => {
+        for (const key of ['groupBy', 'orientation', 'lineBreadth', 'groupDisplay', 'groupOrder', 'cardRatio', 'animateTransitions', 'defaultCardType', 'scrollNoteIntoView'] as const) {
+            expect(isPerViewKey(key)).toBe(true);
         }
     });
 
-    it('document and kanban both inherit the generic viewType from root', () => {
-        expect(resolveSetting('document', 'viewType').home).toBe('root');
-        expect(resolveSetting('kanban', 'viewType').home).toBe('root');
+    it('rejects viewType - the selection itself, not a value a view holds', () => {
+        expect(isPerViewKey('viewType')).toBe(false);
     });
 
-    it('kanban inherits orientation columns from line (unchanged default)', () => {
-        expect(resolveSetting('kanban', 'orientation').value).toBe('columns');
+    it('rejects the two NODE_GLOBAL rows, which stay global with no per-view divergence', () => {
+        expect(isPerViewKey('watchUnopenedFilesInViewer')).toBe(false);
+        expect(isPerViewKey('openNewEditorIfNoneOpen')).toBe(false);
     });
 
-    it('groupBy homes at grouped and kanban forks it as an OPEN override at its own config path', () => {
-        expect(resolveSetting('line', 'groupBy').home).toBe('grouped');
-        expect(resolveSetting('line', 'groupBy').value).toBe('auto');
-        const at_kanban = resolveSetting('kanban', 'groupBy');
-        expect(at_kanban.fixed).toBe(false);
-        expect(at_kanban.open_at).toBe('kanban');
-        const override = VIEW_REGISTRY.overrides.find(o => o.node === 'kanban' && o.key === 'groupBy');
-        expect(override?.config_path).toBe('view.specific.kanban.groupBy');
+    it('rejects a key homed on the card or files tree', () => {
+        expect(isPerViewKey('showLineNumbers')).toBe(false);
+        expect(isPerViewKey('clockMode')).toBe(false);
+        expect(isPerViewKey('includeFilter')).toBe(false);
+    });
+});
+
+describe('resolveViewSetting - nearest-first across built-in and saved views', () => {
+    it('resolves to the flat home value when nothing on the chain holds its own', () => {
+        expect(resolveViewSetting(VIEW_REGISTRY, 'kanban', 'orientation', 'columns').value).toBe('columns');
+        expect(resolveViewSetting(VIEW_REGISTRY, 'kanban', 'orientation', 'columns').owner).toBe('line');
+        expect(resolveViewSetting(VIEW_REGISTRY, 'line', 'groupBy', 'auto').owner).toBe('grouped');
     });
 
-    it('every registry config_path is a config path the settings mirror declares', () => {
-        const declared = Object.values(SETTING_HOMES).map(home => home.path);
-        const paths = [...VIEW_REGISTRY.settings, ...VIEW_REGISTRY.overrides]
-            .map(entry => entry.config_path)
-            .filter((path): path is string => path !== undefined);
-        expect(paths.length).toBeGreaterThan(0);
-        for (const path of paths) {
-            expect(declared).toContain(path);
-        }
+    it('the setting\'s own home view never consults the map - it IS the home', () => {
+        expect(resolveViewSetting(VIEW_REGISTRY, 'line', 'orientation', 'rows', [], { line: { orientation: 'columns' } }).value).toBe('rows');
+        expect(resolveViewSetting(VIEW_REGISTRY, 'line', 'orientation', 'rows', [], { line: { orientation: 'columns' } }).owner).toBe('line');
+    });
+
+    it('a built-in view below the home resolves its own entry in the views bag', () => {
+        const view_overrides: ViewOverridesMap = { kanban: { orientation: 'rows', groupBy: 'assignee' } };
+        const resolution = resolveViewSetting(VIEW_REGISTRY, 'kanban', 'orientation', 'columns', [], view_overrides);
+        expect(resolution.value).toBe('rows');
+        expect(resolution.owner).toBe('kanban');
+        expect(resolveViewSetting(VIEW_REGISTRY, 'kanban', 'groupBy', 'auto', [], view_overrides).value).toBe('assignee');
+    });
+
+    it('kanban resolves groupBy to its own built-in default of status with nothing stored at all', () => {
+        expect(resolveViewSetting(VIEW_REGISTRY, 'kanban', 'groupBy', 'auto').value).toBe('status');
+        expect(resolveViewSetting(VIEW_REGISTRY, 'kanban', 'groupBy', 'auto').owner).toBe('kanban');
+    });
+
+    it('a stored value at kanban overrides its own built-in default', () => {
+        const view_overrides: ViewOverridesMap = { kanban: { groupBy: 'assignee' } };
+        expect(resolveViewSetting(VIEW_REGISTRY, 'kanban', 'groupBy', 'auto', [], view_overrides).value).toBe('assignee');
+    });
+
+    it('a saved type\'s own overrides win over the views bag entry of its built-in parent', () => {
+        const saved: UserViewType = { id: 'user-kanban-by-owner', label: 'Kanban by Owner', parent: 'kanban', overrides: { groupBy: 'owner' } };
+        const registry = registryWithUserTypes([saved]);
+        const resolution = resolveViewSetting(registry, 'user-kanban-by-owner', 'groupBy', 'auto', [saved], { kanban: { groupBy: 'assignee' } });
+        expect(resolution.value).toBe('owner');
+        expect(resolution.owner).toBe('user-kanban-by-owner');
+    });
+
+    it('a saved type under kanban with no override of its own inherits kanban\'s stored value, else kanban\'s own built-in status default', () => {
+        const saved: UserViewType = { id: 'user-plain', label: 'Plain', parent: 'kanban', overrides: {} };
+        const registry = registryWithUserTypes([saved]);
+        expect(resolveViewSetting(registry, 'user-plain', 'groupBy', 'auto', [saved], { kanban: { groupBy: 'assignee' } }).owner).toBe('kanban');
+        const no_stored = resolveViewSetting(registry, 'user-plain', 'groupBy', 'auto', [saved], {});
+        expect(no_stored.owner).toBe('kanban');
+        expect(no_stored.value).toBe('status');
+    });
+
+    it('never walks past the key\'s home, even when an ancestor further up the chain happens to hold an entry', () => {
+        // a line entry here would never be written in practice (line IS orientation's home), but must not be read regardless
+        const view_overrides: ViewOverridesMap = { line: { orientation: 'rows' } };
+        expect(resolveViewSetting(VIEW_REGISTRY, 'kanban', 'orientation', 'columns', [], view_overrides).owner).toBe('line');
+        expect(resolveViewSetting(VIEW_REGISTRY, 'kanban', 'orientation', 'columns', [], view_overrides).value).toBe('columns');
+    });
+});
+
+describe('inheritedViewSetting - what a node would fall back to if it held nothing of its own', () => {
+    it('resolves from the parent, skipping the node\'s own bag entirely', () => {
+        const view_overrides: ViewOverridesMap = { kanban: { orientation: 'rows' } };
+        const inherited = inheritedViewSetting(VIEW_REGISTRY, 'kanban', 'orientation', 'columns', [], view_overrides);
+        expect(inherited.value).toBe('columns');
+        expect(inherited.owner).toBe('line');
+    });
+
+    it('answers with the flat home value for a root-level node with no parent', () => {
+        expect(inheritedViewSetting(VIEW_REGISTRY, 'root', 'scrollNoteIntoView', true).value).toBe(true);
+    });
+
+    it('answers with kanban\'s own built-in default rather than its parent\'s value, since the default is not inherited', () => {
+        const inherited = inheritedViewSetting(VIEW_REGISTRY, 'kanban', 'groupBy', 'auto');
+        expect(inherited.value).toBe('status');
+        expect(inherited.owner).toBe('kanban');
+    });
+
+    it('a saved type under kanban still inherits from its parent chain, since only kanban itself has the built-in default', () => {
+        const saved: UserViewType = { id: 'user-plain', label: 'Plain', parent: 'kanban', overrides: {} };
+        const registry = registryWithUserTypes([saved]);
+        const inherited = inheritedViewSetting(registry, 'user-plain', 'groupBy', 'auto', [saved], {});
+        expect(inherited.value).toBe('status');
+        expect(inherited.owner).toBe('kanban');
+    });
+});
+
+describe('viewSettingValuesEqual - structural equality for clearing', () => {
+    it('is true for identical scalars and false for different ones', () => {
+        expect(viewSettingValuesEqual('rows', 'rows')).toBe(true);
+        expect(viewSettingValuesEqual('rows', 'columns')).toBe(false);
+    });
+
+    it('compares arrays and plain objects element/key-wise rather than by reference', () => {
+        expect(viewSettingValuesEqual([{ value: 'done', shown: true }], [{ value: 'done', shown: true }])).toBe(true);
+        expect(viewSettingValuesEqual([{ value: 'done', shown: true }], [{ value: 'done', shown: false }])).toBe(false);
+        expect(viewSettingValuesEqual([1, 2], [1, 2, 3])).toBe(false);
+    });
+});
+
+describe('ownBagFor', () => {
+    it('reads a saved type\'s own overrides', () => {
+        const saved: UserViewType = { id: 'user-a', label: 'A', parent: 'kanban', overrides: { orientation: 'rows' } };
+        expect(ownBagFor('user-a', [saved], {})).toEqual({ orientation: 'rows' });
+    });
+
+    it('reads a built-in node\'s entry in the views bag, merged beneath any built-in default it carries', () => {
+        expect(ownBagFor('kanban', [], { kanban: { groupBy: 'assignee' } })).toEqual({ groupBy: 'assignee' });
+        expect(ownBagFor('kanban', [], {})).toEqual({ groupBy: 'status' });
+        expect(ownBagFor('line', [], { kanban: { groupBy: 'assignee' } })).toEqual({});
     });
 });
 
 describe('per-node setting counts', () => {
     it('counts the settings each node owns, and reports zero for a node that owns none', () => {
         expect(nodeSettingCount('root')).toBe(2);
-        expect(nodeSettingCount('grouped')).toBe(1);
+        // groupBy, groupDisplay and groupOrder all home at grouped, shared by every grouped descendant
+        expect(nodeSettingCount('grouped')).toBe(3);
         expect(nodeSettingCount('line')).toBe(2);
-        expect(nodeSettingCount('kanban')).toBe(5);
+        expect(nodeSettingCount('kanban')).toBe(3);
         expect(nodeSettingCount('document')).toBe(0);
         // the card tree is counted by the same table, since a home names whichever tree it belongs to
         expect(nodeSettingCount('allcards')).toBe(4);
@@ -251,91 +247,49 @@ describe('per-node setting counts', () => {
     });
 
     it('names the keys a node owns in declaration order', () => {
-        expect(settingKeysForNode('kanban')).toEqual(['kanbanGroupBy', 'groupDisplay', 'kanbanCardRatio', 'kanbanAnimateTransitions', 'kanbanDefaultCardType']);
+        expect(settingKeysForNode('grouped')).toEqual(['groupBy', 'groupDisplay', 'groupOrder']);
+        expect(settingKeysForNode('kanban')).toEqual(['cardRatio', 'animateTransitions', 'defaultCardType']);
         expect(settingKeysForNode('line')).toEqual(['orientation', 'lineBreadth']);
         expect(settingKeysForNode('global')).toEqual(['watchUnopenedFilesInViewer', 'openNewEditorIfNoneOpen']);
     });
 
     it('narrows to the keys a settings payload actually carries when one is supplied', () => {
-        expect(settingKeysForNode('kanban', { groupDisplay: [] })).toEqual(['groupDisplay']);
-        expect(nodeSettingCount('kanban', { groupDisplay: [] })).toBe(1);
+        expect(settingKeysForNode('grouped', { groupDisplay: [] })).toEqual(['groupDisplay']);
+        expect(nodeSettingCount('grouped', { groupDisplay: [] })).toBe(1);
         expect(nodeSettingCount('root', {})).toBe(0);
     });
 });
 
-
-describe('owningNodeFor - the node a settings row pill names', () => {
-    it('names Grouped for Group by at kanban and Kanban for Group display', () => {
-        // the pair the offer rule turns on: kanban pins the axis but owns the lane display
-        expect(owningNodeFor('kanban', 'kanbanGroupBy')).toBe('grouped');
-        expect(owningNodeFor('kanban', 'groupDisplay')).toBe('kanban');
-    });
-
-    it('keys Group by on axes, not on the config key it writes', () => {
-        // both keys carry a kanban OPEN override, so keying on either would name Kanban and kill it
-        expect(STRUCTURAL_SETTING_KEYS.groupBy).toBe('axes');
-        expect(STRUCTURAL_SETTING_KEYS.kanbanGroupBy).toBe('axes');
-        expect(STRUCTURAL_SETTING_KEYS.groupDisplay).toBe('groupDisplay');
-    });
-
-    it('resolves a registry-modelled row through the chain from any node on it', () => {
-        expect(owningNodeFor('kanban', 'groupBy')).toBe('grouped');
-        expect(owningNodeFor('line', 'groupBy')).toBe('grouped');
+describe('owningNodeFor - the view a settings row pill names', () => {
+    it('names kanban itself for groupBy and groupDisplay, since kanban always holds at least its own built-in default', () => {
+        expect(owningNodeFor('kanban', 'groupBy')).toBe('kanban');
+        expect(owningNodeFor('kanban', 'groupDisplay')).toBe('grouped');
+        expect(owningNodeFor('line', 'groupDisplay')).toBe('grouped');
         expect(owningNodeFor('kanban', 'orientation')).toBe('line');
         expect(owningNodeFor('line', 'orientation')).toBe('line');
     });
 
-    it('falls back to the flat home for a key with no registry presence', () => {
+    it('names the built-in view holding its own entry in the views bag', () => {
+        const view_overrides: ViewOverridesMap = { kanban: { groupBy: 'assignee' } };
+        expect(owningNodeFor('kanban', 'groupBy', VIEW_REGISTRY, [], view_overrides)).toBe('kanban');
+    });
+
+    it('falls back to the flat home for a key with no per-view presence', () => {
         expect(owningNodeFor('document', 'scrollNoteIntoView')).toBe('root');
-        expect(owningNodeFor('kanban', 'kanbanAnimateTransitions')).toBe('kanban');
+        expect(owningNodeFor('kanban', 'animateTransitions')).toBe('kanban');
     });
 
     it('names the card home for a card-drawn setting, which is why the view pane never lists one', () => {
-        // the three moved onto the card tree, and no view chain includes allcards
         expect(owningNodeFor('kanban', 'showLineNumbers')).toBe('allcards');
         expect(owningNodeFor('document', 'showLinetagsInHeadlines')).toBe('allcards');
         expect(owningNodeFor('kanban', 'autoExpandFocusedNote')).toBe('allcards');
     });
 
-    it('yields no pill for the three sentinel homes', () => {
+    it('yields no pill for the sentinel homes', () => {
         expect(owningNodeFor('kanban', 'watchUnopenedFilesInViewer')).toBeUndefined();
         expect(owningNodeFor('kanban', 'openNewEditorIfNoneOpen')).toBeUndefined();
         expect(owningNodeFor('kanban', 'includeFilter')).toBeUndefined();
         expect(owningNodeFor('kanban', 'maxNotesPerFile')).toBeUndefined();
-        expect(owningNodeFor('kanban', 'viewUserTypes')).toBeUndefined();
-    });
-});
-
-describe('offersNewViewType - the offer follows the pill', () => {
-    it('offers on an ancestor-owned change and stays silent on a node-owned one', () => {
-        expect(offersNewViewType('kanban', 'kanbanGroupBy')).toBe(true);
-        expect(offersNewViewType('kanban', 'groupDisplay')).toBe(false);
-        expect(offersNewViewType('kanban', 'kanbanAnimateTransitions')).toBe(false);
-    });
-
-    it('offers for orientation from kanban, which line owns, but not from line itself', () => {
-        expect(offersNewViewType('kanban', 'orientation')).toBe(true);
-        expect(offersNewViewType('line', 'orientation')).toBe(false);
-    });
-
-    /*
-     * Root is the ancestor that does not offer. Its settings reach every view, so changing one says
-     * nothing about what kind of board this is - "Kanban with linetags" is a preference, not a type.
-     */
-    it('never offers for a setting All views owns, even though root is an ancestor', () => {
-        expect(offersNewViewType('document', 'scrollNoteIntoView')).toBe(false);
-        expect(offersNewViewType('kanban', 'scrollNoteIntoView')).toBe(false);
-    });
-
-    it('never offers for a card-drawn setting, whose owner is on the other tree entirely', () => {
-        expect(offersNewViewType('kanban', 'showLineNumbers')).toBe(false);
-        expect(offersNewViewType('kanban', 'showLinetagsInHeadlines')).toBe(false);
-    });
-
-    it('never offers for a setting belonging to no view type', () => {
-        expect(offersNewViewType('kanban', 'watchUnopenedFilesInViewer')).toBe(false);
-        expect(offersNewViewType('kanban', 'openNewEditorIfNoneOpen')).toBe(false);
-        expect(offersNewViewType('document', 'maxNotesPerFile')).toBe(false);
     });
 });
 
@@ -344,7 +298,7 @@ describe('registryWithUserTypes - saved types become real nodes', () => {
         id: 'kanban-by-assignee',
         label: 'Kanban by Assignee',
         parent: 'kanban',
-        overrides: { kanbanGroupBy: 'assignee' },
+        overrides: { groupBy: 'assignee' },
     };
 
     it('parents the saved type on its node and makes it selectable and configurable', () => {
@@ -360,22 +314,16 @@ describe('registryWithUserTypes - saved types become real nodes', () => {
         expect(chainOf('kanban-by-assignee', merged)).toEqual(['kanban-by-assignee', 'kanban', 'line', 'grouped', 'root']);
     });
 
-    it('turns each declared override into an OPEN override resolveSetting answers for', () => {
+    it('resolves its declared override as its own value', () => {
         const merged = registryWithUserTypes([kanban_by_assignee]);
-        const resolution = resolveSettingIn(merged, 'kanban-by-assignee', 'axes');
-        expect(resolution.open_at).toBe('kanban-by-assignee');
-        expect(resolution.fixed).toBe(false);
-        expect(owningNodeFor('kanban-by-assignee', 'kanbanGroupBy', merged)).toBe('kanban-by-assignee');
-        expect(offersNewViewType('kanban-by-assignee', 'kanbanGroupBy', merged)).toBe(false);
+        expect(owningNodeFor('kanban-by-assignee', 'groupBy', merged, [kanban_by_assignee])).toBe('kanban-by-assignee');
     });
 
     it('leaves the built-in registry unmutated', () => {
         const node_count = VIEW_REGISTRY.nodes.length;
-        const override_count = VIEW_REGISTRY.overrides.length;
         const merged = registryWithUserTypes([kanban_by_assignee]);
         expect(merged.nodes).not.toBe(VIEW_REGISTRY.nodes);
         expect(VIEW_REGISTRY.nodes).toHaveLength(node_count);
-        expect(VIEW_REGISTRY.overrides).toHaveLength(override_count);
         expect(getViewNode('kanban-by-assignee')).toBeUndefined();
         expect(selectableViewIds()).toEqual(['document', 'line', 'kanban']);
     });
@@ -383,8 +331,6 @@ describe('registryWithUserTypes - saved types become real nodes', () => {
     it('returns an equivalent registry for an empty list', () => {
         const merged = registryWithUserTypes([]);
         expect(merged.nodes).toEqual(VIEW_REGISTRY.nodes);
-        expect(merged.overrides).toEqual(VIEW_REGISTRY.overrides);
-        expect(merged.settings).toEqual(VIEW_REGISTRY.settings);
     });
 
     it('skips a malformed entry rather than throwing, and keeps the good one beside it', () => {
@@ -410,28 +356,49 @@ describe('registryWithUserTypes - saved types become real nodes', () => {
             { id: 'assignee-rows', label: 'Assignee Rows', parent: 'kanban-by-assignee', overrides: { orientation: 'rows' } },
         ]);
         expect(chainOf('assignee-rows', merged)).toEqual(['assignee-rows', 'kanban-by-assignee', 'kanban', 'line', 'grouped', 'root']);
-        expect(owningNodeFor('assignee-rows', 'orientation', merged)).toBe('assignee-rows');
-        expect(owningNodeFor('assignee-rows', 'kanbanGroupBy', merged)).toBe('kanban-by-assignee');
-        expect(offersNewViewType('assignee-rows', 'kanbanGroupBy', merged)).toBe(true);
+        const user_types = [
+            kanban_by_assignee,
+            { id: 'assignee-rows', label: 'Assignee Rows', parent: 'kanban-by-assignee', overrides: { orientation: 'rows' } },
+        ];
+        expect(owningNodeFor('assignee-rows', 'orientation', merged, user_types)).toBe('assignee-rows');
+        expect(owningNodeFor('assignee-rows', 'groupBy', merged, user_types)).toBe('kanban-by-assignee');
+    });
+});
+
+describe('a custom type owns every key its overrides hold', () => {
+
+    const tall_cards: UserViewType = { id: 'user-tall-cards', label: 'Tall Cards', parent: 'kanban', overrides: { cardRatio: 2 } };
+
+    it('names the custom type for a key it holds that has no per-view presence', () => {
+        const merged = registryWithUserTypes([tall_cards]);
+        expect(owningNodeFor('user-tall-cards', 'cardRatio', merged, [tall_cards])).toBe('user-tall-cards');
     });
 
-    /*
-     * A type minted before groupDisplay existed carries the legacy columnOrder shape alone. The
-     * registry migrates it on the way in, so the OPEN override resolveSetting answers for is keyed
-     * groupDisplay like every other type's, with every lane shown.
-     */
-    it('migrates a legacy columnOrder override to groupDisplay, every lane shown', () => {
-        const legacy: UserViewType = { id: 'user-legacy', label: 'Legacy Order', parent: 'kanban', overrides: { columnOrder: ['done', 'doing'] } };
-        const merged = registryWithUserTypes([legacy]);
-        const resolution = resolveSettingIn(merged, 'user-legacy', 'groupDisplay');
-        expect(resolution.open_at).toBe('user-legacy');
-        expect(owningNodeFor('user-legacy', 'groupDisplay', merged)).toBe('user-legacy');
+    it('still names the flat home for a key the custom type does not hold', () => {
+        const merged = registryWithUserTypes([tall_cards]);
+        expect(owningNodeFor('user-tall-cards', 'animateTransitions', merged, [tall_cards])).toBe('kanban');
+    });
+
+    it('names the nearest holder from a type saved on top of one', () => {
+        const user_types = [
+            tall_cards,
+            { id: 'user-tall-rows', label: 'Tall Rows', parent: 'user-tall-cards', overrides: { orientation: 'rows' } },
+        ];
+        const merged = registryWithUserTypes(user_types);
+        expect(owningNodeFor('user-tall-rows', 'cardRatio', merged, user_types)).toBe('user-tall-cards');
+    });
+
+    it('leaves a built-in rung answering exactly as before, since no saved type is on its chain', () => {
+        const merged = registryWithUserTypes([tall_cards]);
+        expect(owningNodeFor('kanban', 'cardRatio', merged, [tall_cards])).toBe('kanban');
+        expect(owningNodeFor('kanban', 'groupBy', merged, [tall_cards])).toBe('kanban');
+        expect(owningNodeFor('kanban', 'groupDisplay', merged, [tall_cards])).toBe('grouped');
     });
 });
 
 describe('editing the saved view types', () => {
 
-    const alpha = { id: 'user-alpha', label: 'Alpha', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' } };
+    const alpha = { id: 'user-alpha', label: 'Alpha', parent: 'kanban', overrides: { groupBy: 'assignee' } };
     const beta = { id: 'user-beta', label: 'Beta', parent: 'user-alpha', overrides: { orientation: 'rows' } };
 
     it('renames the label and leaves the id alone, since the id is what settings are stored under', () => {
@@ -452,81 +419,32 @@ describe('editing the saved view types', () => {
         expect(renameUserViewType([alpha], 'user-nothing', 'X')).toEqual([alpha]);
     });
 
-    /*
-     * A minted type is a real parent, so removing one has to take its descendants with it. Leaving them
-     * behind would point them at a node the registry no longer builds, and registryWithUserTypes drops an
-     * unparented type on the floor - so the list on disk would keep growing entries nothing can render.
-     */
-    it('removes a type along with every type saved on top of it', () => {
-        expect(removeUserViewType([alpha, beta], 'user-alpha')).toEqual([]);
+    it('doomedUserTypeIds names a type along with every type saved on top of it', () => {
+        expect(doomedUserTypeIds([alpha, beta], 'user-alpha').sort()).toEqual(['user-alpha', 'user-beta']);
     });
 
-    it('removes only the named type when nothing was saved on top of it', () => {
-        expect(removeUserViewType([alpha, beta], 'user-beta')).toEqual([alpha]);
+    it('doomedUserTypeIds names only the type itself when nothing was saved on top of it', () => {
+        expect(doomedUserTypeIds([alpha, beta], 'user-beta')).toEqual(['user-beta']);
     });
 
-    it('leaves the list alone for an id no saved type carries', () => {
-        expect(removeUserViewType([alpha, beta], 'user-nothing')).toEqual([alpha, beta]);
-    });
-
-    it('leaves a registry with nothing left to merge once the last type goes', () => {
-        const merged = registryWithUserTypes(removeUserViewType([alpha], 'user-alpha'));
-        expect(merged.nodes).toHaveLength(VIEW_REGISTRY.nodes.length);
-    });
-});
-
-/*
- * A saved type carries values for keys the registry models and for keys it does not, and the pill has to
- * name the type for both. Target card ratio is the case that forces it: `kanbanCardRatio` has no registry
- * setting behind it, so before this the answer came from the flat home and a type holding its own ratio
- * still showed a Kanban pill and an offer to save what it already held.
- */
-describe('a custom type owns every key its overrides hold', () => {
-
-    const tall_cards: UserViewType = { id: 'user-tall-cards', label: 'Tall Cards', parent: 'kanban', overrides: { kanbanCardRatio: 2 } };
-
-    it('names the custom type for a key it holds that has no registry presence', () => {
-        const merged = registryWithUserTypes([tall_cards]);
-        expect(owningNodeFor('user-tall-cards', 'kanbanCardRatio', merged)).toBe('user-tall-cards');
-        expect(offersNewViewType('user-tall-cards', 'kanbanCardRatio', merged)).toBe(false);
-    });
-
-    it('still names the flat home for a key the custom type does not hold, which keeps offering', () => {
-        const merged = registryWithUserTypes([tall_cards]);
-        expect(owningNodeFor('user-tall-cards', 'kanbanAnimateTransitions', merged)).toBe('kanban');
-        expect(offersNewViewType('user-tall-cards', 'kanbanAnimateTransitions', merged)).toBe(true);
-    });
-
-    it('names the nearest holder from a type saved on top of one, and offers there', () => {
-        const merged = registryWithUserTypes([
-            tall_cards,
-            { id: 'user-tall-rows', label: 'Tall Rows', parent: 'user-tall-cards', overrides: { orientation: 'rows' } },
-        ]);
-        expect(owningNodeFor('user-tall-rows', 'kanbanCardRatio', merged)).toBe('user-tall-cards');
-        expect(offersNewViewType('user-tall-rows', 'kanbanCardRatio', merged)).toBe(true);
-    });
-
-    it('leaves a built-in rung answering exactly as before, since no saved type is on its chain', () => {
-        const merged = registryWithUserTypes([tall_cards]);
-        expect(owningNodeFor('kanban', 'kanbanCardRatio', merged)).toBe('kanban');
-        expect(owningNodeFor('kanban', 'kanbanGroupBy', merged)).toBe('grouped');
-        expect(owningNodeFor('kanban', 'groupDisplay', merged)).toBe('kanban');
+    it('doomedUserTypeIds names only the id given for an id no saved type carries', () => {
+        expect(doomedUserTypeIds([alpha, beta], 'user-nothing')).toEqual(['user-nothing']);
     });
 });
 
 describe('updating a saved view type', () => {
 
-    const alpha: UserViewType = { id: 'user-alpha', label: 'Alpha', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' } };
+    const alpha: UserViewType = { id: 'user-alpha', label: 'Alpha', parent: 'kanban', overrides: { groupBy: 'assignee' } };
     const beta: UserViewType = { id: 'user-beta', label: 'Beta', parent: 'kanban', overrides: { orientation: 'rows' } };
 
     it('merges the new values into the named type and leaves its siblings alone', () => {
-        const updated = updateUserViewTypeOverrides([alpha, beta], 'user-alpha', { kanbanCardRatio: 2 });
-        expect(updated[0].overrides).toEqual({ kanbanGroupBy: 'assignee', kanbanCardRatio: 2 });
+        const updated = updateUserViewTypeOverrides([alpha, beta], 'user-alpha', { cardRatio: 2 });
+        expect(updated[0].overrides).toEqual({ groupBy: 'assignee', cardRatio: 2 });
         expect(updated[1]).toBe(beta);
     });
 
     it('replaces the value of a key the type already holds', () => {
-        expect(updateUserViewTypeOverrides([alpha], 'user-alpha', { kanbanGroupBy: 'status' })[0].overrides).toEqual({ kanbanGroupBy: 'status' });
+        expect(updateUserViewTypeOverrides([alpha], 'user-alpha', { groupBy: 'status' })[0].overrides).toEqual({ groupBy: 'status' });
     });
 
     it('leaves the id, label and parent alone, since the id is what settings are stored under', () => {
@@ -547,54 +465,222 @@ describe('updating a saved view type', () => {
     });
 
     it('reports which keys a type holds, which is what routes a row change into it', () => {
-        expect(userTypeHoldsKey(alpha, 'kanbanGroupBy')).toBe(true);
-        expect(userTypeHoldsKey(alpha, 'kanbanCardRatio')).toBe(false);
-        expect(userTypeHoldsKey(undefined, 'kanbanGroupBy')).toBe(false);
+        expect(userTypeHoldsKey(alpha, 'groupBy')).toBe(true);
+        expect(userTypeHoldsKey(alpha, 'cardRatio')).toBe(false);
+        expect(userTypeHoldsKey(undefined, 'groupBy')).toBe(false);
     });
 });
 
-describe('settingWriteFor', () => {
-    const held: UserViewType = { id: 'user-a', label: 'A', parent: 'kanban', overrides: { lineBreadth: 300 } };
-
-    it('writes a key the rendered custom type holds into that type, since a workspace write would be painted over', () => {
-        const write = settingWriteFor([held], held, 'lineBreadth', 400);
-        expect(write.setting).toBe('viewUserTypes');
-        expect(write.value).toEqual([{ ...held, overrides: { lineBreadth: 400 } }]);
+describe('settingWriteFor - the one engine for every per-view write', () => {
+    it('writes a built-in view\'s own home setting flat, at its own key', () => {
+        expect(settingWriteFor(VIEW_REGISTRY, [], {}, 'line', 'orientation', 'rows', 'columns'))
+            .toEqual({ setting: 'views', value: { sets: [{ node_id: 'line', key: 'orientation', value: 'rows' }] } });
     });
 
-    it('writes any other key at workspace scope as a plain per-key write', () => {
-        expect(settingWriteFor([held], held, 'kanbanCardRatio', 2)).toEqual({ setting: 'kanbanCardRatio', value: 2 });
-        expect(settingWriteFor([held], undefined, 'lineBreadth', 400)).toEqual({ setting: 'lineBreadth', value: 400 });
+    it('writes a built-in descendant\'s own value as a views bag delta', () => {
+        const write = settingWriteFor(VIEW_REGISTRY, [], {}, 'kanban', 'orientation', 'rows', 'columns');
+        expect(write).toEqual({ setting: 'views', value: { sets: [{ node_id: 'kanban', key: 'orientation', value: 'rows' }] } });
+    });
+
+    it('clears a built-in descendant\'s own entry when the new value equals what it would inherit', () => {
+        const view_overrides: ViewOverridesMap = { kanban: { orientation: 'rows' } };
+        const write = settingWriteFor(VIEW_REGISTRY, [], view_overrides, 'kanban', 'orientation', 'columns', 'columns');
+        expect(write).toEqual({ setting: 'views', value: { sets: [{ node_id: 'kanban', key: 'orientation', value: undefined }] } });
+    });
+
+    it('clears kanban\'s own groupBy entry when set back to status, its own built-in default', () => {
+        const view_overrides: ViewOverridesMap = { kanban: { groupBy: 'assignee' } };
+        const write = settingWriteFor(VIEW_REGISTRY, [], view_overrides, 'kanban', 'groupBy', 'status', 'auto');
+        expect(write).toEqual({ setting: 'views', value: { sets: [{ node_id: 'kanban', key: 'groupBy', value: undefined }] } });
+    });
+
+    it('writes a saved type\'s own per-view value as a views bag delta, never the ancestor it was saved from', () => {
+        const saved: UserViewType = { id: 'user-a', label: 'A', parent: 'kanban', overrides: {} };
+        const write = settingWriteFor(registryWithUserTypes([saved]), [saved], {}, 'user-a', 'groupBy', 'assignee', 'auto');
+        expect(write).toEqual({ setting: 'views', value: { sets: [{ node_id: 'user-a', key: 'groupBy', value: 'assignee' }] } });
+    });
+
+    it('clears a saved type\'s own per-view value when it equals what it would inherit', () => {
+        const saved: UserViewType = { id: 'user-a', label: 'A', parent: 'kanban', overrides: { groupBy: 'assignee' } };
+        const write = settingWriteFor(registryWithUserTypes([saved]), [saved], {}, 'user-a', 'groupBy', 'status', 'auto');
+        expect(write).toEqual({ setting: 'views', value: { sets: [{ node_id: 'user-a', key: 'groupBy', value: undefined }] } });
+    });
+
+    it('writes a per-view kanban-homed key into a saved type below kanban even when it does not yet hold it', () => {
+        const held: UserViewType = { id: 'user-a', label: 'A', parent: 'kanban', overrides: {} };
+        expect(settingWriteFor(registryWithUserTypes([held]), [held], {}, 'user-a', 'cardRatio', 2, 1.4))
+            .toEqual({ setting: 'views', value: { sets: [{ node_id: 'user-a', key: 'cardRatio', value: 2 }] } });
+    });
+
+    it('writes a non-per-view key at the flat home, unchanged pre-existing behaviour, whatever node is selected', () => {
+        const held: UserViewType = { id: 'user-a', label: 'A', parent: 'kanban', overrides: {} };
+        expect(settingWriteFor(registryWithUserTypes([held]), [held], {}, 'user-a', 'watchUnopenedFilesInViewer', false, true))
+            .toEqual({ setting: 'watchUnopenedFilesInViewer', value: false });
     });
 });
 
-describe('normalizeGroupDisplayOverride - migrating a legacy columnOrder override', () => {
-    it('maps a legacy columnOrder array to groupDisplay entries, every lane shown', () => {
-        expect(normalizeGroupDisplayOverride({ columnOrder: ['done', 'doing'] })).toEqual({
-            groupDisplay: [{ value: 'done', shown: true }, { value: 'doing', shown: true }],
-        });
+describe('divergedKeyFor - which diverged entry a row\'s M reflects', () => {
+    it('answers with a bag cell even when the owner is the setting\'s own home, since there is no bare-key form', () => {
+        expect(divergedKeyFor('line', 'orientation', 'views')).toBe('views:line:orientation');
+        expect(divergedKeyFor('grouped', 'groupBy', 'views')).toBe('views:grouped:groupBy');
     });
 
-    it('drops columnOrder once migrated, leaving every other key untouched', () => {
-        expect(normalizeGroupDisplayOverride({ kanbanGroupBy: 'assignee', columnOrder: ['done'] })).toEqual({
-            kanbanGroupBy: 'assignee',
-            groupDisplay: [{ value: 'done', shown: true }],
-        });
+    it('answers with a views bag cell when the owner is a built-in node below the home', () => {
+        expect(divergedKeyFor('kanban', 'orientation', 'views')).toBe('views:kanban:orientation');
     });
 
-    it('leaves overrides alone once groupDisplay is already present, even beside a stale columnOrder', () => {
-        const overrides = { columnOrder: ['done'], groupDisplay: [{ value: 'doing', shown: false }] };
-        expect(normalizeGroupDisplayOverride(overrides)).toBe(overrides);
+    it('answers with a views bag cell when the owner is a saved type too, since both now live in the same bag', () => {
+        expect(divergedKeyFor('user-a', 'orientation', 'views')).toBe('views:user-a:orientation');
     });
 
-    it('leaves overrides alone with neither key present', () => {
-        const overrides = { kanbanGroupBy: 'assignee' };
-        expect(normalizeGroupDisplayOverride(overrides)).toBe(overrides);
+    it('answers with a cards bag cell when passed the card tree\'s own bag name', () => {
+        expect(divergedKeyFor('card', 'showLineNumbers', 'cards')).toBe('cards:card:showLineNumbers');
+    });
+});
+
+describe('userViewTypesFromViews - saved types extracted from the views bag', () => {
+    it('reads a saved type\'s parent, label and overrides from its own bag entry', () => {
+        const views: ViewOverridesMap = { 'user-a': { parent: 'kanban', label: 'A', groupBy: 'assignee' } };
+        expect(userViewTypesFromViews(views)).toEqual([{ id: 'user-a', parent: 'kanban', label: 'A', overrides: { groupBy: 'assignee' } }]);
     });
 
-    it('reports a legacy columnOrder override as holding groupDisplay, which is what routes a row change into it', () => {
-        const legacy: UserViewType = { id: 'user-legacy', label: 'Legacy', parent: 'kanban', overrides: { columnOrder: ['done', 'doing'] } };
-        expect(userTypeHoldsKey(legacy, 'groupDisplay')).toBe(true);
-        expect(userTypeHoldsKey(legacy, 'columnOrder')).toBe(false);
+    it('never treats a built-in node\'s own entry as a saved type', () => {
+        const views: ViewOverridesMap = { kanban: { groupBy: 'assignee' } };
+        expect(userViewTypesFromViews(views)).toEqual([]);
+    });
+
+    it('skips an entry missing a parent or a label rather than throwing', () => {
+        const views: ViewOverridesMap = { 'user-bad': { groupBy: 'assignee' } };
+        expect(userViewTypesFromViews(views)).toEqual([]);
+    });
+
+    it('answers with an empty list for an empty or absent bag', () => {
+        expect(userViewTypesFromViews({})).toEqual([]);
+        expect(userViewTypesFromViews(undefined as unknown as ViewOverridesMap)).toEqual([]);
+    });
+});
+
+describe('builtinViewOverridesFromViews - a built-in view\'s own entries, narrowed out of the views bag', () => {
+    it('carries only the built-in ids, leaving a saved type\'s entry out', () => {
+        const views: ViewOverridesMap = {
+            kanban: { groupBy: 'assignee' },
+            'user-a': { parent: 'kanban', label: 'A', groupBy: 'owner' },
+        };
+        expect(builtinViewOverridesFromViews(views)).toEqual({ kanban: { groupBy: 'assignee' } });
+    });
+
+    it('leaves out a built-in id with nothing stored', () => {
+        expect(builtinViewOverridesFromViews({})).toEqual({});
+    });
+});
+
+describe('resolvedSettingsFromCascade - unpacking the wire payload into the flat shape', () => {
+    function wire(partial: Partial<SettingsCascadePayload>): SettingsCascadePayload {
+        return {
+            views: {},
+            cards: {},
+            watchUnopenedFilesInViewer: true,
+            openNewEditorIfNoneOpen: false,
+            includeFilter: '**/*.md',
+            excludeFilter: '',
+            maxNotesPerFile: 10,
+            diverged: [],
+            hasWorkspaceOverrides: false,
+            hasAnyOverrides: false,
+            ...partial,
+        };
+    }
+
+    it('defaults every key to its generic built-in default with nothing stored anywhere', () => {
+        const resolved = resolvedSettingsFromCascade(wire({}));
+        expect(resolved.viewType).toBe('auto');
+        expect(resolved.cardType).toBe('auto');
+        expect(resolved.groupBy).toBe('auto');
+        expect(resolved.orientation).toBe('columns');
+        expect(resolved.clockMode).toBe('active');
+        expect(resolved.viewUserTypes).toEqual([]);
+        expect(resolved.viewOverrides).toEqual({});
+    });
+
+    it('reads each view-homed key off its own home node in the views bag', () => {
+        const resolved = resolvedSettingsFromCascade(wire({ views: { root: { viewType: 'kanban' }, line: { orientation: 'rows' } } }));
+        expect(resolved.viewType).toBe('kanban');
+        expect(resolved.orientation).toBe('rows');
+    });
+
+    it('reads each card-homed key off its own home node in the cards bag', () => {
+        const resolved = resolvedSettingsFromCascade(wire({ cards: { allcards: { cardType: 'sticky' }, agent: { clockMode: 'span' } } }));
+        expect(resolved.cardType).toBe('sticky');
+        expect(resolved.clockMode).toBe('span');
+    });
+
+    it('derives viewUserTypes and viewOverrides from the views bag, keeping the two apart', () => {
+        const resolved = resolvedSettingsFromCascade(wire({
+            views: {
+                kanban: { groupBy: 'assignee' },
+                'user-a': { parent: 'kanban', label: 'A', groupBy: 'owner' },
+            },
+        }));
+        expect(resolved.viewUserTypes).toEqual([{ id: 'user-a', parent: 'kanban', label: 'A', overrides: { groupBy: 'owner' } }]);
+        expect(resolved.viewOverrides).toEqual({ kanban: { groupBy: 'assignee' } });
+    });
+
+    it('carries the flat global and files settings straight through', () => {
+        const resolved = resolvedSettingsFromCascade(wire({ watchUnopenedFilesInViewer: false, includeFilter: '**/*.foo' }));
+        expect(resolved.watchUnopenedFilesInViewer).toBe(false);
+        expect(resolved.includeFilter).toBe('**/*.foo');
+    });
+
+    it('carries the three divergence aggregates straight through', () => {
+        const resolved = resolvedSettingsFromCascade(wire({ diverged: ['views:kanban:groupBy'], hasWorkspaceOverrides: true, hasAnyOverrides: true }));
+        expect(resolved.diverged).toEqual(['views:kanban:groupBy']);
+        expect(resolved.hasWorkspaceOverrides).toBe(true);
+        expect(resolved.hasAnyOverrides).toBe(true);
+    });
+});
+
+/**
+ * The extension declares one `notethink.settings.*` key per tree node per setting, and the two bundles
+ * share no module graph, so this reads the manifest itself: every node at or below a key's home must have
+ * a declared key, carrying a default only at the home, and no tree key may be declared anywhere else.
+ */
+describe('package.json declares a key for every node that can hold a tree setting', () => {
+    const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', '..', '..', '..', '..', 'package.json');
+    const manifest = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
+    const properties: Record<string, { default?: unknown }> = manifest.contributes.configuration[0].properties;
+    // the two global settings and the saved-type list sit under the view prefix but belong to no tree node
+    const NON_TREE_PATHS = new Set(['view.userTypes', 'view.generic.watchUnopenedFilesInViewer', 'view.generic.openNewEditorIfNoneOpen']);
+    function declaredPath(bag: 'views' | 'cards', node_id: string, key: string): string {
+        if (key === 'viewType') { return 'view.type'; }
+        if (key === 'cardType') { return 'card.type'; }
+        const tree = bag === 'views' ? 'view' : 'card';
+        const top = bag === 'views' ? ROOT_NODE : 'allcards';
+        return node_id === top ? `${tree}.generic.${key}` : `${tree}.specific.${node_id}.${key}`;
+    }
+    function expectedTreePaths(): Map<string, boolean> {
+        const expected = new Map<string, boolean>();
+        for (const [key, home] of Object.entries(SETTING_HOMES)) {
+            if (home.bag === 'views') {
+                const holders = isPerViewKey(key as keyof typeof SETTING_HOMES) ? VIEW_REGISTRY.nodes.map(n => n.id).filter(id => chainOf(id).includes(home.node)) : [home.node];
+                holders.forEach(id => expected.set(declaredPath('views', id, key), id === home.node));
+            }
+            if (home.bag === 'cards') {
+                const holders = isPerCardKey(key as keyof typeof SETTING_HOMES) ? CARD_REGISTRY.nodes.map(n => n.id).filter(id => cardChainOf(id).includes(home.node)) : [home.node];
+                holders.forEach(id => expected.set(declaredPath('cards', id, key), id === home.node));
+            }
+        }
+        return expected;
+    }
+    it('declares exactly the tree keys the view and card trees can hold', () => {
+        const declared = Object.keys(properties)
+            .filter(full => full.startsWith('notethink.settings.view.') || full.startsWith('notethink.settings.card.'))
+            .map(full => full.slice('notethink.settings.'.length))
+            .filter(config_path => !NON_TREE_PATHS.has(config_path));
+        expect(declared.sort()).toEqual([...expectedTreePaths().keys()].sort());
+    });
+    it('gives a default only to the key at a setting\'s home', () => {
+        for (const [config_path, is_home] of expectedTreePaths()) {
+            expect({ config_path, has_default: properties[`notethink.settings.${config_path}`]?.default !== undefined }).toEqual({ config_path, has_default: is_home });
+        }
     });
 });

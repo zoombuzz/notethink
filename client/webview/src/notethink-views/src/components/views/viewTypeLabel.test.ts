@@ -13,7 +13,7 @@ describe('viewTypeLabel', () => {
         id: 'user-next-up-by-project',
         label: 'User next up by project',
         parent: 'kanban',
-        overrides: { kanbanGroupBy: 'nt_first_level_folder' },
+        overrides: { groupBy: 'nt_first_level_folder' },
     };
     const REGISTRY = registryWithUserTypes([NEXT_UP]);
 

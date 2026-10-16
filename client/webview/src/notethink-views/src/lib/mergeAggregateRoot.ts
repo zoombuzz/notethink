@@ -397,9 +397,9 @@ export function fileDeclaredGroupBy(root: NoteProps): string | undefined {
 }
 
 /**
- * The lane order a single file declares: its H1 `nt_group_order` over the front-matter value. The
+ * The group order a single file declares: its H1 `nt_group_order` over the front-matter value. The
  * authored per-axis order for grouped's group key; captured onto every story's origin so the view can
- * seed lane order from the files without a separate config round-trip.
+ * seed group order from the files without a separate config round-trip.
  */
 export function fileDeclaredGroupOrder(root: NoteProps): string | undefined {
     const h1 = findFileH1(root);

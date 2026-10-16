@@ -30,10 +30,15 @@ const UNBOUND_STATE: ActivitySessionState = {
     session: UNBOUND_SESSION,
 };
 
+// root_relative '' (the repo IS the workspace folder), so any doc_relative_path below resolves to it
 const SEEDED_SNAPSHOT: ActivitySnapshot = {
     analyser: { state: 'live', refusals: [] },
     sessions: [UNBOUND_STATE],
-    trees: [],
+    trees: [{
+        root_path: '/w/notethink',
+        root_relative: '',
+        tree: { generated_at: '2026-09-18T09:14:02Z', branch: 'staging', head_commit: 'a'.repeat(40), uncommitted: [], committed: [] },
+    }],
 };
 
 function seedUnboundAgent(): void {
@@ -70,6 +75,8 @@ function makeProps(card_type: string, story: NoteProps, handlers?: Partial<ViewA
     return {
         id: 'v1',
         type: 'document',
+        // a single-file view with no origin on its notes; the seeded tree's root_relative '' resolves any non-empty path to it
+        doc_relative_path: 'todo.md',
         display_options: { settings: { cardType: card_type } },
         notes: [root, story],
         handlers: {
@@ -117,6 +124,17 @@ describe('the virtual-note seam', () => {
         const { result } = renderHook(() => useGenericView(props));
         expect(result.current.view_context.notes_within_parent_context).toHaveLength(1);
         expect(result.current.view_props.notes).toBe(props.notes);
+    });
+
+    it('admits nothing beside a document whose own repository holds no unbound session', () => {
+        setActivitySnapshot({
+            ...SEEDED_SNAPSHOT,
+            trees: [...SEEDED_SNAPSHOT.trees, { root_path: '/w/notegit', root_relative: 'notegit', tree: SEEDED_SNAPSHOT.trees[0].tree }],
+        });
+        // this view's document sits in notegit, where the seeded session (root_path '/w/notethink') never ran
+        const props = { ...makeProps('agent', makeStory()), doc_relative_path: 'notegit/todo.md' };
+        const { result } = renderHook(() => useGenericView(props));
+        expect(result.current.view_context.notes_within_parent_context).toHaveLength(1);
     });
 
     it('keeps the note set identity across a re-render, so the sort memo below it does not churn', () => {

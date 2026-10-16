@@ -119,6 +119,10 @@ export interface AgentReadRefusal {
  * two later passes turn into cost and story/file attribution.
  * - model: the model id in effect on this session's most recent record; undefined when nothing the
  *   reader saw named one
+ * - active_ms: the sum of the gaps between consecutive events in this session, leaving out any gap
+ *   over `AGENT_ACTIVE_IDLE_GAP_MS` entirely (`agentclockops.ts`'s `activeMsFromTimestamps`), over
+ *   the whole transcript regardless of window, same as `started_at`/`updated_at`; absent on a refusal,
+ *   since no record was read to measure gaps between
  */
 export interface AgentSessionResult {
     session_id: string;
@@ -130,6 +134,7 @@ export interface AgentSessionResult {
     current?: ActivityEventBody;
     question?: ActivityQuestion;
     model?: string;
+    active_ms?: number;
     calls: AgentApiCall[];
     tool_invocations: AgentToolInvocation[];
     refusal?: AgentReadRefusal;

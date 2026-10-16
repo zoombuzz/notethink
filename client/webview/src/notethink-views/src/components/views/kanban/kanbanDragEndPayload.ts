@@ -10,12 +10,12 @@ const debug = Debug("nodejs:notethink-views:kanbanDragEndPayload");
  * Inputs for the pure drag-end payload builder.
  *
  * - dragged_note: the note being dropped; never null (caller validates)
- * - destination_column_value: the lane value the note lands in on the group axis (e.g. 'done', 'untagged')
- * - destination_column_children: the existing notes in that lane (the dragged note may already be present and is filtered out internally)
- * - destination_column_position: zero-based insertion index within the destination lane
+ * - destination_column_value: the group value the note lands in on the group axis (e.g. 'done', 'untagged')
+ * - destination_column_children: the existing notes in that group (the dragged note may already be present and is filtered out internally)
+ * - destination_column_position: zero-based insertion index within the destination group
  * - group_field: the axis field the drop writes; defaults to 'status' so kanban is unchanged. This is
- *   the inverse projection - the drop lands in a lane and writes `group_field := lane value` (or deletes
- *   the linetag for the absent-value lane)
+ *   the inverse projection - the drop lands in a group and writes `group_field := group value` (or deletes
+ *   the linetag for the absent-value group)
  */
 export interface KanbanDragEndPayloadInput {
     dragged_note: NoteProps;
@@ -43,7 +43,7 @@ export function buildKanbanDragEndPayload(input: KanbanDragEndPayloadInput): Edi
     const { dragged_note, destination_column_value, destination_column_children, destination_column_position } = input;
     const group_field = input.group_field ?? 'status';
     const dragged_doc_path = dragged_note.origin?.doc_path;
-    // inverse projection: write the group field to the dropped lane's value, or delete it for the absent lane
+    // inverse projection: write the group field to the dropped group's value, or delete it for the absent group
     const field_changes: Array<EditTextChange> = calculateTextChangesForNewLinetagValue(
         dragged_note, group_field, destination_column_value, ABSENT_VALUE_BUCKET,
     );

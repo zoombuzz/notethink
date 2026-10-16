@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, act } from '@testing-library/react';
 import VirtualizedKanbanColumn from './VirtualizedKanbanColumn';
-import { scrollVirtualLaneToNoteId } from '../../../lib/virtualScrollRegistry';
+import { scrollVirtualGroupToNoteId } from '../../../lib/virtualScrollRegistry';
 import type { NoteProps } from '../../../types/NoteProps';
 import type { ViewProps } from '../../../types/ViewProps';
 import type { KanbanColumnDescriptor } from './useKanbanColumns';
@@ -27,8 +27,8 @@ jest.mock('@hello-pangea/dnd', () => ({
         renderClone?: (provided: unknown, snapshot: unknown, rubric: unknown) => React.ReactNode;
     }) => (
         <div data-testid="droppable">
-            {/* always rendered here (unlike the real library, which only clones mid-drag) so it doesn't inflate the mounted-lane-content count */}
-            <div data-testid="lane-content">
+            {/* always rendered here (unlike the real library, which only clones mid-drag) so it doesn't inflate the mounted-group-content count */}
+            <div data-testid="group-content">
                 {(children as (provided: unknown, snapshot: unknown) => React.ReactNode)(
                     { droppableProps: {}, innerRef: () => {} },
                     { isUsingPlaceholder: false },
@@ -69,7 +69,7 @@ function makeView(): ViewProps {
 }
 
 describe('VirtualizedKanbanColumn', () => {
-    it('mounts far fewer cards than the total when the lane is long (windowed, not the whole corpus)', () => {
+    it('mounts far fewer cards than the total when the group is long (windowed, not the whole corpus)', () => {
         const notes = makeNotes(200);
         const { container } = render(
             <VirtualizedKanbanColumn
@@ -83,13 +83,13 @@ describe('VirtualizedKanbanColumn', () => {
                 list_height={300}
             />,
         );
-        const mounted_cards = container.querySelectorAll('[data-testid="lane-content"] [data-column-card-id]');
+        const mounted_cards = container.querySelectorAll('[data-testid="group-content"] [data-column-card-id]');
         expect(mounted_cards.length).toBeGreaterThan(0);
-        // generous bound: a 300px viewport at ~180px/row plus LANE_OVERSCAN_COUNT (8) either side is nowhere near 200
+        // generous bound: a 300px viewport at ~180px/row plus GROUP_OVERSCAN_COUNT (8) either side is nowhere near 200
         expect(mounted_cards.length).toBeLessThan(40);
     });
 
-    it('mounts every card when the lane is short enough to fit', () => {
+    it('mounts every card when the group is short enough to fit', () => {
         const notes = makeNotes(3);
         const { container } = render(
             <VirtualizedKanbanColumn
@@ -103,10 +103,10 @@ describe('VirtualizedKanbanColumn', () => {
                 list_height={2000}
             />,
         );
-        expect(container.querySelectorAll('[data-testid="lane-content"] [data-column-card-id]').length).toBe(3);
+        expect(container.querySelectorAll('[data-testid="group-content"] [data-column-card-id]').length).toBe(3);
     });
 
-    it('registers a virtual lane the scroll registry can look a card up in, and unregisters it on unmount', () => {
+    it('registers a virtual group the scroll registry can look a card up in, and unregisters it on unmount', () => {
         const notes = makeNotes(200);
         const { unmount } = render(
             <VirtualizedKanbanColumn
@@ -122,10 +122,10 @@ describe('VirtualizedKanbanColumn', () => {
         );
         // a card well outside the initial mounted window is still known to the registry by position
         let handled = false;
-        act(() => { handled = scrollVirtualLaneToNoteId('view-1', 'story-150'); });
+        act(() => { handled = scrollVirtualGroupToNoteId('view-1', 'story-150'); });
         expect(handled).toBe(true);
         unmount();
-        expect(scrollVirtualLaneToNoteId('view-1', 'story-150')).toBe(false);
+        expect(scrollVirtualGroupToNoteId('view-1', 'story-150')).toBe(false);
     });
 
     it('scrolling to an off-screen card mounts it (the virtualizer actually moved, not just answered true)', () => {
@@ -142,9 +142,9 @@ describe('VirtualizedKanbanColumn', () => {
                 list_height={300}
             />,
         );
-        expect(container.querySelector('[data-testid="lane-content"] [data-column-card-id="story-150"]')).toBeNull();
-        act(() => { scrollVirtualLaneToNoteId('view-1', 'story-150'); });
-        expect(container.querySelector('[data-testid="lane-content"] [data-column-card-id="story-150"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="group-content"] [data-column-card-id="story-150"]')).toBeNull();
+        act(() => { scrollVirtualGroupToNoteId('view-1', 'story-150'); });
+        expect(container.querySelector('[data-testid="group-content"] [data-column-card-id="story-150"]')).not.toBeNull();
     });
 
     it('renders a drag clone through renderClone rather than requiring the source row to stay mounted', () => {

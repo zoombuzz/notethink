@@ -35,11 +35,24 @@ describe('GroupBySelector', () => {
         expect(on_change).toHaveBeenCalledWith('assignee');
     });
 
-    it('renders disabled and pinned to the fixed value, naming the unlocking view', () => {
-        render(<GroupBySelector selection="auto" resolvedKey="status" candidateKeys={['status']} fixed fixedValue="status" unlockView="line" onChange={jest.fn()} />);
+    it('labels the option matching the inherited value, whether or not it is also the current selection', () => {
+        render(<GroupBySelector {...base} selection="assignee" inheritedValue="status" />);
         const select = screen.getByTestId('group-by-selector') as HTMLSelectElement;
-        expect(select).toBeDisabled();
-        expect(select.value).toBe('status');
-        expect(screen.getByTestId('group-by-fixed-hint')).toBeInTheDocument();
+        const option_labels = Array.from(select.options).map(o => o.textContent);
+        expect(option_labels).toContain('Status (inherited)');
+        expect(option_labels).not.toContain('Status');
+    });
+
+    it('labels auto itself "(inherited)" when auto is what the view would inherit', () => {
+        render(<GroupBySelector {...base} inheritedValue="auto" />);
+        const select = screen.getByTestId('group-by-selector') as HTMLSelectElement;
+        expect(select.options[0].textContent).toBe('Auto (First Level Folder) (inherited)');
+    });
+
+    it('labels no option when there is no inherited value to mark', () => {
+        render(<GroupBySelector {...base} />);
+        const select = screen.getByTestId('group-by-selector') as HTMLSelectElement;
+        const option_labels = Array.from(select.options).map(o => o.textContent);
+        expect(option_labels.some(label => label?.includes('(inherited)'))).toBe(false);
     });
 });

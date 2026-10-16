@@ -7,7 +7,7 @@ import type { LineTag, NoteProps } from "../types/NoteProps";
 
 const debug = Debug("nodejs:notethink-views:groupbyops");
 
-// re-exported from axisops (its neutral home, shared with the lane helpers) so group-by consumers keep one import site
+// re-exported from axisops (its neutral home, shared with the group helpers) so group-by consumers keep one import site
 export { FIRST_LEVEL_FOLDER_KEY, KANBAN_AXIS_KEY };
 
 /**
@@ -150,18 +150,6 @@ export function resolveGroupByAxisKey(
     const majority = majorityGroupBy(notes);
     if (majority) { return majority; }
     return FIRST_LEVEL_FOLDER_KEY;
-}
-
-/**
- * Resolves which key a kanban board lanes by. Kanban's `auto` is status - the axis is what makes the view
- * a kanban - so this deliberately does NOT walk the generic auto ladder, which would fall through a
- * focused-note tag and a majority vote to the first-level-folder default and lane a kanban by project.
- * An explicit selection still wins, because departing from the pinned axis is exactly what the drawer's
- * "Save as a new view type" offer is for; honouring it here is what makes that offer mean something.
- */
-export function resolveKanbanAxisKey(selection: string | undefined): string {
-    if (selection !== undefined && selection !== 'auto') { return selection; }
-    return KANBAN_AXIS_KEY;
 }
 
 /**

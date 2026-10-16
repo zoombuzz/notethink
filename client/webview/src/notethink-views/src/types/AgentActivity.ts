@@ -163,6 +163,10 @@ export function addActivityUsage(a: ActivityUsage, b: ActivityUsage): ActivityUs
  *   line; Grok: the last usage turn's own model key). Never inferred from a price-table lookup
  * - usage: this session's own total tokens and estimated cost over the analyser's 30 day window,
  *   independent of how many stories it is bound to
+ * - active_ms: the sum of the gaps between consecutive events, leaving out any gap over five
+ *   minutes entirely, over the session's whole lifetime regardless of window; undefined on a
+ *   refusal, since no record was read to measure gaps between. The agent card's clock setting reads
+ *   this for its "active" mode; `started_at`/`updated_at` alone drive the other two modes
  */
 export interface ActivitySession {
     // --- identity and binding ---
@@ -176,6 +180,7 @@ export interface ActivitySession {
     started_at: string;
     updated_at: string;
     ended_at?: string;
+    active_ms?: number;
     // --- what it is doing ---
     state: ActivityState;
     capabilities: ActivityCapabilities;

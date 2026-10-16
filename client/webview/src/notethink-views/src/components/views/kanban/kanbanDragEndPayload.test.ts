@@ -22,7 +22,7 @@ function noteWithLinetag(field: string, value: string): NoteProps {
 }
 
 describe('buildKanbanDragEndPayload group-key inverse projection', () => {
-    it('writes the group field to the destination lane value (group by an arbitrary attribute)', () => {
+    it('writes the group field to the destination group value (group by an arbitrary attribute)', () => {
         const dragged = noteWithLinetag('assignee', 'alex');
         const payload = buildKanbanDragEndPayload({
             dragged_note: dragged,
@@ -36,7 +36,7 @@ describe('buildKanbanDragEndPayload group-key inverse projection', () => {
         expect(changes.some(c => c.insert === 'sam')).toBe(true);
     });
 
-    it('deletes the group linetag when dropped on the absent-value lane', () => {
+    it('deletes the group linetag when dropped on the absent-value group', () => {
         const dragged = noteWithLinetag('assignee', 'alex');
         const payload = buildKanbanDragEndPayload({
             dragged_note: dragged,
@@ -47,7 +47,7 @@ describe('buildKanbanDragEndPayload group-key inverse projection', () => {
         });
         expect(payload).not.toBeNull();
         const changes = (payload as { changes: Array<{ from: number; to?: number; insert: string }> }).changes;
-        // the absent lane removes the linetag: a deletion (empty insert spanning a range)
+        // the absent group removes the linetag: a deletion (empty insert spanning a range)
         expect(changes.some(c => c.insert === '' && c.to !== undefined && c.to > c.from)).toBe(true);
     });
 

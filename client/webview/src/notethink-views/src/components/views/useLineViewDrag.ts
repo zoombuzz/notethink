@@ -29,7 +29,7 @@ const FLIP_CLASS_NAMES = {
 /**
  * Inputs LineView threads into the drag lifecycle.
  * - is_projecting: whether an optimistic post-drop projection is active (holds the FLIP gate open for it)
- * - columns / visible_columns: the full lane list (indexed by droppable id) and the populated subset the board renders (the FLIP registry)
+ * - columns / visible_columns: the full group list (indexed by droppable id) and the populated subset the board renders (the FLIP registry)
  * - apply_optimistic_move: seeds the client-side projection so the dropped card does not snap back
  * - axis / group_field / drag_disabled: the group axis, its field to write, and whether the axis is read-only (no drops)
  * - animate_enabled: the kanban animate-transitions setting
@@ -49,7 +49,7 @@ export interface UseLineViewDragParams {
 
 /**
  * The drag surface LineView renders against.
- * - content_ref: the lane content node useFlipTransition measures within (scope for the [data-flip-id] queries)
+ * - content_ref: the group content node useFlipTransition measures within (scope for the [data-flip-id] queries)
  * - drag_active: true from drag-start until just after drag-end; gates the container clear handler against the post-drop click
  * - handle_drag_start / handle_drag_end: the DragDropContext responders
  */
@@ -61,7 +61,7 @@ export interface LineViewDragApi {
 }
 
 /**
- * The single-axis card-lane drag lifecycle: the FLIP gate + passive-transition layer, and the drag-start
+ * The single-axis card-group drag lifecycle: the FLIP gate + passive-transition layer, and the drag-start
  * / drag-end responders that post the group-key rewrite through the inverse projection and seed the
  * optimistic hold. Extracted from LineView so the component body stays a short sequence of named steps.
  * - flip_gate: marks a layout change as the user's own move (drag -> optimistic projection ->
@@ -74,7 +74,7 @@ export interface LineViewDragApi {
  *   click-suppression and would otherwise bubble to the container's clear handler and jump the caret
  *   onto the next story's header; the guard only sets a flag and must never move the caret itself.
  * - handle_drag_end: a thin React adapter around `buildKanbanDragEndPayload` that pulls the dragged
- *   note and destination lane out of the drop result, applies the lock and no-destination guards,
+ *   note and destination group out of the drop result, applies the lock and no-destination guards,
  *   then delegates payload assembly to the pure helper and posts whatever it returns. Reorders from
  *   the authoritative notes rather than the projection, whose child_notes carry synthetic inherited
  *   weights and a possibly-stale order that would diverge the written doc from what was projected.
@@ -143,6 +143,6 @@ export function useLineViewDrag(params: UseLineViewDragParams): LineViewDragApi 
         gate: flip_gate,
         class_names: FLIP_CLASS_NAMES,
     });
-    debug('drag lifecycle wired: %d visible lanes, disabled=%s', visible_columns.length, drag_disabled);
+    debug('drag lifecycle wired: %d visible groups, disabled=%s', visible_columns.length, drag_disabled);
     return { content_ref, drag_active, handle_drag_start, handle_drag_end };
 }

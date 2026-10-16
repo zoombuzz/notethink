@@ -1,8 +1,20 @@
 import { lazy } from "react";
 import type { ComponentType } from "react";
 import Debug from "debug";
-import { SETTING_HOMES, chainOf, registryWithUserTypes } from "../../lib/viewregistryops";
-import type { SettingsCascadeKey, UserViewType } from "../../types/Messages";
+import {
+    SETTING_HOMES,
+    chainOf,
+    isPerTreeKey,
+    registryWithUserTypes,
+    resolveTreeRow,
+    resolveViewSetting,
+    writeForTree,
+    type ResolvedTreeRow,
+    type ViewOverridesMap,
+} from "../../lib/viewregistryops";
+import { AGENT_VIRTUAL_NAMESPACE, sessionForUnboundKey, sessionsForStory, storyKeyForNote, type ActivitySnapshot } from "../../lib/agentactivityops";
+import { isVirtualNote, virtualNoteKeyOf } from "../../lib/virtualnoteops";
+import type { ResolvedSettingsCascade, SettingsCascadeKey, UserViewType } from "../../types/Messages";
 import type { NoteProps } from "../../types/NoteProps";
 
 const debug = Debug("nodejs:notethink-views:cardregistryops");
@@ -11,7 +23,7 @@ const debug = Debug("nodejs:notethink-views:cardregistryops");
  * The card hierarchy as data, the orthogonal axis to the view registry. A view decides how notes are
  * laid out; a card decides how one note is drawn - the full card (pill, title, attributes, body), a
  * sticky, or the agents working on the note's story. The two are chosen independently, so `sticky`
- * cards work in a document just as they do in a kanban lane. The axis covers the notes a view LAYS OUT,
+ * cards work in a document just as they do in a kanban group. The axis covers the notes a view LAYS OUT,
  * not the view's own container: the note a DocumentView opens at holds every note below it in its body,
  * so GenericNote keeps it on the full card whatever is selected.
  *
@@ -133,14 +145,79 @@ function cardRootNode(registry: CardRegistry): string | undefined {
 }
 
 /**
- * The card node whose name a settings row's pill shows. The card axis is a flat home lookup rather than
- * the chain resolution the view axis needs: a card node carries no fixed or open override model, so
- * there is nothing on the chain that could outrank the home. A key homed off this tree - at a view node,
- * or at one of the sentinels - belongs to no card type and yields undefined, so its row renders no pill.
+ * The card node a setting is structurally homed at - a flat lookup against the tree shape, not the
+ * resolved owner a row's pill names (that is `owningNodeFor` from viewregistryops.ts, called with the
+ * card registry and the cards bag, since a card node can now hold its own value for a setting homed
+ * above it exactly as a view can). This one answers "which node owns the key by declaration", which is
+ * what `offersNewCardType` below needs to test ancestry against. A key homed off this tree - at a view
+ * node, or at one of the sentinels - belongs to no card type and yields undefined.
  */
 export function owningCardNodeFor(key: SettingsCascadeKey, registry: CardRegistry = CARD_REGISTRY): string | undefined {
     const home = SETTING_HOMES[key].node;
     return getCardNode(home, registry) === undefined ? undefined : home;
+}
+
+/** true for every card-tree setting a card node can genuinely hold its own value for, `cardType` excepted */
+export function isPerCardKey(key: SettingsCascadeKey): boolean {
+    return isPerTreeKey(key, CARD_REGISTRY, 'cardType');
+}
+
+/**
+ * The one write for a card settings row, the card tree's half of `settingWriteFor` / `writeForTree`:
+ * the selected card node's own cell, home-written literally or cleared against what it would inherit,
+ * exactly as a view row writes. `cardType` and a non-card-tree key fall through to their flat key, since
+ * the selection itself is not a value any card node holds.
+ */
+export function cardSettingWriteFor(
+    selected_node: string,
+    key: SettingsCascadeKey,
+    value: unknown,
+    home_value: unknown,
+    card_overrides: ViewOverridesMap,
+): { setting: SettingsCascadeKey | 'cards'; value: unknown } {
+    return writeForTree(CARD_REGISTRY, 'cards', isPerCardKey(key), [], card_overrides, selected_node, key, value, home_value) as { setting: SettingsCascadeKey | 'cards'; value: unknown };
+}
+
+/**
+ * Everything one card settings row needs - resolved value, what it would inherit, which pill to show,
+ * and whether it is diverged - through the same engine a view row resolves through, so the card drawer
+ * can never disagree with how a note actually renders.
+ */
+export function resolveCardTreeRow(
+    selected_node: string,
+    key: SettingsCascadeKey,
+    home_value: unknown,
+    card_overrides: ViewOverridesMap,
+    diverged_keys: string[],
+): ResolvedTreeRow {
+    return resolveTreeRow(CARD_REGISTRY, 'cards', isPerCardKey(key), selected_node, key, home_value, [], card_overrides, diverged_keys);
+}
+
+// the card-tree settings resolvedSettingsForCard resolves per rendered card type
+const CARD_TREE_KEYS: SettingsCascadeKey[] = ['showLinetagsInHeadlines', 'autoExpandFocusedNote', 'showLineNumbers', 'clockMode'];
+
+/**
+ * A settings object with every card-tree key replaced by its resolved value for `card_type`'s own
+ * chain - the same role `resolvedSettingsForView` plays for a rendered view, called once per note by
+ * GenericNote so a sticky carrying its own value in `cardOverrides` renders with it. Every other key
+ * (view-tree and global/files settings) passes through unchanged.
+ *
+ * Returns the SAME `settings` reference when nothing actually resolves differently - the overwhelming
+ * common case, since no card type holds its own override yet - rather than always spreading a fresh
+ * object: GenericNote calls this on every render, and a fresh reference there would defeat the card
+ * component's own memo even when nothing about its settings changed.
+ */
+export function resolvedSettingsForCard(card_type: string, settings: Partial<ResolvedSettingsCascade>): Partial<ResolvedSettingsCascade> {
+    const card_overrides = settings.cardOverrides ?? {};
+    const resolved: Record<string, unknown> = {};
+    let changed = false;
+    for (const key of CARD_TREE_KEYS) {
+        const value = resolveViewSetting(CARD_REGISTRY, card_type, key, settings[key], [], card_overrides).value;
+        if (value !== settings[key]) { changed = true; }
+        resolved[key] = value;
+    }
+    if (!changed) { return settings; }
+    return { ...settings, ...resolved } as Partial<ResolvedSettingsCascade>;
 }
 
 /**
@@ -150,10 +227,11 @@ export function owningCardNodeFor(key: SettingsCascadeKey, registry: CardRegistr
  * exempt because its settings reach every card, so changing one is a preference rather than a new type.
  *
  * Nothing calls this yet, and that is the honest state rather than an oversight. Every card setting homes
- * at the root, where the rule is exempt by design, so a card drawer that mounted the offer would mount a
- * control no shipped setting can reach. The predicate is kept and unit-tested because it is the half that
- * is genuinely structural: home one setting at `card` or `sticky` and the answer is already right, and
- * wiring the drawer to it is then the only work left.
+ * either at the root, where the rule is exempt by design, or (clockMode) at `agent`, a leaf with no
+ * descendant to depart from, so a card drawer that mounted the offer would still mount a control no
+ * shipped setting can reach. The predicate is kept and unit-tested because it is the half that is
+ * genuinely structural: home one setting at `card` or `sticky`, each of which COULD grow a descendant,
+ * and the answer is already right; wiring the drawer to it is then the only work left.
  */
 export function offersNewCardType(selected_node: string, key: SettingsCascadeKey, registry: CardRegistry = CARD_REGISTRY): boolean {
     const owner = owningCardNodeFor(key, registry);
@@ -186,7 +264,7 @@ export function selectableCardTypes(registry: CardRegistry = CARD_REGISTRY): str
  * inherited up its chain as before.
  */
 export const VIEW_DEFAULT_CARD_TYPE_SETTINGS: Partial<Record<string, SettingsCascadeKey>> = {
-    kanban: 'kanbanDefaultCardType',
+    kanban: 'defaultCardType',
 };
 
 /**
@@ -247,4 +325,71 @@ export function resolveCardType(selection: string | undefined, view_type?: strin
 /** the component that renders a resolved card type, falling back to the default card for an unknown id */
 export function cardComponentFor(card_type: string): ComponentType<NoteProps> {
     return CARD_COMPONENTS[card_type] ?? CARD_COMPONENTS[DEFAULT_CARD_TYPE];
+}
+
+/**
+ * What a card type's ordering timestamp function needs beyond the note itself, kept to the one thing
+ * that varies live (the agent activity snapshot) plus the fallback doc path a single-file view has no
+ * origin to carry. Grouping order (`grouporderops.ts`) stays independent of card types and agent code by
+ * taking a plain `(note) => number | undefined` instead of this context - `noteOrderTimestampFn` below
+ * is where the two meet.
+ */
+export interface OrderTimestampContext {
+    snapshot: ActivitySnapshot | undefined;
+    fallback_doc_path?: string;
+}
+
+/**
+ * A card type's definition of "when this card last changed", in epoch ms, for the automatic group
+ * orders (`newestFirst` / `newestLast`) to read a group's latest timestamp across its own cards.
+ * Declaring one here is the whole job of making a card type order-aware; a type that declares none
+ * falls back to `fileChangedOrderTimestamp`, the default card's own rule.
+ */
+export type OrderTimestampFn = (note: NoteProps, ctx: OrderTimestampContext) => number | undefined;
+
+/**
+ * The agent card's ordering timestamp: when an agent last wrote to this card, i.e. the latest
+ * `updated_at` among the sessions bound to its story, or, for a virtual unbound-agent note, its own
+ * session. This is the one place a card's agent activity is read for ordering, so a board and its
+ * settings drawer read it alike.
+ */
+function agentOrderTimestamp(note: NoteProps, ctx: OrderTimestampContext): number | undefined {
+    const own_session = isVirtualNote(note) ? sessionForUnboundKey(ctx.snapshot, virtualNoteKeyOf(note, AGENT_VIRTUAL_NAMESPACE)) : undefined;
+    const sessions = own_session ? [own_session] : sessionsForStory(ctx.snapshot, storyKeyForNote(note, ctx.fallback_doc_path));
+    let latest: number | undefined;
+    for (const state of sessions) {
+        const ms = Date.parse(state.session.updated_at);
+        if (Number.isNaN(ms)) { continue; }
+        if (latest === undefined || ms > latest) { latest = ms; }
+    }
+    return latest;
+}
+
+/** every other card type's ordering timestamp: when the card's data last changed, the mtime of the file holding its story; a note with none has no timestamp */
+function fileChangedOrderTimestamp(note: NoteProps): number | undefined {
+    return note.origin?.file_mtime;
+}
+
+// one stable reference so two lookups for the same fallback type are `===`, not two freshly built closures
+const FALLBACK_ORDER_TIMESTAMP_FN: OrderTimestampFn = note => fileChangedOrderTimestamp(note);
+
+// one entry per card type with its own ordering attribute; every other type falls back to file-changed
+const ORDER_TIMESTAMP_FNS: Partial<Record<string, OrderTimestampFn>> = {
+    [AGENT_CARD_TYPE]: agentOrderTimestamp,
+};
+
+/** the ordering timestamp function a card type declares, or the file-changed default for a type that declares none */
+export function orderTimestampFnFor(card_type: string): OrderTimestampFn {
+    return ORDER_TIMESTAMP_FNS[card_type] ?? FALLBACK_ORDER_TIMESTAMP_FN;
+}
+
+/**
+ * The plain `(note) => ms | undefined` function `orderGroupValues` takes, bound to one resolved card
+ * type and one activity context, so the caller (the board or its settings drawer, both of which already
+ * resolve the card type the same way `GenericNote` does) can hand grouping a pure function without
+ * grouping ever importing a card type or agent code itself.
+ */
+export function noteOrderTimestampFn(card_type: string, ctx: OrderTimestampContext): (note: NoteProps) => number | undefined {
+    const fn = orderTimestampFnFor(card_type);
+    return (note: NoteProps) => fn(note, ctx);
 }

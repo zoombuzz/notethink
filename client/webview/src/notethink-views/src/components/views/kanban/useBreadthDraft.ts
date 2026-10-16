@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
  * The breadth a drag is holding but has not yet written, keyed by view id.
  *
  * The board and the settings drawer are siblings under the view, and both have to show the same number while
- * a lane boundary is being dragged: the lanes follow it and the drawer's text box reads it. A module-level
+ * a group boundary is being dragged: the groups follow it and the drawer's text box reads it. A module-level
  * store gives them one value without threading a callback through every layer between them, and because the
  * setting is only written on release, nothing else needs to know a drag is in flight.
  */

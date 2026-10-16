@@ -59,7 +59,10 @@ test.describe('Card settings tab', () => {
         await page.getByTestId('card-radio-sticky').click();
 
         // round-trip order, so a failure names the broken link: write, resolution, render
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.cardType).toBe('sticky');
+        await expect.poll(async () => {
+            const cards = (await readHarnessSettings(page)).workspace.cards as Record<string, Record<string, unknown>> | undefined;
+            return cards?.allcards?.cardType;
+        }).toBe('sticky');
         await expect(page.locator('[data-auto-selected-cardtype="sticky"]')).toHaveCount(1);
         await expect(page.locator('[data-card-type="sticky"]').first()).toBeVisible();
     });
@@ -84,13 +87,59 @@ test.describe('Card settings tab', () => {
 
     test('a card setting diverges and the card tab counts it independently of the view tab', async ({ page }) => {
         await openCardDrawer(page);
+        // showLineNumbers is per-card now; select its own home (All cards) so the edit lands there
+        await page.getByTestId('card-node-allcards').click();
         await expect(page.getByTestId('card-diverged-count')).toContainText('0 settings');
 
         const card_rows = page.getByTestId('card-settings-drawer-grid');
         await card_rows.getByTestId('setting-control-showLineNumbers').click();
 
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.showLineNumbers).toBe(true);
+        await expect.poll(async () => {
+            const cards = (await readHarnessSettings(page)).workspace.cards as Record<string, Record<string, unknown>> | undefined;
+            return cards?.allcards?.showLineNumbers;
+        }).toBe(true);
         await expect(card_rows.getByTestId('setting-row-showLineNumbers')).toHaveAttribute('data-diverged', 'true');
         await expect(page.getByTestId('card-diverged-count')).toContainText('1 setting');
+    });
+
+    /*
+     * Card inheritance, end to end: a card type (Sticky) holds its own showLineNumbers distinct from
+     * All cards, exactly as a saved view type holds its own value distinct from its parent. The write
+     * lands in Sticky's own cell, a note rendered as Sticky picks it up, and switching the board's own
+     * card type to Card (which holds nothing of its own) drops it again - proving the value travels
+     * with the card TYPE, not with the note or the shared default.
+     */
+    test('a setting held by one card type reaches only notes rendered as that type, never a sibling\'s', async ({ page }) => {
+        const note = page.locator('[data-seq]').first();
+        await expect(note.getByTestId('note-lineno')).toHaveCount(0);
+
+        await openCardDrawer(page);
+        await page.getByTestId('card-node-sticky').click();
+        await page.getByTestId('setting-control-showLineNumbers').click();
+
+        // the write lands in Sticky's own cell, never All cards'
+        await expect.poll(async () => {
+            const cards = (await readHarnessSettings(page)).workspace.cards as Record<string, Record<string, unknown>> | undefined;
+            return cards?.sticky?.showLineNumbers;
+        }).toBe(true);
+        await expect.poll(async () => {
+            const cards = (await readHarnessSettings(page)).workspace.cards as Record<string, Record<string, unknown>> | undefined;
+            return cards?.allcards?.showLineNumbers;
+        }).toBeUndefined();
+
+        // All cards still reads unchecked and un-diverged: the value is Sticky's own, not the shared default
+        await page.getByTestId('card-node-allcards').click();
+        await expect(page.getByTestId('setting-control-showLineNumbers')).not.toBeChecked();
+        await expect(page.getByTestId('setting-row-showLineNumbers')).toHaveAttribute('data-diverged', 'false');
+        // and the note, still rendered as Card (allcards' own default), carries no line number yet
+        await expect(note.getByTestId('note-lineno')).toHaveCount(0);
+
+        // pinning the board to Sticky picks up Sticky's own value, never seen before this point
+        await page.getByTestId('card-radio-sticky').click();
+        await expect(note.getByTestId('note-lineno')).toBeVisible();
+
+        // pinning back to Card, which holds nothing of its own, drops the line number again
+        await page.getByTestId('card-radio-card').click();
+        await expect(note.getByTestId('note-lineno')).toHaveCount(0);
     });
 });

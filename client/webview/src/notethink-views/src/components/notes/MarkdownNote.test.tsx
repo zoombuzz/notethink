@@ -91,7 +91,7 @@ function simulateOverflow(el: HTMLElement, scrollHeight: number, offsetWidth: nu
 /*
  * Stand-in for a real view: owns view_expanded_ids and the setNoteExpanded handler, driving
  * expansion the way DocumentView and KanbanBoard do rather than component-instance state. The
- * column wrapper is the kanban lane, so changing it remounts the card in the new lane. keyBySeq
+ * column wrapper is the kanban group, so changing it remounts the card in the new group. keyBySeq
  * switches the card to seq-keying, so a renumber gets a fresh instance and only the view-owned
  * expansion list can survive the handover.
  */
@@ -334,7 +334,7 @@ describe('MarkdownNote', () => {
     });
 
     it('stays expanded when it remounts under a different parent (kanban column move)', () => {
-        // dragging a card to another column unmounts it and remounts it in the new lane's Droppable, killing the instance
+        // dragging a card to another column unmounts it and remounts it in the new group's Droppable, killing the instance
         const { container, rerender, note } = renderExpandedNote();
         rerender(<ExpansionHost note={note} column="doing" />);
         const body = remeasuredBody(container);

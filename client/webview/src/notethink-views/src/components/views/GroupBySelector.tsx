@@ -13,23 +13,27 @@ export function groupByKeyLabel(key: string): string {
 }
 
 /**
- * GroupBySelector, the Line view's group-by dropdown in the lane settings drawer. Offers 'auto' (labelled
- * "Auto (First Level Folder)" with its resolved key) plus every categorical candidate. When the group-by
- * is fixed for this view (kanban pins it to status via the registry) the select is disabled and shows the
- * pinned key, with a note that selecting the unlocking view (Line) makes it editable.
+ * GroupBySelector, the group view's group-by dropdown in the group settings drawer. Offers 'auto' (labelled
+ * "Auto (...)" with its resolved key) plus every categorical candidate.
  * - selection: the persisted per-view choice ('auto' or a candidate key)
  * - resolvedKey: the auto-resolved key, shown in the "Auto (...)" label
  * - candidateKeys: categorical group-by candidate keys enumerated from the notes
- * - fixed / fixedValue / unlockView: the registry lock - disabled, pinned to fixedValue, unlocked by unlockView
+ * - inheritedValue: the value this view would inherit if it held none of its own; the option matching it
+ *   (which may be 'auto' itself) reads "<label> (inherited)", whether or not the view currently holds
+ *   its own value, so picking it is how an edit clears back to inheriting
  */
 export interface GroupBySelectorProps {
     selection: string;
     resolvedKey: string;
     candidateKeys: string[];
-    fixed?: boolean;
-    fixedValue?: string;
-    unlockView?: string;
+    inheritedValue?: string;
     onChange: (group_by_key: string) => void;
+}
+
+/** an option's label, with "(inherited)" appended when its value is what the view would inherit */
+function optionLabel(key: string, resolved_key: string, inherited_value: string | undefined): string {
+    const base = key === 'auto' ? viewTypeLabel('auto', groupByKeyLabel(resolved_key)) : groupByKeyLabel(key);
+    return key === inherited_value ? l10n.t('{0} (inherited)', base) : base;
 }
 
 export default function GroupBySelector(props: GroupBySelectorProps): ReactElement {
@@ -40,27 +44,11 @@ export default function GroupBySelector(props: GroupBySelectorProps): ReactEleme
         background: 'var(--vscode-dropdown-background)',
         border: '1px solid var(--vscode-dropdown-border)',
         borderRadius: '2px',
-        cursor: props.fixed ? 'not-allowed' : 'pointer',
+        cursor: 'pointer',
         fontSize: 'inherit',
         padding: '2px 0.3em',
         color: 'var(--vscode-dropdown-foreground)',
     };
-    // fixed (kanban): a disabled select showing the pinned key, plus a hint naming the view that unlocks it
-    if (props.fixed) {
-        const fixed_value = props.fixedValue ?? 'status';
-        return (
-            <>
-                <select data-testid="group-by-selector" value={fixed_value} disabled aria-label={l10n.t('Group by')} style={select_style}>
-                    <option value={fixed_value}>{groupByKeyLabel(fixed_value)}</option>
-                </select>
-                {props.unlockView && (
-                    <span data-testid="group-by-fixed-hint" style={{ marginLeft: '0.5em', opacity: 0.7 }}>
-                        {l10n.t('Set by {0}', viewTypeLabel(props.unlockView))}
-                    </span>
-                )}
-            </>
-        );
-    }
     const options = ['auto', ...props.candidateKeys];
     return (
         <select
@@ -72,7 +60,7 @@ export default function GroupBySelector(props: GroupBySelectorProps): ReactEleme
         >
             {options.map((key) => (
                 <option key={key} value={key}>
-                    {key === 'auto' ? viewTypeLabel('auto', groupByKeyLabel(props.resolvedKey)) : groupByKeyLabel(key)}
+                    {optionLabel(key, props.resolvedKey, props.inheritedValue)}
                 </option>
             ))}
         </select>

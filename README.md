@@ -2,7 +2,7 @@
 
 Your `todo.md` is already a project board. NoteThink renders any markdown file - a plain
 checklist, a full `todo.md` / `done.md` pair, a whole folder of them - as a live Kanban board,
-a single-lane Line view, or a structured Document view, right inside VS Code. Nothing to sign
+a single-group Line view, or a structured Document view, right inside VS Code. Nothing to sign
 up for, nothing to sync: it reads the markdown you already have, live. Drag a card or tick a
 checkbox and NoteThink writes exactly that change back to the file - nothing else changes
 unless you drag or tick something yourself; it is not a free-text editor.
@@ -21,6 +21,7 @@ Then open any `.md` file, right-click it and choose **Open With... -> NoteThink*
 ## Features
 
 - **Kanban and Line boards**: group stories by status, assignee, or any attribute you author - drag a card to rewrite its status (or grouping attribute) linetag in the file
+- **Group order**: drag the groups into your own order, or let the board order them by when their cards last changed (in either direction), alphabetically, or by card count
 - **Document view**: the same file read top to bottom, nested and structured
 - **Folder mode**: aggregate every markdown file in a folder into one board
 - **Live Updates**: edit the file in the normal text editor and the view updates in place, debounced
@@ -224,7 +225,9 @@ A session appears on a story's card when one of its own file edits changed that 
 story board, `docstech/users/<name>/todo.md` or `done.md`, in the workspace folder or in any project
 directly inside it. A story is matched by its `[](?id=...)` linetag, or by the id derived from its
 title when it has none, so a story keeps its agents when it moves from `todo.md` to `done.md`. A
-session that edited no story is drawn on a card of its own rather than guessed onto one.
+session that edited no story is drawn on a card of its own rather than guessed onto one, and only
+beside documents from the same git repository as the session, so a workspace holding several
+repositories does not draw every repository's agents on every board.
 
 Clicking an agent on a card opens that session in VS Code: in Claude Code's own chat panel, or, for a
 vendor with no such panel, as the session's transcript in an editor.

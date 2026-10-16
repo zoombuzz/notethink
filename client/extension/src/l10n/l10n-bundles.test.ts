@@ -22,6 +22,10 @@ const ALLOWED_SAME_EVERY_LOCALE = [
     '${0}',
     // the same figure marked as an estimate, e.g. "~$0.42"
     '~${0}',
+    // the diverged-row badge - a single letter, kept identical in every locale by design
+    'M',
+    // the "specific to this view" pill badge - a two-letter abbreviation, kept identical in every locale by design
+    'VS',
 ];
 
 const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {

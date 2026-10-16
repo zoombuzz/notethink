@@ -15,7 +15,7 @@
             --vscode-gitDecoration-modifiedResourceForeground: #e2c08d;
             /* Dark+'s value, and opaque like every real theme's, so the tree's current-row band reads at the contrast a real window gives it */
             --vscode-list-inactiveSelectionBackground: #37373d;
-            /* the settings drawer's selects and lane chips read these, so a screenshot of the harness looks like a real window */
+            /* the settings drawer's selects and group chips read these, so a screenshot of the harness looks like a real window */
             --vscode-dropdown-background: #313131;
             --vscode-dropdown-border: #3c3c3c;
             --vscode-font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -54,17 +54,26 @@
          * effect at all unless something plays the extension's part: resolve the value, then echo the
          * whole cascade back. So the harness keeps the same three layers VS Code configuration has
          * (built-in default, User, Workspace) and answers the same four messages the real PanelSession
-         * answers, computing `diverged` exactly the way client/extension/src/lib/settings.ts does -
-         * resolved value differs from the saved default, which is the User value when one is set and
-         * the built-in default otherwise.
+         * answers, in the shape client/extension/src/lib/settings.ts sends: every view- and card-tree
+         * setting arrives in one of two bags (`views`, `cards`), one entry per tree node, which the
+         * extension assembles from one declared key per node per setting, and the five settings that
+         * belong to no tree arrive as flat keys.
          *
-         * NOTETHINK_BUILTIN_SETTINGS mirrors the SETTINGS defaults in that same module. Tests may read
-         * or seed window.__nt_settings to arrange a scenario.
+         * FLAT_SETTINGS_DEFAULTS and CASCADE_KEY_DEFAULTS mirror FLAT_SETTINGS / CASCADE_KEY_DEFAULTS in
+         * that same module. Tests may read or seed window.__nt_settings to arrange a scenario; its shape
+         * is `{ user: { views, cards, <flat key>... }, workspace: { views, cards, <flat key>... } }`.
          */
-        var NOTETHINK_BUILTIN_SETTINGS = {
+        var FLAT_SETTINGS_DEFAULTS = {
+            watchUnopenedFilesInViewer: true,
+            openNewEditorIfNoneOpen: false,
+            includeFilter: '**/*.md',
+            excludeFilter: '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**',
+            maxNotesPerFile: 10,
+        };
+        var FLAT_SETTING_KEYS = Object.keys(FLAT_SETTINGS_DEFAULTS);
+        var CASCADE_KEY_DEFAULTS = {
             viewType: 'auto',
             cardType: 'auto',
-            viewUserTypes: [],
             showLinetagsInHeadlines: false,
             scrollNoteIntoView: true,
             autoExpandFocusedNote: false,
@@ -72,19 +81,14 @@
             groupBy: 'auto',
             orientation: 'columns',
             lineBreadth: 220,
-            kanbanGroupBy: 'auto',
             groupDisplay: ['untagged', 'doing', 'code-review', 'testing', 'done'].map(function(value) { return { value: value, shown: true }; }),
-            kanbanCardRatio: 1.4,
-            kanbanAnimateTransitions: true,
-            kanbanDefaultCardType: 'card',
-            watchUnopenedFilesInViewer: true,
-            openNewEditorIfNoneOpen: false,
-            includeFilter: '**/*.md',
-            excludeFilter: '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,vendored}/**',
-            maxNotesPerFile: 10,
+            groupOrder: 'custom',
+            cardRatio: 1.4,
+            animateTransitions: true,
+            defaultCardType: 'card',
+            clockMode: 'active',
         };
-        var NOTETHINK_SETTING_KEYS = Object.keys(NOTETHINK_BUILTIN_SETTINGS);
-        window.__nt_settings = window.__nt_settings || { user: {}, workspace: {} };
+        window.__nt_settings = window.__nt_settings || { user: { views: {}, cards: {} }, workspace: { views: {}, cards: {} } };
 
         // structural comparison, so a fresh groupDisplay array (of {value, shown} entries) reads equal to the stored one
         function settingValuesEqual(a, b) {
@@ -99,28 +103,57 @@
             }
             return false;
         }
-        function readSetting(key) {
+        // a bag merges User and Workspace key by key within each node, as mergedBag() does in settings.ts
+        function mergedBag(bag) {
+            var user_map = window.__nt_settings.user[bag] || {};
+            var workspace_map = window.__nt_settings.workspace[bag] || {};
+            var merged = {};
+            var node_ids = {};
+            Object.keys(user_map).forEach(function(id) { node_ids[id] = true; });
+            Object.keys(workspace_map).forEach(function(id) { node_ids[id] = true; });
+            Object.keys(node_ids).forEach(function(id) {
+                merged[id] = Object.assign({}, user_map[id] || {}, workspace_map[id] || {});
+            });
+            return merged;
+        }
+        function readFlatSetting(key) {
             var store = window.__nt_settings;
             if (store.workspace[key] !== undefined) { return store.workspace[key]; }
             if (store.user[key] !== undefined) { return store.user[key]; }
-            return NOTETHINK_BUILTIN_SETTINGS[key];
+            return FLAT_SETTINGS_DEFAULTS[key];
         }
-        function savedDefaultOf(key) {
+        function savedFlatDefaultOf(key) {
             var user_value = window.__nt_settings.user[key];
-            return user_value === undefined ? NOTETHINK_BUILTIN_SETTINGS[key] : user_value;
+            return user_value === undefined ? FLAT_SETTINGS_DEFAULTS[key] : user_value;
+        }
+        // a cell diverges when Workspace holds it and it differs from User (or the generic default), as in settings.ts
+        function bagDivergedKeys(bag) {
+            var user_map = window.__nt_settings.user[bag] || {};
+            var workspace_map = window.__nt_settings.workspace[bag] || {};
+            var diverged = [];
+            Object.keys(workspace_map).forEach(function(node_id) {
+                Object.keys(workspace_map[node_id] || {}).forEach(function(key) {
+                    var workspace_value = workspace_map[node_id][key];
+                    var user_value = (user_map[node_id] || {})[key];
+                    var baseline = user_value === undefined ? CASCADE_KEY_DEFAULTS[key] : user_value;
+                    if (!settingValuesEqual(workspace_value, baseline)) { diverged.push(bag + ':' + node_id + ':' + key); }
+                });
+            });
+            return diverged;
         }
         function buildSettingsCascadePayload() {
             var store = window.__nt_settings;
-            var payload = {};
+            var payload = { views: mergedBag('views'), cards: mergedBag('cards') };
             var diverged = [];
-            var has_workspace_overrides = false;
-            var has_any_overrides = false;
-            NOTETHINK_SETTING_KEYS.forEach(function(key) {
-                payload[key] = readSetting(key);
-                if (!settingValuesEqual(payload[key], savedDefaultOf(key))) { diverged.push(key); }
+            var has_workspace_overrides = Object.keys(store.workspace.views || {}).length > 0 || Object.keys(store.workspace.cards || {}).length > 0;
+            var has_any_overrides = has_workspace_overrides || Object.keys(store.user.views || {}).length > 0 || Object.keys(store.user.cards || {}).length > 0;
+            FLAT_SETTING_KEYS.forEach(function(key) {
+                payload[key] = readFlatSetting(key);
+                if (!settingValuesEqual(payload[key], savedFlatDefaultOf(key))) { diverged.push(key); }
                 if (store.workspace[key] !== undefined) { has_workspace_overrides = true; }
                 if (store.workspace[key] !== undefined || store.user[key] !== undefined) { has_any_overrides = true; }
             });
+            diverged = diverged.concat(bagDivergedKeys('views')).concat(bagDivergedKeys('cards'));
             payload.diverged = diverged;
             payload.hasWorkspaceOverrides = has_workspace_overrides;
             payload.hasAnyOverrides = has_any_overrides;
@@ -137,9 +170,33 @@
         }
         // test hook: re-publish after a spec seeds __nt_settings, as a reopened diverged window arrives
         window.__nt_publishSettings = sendSettingsCascade;
-        function writeSetting(key, value, scope) {
+        function writeFlatSetting(key, value, scope) {
             var layer = scope === 'global' ? window.__nt_settings.user : window.__nt_settings.workspace;
             if (value === undefined) { delete layer[key]; } else { layer[key] = value; }
+        }
+        /*
+         * The one bag write path: every cell op in `sets` ({node_id, key, value}) applies together
+         * against the target scope's own copy of the bag, standing in for applyBagDelta() in
+         * settings.ts. `key === null` operates on the whole node entry: undefined deletes it (removing
+         * a saved type, and every descendant doomed with it), any other value replaces it wholesale
+         * (minting a saved type's complete entry). `key` set clears or sets one field, pruning the
+         * node's entry once it holds nothing at all.
+         */
+        function applyBagDelta(bag, sets, scope) {
+            var layer = scope === 'global' ? window.__nt_settings.user : window.__nt_settings.workspace;
+            var current = layer[bag] || {};
+            var next = Object.assign({}, current);
+            sets.forEach(function(op) {
+                if (!op || typeof op.node_id !== 'string') { return; }
+                if (op.key === null) {
+                    if (op.value === undefined) { delete next[op.node_id]; } else { next[op.node_id] = op.value; }
+                    return;
+                }
+                var entry = Object.assign({}, next[op.node_id] || {});
+                if (op.value === undefined) { delete entry[op.key]; } else { entry[op.key] = op.value; }
+                if (Object.keys(entry).length === 0) { delete next[op.node_id]; } else { next[op.node_id] = entry; }
+            });
+            layer[bag] = next;
         }
         function handleSettingsMessage(msg) {
             var store = window.__nt_settings;
@@ -148,23 +205,30 @@
                     sendSettingsCascade();
                     return;
                 case 'updateSetting':
-                    if (!(msg.setting in NOTETHINK_BUILTIN_SETTINGS)) { return; }
-                    writeSetting(msg.setting, msg.value, msg.scope);
+                    if (msg.setting === 'views' || msg.setting === 'cards') {
+                        applyBagDelta(msg.setting, (msg.value || {}).sets || [], msg.scope);
+                        sendSettingsCascade();
+                        return;
+                    }
+                    if (!(msg.setting in FLAT_SETTINGS_DEFAULTS)) { return; }
+                    writeFlatSetting(msg.setting, msg.value, msg.scope);
                     sendSettingsCascade();
                     return;
                 case 'promoteSettingsToUser':
-                    // snapshot every resolved value into User, then drop the Workspace layer it came from
-                    NOTETHINK_SETTING_KEYS.forEach(function(key) { store.user[key] = readSetting(key); });
-                    store.workspace = {};
+                    // snapshot each bag's merged result, and every flat key's resolved value, into User; drop the Workspace layer
+                    store.user.views = mergedBag('views');
+                    store.user.cards = mergedBag('cards');
+                    FLAT_SETTING_KEYS.forEach(function(key) { store.user[key] = readFlatSetting(key); });
+                    store.workspace = { views: {}, cards: {} };
                     sendSettingsCascade();
                     return;
                 case 'resetSettingsToDefault':
-                    store.workspace = {};
+                    store.workspace = { views: {}, cards: {} };
                     sendSettingsCascade();
                     return;
                 case 'restoreSettingsToBuiltinDefault':
-                    store.workspace = {};
-                    store.user = {};
+                    store.workspace = { views: {}, cards: {} };
+                    store.user = { views: {}, cards: {} };
                     sendSettingsCascade();
                     return;
             }

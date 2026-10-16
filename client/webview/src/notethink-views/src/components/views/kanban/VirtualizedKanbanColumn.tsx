@@ -11,10 +11,10 @@ import type { NoteProps, NoteDisplayOptions, NoteHandlers } from "../../../types
 import KanbanColumn from "./KanbanColumn";
 import { renderBoardCard } from "./renderKanbanCard";
 import { useCardHeightCache } from "./useCardHeightCache";
-import { useLaneScrollOffset } from "./useLaneScrollOffset";
-import { registerVirtualLane, unregisterVirtualLane } from "../../../lib/virtualScrollRegistry";
+import { useGroupScrollOffset } from "./useGroupScrollOffset";
+import { registerVirtualGroup, unregisterVirtualGroup } from "../../../lib/virtualScrollRegistry";
 import type { KanbanColumnDescriptor } from "./useKanbanColumns";
-import { LANE_OVERSCAN_COUNT, MIN_LANE_LIST_HEIGHT, totalContentHeight, rowOffsets, visibleRowRange, scrollOffsetForIndex } from "./virtualCardSizingOps";
+import { GROUP_OVERSCAN_COUNT, MIN_GROUP_LIST_HEIGHT, totalContentHeight, rowOffsets, visibleRowRange, scrollOffsetForIndex } from "./virtualCardSizingOps";
 import view_specific_styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:VirtualizedKanbanColumn");
@@ -95,12 +95,12 @@ function KanbanVirtualRow({ index, style, data }: RowRenderProps): ReactElement 
 const MemoizedKanbanVirtualRow = React.memo(KanbanVirtualRow);
 
 /**
- * One kanban lane, windowed vertically: every card's index is real, but only the mounted window
- * (viewport + `LANE_OVERSCAN_COUNT` rows) is rendered. Uses dnd's virtual-list pattern
+ * One kanban group, windowed vertically: every card's index is real, but only the mounted window
+ * (viewport + `GROUP_OVERSCAN_COUNT` rows) is rendered. Uses dnd's virtual-list pattern
  * (`Droppable mode="virtual"` + `renderClone`) since a dragged card's row can scroll out of the
  * window mid-drag.
  *
- * The lane has no scroll container of its own: its content renders at full height so the PAGE
+ * The group has no scroll container of its own: its content renders at full height so the PAGE
  * scrolls, and `Droppable`'s ref/props land on that same container so dnd's auto-scroll drives it
  * directly. `KanbanColumn` still renders the heading; only the card-list area is replaced here.
  */
@@ -126,11 +126,11 @@ export default function VirtualizedKanbanColumn(props: VirtualizedKanbanColumnPr
         const row_sizes = Array.from({ length: stable_ids.length }, (_, index) => item_size(index));
         return totalContentHeight(row_sizes);
     }, [stable_ids, item_size, measurement_tick]);
-    // full content height, floored so an empty lane still offers a droppable area
-    const list_root_height = Math.max(content_height, MIN_LANE_LIST_HEIGHT);
+    // full content height, floored so an empty group still offers a droppable area
+    const list_root_height = Math.max(content_height, MIN_GROUP_LIST_HEIGHT);
     const list_root_ref = useRef<HTMLDivElement | null>(null);
-    const { scroll_offset, setScrollOffset } = useLaneScrollOffset(list_root_ref, content_height, list_height);
-    // read inside registerVirtualLane's scrollToIndex without re-registering the lane on every scroll tick
+    const { scroll_offset, setScrollOffset } = useGroupScrollOffset(list_root_ref, content_height, list_height);
+    // read inside registerVirtualGroup's scrollToIndex without re-registering the group on every scroll tick
     const scroll_offset_ref = useRef(scroll_offset);
     const list_height_ref = useRef(list_height);
     useLayoutEffect(() => {
@@ -141,16 +141,16 @@ export default function VirtualizedKanbanColumn(props: VirtualizedKanbanColumnPr
     const notes_ref = useRef<HTMLDivElement | null>(null);
     // scroll-to-focus asks the registry to scroll a card into the mounted window before framing it
     useEffect(() => {
-        registerVirtualLane(view_id, column.value, {
+        registerVirtualGroup(view_id, column.value, {
             stable_ids,
             scrollToIndex: (index: number) => {
                 const row_sizes = Array.from({ length: stable_ids.length }, (_, i) => item_size(i));
                 setScrollOffset(scrollOffsetForIndex(row_sizes, index, scroll_offset_ref.current, list_height_ref.current));
             },
         });
-        return () => unregisterVirtualLane(view_id, column.value);
+        return () => unregisterVirtualGroup(view_id, column.value);
     }, [view_id, column.value, stable_ids, item_size, setScrollOffset]);
-    debug('rendering virtualized lane %s: %d cards, content height %dpx, scroll offset %dpx', column.value, notes.length, list_root_height, scroll_offset);
+    debug('rendering virtualized group %s: %d cards, content height %dpx, scroll offset %dpx', column.value, notes.length, list_root_height, scroll_offset);
     return (
         <Droppable
             droppableId={`${column.seq}`}
@@ -180,7 +180,7 @@ export default function VirtualizedKanbanColumn(props: VirtualizedKanbanColumnPr
                 const item_count = snapshot_drop.isUsingPlaceholder ? notes.length + 1 : notes.length;
                 const row_sizes = Array.from({ length: item_count }, (_, index) => item_size(index));
                 const row_offsets_px = rowOffsets(row_sizes);
-                const visible = visibleRowRange(row_sizes, scroll_offset, list_height, LANE_OVERSCAN_COUNT);
+                const visible = visibleRowRange(row_sizes, scroll_offset, list_height, GROUP_OVERSCAN_COUNT);
                 const visible_indices = Array.from({ length: Math.max(0, visible.end - visible.start + 1) }, (_, i) => visible.start + i);
                 // dnd's droppableProps are applied imperatively; this container isn't a component to spread props onto
                 const setListRootRef = (node: HTMLDivElement | null): void => {

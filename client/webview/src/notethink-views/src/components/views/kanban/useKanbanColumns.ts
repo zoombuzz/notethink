@@ -23,7 +23,7 @@ export interface KanbanColumnDescriptor {
 
 /**
  * Derives the ordered kanban columns for the view, each populated with its matching notes (sorted by
- * `kanbanNoteOrder`; a note with no value for `axis` lands in the 'untagged' pseudo-lane). With
+ * `kanbanNoteOrder`; a note with no value for `axis` lands in the 'untagged' pseudo-group). With
  * `custom_order` set, columns start in that order, then newly-seen values append alphabetically with
  * 'untagged' ensured last; otherwise columns are alphabetical with 'untagged' last. `axis` defaults to
  * status so kanban is unchanged, and a grouped view passes its own group-by axis.
@@ -38,7 +38,7 @@ export function useKanbanColumns(
         for (const column of columns) {
             column.child_notes = notesInKanbanColumn(notes || [], column.value, axis);
         }
-        debug('built %d lanes, total notes=%d', columns.length, (notes || []).length);
+        debug('built %d groups, total notes=%d', columns.length, (notes || []).length);
         return columns;
     }, [notes, custom_order, axis]);
 }
@@ -75,8 +75,8 @@ function deriveColumnOrder(
 }
 
 /**
- * Drops every lane named in `hidden_values` and renumbers the survivors' `seq` to their new index, so a
- * hidden lane is absent from the board altogether (both Kanban and Line view) rather than merely
+ * Drops every group named in `hidden_values` and renumbers the survivors' `seq` to their new index, so a
+ * hidden group is absent from the board altogether (both Kanban and Line view) rather than merely
  * undraggable. Renumbering keeps `seq` a dense 0..n-1 sequence matching array index, the invariant the
  * drag-end lookup (`columns[destination_column_seq]`) and the droppable id both depend on.
  */

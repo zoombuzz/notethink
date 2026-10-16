@@ -11,15 +11,15 @@
 /**
  * AnimationProbeEvent: one scheduled animation, as the FLIP hook planned it (independent of whether
  * a real WAAPI animation runs).
- * - kind: which path fired - a card 'move'/'enter'/'exit', a 'column-enter'/'column-exit', the
- *   global 'cap' that force-finishes in-flight animations, or a 'skip' (gate/first-run/disabled/reduced).
- * - id: the card stable_id (move/enter/exit) or column value (column-enter/column-exit)
- * - dx / dy: the inverse-transform delta for a move
+ * - kind: which path fired - a card 'move'/'enter'/'exit', a group 'column-move'/'column-enter'/'column-exit',
+ *   the global 'cap' that force-finishes in-flight animations, or a 'skip' (gate/first-run/disabled/reduced).
+ * - id: the card stable_id (move/enter/exit) or column value (column-move/column-enter/column-exit)
+ * - dx / dy: the inverse-transform delta for a move or column-move
  * - duration: scheduled duration in ms
  * - reason: why a 'skip' fired (e.g. 'first-run', 'gate-hot', 'disabled', 'reduced-motion')
  */
 export interface AnimationProbeEvent {
-    kind: 'move' | 'enter' | 'exit' | 'column-enter' | 'column-exit' | 'cap' | 'skip';
+    kind: 'move' | 'enter' | 'exit' | 'column-move' | 'column-enter' | 'column-exit' | 'cap' | 'skip';
     id?: string;
     dx?: number;
     dy?: number;

@@ -35,7 +35,7 @@ describe('medianOf', () => {
 
 describe('medianCardArea', () => {
 
-    it('is the middle card\'s area, so one outsized note does not widen every lane beside it', () => {
+    it('is the middle card\'s area, so one outsized note does not widen every group beside it', () => {
         const area = medianCardArea([
             { width: 200, height: 100 },
             { width: 200, height: 200 },
@@ -106,15 +106,15 @@ describe('parseBreadthInput', () => {
 describe('breadthFromPointer', () => {
 
     /*
-     * The boundary after the first lane sits in the middle of the gap, so with an 8px gap a pointer 224px in
-     * is over a 220px lane and half a gap.
+     * The boundary after the first group sits in the middle of the gap, so with an 8px gap a pointer 224px in
+     * is over a 220px group and half a gap.
      */
-    it('is the distance from the board start over the lanes before the boundary', () => {
+    it('is the distance from the board start over the groups before the boundary', () => {
         expect(breadthFromPointer(224, 1, 8)).toBe(220);
     });
 
-    it('spreads the pointer over every lane before the boundary and the gaps between them', () => {
-        // three lanes of 200 and two gaps of 8 before a gap whose middle is 4 further
+    it('spreads the pointer over every group before the boundary and the gaps between them', () => {
+        // three groups of 200 and two gaps of 8 before a gap whose middle is 4 further
         expect(breadthFromPointer(3 * 200 + 2 * 8 + 4, 3, 8)).toBe(200);
     });
 
@@ -137,7 +137,7 @@ describe('nudgeBreadth', () => {
 
 describe('solveColumnLayout', () => {
 
-    it('spreads the lanes to fill the board when they all fit', () => {
+    it('spreads the groups to fill the board when they all fit', () => {
         const layout = solveColumnLayout(200, 1000, 3, 8);
         expect(layout.scrolls).toBe(false);
         expect(layout.fit).toBe(3);
@@ -146,17 +146,17 @@ describe('solveColumnLayout', () => {
     });
 
     /*
-     * The point of the feature: past the point where the lanes fit, a wider board must reveal more of
+     * The point of the feature: past the point where the groups fit, a wider board must reveal more of
      * them rather than fatten the ones already showing, so the width stays pinned at the target.
      */
-    it('holds every column at its target and scrolls when the lanes do not all fit', () => {
+    it('holds every column at its target and scrolls when the groups do not all fit', () => {
         const layout = solveColumnLayout(200, 500, 6, 8);
         expect(layout.scrolls).toBe(true);
         expect(layout.width).toBe(200);
         expect(layout.fit).toBe(2);
     });
 
-    it('reveals one more lane per target-width of board, without changing the column width', () => {
+    it('reveals one more group per target-width of board, without changing the column width', () => {
         const narrow = solveColumnLayout(200, 500, 9, 8);
         const wider = solveColumnLayout(200, 800, 9, 8);
         expect(wider.fit).toBeGreaterThan(narrow.fit);
@@ -167,7 +167,7 @@ describe('solveColumnLayout', () => {
         expect(solveColumnLayout(200, 40, 5, 8).fit).toBe(1);
     });
 
-    it('leaves an unmeasured board alone rather than dividing by a lane count of zero', () => {
+    it('leaves an unmeasured board alone rather than dividing by a group count of zero', () => {
         const layout = solveColumnLayout(200, 800, 0, 8);
         expect(layout.scrolls).toBe(true);
         expect(layout.width).toBe(200);
@@ -176,7 +176,7 @@ describe('solveColumnLayout', () => {
 
 describe('cardSignature', () => {
 
-    it('changes when a card moves lane, which is a change worth re-measuring for', () => {
+    it('changes when a card moves group, which is a change worth re-measuring for', () => {
         const before = cardSignature([
             { value: 'doing', child_notes: [{ stable_id: 'a' }, { stable_id: 'b' }] },
             { value: 'done', child_notes: [] },
@@ -189,8 +189,8 @@ describe('cardSignature', () => {
     });
 
     it('is stable across a re-render that changed nothing', () => {
-        const lanes = [{ value: 'doing', child_notes: [{ stable_id: 'a' }] }];
-        expect(cardSignature(lanes, 'columns/card')).toBe(cardSignature([{ value: 'doing', child_notes: [{ stable_id: 'a' }] }], 'columns/card'));
+        const groups = [{ value: 'doing', child_notes: [{ stable_id: 'a' }] }];
+        expect(cardSignature(groups, 'columns/card')).toBe(cardSignature([{ value: 'doing', child_notes: [{ stable_id: 'a' }] }], 'columns/card'));
     });
 
     /*
@@ -199,12 +199,12 @@ describe('cardSignature', () => {
      * the ratio setting then moved nothing at all.
      */
     it('changes when the orientation or the card type changes, since the same cards measure differently', () => {
-        const lanes = [{ value: 'doing', child_notes: [{ stable_id: 'a' }] }];
-        expect(cardSignature(lanes, 'rows/card')).not.toBe(cardSignature(lanes, 'columns/card'));
-        expect(cardSignature(lanes, 'columns/sticky')).not.toBe(cardSignature(lanes, 'columns/card'));
+        const groups = [{ value: 'doing', child_notes: [{ stable_id: 'a' }] }];
+        expect(cardSignature(groups, 'rows/card')).not.toBe(cardSignature(groups, 'columns/card'));
+        expect(cardSignature(groups, 'columns/sticky')).not.toBe(cardSignature(groups, 'columns/card'));
     });
 
-    it('tolerates a lane with no cards and a card with no stable id', () => {
+    it('tolerates a group with no cards and a card with no stable id', () => {
         expect(cardSignature([{ value: 'todo' }], 'columns/card')).toBe('columns/card#todo:');
         expect(cardSignature([{ value: 'todo', child_notes: [{}] }], 'columns/card')).toBe('columns/card#todo:?');
     });

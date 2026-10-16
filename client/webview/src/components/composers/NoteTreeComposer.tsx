@@ -3,11 +3,24 @@ import { GenericView } from "../../notethink-views/src/components";
 import { convertMdastToNoteHierarchy } from "../../notethink-views/src/lib/convertMdastToNoteHierarchy";
 import { fileDeclaredViewType, flattenSingleFileStories, stampSingleFileStableIds } from "../../notethink-views/src/lib/mergeAggregateRoot";
 import { flattenAllNotes } from "../../notethink-views/src/lib/noteops";
+import { chainOf, registryWithUserTypes } from "../../notethink-views/src/lib/viewregistryops";
 import { buildViewDisplayOptions } from "../../lib/composerops";
 import { INTEGRATION_MODE_CURRENT_FILE } from "../../notethink-views/src/types/IntegrationMode";
 import type { Doc } from "../../types/general";
+import type { UserViewType } from "../../notethink-views/src/types/Messages";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
 import type { NoteRendererProps } from "../NoteRenderer";
+
+/**
+ * True when `view_type`'s chain passes through kanban - kanban itself, or a saved type parented (however
+ * deep) on it - the shape every kanban-descended board needs flattened into story cards. A literal
+ * `view_type === 'kanban'` check went stale the moment saved view types became real nodes with their own
+ * ids: a type saved from Kanban drew as one undifferentiated card holding the whole document, since its
+ * epics were never lifted out from under it.
+ */
+function drawsAsKanban(view_type: string, user_types: UserViewType[]): boolean {
+    return chainOf(view_type, registryWithUserTypes(user_types)).includes('kanban');
+}
 
 /**
  * NoteTreeComposer composes a NoteProps tree from a single Doc and renders GenericView.
@@ -26,18 +39,19 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
     const view_state = props.viewStates?.[note_id] || props.viewStates?.['__default'];
     // the current_file stamp is this composer's source of truth for the toolbar selector, mirroring the folder stamp
     const { viewType, view_display_options } = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
+    const view_user_types = view_display_options.settings?.viewUserTypes ?? [];
     // memoize conversion keyed on content hash - avoids redundant work when only selection changes
     const root_note = useMemo(
         () => {
             const root = convertMdastToNoteHierarchy(note.content!, note.text!);
-            // flattens epics into story cards for a kanban board; runs before the stable-id stamp to key off final structure
-            if (viewType === 'kanban' || fileDeclaredViewType(root) === 'kanban') {
+            // flattens epics into story cards for a kanban-shaped board; runs before the stable-id stamp to key off final structure
+            if (drawsAsKanban(viewType, view_user_types) || fileDeclaredViewType(root) === 'kanban') {
                 flattenSingleFileStories(root, note_id, note.path ?? '');
             }
             stampSingleFileStableIds(root, note_id);
             return root;
         },
-        [note.hash_sha256, note_id, note.path, viewType]
+        [note.hash_sha256, note_id, note.path, viewType, view_user_types]
     );
     const selection = note.path ? props.selections?.[note.path] : undefined;
     // the flat list only changes when the tree does, and every view memo downstream keys on its identity

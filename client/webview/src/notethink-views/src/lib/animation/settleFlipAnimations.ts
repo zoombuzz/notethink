@@ -4,10 +4,12 @@ const debug = Debug('nodejs:notethink-views:settleFlipAnimations');
 
 /**
  * Single named operation (like mergeAggregateRoot.ts) - one export, no *ops barrel. Snaps every
- * FLIP card in `container` to its true layout box before @hello-pangea/dnd lifts it into a fixed
- * drag clone: finishes any running Web Animation, drops the inline transform the FLIP layer
- * painted, and strips the transient flip classes. Called at drag-start so a card grabbed
- * mid-animation does not jump when it becomes the drag clone.
+ * FLIP card AND every FLIP group in `container` to its true layout box before @hello-pangea/dnd lifts
+ * a card into a fixed drag clone or measures a droppable: finishes any running Web Animation and
+ * drops the inline transform the FLIP layer painted (plus, for a card, strips the transient flip
+ * classes - a group carries none). Called at drag-start so a card grabbed mid-animation does not jump
+ * when it becomes the drag clone, and so dnd never measures a group still mid-flight through its own
+ * reorder move.
  */
 
 /**
@@ -25,14 +27,21 @@ function removeFlipClasses(el: HTMLElement): void {
     });
 }
 
+// finish any running Web Animation on `el` and drop the inline transform the FLIP layer painted
+function settleElement(el: HTMLElement): void {
+    if (typeof el.getAnimations === 'function') {
+        el.getAnimations().forEach((animation) => animation.finish());
+    }
+    el.style.transform = '';
+}
+
 export function settleFlipAnimations(container: HTMLElement): void {
     const cards = container.querySelectorAll<HTMLElement>('[data-flip-id]');
-    debug('settling %d flip cards', cards.length);
+    const groups = container.querySelectorAll<HTMLElement>('[data-flip-column-id]');
+    debug('settling %d flip cards, %d flip groups', cards.length, groups.length);
     cards.forEach((el) => {
-        if (typeof el.getAnimations === 'function') {
-            el.getAnimations().forEach((animation) => animation.finish());
-        }
-        el.style.transform = '';
+        settleElement(el);
         removeFlipClasses(el);
     });
+    groups.forEach(settleElement);
 }

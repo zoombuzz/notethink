@@ -69,18 +69,26 @@ test.describe('Settings Toggle', () => {
         await injectDocsFromFixture(page, 'basic.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
         await openCardDrawer(page);
+        // showLineNumbers is per-card now; select its own home (All cards) so the edit lands there
+        await page.getByTestId('card-node-allcards').click();
 
         // showLineNumbers is off by default, so no headline carries a line-number span
         const line_numbers = page.getByTestId('note-lineno');
         await expect(line_numbers).toHaveCount(0);
 
         await setCheckbox(page, 'showLineNumbers', true);
-        // the write goes to the workspace layer, which is what an ordinary edit targets
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.showLineNumbers).toBe(true);
+        // the write goes to the workspace layer, in allcards' own cell, which is what an ordinary edit targets
+        await expect.poll(async () => {
+            const cards = (await readHarnessSettings(page)).workspace.cards as Record<string, Record<string, unknown>> | undefined;
+            return cards?.allcards?.showLineNumbers;
+        }).toBe(true);
         await expect(line_numbers.first()).toBeVisible();
 
         await setCheckbox(page, 'showLineNumbers', false);
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.showLineNumbers).toBe(false);
+        await expect.poll(async () => {
+            const cards = (await readHarnessSettings(page)).workspace.cards as Record<string, Record<string, unknown>> | undefined;
+            return cards?.allcards?.showLineNumbers;
+        }).toBe(false);
         await expect(line_numbers).toHaveCount(0);
     });
 
@@ -88,14 +96,22 @@ test.describe('Settings Toggle', () => {
         await injectDocsFromFixture(page, 'basic.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
         await openCardDrawer(page);
+        // showLinetagsInHeadlines is per-card now; select its own home (All cards) so the edit lands there
+        await page.getByTestId('card-node-allcards').click();
 
         await setCheckbox(page, 'showLinetagsInHeadlines', true);
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.showLinetagsInHeadlines).toBe(true);
+        await expect.poll(async () => {
+            const cards = (await readHarnessSettings(page)).workspace.cards as Record<string, Record<string, unknown>> | undefined;
+            return cards?.allcards?.showLinetagsInHeadlines;
+        }).toBe(true);
 
         // both tabs write one channel and read one cascade, so the card setting survives a view switch
         await openSettingsDrawer(page);
         await page.getByTestId('view-radio-kanban').click();
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.viewType).toBe('kanban');
+        await expect.poll(async () => {
+            const views = (await readHarnessSettings(page)).workspace.views as Record<string, Record<string, unknown>> | undefined;
+            return views?.root?.viewType;
+        }).toBe('kanban');
         await openCardDrawer(page);
         await expect(settingControl(page, 'showLinetagsInHeadlines')).toBeChecked();
     });
@@ -104,30 +120,46 @@ test.describe('Settings Toggle', () => {
         await injectDocsFromFixture(page, 'basic.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
         await openCardDrawer(page);
+        // autoExpandFocusedNote is per-card now; select its own home (All cards) so the edit lands there
+        await page.getByTestId('card-node-allcards').click();
 
         await setCheckbox(page, 'autoExpandFocusedNote', true);
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.autoExpandFocusedNote).toBe(true);
+        await expect.poll(async () => {
+            const cards = (await readHarnessSettings(page)).workspace.cards as Record<string, Record<string, unknown>> | undefined;
+            return cards?.allcards?.autoExpandFocusedNote;
+        }).toBe(true);
 
         const messages = await getCapturedMessages(page);
-        const writes = messages.filter(m => m.type === 'updateSetting' && m.setting === 'autoExpandFocusedNote');
+        const writes = messages.filter(m => m.type === 'updateSetting' && m.setting === 'cards') as Array<{ value: { sets: Array<{ node_id: string; key: string; value: unknown }> } }>;
         expect(writes).toHaveLength(1);
-        expect(writes[0].value).toBe(true);
+        expect(writes[0].value.sets).toEqual([{ node_id: 'allcards', key: 'autoExpandFocusedNote', value: true }]);
     });
 
     test('make user default promotes the workspace value into the user layer', async ({ page }) => {
         await injectDocsFromFixture(page, 'basic.md');
         await page.waitForSelector('[data-seq]', { timeout: 5000 });
         await openSettingsDrawer(page);
+        // scrollNoteIntoView is per-view now; select its own home (root, "All views") so the edit lands there
+        await page.getByTestId('view-node-root').click();
 
         // a view-drawn setting, because Change defaults is rendered by the view tab
         await setCheckbox(page, 'scrollNoteIntoView', false);
-        await expect.poll(async () => (await readHarnessSettings(page)).workspace.scrollNoteIntoView).toBe(false);
+        await expect.poll(async () => {
+            const views = (await readHarnessSettings(page)).workspace.views as Record<string, Record<string, unknown>> | undefined;
+            return views?.root?.scrollNoteIntoView;
+        }).toBe(false);
 
         await page.getByTestId('change-defaults-summary').click();
         await page.getByTestId('save-as-default').click();
-        await expect.poll(async () => (await readHarnessSettings(page)).user.scrollNoteIntoView).toBe(false);
+        await expect.poll(async () => {
+            const views = (await readHarnessSettings(page)).user.views as Record<string, Record<string, unknown>> | undefined;
+            return views?.root?.scrollNoteIntoView;
+        }).toBe(false);
         // promotion moves the value rather than copying it, so nothing overrides at the workspace layer
-        await expect.poll(async () => Object.keys((await readHarnessSettings(page)).workspace).length).toBe(0);
+        await expect.poll(async () => {
+            const workspace = (await readHarnessSettings(page)).workspace as { views?: Record<string, unknown>; cards?: Record<string, unknown> };
+            return Object.keys(workspace.views ?? {}).length + Object.keys(workspace.cards ?? {}).length;
+        }).toBe(0);
         // the checkbox still shows the change: promotion moved the value between layers, not altered it
         await expect(settingControl(page, 'scrollNoteIntoView')).not.toBeChecked();
     });
@@ -143,7 +175,10 @@ test.describe('Settings Toggle', () => {
 
         await page.getByTestId('change-defaults-summary').click();
         await page.getByTestId('revert-to-defaults').click();
-        await expect.poll(async () => Object.keys((await readHarnessSettings(page)).workspace).length).toBe(0);
+        await expect.poll(async () => {
+            const workspace = (await readHarnessSettings(page)).workspace as { views?: Record<string, unknown>; cards?: Record<string, unknown> };
+            return Object.keys(workspace.views ?? {}).length + Object.keys(workspace.cards ?? {}).length;
+        }).toBe(0);
         await expect(settingControl(page, 'scrollNoteIntoView')).toBeChecked();
     });
 

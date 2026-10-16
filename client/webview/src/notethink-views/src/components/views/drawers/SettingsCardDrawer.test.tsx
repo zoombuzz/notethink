@@ -126,14 +126,16 @@ describe('SettingsCardDrawer rows', () => {
         expect(screen.queryByTestId('global-settings-heading')).not.toBeInTheDocument();
     });
 
-    it('keeps every row when a concrete card is selected, since all three home at the root', () => {
+    it('keeps every root-homed row when a concrete card is selected, but shows the agent-homed row only from agent', () => {
         renderDrawer();
         fireEvent.click(screen.getByTestId('card-node-sticky'));
+        expect(renderedRowKeys()).toHaveLength(CARD_SETTING_ROWS.length - 1);
+        fireEvent.click(screen.getByTestId('card-node-agent'));
         expect(renderedRowKeys()).toHaveLength(CARD_SETTING_ROWS.length);
     });
 
     it('marks every diverged row with an M and tallies exactly the marked rows', () => {
-        renderDrawer({ diverged: ['showLineNumbers', 'scrollNoteIntoView'] });
+        renderDrawer({ diverged: ['cards:allcards:showLineNumbers', 'scrollNoteIntoView'] });
         const marked = screen.getAllByTestId(/^setting-row-/).filter(row => row.getAttribute('data-diverged') === 'true');
         expect(marked.map(row => row.getAttribute('data-testid'))).toEqual(['setting-row-showLineNumbers']);
         expect(screen.getByTestId('setting-marker-showLineNumbers')).toHaveTextContent('M');
@@ -150,14 +152,18 @@ describe('SettingsCardDrawer rows', () => {
         const on_setting_change = jest.fn();
         renderDrawer({ onSettingChange: on_setting_change, settings: { showLineNumbers: false } });
         fireEvent.click(screen.getByTestId('setting-control-showLineNumbers'));
-        expect(on_setting_change).toHaveBeenCalledWith('showLineNumbers', true);
+        // resolvedCardType defaults to 'card', so the write lands there - its own cell, not allcards's
+        expect(on_setting_change).toHaveBeenCalledWith('cards', { sets: [{ node_id: 'card', key: 'showLineNumbers', value: true }] });
     });
 
     it('falls back to each setting built-in default before the first cascade arrives', () => {
         renderDrawer({ settings: {} });
         for (const def of CARD_SETTING_ROWS) {
+            if (def.key === 'clockMode') { continue; }
             expect(screen.getByTestId(`setting-control-${def.key}`)).not.toBeChecked();
         }
+        fireEvent.click(screen.getByTestId('card-node-agent'));
+        expect(screen.getByTestId('setting-control-clockMode')).toHaveValue('active');
     });
 
     /*

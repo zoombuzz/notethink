@@ -21,7 +21,7 @@ export const DEFAULT_INCLUDE_FILTER = '**/*.md';
  */
 export const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,.venv,__pycache__,vendored}/**';
 
-// ordering and visibility hint only: lanes absent from the data are culled; mirrors package.json's kanban groupDisplay
+// ordering and visibility hint only: groups absent from the data are culled; mirrors package.json's grouped groupDisplay
 export const DEFAULT_GROUP_DISPLAY: GroupDisplayEntry[] = [
     { value: 'untagged', shown: true },
     { value: 'doing', shown: true },

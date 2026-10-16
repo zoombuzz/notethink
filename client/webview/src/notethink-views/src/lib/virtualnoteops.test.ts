@@ -51,6 +51,19 @@ function makeVirtual(key = 'claude-no-story'): NoteProps {
     return makeVirtualNote({ namespace: 'agent', key, headline: 'claude-code in notethink' });
 }
 
+describe('a virtual note origin', () => {
+
+    it('carries no relative_path when the caller supplies none, so it stays in the untagged group', () => {
+        const note = makeVirtual();
+        expect(note.origin?.relative_path).toBeUndefined();
+    });
+
+    it('carries the repository relative_path a caller supplies, so the project axis joins it to that repository', () => {
+        const note = makeVirtualNote({ namespace: 'agent', key: 'claude-no-story', headline: 'claude-code in notethink', relative_path: 'notethink' });
+        expect(note.origin?.relative_path).toBe('notethink');
+    });
+});
+
 describe('virtual note identity', () => {
 
     it('cannot collide with a parsed stable_id, because a parsed one opens with a 64-character hex doc_id', () => {

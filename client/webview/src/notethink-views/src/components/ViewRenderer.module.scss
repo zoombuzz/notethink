@@ -345,16 +345,45 @@ body.disableAddressBarHidingOnScroll {
  * .settingsDrawer* / .filesDrawer* / .collisionsDrawer* specialisations below.
  */
 
+/*
+ * .drawerGrid is a zero-height sticky anchor, not the visible box: it sticks immediately below
+ * the sticky toolbar (top: $toolbar_height, the toolbar's own height) while reserving no space in
+ * the flow, so opening or closing a drawer never moves .viewContentRegion or anything else below
+ * it. Being `position: sticky` (not `static`), it still supplies the containing block .drawer
+ * positions itself against; overflow: visible lets .drawer paint outside this empty box.
+ */
 .drawerGrid {
+  position: sticky;
+  top: $toolbar_height;
+  z-index: 9; // one below .viewToolbar (z-index: 10)
+  height: 0;
+  overflow: visible;
+}
+
+/*
+ * The drawer itself: positioned over the view rather than in flow, so it slides down as one
+ * element with nothing beneath it moving. The 0fr→1fr grid-template-rows trick animates this
+ * box's own height directly, independent of .drawerGrid's fixed zero-height flow footprint.
+ */
+.drawer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 150ms cubic-bezier(0.2, 0, 0.38, 0.9);
-  position: sticky;
-  top: $toolbar_height; // hangs immediately below the sticky toolbar, whose full height this is
-  z-index: 9; // one below .viewToolbar (z-index: 10)
+  overflow: hidden; // required for the 0fr→1fr grid trick; also clips the body at the drawer's edge
+  min-height: 0;    // required for the 0fr→1fr grid trick
+  // closed by default: no shadow, and the shell below is reachable rather than sitting under an invisible layer
+  box-shadow: none;
+  pointer-events: none;
 
-  &[data-open="true"] {
+  // the open/closed state lives as a data attribute on .drawerGrid, the sticky anchor this box is positioned against
+  .drawerGrid[data-open="true"] > & {
     grid-template-rows: 1fr;
+    box-shadow: 0 4px 10px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.28));
+    pointer-events: auto;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -362,10 +391,19 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
-.drawer {
-  position: relative; // anchors the top-right close button
-  overflow: hidden; // required for the 0fr→1fr grid trick
-  min-height: 0;    // required for the 0fr→1fr grid trick
+/*
+ * The 0fr→1fr trick sizes the grid ITEM placed in that track, not .drawer itself: .drawer's own
+ * min-height above constrains nothing here. The item needs its own min-height: 0 so the track's 'auto'
+ * min sizing function can resolve to zero instead of the item's content-based automatic minimum size -
+ * but a drawer's real content (.drawerBody) carries its own padding and border, which a min-height
+ * override cannot shrink away, since padding and border are added on top of the content box regardless.
+ * .drawerContent is a bare wrapper with none of its own, placed between .drawer and .drawerBody purely so
+ * the item being sized has nothing but its children to clip: closed, min-height: 0 lets it collapse to a
+ * true zero and overflow: hidden clips .drawerBody (padding, border and all) out of view beneath it.
+ */
+.drawerContent {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .drawerBody {
@@ -533,10 +571,10 @@ body.disableAddressBarHidingOnScroll {
 }
 
 /*
- * The lane order + visibility editor: one chip per lane, stacked down the page in board order. Side by
- * side is what the order means, but it does not fit - five lanes already overflow the control column and
+ * The group order + visibility editor: one chip per group, stacked down the page in board order. Side by
+ * side is what the order means, but it does not fit - five groups already overflow the control column and
  * a sixth is off the end of a scrollbar - so the list runs vertically, which also gives the drag one
- * unambiguous axis to reason about however many lanes the board has.
+ * unambiguous axis to reason about however many groups the board has.
  */
 .settingsDrawerGroupDisplay {
   display: flex;
@@ -567,7 +605,7 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
-// an unchecked lane: left in the list (still reorderable) but visibly dimmed, since it will not draw on the board
+// an unchecked group: left in the list (still reorderable) but visibly dimmed, since it will not draw on the board
 .settingsDrawerGroupDisplayHidden {
   opacity: 0.5;
 }
@@ -1583,56 +1621,61 @@ body.disableAddressBarHidingOnScroll {
 
   /*
    * Orientation transposes the board, and both axes are transposed together or the flip is only half done.
-   * The lanes swap direction, and so do the cards inside each lane - a lane laid out as a row whose cards
+   * The groups swap direction, and so do the cards inside each group - a group laid out as a row whose cards
    * still stack downwards is a column wearing a row's shape, which is what the first cut of this shipped.
    *
    * Either way round the board is the horizontal scroller and the card is the thing the ratio sizes. Side
-   * by side, the ratio sets the LANE width and the lanes overflow to the right. Stacked, the ratio sets
-   * the CARD width directly, each lane is as wide as its own cards need, and the lanes overflow to the
+   * by side, the ratio sets the GROUP width and the groups overflow to the right. Stacked, the ratio sets
+   * the CARD width directly, each group is as wide as its own cards need, and the groups overflow to the
    * right together - so a stacked board scrolls a long way sideways and barely at all downwards, which is
    * the shape that makes the orientation worth having.
    */
   .board {
     display: flex;
-    // the 8px between lanes is a separator element, which the drag handle needs and a CSS gap cannot be
+    // the 8px between groups is a separator element, which the drag handle needs and a CSS gap cannot be
     gap: 0;
     margin-top: 0.8em;
     overflow-x: auto;
 
     &[data-orientation="columns"] {
       flex-direction: row;
+      // a floor, not a cap: a short board's groups (and the separator between them) still reach the room below the toolbar, so a drawer opened over the top can never cover a separator whole; a group with more content keeps growing past it exactly as before
+      min-height: calc(100vh - #{$toolbar_height});
 
-      .laneSeparator {
+      .groupSeparator {
         cursor: col-resize;
         flex: 0 0 8px;
-        // the row is as tall as its tallest lane, so the handle runs the whole height
+        // the row is as tall as its tallest group, so the handle runs the whole height
         align-self: stretch;
       }
 
       .column {
         flex: 1 1 var(--nt-column-width, 17.0em);
         min-width: var(--nt-column-width, 17.0em);
+        // lets .notes take only the room it needs and the repeated footer sit flush with the stretched bottom
+        display: flex;
+        flex-direction: column;
       }
     }
 
     /*
-     * Every rule here is nested one level deeper than it needs to be, under `.column`. The generic lane
+     * Every rule here is nested one level deeper than it needs to be, under `.column`. The generic group
      * rules below are `.board .column .notes`, which ties this block's specificity exactly, and a tie is
      * settled by source order - so a shallower override would silently lose to the rules it is overriding.
      */
     &[data-orientation="rows"] {
       flex-direction: column;
 
-      .laneSeparator {
+      .groupSeparator {
         cursor: row-resize;
         flex: 0 0 8px;
         width: 100%;
       }
 
       /*
-       * A stacked lane is as wide as its own cards, floored at the board so a one-card lane still draws a
+       * A stacked group is as wide as its own cards, floored at the board so a one-card group still draws a
        * full-width band, and its name sits BESIDE the cards rather than above them, so none of the row's
-       * height is spent on chrome. The lane has to be made a flex container here first: it is a plain
+       * height is spent on chrome. The group has to be made a flex container here first: it is a plain
        * block side by side, so a flex-direction on it means nothing until it is one.
        */
       .column {
@@ -1644,7 +1687,8 @@ body.disableAddressBarHidingOnScroll {
         display: flex;
         flex-direction: row;
         align-items: stretch;
-        padding: 12px 12px 12px 0;
+        // no inline padding at either end: the heading and the repeated footer close the row off, each with its own
+        padding: 12px 0;
 
         .notes {
           flex: 1 1 auto;
@@ -1663,7 +1707,7 @@ body.disableAddressBarHidingOnScroll {
         }
 
         /*
-         * Turned on its side and pinned to the left edge: a lane name reading across the top would cost
+         * Turned on its side and pinned to the left edge: a group name reading across the top would cost
          * every row a line of height it does not otherwise need, and the whole point of the stacked layout
          * is that a row is exactly one card tall. Sticky keeps it identifiable partway along a long row.
          */
@@ -1686,11 +1730,37 @@ body.disableAddressBarHidingOnScroll {
             margin: 8px 0 0;
           }
         }
+
+        /*
+         * The repeated footer, mirroring .heading at the row's other end: rows genuinely scroll the
+         * board horizontally, so .board is the right containing block for this sticky, pushed there by
+         * the row's own auto margin rather than a flex-grow on .notes, so a short row needs no extra sizing.
+         */
+        .footer {
+          margin-left: auto;
+          position: sticky;
+          right: 0;
+          z-index: 2;
+          writing-mode: vertical-rl;
+          flex: 0 0 auto;
+          align-self: stretch;
+          padding: 0 10px 0 6px;
+          text-align: left;
+          background: inherit;
+
+          h3 {
+            display: inline;
+          }
+
+          .countBadge {
+            margin: 8px 0 0;
+          }
+        }
       }
     }
 
-    // the whole gap between two lanes is the drag target; nothing is drawn in it until it is hovered or focused
-    .laneSeparator {
+    // the whole gap between two groups is the drag target; nothing is drawn in it until it is hovered or focused
+    .groupSeparator {
       background: transparent;
       border-radius: 2px;
       touch-action: none;
@@ -1705,14 +1775,16 @@ body.disableAddressBarHidingOnScroll {
     }
 
     /*
-     * border-box, so the width the board computes is the width the lane occupies: the solve reasons in
-     * whole lanes against the board's own width, and content-box lands every lane a padding too wide.
+     * border-box, so the width the board computes is the width the group occupies: the solve reasons in
+     * whole groups against the board's own width, and content-box lands every group a padding too wide.
+     * No bottom padding: the repeated footer below already carries its own bottom padding, and a second
+     * one here would leave the footer short of the group's actual bottom edge.
      */
     .column {
       box-sizing: border-box;
       background: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 4%);
 
-      padding: 0 12px 12px 12px;
+      padding: 0 12px 0 12px;
 
       border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
       border-radius: 12px;
@@ -1739,15 +1811,15 @@ body.disableAddressBarHidingOnScroll {
       }
 
       /*
-       * The lane gives every card a surface, but the card type decides what that surface looks like: each
+       * The group gives every card a surface, but the card type decides what that surface looks like: each
        * value below reads a --nt-card-* custom property a card may set on itself, falling back to the full
-       * card's look. That keeps the lane free of any branch on card type, the reverse direction of the
+       * card's look. That keeps the group free of any branch on card type, the reverse direction of the
        * --nt-card-width the board hands down to a card.
        *
        * `.note:not(.note .note)` selects the top-level card only, never a nested sub-note rendered
        * recursively inside its own `.body` (that gets the plain `> .note` rule below); it holds
        * regardless of how many wrapper elements sit between `.column` and the card, so both the flex
-       * `.notes` path and a windowed lane's `.virtualNotes`/`.virtualRow` wrapper match without
+       * `.notes` path and a windowed group's `.virtualNotes`/`.virtualRow` wrapper match without
        * counting them.
        */
       .note:not(.note .note) {
@@ -1812,7 +1884,7 @@ body.disableAddressBarHidingOnScroll {
        * VirtualizedKanbanColumn's windowed-row container, this `.notes` div's only child in columns
        * orientation, so `flex`/`gap` above do nothing and its own `padding-top` gives the first row
        * its focus-ring clearance. Sized to its own full content height (set inline) rather than the
-       * viewport, since the page, not this container, is the lane's only scroller.
+       * viewport, since the page, not this container, is the group's only scroller.
        */
       .virtualNotes {
         position: relative;
@@ -1843,6 +1915,36 @@ body.disableAddressBarHidingOnScroll {
         position: sticky;
         top: 0;
         z-index: 1;
+        background: inherit;
+
+        h3 {
+          margin: 0;
+          font-size: 13px;
+          font-weight: 600;
+          display: inline;
+        }
+
+        .countBadge {
+          display: inline-block;
+          margin-left: 8px;
+          padding: 1px 8px;
+          font-size: 12px;
+          font-weight: 500;
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--vscode-editor-background), var(--vscode-editor-foreground) 10%);
+          color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 30%);
+        }
+      }
+
+      /*
+       * The repeated footer, mirroring .heading at the group's other end: pushed to the bottom by its
+       * own auto margin rather than a flex-grow on .notes, so a short group needs no extra sizing. It
+       * scrolls with its group, as the heading does, so the board's own scrolling is unchanged.
+       */
+      .footer {
+        margin-top: auto;
+        text-align: left;
+        padding: 8px 4px 12px 4px;
         background: inherit;
 
         h3 {
@@ -2016,17 +2118,18 @@ body.disableAddressBarHidingOnScroll {
 }
 
 /*
- * The four aligned columns: marker, name, control, owning-type pill. Rows are display:contents so every
- * cell joins this grid and the columns stay aligned down the whole pane rather than per row.
+ * The five aligned columns: name, inherited-or-specific pill, diverged (M) pill, control, owning-view
+ * pill. Rows are display:contents so every cell joins this grid and the columns stay aligned down the
+ * whole pane rather than per row.
  *
  * Baseline rather than centre, because one control is several lines tall. Column order stacks a chip per
- * lane, and centring set its name halfway down that stack, level with the third lane for no reason a
+ * group, and centring set its name halfway down that stack, level with the third group for no reason a
  * reader could infer; on a baseline the name sits on the first chip's own line. Every other row is one
  * line high, where the two are the same thing.
  */
 .settingsRowGrid {
   display: grid;
-  grid-template-columns: 1.2em auto minmax(0, 1fr) auto;
+  grid-template-columns: auto 1.4em 1.2em minmax(0, 1fr) auto;
   align-items: baseline;
   column-gap: 0.8em;
   row-gap: 0.25em;
@@ -2036,34 +2139,80 @@ body.disableAddressBarHidingOnScroll {
   display: contents;
 }
 
-.settingsRowMarker {
-  text-align: center;
-  font-weight: 600;
-}
-
 .settingsRowName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+// the inherited/specific pill slot; empty and zero-opinion when the row is at its own home view
+.settingsRowState {
+  display: flex;
+  justify-content: center;
+}
+
+.settingsRowMarker {
+  text-align: center;
+}
+
 .settingsRowControl {
   min-width: 0;
 }
 
-// the owning type, stated quietly so it reads as provenance rather than as a control
+// the view the effective value comes from, stated quietly so it reads as provenance rather than as a control
 .settingsRowPill {
   justify-self: end;
   opacity: 0.65;
   white-space: nowrap;
 }
 
-// a diverged setting, tinted the way the Explorer tints a modified file
+// a diverged setting's name, tinted the way the Explorer tints a modified file
 .settingsRowDiverged {
   color: var(--vscode-gitDecoration-modifiedResourceForeground, #895503);
 
   :global(body.vscode-dark) & {
     color: var(--vscode-gitDecoration-modifiedResourceForeground, #E2C08D);
+  }
+}
+
+// shared pill shape for the inherited, specific and diverged markers; colour alone tells them apart
+.settingsPillInherited,
+.settingsPillSpecific,
+.settingsPillDiverged {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.2em;
+  height: 1.2em;
+  padding: 0 0.3em;
+  border-radius: 999px;
+  font-size: 0.75em;
+  font-weight: 600;
+  line-height: 1;
+}
+
+// grey: the value comes from an ancestor view
+.settingsPillInherited {
+  background: var(--vscode-badge-background, rgba(128, 128, 128, 0.25));
+  color: var(--vscode-badge-foreground, var(--vscode-foreground));
+  opacity: 0.8;
+}
+
+// white: this view holds its own value
+.settingsPillSpecific {
+  background: var(--vscode-editor-background, #fff);
+  color: var(--vscode-editor-foreground, #000);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.4)));
+}
+
+// modified tint, the same family the Explorer uses for a changed file
+.settingsPillDiverged {
+  background: var(--vscode-gitDecoration-modifiedResourceForeground, #895503);
+  color: var(--vscode-editor-background, #fff);
+
+  :global(body.vscode-dark) & {
+    background: var(--vscode-gitDecoration-modifiedResourceForeground, #E2C08D);
+    color: var(--vscode-editor-background, #000);
   }
 }
 
@@ -2077,6 +2226,14 @@ body.disableAddressBarHidingOnScroll {
  * it lines up under "View settings" in the head row above and the eye reads down one margin rather than
  * tracking between two.
  */
+.settingsOwnerDivider {
+  grid-column: 1 / -1;
+  height: 0;
+  margin: 0.3em 0;
+  border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.25)));
+  opacity: 0.6;
+}
+
 .settingsGroupHeading {
   grid-column: 1 / -1;
   margin-top: 1.1em;

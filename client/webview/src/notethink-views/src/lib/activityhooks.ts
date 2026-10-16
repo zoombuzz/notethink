@@ -162,7 +162,7 @@ export function useAgentActivityDemand(post_message: ((message: Record<string, u
 /**
  * Hold the toolbar's pending-work spinner while this panel waits on the analyser's first scan, which
  * reads every agent's transcripts and can take seconds on a long history. Mounted once per panel, not
- * per card, so a card unmounting (a virtualised lane scrolling it away) cannot clear a key the other
+ * per card, so a card unmounting (a virtualised group scrolling it away) cannot clear a key the other
  * cards still depend on. The pending set's safety net exists for a clear the host never sends; here
  * the store is the authority on whether the scan is still running, so the key is re-marked while it is.
  */

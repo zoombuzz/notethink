@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -175,56 +175,21 @@
             "default": "auto",
             "description": "%config.settings.view.type.description%"
           },
-          "notethink.settings.view.userTypes": {
-            "type": "array",
-            "scope": "window",
-            "items": {
-              "type": "object"
-            },
-            "default": [],
-            "description": "%config.settings.view.userTypes.description%"
-          },
-          "notethink.settings.card.type": {
-            "type": "string",
-            "scope": "window",
-            "default": "auto",
-            "description": "%config.settings.card.type.description%"
-          },
-          "notethink.settings.view.generic.showLineNumbers": {
-            "type": "boolean",
-            "scope": "window",
-            "default": false,
-            "description": "%config.settings.view.generic.showLineNumbers.description%"
-          },
-          "notethink.settings.view.generic.showLinetagsInHeadlines": {
-            "type": "boolean",
-            "scope": "window",
-            "default": false,
-            "description": "%config.settings.view.generic.showLinetagsInHeadlines.description%"
-          },
           "notethink.settings.view.generic.scrollNoteIntoView": {
             "type": "boolean",
             "scope": "window",
             "default": true,
             "description": "%config.settings.view.generic.scrollNoteIntoView.description%"
           },
-          "notethink.settings.view.generic.autoExpandFocusedNote": {
+          "notethink.settings.view.specific.document.scrollNoteIntoView": {
             "type": "boolean",
             "scope": "window",
-            "default": false,
-            "description": "%config.settings.view.generic.autoExpandFocusedNote.description%"
+            "description": "%config.settings.view.specific.document.scrollNoteIntoView.description%"
           },
-          "notethink.settings.view.generic.watchUnopenedFilesInViewer": {
+          "notethink.settings.view.specific.grouped.scrollNoteIntoView": {
             "type": "boolean",
             "scope": "window",
-            "default": true,
-            "description": "%config.settings.view.generic.watchUnopenedFilesInViewer.description%"
-          },
-          "notethink.settings.view.generic.openNewEditorIfNoneOpen": {
-            "type": "boolean",
-            "scope": "window",
-            "default": false,
-            "description": "%config.settings.view.generic.openNewEditorIfNoneOpen.description%"
+            "description": "%config.settings.view.specific.grouped.scrollNoteIntoView.description%"
           },
           "notethink.settings.view.specific.grouped.groupBy": {
             "type": "string",
@@ -232,13 +197,68 @@
             "default": "auto",
             "description": "%config.settings.view.specific.grouped.groupBy.description%"
           },
+          "notethink.settings.view.specific.grouped.groupDisplay": {
+            "type": "array",
+            "scope": "window",
+            "items": {
+              "type": "object",
+              "required": ["value", "shown"],
+              "properties": {
+                "value": { "type": "string" },
+                "shown": { "type": "boolean" },
+                "axis": { "type": "string" }
+              }
+            },
+            "default": [
+              { "value": "untagged", "shown": true },
+              { "value": "doing", "shown": true },
+              { "value": "code-review", "shown": true },
+              { "value": "testing", "shown": true },
+              { "value": "done", "shown": true }
+            ],
+            "description": "%config.settings.view.specific.grouped.groupDisplay.description%"
+          },
+          "notethink.settings.view.specific.grouped.groupOrder": {
+            "type": "string",
+            "scope": "window",
+            "enum": ["custom", "newestFirst", "newestLast", "alphabetical", "cardCount"],
+            "default": "custom",
+            "description": "%config.settings.view.specific.grouped.groupOrder.description%"
+          },
+          "notethink.settings.view.specific.line.scrollNoteIntoView": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.view.specific.line.scrollNoteIntoView.description%"
+          },
+          "notethink.settings.view.specific.line.groupBy": {
+            "type": "string",
+            "scope": "window",
+            "description": "%config.settings.view.specific.line.groupBy.description%"
+          },
+          "notethink.settings.view.specific.line.groupDisplay": {
+            "type": "array",
+            "scope": "window",
+            "items": {
+              "type": "object",
+              "required": ["value", "shown"],
+              "properties": {
+                "value": { "type": "string" },
+                "shown": { "type": "boolean" },
+                "axis": { "type": "string" }
+              }
+            },
+            "description": "%config.settings.view.specific.line.groupDisplay.description%"
+          },
+          "notethink.settings.view.specific.line.groupOrder": {
+            "type": "string",
+            "scope": "window",
+            "enum": ["custom", "newestFirst", "newestLast", "alphabetical", "cardCount"],
+            "description": "%config.settings.view.specific.line.groupOrder.description%"
+          },
           "notethink.settings.view.specific.line.orientation": {
             "type": "string",
             "scope": "window",
-            "enum": [
-              "columns",
-              "rows"
-            ],
+            "enum": ["columns", "rows"],
             "default": "columns",
             "description": "%config.settings.view.specific.line.orientation.description%"
           },
@@ -249,57 +269,47 @@
             "default": 220,
             "description": "%config.settings.view.specific.line.lineBreadth.description%"
           },
+          "notethink.settings.view.specific.kanban.scrollNoteIntoView": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.view.specific.kanban.scrollNoteIntoView.description%"
+          },
           "notethink.settings.view.specific.kanban.groupBy": {
             "type": "string",
             "scope": "window",
-            "default": "auto",
             "description": "%config.settings.view.specific.kanban.groupBy.description%"
-          },
-          "notethink.settings.view.specific.kanban.columnOrder": {
-            "type": "array",
-            "scope": "window",
-            "items": {
-              "type": "string"
-            },
-            "default": [
-              "untagged",
-              "doing",
-              "code-review",
-              "testing",
-              "done"
-            ],
-            "description": "%config.settings.view.specific.kanban.columnOrder.description%",
-            "markdownDeprecationMessage": "%config.settings.view.specific.kanban.columnOrder.deprecationMessage%"
           },
           "notethink.settings.view.specific.kanban.groupDisplay": {
             "type": "array",
             "scope": "window",
             "items": {
               "type": "object",
-              "required": [
-                "value",
-                "shown"
-              ],
+              "required": ["value", "shown"],
               "properties": {
-                "value": {
-                  "type": "string"
-                },
-                "shown": {
-                  "type": "boolean"
-                },
-                "axis": {
-                  "type": "string"
-                }
+                "value": { "type": "string" },
+                "shown": { "type": "boolean" },
+                "axis": { "type": "string" }
               }
             },
-            "default": [
-              { "value": "untagged", "shown": true },
-              { "value": "doing", "shown": true },
-              { "value": "code-review", "shown": true },
-              { "value": "testing", "shown": true },
-              { "value": "done", "shown": true }
-            ],
             "description": "%config.settings.view.specific.kanban.groupDisplay.description%"
+          },
+          "notethink.settings.view.specific.kanban.groupOrder": {
+            "type": "string",
+            "scope": "window",
+            "enum": ["custom", "newestFirst", "newestLast", "alphabetical", "cardCount"],
+            "description": "%config.settings.view.specific.kanban.groupOrder.description%"
+          },
+          "notethink.settings.view.specific.kanban.orientation": {
+            "type": "string",
+            "scope": "window",
+            "enum": ["columns", "rows"],
+            "description": "%config.settings.view.specific.kanban.orientation.description%"
+          },
+          "notethink.settings.view.specific.kanban.lineBreadth": {
+            "type": "number",
+            "scope": "window",
+            "minimum": 120,
+            "description": "%config.settings.view.specific.kanban.lineBreadth.description%"
           },
           "notethink.settings.view.specific.kanban.cardRatio": {
             "type": "number",
@@ -320,6 +330,103 @@
             "scope": "window",
             "default": "card",
             "description": "%config.settings.view.specific.kanban.defaultCardType.description%"
+          },
+          "notethink.settings.view.userTypes": {
+            "type": "array",
+            "scope": "window",
+            "items": {
+              "type": "object"
+            },
+            "default": [],
+            "description": "%config.settings.view.userTypes.description%"
+          },
+          "notethink.settings.card.type": {
+            "type": "string",
+            "scope": "window",
+            "default": "auto",
+            "description": "%config.settings.card.type.description%"
+          },
+          "notethink.settings.card.generic.showLinetagsInHeadlines": {
+            "type": "boolean",
+            "scope": "window",
+            "default": false,
+            "description": "%config.settings.card.generic.showLinetagsInHeadlines.description%"
+          },
+          "notethink.settings.card.generic.autoExpandFocusedNote": {
+            "type": "boolean",
+            "scope": "window",
+            "default": false,
+            "description": "%config.settings.card.generic.autoExpandFocusedNote.description%"
+          },
+          "notethink.settings.card.generic.showLineNumbers": {
+            "type": "boolean",
+            "scope": "window",
+            "default": false,
+            "description": "%config.settings.card.generic.showLineNumbers.description%"
+          },
+          "notethink.settings.card.specific.card.showLinetagsInHeadlines": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.card.specific.card.showLinetagsInHeadlines.description%"
+          },
+          "notethink.settings.card.specific.card.autoExpandFocusedNote": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.card.specific.card.autoExpandFocusedNote.description%"
+          },
+          "notethink.settings.card.specific.card.showLineNumbers": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.card.specific.card.showLineNumbers.description%"
+          },
+          "notethink.settings.card.specific.sticky.showLinetagsInHeadlines": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.card.specific.sticky.showLinetagsInHeadlines.description%"
+          },
+          "notethink.settings.card.specific.sticky.autoExpandFocusedNote": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.card.specific.sticky.autoExpandFocusedNote.description%"
+          },
+          "notethink.settings.card.specific.sticky.showLineNumbers": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.card.specific.sticky.showLineNumbers.description%"
+          },
+          "notethink.settings.card.specific.agent.showLinetagsInHeadlines": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.card.specific.agent.showLinetagsInHeadlines.description%"
+          },
+          "notethink.settings.card.specific.agent.autoExpandFocusedNote": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.card.specific.agent.autoExpandFocusedNote.description%"
+          },
+          "notethink.settings.card.specific.agent.showLineNumbers": {
+            "type": "boolean",
+            "scope": "window",
+            "description": "%config.settings.card.specific.agent.showLineNumbers.description%"
+          },
+          "notethink.settings.card.specific.agent.clockMode": {
+            "type": "string",
+            "scope": "window",
+            "enum": ["span", "active", "sinceStart"],
+            "default": "active",
+            "description": "%config.settings.card.specific.agent.clockMode.description%"
+          },
+          "notethink.settings.view.generic.watchUnopenedFilesInViewer": {
+            "type": "boolean",
+            "scope": "window",
+            "default": true,
+            "description": "%config.settings.view.generic.watchUnopenedFilesInViewer.description%"
+          },
+          "notethink.settings.view.generic.openNewEditorIfNoneOpen": {
+            "type": "boolean",
+            "scope": "window",
+            "default": false,
+            "description": "%config.settings.view.generic.openNewEditorIfNoneOpen.description%"
           },
           "notethink.settings.files.includeFilter": {
             "type": "string",

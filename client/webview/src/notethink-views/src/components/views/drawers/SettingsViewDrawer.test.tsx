@@ -2,13 +2,50 @@ import React from 'react';
 import { render, screen, fireEvent, within, act, type RenderResult } from '@testing-library/react';
 import type { DropResult } from '@hello-pangea/dnd';
 import type { UserViewType } from '../../../types/Messages';
+import type { NoteProps } from '../../../types/NoteProps';
 import SettingsViewDrawer, { mintUserViewTypeId, newViewTypeNameHint } from './SettingsViewDrawer';
 import { VIEW_REGISTRY } from '../../../lib/viewregistryops';
 import { CARD_SETTING_ROWS, VIEW_SETTING_ROWS } from '../settingRows';
 import { setBreadthDraft } from '../kanban/useBreadthDraft';
+import { resetActivitySnapshot, setActivitySnapshot } from '../../../lib/activityhooks';
+import { AGENT_CARD_TYPE, DEFAULT_CARD_TYPE } from '../../notes/cardregistryops';
+import type { ActivitySession } from '../../../types/AgentActivity';
+
+function makeGroupNote(id: string, status: string, file_mtime?: number): NoteProps {
+    return {
+        seq: 1,
+        level: 1,
+        type: 'heading',
+        children_body: [],
+        children: [],
+        position: { start: { offset: 0, line: 1 }, end: { offset: 10, line: 1 } },
+        headline_raw: `### Story [](?id=${id})`,
+        body_raw: '',
+        linetags: {
+            id: { key: 'id', value: id, key_offset: 0, value_offset: 0, linktext_offset: 0, note_seq: 1 },
+            status: { key: 'status', value: status, key_offset: 0, value_offset: 0, linktext_offset: 0, note_seq: 1 },
+        },
+        origin: { doc_id: 'x', doc_path: '/workspace/todo.md', relative_path: 'todo.md', file_mtime },
+    };
+}
+
+function makeSession(session_id: string, overrides: Partial<ActivitySession> = {}): ActivitySession {
+    return {
+        session_id,
+        vendor: 'claude-code',
+        project: 'project',
+        story_binding: 'bound',
+        started_at: '2026-10-01T00:00:00Z',
+        updated_at: '2026-10-01T00:00:00Z',
+        state: 'working',
+        capabilities: { live_tool_call: 'supported', question: 'unsupported', file_attribution: 'supported' },
+        usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, is_estimate: true },
+        ...overrides,
+    };
+}
 
 /*
- * The lane-order chips drag through @hello-pangea/dnd, which needs real layout to run a gesture. The
+ * The group-order chips drag through @hello-pangea/dnd, which needs real layout to run a gesture. The
  * mock renders the chips as the component asks and hands the test the context's onDragEnd, so a drop can
  * be delivered directly and the mapping from a drop to a written order is what gets asserted. The gesture
  * itself is covered in the browser by playwright/specs/view-settings-drawer.spec.ts.
@@ -43,13 +80,16 @@ function dropChip(from_index: number, to_index: number): void {
     });
 }
 
-/** the lane chips in the order the control lists them */
+/** the group chips in the order the control lists them */
 function renderedChipValues(): string[] {
     return screen.getAllByTestId(/^group-display-chip-/).map(el => el.getAttribute('data-testid')!.replace('group-display-chip-', ''));
 }
 
 // one saved type, used wherever a case needs a node the user owns rather than a built-in rung
-const MINTED: UserViewType = { id: 'user-kanban-by-owner', label: 'Kanban by Owner', parent: 'kanban', overrides: { kanbanGroupBy: 'owner' } };
+const MINTED: UserViewType = { id: 'user-kanban-by-owner', label: 'Kanban by Owner', parent: 'kanban', overrides: { groupBy: 'owner' } };
+
+// a saved type parented on kanban holding no groupBy of its own, so it falls through to kanban's built-in default
+const MINTED_NO_GROUPBY: UserViewType = { id: 'user-kanban-plain', label: 'Kanban plain', parent: 'kanban', overrides: {} };
 
 const default_props = {
     viewId: 'v1',
@@ -65,6 +105,8 @@ const default_props = {
     onGroupDisplayChange: jest.fn(),
     groupByResolvedKey: 'status',
     groupByCandidateKeys: ['assignee', 'status'],
+    notesWithinParentContext: [] as NoteProps[],
+    resolvedCardType: DEFAULT_CARD_TYPE,
     onMakeDefault: jest.fn(),
     onResetToDefault: jest.fn(),
     canResetToDefault: true,
@@ -74,10 +116,15 @@ function renderDrawer(overrides: Partial<typeof default_props> = {}): RenderResu
     return render(<SettingsViewDrawer {...default_props} {...overrides} />);
 }
 
-/** the view types a save wrote, picked out of the several setting writes a save now makes */
-function mintedTypes(on_setting_change: jest.Mock): UserViewType[] {
-    const call = on_setting_change.mock.calls.filter(([key]) => key === 'viewUserTypes').at(-1);
-    return (call?.[1] ?? []) as UserViewType[];
+/** the bag a "Save as new view type" click wrote: the create op's node id and its complete new entry */
+function mintedBag(on_setting_change: jest.Mock): { node_id: string; bag: Record<string, unknown> } | undefined {
+    const calls = on_setting_change.mock.calls.filter(([key]) => key === 'views');
+    for (let i = calls.length - 1; i >= 0; i--) {
+        const sets = (calls[i][1] as { sets: Array<{ node_id: string; key: string | null; value: unknown }> }).sets;
+        const create = sets.find(op => op.key === null && op.value !== undefined);
+        if (create) { return { node_id: create.node_id, bag: create.value as Record<string, unknown> }; }
+    }
+    return undefined;
 }
 
 function renderedRowKeys(): string[] {
@@ -125,19 +172,20 @@ describe('SettingsViewDrawer tree', () => {
         renderDrawer({ settings });
         expect(screen.getByTestId('view-node-count-root')).toHaveTextContent('(1)');
         expect(screen.getByTestId('view-node-count-document')).toHaveTextContent('(0)');
-        expect(screen.getByTestId('view-node-count-grouped')).toHaveTextContent('(1)');
+        // groupDisplay and groupOrder now home at grouped alongside groupBy
+        expect(screen.getByTestId('view-node-count-grouped')).toHaveTextContent('(3)');
         expect(screen.getByTestId('view-node-count-line')).toHaveTextContent('(2)');
-        expect(screen.getByTestId('view-node-count-kanban')).toHaveTextContent('(5)');
+        // kanban's own groupBy now lives in the viewOverrides map, not a flat kanban-homed key
+        expect(screen.getByTestId('view-node-count-kanban')).toHaveTextContent('(3)');
     });
 
     it('clicking an abstract node shows its settings and leaves the rendered view alone', () => {
         const on_view_type_change = jest.fn();
         renderDrawer({ onViewTypeChange: on_view_type_change });
-        expect(renderedRowKeys()).toContain('kanbanGroupBy');
+        expect(renderedRowKeys()).toContain('groupBy');
         fireEvent.click(screen.getByTestId('view-node-grouped'));
         expect(on_view_type_change).not.toHaveBeenCalled();
         expect(renderedRowKeys()).toContain('groupBy');
-        expect(renderedRowKeys()).not.toContain('kanbanGroupBy');
         expect(screen.getByTestId('view-node-grouped').closest('li')).toHaveAttribute('aria-selected', 'true');
     });
 
@@ -150,7 +198,7 @@ describe('SettingsViewDrawer tree', () => {
 
     it('renders a minted view type under its parent, with a radio, exactly like a built-in', () => {
         renderDrawer({
-            userTypes: [{ id: 'user-kanban-by-assignee', label: 'Kanban by Assignee', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' } }],
+            userTypes: [{ id: 'user-kanban-by-assignee', label: 'Kanban by Assignee', parent: 'kanban', overrides: { groupBy: 'assignee' } }],
         });
         const kanban_item = screen.getByTestId('view-node-kanban').closest('li')!;
         expect(within(kanban_item).getByTestId('view-node-user-kanban-by-assignee')).toHaveTextContent('Kanban by Assignee');
@@ -164,26 +212,79 @@ describe('SettingsViewDrawer rows', () => {
         jest.clearAllMocks();
     });
 
-    it('orders the rows by the type each is pilled to and gives each one that type', () => {
+    it('bands the rows by home - kanban, then line, then grouped, then root - and pills each by where its value actually comes from', () => {
         renderDrawer();
-        // the list reads down the pill column, which is the tree above it upside down
         expect(renderedRowKeys()).toEqual([
-            'groupDisplay',
-            'kanbanCardRatio',
-            'kanbanAnimateTransitions',
-            'kanbanDefaultCardType',
+            'cardRatio',
+            'animateTransitions',
+            'defaultCardType',
             'orientation',
             'lineBreadth',
-            'kanbanGroupBy',
+            'groupBy',
+            'groupOrder',
+            'groupDisplay',
             'scrollNoteIntoView',
             'watchUnopenedFilesInViewer',
             'openNewEditorIfNoneOpen',
         ]);
-        expect(screen.getByTestId('setting-pill-kanbanGroupBy')).toHaveTextContent('Grouped');
-        expect(screen.getByTestId('setting-pill-groupDisplay')).toHaveTextContent('Kanban');
-        expect(screen.getByTestId('setting-pill-kanbanDefaultCardType')).toHaveTextContent('Kanban');
+        // kanban always holds at least its own built-in status default for groupBy, so its pill names Kanban itself
+        expect(screen.getByTestId('setting-pill-groupBy')).toHaveTextContent('Kanban');
+        expect(screen.getByTestId('setting-pill-groupDisplay')).toHaveTextContent('Grouped');
+        expect(screen.getByTestId('setting-pill-groupOrder')).toHaveTextContent('Grouped');
+        expect(screen.getByTestId('setting-pill-defaultCardType')).toHaveTextContent('Kanban');
         expect(screen.getByTestId('setting-pill-orientation')).toHaveTextContent('Line');
         expect(screen.getByTestId('setting-pill-scrollNoteIntoView')).toHaveTextContent('All views');
+    });
+
+    it('rules a thin line wherever the HOME band changes, and none between rows of one band', () => {
+        renderDrawer();
+        const sequence = Array.from(screen.getByTestId('settings-rows').children).map(el => el.getAttribute('data-testid'));
+        const opened_by_divider = sequence.flatMap((id, index) => (id === 'settings-owner-divider' ? [sequence[index + 1]] : []));
+        // kanban's band ends after defaultCardType, line's after lineBreadth, grouped's after groupDisplay
+        expect(opened_by_divider).toEqual(['setting-row-orientation', 'setting-row-groupBy', 'setting-row-scrollNoteIntoView']);
+    });
+
+    /*
+     * Kanban's own built-in status default (BUILTIN_NODE_DEFAULTS) is not something settings.json holds,
+     * so VS (specific to this view) would be a false claim: the row reads as inherited, with a hover
+     * naming the default rather than an ancestor that holds nothing.
+     */
+    it('shows the inherited pill, not VS, for kanban\'s groupBy while nothing is actually stored', () => {
+        renderDrawer();
+        expect(screen.queryByTestId('setting-pill-specific-groupBy')).not.toBeInTheDocument();
+        const pill = screen.getByTestId('setting-pill-inherited-groupBy');
+        expect(pill).toHaveAttribute('title', "Kanban's built-in default");
+    });
+
+    it('shows VS for kanban\'s groupBy once kanban genuinely stores its own value', () => {
+        renderDrawer({ settings: { viewOverrides: { kanban: { groupBy: 'assignee' } } } });
+        expect(screen.queryByTestId('setting-pill-inherited-groupBy')).not.toBeInTheDocument();
+        expect(screen.getByTestId('setting-pill-specific-groupBy')).toBeInTheDocument();
+    });
+
+    it('shows the inherited pill, naming kanban\'s built-in default, for a saved type under kanban holding no groupBy of its own', () => {
+        renderDrawer({ userTypes: [MINTED_NO_GROUPBY], viewTypeSelection: MINTED_NO_GROUPBY.id, currentType: MINTED_NO_GROUPBY.id });
+        expect(screen.queryByTestId('setting-pill-specific-groupBy')).not.toBeInTheDocument();
+        const pill = screen.getByTestId('setting-pill-inherited-groupBy');
+        expect(pill).toHaveAttribute('title', "Kanban's built-in default");
+    });
+
+    it('keeps the band the same, and only the pill\'s view changes, once kanban holds its own groupBy', () => {
+        renderDrawer({ settings: { viewOverrides: { kanban: { groupBy: 'assignee' } } } });
+        expect(renderedRowKeys()).toEqual([
+            'cardRatio',
+            'animateTransitions',
+            'defaultCardType',
+            'orientation',
+            'lineBreadth',
+            'groupBy',
+            'groupOrder',
+            'groupDisplay',
+            'scrollNoteIntoView',
+            'watchUnopenedFilesInViewer',
+            'openNewEditorIfNoneOpen',
+        ]);
+        expect(screen.getByTestId('setting-pill-groupBy')).toHaveTextContent('Kanban');
     });
 
     it('lists no card-drawn setting, since those moved onto the card tab', () => {
@@ -222,9 +323,10 @@ describe('SettingsViewDrawer rows', () => {
     });
 
     it('marks every diverged row with an M and tallies exactly the marked rows', () => {
-        renderDrawer({ diverged: ['kanbanGroupBy', 'scrollNoteIntoView', 'includeFilter'] });
+        // scrollNoteIntoView is only inheriting at kanban, so its M answers to root's own cell, not a bare key
+        renderDrawer({ diverged: ['views:kanban:groupBy', 'views:root:scrollNoteIntoView', 'includeFilter'] });
         const marked = screen.getAllByTestId(/^setting-row-/).filter(row => row.getAttribute('data-diverged') === 'true');
-        expect(marked.map(row => row.getAttribute('data-testid'))).toEqual(['setting-row-kanbanGroupBy', 'setting-row-scrollNoteIntoView']);
+        expect(marked.map(row => row.getAttribute('data-testid'))).toEqual(['setting-row-groupBy', 'setting-row-scrollNoteIntoView']);
         expect(screen.getAllByTestId(/^setting-marker-/)).toHaveLength(2);
         // includeFilter diverges but renders no row here: the tally is of M-marked rows
         expect(screen.getByTestId('diverged-count')).toHaveTextContent('(2 settings diverged)');
@@ -236,7 +338,7 @@ describe('SettingsViewDrawer rows', () => {
     });
 
     it('states the tally on the collapsed summary and the sentence explaining it inside', () => {
-        renderDrawer({ diverged: ['scrollNoteIntoView'] });
+        renderDrawer({ diverged: ['views:root:scrollNoteIntoView'] });
         expect(screen.getByTestId('change-defaults-summary')).toHaveTextContent('Change defaults (1 setting diverged)');
         expect(screen.getByTestId('change-defaults')).toHaveTextContent('Settings diverged from the defaults and are already saved');
     });
@@ -251,46 +353,46 @@ describe('SettingsViewDrawer controls', () => {
     it('writes the card ratio as a number, since the width solve does arithmetic on it', () => {
         const on_setting_change = jest.fn();
         renderDrawer({ onSettingChange: on_setting_change });
-        fireEvent.change(screen.getByTestId('setting-control-kanbanCardRatio'), { target: { value: '2' } });
-        expect(on_setting_change).toHaveBeenCalledWith('kanbanCardRatio', 2);
+        fireEvent.change(screen.getByTestId('setting-control-cardRatio'), { target: { value: '2' } });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'cardRatio', value: 2 }] });
     });
 
     it('offers the default card type as a dropdown of the concrete cards, showing Card until one is chosen', () => {
         renderDrawer();
-        const control = screen.getByTestId('setting-control-kanbanDefaultCardType') as HTMLSelectElement;
+        const control = screen.getByTestId('setting-control-defaultCardType') as HTMLSelectElement;
         expect(control.tagName).toBe('SELECT');
         expect(control.value).toBe('card');
         expect(Array.from(control.options).map(option => option.value)).toEqual(['card', 'sticky', 'agent']);
-        expect(screen.getByTestId('setting-row-kanbanDefaultCardType')).toHaveTextContent('Default card type');
+        expect(screen.getByTestId('setting-row-defaultCardType')).toHaveTextContent('Default card type');
     });
 
     it('writes a chosen default card type to the kanban setting', () => {
         const on_setting_change = jest.fn();
         renderDrawer({ onSettingChange: on_setting_change });
-        fireEvent.change(screen.getByTestId('setting-control-kanbanDefaultCardType'), { target: { value: 'sticky' } });
-        expect(on_setting_change).toHaveBeenCalledWith('kanbanDefaultCardType', 'sticky');
+        fireEvent.change(screen.getByTestId('setting-control-defaultCardType'), { target: { value: 'sticky' } });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'defaultCardType', value: 'sticky' }] });
     });
 
     it('offers the default card type on a kanban board and nowhere above it', () => {
         renderDrawer();
-        expect(screen.getByTestId('setting-row-kanbanDefaultCardType')).toBeInTheDocument();
+        expect(screen.getByTestId('setting-row-defaultCardType')).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('view-node-line'));
-        expect(screen.queryByTestId('setting-row-kanbanDefaultCardType')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('setting-row-defaultCardType')).not.toBeInTheDocument();
     });
 
     it('offers the card ratio on a kanban board and nowhere above it, since the width is a kanban concern', () => {
         renderDrawer();
-        expect(screen.getByTestId('setting-row-kanbanCardRatio')).toBeInTheDocument();
+        expect(screen.getByTestId('setting-row-cardRatio')).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('view-node-line'));
-        expect(screen.queryByTestId('setting-row-kanbanCardRatio')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('setting-row-cardRatio')).not.toBeInTheDocument();
     });
 
-    it('changing Group by from kanban writes the kanban override and leaves the ancestor key alone', () => {
+    it('changing Group by from kanban writes kanban\'s own entry in the viewOverrides map, never the ancestor key', () => {
         const on_setting_change = jest.fn();
         renderDrawer({ onSettingChange: on_setting_change });
         fireEvent.change(screen.getByTestId('group-by-selector'), { target: { value: 'assignee' } });
         expect(on_setting_change).toHaveBeenCalledTimes(1);
-        expect(on_setting_change).toHaveBeenCalledWith('kanbanGroupBy', 'assignee');
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'groupBy', value: 'assignee' }] });
     });
 
     it('changing Group by from the grouped node writes the ancestor key instead', () => {
@@ -298,24 +400,32 @@ describe('SettingsViewDrawer controls', () => {
         renderDrawer({ onSettingChange: on_setting_change });
         fireEvent.click(screen.getByTestId('view-node-grouped'));
         fireEvent.change(screen.getByTestId('group-by-selector'), { target: { value: 'assignee' } });
-        expect(on_setting_change).toHaveBeenCalledWith('groupBy', 'assignee');
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'grouped', key: 'groupBy', value: 'assignee' }] });
     });
 
-    it('renders the orientation control and writes the chosen value', () => {
+    it('renders the orientation control and writes kanban\'s own entry in the viewOverrides map, selected on kanban', () => {
         const on_setting_change = jest.fn();
         renderDrawer({ onSettingChange: on_setting_change });
         fireEvent.change(screen.getByTestId('setting-control-orientation'), { target: { value: 'rows' } });
-        expect(on_setting_change).toHaveBeenCalledWith('orientation', 'rows');
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'orientation', value: 'rows' }] });
     });
 
-    it('lists every lane as a chip, in the order the board lays the lanes out', () => {
+    it('writes orientation flat when selected on line, its own home', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId('view-node-line'));
+        fireEvent.change(screen.getByTestId('setting-control-orientation'), { target: { value: 'rows' } });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'line', key: 'orientation', value: 'rows' }] });
+    });
+
+    it('lists every group as a chip, in the order the board lays the groups out', () => {
         renderDrawer();
         expect(renderedChipValues()).toEqual(['doing', 'done', 'untagged']);
         expect(screen.getByLabelText('Reorder Done')).toBeInTheDocument();
     });
 
-    it('on the status axis, an untouched kanban-rung default lists in full, exactly as today, even with lanes no note currently uses', () => {
-        // the kanban rung's own package.json default; the status axis never filters by current population
+    it('on the status axis, an untouched kanban-rung default lists only the groups a current note carries', () => {
+        // the kanban rung's own package.json default names 5 groups; naturalColumnOrder here is only 3
         renderDrawer({
             settings: {
                 groupDisplay: [
@@ -327,13 +437,16 @@ describe('SettingsViewDrawer controls', () => {
                 ],
             },
         });
-        expect(renderedChipValues()).toEqual(['untagged', 'doing', 'code-review', 'testing', 'done']);
+        // code-review and testing name no current note and so list no chip, in the default's own relative order
+        expect(renderedChipValues()).toEqual(['untagged', 'doing', 'done']);
     });
 
-    it('routes a dropped lane through the group-display handler that normalises the natural order', () => {
+    it('routes a dropped group through the group-display handler that normalises the natural order', () => {
         const on_group_display_change = jest.fn();
         const on_setting_change = jest.fn();
         renderDrawer({ onGroupDisplayChange: on_group_display_change, onSettingChange: on_setting_change });
+        // groupDisplay is per-view now; select its home (grouped) so this exercises the flat axis-merge path
+        fireEvent.click(screen.getByTestId('view-node-grouped'));
         dropChip(1, 0);
         expect(on_group_display_change).toHaveBeenCalledWith([
             { value: 'done', shown: true },
@@ -343,7 +456,7 @@ describe('SettingsViewDrawer controls', () => {
         expect(on_setting_change).not.toHaveBeenCalled();
     });
 
-    it('writes nothing when a lane is dropped outside the list, or back where it started', () => {
+    it('writes nothing when a group is dropped outside the list, or back where it started', () => {
         const on_group_display_change = jest.fn();
         renderDrawer({ onGroupDisplayChange: on_group_display_change });
         act(() => { captured_drag_end?.({ source: { index: 1, droppableId: 'v1-group-display' }, destination: null } as DropResult); });
@@ -351,9 +464,10 @@ describe('SettingsViewDrawer controls', () => {
         expect(on_group_display_change).not.toHaveBeenCalled();
     });
 
-    it('toggling a lane\'s checkbox posts the shown flag flipped, without starting a drag', () => {
+    it('toggling a group\'s checkbox posts the shown flag flipped, without starting a drag', () => {
         const on_group_display_change = jest.fn();
         renderDrawer({ onGroupDisplayChange: on_group_display_change });
+        fireEvent.click(screen.getByTestId('view-node-grouped'));
         fireEvent.click(screen.getByTestId('group-display-shown-done'));
         expect(on_group_display_change).toHaveBeenCalledWith([
             { value: 'doing', shown: true },
@@ -367,7 +481,7 @@ describe('SettingsViewDrawer controls', () => {
         expect(renderedChipValues()).toEqual(['untagged']);
     });
 
-    it('grouped by first level folder, lists the folder lanes rather than any saved status chips', () => {
+    it('grouped by first level folder, lists the folder groups rather than any saved status chips', () => {
         renderDrawer({
             groupByResolvedKey: 'nt_first_level_folder',
             naturalColumnOrder: ['alpha', 'beta', 'untagged'],
@@ -427,7 +541,7 @@ describe('SettingsViewDrawer controls', () => {
         expect(renderedChipValues()).toEqual(['doing', 'done']);
     });
 
-    it('a mixed stored list shows only the entries tagged for the active axis, folder lanes merged with the untagged ones of its own', () => {
+    it('a mixed stored list shows only the entries tagged for the active axis, folder groups merged with the untagged ones of its own', () => {
         renderDrawer({
             groupByResolvedKey: 'nt_first_level_folder',
             naturalColumnOrder: ['alpha', 'beta', 'untagged'],
@@ -455,7 +569,7 @@ describe('SettingsViewDrawer controls', () => {
         expect(renderedChipValues()).toEqual(['doing', 'done', 'untagged']);
     });
 
-    it('reordering a folder lane writes only the folder axis entries, independent of any stored status chips', () => {
+    it('reordering a folder group writes only the folder axis entries, independent of any stored status chips', () => {
         const on_group_display_change = jest.fn();
         renderDrawer({
             groupByResolvedKey: 'nt_first_level_folder',
@@ -463,6 +577,7 @@ describe('SettingsViewDrawer controls', () => {
             settings: { groupDisplay: [{ value: 'doing', shown: false }, { value: 'done', shown: true }] },
             onGroupDisplayChange: on_group_display_change,
         });
+        fireEvent.click(screen.getByTestId('view-node-grouped'));
         dropChip(1, 0);
         expect(on_group_display_change).toHaveBeenCalledWith([
             { value: 'beta', shown: true },
@@ -471,7 +586,7 @@ describe('SettingsViewDrawer controls', () => {
         ]);
     });
 
-    it('hiding a folder lane writes only the folder axis entries, independent of any stored status chips', () => {
+    it('hiding a folder group writes only the folder axis entries, independent of any stored status chips', () => {
         const on_group_display_change = jest.fn();
         renderDrawer({
             groupByResolvedKey: 'nt_first_level_folder',
@@ -479,6 +594,7 @@ describe('SettingsViewDrawer controls', () => {
             settings: { groupDisplay: [{ value: 'doing', shown: false }, { value: 'done', shown: true }] },
             onGroupDisplayChange: on_group_display_change,
         });
+        fireEvent.click(screen.getByTestId('view-node-grouped'));
         fireEvent.click(screen.getByTestId('group-display-shown-alpha'));
         expect(on_group_display_change).toHaveBeenCalledWith([
             { value: 'alpha', shown: false },
@@ -487,18 +603,236 @@ describe('SettingsViewDrawer controls', () => {
         ]);
     });
 
-    it('toggles a checkbox row through the one setting-change path', () => {
+    it('toggles a checkbox row through the one setting-change path, flat at its own home (root/"All views")', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ onSettingChange: on_setting_change, settings: { scrollNoteIntoView: false } });
+        fireEvent.click(screen.getByTestId('view-node-root'));
+        fireEvent.click(screen.getByTestId('setting-control-scrollNoteIntoView'));
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'root', key: 'scrollNoteIntoView', value: true }] });
+    });
+
+    it('toggles scrollNoteIntoView from Kanban into Kanban\'s own viewOverrides entry, since root-homed rows are per-view too', () => {
         const on_setting_change = jest.fn();
         renderDrawer({ onSettingChange: on_setting_change, settings: { scrollNoteIntoView: false } });
         fireEvent.click(screen.getByTestId('setting-control-scrollNoteIntoView'));
-        expect(on_setting_change).toHaveBeenCalledWith('scrollNoteIntoView', true);
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'scrollNoteIntoView', value: true }] });
     });
 
     it('falls back to each setting built-in default before the first cascade arrives', () => {
         renderDrawer({ settings: {} });
         expect(screen.getByTestId('setting-control-scrollNoteIntoView')).toBeChecked();
         expect(screen.getByTestId('setting-control-openNewEditorIfNoneOpen')).not.toBeChecked();
-        expect(screen.getByTestId('setting-control-kanbanAnimateTransitions')).toBeChecked();
+        expect(screen.getByTestId('setting-control-animateTransitions')).toBeChecked();
+    });
+});
+
+describe('SettingsViewDrawer group display: entries no live note carries', () => {
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('a stored entry for a value no note carries does not appear as a chip', () => {
+        renderDrawer({
+            naturalColumnOrder: ['doing', 'done', 'untagged'],
+            settings: { groupDisplay: [{ value: 'doing', shown: true }, { value: 'archived', shown: true }] },
+        });
+        expect(renderedChipValues()).toEqual(['doing', 'done', 'untagged']);
+        expect(screen.queryByTestId('group-display-chip-archived')).not.toBeInTheDocument();
+    });
+
+    it('a hidden absent entry survives a toggle on another chip, unchanged, appended after the present ones', () => {
+        const on_group_display_change = jest.fn();
+        renderDrawer({
+            naturalColumnOrder: ['doing', 'done', 'untagged'],
+            settings: { groupDisplay: [{ value: 'doing', shown: true }, { value: 'done', shown: true }, { value: 'archived', shown: false }] },
+            onGroupDisplayChange: on_group_display_change,
+        });
+        fireEvent.click(screen.getByTestId('view-node-grouped'));
+        fireEvent.click(screen.getByTestId('group-display-shown-done'));
+        expect(on_group_display_change).toHaveBeenCalledWith([
+            { value: 'doing', shown: true },
+            { value: 'done', shown: false },
+            { value: 'untagged', shown: true },
+            { value: 'archived', shown: false },
+        ]);
+    });
+
+    it('a hidden absent entry survives a drag reordering the present chips, unchanged, appended after them', () => {
+        const on_group_display_change = jest.fn();
+        renderDrawer({
+            naturalColumnOrder: ['doing', 'done', 'untagged'],
+            settings: { groupDisplay: [{ value: 'doing', shown: true }, { value: 'done', shown: true }, { value: 'archived', shown: false }] },
+            onGroupDisplayChange: on_group_display_change,
+        });
+        fireEvent.click(screen.getByTestId('view-node-grouped'));
+        dropChip(1, 0);
+        expect(on_group_display_change).toHaveBeenCalledWith([
+            { value: 'done', shown: true },
+            { value: 'doing', shown: true },
+            { value: 'untagged', shown: true },
+            { value: 'archived', shown: false },
+        ]);
+    });
+
+    it('an absent entry reappears as a chip, in its stored position and shown state, once a note carries the value again', () => {
+        renderDrawer({
+            naturalColumnOrder: ['doing', 'done', 'archived', 'untagged'],
+            settings: { groupDisplay: [{ value: 'doing', shown: true }, { value: 'archived', shown: false }, { value: 'done', shown: true }] },
+        });
+        expect(renderedChipValues()).toEqual(['doing', 'archived', 'done', 'untagged']);
+    });
+});
+
+describe('SettingsViewDrawer group order', () => {
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        resetActivitySnapshot();
+    });
+
+    afterEach(() => {
+        resetActivitySnapshot();
+    });
+
+    it('renders the select at the current value, offering all five modes', () => {
+        renderDrawer({ settings: { groupOrder: 'alphabetical' } });
+        const control = screen.getByTestId('setting-control-groupOrder') as HTMLSelectElement;
+        expect(control.tagName).toBe('SELECT');
+        expect(control.value).toBe('alphabetical');
+        expect(Array.from(control.options).map(option => option.value)).toEqual(['custom', 'newestFirst', 'newestLast', 'alphabetical', 'cardCount']);
+        expect(screen.getByTestId('setting-row-groupOrder')).toHaveTextContent('Group order');
+    });
+
+    it('defaults to custom when nothing is set, and writes the picked mode as a plain setting change at its own home', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId('view-node-grouped'));
+        expect((screen.getByTestId('setting-control-groupOrder') as HTMLSelectElement).value).toBe('custom');
+        fireEvent.change(screen.getByTestId('setting-control-groupOrder'), { target: { value: 'cardCount' } });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'grouped', key: 'groupOrder', value: 'cardCount' }] });
+    });
+
+    it('picking a mode from Kanban (groupOrder is per-view too) writes Kanban\'s own viewOverrides entry', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ onSettingChange: on_setting_change });
+        fireEvent.change(screen.getByTestId('setting-control-groupOrder'), { target: { value: 'cardCount' } });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'groupOrder', value: 'cardCount' }] });
+    });
+
+    it('with the agent card type on screen, lists the chips in newestLast order, oldest group first, agreeing with what the board would draw', () => {
+        setActivitySnapshot({
+            analyser: { state: 'live', refusals: [] },
+            sessions: [
+                { root_path: '/ws', session: makeSession('older', { stories: [{ doc_path: 'todo.md', id: 'a' }], updated_at: '2026-10-01T00:00:00Z' }) },
+                { root_path: '/ws', session: makeSession('newer', { stories: [{ doc_path: 'todo.md', id: 'b' }], updated_at: '2026-10-09T00:00:00Z' }) },
+            ],
+            trees: [],
+        });
+        renderDrawer({
+            settings: { groupOrder: 'newestLast' },
+            notesWithinParentContext: [makeGroupNote('a', 'doing'), makeGroupNote('b', 'done')],
+            resolvedCardType: AGENT_CARD_TYPE,
+        });
+        expect(renderedChipValues()).toEqual(['doing', 'done', 'untagged']);
+    });
+
+    it('with the agent card type on screen, lists the chips in newestFirst order, newest group first', () => {
+        setActivitySnapshot({
+            analyser: { state: 'live', refusals: [] },
+            sessions: [
+                { root_path: '/ws', session: makeSession('older', { stories: [{ doc_path: 'todo.md', id: 'a' }], updated_at: '2026-10-01T00:00:00Z' }) },
+                { root_path: '/ws', session: makeSession('newer', { stories: [{ doc_path: 'todo.md', id: 'b' }], updated_at: '2026-10-09T00:00:00Z' }) },
+            ],
+            trees: [],
+        });
+        renderDrawer({
+            settings: { groupOrder: 'newestFirst' },
+            notesWithinParentContext: [makeGroupNote('a', 'doing'), makeGroupNote('b', 'done')],
+            resolvedCardType: AGENT_CARD_TYPE,
+        });
+        expect(renderedChipValues()).toEqual(['done', 'doing', 'untagged']);
+    });
+
+    it('with the default card type on screen, orders by the stories\' own file_mtime instead of any agent activity', () => {
+        setActivitySnapshot({
+            analyser: { state: 'live', refusals: [] },
+            // an activity snapshot that would reverse the order under the agent card type; the default card ignores it
+            sessions: [
+                { root_path: '/ws', session: makeSession('newer-activity', { stories: [{ doc_path: 'todo.md', id: 'a' }], updated_at: '2026-10-09T00:00:00Z' }) },
+            ],
+            trees: [],
+        });
+        renderDrawer({
+            settings: { groupOrder: 'newestLast' },
+            notesWithinParentContext: [
+                makeGroupNote('a', 'doing', Date.parse('2026-10-01T00:00:00Z')),
+                makeGroupNote('b', 'done', Date.parse('2026-10-05T00:00:00Z')),
+            ],
+            resolvedCardType: DEFAULT_CARD_TYPE,
+        });
+        expect(renderedChipValues()).toEqual(['doing', 'done', 'untagged']);
+    });
+
+    it('a chip drag in an automatic order seeds groupDisplay with the on-screen order and switches groupOrder to custom in one combined write when the type holds both', () => {
+        const on_setting_change = jest.fn();
+        const MINTED_BOTH: UserViewType = { id: 'user-kanban-both', label: 'Kanban both', parent: 'kanban', overrides: { groupDisplay: [], groupOrder: 'cardCount' } };
+        renderDrawer({
+            userTypes: [MINTED_BOTH],
+            currentType: 'user-kanban-both',
+            viewTypeSelection: 'user-kanban-both',
+            settings: { groupOrder: 'cardCount' },
+            notesWithinParentContext: [makeGroupNote('a', 'doing'), makeGroupNote('a2', 'doing'), makeGroupNote('b', 'done')],
+            onSettingChange: on_setting_change,
+        });
+        // cardCount puts 'doing' (2 cards) before 'done' (1), untagged last; the drag moves 'done' to the front
+        expect(renderedChipValues()).toEqual(['doing', 'done', 'untagged']);
+        dropChip(1, 0);
+        expect(on_setting_change).toHaveBeenCalledTimes(1);
+        const [key, value] = on_setting_change.mock.calls[0];
+        expect(key).toBe('views');
+        const sets = (value as { sets: Array<{ node_id: string; key: string; value: unknown }> }).sets;
+        expect(sets.every(op => op.node_id === 'user-kanban-both')).toBe(true);
+        expect(sets.find(op => op.key === 'groupOrder')?.value).toBe('custom');
+        expect(sets.find(op => op.key === 'groupDisplay')?.value).toEqual([
+            { value: 'done', shown: true },
+            { value: 'doing', shown: true },
+            { value: 'untagged', shown: true },
+        ]);
+    });
+
+    /*
+     * groupDisplay is now per-view too, so a saved type combines both keys into one `views` bag delta
+     * (two cells, one node_id) unconditionally - whether or not it already held groupDisplay - since two
+     * separate round trips risk one clobbering the other. The type's groupDisplay starts empty (never
+     * set), so the merge against its own bag carries nothing else forward: the written array is exactly
+     * this drag's own entries.
+     */
+    it('a chip drag in an automatic order combines both keys into one views delta, even when the type held only one of them', () => {
+        const on_setting_change = jest.fn();
+        const on_group_display_change = jest.fn();
+        const MINTED_ORDER_ONLY: UserViewType = { id: 'user-kanban-order', label: 'Kanban order', parent: 'kanban', overrides: { groupOrder: 'alphabetical' } };
+        renderDrawer({
+            userTypes: [MINTED_ORDER_ONLY],
+            currentType: 'user-kanban-order',
+            viewTypeSelection: 'user-kanban-order',
+            settings: { groupOrder: 'alphabetical' },
+            onSettingChange: on_setting_change,
+            onGroupDisplayChange: on_group_display_change,
+        });
+        dropChip(1, 0);
+        expect(on_group_display_change).not.toHaveBeenCalled();
+        expect(on_setting_change).toHaveBeenCalledTimes(1);
+        const [key, value] = on_setting_change.mock.calls[0];
+        expect(key).toBe('views');
+        const sets = (value as { sets: Array<{ node_id: string; key: string; value: unknown }> }).sets;
+        expect(sets.every(op => op.node_id === 'user-kanban-order')).toBe(true);
+        expect(sets.find(op => op.key === 'groupOrder')?.value).toBe('custom');
+        expect(sets.find(op => op.key === 'groupDisplay')?.value).toEqual([
+            { value: 'done', shown: true },
+            { value: 'doing', shown: true },
+            { value: 'untagged', shown: true },
+        ]);
     });
 });
 
@@ -511,7 +845,7 @@ describe('SettingsViewDrawer defaults and new view types', () => {
     it('collapses both default actions into one Change defaults disclosure', () => {
         const on_make_default = jest.fn();
         const on_reset = jest.fn();
-        renderDrawer({ onMakeDefault: on_make_default, onResetToDefault: on_reset, diverged: ['scrollNoteIntoView'] });
+        renderDrawer({ onMakeDefault: on_make_default, onResetToDefault: on_reset, diverged: ['views:root:scrollNoteIntoView'] });
         expect(screen.getByTestId('change-defaults-summary')).toHaveTextContent('Change defaults');
         fireEvent.click(screen.getByTestId('save-as-default'));
         fireEvent.click(screen.getByTestId('revert-to-defaults'));
@@ -532,7 +866,7 @@ describe('SettingsViewDrawer defaults and new view types', () => {
     });
 
     it('enables it, and explains the tally, once something diverges', () => {
-        renderDrawer({ diverged: ['scrollNoteIntoView'] });
+        renderDrawer({ diverged: ['views:root:scrollNoteIntoView'] });
         expect(screen.getByTestId('save-as-default')).toBeEnabled();
         expect(screen.getByTestId('change-defaults')).toHaveTextContent('Settings diverged from the defaults and are already saved');
     });
@@ -542,172 +876,97 @@ describe('SettingsViewDrawer defaults and new view types', () => {
         expect(screen.getByTestId('revert-to-defaults')).toBeDisabled();
     });
 
-    /*
-     * The offer is asked of the settings, not remembered from a click, which is what makes it survive a
-     * reload: a board reopened with an ancestor-owned row still diverged makes the same offer it made when
-     * the change landed. Nothing is touched in this case - the drawer is simply rendered in that state.
-     */
-    it('offers a new view type for a diverged setting an ancestor owns, with nothing touched', () => {
-        renderDrawer({ diverged: ['kanbanGroupBy'] });
-        expect(screen.getByTestId('new-view-type-offer')).toBeInTheDocument();
-    });
-
-    it('offers nothing once the cascade says the row is back at its default', () => {
-        const { rerender } = renderDrawer({ diverged: ['kanbanGroupBy'] });
-        expect(screen.getByTestId('new-view-type-offer')).toBeInTheDocument();
-        rerender(<SettingsViewDrawer {...default_props} diverged={[]} />);
-        expect(screen.queryByTestId('new-view-type-offer')).not.toBeInTheDocument();
-    });
 
     /*
-     * Every ancestor-owned departure is a reason, not just the most recent one, so a board that has drifted
-     * on two of them mints a type carrying both rather than losing one of them silently.
+     * The explicit button replaces the old automatic offer: it is always there in the Custom view types
+     * disclosure, whatever is or is not diverged, because minting no longer depends on a change having
+     * landed on an ancestor-owned setting - a built-in view's own value already lives in its own place
+     * (the viewOverrides map), so there is nothing left for an "offer" to react to.
      */
-    it('carries every ancestor-owned divergence into the minted type', () => {
-        const on_setting_change = jest.fn();
-        renderDrawer({
-            onSettingChange: on_setting_change,
-            diverged: ['kanbanGroupBy', 'orientation'],
-            settings: { kanbanGroupBy: 'assignee', orientation: 'rows' },
-        });
+    it('always offers the explicit Save as new view type button, regardless of divergence', () => {
+        renderDrawer({ diverged: [] });
+        fireEvent.click(screen.getByTestId('custom-view-types-summary'));
+        expect(screen.getByTestId('new-view-type-open')).toBeInTheDocument();
+    });
+
+    it('is closed by default, since nothing fires automatically any more', () => {
+        renderDrawer();
+        expect(screen.getByTestId('custom-view-types')).not.toHaveAttribute('open');
+    });
+
+    it('opens on click and the name form opens pre-filled with the selected view named as a copy of it', () => {
+        renderDrawer();
+        fireEvent.click(screen.getByTestId('custom-view-types-summary'));
+        expect(screen.getByTestId('custom-view-types')).toHaveAttribute('open');
         fireEvent.click(screen.getByTestId('new-view-type-open'));
-        fireEvent.click(screen.getByTestId('new-view-type-save'));
-        const written = mintedTypes(on_setting_change);
-        expect(written[0].overrides).toEqual({ kanbanGroupBy: 'assignee', orientation: 'rows' });
+        expect(screen.getByTestId('new-view-type-name')).toHaveValue('Kanban copy');
     });
 
     /*
-     * Saving is three writes, and the two that used to be missing are what made the button lie. The
-     * overrides only apply while the board renders as the minted node, so an unpinned type contributes
-     * nothing; and the values have to come off the parent, or the offer's promise to keep the change
-     * "without altering the type it came from" is simply false and the row stays diverged.
+     * Minting starts the new type with an empty bag of its own - parent and label only - whatever the
+     * selected view's own bag holds: everything it holds, stored or built-in, is already reachable
+     * through the parent link, so copying it in would only bake in a redundant explicit entry that can
+     * drift from its source (and would wrongly read as this view's OWN value rather than inherited).
      */
-    it('pins the minted type and clears the captured keys off the parent', () => {
+    it('mints a type with an empty bag, never copying the selected built-in view\'s own values', () => {
         const on_setting_change = jest.fn();
         const on_view_type_change = jest.fn();
         renderDrawer({
             onSettingChange: on_setting_change,
             onViewTypeChange: on_view_type_change,
-            diverged: ['kanbanGroupBy'],
-            settings: { kanbanGroupBy: 'assignee' },
+            settings: { viewOverrides: { kanban: { groupBy: 'assignee', orientation: 'rows' } } },
         });
+        fireEvent.click(screen.getByTestId('custom-view-types-summary'));
         fireEvent.click(screen.getByTestId('new-view-type-open'));
         fireEvent.click(screen.getByTestId('new-view-type-save'));
-        expect(on_view_type_change).toHaveBeenCalledWith('user-kanban-by-assignee');
-        expect(on_setting_change).toHaveBeenCalledWith('kanbanGroupBy', undefined);
+        expect(mintedBag(on_setting_change)).toEqual({
+            node_id: 'user-kanban-copy',
+            bag: { parent: 'kanban', label: 'Kanban copy' },
+        });
+        expect(on_view_type_change).toHaveBeenCalledWith('user-kanban-copy');
+        // minting is a copy, not a move - kanban's own entry is never cleared
+        expect(on_setting_change).not.toHaveBeenCalledWith('views', expect.objectContaining({ sets: expect.arrayContaining([expect.objectContaining({ node_id: 'kanban', value: undefined })]) }));
     });
 
-    /*
-     * What the three writes add up to, played through the cascade the way the extension echoes it: the
-     * type exists, the board renders as it, the key is off the parent and so no longer diverges. The offer
-     * is spent, and the panel now carries the minted type's own rename and delete instead - which is what
-     * stops a second save minting the same departure again under a `-2` id.
-     */
-    it('spends the offer once the cascade comes back with the type saved and the key cleared', () => {
-        const minted: UserViewType = { id: 'user-kanban-by-assignee', label: 'Kanban by Assignee', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' } };
-        const { rerender } = renderDrawer({ diverged: ['kanbanGroupBy'], settings: { kanbanGroupBy: 'assignee' } });
-        expect(screen.getByTestId('new-view-type-offer')).toBeInTheDocument();
-        rerender(
-            <SettingsViewDrawer
-                {...default_props}
-                userTypes={[minted]}
-                currentType={minted.id}
-                viewTypeSelection={minted.id}
-                diverged={[]}
-                settings={{ kanbanGroupBy: 'assignee' }}
-            />,
-        );
-        expect(screen.queryByTestId('new-view-type-offer')).not.toBeInTheDocument();
-        expect(screen.getByTestId('user-view-type-controls')).toBeInTheDocument();
-    });
-
-    it('offers nothing when the change lands on a setting the selected node owns itself', () => {
-        renderDrawer();
-        dropChip(1, 0);
-        expect(screen.queryByTestId('new-view-type-offer')).not.toBeInTheDocument();
-    });
-
-    it('offers nothing when the change lands on a setting with no owning type at all', () => {
-        renderDrawer();
-        fireEvent.click(screen.getByTestId('setting-control-watchUnopenedFilesInViewer'));
-        expect(screen.queryByTestId('new-view-type-offer')).not.toBeInTheDocument();
-    });
-
-    it('offers nothing for a setting All views owns, which reaches every view and so defines no type', () => {
-        renderDrawer();
-        expect(screen.getByTestId('setting-pill-scrollNoteIntoView')).toHaveTextContent('All views');
-        fireEvent.click(screen.getByTestId('setting-control-scrollNoteIntoView'));
-        expect(screen.queryByTestId('new-view-type-offer')).not.toBeInTheDocument();
-    });
-
-    it('pre-fills the name from the node plus what changed, and appends the minted type on save', () => {
+    it('mints a type with no overrides at all when the selected view holds no value of its own', () => {
         const on_setting_change = jest.fn();
-        renderDrawer({ onSettingChange: on_setting_change, diverged: ['kanbanGroupBy'], settings: { kanbanGroupBy: 'assignee' } });
+        renderDrawer({ onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId('custom-view-types-summary'));
         fireEvent.click(screen.getByTestId('new-view-type-open'));
-        expect(screen.getByTestId('new-view-type-name')).toHaveValue('Kanban by Assignee');
         fireEvent.click(screen.getByTestId('new-view-type-save'));
-        expect(mintedTypes(on_setting_change)).toEqual([{
-            id: 'user-kanban-by-assignee',
-            label: 'Kanban by Assignee',
-            parent: 'kanban',
-            overrides: { kanbanGroupBy: 'assignee' },
-        }]);
+        expect(mintedBag(on_setting_change)).toEqual({ node_id: 'user-kanban-copy', bag: { parent: 'kanban', label: 'Kanban copy' } });
     });
 
-    it('keeps an already-saved type and appends beside it rather than replacing it', () => {
+    it('mints a type with an empty bag when saved from a selected saved type, parented on that type', () => {
         const on_setting_change = jest.fn();
-        const existing: UserViewType = { id: 'user-kanban-by-owner', label: 'Kanban by Owner', parent: 'kanban', overrides: { kanbanGroupBy: 'owner' } };
-        renderDrawer({ onSettingChange: on_setting_change, userTypes: [existing], diverged: ['kanbanGroupBy'], settings: { kanbanGroupBy: 'assignee' } });
+        renderDrawer({ userTypes: [MINTED], viewTypeSelection: MINTED.id, currentType: MINTED.id, onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId('custom-view-types-summary'));
         fireEvent.click(screen.getByTestId('new-view-type-open'));
         fireEvent.click(screen.getByTestId('new-view-type-save'));
-        const written = mintedTypes(on_setting_change);
-        expect(written).toHaveLength(2);
-        expect(written[0]).toBe(existing);
+        expect(mintedBag(on_setting_change)).toEqual({
+            node_id: 'user-kanban-by-owner-copy',
+            bag: { parent: 'user-kanban-by-owner', label: 'Kanban by Owner copy' },
+        });
     });
 
-    it('drops the offer when the highlight moves to a node the row does not hang off', () => {
-        renderDrawer({ diverged: ['kanbanGroupBy'] });
-        expect(screen.getByTestId('new-view-type-offer')).toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('view-node-document'));
-        expect(screen.queryByTestId('new-view-type-offer')).not.toBeInTheDocument();
+    it('leaves an already-saved type untouched, since minting writes only the new node\'s own entry', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ userTypes: [MINTED], onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId('custom-view-types-summary'));
+        fireEvent.click(screen.getByTestId('new-view-type-open'));
+        fireEvent.click(screen.getByTestId('new-view-type-save'));
+        for (const [, value] of on_setting_change.mock.calls) {
+            const sets = (value as { sets?: Array<{ node_id: string }> }).sets ?? [];
+            expect(sets.some(op => op.node_id === MINTED.id)).toBe(false);
+        }
     });
 
-    /*
-     * The offer used to be a bare button, which asked a question nothing on screen answered. It now leads
-     * with which setting moved and which type up the tree owns it, so the reason is on the page rather
-     * than in the reader's head.
-     */
-    it('says which setting moved and which type owns it, rather than offering a bare button', () => {
-        renderDrawer({ diverged: ['kanbanGroupBy'] });
-        expect(screen.getByTestId('new-view-type-reason')).toHaveTextContent('Group by is owned by Grouped');
-    });
-
-    /*
-     * An empty panel explaining a feature the reader cannot reach from where they are standing is just
-     * clutter, so it appears only when it holds something: an offer to mint, or a minted type to manage.
-     */
-    it('renders no Custom view types panel while nothing diverges to a type above', () => {
-        renderDrawer({ diverged: [] });
-        expect(screen.queryByTestId('custom-view-types')).not.toBeInTheDocument();
-    });
-
-    it('renders no panel for a divergence the selected node owns outright', () => {
-        renderDrawer({ diverged: ['groupDisplay'] });
-        expect(screen.getByTestId('setting-pill-groupDisplay')).toHaveTextContent('Kanban');
-        expect(screen.queryByTestId('custom-view-types')).not.toBeInTheDocument();
-    });
-
-    it('opens the panel it renders, since an offer nobody can see is not an offer', () => {
-        renderDrawer({ diverged: ['kanbanGroupBy'] });
-        expect(screen.getByTestId('custom-view-types')).toHaveAttribute('open');
-    });
-
-    it('renders the panel for a minted type with no offer pending, so it can be renamed or deleted', () => {
+    it('renders the Custom view types panel for a minted type, with no button-click needed to reach rename/delete', () => {
         renderDrawer({ userTypes: [MINTED] });
-        expect(screen.queryByTestId('custom-view-types')).not.toBeInTheDocument();
         fireEvent.click(screen.getByTestId(`view-node-${MINTED.id}`));
+        fireEvent.click(screen.getByTestId('custom-view-types-summary'));
         expect(screen.getByTestId('custom-view-types-summary')).toHaveTextContent('Custom view types');
-        expect(screen.queryByTestId('custom-view-types-count')).not.toBeInTheDocument();
+        expect(screen.getByTestId('user-view-type-controls')).toBeInTheDocument();
     });
 });
 
@@ -752,7 +1011,7 @@ describe('SettingsViewDrawer custom view types', () => {
         renderOnMintedType({ onSettingChange: on_setting_change });
         fireEvent.change(screen.getByTestId('user-view-type-name'), { target: { value: 'Kanban by Lead' } });
         fireEvent.click(screen.getByTestId('user-view-type-rename'));
-        expect(on_setting_change).toHaveBeenCalledWith('viewUserTypes', [{ ...MINTED, label: 'Kanban by Lead' }]);
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: MINTED.id, key: 'label', value: 'Kanban by Lead' }] });
     });
 
     it('asks twice before deleting, because a webview does not honour window.confirm', () => {
@@ -762,7 +1021,7 @@ describe('SettingsViewDrawer custom view types', () => {
         expect(on_setting_change).not.toHaveBeenCalled();
         expect(screen.getByTestId('user-view-type-delete-confirm')).toHaveTextContent('Delete Kanban by Owner');
         fireEvent.click(screen.getByTestId('user-view-type-delete-confirm'));
-        expect(on_setting_change).toHaveBeenCalledWith('viewUserTypes', []);
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: MINTED.id, key: null, value: undefined }] });
     });
 
     it('backs out of the delete without writing anything', () => {
@@ -795,129 +1054,6 @@ describe('SettingsViewDrawer custom view types', () => {
     });
 });
 
-/*
- * Updating the selected type is the other half of the offer: the change is kept in the type the reader is
- * standing on rather than in a second type minted beside it. Every case here first moves the highlight
- * onto the minted node, since the offer is made against the selected node rather than the rendered one.
- */
-describe('SettingsViewDrawer updating a custom view type', () => {
-
-    beforeEach(() => {
-        jest.clearAllMocks();
-    });
-
-    /** the minted type highlighted with a kanban-owned row already diverged, so the offer is standing */
-    function renderOnMintedTypeWithOffer(overrides: Partial<typeof default_props> = {}): void {
-        renderDrawer({ userTypes: [MINTED], diverged: ['kanbanCardRatio'], settings: { kanbanCardRatio: 2 }, ...overrides });
-        fireEvent.click(screen.getByTestId(`view-node-${MINTED.id}`));
-    }
-
-    it('offers Update beside Save once the highlight is on a minted type', () => {
-        renderOnMintedTypeWithOffer();
-        expect(screen.getByTestId('user-view-type-update')).toBeInTheDocument();
-        expect(screen.getByTestId('new-view-type-open')).toBeInTheDocument();
-        expect(screen.getByTestId('new-view-type-reason')).toHaveTextContent('Update Kanban by Owner');
-    });
-
-    it('offers no Update on a built-in rung, which leaves minting as the only way to keep the change', () => {
-        renderDrawer({ diverged: ['kanbanGroupBy'], settings: { kanbanGroupBy: 'assignee' } });
-        expect(screen.getByTestId('new-view-type-open')).toBeInTheDocument();
-        expect(screen.queryByTestId('user-view-type-update')).not.toBeInTheDocument();
-        expect(screen.getByTestId('new-view-type-reason')).toHaveTextContent('Save your change as a new view type');
-    });
-
-    it('merges the diverged rows into the type overrides and clears the keys off the workspace', () => {
-        const on_setting_change = jest.fn();
-        renderOnMintedTypeWithOffer({ onSettingChange: on_setting_change });
-        fireEvent.click(screen.getByTestId('user-view-type-update'));
-        expect(mintedTypes(on_setting_change)).toEqual([{ ...MINTED, overrides: { kanbanGroupBy: 'owner', kanbanCardRatio: 2 } }]);
-        expect(on_setting_change).toHaveBeenCalledWith('kanbanCardRatio', undefined);
-    });
-
-    it('carries every ancestor-owned divergence into the update, not just one of them', () => {
-        const on_setting_change = jest.fn();
-        renderOnMintedTypeWithOffer({
-            onSettingChange: on_setting_change,
-            diverged: ['kanbanCardRatio', 'orientation'],
-            settings: { kanbanCardRatio: 2, orientation: 'rows' },
-        });
-        fireEvent.click(screen.getByTestId('user-view-type-update'));
-        expect(mintedTypes(on_setting_change)[0].overrides).toEqual({ kanbanGroupBy: 'owner', kanbanCardRatio: 2, orientation: 'rows' });
-        expect(on_setting_change).toHaveBeenCalledWith('orientation', undefined);
-    });
-
-    it('leaves the board alone when it is already rendering the type being updated', () => {
-        const on_view_type_change = jest.fn();
-        renderOnMintedTypeWithOffer({ onViewTypeChange: on_view_type_change, viewTypeSelection: MINTED.id, currentType: MINTED.id });
-        fireEvent.click(screen.getByTestId('user-view-type-update'));
-        expect(on_view_type_change).not.toHaveBeenCalled();
-    });
-
-    /*
-     * A type's overrides layer over the cascade while it is the RENDERED type, so clearing the workspace
-     * keys without pinning the type would drop the change off the board the moment it was kept.
-     */
-    it('pins the board to the type when it is rendering something else', () => {
-        const on_view_type_change = jest.fn();
-        renderOnMintedTypeWithOffer({ onViewTypeChange: on_view_type_change });
-        fireEvent.click(screen.getByTestId('user-view-type-update'));
-        expect(on_view_type_change).toHaveBeenCalledWith(MINTED.id);
-    });
-
-    /*
-     * The pill and the offer are one question asked twice, and a key with no registry setting behind it
-     * used to answer it from its flat home: a ratio saved into a type still showed a Kanban pill and an
-     * offer to mint what the type already held.
-     */
-    it('names the type on the pill of a key it holds, and offers nothing over it', () => {
-        const holds_ratio: UserViewType = { ...MINTED, overrides: { kanbanGroupBy: 'owner', kanbanCardRatio: 2 } };
-        renderDrawer({ userTypes: [holds_ratio], diverged: ['kanbanCardRatio'], settings: { kanbanCardRatio: 2 } });
-        fireEvent.click(screen.getByTestId(`view-node-${holds_ratio.id}`));
-        expect(screen.getByTestId('setting-pill-kanbanCardRatio')).toHaveTextContent('Kanban by Owner');
-        expect(screen.queryByTestId('new-view-type-offer')).not.toBeInTheDocument();
-    });
-
-    it('writes a change to a key the type holds into the type, never to the workspace', () => {
-        const on_setting_change = jest.fn();
-        renderDrawer({ userTypes: [MINTED], onSettingChange: on_setting_change });
-        fireEvent.click(screen.getByTestId(`view-node-${MINTED.id}`));
-        fireEvent.change(screen.getByTestId('group-by-selector'), { target: { value: 'assignee' } });
-        expect(on_setting_change).toHaveBeenCalledTimes(1);
-        expect(mintedTypes(on_setting_change)).toEqual([{ ...MINTED, overrides: { kanbanGroupBy: 'assignee' } }]);
-    });
-
-    it('writes a change to a key the type does not hold to the workspace, where the offer catches it', () => {
-        const on_setting_change = jest.fn();
-        renderDrawer({ userTypes: [MINTED], onSettingChange: on_setting_change });
-        fireEvent.click(screen.getByTestId(`view-node-${MINTED.id}`));
-        fireEvent.change(screen.getByTestId('setting-control-kanbanCardRatio'), { target: { value: '2' } });
-        expect(on_setting_change).toHaveBeenCalledWith('kanbanCardRatio', 2);
-    });
-
-    /*
-     * The saved type here carries the legacy columnOrder shape alone (a type minted before lane
-     * visibility existed), which userTypeHoldsKey's normalisation reports as holding groupDisplay -
-     * so a dropped lane still routes into the type, and the write that lands migrates the type off
-     * columnOrder entirely rather than leaving both keys on it.
-     */
-    it('routes a dropped lane into the type when the type holds the lane display, migrating a legacy columnOrder override on the way', () => {
-        const on_setting_change = jest.fn();
-        const on_group_display_change = jest.fn();
-        const holds_order: UserViewType = { ...MINTED, overrides: { columnOrder: ['done', 'doing'] } };
-        renderDrawer({ userTypes: [holds_order], onSettingChange: on_setting_change, onGroupDisplayChange: on_group_display_change });
-        fireEvent.click(screen.getByTestId(`view-node-${holds_order.id}`));
-        dropChip(1, 0);
-        expect(on_group_display_change).not.toHaveBeenCalled();
-        const written_overrides = mintedTypes(on_setting_change)[0].overrides;
-        expect(written_overrides.groupDisplay).toEqual([
-            { value: 'done', shown: true },
-            { value: 'doing', shown: true },
-            { value: 'untagged', shown: true },
-        ]);
-        expect(written_overrides.columnOrder).toBeUndefined();
-    });
-});
-
 describe('minting a view type', () => {
 
     it('slugs the label once, prefixes it, and never collides with a built-in rung', () => {
@@ -931,21 +1067,19 @@ describe('minting a view type', () => {
         expect(mintUserViewTypeId('Kanban by Assignee', registry)).toBe('user-kanban-by-assignee-2');
     });
 
-    it('names a boolean change by the setting rather than by its value', () => {
-        const scroll = VIEW_SETTING_ROWS.find(def => def.key === 'scrollNoteIntoView')!;
-        expect(newViewTypeNameHint('Kanban', scroll, true)).toBe('Kanban with Scroll note into view');
-        expect(newViewTypeNameHint('Kanban', scroll, false)).toBe('Kanban without Scroll note into view');
+    it('names the save form\'s default as a copy of the selected view', () => {
+        expect(newViewTypeNameHint('Kanban')).toBe('Kanban copy');
     });
 });
 
-describe('the lane breadth row', () => {
+describe('the group breadth row', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
         act(() => { setBreadthDraft('v1', undefined); });
     });
 
-    it('is a pixel text box labelled Column width while the lanes are columns and Row height once they are rows', () => {
+    it('is a pixel text box labelled Column width while the groups are columns and Row height once they are rows', () => {
         renderDrawer({ settings: { orientation: 'columns' } });
         expect(screen.getByTestId('setting-control-lineBreadth')).toHaveAttribute('aria-label', 'Column width');
         expect(screen.getByTestId('setting-row-lineBreadth')).toHaveTextContent('Column width');
@@ -964,22 +1098,33 @@ describe('the lane breadth row', () => {
         expect(screen.getByTestId('setting-control-lineBreadth')).toHaveValue('410');
     });
 
-    it('writes a typed number on Enter', () => {
+    it('writes a typed number on Enter, flat, once selected on line, its own home', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ settings: { lineBreadth: 340 }, onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId('view-node-line'));
+        const box = screen.getByTestId('setting-control-lineBreadth');
+        fireEvent.change(box, { target: { value: '400' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'line', key: 'lineBreadth', value: 400 }] });
+    });
+
+    it('writes into kanban\'s own viewOverrides entry when selected there, never line\'s flat key', () => {
         const on_setting_change = jest.fn();
         renderDrawer({ settings: { lineBreadth: 340 }, onSettingChange: on_setting_change });
         const box = screen.getByTestId('setting-control-lineBreadth');
         fireEvent.change(box, { target: { value: '400' } });
         fireEvent.keyDown(box, { key: 'Enter' });
-        expect(on_setting_change).toHaveBeenCalledWith('lineBreadth', 400);
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'lineBreadth', value: 400 }] });
     });
 
     it('clamps a number under the floor', () => {
         const on_setting_change = jest.fn();
         renderDrawer({ settings: { lineBreadth: 340 }, onSettingChange: on_setting_change });
+        fireEvent.click(screen.getByTestId('view-node-line'));
         const box = screen.getByTestId('setting-control-lineBreadth');
         fireEvent.change(box, { target: { value: '30' } });
         fireEvent.blur(box);
-        expect(on_setting_change).toHaveBeenCalledWith('lineBreadth', 120);
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'line', key: 'lineBreadth', value: 120 }] });
     });
 
     it('rejects what is not a number, writes nothing and goes back to the saved value', () => {
@@ -990,5 +1135,132 @@ describe('the lane breadth row', () => {
         fireEvent.blur(box);
         expect(on_setting_change).not.toHaveBeenCalled();
         expect(box).toHaveValue('340');
+    });
+});
+
+describe('SettingsViewDrawer per-view pills, hovers and clearing', () => {
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    /*
+     * The bug requirement #2 fixes: the drawer used to read `props.settings[key]`, which composerops
+     * folded with the RENDERED type's own overrides, so selecting an ancestor while a saved type with
+     * its own value was on screen still showed the saved type's value. Now `props.settings` is the raw
+     * flat cascade and every row resolves for the SELECTED node, so selecting Line here must show
+     * Line's own flat value, not the rendered saved type's.
+     */
+    it('selecting Line while a saved type with its own orientation is rendered shows Line\'s own value', () => {
+        const rendered_type: UserViewType = { id: 'user-tall-rows', label: 'Tall Rows', parent: 'kanban', overrides: { orientation: 'rows' } };
+        renderDrawer({
+            userTypes: [rendered_type],
+            currentType: rendered_type.id,
+            viewTypeSelection: rendered_type.id,
+            settings: { orientation: 'columns' },
+        });
+        // the rendered type's own orientation, as seen before navigating the tree at all
+        expect((screen.getByTestId('setting-control-orientation') as HTMLSelectElement).value).toBe('rows');
+        fireEvent.click(screen.getByTestId('view-node-line'));
+        expect((screen.getByTestId('setting-control-orientation') as HTMLSelectElement).value).toBe('columns');
+        expect(screen.queryByTestId('setting-pill-specific-orientation')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('setting-pill-inherited-orientation')).not.toBeInTheDocument();
+    });
+
+    it('shows no state pill at a setting\'s own home view', () => {
+        renderDrawer();
+        fireEvent.click(screen.getByTestId('view-node-line'));
+        expect(screen.queryByTestId('setting-pill-inherited-orientation')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('setting-pill-specific-orientation')).not.toBeInTheDocument();
+    });
+
+    it('shows a grey inherited pill naming the view the value comes from, when the selected descendant holds none of its own', () => {
+        renderDrawer();
+        const pill = screen.getByTestId('setting-pill-inherited-orientation');
+        expect(pill).toHaveAttribute('title', expect.stringContaining('Inherited from Line'));
+        expect(screen.queryByTestId('setting-pill-specific-orientation')).not.toBeInTheDocument();
+    });
+
+    it('shows a white VS pill once kanban holds its own value, naming Line as where clearing it would inherit from again', () => {
+        renderDrawer({ settings: { viewOverrides: { kanban: { orientation: 'rows' } } } });
+        const pill = screen.getByTestId('setting-pill-specific-orientation');
+        expect(pill).toHaveTextContent('VS');
+        expect(pill).toHaveAttribute('title', expect.stringContaining('Line'));
+        expect(screen.queryByTestId('setting-pill-inherited-orientation')).not.toBeInTheDocument();
+    });
+
+    /*
+     * M reflects whichever cell the row actually shows: kanban's own entry when kanban holds one
+     * (`views:kanban:orientation`), Line's own entry (`views:line:orientation`) when it is only
+     * inheriting from Line. The two never both drive the same row's M, and a row at Line's own home
+     * answers to Line's own cell too - there is no separate flat key for a per-view setting any more.
+     */
+    it('marks M from kanban\'s own cell when kanban holds its own value, not from Line\'s own cell', () => {
+        renderDrawer({
+            settings: { orientation: 'columns', viewOverrides: { kanban: { orientation: 'rows' } } },
+            diverged: ['views:kanban:orientation'],
+        });
+        expect(screen.getByTestId('setting-row-orientation')).toHaveAttribute('data-diverged', 'true');
+    });
+
+    it('does not mark M from kanban\'s own cell when kanban is only inheriting, even if that cell is diverged elsewhere', () => {
+        renderDrawer({
+            settings: { orientation: 'columns' },
+            diverged: ['views:kanban:orientation'],
+        });
+        expect(screen.getByTestId('setting-row-orientation')).toHaveAttribute('data-diverged', 'false');
+    });
+
+    it('marks M from Line\'s own cell once selected on Line (orientation\'s own home), ignoring kanban\'s cell', () => {
+        renderDrawer({
+            settings: { orientation: 'columns' },
+            diverged: ['views:line:orientation', 'views:kanban:orientation'],
+        });
+        fireEvent.click(screen.getByTestId('view-node-line'));
+        expect(screen.getByTestId('setting-row-orientation')).toHaveAttribute('data-diverged', 'true');
+    });
+
+    it('clears kanban\'s own orientation, rather than writing it, when the new value equals what it would inherit', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ settings: { orientation: 'rows', viewOverrides: { kanban: { orientation: 'columns' } } }, onSettingChange: on_setting_change });
+        fireEvent.change(screen.getByTestId('setting-control-orientation'), { target: { value: 'rows' } });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'orientation', value: undefined }] });
+    });
+
+    it('clears kanban\'s own stored groupBy when set back to status, its built-in default', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ settings: { viewOverrides: { kanban: { groupBy: 'assignee' } } }, onSettingChange: on_setting_change, groupByCandidateKeys: ['assignee', 'status'] });
+        fireEvent.change(screen.getByTestId('group-by-selector'), { target: { value: 'status' } });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'groupBy', value: undefined }] });
+    });
+
+    it('stores (VS) kanban\'s own groupBy when it diverges from its built-in default', () => {
+        const on_setting_change = jest.fn();
+        renderDrawer({ onSettingChange: on_setting_change, groupByCandidateKeys: ['assignee', 'status'] });
+        fireEvent.change(screen.getByTestId('group-by-selector'), { target: { value: 'assignee' } });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: 'kanban', key: 'groupBy', value: 'assignee' }] });
+    });
+
+    it('clears a saved type\'s own groupBy, rather than writing it, when the new value equals what it would inherit', () => {
+        // MINTED's parent is kanban, so it inherits kanban's own built-in status default, not the flat home value
+        const on_setting_change = jest.fn();
+        renderDrawer({ userTypes: [MINTED], onSettingChange: on_setting_change, settings: { groupBy: 'auto' }, groupByCandidateKeys: ['owner', 'status'] });
+        fireEvent.click(screen.getByTestId(`view-node-${MINTED.id}`));
+        fireEvent.change(screen.getByTestId('group-by-selector'), { target: { value: 'status' } });
+        expect(on_setting_change).toHaveBeenCalledWith('views', { sets: [{ node_id: MINTED.id, key: 'groupBy', value: undefined }] });
+    });
+
+    it('labels the dropdown option matching the inherited value, whether or not the selected view holds its own', () => {
+        renderDrawer({ settings: { orientation: 'rows' } });
+        const select = screen.getByTestId('setting-control-orientation') as HTMLSelectElement;
+        expect(within(select).getByText('Rows (inherited)')).toBeInTheDocument();
+        expect(within(select).queryByText('Columns (inherited)')).not.toBeInTheDocument();
+    });
+
+    it('still names the inherited option once the selected view holds its own, different, value', () => {
+        renderDrawer({ settings: { orientation: 'rows', viewOverrides: { kanban: { orientation: 'columns' } } } });
+        const select = screen.getByTestId('setting-control-orientation') as HTMLSelectElement;
+        expect(select.value).toBe('columns');
+        expect(within(select).getByText('Rows (inherited)')).toBeInTheDocument();
     });
 });

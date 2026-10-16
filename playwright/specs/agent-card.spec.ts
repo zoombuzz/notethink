@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
-import { injectActivity, injectActivityUnavailable, injectNoProducer, injectScanning } from '../helpers/inject-activity';
+import { injectActivity, injectActivityAcrossRepos, injectActivityUnavailable, injectNoProducer, injectScanning } from '../helpers/inject-activity';
 
 const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 const NOTETHINK_TODO = 'notethink/docstech/users/alex.stanhope/todo.md';
@@ -53,8 +53,8 @@ async function folderBoard(page: Page): Promise<void> {
  */
 async function pinAgentCard(page: Page): Promise<void> {
     await page.evaluate(() => {
-        const harness = window as unknown as { __nt_settings: { workspace: Record<string, unknown> }; __nt_publishSettings: () => void };
-        harness.__nt_settings.workspace.cardType = 'agent';
+        const harness = window as unknown as { __nt_settings: { workspace: { cards: Record<string, Record<string, unknown>> } }; __nt_publishSettings: () => void };
+        harness.__nt_settings.workspace.cards.allcards = { ...harness.__nt_settings.workspace.cards.allcards, cardType: 'agent' };
         harness.__nt_publishSettings();
     });
 }
@@ -94,6 +94,11 @@ function cellOf(cells: RowCell[], testid: string): RowCell {
 /** every message the webview has posted to the mocked extension host */
 async function capturedMessages(page: Page): Promise<Array<Record<string, unknown>>> {
     return page.evaluate(() => (window as unknown as { __captured_messages: Array<Record<string, unknown>> }).__captured_messages);
+}
+
+/** the workspace-scope settings the harness host has actually persisted, so a write can be polled rather than assumed */
+async function workspaceSettings(page: Page): Promise<Record<string, unknown>> {
+    return page.evaluate(() => (window as unknown as { __nt_settings: { workspace: Record<string, unknown> } }).__nt_settings.workspace);
 }
 
 test.describe('Agent card', () => {
@@ -144,6 +149,23 @@ test.describe('Agent card', () => {
         for (const headline of ['Agent activity card', 'Kanban card ratio height', 'Remove blank lines between statements']) {
             await expect(cardFor(page, headline)).toHaveAttribute('data-virtual-note', 'false');
         }
+    });
+
+    test('draws an unbound session only beside its own repository, never beside a document outside it', async ({ page }) => {
+        await pinAgentCard(page);
+        // a single-file board: just the notethink todo, no other repository's document in view
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'activity-todo-notethink.md', doc_path: `${WORKSPACE_ROOT}/${NOTETHINK_TODO}`, relative_path: NOTETHINK_TODO },
+        ], { workspace_root: WORKSPACE_ROOT });
+        await page.waitForSelector('[data-testid="NoteRenderer"]');
+        // notegit's unbound session has a tree of its own, even though no document of it is open here
+        await injectActivityAcrossRepos(page, [
+            { root_relative: 'notethink' },
+            { root_relative: 'notegit', root_path: `${WORKSPACE_ROOT}/notegit` },
+        ]);
+        const virtual = page.locator('[data-card-type="agent"][data-virtual-note="true"]');
+        await expect(virtual).toHaveCount(1, { timeout: 5000 });
+        await expect(virtual).toContainText('claude-code in notethink');
     });
 
     test('shows a pending question as a band, and draws no band for a vendor that cannot report one', async ({ page }) => {
@@ -292,17 +314,17 @@ test.describe('Agent card', () => {
         expect(padding_right).toBeGreaterThan(0);
     });
 
-    test('stacks an agent row in a narrow kanban lane with every cell on one line, and the live line wide enough to read', async ({ page }) => {
+    test('stacks an agent row in a narrow kanban group with every cell on one line, and the live line wide enough to read', async ({ page }) => {
         await agentBoard(page);
         await openViewSettings(page);
         await page.getByTestId('view-radio-kanban').click();
         await expect(page.locator('[role="columnheader"]').first()).toBeVisible({ timeout: 5000 });
         await page.keyboard.press('Escape');
-        // a board too narrow for its lanes holds each at the default breadth rather than stretching to fill
+        // a board too narrow for its groups holds each at the default breadth rather than stretching to fill
         await page.setViewportSize({ width: 600, height: 900 });
         const card = cardFor(page, 'Agent activity card');
         const rows = card.getByTestId('agent-rows');
-        // the layout switches on the roster's own width, so the lane must be narrower than the one-line threshold
+        // the layout switches on the roster's own width, so the group must be narrower than the one-line threshold
         await expect.poll(async () => (await rows.boundingBox())!.width).toBeLessThan(440);
         const cells = await rowCells(card.getByTestId('agent-row-button').first());
         for (const cell of cells) {
@@ -312,7 +334,7 @@ test.describe('Agent card', () => {
         expect(live.width).toBeGreaterThan(100);
         expect(live.top).toBeGreaterThan(cellOf(cells, 'agent-model').top);
         expect(cellOf(cells, 'agent-usage').top).toBeGreaterThan(live.top);
-        // the shared card list rules draw a disc on every list item and the lane indents every list; a roster carries neither
+        // the shared card list rules draw a disc on every list item and the group indents every list; a roster carries neither
         expect(await card.getByTestId('agent-row').first().evaluate(li => getComputedStyle(li).listStyleType)).toBe('none');
         expect(await rows.evaluate(ul => getComputedStyle(ul).paddingLeft)).toBe('0px');
     });
@@ -429,12 +451,12 @@ test.describe('Agent card', () => {
         await injectActivity(page, { root_relative: 'vendored/notethink', root_path: '/mnt/workspace/in_development/vendored/notethink' });
         await expect(page.locator('[data-card-type="agent"]').first()).toBeVisible({ timeout: 5000 });
         await expect(cardFor(page, 'Agent activity card').getByTestId('agent-row')).toHaveCount(0);
-        // and nothing was guessed onto a neighbouring story either
-        await expect(page.getByTestId('agent-row')).toHaveCount(1);
-        await expect(page.locator('[data-card-type="agent"][data-virtual-note="true"]')).toHaveCount(1);
+        // nothing was guessed onto a story, and the session's repository holds no viewed document, so no card either
+        await expect(page.getByTestId('agent-row')).toHaveCount(0);
+        await expect(page.locator('[data-card-type="agent"][data-virtual-note="true"]')).toHaveCount(0);
     });
 
-    test('picking the agent card from the card tab repaints a document view, not only a lane', async ({ page }) => {
+    test('picking the agent card from the card tab repaints a document view, not only a group', async ({ page }) => {
         await folderBoard(page);
         await injectActivity(page);
         await expect(page.locator('[data-auto-selected-viewtype="document"]')).toHaveCount(1);
@@ -442,6 +464,43 @@ test.describe('Agent card', () => {
         await openCardSettings(page);
         await page.getByTestId('card-radio-agent').click();
         await expect(cardFor(page, 'Agent activity card').getByTestId('agent-row')).toHaveCount(1, { timeout: 5000 });
+    });
+
+    test('switches the clock mode from the card settings drawer, and the row redraws by it', async ({ page }) => {
+        await agentBoard(page);
+        const bound = cardFor(page, 'Agent activity card');
+        const clock = bound.getByTestId('agent-clock');
+        // active is the built-in default: the fixture's reader-computed active_ms, not the raw 22m31s span
+        await expect(clock).toHaveText('7m');
+
+        await openCardSettings(page);
+        await page.getByTestId('card-node-agent').click();
+        await expect(page.getByTestId('setting-control-clockMode')).toHaveValue('active');
+        await page.getByTestId('setting-control-clockMode').selectOption('span');
+        await expect.poll(async () => ((await workspaceSettings(page)).cards as Record<string, Record<string, unknown>> | undefined)?.agent?.clockMode).toBe('span');
+        await expect(clock).toHaveText('22m');
+        await expect(clock).toHaveAttribute('title', 'Span: ran from 2026-09-18T08:51:30Z to 2026-09-18T09:14:01Z');
+
+        await page.getByTestId('setting-control-clockMode').selectOption('sinceStart');
+        await expect.poll(async () => ((await workspaceSettings(page)).cards as Record<string, Record<string, unknown>> | undefined)?.agent?.clockMode).toBe('sinceStart');
+        // "now" is the browser's own clock, so only the mode's name and the fixed start are asserted
+        await expect(clock).toHaveAttribute('title', /^Since start: running since 2026-09-18T08:51:30Z, now at /);
+    });
+
+    test('switches the clock mode on a kanban board, not only in the document view', async ({ page }) => {
+        await agentBoard(page);
+        await openViewSettings(page);
+        await page.getByTestId('view-radio-kanban').click();
+        await expect(page.locator('[role="columnheader"]').first()).toBeVisible({ timeout: 5000 });
+        await page.keyboard.press('Escape');
+        const clock = cardFor(page, 'Agent activity card').getByTestId('agent-clock');
+        await expect(clock).toHaveText('7m');
+
+        await openCardSettings(page);
+        await page.getByTestId('card-node-agent').click();
+        await page.getByTestId('setting-control-clockMode').selectOption('span');
+        await expect.poll(async () => ((await workspaceSettings(page)).cards as Record<string, Record<string, unknown>> | undefined)?.agent?.clockMode).toBe('span');
+        await expect(clock).toHaveText('22m');
     });
 
     test('holds the toolbar spinner from picking the agent card until the analyser finishes its first scan', async ({ page }) => {

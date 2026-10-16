@@ -1,13 +1,16 @@
 import Debug from 'debug';
 import React, { type ReactElement, Profiler, useMemo } from "react";
-import { groupDisplayForAxis, withinNoteHeadlineOrBodyUpTo } from "../../lib/noteops";
+import { deriveNaturalColumnOrder, groupDisplayForAxis, withinNoteHeadlineOrBodyUpTo } from "../../lib/noteops";
 import { axisField, isAxisWritable, type Axis } from "../../lib/axisops";
 import { axisForGroupByKey, resolveGroupByAxisKey } from "../../lib/groupbyops";
+import { orderGroupValues, resolveGroupOrderMode } from "../../lib/grouporderops";
+import { useAgentActivity } from "../../lib/activityhooks";
 import { useScrollToCaret, useCaretIndicator } from "../../lib/viewhooks";
 import { buildChildNoteDisplayOptions } from "../../lib/noteui";
 import type { ViewProps } from "../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions } from "../../types/NoteProps";
 import GenericNote from "../notes/GenericNote";
+import { cardRegistryWithViewSettings, noteOrderTimestampFn, resolveCardType } from "../notes/cardregistryops";
 import { filterHiddenColumns, useKanbanColumns } from "./kanban/useKanbanColumns";
 import { useProjectedNotes } from "./kanban/useProjectedNotes";
 import { useLineViewDrag } from "./useLineViewDrag";
@@ -18,8 +21,8 @@ declare const NOTETHINK_DEV: boolean | undefined;
 const debug = Debug("nodejs:notethink-views:LineView");
 
 /**
- * LineView, the single-axis card-lane view. It groups the notes into lanes on one categorical axis
- * (the grouping engine + lane layout + orientation), then renders them via KanbanBoard with the drag
+ * LineView, the single-axis card-group view. It groups the notes into groups on one categorical axis
+ * (the grouping engine + group layout + orientation), then renders them via KanbanBoard with the drag
  * wiring (owned by useLineViewDrag). Kanban is LineView preset to the status axis; a grouped view
  * supplies its own group-by axis.
  * - axis: the categorical axis to group by. A preset (kanban) supplies it directly (status); otherwise
@@ -63,11 +66,11 @@ const renderTopLevelNoteWithoutChildren = (note: NoteProps, view: ViewProps, dis
  * nt_group_by vote, else the first-level-folder default. The dropped layout renders optimistically
  * client-side until the document round-trip lands, so there is no drop -> snap-back -> re-land flash;
  * this is safe because KanbanBoard collapses the drop tween via transitionDuration rather than the
- * old transition:'none' hack that broke dnd's transitionend and left cards stuck. A lane whose
- * `groupDisplay` entry carries `shown: false` is dropped before the lane-with-stories rule runs, so a
- * hidden lane never counts as a populated lane and never falls back into view; of what remains, only
- * lanes holding stories render, falling back to every remaining lane when none do, so a stale lane
- * order or an empty board still draws its lanes. Hiding every lane draws none.
+ * old transition:'none' hack that broke dnd's transitionend and left cards stuck. A group whose
+ * `groupDisplay` entry carries `shown: false` is dropped before the group-with-stories rule runs, so a
+ * hidden group never counts as a populated group and never falls back into view; of what remains, only
+ * groups holding stories render, falling back to every remaining group when none do, so a stale group
+ * order or an empty board still draws its groups. Hiding every group draws none.
  */
 export default function LineView(props: LineViewProps): ReactElement {
     // resolves the group-by key and builds a writable-or-read-only axis when none is preset
@@ -79,7 +82,7 @@ export default function LineView(props: LineViewProps): ReactElement {
     // a read-only axis (e.g. the first level folder) takes no drops - moving a card would move a file on disk
     const drag_disabled = !isAxisWritable(axis);
     const group_field = axisField(axis);
-    // orientation is a LineView setting: columns (kanban default) lay lanes side by side, rows stack them
+    // orientation is a LineView setting: columns (kanban default) lay groups side by side, rows stack them
     const orientation: 'columns' | 'rows' = props.display_options?.settings?.orientation ?? 'columns';
     const display_options: NoteDisplayOptions = {
         ...props.display_options,
@@ -91,15 +94,29 @@ export default function LineView(props: LineViewProps): ReactElement {
         () => groupDisplayForAxis(display_options.settings?.groupDisplay, group_field),
         [display_options.settings?.groupDisplay, group_field],
     );
-    const order = group_display.length > 0 ? group_display.map(entry => entry.value) : undefined;
+    const group_order_mode = resolveGroupOrderMode(display_options.settings?.groupOrder);
+    // the agent activity snapshot, read live so a card type reading it (the agent card) ages its groups as agents work
+    const activity_snapshot = useAgentActivity();
+    // the card type on screen, resolved exactly as GenericNote resolves it, so the order follows the card the reader sees
+    const resolved_card_type = resolveCardType(display_options.settings?.cardType, display_options.settings?.viewType, undefined, cardRegistryWithViewSettings(display_options.settings));
+    // the note -> timestamp function for that card type; grouporderops stays pure and never sees the snapshot or card type
+    const timestamp_of = useMemo(
+        () => noteOrderTimestampFn(resolved_card_type, { snapshot: activity_snapshot, fallback_doc_path: props.doc_relative_path }),
+        [resolved_card_type, activity_snapshot, props.doc_relative_path],
+    );
+    // only groups present in the live notes, so a stored entry for a value no note carries draws no group
+    const order = useMemo(() => {
+        const natural = deriveNaturalColumnOrder(notes_to_render, axis);
+        return orderGroupValues(natural, notes_to_render, axis, group_order_mode, group_display, timestamp_of);
+    }, [notes_to_render, axis, group_display, group_order_mode, timestamp_of]);
     const hidden_values = useMemo(
         () => new Set(group_display.filter(entry => entry.shown === false).map(entry => entry.value)),
         [group_display],
     );
     const all_columns = useKanbanColumns(notes_to_render, order, axis);
-    // hidden lanes drop out before the populated-lane rule runs, so a hidden lane never falls back into view
+    // hidden groups drop out before the populated-group rule runs, so a hidden group never falls back into view
     const columns = useMemo(() => filterHiddenColumns(all_columns, hidden_values), [all_columns, hidden_values]);
-    // only lanes with stories render; falls back to every (non-hidden) lane when none do
+    // only groups with stories render; falls back to every (non-hidden) group when none do
     const populated_columns = columns.filter(col => (col.child_notes?.length ?? 0) > 0);
     const visible_columns = populated_columns.length > 0 ? populated_columns : columns;
     // drag lifecycle: the FLIP gate + passive-transition layer and the drag responders that post the group-key rewrite
@@ -111,7 +128,7 @@ export default function LineView(props: LineViewProps): ReactElement {
         axis,
         group_field,
         drag_disabled,
-        animate_enabled: display_options.settings?.kanbanAnimateTransitions ?? true,
+        animate_enabled: display_options.settings?.animateTransitions ?? true,
         view: props,
     });
     // scroll focused note (and body item) into view when caret moves

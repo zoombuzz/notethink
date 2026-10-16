@@ -18,9 +18,12 @@ const DESTINATION_INSET_Y = 60;
 const THRESHOLD_NUDGE_PX = 8;
 const LIFT_SETTLE_MS = 150;
 const TRAVEL_SETTLE_MS = 150;
+// how long a locator's box may keep moving before pointerDrag gives up waiting for it to settle
+const BOX_SETTLE_TIMEOUT_MS = 2000;
+const BOX_SETTLE_POLL_MS = 30;
 
 /**
- * A point inside the visible part of a box, since a kanban lane or a card standing at the target
+ * A point inside the visible part of a box, since a kanban group or a card standing at the target
  * card ratio can run off both edges of the window. The wanted offset is honoured whenever it lands
  * on screen, so a box that fits is unaffected; otherwise the point falls back to the middle of the
  * visible band. A box with no visible band at all throws, because a coordinate outside the viewport
@@ -36,6 +39,37 @@ function visiblePointY(box: { y: number; height: number }, offset: number, viewp
     return wanted > top && wanted < bottom ? wanted : (top + bottom) / 2;
 }
 
+type Box = { x: number; y: number; width: number; height: number };
+
+function sameBox(a: Box, b: Box): boolean {
+    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+/**
+ * The locator's bounding box once two consecutive reads agree, so a drag computed right after a
+ * settings round trip (or any other async layout settling, such as a drawer marker appearing or a
+ * scroll-into-view still animating) doesn't press or drop at a coordinate the page has already
+ * moved on from by the time the mouse event actually fires. Polling on a short bounded interval is
+ * an observable-condition wait, not a guessed fixed delay: it returns as soon as the box stops
+ * moving, and throws if it never does within the timeout, which is itself a real finding (an
+ * animation that never settles) rather than something to paper over.
+ */
+async function stableBoundingBox(page: Page, locator: Locator): Promise<Box> {
+    const deadline = Date.now() + BOX_SETTLE_TIMEOUT_MS;
+    let previous = await locator.boundingBox();
+    if (!previous) { throw new Error('pointerDrag: missing bounding box'); }
+    for (;;) {
+        await page.waitForTimeout(BOX_SETTLE_POLL_MS);
+        const next = await locator.boundingBox();
+        if (!next) { throw new Error('pointerDrag: missing bounding box'); }
+        if (sameBox(previous, next)) { return next; }
+        if (Date.now() > deadline) {
+            throw new Error(`pointerDrag: bounding box never settled within ${BOX_SETTLE_TIMEOUT_MS}ms (still moving: ${JSON.stringify(previous)} -> ${JSON.stringify(next)})`);
+        }
+        previous = next;
+    }
+}
+
 /**
  * Drives @hello-pangea/dnd's pointer sensor with a real mouse gesture: press on the card, nudge past
  * the drag threshold, travel over the destination in steps so dnd tracks the move, settle, release.
@@ -47,12 +81,16 @@ function visiblePointY(box: { y: number; height: number }, offset: number, viewp
  * than the viewport whose centre would be off-screen. `post_release_settle_ms` of 0 skips the wait
  * entirely, for a spec that measures the echo itself and must not have the drop settled for it.
  * `destination_inset_y` overrides the drop point's offset below the destination's top edge; the default
- * aims well inside a tall kanban lane, which overshoots a target only a line high.
+ * aims well inside a tall kanban group, which overshoots a target only a line high.
+ *
+ * The handle's and destination's boxes are read only once they've stopped moving (`stableBoundingBox`):
+ * reading them immediately after a preceding action (a settings write, a scroll) can catch the page
+ * mid-reflow, and the coordinates computed from that stale box are what the mouse actually presses or
+ * drops on - a race that shows up as the drop landing on the wrong chip or registering as a no-op.
  */
 export async function pointerDrag(page: Page, handle: Locator, destination: Locator, options: PointerDragOptions = {}): Promise<void> {
-    const start = await handle.boundingBox();
-    const end = await destination.boundingBox();
-    if (!start || !end) { throw new Error('pointerDrag: missing bounding box'); }
+    const start = await stableBoundingBox(page, handle);
+    const end = await stableBoundingBox(page, destination);
     const viewport = page.viewportSize();
     if (!viewport) { throw new Error('pointerDrag: page has no viewport size'); }
     const pre_release_settle_ms = options.pre_release_settle_ms ?? PRE_RELEASE_SETTLE_MS;

@@ -2,7 +2,7 @@ import {
     ABSENT_VALUE_BUCKET,
     INTRA_CELL_RANK_KEY,
     axisField,
-    categoricalLaneFor,
+    categoricalGroupFor,
     invertCategoricalAxis,
     invertDrop,
     isAxisWritable,
@@ -59,22 +59,22 @@ describe('isAxisWritable', () => {
     });
 });
 
-describe('categoricalLaneFor', () => {
-    it('a present value is its own lane', () => {
-        expect(categoricalLaneFor('done')).toBe('done');
+describe('categoricalGroupFor', () => {
+    it('a present value is its own group', () => {
+        expect(categoricalGroupFor('done')).toBe('done');
     });
 
     it('an undefined value falls into the absent bucket', () => {
-        expect(categoricalLaneFor(undefined)).toBe(ABSENT_VALUE_BUCKET);
+        expect(categoricalGroupFor(undefined)).toBe(ABSENT_VALUE_BUCKET);
     });
 
     it('an empty string falls into the absent bucket', () => {
-        expect(categoricalLaneFor('')).toBe(ABSENT_VALUE_BUCKET);
+        expect(categoricalGroupFor('')).toBe(ABSENT_VALUE_BUCKET);
     });
 });
 
 describe('projectNoteOntoAxis (forward)', () => {
-    it('places a note in the lane named by its linetag value', () => {
+    it('places a note in the group named by its linetag value', () => {
         expect(projectNoteOntoAxis(noteWith({ status: tag('status', 'doing') }), 'status')).toBe('doing');
     });
 
@@ -88,7 +88,7 @@ describe('projectNoteOntoAxis (forward)', () => {
 });
 
 describe('invertCategoricalAxis (inverse)', () => {
-    it('a real lane returns a set of the field to that lane value', () => {
+    it('a real group returns a set of the field to that group value', () => {
         expect(invertCategoricalAxis('status', 'done')).toEqual({ kind: 'write', write: { field: 'status', op: 'set', value: 'done' } });
     });
 
@@ -104,29 +104,29 @@ describe('invertCategoricalAxis (inverse)', () => {
 
 describe('invertDrop (whole drop)', () => {
     it('writes the writable axes and carries the intra-cell rank', () => {
-        const result = invertDrop([{ axis: 'status', lane_value: 'done' }], { key: INTRA_CELL_RANK_KEY, index: 2 });
+        const result = invertDrop([{ axis: 'status', group_value: 'done' }], { key: INTRA_CELL_RANK_KEY, index: 2 });
         expect(result.writes).toEqual([{ field: 'status', op: 'set', value: 'done' }]);
         expect(result.rejected_fields).toEqual([]);
         expect(result.rank).toEqual({ key: INTRA_CELL_RANK_KEY, index: 2 });
     });
 
     it('collects read-only axes as rejected and does not write them', () => {
-        const result = invertDrop([{ axis: { field: 'nt_first_level_folder', kind: 'categorical', writable: false }, lane_value: 'notethink' }]);
+        const result = invertDrop([{ axis: { field: 'nt_first_level_folder', kind: 'categorical', writable: false }, group_value: 'notethink' }]);
         expect(result.writes).toEqual([]);
         expect(result.rejected_fields).toEqual(['nt_first_level_folder']);
     });
 });
 
 describe('kanban status drop round-trips identically through the general path', () => {
-    it('forward then inverse reproduces the status write for a real lane', () => {
+    it('forward then inverse reproduces the status write for a real group', () => {
         const note = noteWith({ status: tag('status', 'code-review') });
-        const lane = projectNoteOntoAxis(note, 'status');
-        expect(lane).toBe('code-review');
+        const group = projectNoteOntoAxis(note, 'status');
+        expect(group).toBe('code-review');
         const inversion = invertCategoricalAxis('status', 'done');
         expect(inversion).toEqual({ kind: 'write', write: { field: 'status', op: 'set', value: 'done' } });
     });
 
-    it('a drop onto the absent lane deletes the status linetag, matching kanban untagged', () => {
+    it('a drop onto the absent group deletes the status linetag, matching kanban untagged', () => {
         const note = noteWith({ status: tag('status', 'doing') });
         expect(projectNoteOntoAxis(note, 'status')).toBe('doing');
         const inversion = invertCategoricalAxis('status', ABSENT_VALUE_BUCKET);

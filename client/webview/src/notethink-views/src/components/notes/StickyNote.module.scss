@@ -2,9 +2,9 @@
  * The sticky card: a square of paper in its project's hue, with the bottom-right corner curled over.
  *
  * The card element itself stays bare. It carries the focus ring as an outline, so nothing on it may clip,
- * and it clears the lane's card surface by setting the --nt-card-* properties the lane reads, rather than
- * out-specifying the lane's selector. The paper, its colour and the curl all live on the inner wrapper,
- * which also keeps the headline out of the lane layouts' direct-child rule.
+ * and it clears the group's card surface by setting the --nt-card-* properties the group reads, rather than
+ * out-specifying the group's selector. The paper, its colour and the curl all live on the inner wrapper,
+ * which also keeps the headline out of the group layouts' direct-child rule.
  *
  * The curl clips nothing either. The paper's own background gradient paints the corner transparent, and
  * the flap is a pseudo-element laid over the fold line, so a line number badge hanging outside the headline
@@ -43,7 +43,7 @@
   padding: 7px 18px 11px 12px;
   border-radius: 2px;
   color: #1d1f23;
-  // the lift shading is measured from the corner rather than as a share of the width, so a wide lane is not shaded end to end
+  // the lift shading is measured from the corner rather than as a share of the width, so a wide group is not shaded end to end
   background: linear-gradient(315deg, transparent var(--sticky-curl), var(--sticky-paper-shade) var(--sticky-curl), var(--sticky-paper) calc(var(--sticky-curl) * 5));
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
   transition: box-shadow 200ms ease;

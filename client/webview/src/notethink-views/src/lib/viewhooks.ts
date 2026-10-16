@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { findBodyItemElement, kanbanDraggableId } from './noteops';
-import { scrollVirtualLaneToNoteId } from './virtualScrollRegistry';
+import { scrollVirtualGroupToNoteId } from './virtualScrollRegistry';
 import type { NoteDisplayOptions, TextSelection } from '../types/NoteProps';
 
 // small extra so the story sits clear of the sticky header rather than flush against it
@@ -87,12 +87,18 @@ function resolveCaretTarget(
     return { note_element, body_item };
 }
 
+// every drawer suffix GenericViewToolbar can mount, in the id scheme `v{view_id}-{suffix}-drawer`
+const DRAWER_SUFFIXES = ['-settings-drawer', '-cards-drawer', '-files-drawer', '-collisions-drawer', '-jump-drawer'];
+
 /**
  * Return the maximum bottom edge (viewport px) of the sticky header stack - the view's
  * toolbar plus any currently-open drawer. Used to set scroll-margin-top before
  * scrollIntoView so the caret line lands below the header instead of behind it, and to
  * decide whether the target is genuinely visible (vs technically on-screen but occluded).
- * Returns 0 if no occluders are found.
+ * Returns 0 if no occluders are found. The drawer's own bottom edge is read off its first
+ * child (the `.drawer` box the open/close animation actually sizes), not the zero-height
+ * sticky anchor the id sits on, so this reflects the drawer's final geometry once its slide
+ * animation settles.
  */
 function stickyOccluderBottomPx(view_id: string): number {
     const doc = window?.document;
@@ -100,12 +106,70 @@ function stickyOccluderBottomPx(view_id: string): number {
     let max_bottom = 0;
     const toolbar = doc.querySelector<HTMLElement>('[data-testid="view-toolbar"]');
     if (toolbar) { max_bottom = Math.max(max_bottom, toolbar.getBoundingClientRect().bottom); }
-    for (const suffix of ['-settings-drawer', '-files-drawer']) {
-        const drawer = doc.getElementById(`v${view_id}${suffix}`);
-        if (!drawer || drawer.dataset.open !== 'true') { continue; }
-        max_bottom = Math.max(max_bottom, drawer.getBoundingClientRect().bottom);
+    for (const suffix of DRAWER_SUFFIXES) {
+        const anchor = doc.getElementById(`v${view_id}${suffix}`);
+        if (!anchor || anchor.dataset.open !== 'true') { continue; }
+        const drawer_box = anchor.firstElementChild as HTMLElement | null;
+        if (!drawer_box) { continue; }
+        max_bottom = Math.max(max_bottom, drawer_box.getBoundingClientRect().bottom);
     }
     return Math.max(0, max_bottom);
+}
+
+/**
+ * Scroll the focused story so it clears the sticky header stack (toolbar plus any open drawer),
+ * and horizontally past the board edge for a kanban group. Does nothing when the story has no
+ * element in the DOM, or is already fully clear of the header stack - frameDelta then returns 0
+ * on both axes, so a story already in view is never yanked.
+ */
+function frameFocusedStoryIntoView(focused_seqs: number[] | undefined, view_id: string): void {
+    const resolved = resolveCaretTarget(focused_seqs, view_id, undefined);
+    if (!resolved) { return; }
+    // frames the top-level story card (the visible ring), not the deepest focused sub-note
+    const story = outermostRingedElement(resolved.note_element);
+    const rect = story.getBoundingClientRect();
+    const ring = SCROLL_FOCUS_RING_PX;
+    // sticky toolbar (and any open drawer) eat the top of the vertical scrollport
+    const occluder_top = stickyOccluderBottomPx(view_id) + SCROLL_OCCLUDER_BUFFER_PX;
+    // vertical: keep the ring clear of the sticky header; findScrollParent finds a virtual group's own scrollport or the page
+    const v = findScrollParent(story, 'y');
+    const v_bounds = scrollerViewportBounds(v, 'y');
+    const dy = frameDelta(rect.top - ring, rect.bottom + ring, Math.max(v_bounds.start, occluder_top), v_bounds.end);
+    if (dy !== 0) { v.scrollBy({ top: dy, behavior: 'smooth' }); }
+    // horizontal: reserve the ring against the board edge; a document view has no x scroller, so dx is 0
+    const h = findScrollParent(story, 'x');
+    const h_bounds = scrollerViewportBounds(h, 'x');
+    const dx = frameDelta(rect.left - ring, rect.right + ring, h_bounds.start, h_bounds.end);
+    if (dx !== 0) { h.scrollBy({ left: dx, behavior: 'smooth' }); }
+}
+
+// the grid-template-rows transition .drawer animates on open/close (150ms), plus margin
+const DRAWER_SETTLE_FALLBACK_MS = 250;
+
+/**
+ * Wait for `anchor`'s drawer box to reach its final open/closed geometry, then run `on_settled`.
+ * Prefers the box's own transitionend (the open animation's actual finish), falling back to a
+ * timer so a reduced-motion or interrupted transition still re-frames rather than hanging forever.
+ */
+function onDrawerGeometrySettled(anchor: HTMLElement, on_settled: () => void): () => void {
+    const drawer_box = anchor.firstElementChild as HTMLElement | null;
+    if (!drawer_box) { on_settled(); return () => {}; }
+    let timer: ReturnType<typeof setTimeout>;
+    const settle_once = (): void => {
+        drawer_box.removeEventListener('transitionend', on_transition_end);
+        clearTimeout(timer);
+        on_settled();
+    };
+    const on_transition_end = (e: TransitionEvent): void => {
+        if (e.propertyName !== 'grid-template-rows') { return; }
+        settle_once();
+    };
+    drawer_box.addEventListener('transitionend', on_transition_end);
+    timer = setTimeout(settle_once, DRAWER_SETTLE_FALLBACK_MS);
+    return () => {
+        drawer_box.removeEventListener('transitionend', on_transition_end);
+        clearTimeout(timer);
+    };
 }
 
 /**
@@ -116,6 +180,12 @@ function stickyOccluderBottomPx(view_id: string): number {
  * its horizontal scroll container. The story's top and left edge are always
  * brought into view; its right and bottom follow when the story fits the
  * available space (see the block/inline choice below).
+ *
+ * A second effect re-frames the same story whenever a drawer opens or closes: the drawer floats
+ * over the view rather than reflowing it, so focus-driven framing alone would miss a story the
+ * drawer newly covers (or stops covering) in place. It watches every `v{view_id}-*-drawer`
+ * element's `data-open` attribute via a MutationObserver (not the view's own props) so it keeps
+ * working regardless of which concrete view component owns the toolbar.
  */
 export function useScrollToCaret(
     display_options: NoteDisplayOptions,
@@ -126,29 +196,10 @@ export function useScrollToCaret(
     useEffect(() => {
         if (!display_options.settings?.scrollNoteIntoView || !display_options.focused_seqs?.length) { return; }
         cancelAnimationFrame(scroll_raf_ref.current);
-        const frameStory = (): void => {
-            const resolved = resolveCaretTarget(display_options.focused_seqs, view_id, undefined);
-            if (!resolved) { return; }
-            // frames the top-level story card (the visible ring), not the deepest focused sub-note
-            const story = outermostRingedElement(resolved.note_element);
-            const rect = story.getBoundingClientRect();
-            const ring = SCROLL_FOCUS_RING_PX;
-            // sticky toolbar (and any open drawer) eat the top of the vertical scrollport
-            const occluder_top = stickyOccluderBottomPx(view_id) + SCROLL_OCCLUDER_BUFFER_PX;
-            // vertical: keep the ring clear of the sticky header; findScrollParent finds a virtual lane's own scrollport or the page
-            const v = findScrollParent(story, 'y');
-            const v_bounds = scrollerViewportBounds(v, 'y');
-            const dy = frameDelta(rect.top - ring, rect.bottom + ring, Math.max(v_bounds.start, occluder_top), v_bounds.end);
-            if (dy !== 0) { v.scrollBy({ top: dy, behavior: 'smooth' }); }
-            // horizontal: reserve the ring against the board edge; a document view has no x scroller, so dx is 0
-            const h = findScrollParent(story, 'x');
-            const h_bounds = scrollerViewportBounds(h, 'x');
-            const dx = frameDelta(rect.left - ring, rect.right + ring, h_bounds.start, h_bounds.end);
-            if (dx !== 0) { h.scrollBy({ left: dx, behavior: 'smooth' }); }
-        };
-        // a windowed-out card has no element yet: its lane scrolls it into range first, and frameStory waits a frame
+        const frameStory = (): void => frameFocusedStoryIntoView(display_options.focused_seqs, view_id);
+        // a windowed-out card has no element yet: its group scrolls it into range first, and frameStory waits a frame
         const focused_note = display_options.focused_notes?.[display_options.focused_notes.length - 1];
-        const asked_virtualizer = focused_note !== undefined && scrollVirtualLaneToNoteId(view_id, kanbanDraggableId(focused_note));
+        const asked_virtualizer = focused_note !== undefined && scrollVirtualGroupToNoteId(view_id, kanbanDraggableId(focused_note));
         scroll_raf_ref.current = requestAnimationFrame(() => {
             if (!asked_virtualizer) { frameStory(); return; }
             scroll_raf_ref.current = requestAnimationFrame(frameStory);
@@ -160,6 +211,29 @@ export function useScrollToCaret(
         display_options.focused_notes,
         view_id,
         selection?.main.head,
+    ]);
+    useEffect(() => {
+        const doc = window?.document;
+        if (!doc || !display_options.settings?.scrollNoteIntoView || !display_options.focused_seqs?.length) { return; }
+        const focused_seqs = display_options.focused_seqs;
+        let cancel_wait: (() => void) | undefined;
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                const anchor = mutation.target as HTMLElement;
+                if (!DRAWER_SUFFIXES.some(suffix => anchor.id === `v${view_id}${suffix}`)) { continue; }
+                cancel_wait?.();
+                cancel_wait = onDrawerGeometrySettled(anchor, () => frameFocusedStoryIntoView(focused_seqs, view_id));
+            }
+        });
+        observer.observe(doc.body, { attributes: true, attributeFilter: ['data-open'], subtree: true });
+        return () => {
+            observer.disconnect();
+            cancel_wait?.();
+        };
+    }, [
+        display_options.settings?.scrollNoteIntoView,
+        display_options.focused_seqs?.length && display_options.focused_seqs[display_options.focused_seqs.length - 1],
+        view_id,
     ]);
 }
 

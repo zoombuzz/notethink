@@ -1,3 +1,4 @@
+import { activeMsFromTimestamps } from './agentclockops';
 import {
     AGENT_EDIT_SNIPPET_MAX_CHARS,
     AGENT_TRANSCRIPT_MAX_BYTES,
@@ -355,6 +356,7 @@ export function buildCodexResult(input: AgentSessionInput, lines: CodexLine[]): 
         ended_at: input.vendor_live === false ? updated_at : undefined,
         current,
         model: walked.latest_model_overall,
+        active_ms: activeMsFromTimestamps(lines.map((line) => line.timestamp)),
         // Codex records no permission-request signal, so question stays undefined rather than a guessed value
         calls: walked.calls,
         tool_invocations: walked.tool_invocations,

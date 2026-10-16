@@ -129,7 +129,7 @@ describe('StickyNote', () => {
         expect(card.style.getPropertyValue('--nt-sticky-hue')).toBe(String(STICKY_FALLBACK_HUE));
     });
 
-    it('clears the lane card surface through its own class rather than any lane rule', () => {
+    it('clears the group card surface through its own class rather than any group rule', () => {
         const { container } = render(<StickyNote {...makeNote()} />);
         expect(container.querySelector('[data-card-type="sticky"]')).toHaveClass('stickyNote');
     });

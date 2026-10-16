@@ -4,7 +4,7 @@
 + [ ] render the card
 
 ### Kanban card ratio height [](?id=kanban-card-ratio-height&status=doing)
-+ [ ] settle the lane height
++ [ ] settle the group height
 
 ### User view type update [](?id=user-view-type-update&status=doing)
 + [ ] update the minted type

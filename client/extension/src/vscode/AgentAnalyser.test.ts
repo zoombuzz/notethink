@@ -183,11 +183,14 @@ const CLAUDE_SESSION_ID = 'session-1';
 const CLAUDE_PROJECTS_DIR = `${CLAUDE_HOME}/projects`;
 const CLAUDE_PROJECT_PATH = `${CLAUDE_PROJECTS_DIR}/${CLAUDE_PROJECT_DIR}`;
 const CLAUDE_TRANSCRIPT_PATH = `${CLAUDE_PROJECT_PATH}/${CLAUDE_SESSION_ID}.jsonl`;
+// an absolute cwd under the default '/ws' workspace folder these fixtures use, so an ordinary session stays in scope
+const CLAUDE_SESSION_CWD = '/ws/my-project';
 
 function claudeTranscriptLine(tool_name: string): string {
 	return JSON.stringify({
 		type: 'assistant',
 		timestamp: '2026-09-22T11:00:00Z',
+		cwd: CLAUDE_SESSION_CWD,
 		message: {
 			id: 'm1', role: 'assistant', model: 'claude-sonnet-5',
 			content: [{ type: 'tool_use', id: 't1', name: tool_name, input: { file_path: 'src/foo.ts' } }],
@@ -209,7 +212,7 @@ const CLAUDE_PID_PATH = `${CLAUDE_SESSIONS_DIR}/${CLAUDE_PID_FILE_NAME}`;
  */
 function mockClaudeCodeSession(content: string | undefined, mtime: number, live?: { status: 'busy' | 'idle' | 'waiting' }): void {
 	const bytes = content !== undefined ? new TextEncoder().encode(content) : undefined;
-	const pid_bytes = live ? new TextEncoder().encode(JSON.stringify({ sessionId: CLAUDE_SESSION_ID, cwd: CLAUDE_PROJECT_DIR, status: live.status })) : undefined;
+	const pid_bytes = live ? new TextEncoder().encode(JSON.stringify({ sessionId: CLAUDE_SESSION_ID, cwd: CLAUDE_SESSION_CWD, status: live.status })) : undefined;
 	(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
 		if (uri.path === CLAUDE_PROJECTS_DIR) { return content !== undefined ? [[CLAUDE_PROJECT_DIR, vscode.FileType.Directory]] : []; }
 		if (uri.path === CLAUDE_PROJECT_PATH) { return content !== undefined ? [[`${CLAUDE_SESSION_ID}.jsonl`, vscode.FileType.File]] : []; }
@@ -952,7 +955,7 @@ describe('AgentAnalyser lifecycle', () => {
 			const rollout_path = `${day_dir}/${file_name}`;
 			const session_meta_line = JSON.stringify({
 				timestamp: now.toISOString(), ordinal: 0, type: 'session_meta',
-				payload: { session_id: session_uuid, id: session_uuid, timestamp: now.toISOString(), cwd: '/repo', originator: 'codex-tui', cli_version: '0.1.0', source: 'cli' },
+				payload: { session_id: session_uuid, id: session_uuid, timestamp: now.toISOString(), cwd: '/ws/repo', originator: 'codex-tui', cli_version: '0.1.0', source: 'cli' },
 			});
 			const bytes = new TextEncoder().encode(session_meta_line);
 			const mtime = now.getTime(); // well within the 5-minute live window at the start
@@ -1314,12 +1317,6 @@ describe('AgentAnalyser symlinked session binding', () => {
 		return sessions.find(s => s.session.session_id === session_id)?.session.stories;
 	}
 
-	function storyBindingFrom(posted: Array<Record<string, unknown>>, session_id: string): unknown {
-		const last = posted[posted.length - 1];
-		const sessions = (last.activity as { sessions: Array<{ session: { session_id: string; story_binding?: unknown } }> }).sessions;
-		return sessions.find(s => s.session.session_id === session_id)?.session.story_binding;
-	}
-
 	function editTranscriptLine(absolute_file_path: string): string {
 		return JSON.stringify({
 			type: 'assistant',
@@ -1386,7 +1383,7 @@ describe('AgentAnalyser symlinked session binding', () => {
 		expect(storiesFrom(posted, CLAUDE_SESSION_ID)).toEqual([{ doc_path: BOARD_RELATIVE, id: 'my-story' }]);
 	});
 
-	it('leaves a session unbound when its cwd only coincidentally shares trailing segments with an unrelated workspace folder', async () => {
+	it('drops a session entirely when its cwd only coincidentally shares trailing segments with an unrelated workspace folder', async () => {
 		// shares the final two segments ("in_development/notethink") with REAL_ROOT, but is a different tree with no such file
 		const lookalike_root = '/home/otheruser/backup/in_development/notethink';
 		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(lookalike_root), name: 'notethink', index: 0 }];
@@ -1400,8 +1397,8 @@ describe('AgentAnalyser symlinked session binding', () => {
 		const posted: Array<Record<string, unknown>> = [];
 		analyser.demand(msg => posted.push(msg));
 		await settle();
-		expect(storiesFrom(posted, CLAUDE_SESSION_ID)).toBeUndefined();
-		expect(storyBindingFrom(posted, CLAUDE_SESSION_ID)).toBe('none');
+		// no alias confirms, so the cwd stays unmapped, outside every workspace folder, with no write call inside one either
+		expect(sessionIdsFrom(posted)).not.toContain(CLAUDE_SESSION_ID);
 	});
 
 	// the umbrella multi-project shape: the workspace folder is a parent directory, and each project is a child of it
@@ -1477,6 +1474,237 @@ describe('AgentAnalyser symlinked session binding', () => {
 			{ doc_path: `${OWN_PROJECT}/${BOARD_RELATIVE}`, id: 'my-story' },
 			{ doc_path: `${SIBLING_PROJECT}/${BOARD_RELATIVE}`, id: 'my-story' },
 		]);
+	});
+});
+
+/**
+ * A session deliberately run from a folder outside the workspace is dropped from the snapshot
+ * entirely, never drawn as an Untagged card: scope is a session whose (alias-mapped) cwd is inside a
+ * workspace folder, OR whose write call lands inside one. The symlinked-alias case is already covered
+ * by `AgentAnalyser symlinked session binding` above, which asserts a bound card for it.
+ */
+describe('AgentAnalyser workspace scope', () => {
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers();
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
+		(vscode.workspace.fs.stat as jest.Mock).mockRejectedValue(new Error('not found'));
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
+	});
+
+	afterEach(() => { jest.useRealTimers(); });
+
+	async function settle(): Promise<void> {
+		for (let i = 0; i < 5; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	// a minimal assistant message, with an optional tool call editing edited_absolute_path - the sole scope signal besides cwd
+	function scopeTranscriptLine(edited_absolute_path?: string): string {
+		return JSON.stringify({
+			type: 'assistant',
+			timestamp: '2026-09-22T11:00:00Z',
+			message: {
+				id: 'm1', role: 'assistant', model: 'claude-sonnet-5',
+				content: edited_absolute_path
+					? [{ type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: edited_absolute_path, old_string: 'a', new_string: 'b' } }]
+					: [{ type: 'text', text: 'hi' }],
+				usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+			},
+		});
+	}
+
+	// wires one live Claude Code session whose pid file reports session_cwd, with an optional edit to edited_absolute_path
+	function mockScopedSession(session_cwd: string, edited_absolute_path?: string): void {
+		const transcript_bytes = new TextEncoder().encode(scopeTranscriptLine(edited_absolute_path));
+		const pid_bytes = new TextEncoder().encode(JSON.stringify({ sessionId: CLAUDE_SESSION_ID, cwd: session_cwd, status: 'idle' }));
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_PROJECTS_DIR) { return [[CLAUDE_PROJECT_DIR, vscode.FileType.Directory]]; }
+			if (uri.path === CLAUDE_PROJECT_PATH) { return [[`${CLAUDE_SESSION_ID}.jsonl`, vscode.FileType.File]]; }
+			if (uri.path === CLAUDE_SESSIONS_DIR) { return [[CLAUDE_PID_FILE_NAME, vscode.FileType.File]]; }
+			return [];
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_TRANSCRIPT_PATH) { return { type: 1, ctime: 0, mtime: Date.parse('2026-09-22T11:00:00Z'), size: transcript_bytes.byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_TRANSCRIPT_PATH) { return transcript_bytes; }
+			if (uri.path === CLAUDE_PID_PATH) { return pid_bytes; }
+			throw new Error('not found');
+		});
+	}
+
+	it('keeps a session whose cwd is inside the workspace folder', async () => {
+		mockScopedSession('/ws/my-project');
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(sessionIdsFrom(posted)).toContain(CLAUDE_SESSION_ID);
+	});
+
+	it('drops a session whose cwd is outside every workspace folder and which touched no file inside one', async () => {
+		mockScopedSession('/somewhere/else');
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		// Claude Code is filtered after the read, not skipped at discovery the way Grok is (it has no write calls to check)
+		expect((vscode.workspace.fs.readFile as jest.Mock).mock.calls.some(call => (call[0] as vscode.Uri).path === CLAUDE_TRANSCRIPT_PATH)).toBe(true);
+		expect(sessionIdsFrom(posted)).not.toContain(CLAUDE_SESSION_ID);
+	});
+
+	it('keeps a session whose cwd is outside the workspace but whose write call lands inside it', async () => {
+		mockScopedSession('/somewhere/else', '/ws/my-project/notes.md');
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(sessionIdsFrom(posted)).toContain(CLAUDE_SESSION_ID);
+	});
+
+	it('skips a Grok session directory at discovery when its decoded cwd is outside every workspace folder', async () => {
+		const grok_sessions_dir = '/home/test/.grok/sessions';
+		const in_scope_dir = '/ws/my-project';
+		const out_scope_dir = '/home/other/outside-project';
+		const in_scope_listing_path = Uri.joinPath(Uri.file(grok_sessions_dir), in_scope_dir).path;
+		const out_scope_listing_path = Uri.joinPath(Uri.file(grok_sessions_dir), out_scope_dir).path;
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === grok_sessions_dir) { return [[in_scope_dir, vscode.FileType.Directory], [out_scope_dir, vscode.FileType.Directory]]; }
+			if (uri.path === in_scope_listing_path) { return [['session-in', vscode.FileType.Directory]]; }
+			if (uri.path === out_scope_listing_path) { return [['session-out', vscode.FileType.Directory]]; }
+			return [];
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		// the out-of-scope directory is never even listed, let alone stat'd or read - filtered before any round trip
+		const listed = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(call => (call[0] as vscode.Uri).path);
+		expect(listed).toContain(in_scope_listing_path);
+		expect(listed).not.toContain(out_scope_listing_path);
+	});
+});
+
+/**
+ * In a Remote-SSH window `AgentAnalyser` runs on the UI side, so `vscode.Uri.file(path)` always
+ * means the UI machine's own local disk, never the remote host actually serving the workspace. Each
+ * mock's `readFile`/`stat` below matches on the full `uri.toString()` (scheme, authority AND path
+ * together), not `uri.path` alone, so a read still built as `vscode.Uri.file(entry.path)` - scheme
+ * 'file', no authority - would silently miss and read as unreadable, exactly the regression this
+ * covers: an extra file (a Grok `usage.json`, a Claude Code subagent transcript) carried through
+ * discovery only as a bare path rather than as its own `vscode.Uri`.
+ */
+describe('AgentAnalyser remote extra file reads', () => {
+	const REMOTE_AUTHORITY = 'ssh-remote+test-host';
+	const REMOTE_WORKSPACE_PATH = '/home/dev/github.com/in_development/notethink';
+
+	function remoteFolderUri(): vscode.Uri {
+		return Uri.parse(`vscode-remote://${REMOTE_AUTHORITY}${REMOTE_WORKSPACE_PATH}`);
+	}
+
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers();
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = REMOTE_AUTHORITY;
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: remoteFolderUri(), name: 'notethink', index: 0 }];
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
+		(vscode.workspace.fs.stat as jest.Mock).mockRejectedValue(new Error('not found'));
+	});
+
+	afterEach(() => {
+		jest.useRealTimers();
+		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = undefined;
+	});
+
+	async function settle(): Promise<void> {
+		for (let i = 0; i < 5; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	function sessionUsageInputTokensFrom(posted: Array<Record<string, unknown>>, session_id: string): number | undefined {
+		const last = posted[posted.length - 1];
+		const sessions = (last.activity as { sessions: Array<{ session: { session_id: string; usage?: { input_tokens: number } } }> }).sessions;
+		return sessions.find(s => s.session.session_id === session_id)?.session.usage?.input_tokens;
+	}
+
+	it('reads a Grok usage.json through the workspace folder\'s own scheme and authority, so its model and tokens land on the card', async () => {
+		// the ancestor probe's depth-0 candidate: the workspace folder itself holds .grok/sessions directly
+		const grok_sessions_dir = Uri.joinPath(remoteFolderUri(), '.grok', 'sessions');
+		// a directory name decodeURIComponent leaves unchanged, and that workspaceRelative resolves to '' (the folder itself)
+		const project_dir = Uri.joinPath(grok_sessions_dir, REMOTE_WORKSPACE_PATH);
+		const session_dir = Uri.joinPath(project_dir, 'session-1');
+		const events_uri = Uri.joinPath(session_dir, 'events.jsonl');
+		const usage_uri = Uri.joinPath(session_dir, 'usage.json');
+		const events_bytes = new TextEncoder().encode(JSON.stringify({ ts: '2026-09-22T11:00:00.000Z', type: 'tool_started', tool_name: 'read_file' }));
+		const usage_bytes = new TextEncoder().encode(JSON.stringify({
+			turns: [{ turnNumber: 1, endedAt: '2026-09-22T11:00:01.000Z', modelUsage: { 'grok-4.5-build': { inputTokens: 10, outputTokens: 5, cachedReadTokens: 0, cacheCreationTokens: 0, reasoningTokens: 0, costUsdTicks: 0 } } }] },
+		));
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.toString() === grok_sessions_dir.toString()) { return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 }; }
+			if (uri.toString() === events_uri.toString()) { return { type: vscode.FileType.File, ctime: 0, mtime: Date.now(), size: events_bytes.byteLength }; }
+			if (uri.toString() === usage_uri.toString()) { return { type: vscode.FileType.File, ctime: 0, mtime: Date.now(), size: usage_bytes.byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.toString() === grok_sessions_dir.toString()) { return [[REMOTE_WORKSPACE_PATH, vscode.FileType.Directory]]; }
+			if (uri.toString() === project_dir.toString()) { return [['session-1', vscode.FileType.Directory]]; }
+			return [];
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.toString() === events_uri.toString()) { return events_bytes; }
+			if (uri.toString() === usage_uri.toString()) { return usage_bytes; }
+			throw new Error('not found');
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(sessionModelFrom(posted, 'session-1')).toBe('grok-4.5-build');
+		expect(sessionUsageInputTokensFrom(posted, 'session-1')).toBe(10);
+		// the chat opener's fallback opens this URI as given, so it must keep the remote scheme and authority
+		expect(analyser.transcriptUriFor('session-1')?.toString()).toBe(events_uri.toString());
+	});
+
+	it('reads a Claude Code subagent transcript through the workspace folder\'s own scheme and authority, folding its usage into the session total', async () => {
+		// the ancestor probe's depth-0 candidate: the workspace folder itself holds .claude/projects directly
+		const projects_dir = Uri.joinPath(remoteFolderUri(), '.claude', 'projects');
+		const project_dir = Uri.joinPath(projects_dir, 'my-project');
+		const transcript_uri = Uri.joinPath(project_dir, 'session-1.jsonl');
+		const subagents_dir = Uri.joinPath(project_dir, 'session-1', 'subagents');
+		const subagent_uri = Uri.joinPath(subagents_dir, 'agent-1.jsonl');
+		const transcript_bytes = new TextEncoder().encode(JSON.stringify({
+			type: 'assistant', timestamp: '2026-09-22T11:00:00Z', cwd: REMOTE_WORKSPACE_PATH,
+			message: { id: 'm1', role: 'assistant', model: 'claude-sonnet-5', content: [{ type: 'text', text: 'hi' }], usage: { input_tokens: 3, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } },
+		}));
+		const subagent_bytes = new TextEncoder().encode(JSON.stringify({
+			type: 'assistant', timestamp: '2026-09-22T11:00:01Z',
+			message: { id: 'sub1', role: 'assistant', model: 'claude-sonnet-5', content: [], usage: { input_tokens: 40, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } },
+		}));
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.toString() === projects_dir.toString()) { return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 }; }
+			if (uri.toString() === transcript_uri.toString()) { return { type: vscode.FileType.File, ctime: 0, mtime: Date.now(), size: transcript_bytes.byteLength }; }
+			if (uri.toString() === subagent_uri.toString()) { return { type: vscode.FileType.File, ctime: 0, mtime: Date.now(), size: subagent_bytes.byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.toString() === projects_dir.toString()) { return [['my-project', vscode.FileType.Directory]]; }
+			if (uri.toString() === project_dir.toString()) { return [['session-1.jsonl', vscode.FileType.File]]; }
+			if (uri.toString() === subagents_dir.toString()) { return [['agent-1.jsonl', vscode.FileType.File]]; }
+			return [];
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.toString() === transcript_uri.toString()) { return transcript_bytes; }
+			if (uri.toString() === subagent_uri.toString()) { return subagent_bytes; }
+			throw new Error('not found');
+		});
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		// the main transcript's own 3 input tokens plus the subagent's 40, only combined once the subagent file is actually read
+		expect(sessionUsageInputTokensFrom(posted, 'session-1')).toBe(43);
 	});
 });
 
@@ -2115,7 +2343,8 @@ describe('AgentAnalyser session fold caching', () => {
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
 		(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
-		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [];
+		// '/ws' so these sessions' cwd (baked into claudeTranscriptLine) is in scope and actually folds into a card
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
 	});
 
 	afterEach(() => { jest.useRealTimers(); });
@@ -2257,7 +2486,8 @@ describe('AgentAnalyser discovery concurrency', () => {
 		jest.useFakeTimers();
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
-		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [];
+		// '/ws' so these sessions' cwd (baked into claudeTranscriptLine) is in scope and actually folds into a card
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
 	});
 
 	afterEach(() => { jest.useRealTimers(); });

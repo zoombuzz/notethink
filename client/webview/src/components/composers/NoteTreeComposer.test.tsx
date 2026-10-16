@@ -1,9 +1,15 @@
 import React from 'react';
 import { render } from '@testing-library/react';
 import type { Root as MdastRoot } from 'mdast';
+import { DEFAULT_SETTINGS_CASCADE } from '../../constants';
 import type { Doc } from '../../types/general';
+import type { SettingsCascadePayload } from '../../notethink-views/src/types/Messages';
 import type { ViewProps } from '../../notethink-views/src/types/ViewProps';
 import type { NoteRendererProps } from '../NoteRenderer';
+
+function buildCascade(overrides: Partial<SettingsCascadePayload> = {}): SettingsCascadePayload {
+    return { ...DEFAULT_SETTINGS_CASCADE, ...overrides };
+}
 
 // capture GenericView props for assertion
 const captured_props: ViewProps[] = [];
@@ -70,6 +76,33 @@ describe('NoteTreeComposer', () => {
         expect(flattenSingleFileStories).toHaveBeenCalledTimes(1);
         // the converted root, doc id and doc path let stories route and stamp against the one open file
         expect(flattenSingleFileStories).toHaveBeenCalledWith(expect.objectContaining({ type: 'root' }), 'doc-1', '/repo/sub/file.md');
+    });
+
+    it('descends to story cards for a saved type parented on kanban, not just the literal "kanban" id', () => {
+        const note = buildDoc();
+        render(<NoteTreeComposer
+            note_id="doc-1"
+            note={note}
+            props={buildProps({
+                viewStates: { 'doc-1': { type: 'user-kanban-copy' } },
+                settingsCascade: buildCascade({ views: { 'user-kanban-copy': { parent: 'kanban', label: 'Kanban copy' } } }),
+            })}
+        />);
+        expect(flattenSingleFileStories).toHaveBeenCalledTimes(1);
+        expect(flattenSingleFileStories).toHaveBeenCalledWith(expect.objectContaining({ type: 'root' }), 'doc-1', '/repo/sub/file.md');
+    });
+
+    it('does NOT descend a saved type parented on document, since its chain never passes through kanban', () => {
+        const note = buildDoc();
+        render(<NoteTreeComposer
+            note_id="doc-1"
+            note={note}
+            props={buildProps({
+                viewStates: { 'doc-1': { type: 'user-document-copy' } },
+                settingsCascade: buildCascade({ views: { 'user-document-copy': { parent: 'document', label: 'Document copy' } } }),
+            })}
+        />);
+        expect(flattenSingleFileStories).not.toHaveBeenCalled();
     });
 
     it('does NOT descend a plain document (no kanban view) so its ## structure + prose are preserved', () => {

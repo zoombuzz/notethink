@@ -16,8 +16,14 @@ interface ToolbarDrawerProps {
  * collisions, and jump drawers. Purely presentational: the open/close state, the
  * scroll-anchor RAF loop and the Escape handling live in the owning view (GenericView) so a
  * single set of effects can serve whichever drawer is active. The 0fr→1fr grid trick lives
- * in ViewRenderer.module.scss (.drawerGrid / .drawer), reused verbatim. When onClose is
- * supplied an X button is rendered in the drawer's top-right corner, beside the title.
+ * in ViewRenderer.module.scss (.drawerGrid / .drawer / .drawerContent), reused verbatim; the
+ * bare .drawerContent wrapper around children is what the trick resizes, since the drawer's
+ * own content carries padding and border that a min-height override on it alone cannot shrink
+ * away. aria-hidden keeps a closed drawer out of the accessibility tree, but a closed drawer
+ * stays reachable by a direct .focus() call or a screen reader's virtual cursor regardless,
+ * since it is only visually clipped rather than removed - inert additionally blocks that,
+ * without touching the slide animation since it carries no visual effect of its own. When
+ * onClose is supplied an X button is rendered in the drawer's top-right corner, beside the title.
  */
 function ToolbarDrawer(props: ToolbarDrawerProps): React.ReactElement {
     return (
@@ -29,6 +35,7 @@ function ToolbarDrawer(props: ToolbarDrawerProps): React.ReactElement {
             role="region"
             aria-label={props.ariaLabel}
             aria-hidden={!props.open}
+            inert={!props.open}
         >
             <div className={styles.drawer}>
                 {props.onClose && (
@@ -43,7 +50,9 @@ function ToolbarDrawer(props: ToolbarDrawerProps): React.ReactElement {
                         &#215;
                     </button>
                 )}
-                {props.children}
+                <div className={styles.drawerContent}>
+                    {props.children}
+                </div>
             </div>
         </div>
     );

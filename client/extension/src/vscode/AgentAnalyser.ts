@@ -98,6 +98,12 @@ interface DiscoveredJob extends AgentAnalyserWorkerJob {
 /**
  * One file's stat as it bears on whether a session needs re-reading: unchanged mtime AND size means
  * the file's content is unchanged.
+ * - path: the bare `uri.path`, used only as a stable cache key (`sessionUnchanged`, `tail_state`,
+ *   the line-diff cache); it carries no scheme or authority, so it is never rebuilt into a `vscode.Uri`
+ * - uri_string: this file's full URI, scheme and authority included, as `uri.toString()` - the only
+ *   form that survives a structured-clone boundary (this identity rides along in a worker job) intact,
+ *   so a re-read goes through `vscode.Uri.parse(uri_string)` rather than `vscode.Uri.file(path)`, which
+ *   always means the LOCAL disk even in a Remote-SSH window
  * - appendable: true for an append-only JSONL transcript (every main transcript, every Claude Code
  *   subagent transcript, Grok's events.jsonl), which is what makes tail-slicing safe; false for a file
  *   a vendor rewrites whole each time it changes (Grok's usage.json), which is always read and sent in
@@ -105,6 +111,7 @@ interface DiscoveredJob extends AgentAnalyserWorkerJob {
  */
 interface AgentFileIdentity {
     path: string;
+    uri_string: string;
     mtime: number;
     size: number;
     appendable: boolean;
@@ -365,9 +372,10 @@ export class AgentAnalyser {
         return this.trees[root_path]?.tree;
     }
 
-    /** the main transcript (Claude Code, Codex) or event log (Grok) the last scan read for a session, for the chat opener's fallback; every vendor's first file identity is that file */
-    public transcriptPathFor(session_id: string): string | undefined {
-        return this.file_cache.get(session_id)?.files[0]?.path;
+    /** the main transcript (Claude Code, Codex) or event log (Grok) the last scan read for a session, as its full URI so a Remote-SSH window opens it on the remote host; every vendor's first file identity is that file */
+    public transcriptUriFor(session_id: string): vscode.Uri | undefined {
+        const uri_string = this.file_cache.get(session_id)?.files[0]?.uri_string;
+        return uri_string === undefined ? undefined : vscode.Uri.parse(uri_string);
     }
 
     public dispose(): void {
@@ -1155,6 +1163,8 @@ export class AgentAnalyser {
                 (write_calls_by_repo.get(root) ?? write_calls_by_repo.set(root, []).get(root)!).push(...repo_write_calls);
                 (commit_calls_by_repo.get(root) ?? commit_calls_by_repo.set(root, []).get(root)!).push(...repo_commit_calls);
             }
+            // out of scope: neither its cwd nor any write call lands in a workspace folder; attribution above still ran
+            if (this.workspaceRelative(aliased_cwd) === undefined && write_calls.length === 0) { continue; }
             const signature = this.sessionFoldSignature(write_calls, board_versions);
             const cached = reused_ids.has(output.session_id) ? this.session_fold_cache.get(output.session_id) : undefined;
             if (cached && cached.signature === signature) {
@@ -1251,6 +1261,7 @@ export class AgentAnalyser {
             started_at: output.started_at,
             updated_at: output.updated_at,
             ended_at: output.ended_at,
+            active_ms: output.active_ms,
             state: output.state,
             capabilities: output.capabilities,
             current: output.current,
@@ -1277,6 +1288,7 @@ export class AgentAnalyser {
             started_at: output.started_at,
             updated_at: output.updated_at,
             ended_at: output.ended_at,
+            active_ms: output.active_ms,
             state: output.state,
             capabilities: output.capabilities,
             current: output.current,
@@ -1645,11 +1657,17 @@ export class AgentAnalyser {
         return { vendor, session_id, cwd, vendor_live, now_ms, window_start_ms, transcript, extra_files: extra, identity, cacheable };
     }
 
-    // reads every extra file this session's identity names, once re-reading is known needed; an unreadable one is dropped
+    /**
+     * Reads every extra file this session's identity names, once re-reading is known needed; an
+     * unreadable one is dropped. Revives each file's full `vscode.Uri` from `uri_string` rather than
+     * rebuilding it with `vscode.Uri.file(entry.path)`, which always means the LOCAL disk: in a
+     * Remote-SSH window this runs on the UI side, so `Uri.file` silently reads the wrong machine
+     * instead of the remote host `ResolvedAgentVendorHome`'s header requires.
+     */
     private async readExtraFileBytes(extra_identity: ReadonlyArray<AgentFileIdentity>): Promise<Array<{ identity: AgentFileIdentity; bytes: Uint8Array }>> {
         const files: Array<{ identity: AgentFileIdentity; bytes: Uint8Array }> = [];
         for (const entry of extra_identity) {
-            const bytes = await this.readBytes(vscode.Uri.file(entry.path));
+            const bytes = await this.readBytes(vscode.Uri.parse(entry.uri_string));
             if (bytes !== undefined) { files.push({ identity: entry, bytes }); }
         }
         return files;
@@ -1714,7 +1732,7 @@ export class AgentAnalyser {
             const transcript_stat = await this.statFile(transcript_uri);
             if (transcript_stat === undefined || transcript_stat.mtime < window_start_ms) { return; }
             const extra_identity = await this.claudeSubagentFileStats(project_uri, session_id);
-            const transcript_identity: AgentFileIdentity = { path: transcript_uri.path, ...transcript_stat, appendable: true };
+            const transcript_identity: AgentFileIdentity = { path: transcript_uri.path, uri_string: transcript_uri.toString(), ...transcript_stat, appendable: true };
             const identity: AgentFileIdentity[] = [transcript_identity, ...extra_identity];
             const vendor_live = live.has(session_id);
             if (this.sessionUnchanged(session_id, identity)) {
@@ -1784,7 +1802,7 @@ export class AgentAnalyser {
             if (type !== vscode.FileType.File || !file_name.endsWith('.jsonl')) { continue; }
             const uri = vscode.Uri.joinPath(subagents_uri, file_name);
             const stat = await this.statFile(uri);
-            if (stat !== undefined) { identity.push({ path: uri.path, ...stat, appendable: true }); }
+            if (stat !== undefined) { identity.push({ path: uri.path, uri_string: uri.toString(), ...stat, appendable: true }); }
         }
         return identity;
     }
@@ -1811,7 +1829,7 @@ export class AgentAnalyser {
             if (stat === undefined || stat.mtime < window_start_ms) { return; }
             const session_id = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/.exec(file_name)?.[1] ?? file_name;
             // codex has no extra files, so its identity is just the rollout's own stat
-            const identity: AgentFileIdentity = { path: uri.path, ...stat, appendable: true };
+            const identity: AgentFileIdentity = { path: uri.path, uri_string: uri.toString(), ...stat, appendable: true };
             // "live" is a pure clock check on the stat's mtime, recomputed every scan whether reused or freshly read
             const vendor_live = now_ms - stat.mtime < 5 * 60 * 1000;
             if (this.sessionUnchanged(session_id, [identity])) {
@@ -1864,7 +1882,11 @@ export class AgentAnalyser {
         let project_dirs: Array<[string, vscode.FileType]>;
         try { project_dirs = await vscode.workspace.fs.readDirectory(sessions_uri); }
         catch { return { candidates: [], reused: [] }; }
-        const encoded_cwds = project_dirs.filter(([, type]) => type === vscode.FileType.Directory).map(([encoded_cwd]) => encoded_cwd);
+        // a Grok session records no file paths, so its encoded directory name (its cwd) is the only scope signal before any read
+        const encoded_cwds = project_dirs
+            .filter(([, type]) => type === vscode.FileType.Directory)
+            .map(([encoded_cwd]) => encoded_cwd)
+            .filter(encoded_cwd => this.workspaceRelative(this.decodeUriComponentSafe(encoded_cwd)) !== undefined);
         const listings = await this.mapWithConcurrency(encoded_cwds, AGENT_DISCOVERY_STAT_CONCURRENCY, async encoded_cwd => {
             const project_uri = vscode.Uri.joinPath(sessions_uri, encoded_cwd);
             const cwd = this.decodeUriComponentSafe(encoded_cwd);
@@ -1885,8 +1907,8 @@ export class AgentAnalyser {
             const usage_uri = vscode.Uri.joinPath(project_uri, session_id, 'usage.json');
             const usage_stat = await this.statFile(usage_uri);
             // events.jsonl is tail-sliceable; usage.json is rewritten whole each turn, so it never carries a bookmark
-            const events_identity: AgentFileIdentity = { path: events_uri.path, ...events_stat, appendable: true };
-            const identity: AgentFileIdentity[] = [events_identity, ...(usage_stat ? [{ path: usage_uri.path, ...usage_stat, appendable: false }] : [])];
+            const events_identity: AgentFileIdentity = { path: events_uri.path, uri_string: events_uri.toString(), ...events_stat, appendable: true };
+            const identity: AgentFileIdentity[] = [events_identity, ...(usage_stat ? [{ path: usage_uri.path, uri_string: usage_uri.toString(), ...usage_stat, appendable: false }] : [])];
             const vendor_live = live.has(session_id);
             if (this.sessionUnchanged(session_id, identity)) {
                 this.reconcileCacheability(session_id, vendor_live, identity, now_ms);

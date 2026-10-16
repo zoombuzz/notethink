@@ -13,7 +13,7 @@ export const STICKY_FALLBACK_HUE = 52;
 /**
  * StickyNote, the sticky card: the origin pill and the title on a square of paper with its bottom-right
  * corner curled over, and nothing beneath them. It is the second entry on the card axis, chosen
- * independently of the view, so a lane of stickies and a document of stickies are the same card in two
+ * independently of the view, so a group of stickies and a document of stickies are the same card in two
  * layouts. Deliberately absent, relative to MarkdownNote: the linetag attribute row, the body, the
  * clip/overflow measurement and its Show more / Show less bars. With no body there is nothing to clip,
  * which is why none of that machinery is reached for here.
@@ -24,7 +24,7 @@ export const STICKY_FALLBACK_HUE = 52;
  * as the --nt-sticky-hue custom property and the stylesheet turns it into paper for the current theme,
  * so a theme switch needs no re-render.
  *
- * The headline sits inside an inner wrapper rather than directly under the card. The lane layouts in
+ * The headline sits inside an inner wrapper rather than directly under the card. The group layouts in
  * ViewRenderer.module.scss style `.note > .headline` as a direct child, giving it the padding and the
  * divider rule that separate a headline from the body below it; a sticky has no body, so that chrome
  * would leave a title floating above a line dividing nothing. Nesting one level takes the card out of

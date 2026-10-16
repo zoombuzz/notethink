@@ -4,6 +4,8 @@ import {
     isNoteManuallyExpanded,
     deriveNaturalColumnOrder,
     mergeSavedGroupDisplay,
+    splitGroupDisplayByPresence,
+    recombineGroupDisplay,
     groupDisplayForAxis,
     replaceGroupDisplayForAxis,
     moveInOrder,
@@ -1305,21 +1307,57 @@ describe('arraysEqual', () => {
 
 describe('mergeSavedGroupDisplay', () => {
 
-    it('falls through to the natural order, every lane shown, when nothing is saved', () => {
+    it('falls through to the natural order, every group shown, when nothing is saved', () => {
         expect(mergeSavedGroupDisplay(undefined, ['doing', 'done'])).toEqual([{ value: 'doing', shown: true }, { value: 'done', shown: true }]);
         expect(mergeSavedGroupDisplay([], ['doing', 'done'])).toEqual([{ value: 'doing', shown: true }, { value: 'done', shown: true }]);
     });
 
-    it('leads with the saved entries and appends a lane the saved display never named, shown', () => {
+    it('leads with the saved entries and appends a group the saved display never named, shown', () => {
         const saved = [{ value: 'done', shown: false }, { value: 'doing', shown: true }];
         expect(mergeSavedGroupDisplay(saved, ['doing', 'done', 'untagged']))
             .toEqual([{ value: 'done', shown: false }, { value: 'doing', shown: true }, { value: 'untagged', shown: true }]);
     });
 
-    it('keeps a saved lane no note currently uses, so a pinned display survives an empty lane', () => {
+    it('drops a saved entry for a value no note currently uses, listing present groups only', () => {
         const saved = [{ value: 'done', shown: true }, { value: 'blocked', shown: false }];
         expect(mergeSavedGroupDisplay(saved, ['done', 'untagged']))
+            .toEqual([{ value: 'done', shown: true }, { value: 'untagged', shown: true }]);
+    });
+
+    it('lists a dropped entry again, in its stored position and shown state, once a note carries the value again', () => {
+        const saved = [{ value: 'done', shown: true }, { value: 'blocked', shown: false }];
+        expect(mergeSavedGroupDisplay(saved, ['blocked', 'done', 'untagged']))
             .toEqual([{ value: 'done', shown: true }, { value: 'blocked', shown: false }, { value: 'untagged', shown: true }]);
+    });
+
+    it('with no live axis to filter against (an empty natural), lists every saved entry unfiltered', () => {
+        const saved = [{ value: 'done', shown: true }, { value: 'blocked', shown: false }];
+        expect(mergeSavedGroupDisplay(saved, [])).toEqual(saved);
+    });
+});
+
+describe('splitGroupDisplayByPresence', () => {
+
+    it('splits entries into those naming a value in natural and those that do not', () => {
+        const entries = [{ value: 'done', shown: true }, { value: 'blocked', shown: false }, { value: 'doing', shown: true }];
+        expect(splitGroupDisplayByPresence(entries, ['done', 'doing', 'untagged'])).toEqual({
+            present: [{ value: 'done', shown: true }, { value: 'doing', shown: true }],
+            absent: [{ value: 'blocked', shown: false }],
+        });
+    });
+
+    it('treats every entry as present when natural is empty (no live axis to filter against)', () => {
+        const entries = [{ value: 'done', shown: true }, { value: 'blocked', shown: false }];
+        expect(splitGroupDisplayByPresence(entries, [])).toEqual({ present: entries, absent: [] });
+    });
+});
+
+describe('recombineGroupDisplay', () => {
+
+    it('appends the absent tail after the edited present entries, in the order each list already holds', () => {
+        const edited_present = [{ value: 'done', shown: false }, { value: 'doing', shown: true }];
+        const absent = [{ value: 'blocked', shown: false }, { value: 'archived', shown: true }];
+        expect(recombineGroupDisplay(edited_present, absent)).toEqual([...edited_present, ...absent]);
     });
 });
 
@@ -1364,7 +1402,7 @@ describe('replaceGroupDisplayForAxis', () => {
 
 describe('toggleShownInDisplay', () => {
 
-    it('flips the named lane\'s shown flag and leaves the rest untouched', () => {
+    it('flips the named group\'s shown flag and leaves the rest untouched', () => {
         const entries = [{ value: 'doing', shown: true }, { value: 'done', shown: true }];
         expect(toggleShownInDisplay(entries, 'done')).toEqual([{ value: 'doing', shown: true }, { value: 'done', shown: false }]);
     });
@@ -1374,7 +1412,7 @@ describe('toggleShownInDisplay', () => {
         expect(toggleShownInDisplay(entries, 'doing')).toEqual([{ value: 'doing', shown: true }]);
     });
 
-    it('leaves the list unchanged when the named lane is absent', () => {
+    it('leaves the list unchanged when the named group is absent', () => {
         const entries = [{ value: 'doing', shown: true }];
         expect(toggleShownInDisplay(entries, 'done')).toEqual(entries);
     });
@@ -1630,17 +1668,17 @@ describe('hasVisibleCard', () => {
         expect(hasVisibleCard([statusNote('doing')], true, 'status', [])).toBe(true);
     });
 
-    it('does not count a note whose only lane the group-display hides', () => {
+    it('does not count a note whose only group the group-display hides', () => {
         const hidden = [{ value: 'doing', shown: false }];
         expect(hasVisibleCard([statusNote('doing')], true, 'status', hidden)).toBe(false);
     });
 
-    it('counts a note once any note sits in a lane the group-display does not hide', () => {
+    it('counts a note once any note sits in a group the group-display does not hide', () => {
         const hidden = [{ value: 'doing', shown: false }];
         expect(hasVisibleCard([statusNote('doing'), statusNote('done')], true, 'status', hidden)).toBe(true);
     });
 
-    it('reads only the entries belonging to the live axis, ignoring another axis\'s hidden lanes', () => {
+    it('reads only the entries belonging to the live axis, ignoring another axis\'s hidden groups', () => {
         const other_axis_hidden = [{ value: 'doing', shown: false, axis: 'nt_first_level_folder' }];
         expect(hasVisibleCard([statusNote('doing')], true, 'status', other_axis_hidden)).toBe(true);
     });

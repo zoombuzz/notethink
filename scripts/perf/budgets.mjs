@@ -53,7 +53,7 @@ export const BUDGETS = {
      */
     /*
      * mounted_cards is the virtualized-kanban acceptance criterion itself: a board of 2000 merged
-     * stories mounts only a windowed lane's visible rows plus LANE_OVERSCAN_COUNT, not the full
+     * stories mounts only a windowed group's visible rows plus GROUP_OVERSCAN_COUNT, not the full
      * count. Measured 55 on the harness's fixed viewport, which doesn't vary with machine speed, so
      * it's budgeted at exactly that count.
      */

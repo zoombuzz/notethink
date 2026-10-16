@@ -1,26 +1,42 @@
 import Debug from "debug";
-import type { SettingsCascadeKey, SettingsCascadePayload, UserViewType } from "../types/Messages";
+import { DEFAULT_CARD_RATIO, DEFAULT_LINE_BREADTH } from "../components/views/kanban/columnwidthops";
+import { GROUP_ORDER_DEFAULT } from "./grouporderops";
+import { AGENT_CLOCK_MODE_DEFAULT } from "./agentactivityops";
+import type { GroupDisplayEntry, ResolvedSettingsCascade, SettingsCascadeKey, SettingsCascadePayload, UserViewType } from "../types/Messages";
 
 const debug = Debug("nodejs:notethink-views:viewregistryops");
 
 /*
+ * Mirrors of client/extension/src/constants.ts' folder-mode filter defaults and grouped-rung group
+ * order, needed here for SETTING_HOMES' per-key defaults. notethink-views is a nested package with its
+ * own build and no module graph reaching outside it, so these three values are the same deliberate
+ * mirror as the rest of SETTING_HOMES, not an import of the outer webview app's own constants.ts.
+ */
+const DEFAULT_INCLUDE_FILTER = '**/*.md';
+const DEFAULT_EXCLUDE_FILTER = '**/{node_modules,notegit/nodejs,.git,.svn,.hg,.terraform,.claude,dist,build,out,.next,.cache,coverage,.venv,__pycache__,vendored}/**';
+const DEFAULT_GROUP_DISPLAY: GroupDisplayEntry[] = ['untagged', 'doing', 'code-review', 'testing', 'done'].map(value => ({ value, shown: true }));
+
+/*
  * The view hierarchy as data. The dimensional ladder - root -> {document, grouped}; grouped -> {line,
  * grid(future), cube(future)}; line -> {kanban} - lives here as one declarative registry: every node's
- * parent, kind, label, selectability and configurability, plus the settings model layered on top. Every part of the view
- * programme (the selector, line->kanban parentage, a group-by owned by a shared ancestor, a setting a
- * child fixes but an ancestor can edit) is a query against this registry rather than logic re-derived in
- * three places.
+ * parent, kind, label, selectability and configurability. Every part of the view programme (the
+ * selector, line->kanban parentage, a group-by owned by a shared ancestor) is a query against this
+ * registry rather than logic re-derived in three places.
  *
- * The settings model has three concerns and one engine:
- *  - storage: every setting has ONE home node where it is declared; a descendant may carry an override
- *  - an override is FIXED (child pins it as identity, read-only here, edit at the unlocking ancestor -
- *    kanban's group-by = status) or OPEN (child holds its own editable value - kanban's group display)
- *  - resolution: the effective structural value for a node is the deepest override on its ancestor
- *    chain, else the home default; the runtime per-session viewState -> extension cascade -> built-in
- *    default layering (composerops) sits UNDER each node's value and is not modelled here
+ * The settings model has three concerns and one engine, `resolveViewSetting` below:
+ *  - storage: every setting has ONE home node where it is declared (SETTING_HOMES); a view's own entry
+ *    in the `views` bag the extension sends on the wire holds every value that node sets for itself,
+ *    whether the key's home is that node or one above it - a built-in node's entry and a saved type's
+ *    entry are the same shape, keyed the same way
+ *  - resolution: a node's effective value for a key is the nearest node on its chain, from itself up to
+ *    and including the key's home, whose own bag sets the key, else the key's generic built-in default;
+ *    a built-in node may also carry a BUILT-IN bag value of its own (Kanban's `groupBy: 'status'`),
+ *    which sits beneath anything stored but above a plain ancestor's value
+ *  - the runtime per-session viewState -> extension cascade -> built-in default layering (composerops)
+ *    sits UNDER the home's own value and is not modelled here
  *
  * Abstract nodes (root, grouped) own settings but do not render; concrete nodes (document, line, kanban)
- * render. `line` is the single-axis card-lane view; `kanban` is `line` preset to status plus chrome.
+ * render. `line` is the single-axis card-group view; `kanban` is `line` preset to status plus chrome.
  * grid/cube are future rungs the model accommodates but this file does not build.
  */
 
@@ -32,7 +48,9 @@ export type ViewNodeKind = 'abstract' | 'concrete';
  * - kind: 'abstract' nodes own settings but are not rendered; 'concrete' nodes render
  * - selectable: whether the user may switch the board to this view (abstract nodes and future rungs are false)
  * - configurable: whether this node owns settings worth showing, so the tree offers it for selection-of-settings
- *   even when it cannot render; the two marks are independent, and root and grouped carry only the second
+ *   even when it cannot render; the two marks are independent, and root and grouped carry only the second.
+ *   Optional so the card registry's nodes - which carry no abstract/rendering distinction at all - are
+ *   structurally a `ViewNode[]` too, letting the chain and resolution engine below serve both trees.
  * - label: display base for the selector / drawer (l10n capitalisation is applied by viewTypeLabel)
  */
 export interface ViewNode {
@@ -40,121 +58,110 @@ export interface ViewNode {
     parent?: string;
     kind: ViewNodeKind;
     selectable: boolean;
-    configurable: boolean;
+    configurable?: boolean;
     label: string;
-}
-
-/**
- * A setting declared at its home node, with the structural default that applies when no descendant
- * override wins. `config_path` records the `notethink.settings.*` key this setting persists to (when it
- * has one) so the drawer and the extension can stay in lockstep without a second lookup table.
- */
-export interface ViewSettingDecl {
-    key: string;
-    home: string;
-    default?: unknown;
-    config_path?: string;
-}
-
-/**
- * An override a descendant node applies to an inherited setting.
- * - mode 'fixed': the node pins the value as identity; it is read-only here and editable only at the
- *   nearest configurable ancestor that does not itself fix it (the unlocking view)
- * - mode 'open': the node holds its own editable value (a fork the descendant owns, e.g. kanban's group
- *   order persisted at its own config path)
- * - config_path: the `notethink.settings.*` key an OPEN override persists to, when it forks to its own key
- */
-export interface ViewSettingOverride {
-    node: string;
-    key: string;
-    mode: 'fixed' | 'open';
-    value?: unknown;
-    config_path?: string;
 }
 
 export interface ViewRegistry {
     nodes: ViewNode[];
-    settings: ViewSettingDecl[];
-    overrides: ViewSettingOverride[];
-}
-
-/**
- * SettingResolution, the answer the engine returns for "what does setting K look like at node N".
- * - applies: whether K is defined on N's ancestor chain at all (its home is N or an ancestor)
- * - value: the structural value - a fixed override's pinned value, else the home default
- * - fixed / fixed_at: whether a fixed override on the chain pins K for N, and the node applying it
- * - open_at: the node holding an OPEN (own editable) override, when one is the nearest override
- * - unlock_view: the configurable ancestor that unlocks a fixed setting (edit K from that node's settings)
- */
-export interface SettingResolution {
-    key: string;
-    home?: string;
-    applies: boolean;
-    value: unknown;
-    fixed: boolean;
-    fixed_at?: string;
-    open_at?: string;
-    unlock_view?: string;
 }
 
 /*
  * Owning-node sentinels for settings that belong to no view type: NODE_GLOBAL renders under the settings
- * drawer's "Global settings" heading with no owning-type pill, NODE_FILES belongs to the Files drawer and
- * the view drawer never lists it. Mirrored from settings.ts alongside SETTING_HOMES below.
+ * drawer's "Global settings" heading with no owning-type pill, and NODE_FILES belongs to the Files drawer
+ * and the view drawer never lists it. Mirrored from settings.ts alongside SETTING_HOMES below.
  */
 export const NODE_GLOBAL = 'global';
 export const NODE_FILES = 'files';
-export const NODE_INTERNAL = 'internal';
 
 // the tree's root: it owns the settings every view inherits, so changing one offers no new type
 export const ROOT_NODE = 'root';
 
+/** which of the two bags a setting's own value lives in; the two flat sentinel homes (global, files) live in neither */
+export type SettingsBag = 'views' | 'cards';
+
 /**
- * Where each setting lives, mirrored from `SETTINGS` in `client/extension/src/lib/settings.ts`.
+ * Where each setting lives and what it falls back to with nothing stored anywhere, mirrored from
+ * `CASCADE_KEY_DEFAULTS` in client/extension/src/lib/settings.ts.
  *
  * The extension host and the webview are separate webpack bundles with no shared module graph, so there
- * is no import path from here to that map - this is the same deliberate mirror as the folder-view defaults
- * duplicated in the two `constants.ts` files, and the contract is that the shared subset agrees.
+ * is no import path from here to that table - this is the same deliberate mirror as the folder-view
+ * defaults duplicated in the two `constants.ts` files, and the contract is that the shared subset agrees.
  *
- * ADDING A KEY TO `SettingsCascadePayload` WITHOUT A HOME HERE IS A COMPILE ERROR. That is the whole
- * point of the `satisfies Record<SettingsCascadeKey, ...>` below, and it is stronger than the constants.ts
- * mirror it is modelled on, which agrees only by review. Rely on it: a caller counting or grouping the
- * settings a node owns can treat this table as complete for every key on the wire, because an incomplete
- * one does not build. The mirror still has to be kept truthful by hand in one respect the compiler cannot
- * see - that each `node` and `path` matches the `SETTINGS` entry of the same name.
- * - node: the owning tree node, a view-registry id, a card-registry id, or one of the sentinels below
- * - path: the dotted `notethink.settings.*` config path, so a registry config_path resolves to one place
+ * ADDING A KEY TO `SettingsCascadeKey` WITHOUT A HOME HERE IS A COMPILE ERROR. That is the whole point
+ * of the `satisfies Record<SettingsCascadeKey, ...>` below: a caller counting or grouping the settings a
+ * node owns can treat this table as complete for every key on the wire, because an incomplete one does
+ * not build.
+ * - node: the owning tree node - a view-registry id, a card-registry id, or one of the sentinels above
+ * - bag: which bag the node's own value for this key lives in; undefined for the two flat sentinel homes
+ * - default: the generic built-in default, used when nothing anywhere holds a value for this key
  */
-export const SETTING_HOMES = {
-    viewType:                   { node: 'root',      path: 'view.type' },
-    cardType:                   { node: 'allcards',  path: 'card.type' },
-    viewUserTypes:              { node: NODE_INTERNAL, path: 'view.userTypes' },
-    showLinetagsInHeadlines:    { node: 'allcards',  path: 'view.generic.showLinetagsInHeadlines' },
-    scrollNoteIntoView:         { node: 'root',      path: 'view.generic.scrollNoteIntoView' },
-    autoExpandFocusedNote:      { node: 'allcards',  path: 'view.generic.autoExpandFocusedNote' },
-    showLineNumbers:            { node: 'allcards',  path: 'view.generic.showLineNumbers' },
-    groupBy:                    { node: 'grouped',   path: 'view.specific.grouped.groupBy' },
-    orientation:                { node: 'line',      path: 'view.specific.line.orientation' },
-    lineBreadth:                { node: 'line',      path: 'view.specific.line.lineBreadth' },
-    kanbanGroupBy:              { node: 'kanban',    path: 'view.specific.kanban.groupBy' },
-    groupDisplay:               { node: 'kanban',    path: 'view.specific.kanban.groupDisplay' },
-    kanbanCardRatio:            { node: 'kanban',    path: 'view.specific.kanban.cardRatio' },
-    kanbanAnimateTransitions:   { node: 'kanban',    path: 'view.specific.kanban.animateTransitions' },
-    kanbanDefaultCardType:      { node: 'kanban',    path: 'view.specific.kanban.defaultCardType' },
-    watchUnopenedFilesInViewer: { node: NODE_GLOBAL, path: 'view.generic.watchUnopenedFilesInViewer' },
-    openNewEditorIfNoneOpen:    { node: NODE_GLOBAL, path: 'view.generic.openNewEditorIfNoneOpen' },
-    includeFilter:              { node: NODE_FILES,  path: 'files.includeFilter' },
-    excludeFilter:              { node: NODE_FILES,  path: 'files.excludeFilter' },
-    maxNotesPerFile:            { node: NODE_FILES,  path: 'files.maxNotesPerFile' },
-} as const satisfies Record<SettingsCascadeKey, { node: string; path: string }>;
+export const SETTING_HOMES: Record<SettingsCascadeKey, { node: string; bag: SettingsBag | undefined; default: unknown }> = {
+    viewType:                   { node: 'root',      bag: 'views', default: 'auto' },
+    cardType:                   { node: 'allcards',  bag: 'cards', default: 'auto' },
+    showLinetagsInHeadlines:    { node: 'allcards',  bag: 'cards', default: false },
+    scrollNoteIntoView:         { node: 'root',      bag: 'views', default: true },
+    autoExpandFocusedNote:      { node: 'allcards',  bag: 'cards', default: false },
+    showLineNumbers:            { node: 'allcards',  bag: 'cards', default: false },
+    groupBy:                    { node: 'grouped',   bag: 'views', default: 'auto' },
+    orientation:                { node: 'line',      bag: 'views', default: 'columns' },
+    lineBreadth:                { node: 'line',      bag: 'views', default: DEFAULT_LINE_BREADTH },
+    groupDisplay:                { node: 'grouped',   bag: 'views', default: DEFAULT_GROUP_DISPLAY },
+    groupOrder:                 { node: 'grouped',   bag: 'views', default: GROUP_ORDER_DEFAULT },
+    cardRatio:                  { node: 'kanban',    bag: 'views', default: DEFAULT_CARD_RATIO },
+    animateTransitions:         { node: 'kanban',    bag: 'views', default: true },
+    defaultCardType:            { node: 'kanban',    bag: 'views', default: 'card' },
+    clockMode:                  { node: 'agent',     bag: 'cards', default: AGENT_CLOCK_MODE_DEFAULT },
+    watchUnopenedFilesInViewer: { node: NODE_GLOBAL, bag: undefined, default: true },
+    openNewEditorIfNoneOpen:    { node: NODE_GLOBAL, bag: undefined, default: false },
+    includeFilter:              { node: NODE_FILES,  bag: undefined, default: DEFAULT_INCLUDE_FILTER },
+    excludeFilter:              { node: NODE_FILES,  bag: undefined, default: DEFAULT_EXCLUDE_FILTER },
+    maxNotesPerFile:            { node: NODE_FILES,  bag: undefined, default: 10 },
+};
+
+/**
+ * A built-in node's own value for a key, with no stored entry at all - Kanban's Group by defaults to
+ * status rather than the generic `auto`, which is what makes a kanban board a kanban rather than merely
+ * a line view preset to it. Checked ahead of a stored value in `ownBagFor` (stored still wins) and ahead
+ * of plain parent inheritance in `inheritedViewSetting` (a node's own built-in value is not something it
+ * inherits, so setting it back to status clears the stored entry rather than merely matching Line's).
+ * Nothing besides Kanban's group axis needs one today; the table stays open for the next one.
+ */
+const BUILTIN_NODE_DEFAULTS: Partial<Record<string, Partial<Record<SettingsCascadeKey, unknown>>>> = {
+    kanban: { groupBy: 'status' },
+};
+
+function builtinNodeDefault(node_id: string, key: SettingsCascadeKey): unknown {
+    return BUILTIN_NODE_DEFAULTS[node_id]?.[key];
+}
+
+/**
+ * True for every setting a view node can genuinely hold its own value for - every key whose home is a
+ * real node in the (built-in) view tree, `viewType` excepted, since that is the selection itself rather
+ * than a value a view holds. This is every row the view settings drawer renders except the two
+ * NODE_GLOBAL ones (which stay global, with no per-view divergence at all).
+ */
+/**
+ * True for every setting a node on `registry` can genuinely hold its own value for: its home is a real
+ * node on that tree, and the key is not `selection_key` - the tree's own selection (`viewType` for the
+ * view tree, `cardType` for the card tree), which is the choice of node itself rather than a value any
+ * node holds. Generic over which tree so both `isPerViewKey` and the card tree's own predicate are one
+ * function with two callers, not two copies.
+ */
+export function isPerTreeKey(key: SettingsCascadeKey, registry: ViewRegistry, selection_key: SettingsCascadeKey): boolean {
+    if (key === selection_key) { return false; }
+    return getViewNode(SETTING_HOMES[key].node, registry) !== undefined;
+}
+
+export function isPerViewKey(key: SettingsCascadeKey): boolean {
+    return isPerTreeKey(key, VIEW_REGISTRY, 'viewType');
+}
 
 /*
- * The dimensional ladder plus its settings homes and overrides. `axes`, `groupDisplay` and `groupBy`
- * home at grouped; `orientation` homes at line; generic settings and view selection home at root.
- * Kanban fixes axes[0] to status and holds its own open group display and group-by, so editing from
- * kanban forks rather than moving the ancestor's value; grouped's own group display has no
- * config_path since only kanban's groupDisplay persists it. Every node owns settings and is
- * configurable; only concrete rungs are selectable.
+ * The dimensional ladder. Every node owns settings and is configurable; only concrete rungs are
+ * selectable. `kanban`'s own values for the per-view keys above - its group axis included - live in its
+ * own entry in the `views` bag the extension assembles on the wire, resolved by `resolveViewSetting`
+ * exactly like a saved type's own entry; there is no structural pin left in the registry itself.
  */
 export const VIEW_REGISTRY: ViewRegistry = {
     nodes: [
@@ -164,36 +171,10 @@ export const VIEW_REGISTRY: ViewRegistry = {
         { id: 'line', parent: 'grouped', kind: 'concrete', selectable: true, configurable: true, label: 'Line' },
         { id: 'kanban', parent: 'line', kind: 'concrete', selectable: true, configurable: true, label: 'Kanban' },
     ],
-    settings: [
-        { key: 'viewType', home: 'root', default: 'auto', config_path: SETTING_HOMES.viewType.path },
-        { key: 'axes', home: 'grouped', default: undefined },
-        { key: 'groupDisplay', home: 'grouped', default: [] },
-        { key: 'groupBy', home: 'grouped', default: 'auto', config_path: SETTING_HOMES.groupBy.path },
-        { key: 'orientation', home: 'line', default: 'columns', config_path: SETTING_HOMES.orientation.path },
-    ],
-    overrides: [
-        { node: 'kanban', key: 'axes', mode: 'fixed', value: ['status'] },
-        { node: 'kanban', key: 'groupDisplay', mode: 'open', value: undefined, config_path: SETTING_HOMES.groupDisplay.path },
-        { node: 'kanban', key: 'groupBy', mode: 'open', value: undefined, config_path: SETTING_HOMES.kanbanGroupBy.path },
-    ],
 };
 
-/*
- * Rows whose pill and offer are decided by a registry setting rather than a flat home. Each row has a
- * structural key (the registry setting carrying override semantics) and a write key (the cascade key
- * the value persists to); groupBy and kanbanGroupBy force the split, since both carry a kanban open
- * override, so keying on the write key would wrongly put the pill on kanban and suppress the offer.
- * `axes` is the key kanban fixes to status, and departing from that pin is what saving a new view type
- * means; group display carries no such pin. A key absent here has no registry presence and answers from
- * SETTING_HOMES.
- */
-export const STRUCTURAL_SETTING_KEYS: Partial<Record<SettingsCascadeKey, string>> = {
-    viewType: 'viewType',
-    groupBy: 'axes',
-    kanbanGroupBy: 'axes',
-    groupDisplay: 'groupDisplay',
-    orientation: 'orientation',
-};
+// every id the registry declares, which is what tells a saved type's bag entry apart from a built-in's
+const BUILTIN_VIEW_IDS = new Set(VIEW_REGISTRY.nodes.map(n => n.id));
 
 /** the node record for an id in the given registry (defaults to the built-in VIEW_REGISTRY) */
 export function getViewNode(id: string, registry: ViewRegistry = VIEW_REGISTRY): ViewNode | undefined {
@@ -228,8 +209,8 @@ export function isDescendantOf(id: string, ancestor: string, registry: ViewRegis
 }
 
 /**
- * True when a view renders lanes (it sits under `grouped`): line and kanban today. Drives the settings
- * drawer's per-view dispatch (lane drawer vs document drawer) without a hardcoded `type ===` list.
+ * True when a view renders groups (it sits under `grouped`): line and kanban today. Drives the settings
+ * drawer's per-view dispatch (group drawer vs document drawer) without a hardcoded `type ===` list.
  */
 export function isGroupedViewType(id: string, registry: ViewRegistry = VIEW_REGISTRY): boolean {
     return isDescendantOf(id, 'grouped', registry);
@@ -245,131 +226,9 @@ export function childViewNodes(parent_id: string | undefined, registry: ViewRegi
     return registry.nodes.filter(n => n.parent === parent_id);
 }
 
-/** the nearest override for `key` walking `chain` deepest-first, or undefined when none is on the chain */
-function nearestOverrideOnChain(chain: string[], key: string, registry: ViewRegistry): ViewSettingOverride | undefined {
-    for (const node_id of chain) {
-        const override = registry.overrides.find(o => o.node === node_id && o.key === key);
-        if (override) { return override; }
-    }
-    return undefined;
-}
-
-/**
- * The ancestor that unlocks a fixed setting: the nearest node strictly above the fixing node that is
- * configurable and does not itself fix the key, or undefined when nothing above can edit it. Configurable
- * rather than selectable, since this answers "where is this setting editable" and the settings tree offers
- * a node's settings whether or not the board can render it; they part on an abstract owner such as grouped,
- * which holds the value but renders nothing.
- */
-function unlockingViewOnChain(chain: string[], fixed_at: string, key: string, registry: ViewRegistry): string | undefined {
-    const start = chain.indexOf(fixed_at) + 1;
-    for (let i = start; i < chain.length; i++) {
-        const node_id = chain[i];
-        const node = getViewNode(node_id, registry);
-        const fixes_here = registry.overrides.some(o => o.node === node_id && o.key === key && o.mode === 'fixed');
-        if (node?.configurable && !fixes_here) { return node_id; }
-    }
-    return undefined;
-}
-
-/**
- * Resolves a setting for a node against an explicit registry (the pure, testable core). Walks the node's
- * ancestor chain deepest-first; the nearest override wins over the home default, a fixed override reports
- * the view that unlocks it, and a setting whose home is not on the chain does not apply to the node.
- */
-export function resolveSettingIn(registry: ViewRegistry, node_id: string, key: string): SettingResolution {
-    const decl = registry.settings.find(s => s.key === key);
-    const chain = chainOf(node_id, registry);
-    if (!decl || !chain.includes(decl.home)) {
-        return { key, home: decl?.home, applies: false, value: undefined, fixed: false };
-    }
-    const override = nearestOverrideOnChain(chain, key, registry);
-    if (override?.mode === 'fixed') {
-        return {
-            key,
-            home: decl.home,
-            applies: true,
-            value: override.value,
-            fixed: true,
-            fixed_at: override.node,
-            unlock_view: unlockingViewOnChain(chain, override.node, key, registry),
-        };
-    }
-    if (override?.mode === 'open') {
-        return { key, home: decl.home, applies: true, value: decl.default, fixed: false, open_at: override.node };
-    }
-    return { key, home: decl.home, applies: true, value: decl.default, fixed: false };
-}
-
-/** resolve a setting for a node against the built-in registry */
-export function resolveSetting(node_id: string, key: string): SettingResolution {
-    return resolveSettingIn(VIEW_REGISTRY, node_id, key);
-}
-
-/**
- * The settings a tree node owns, in SETTING_HOMES declaration order. Pass a settings payload to narrow
- * the answer to the keys that payload actually carries, so a node's count reflects what the drawer can
- * show rather than what the mirror declares; omit it to count every declared setting.
- */
-export function settingKeysForNode(node_id: string, settings?: Partial<SettingsCascadePayload>): SettingsCascadeKey[] {
-    const keys = Object.keys(SETTING_HOMES) as SettingsCascadeKey[];
-    return keys.filter(key => SETTING_HOMES[key].node === node_id && (settings === undefined || key in settings));
-}
-
-/** how many settings a node owns; the count the settings tree renders beside each node label */
-export function nodeSettingCount(node_id: string, settings?: Partial<SettingsCascadePayload>): number {
-    return settingKeysForNode(node_id, settings).length;
-}
-
 /** true for a setting home naming no view type, so its row renders no pill and never offers a new type */
 function isSentinelNode(node_id: string): boolean {
-    return node_id === NODE_GLOBAL || node_id === NODE_FILES || node_id === NODE_INTERNAL;
-}
-
-/** the registry setting governing a row, or the key itself when the key has no registry presence */
-function structuralKeyFor(key: string): string {
-    return STRUCTURAL_SETTING_KEYS[key as SettingsCascadeKey] ?? key;
-}
-
-/**
- * The node whose name a settings row's pill shows: the nearest node on the selected node's ancestor
- * chain that owns a declared value for the row, else the setting's flat home. This reconciles two
- * tables, because the registry models 5 keys while the drawer renders 17 - a registry-modelled row
- * resolves through the chain, where an existing OPEN override outranks the home, and every other row
- * answers with its SETTING_HOMES node. The three sentinel homes belong to no view type and yield
- * undefined.
- *
- * A saved view type contributes an OPEN override for every key it declares, whether or not the registry
- * models that key, so the chain is searched before the flat home is consulted. Without that search a type
- * holding its own card ratio still showed a Kanban pill and an offer to save what it already held.
- */
-export function owningNodeFor(node_id: string, key: SettingsCascadeKey, registry: ViewRegistry = VIEW_REGISTRY): string | undefined {
-    const home = SETTING_HOMES[key].node;
-    if (isSentinelNode(home)) { return undefined; }
-    const structural_key = structuralKeyFor(key);
-    const nearest = nearestOverrideOnChain(chainOf(node_id, registry), structural_key, registry);
-    if (nearest?.mode === 'open') { return nearest.node; }
-    if (STRUCTURAL_SETTING_KEYS[key] === undefined) { return home; }
-    const resolution = resolveSettingIn(registry, node_id, structural_key);
-    return resolution.open_at ?? resolution.home ?? home;
-}
-
-/**
- * True when changing this row from the selected node departs from a value an ancestor owns, which is
- * when the drawer offers "Save as a new view type". The pill and the offer are one question asked twice:
- * the offer fires when the pill names a STRICT ancestor of the selected node, so no per-setting list is
- * needed - a row the node owns itself (kanban's group display) and a row with no owning type at all (a
- * global) both fall out as false.
- *
- * Root is the one ancestor that does not offer. Its settings are the generic ones that reach every view,
- * so changing one says nothing about what kind of board this is: "Kanban with linetags" is a preference
- * someone has expressed, not a view type worth minting. That is a structural exemption for one node
- * rather than a list of settings, so the rule still needs no per-setting knowledge.
- */
-export function offersNewViewType(selected_node: string, key: SettingsCascadeKey, registry: ViewRegistry = VIEW_REGISTRY): boolean {
-    const owner = owningNodeFor(selected_node, key, registry);
-    if (owner === undefined || owner === ROOT_NODE) { return false; }
-    return isDescendantOf(selected_node, owner, registry);
+    return node_id === NODE_GLOBAL || node_id === NODE_FILES;
 }
 
 /** true when a saved view type can become a node: it names a label, a fresh id and a parent that exists */
@@ -381,77 +240,332 @@ function isUsableUserViewType(user_type: UserViewType, nodes: ViewNode[]): boole
 }
 
 /**
- * Migrates a saved type's legacy `columnOrder: string[]` override to `groupDisplay`, every lane shown,
- * when `groupDisplay` is absent. `columnOrder` predates lane visibility; a type minted before that
- * change carries it alone, and this is the one place every reader of a saved type's overrides passes
- * through, so the rest of the drawer, the minted-type offer and the board only ever see `groupDisplay`.
- * Leaves `overrides` untouched once it already carries `groupDisplay`.
- */
-export function normalizeGroupDisplayOverride(overrides: Record<string, unknown>): Record<string, unknown> {
-    if ('groupDisplay' in overrides || !Array.isArray(overrides.columnOrder)) { return overrides; }
-    const { columnOrder, ...rest } = overrides;
-    return { ...rest, groupDisplay: (columnOrder as string[]).map(value => ({ value, shown: true })) };
-}
-
-/**
  * The overrides a saved type declares, keyed by cascade key exactly as the drawer wrote them. The list
  * comes from a user's settings.json and is untrusted, so an entry carrying anything but an object reads
- * as declaring nothing rather than throwing. Migrates a legacy `columnOrder` override on the way out, so
- * every caller - the registry, the drawer's offer, the board - reads `groupDisplay` alone.
+ * as declaring nothing rather than throwing.
  */
 function declaredOverrides(user_type: UserViewType | undefined): Record<string, unknown> {
     const declared = user_type?.overrides;
     if (typeof declared !== 'object' || declared === null) { return {}; }
-    return normalizeGroupDisplayOverride(declared);
+    return declared;
 }
 
 /**
- * The OPEN registry overrides a saved view type contributes, one per setting key it declares, keyed by
- * the structural setting each one forks. No config_path: a minted type does not fork to a config key of
- * its own, it writes through the same path its parent's row already writes.
- */
-function userTypeOverrides(user_type: UserViewType): ViewSettingOverride[] {
-    return Object.entries(declaredOverrides(user_type)).map(([key, value]) => ({
-        node: user_type.id,
-        key: structuralKeyFor(key),
-        mode: 'open' as const,
-        value,
-    }));
-}
-
-/**
- * True when a saved type declares its own value for `key`, which is what sends a change to that row into
- * the type rather than to the workspace scope. A type's overrides layer over the whole cascade when the
- * board renders, so a workspace write to a key the type holds is written, ignored, and then painted over
- * by the type's own value.
+ * True when a saved type declares its own value for `key` - unchanged by the per-view bag, since a
+ * saved type's own bag is always its `overrides`, never a built-in node's own entry.
  */
 export function userTypeHoldsKey(user_type: UserViewType | undefined, key: string): boolean {
     return Object.prototype.hasOwnProperty.call(declaredOverrides(user_type), key);
 }
 
 /**
- * The one write that carries a setting change to where it takes effect. A key the rendered custom type
- * holds is written into that type's overrides, because a workspace write to it would be written, ignored
- * and painted over; every other key is a plain per-key write at workspace scope. The drawer's rows and a
- * dragged lane boundary both route through here, so they can never disagree about where a value lands.
+ * The per-view bag, `views` on the wire: one entry per node id (a built-in view or a saved type), holding
+ * every value that node sets for itself, whatever its key's home. Assembled from each node's own declared
+ * `notethink.settings.*` key, then resolved and merged across the Workspace/User scopes on the extension
+ * side (client/extension/src/lib/settings.ts); the webview only ever sees the merged result. A saved
+ * type's entry also carries `parent` and `label`; `ownBagFor` strips them off before a caller sees the
+ * override keys alone.
+ *
+ * Named `ViewOverridesMap` rather than `ViewsBag` because it still serves the one other shape the rest of
+ * the webview expects to find a built-in node's own values under (`ResolvedSettingsCascade.viewOverrides`,
+ * built by `builtinViewOverridesFromViews` below) - the same shape, the same name, now also doubling as
+ * the raw per-node bag.
  */
-export function settingWriteFor(
+export type ViewOverridesMap = Record<string, Record<string, unknown>>;
+
+/**
+ * A node's own STORED bag of per-view values: a saved type's declared overrides, or a built-in node's
+ * bag entry exactly as written - no built-in default folded in. Tells a row's pill apart from its
+ * resolved value: a key this returns nothing for is never "specific to this node", whatever `ownBagFor`
+ * (below) resolves it to from a built-in default.
+ */
+export function storedBagFor(node_id: string, user_types: UserViewType[], view_overrides: ViewOverridesMap): Record<string, unknown> {
+    const user_type = user_types.find(t => t.id === node_id);
+    if (user_type !== undefined) { return declaredOverrides(user_type); }
+    return view_overrides[node_id] ?? {};
+}
+
+/** true when `node_id` genuinely stores its own value for `key` - a built-in default alone does not count */
+function hasStoredValue(node_id: string, key: SettingsCascadeKey, user_types: UserViewType[], view_overrides: ViewOverridesMap): boolean {
+    return Object.prototype.hasOwnProperty.call(storedBagFor(node_id, user_types, view_overrides), key);
+}
+
+/**
+ * A node's own bag of per-view values for RESOLUTION: the stored bag (above) with the node's own
+ * built-in default (if any) sitting beneath whatever is actually stored.
+ */
+export function ownBagFor(node_id: string, user_types: UserViewType[], view_overrides: ViewOverridesMap): Record<string, unknown> {
+    const stored = storedBagFor(node_id, user_types, view_overrides);
+    if (user_types.some(t => t.id === node_id)) { return stored; }
+    const builtin_defaults = BUILTIN_NODE_DEFAULTS[node_id] ?? {};
+    return { ...builtin_defaults, ...stored };
+}
+
+/**
+ * ViewSettingResolution, the answer the engine returns for "what does setting K look like at node N".
+ * - value: the resolved value
+ * - owner: the view whose own bag the value came from, else the setting's home
+ */
+export interface ViewSettingResolution {
+    value: unknown;
+    owner: string;
+}
+
+/**
+ * The one engine a node's effective value for a per-view-capable key resolves through: the nearest node
+ * strictly between `node_id` and the key's home (itself included) whose own bag sets the key - a saved
+ * type's declared overrides, or a built-in node's own bag entry, a built-in default included - else
+ * `home_value`, the value already stored at the key's home. Used by the render path (composerops /
+ * GenericView, for the rendered view) and by the drawer (for whichever node the user has selected), so
+ * a pill, a dropdown's "(inherited)" label and the rendered board can never disagree about the answer.
+ *
+ * `home_value` is the caller's responsibility: it is simply the flat cascade value already read for this
+ * key (the value stored at its home, defaulted exactly as every other setting is), since this file has no
+ * access to the cascade.
+ */
+export function resolveViewSetting(
+    registry: ViewRegistry,
+    node_id: string,
+    key: SettingsCascadeKey,
+    home_value: unknown,
+    user_types: UserViewType[] = [],
+    view_overrides: ViewOverridesMap = {},
+): ViewSettingResolution {
+    const home = SETTING_HOMES[key].node;
+    const chain = chainOf(node_id, registry);
+    const home_index = chain.indexOf(home);
+    const below_home = home_index === -1 ? chain : chain.slice(0, home_index);
+    for (const candidate of below_home) {
+        const bag = ownBagFor(candidate, user_types, view_overrides);
+        if (Object.prototype.hasOwnProperty.call(bag, key)) { return { value: bag[key], owner: candidate }; }
+    }
+    return { value: home_value, owner: home };
+}
+
+/**
+ * The value `node_id` would fall back to if it held no STORED value of its own for `key` - resolved
+ * from `node_id`'s own built-in default when it has one (Kanban's status), else its PARENT's chain,
+ * skipping the node's own bag. This is what an edit compares a new value against to decide whether to
+ * clear the node's own value instead of setting it (`settingWriteFor`), what the "specific" pill's hover
+ * names as the view it would inherit from again, and what a dropdown's "(inherited)" option label
+ * matches against.
+ *
+ * A node's own built-in default is checked first, ahead of its parent, because it is not something the
+ * node inherits: Kanban shows status with nothing stored at all, whatever Grouped's own group-by value
+ * is, so setting Kanban's own value back to status must clear Kanban's stored entry rather than compare
+ * it against Line's or Grouped's.
+ */
+export function inheritedViewSetting(
+    registry: ViewRegistry,
+    node_id: string,
+    key: SettingsCascadeKey,
+    home_value: unknown,
+    user_types: UserViewType[] = [],
+    view_overrides: ViewOverridesMap = {},
+): ViewSettingResolution {
+    const builtin_default = builtinNodeDefault(node_id, key);
+    if (builtin_default !== undefined) { return { value: builtin_default, owner: node_id }; }
+    const parent_id = getViewNode(node_id, registry)?.parent;
+    if (parent_id === undefined) { return { value: home_value, owner: SETTING_HOMES[key].node }; }
+    return resolveViewSetting(registry, parent_id, key, home_value, user_types, view_overrides);
+}
+
+/** structural equality for a resolved setting value: scalars by `===`, arrays and plain objects element/key-wise */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function viewSettingValuesEqual(a: unknown, b: unknown): boolean {
+    if (a === b) { return true; }
+    if (Array.isArray(a) && Array.isArray(b)) {
+        return a.length === b.length && a.every((item, index) => viewSettingValuesEqual(item, b[index]));
+    }
+    if (isPlainObject(a) && isPlainObject(b)) {
+        const a_keys = Object.keys(a);
+        const b_keys = Object.keys(b);
+        return a_keys.length === b_keys.length && a_keys.every(k => viewSettingValuesEqual(a[k], b[k]));
+    }
+    return false;
+}
+
+/**
+ * The node whose own value a settings row's pill and owner label name: the nearest node on the selected
+ * node's chain that owns a value for the key (a saved type's own override, or a built-in view's own bag
+ * entry), else the key's flat home. One call reaches the same answer `resolveViewSetting` does, so the
+ * owner label and the live render can never disagree.
+ */
+export function owningNodeFor(
+    node_id: string,
+    key: SettingsCascadeKey,
+    registry: ViewRegistry = VIEW_REGISTRY,
+    user_types: UserViewType[] = [],
+    view_overrides: ViewOverridesMap = {},
+): string | undefined {
+    const home = SETTING_HOMES[key].node;
+    if (isSentinelNode(home)) { return undefined; }
+    return resolveViewSetting(registry, node_id, key, undefined, user_types, view_overrides).owner;
+}
+
+/**
+ * The entry in the cascade's `diverged` list that answers for a row's M, given WHICH node actually owns
+ * the resolved value - `<bag>:<node_id>:<key>`, exactly as `client/extension/src/lib/settings.ts`'s
+ * `bagDivergedKeys` publishes it for every node's own cell, the setting's home node included: a per-tree
+ * key has no separate flat storage anywhere, even at its home, so there is no bare-key form to match.
+ * M therefore always describes the value the row actually shows, never the selected node's own
+ * divergence when it is only inheriting. `bag` is the tree's own bag name (`'views'` or `'cards'`).
+ */
+export function divergedKeyFor(owner: string, key: SettingsCascadeKey, bag: 'views' | 'cards'): string {
+    return `${bag}:${owner}:${key}`;
+}
+
+/**
+ * Everything a settings row's control, pill and M marker need for one (selected node, key) pair,
+ * resolved once through the one engine above so the two drawers - the view tree's and the card tree's -
+ * can never disagree with the live render about what a row shows. Shared rather than duplicated: the two
+ * trees differ only in which bag they read (`bag`), whether the key is even per that tree
+ * (`is_per_tree_key`), and the tree itself (`registry`); the resolution and pill logic is one function.
+ * - ownerId: the node whose own bag the effective value came from, or undefined when the key belongs to
+ *   no node on this tree (a sentinel home); the caller turns this into a label for the owner pill
+ * - inherited: the value `selectedNode` would show holding nothing of its own; undefined for a
+ *   non-per-tree key, which has no such concept
+ * - inheritedFromId / specificFromId: which state pill to render, as a node id for the caller to label -
+ *   mutually exclusive, and both undefined at the setting's own home, where there is nothing to inherit
+ *   from or clear back to
+ * - inheritedIsBuiltinDefault: true when `inheritedFromId` names a node supplying the value from its own
+ *   `BUILTIN_NODE_DEFAULTS` entry rather than a genuinely stored one (Kanban's Group by, with nothing
+ *   saved anywhere) - VS names a value settings.json actually holds, so a built-in default is never VS
+ *   even when the resolved owner is the selected node itself; the caller's pill still reads as inherited,
+ *   with a hover naming the default rather than an ancestor
+ */
+export interface ResolvedTreeRow {
+    value: unknown;
+    inherited: unknown;
+    ownerId: string | undefined;
+    inheritedFromId: string | undefined;
+    inheritedIsBuiltinDefault: boolean;
+    specificFromId: string | undefined;
+    diverged: boolean;
+}
+
+export function resolveTreeRow(
+    registry: ViewRegistry,
+    bag: 'views' | 'cards',
+    is_per_tree_key: boolean,
+    selected_node: string,
+    key: SettingsCascadeKey,
+    home_value: unknown,
     user_types: UserViewType[],
-    user_type: UserViewType | undefined,
+    own_bags: ViewOverridesMap,
+    diverged_keys: string[],
+): ResolvedTreeRow {
+    const home = SETTING_HOMES[key].node;
+    const owner_id = isSentinelNode(home) ? undefined : resolveViewSetting(registry, selected_node, key, home_value, user_types, own_bags).owner;
+    if (!is_per_tree_key) {
+        return { value: home_value, inherited: undefined, ownerId: owner_id, inheritedFromId: undefined, inheritedIsBuiltinDefault: false, specificFromId: undefined, diverged: diverged_keys.includes(key) };
+    }
+    const resolution = resolveViewSetting(registry, selected_node, key, home_value, user_types, own_bags);
+    const diverged = diverged_keys.includes(divergedKeyFor(resolution.owner, key, bag));
+    if (selected_node === home) {
+        return { value: resolution.value, inherited: undefined, ownerId: resolution.owner, inheritedFromId: undefined, inheritedIsBuiltinDefault: false, specificFromId: undefined, diverged };
+    }
+    const inherited = inheritedViewSetting(registry, selected_node, key, home_value, user_types, own_bags);
+    // VS names a genuinely stored value; a built-in default the owner carries without one reads as inherited
+    if (builtinNodeDefault(resolution.owner, key) !== undefined && !hasStoredValue(resolution.owner, key, user_types, own_bags)) {
+        return { value: resolution.value, inherited: inherited.value, ownerId: resolution.owner, inheritedFromId: resolution.owner, inheritedIsBuiltinDefault: true, specificFromId: undefined, diverged };
+    }
+    if (resolution.owner !== selected_node) {
+        return { value: resolution.value, inherited: inherited.value, ownerId: resolution.owner, inheritedFromId: resolution.owner, inheritedIsBuiltinDefault: false, specificFromId: undefined, diverged };
+    }
+    return { value: resolution.value, inherited: inherited.value, ownerId: resolution.owner, inheritedFromId: undefined, inheritedIsBuiltinDefault: false, specificFromId: inherited.owner, diverged };
+}
+
+/** every cascade key, in `SETTING_HOMES` declaration order, that `isPerViewKey` accepts */
+function perViewKeys(): SettingsCascadeKey[] {
+    return (Object.keys(SETTING_HOMES) as SettingsCascadeKey[]).filter(isPerViewKey);
+}
+
+/**
+ * A settings object with every per-view key replaced by its resolved value for `view_type`'s chain - the
+ * group axis, group order/visibility, orientation, group breadth, group-card shape and `scrollNoteIntoView`
+ * a rendered view actually uses, including its own value in its `views` bag entry or a saved type's own
+ * overrides when it holds one. Every other key (the two NODE_GLOBAL ones, and anything on the card or
+ * files tree) is passed through unchanged.
+ *
+ * This is the ONE resolver for a rendered view: it already folds a saved type's own overrides in (via
+ * `ownBagFor`), so there is no second layering mechanism left to agree with. Called once per rendered view
+ * (GenericView) and, row by row, by the drawer for whichever node the user has selected there - the same
+ * call either way, so a kanban board and the drawer viewing kanban's own row can never disagree about
+ * what "auto" resolves to.
+ */
+export function resolvedSettingsForView(
+    registry: ViewRegistry,
+    view_type: string,
+    settings: Partial<ResolvedSettingsCascade>,
+    user_types: UserViewType[],
+    view_overrides: ViewOverridesMap,
+): Partial<ResolvedSettingsCascade> {
+    const resolved: Record<string, unknown> = { ...settings };
+    for (const key of perViewKeys()) {
+        resolved[key] = resolveViewSetting(registry, view_type, key, settings[key], user_types, view_overrides).value;
+    }
+    return resolved as Partial<ResolvedSettingsCascade>;
+}
+
+/**
+ * The one write that carries a setting change to where it takes effect, whichever node is selected on
+ * whichever tree:
+ * - a key not per-tree there (a global, or a setting on the OTHER tree) writes its flat key
+ * - the selected node IS the key's home -> the home's own cell, written literally (never cleared,
+ *   exactly as writing a flat key always has)
+ * - any other selected node (a saved type, or a node below the home) -> that node's own cell, cleared
+ *   instead when the new value equals what the node would show holding nothing of its own
+ *   (`inheritedViewSetting`, which already knows about a node's own built-in default)
+ *
+ * The result for a per-tree key is always a single-cell `bag` delta: storage no longer distinguishes a
+ * built-in node's own entry from a saved type's, so there is nothing left here to branch on beyond "is
+ * this the home". Shared by `settingWriteFor` (views) and the card tree's own write helper - the two
+ * trees differ only in which bag they write and which key is per that tree, both supplied by the caller.
+ */
+export function writeForTree(
+    registry: ViewRegistry,
+    bag: 'views' | 'cards',
+    is_per_tree_key: boolean,
+    user_types: UserViewType[],
+    own_bags: ViewOverridesMap,
+    selected_node: string,
     key: SettingsCascadeKey,
     value: unknown,
-): { setting: SettingsCascadeKey; value: unknown } {
-    if (user_type !== undefined && userTypeHoldsKey(user_type, key)) {
-        return { setting: 'viewUserTypes', value: updateUserViewTypeOverrides(user_types, user_type.id, { [key]: value }) };
+    home_value: unknown,
+): { setting: SettingsCascadeKey | 'views' | 'cards'; value: unknown } {
+    if (!is_per_tree_key) { return { setting: key, value }; }
+    const home = SETTING_HOMES[key].node;
+    if (selected_node === home) {
+        return { setting: bag, value: { sets: [{ node_id: selected_node, key, value }] } };
     }
-    return { setting: key, value };
+    const inherited = inheritedViewSetting(registry, selected_node, key, home_value, user_types, own_bags).value;
+    const write_value = viewSettingValuesEqual(value, inherited) ? undefined : value;
+    return { setting: bag, value: { sets: [{ node_id: selected_node, key, value: write_value }] } };
+}
+
+export function settingWriteFor(
+    registry: ViewRegistry,
+    user_types: UserViewType[],
+    view_overrides: ViewOverridesMap,
+    selected_node: string,
+    key: SettingsCascadeKey,
+    value: unknown,
+    home_value: unknown,
+): { setting: SettingsCascadeKey | 'views'; value: unknown } {
+    return writeForTree(registry, 'views', isPerViewKey(key), user_types, view_overrides, selected_node, key, value, home_value) as { setting: SettingsCascadeKey | 'views'; value: unknown };
 }
 
 /**
  * The saved list with one type's overrides merged with `overrides`: a key already held takes the new
  * value, a key it has never held is added, and every other key it holds is left alone. The id, label and
  * parent are untouched, so an update can neither re-home a type nor orphan the settings on a user's disk
- * stored under its id.
+ * stored under its id. Pure array transform used only to compute what a multi-key drawer write (minting a
+ * type, a combined group-order drag) is about to mint or send; the write itself always goes through a
+ * `views` bag delta, never this whole-array shape.
  */
 export function updateUserViewTypeOverrides(user_types: UserViewType[], id: string, overrides: Record<string, unknown>): UserViewType[] {
     return user_types.map(type => (
@@ -471,11 +585,12 @@ export function renameUserViewType(user_types: UserViewType[], id: string, label
 }
 
 /**
- * The saved list with one type removed, along with any type saved on top of it - a minted type is a real
- * parent, so dropping one without its descendants would leave them pointing at a node the registry no
- * longer builds, and `registryWithUserTypes` would silently discard them anyway.
+ * The ids a saved type's removal doomed: the type itself, plus any type saved on top of it - a minted
+ * type is a real parent, so dropping one without its descendants would leave them pointing at a node the
+ * registry no longer builds. Used to build the one multi-cell `views` delta that deletes every doomed
+ * entry together.
  */
-export function removeUserViewType(user_types: UserViewType[], id: string): UserViewType[] {
+export function doomedUserTypeIds(user_types: UserViewType[], id: string): string[] {
     const doomed = new Set([id]);
     let grew = true;
     while (grew) {
@@ -487,15 +602,13 @@ export function removeUserViewType(user_types: UserViewType[], id: string): User
             }
         }
     }
-    return user_types.filter(type => !doomed.has(type.id));
+    return [...doomed];
 }
 
 /**
  * A registry with the user's saved view types merged in as real nodes under their parents: concrete,
  * selectable and configurable, so a minted type appears in the tree, carries a radio and is selectable
- * exactly like a built-in. Each declared override becomes an OPEN override on the minted node, so
- * resolveSetting answers for it and the row it was saved from stops offering to mint the same type
- * twice.
+ * exactly like a built-in.
  *
  * Pure - the built-in registry is never mutated. The input comes from a user's settings.json and is
  * therefore untrusted, so an entry missing a label, reusing an id or naming an unknown parent is skipped
@@ -503,7 +616,6 @@ export function removeUserViewType(user_types: UserViewType[], id: string): User
  */
 export function registryWithUserTypes(user_types: UserViewType[], registry: ViewRegistry = VIEW_REGISTRY): ViewRegistry {
     const nodes = [...registry.nodes];
-    const overrides = [...registry.overrides];
     for (const user_type of Array.isArray(user_types) ? user_types : []) {
         if (!isUsableUserViewType(user_type, nodes)) {
             debug('skipping malformed user view type %O', user_type);
@@ -517,7 +629,80 @@ export function registryWithUserTypes(user_types: UserViewType[], registry: View
             configurable: true,
             label: user_type.label,
         });
-        overrides.push(...userTypeOverrides(user_type));
     }
-    return { nodes, settings: [...registry.settings], overrides };
+    return { nodes };
+}
+
+/**
+ * The settings a tree node owns, in SETTING_HOMES declaration order. Pass a settings payload to narrow
+ * the answer to the keys that payload actually carries, so a node's count reflects what the drawer can
+ * show rather than what the mirror declares; omit it to count every declared setting.
+ */
+export function settingKeysForNode(node_id: string, settings?: Partial<ResolvedSettingsCascade>): SettingsCascadeKey[] {
+    const keys = Object.keys(SETTING_HOMES) as SettingsCascadeKey[];
+    return keys.filter(key => SETTING_HOMES[key].node === node_id && (settings === undefined || key in settings));
+}
+
+/** how many settings a node owns; the count the settings tree renders beside each node label */
+export function nodeSettingCount(node_id: string, settings?: Partial<ResolvedSettingsCascade>): number {
+    return settingKeysForNode(node_id, settings).length;
+}
+
+/**
+ * The saved view types carried in the `views` bag: every entry whose id is not a built-in node, with a
+ * declared `parent` and `label` - what tells a saved type's entry apart from a built-in node's own. A
+ * malformed entry (missing either field) reads as none, the same way `registryWithUserTypes` treats one
+ * that cannot become a node.
+ */
+export function userViewTypesFromViews(views: ViewOverridesMap): UserViewType[] {
+    const result: UserViewType[] = [];
+    for (const [id, bag] of Object.entries(views ?? {})) {
+        if (BUILTIN_VIEW_IDS.has(id)) { continue; }
+        if (typeof bag?.parent !== 'string' || typeof bag?.label !== 'string') { continue; }
+        const { parent, label, ...overrides } = bag;
+        result.push({ id, label, parent, overrides });
+    }
+    return result;
+}
+
+/**
+ * The built-in views' own bag entries, narrowed out of the `views` bag - the
+ * `ResolvedSettingsCascade.viewOverrides` shape the rest of the webview reads, now simply the subset of
+ * `views` keyed by a registry id rather than a saved type's. Entries holding nothing are left out.
+ */
+export function builtinViewOverridesFromViews(views: ViewOverridesMap): ViewOverridesMap {
+    const result: ViewOverridesMap = {};
+    for (const id of BUILTIN_VIEW_IDS) {
+        const bag = views?.[id];
+        if (bag && Object.keys(bag).length > 0) { result[id] = bag; }
+    }
+    return result;
+}
+
+/**
+ * Unpacks the wire `SettingsCascadePayload` (the `views` / `cards` bags, the five flat settings, and the
+ * three divergence aggregates) into the flat `ResolvedSettingsCascade` every view, drawer and composer
+ * reads: one field per cascade key, read off its own home node in its own bag and defaulted exactly like
+ * any other setting, plus `viewUserTypes` / `viewOverrides` derived from the `views` bag for the readers
+ * that predate the bag storage model. The one place this translation happens; nothing downstream of
+ * `buildViewDisplayOptions` (composerops.ts) ever reads `views` or `cards` directly.
+ */
+export function resolvedSettingsFromCascade(wire: Partial<SettingsCascadePayload> | undefined): ResolvedSettingsCascade {
+    const views: ViewOverridesMap = wire?.views ?? {};
+    const cards: ViewOverridesMap = wire?.cards ?? {};
+    const resolved: Record<string, unknown> = {};
+    for (const key of Object.keys(SETTING_HOMES) as SettingsCascadeKey[]) {
+        const def = SETTING_HOMES[key];
+        if (def.bag === 'views') { resolved[key] = views[def.node]?.[key] ?? def.default; }
+        else if (def.bag === 'cards') { resolved[key] = cards[def.node]?.[key] ?? def.default; }
+        else { resolved[key] = (wire as Record<string, unknown> | undefined)?.[key] ?? def.default; }
+    }
+    resolved.viewUserTypes = userViewTypesFromViews(views);
+    resolved.viewOverrides = builtinViewOverridesFromViews(views);
+    // the whole cards bag, unfiltered: every entry is a built-in card node's own bag, there being no saved card types
+    resolved.cardOverrides = cards;
+    resolved.diverged = wire?.diverged ?? [];
+    resolved.hasWorkspaceOverrides = wire?.hasWorkspaceOverrides ?? false;
+    resolved.hasAnyOverrides = wire?.hasAnyOverrides ?? false;
+    return resolved as unknown as ResolvedSettingsCascade;
 }

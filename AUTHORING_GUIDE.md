@@ -291,8 +291,8 @@ renders.
 |---|---|
 | `nt_view` | View type for this subtree: `auto`, `document`, `kanban`, `line`. Legacy `ng_view` is still accepted on read. See [The Line view and grouping](#the-line-view-and-grouping) |
 | `nt_card` | How each note is drawn, independently of the view: `auto`, `card` (the full card - pill, title, attributes, body) or `sticky` (a sticky in its project's colour - pill and title only). Set on the file root (`#`). In Folder mode it is majority-voted across files, same as `nt_view`. Legacy `ng_card` is accepted on read. See [Card types](#card-types) |
-| `nt_group_by` | The attribute the **Line** view groups its lanes by: an attribute key present on your stories (e.g. `assignee`) or the implicit key `nt_first_level_folder` (each file's first path segment / project folder). Defaults to `nt_first_level_folder` when unset. Set on the file root (`#`). In Folder mode it is majority-voted across files, same as `nt_view`. See [The Line view and grouping](#the-line-view-and-grouping) |
-| `nt_group_order` | The order the lanes appear in on the Line view's grouped axis (optional). Set on the file root (`#`) - the same idea as Kanban's column order |
+| `nt_group_by` | The attribute the **Line** view groups by: an attribute key present on your stories (e.g. `assignee`) or the implicit key `nt_first_level_folder` (each file's first path segment / project folder). Defaults to `nt_first_level_folder` when unset. Set on the file root (`#`). In Folder mode it is majority-voted across files, same as `nt_view`. See [The Line view and grouping](#the-line-view-and-grouping) |
+| `nt_group_order` | The order the groups appear in on the Line view's grouped axis (optional). Set on the file root (`#`) - the same idea as Kanban's column order |
 | `nt_integration_mode` | The integration mode this file opens into while the view is in **auto**: `current_file` or `folder`. In auto the view follows it; changing the mode or navigating away from the file's intent pins your own choice. Set on the file root (`#`). `nt_`-only - no `ng_` form |
 | `nt_breadcrumb_last` | The breadcrumb segment this file opens scoped to while in **auto** - a folder name (narrows folder-mode aggregation to that subfolder, implying folder mode) or an epic/story headline (scopes the note hierarchy). Seeds the initial position; navigate away freely. Set on the file root (`#`). `nt_`-only |
 | `nt_level` | Render level (advanced; usually leave unset). Legacy `ng_level` is still accepted on read |
@@ -301,10 +301,10 @@ renders.
 
 #### The Line view and grouping
 
-`nt_view=line` selects the **Line** view - the single-axis card-lane view. Like
-Kanban it lays stories out as cards in lanes, but *you* choose which attribute
-the lanes are grouped by. Kanban is simply Line preset to group by `status`, so
-`nt_view=kanban` is unchanged and still means "lanes by status".
+`nt_view=line` selects the **Line** view - the single-axis card-group view. Like
+Kanban it lays stories out as cards in groups, but *you* choose which attribute
+the groups are grouped by. Kanban is simply Line preset to group by `status`, so
+`nt_view=kanban` is unchanged and still means "groups by status".
 
 Set the view on the file root (`#`):
 
@@ -315,12 +315,12 @@ Set the view on the file root (`#`):
 In Folder mode the view type is majority-voted across the files' top-level
 `nt_view` linetags, exactly as today.
 
-**Choosing the lane axis with `nt_group_by`.** On a Line board, `nt_group_by`
-names the attribute whose values become the lanes. Its value is either:
+**Choosing the group axis with `nt_group_by`.** On a Line board, `nt_group_by`
+names the attribute whose values become the groups. Its value is either:
 
 - an **attribute key present on your stories** - e.g. `nt_group_by=assignee`
-  gives each `assignee` value its own lane; or
-- the implicit key **`nt_first_level_folder`** - one lane per file's first path
+  gives each `assignee` value its own group; or
+- the implicit key **`nt_first_level_folder`** - one group per file's first path
   segment (its project folder).
 
 When unset it defaults to `nt_first_level_folder`. Set it on the file root next
@@ -335,13 +335,13 @@ semantics as `nt_view`), and the Line board labels the resolved key as
 "Auto (Assignee)".
 
 **Drag depends on what you grouped by.** Grouping by an authored attribute lets
-you **drag a card between lanes to rewrite that attribute** - drop a card in the
-`bob` lane and its `assignee` becomes `bob`. Grouping by `nt_first_level_folder`
-is **read-only**: dragging a card between folder lanes is disabled, because it
+you **drag a card between groups to rewrite that attribute** - drop a card in the
+`bob` group and its `assignee` becomes `bob`. Grouping by `nt_first_level_folder`
+is **read-only**: dragging a card between folder groups is disabled, because it
 would mean moving the file on disk.
 
-**Ordering the lanes with `nt_group_order`.** `nt_group_order` (optional) sets
-the order the lanes appear in on the grouped axis, following the same idea as
+**Ordering the groups with `nt_group_order`.** `nt_group_order` (optional) sets
+the order the groups appear in on the grouped axis, following the same idea as
 Kanban's column order. Set it on the file root.
 
 #### Card types
@@ -608,7 +608,7 @@ In Folder mode, NoteThink:
 4. Picks one view type (`auto`, `document`, `kanban`, `line`) by majority vote
    across the files' top-level `nt_view` linetags (legacy `ng_view` still
    counts). For a `line` view it likewise majority-votes `nt_group_by` to pick
-   the shared lane axis.
+   the shared group axis.
 5. Renders one view, one toolbar, one breadcrumb.
 
 Each story shows a small **origin pill** with the source file (and epic, if

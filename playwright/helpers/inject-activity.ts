@@ -53,6 +53,8 @@ function claudeBoundBusy(story_doc_path: string): Record<string, unknown> {
         capabilities: CLAUDE_CAPABILITIES,
         current: { at: '2026-09-18T09:14:01Z', kind: 'tool_call', tool: 'Edit', arg: 'client/extension/src/types/AgentActivity.ts' },
         model: 'claude-sonnet-5',
+        // well under the 22m31s span between started_at and updated_at, so active mode and span mode read visibly differently
+        active_ms: 7 * 60 * 1000,
         usage: USAGE,
     };
 }
@@ -123,7 +125,7 @@ function activityTree(extra_uncommitted = 0): Record<string, unknown> {
             ...extra,
         ],
         committed: [
-            { sha: 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4', subject: 'wire the sticky note lane', session_id: 'grok-bound-idle' },
+            { sha: 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4', subject: 'wire the sticky note group', session_id: 'grok-bound-idle' },
             { sha: 'b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5', subject: 'rename axisops', session_id: 'grok-bound-idle' },
         ],
     };
@@ -149,6 +151,24 @@ export function activityFixtureSnapshot(options: InjectActivityOptions = {}): Re
 /** post one activity snapshot to the webview */
 export async function injectActivity(page: Page, options: InjectActivityOptions = {}): Promise<void> {
     const activity = activityFixtureSnapshot(options);
+    await page.evaluate((payload) => {
+        window.dispatchEvent(new MessageEvent('message', { data: { type: 'activity', activity: payload } }));
+    }, activity);
+}
+
+/**
+ * Post a snapshot spanning several repositories, each carrying only its own `claude-no-story`
+ * unbound session, for the repository-scoping spec: a workspace rooted above several repositories
+ * sees every one of them, so admission has to be proved against more than the single tree
+ * `injectActivity` builds.
+ */
+export async function injectActivityAcrossRepos(page: Page, repos: Array<Pick<InjectActivityOptions, 'root_relative' | 'root_path'>>): Promise<void> {
+    const snapshots = repos.map(repo => activityFixtureSnapshot({ ...repo, sessions: ['claude-no-story'] }));
+    const activity = {
+        analyser: { state: 'live', refusals: [] },
+        sessions: snapshots.flatMap(snapshot => snapshot.sessions),
+        trees: snapshots.flatMap(snapshot => snapshot.trees),
+    };
     await page.evaluate((payload) => {
         window.dispatchEvent(new MessageEvent('message', { data: { type: 'activity', activity: payload } }));
     }, activity);

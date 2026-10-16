@@ -7,8 +7,11 @@ import {
     attributedFiles,
     earliestCountedActivity,
     unattributedCommits,
+    agentClockModeLabel,
+    agentClockTooltip,
     factStateFor,
     formatActivityUsage,
+    formatAgentClock,
     formatDurationClock,
     isAgentScanPending,
     normaliseActivityPath,
@@ -28,10 +31,12 @@ import {
     unboundSessionKey,
     unboundSessions,
     vendorMonogram,
+    viewedActivityScope,
     virtualNotesForActivity,
     type ActivitySessionState,
     type ActivitySnapshot,
     type ActivityTreeState,
+    type ActivityViewScope,
 } from './agentactivityops';
 import { isVirtualNote, virtualNoteKeyOf } from './virtualnoteops';
 import type { ActivitySession, ActivityTree } from '../types/AgentActivity';
@@ -260,12 +265,17 @@ describe('joining a session to a card', () => {
     });
 });
 
+/** a scope admitting exactly these root_paths, folder-mode shaped unless told otherwise; `undefined` in the list admits a root-less session */
+function scopeAdmitting(root_paths: ReadonlyArray<string | undefined>, notes_carry_relative_path = true): ActivityViewScope {
+    return { root_paths: new Set(root_paths), notes_carry_relative_path };
+}
+
 describe('an agent whose own write calls bound it to no story', () => {
 
     it('is the only kind of session a virtual note is minted for', () => {
         const snapshot = fixtureSnapshot();
         expect(unboundSessions(snapshot).map(s => s.session.session_id)).toEqual(['claude-no-story']);
-        const virtual = virtualNotesForActivity(snapshot);
+        const virtual = virtualNotesForActivity(snapshot, scopeAdmitting([ROOT_PATH]));
         expect(virtual).toHaveLength(1);
         expect(isVirtualNote(virtual[0])).toBe(true);
         expect(virtualNoteKeyOf(virtual[0], 'agent')).toBe(`${ROOT_PATH.replace(/^\//, '')}/claude-no-story`);
@@ -277,15 +287,79 @@ describe('an agent whose own write calls bound it to no story', () => {
         const elsewhere = { ...unbound, root_path: '/w/notegit' };
         const both = { ...snapshot, sessions: [...snapshot.sessions, elsewhere] };
         expect(unboundSessionKey(unbound)).not.toBe(unboundSessionKey(elsewhere));
-        expect(virtualNotesForActivity(both)).toHaveLength(2);
+        expect(virtualNotesForActivity(both, scopeAdmitting([ROOT_PATH, '/w/notegit']))).toHaveLength(2);
         expect(sessionForUnboundKey(both, unboundSessionKey(elsewhere))?.root_path).toBe('/w/notegit');
         expect(sessionForUnboundKey(both, 'nothing/at-all')).toBeUndefined();
     });
 
     it('is headlined by its vendor and project, never by a story it did not declare', () => {
-        const virtual = virtualNotesForActivity(fixtureSnapshot());
+        const virtual = virtualNotesForActivity(fixtureSnapshot(), scopeAdmitting([ROOT_PATH]));
         expect(virtual[0].headline_raw).toBe('claude-code in notethink');
         expect(virtual[0].origin?.project_hue).toEqual(expect.any(Number));
+    });
+});
+
+describe('drawing unbound agents only beside their own repository', () => {
+
+    const OTHER_ROOT_PATH = '/mnt/workspace/in_development/notegit';
+    const OTHER_ROOT_RELATIVE = 'notegit';
+    const OTHER_TODO_PATH = `${OTHER_ROOT_RELATIVE}/docstech/users/alex.stanhope/todo.md`;
+
+    /** the fixture snapshot's one repository plus a second, each with its own unbound session */
+    function twoRepoSnapshot(): ActivitySnapshot {
+        const base = fixtureSnapshot();
+        const other_unbound = { root_path: OTHER_ROOT_PATH, session: { ...base.sessions.find(s => s.session.session_id === 'claude-no-story')!.session, session_id: 'codex-no-story-other', vendor: 'codex' } };
+        return {
+            ...base,
+            sessions: [...base.sessions, other_unbound],
+            trees: [...base.trees, { root_path: OTHER_ROOT_PATH, root_relative: OTHER_ROOT_RELATIVE, tree: makeTree() }],
+        };
+    }
+
+    it('admits only its own repository in a single-file view, and stamps no relative_path', () => {
+        const snapshot = twoRepoSnapshot();
+        const scope = viewedActivityScope(snapshot, undefined, TODO_PATH);
+        expect(scope.notes_carry_relative_path).toBe(false);
+        const virtual = virtualNotesForActivity(snapshot, scope);
+        expect(virtual.map(note => virtualNoteKeyOf(note, 'agent'))).toEqual([`${ROOT_PATH.replace(/^\//, '')}/claude-no-story`]);
+        expect(virtual[0].origin?.relative_path).toBeUndefined();
+    });
+
+    it('admits both repositories in a folder view spanning both, each stamped with its own repository', () => {
+        const snapshot = twoRepoSnapshot();
+        const notes = [makeStoryNote('agent-activity-card', TODO_PATH), makeStoryNote('some-other-story', OTHER_TODO_PATH)];
+        const scope = viewedActivityScope(snapshot, notes, undefined);
+        expect(scope.notes_carry_relative_path).toBe(true);
+        const virtual = virtualNotesForActivity(snapshot, scope);
+        const by_key = new Map(virtual.map(note => [virtualNoteKeyOf(note, 'agent'), note]));
+        expect(by_key.get(`${ROOT_PATH.replace(/^\//, '')}/claude-no-story`)?.origin?.relative_path).toBe(ROOT_RELATIVE);
+        expect(by_key.get(`${OTHER_ROOT_PATH.replace(/^\//, '')}/codex-no-story-other`)?.origin?.relative_path).toBe(OTHER_ROOT_RELATIVE);
+    });
+
+    it('admits only root-less sessions beside a document outside every repository', () => {
+        const snapshot = twoRepoSnapshot();
+        const outside = { root_path: undefined, session: { ...snapshot.sessions.find(s => s.session.session_id === 'claude-no-story')!.session, session_id: 'claude-no-story-outside' } };
+        const with_outside = { ...snapshot, sessions: [...snapshot.sessions, outside] };
+        const scope = viewedActivityScope(with_outside, [makeStoryNote('a-story', 'elsewhere/todo.md')], undefined);
+        expect(scope.root_paths.has(undefined)).toBe(true);
+        expect(scope.root_paths.has(ROOT_PATH)).toBe(false);
+        const virtual = virtualNotesForActivity(with_outside, scope);
+        expect(virtual.map(note => virtualNoteKeyOf(note, 'agent'))).toEqual(['/claude-no-story-outside']);
+    });
+
+    it('admits a workspace-folder repository (root_relative \'\') for every document inside it', () => {
+        const workspace_root_path = '/w';
+        const snapshot: ActivitySnapshot = {
+            analyser: { state: 'live', refusals: [] },
+            sessions: [{ root_path: workspace_root_path, session: { ...fixtureSnapshot().sessions.find(s => s.session.session_id === 'claude-no-story')!.session, session_id: 'claude-no-story-ws' } }],
+            trees: [{ root_path: workspace_root_path, root_relative: '', tree: makeTree() }],
+        };
+        const scope = viewedActivityScope(snapshot, [makeStoryNote('a-story', 'docstech/users/alex.stanhope/todo.md')], undefined);
+        expect(scope.root_paths.has(workspace_root_path)).toBe(true);
+        const virtual = virtualNotesForActivity(snapshot, scope);
+        expect(virtual).toHaveLength(1);
+        // root_relative '' is the repository IS the workspace folder case, which has no sub-path to stamp
+        expect(virtual[0].origin?.relative_path).toBeUndefined();
     });
 });
 
@@ -382,6 +456,45 @@ describe('the duration clock', () => {
         expect(formatDurationClock('not a date', end)).toBe('');
         expect(formatDurationClock(end, 'not a date')).toBe('');
         expect(formatDurationClock('2026-09-23T12:05:00Z', end)).toBe('0m');
+    });
+});
+
+describe('the agent card clock, by mode', () => {
+
+    const now_ms = Date.parse('2026-09-23T12:00:00Z');
+    const now_iso = new Date(now_ms).toISOString();
+    const session = makeSession('claude-bound-busy', { started_at: '2026-09-23T10:00:00Z', updated_at: '2026-09-23T10:42:00Z', active_ms: 7 * 60_000 });
+
+    it('span draws the same figure formatDurationClock would, ignoring active_ms and now', () => {
+        expect(formatAgentClock(session, 'span', now_ms)).toBe('42m');
+    });
+
+    it('active draws active_ms rather than the span between started_at and updated_at', () => {
+        expect(formatAgentClock(session, 'active', now_ms)).toBe('7m');
+    });
+
+    it('active reads a missing active_ms as zero rather than throwing', () => {
+        expect(formatAgentClock({ ...session, active_ms: undefined }, 'active', now_ms)).toBe('0m');
+    });
+
+    it('sinceStart measures from started_at to the caller\'s now, not to updated_at', () => {
+        expect(formatAgentClock(session, 'sinceStart', now_ms)).toBe('2h 00m');
+    });
+
+    it('sinceStart draws nothing for an unparseable started_at', () => {
+        expect(formatAgentClock({ ...session, started_at: 'not a date' }, 'sinceStart', now_ms)).toBe('');
+    });
+
+    it('names each mode distinctly for the settings drawer', () => {
+        expect(agentClockModeLabel('span')).toBe('Span');
+        expect(agentClockModeLabel('active')).toBe('Active time');
+        expect(agentClockModeLabel('sinceStart')).toBe('Since start');
+    });
+
+    it('the tooltip names the mode and keeps the start and end times, "now" standing in for sinceStart\'s open end', () => {
+        expect(agentClockTooltip(session, 'span', now_iso)).toBe(`Span: ran from ${session.started_at} to ${session.updated_at}`);
+        expect(agentClockTooltip(session, 'active', now_iso)).toBe(`Active time, excluding gaps over five minutes: ran from ${session.started_at} to ${session.updated_at}`);
+        expect(agentClockTooltip(session, 'sinceStart', now_iso)).toBe(`Since start: running since ${session.started_at}, now at ${now_iso}`);
     });
 });
 

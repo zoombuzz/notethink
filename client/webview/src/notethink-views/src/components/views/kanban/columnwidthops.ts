@@ -1,9 +1,9 @@
 /*
- * Lane breadth is a setting, and the ratio only shapes the card.
+ * Group breadth is a setting, and the ratio only shapes the card.
  *
- * `lineBreadth` is the pixel breadth of one lane: its width when the lanes run side by side, its height when
- * they are stacked. It is a minimum rather than an exact size - lanes that all fit still spread to fill the
- * board - and it is the one number the drawer's text box shows and a dragged lane boundary sets. The card
+ * `lineBreadth` is the pixel breadth of one group: its width when the groups run side by side, its height when
+ * they are stacked. It is a minimum rather than an exact size - groups that all fit still spread to fill the
+ * board - and it is the one number the drawer's text box shows and a dragged group boundary sets. The card
  * ratio then decides how tall a card stands at the width it is drawn at, and a card holding more than that
  * clips its own body to reach it. Stacked, the same rule runs along the other axis: a row is `lineBreadth`
  * tall, and each card's width is solved from its own text so the row is one card high whatever it holds.
@@ -16,13 +16,13 @@ export const CARD_RATIOS = [1, 1.2, 1.4, 1.6, 2, 2.5, 3];
 
 export const DEFAULT_CARD_RATIO = 1.4;
 
-// the breadth a lane starts at, measured from the layout it replaced: 3 lanes on a 760px board, 7 on 1590px
+// the breadth a group starts at, measured from the layout it replaced: 3 groups on a 760px board, 7 on 1590px
 export const DEFAULT_LINE_BREADTH = 220;
 
-// the narrowest a lane may be dragged or typed to; below it a card has no room to hold a line of text
+// the narrowest a group may be dragged or typed to; below it a card has no room to hold a line of text
 export const MIN_LINE_BREADTH = 120;
 
-// the pixels one arrow key nudges a lane boundary, and one with shift held
+// the pixels one arrow key nudges a group boundary, and one with shift held
 export const BREADTH_NUDGE = 10;
 export const BREADTH_NUDGE_LARGE = 50;
 
@@ -40,7 +40,7 @@ export interface CardBox {
  * What a solved layout tells the board.
  * - width: the width every rendered column takes, in px
  * - fit: how many whole columns of that width the board holds
- * - scrolls: true when the lanes do not all fit, so the board scrolls rather than filling
+ * - scrolls: true when the groups do not all fit, so the board scrolls rather than filling
  */
 export interface ColumnLayout {
     width: number;
@@ -49,9 +49,9 @@ export interface ColumnLayout {
 }
 
 /**
- * One lane's cards, narrowed to what a signature needs.
+ * One group's cards, narrowed to what a signature needs.
  */
-export interface LaneCards {
+export interface GroupCards {
     value: string;
     child_notes?: Array<{ stable_id?: string }>;
 }
@@ -59,7 +59,7 @@ export interface LaneCards {
 /**
  * A string that changes exactly when the measurement would come out different, and is what invalidates a
  * cached one. Keyed on which cards are on the board rather than on what they say: an edit changes a card's
- * area a little, and re-measuring mid-keystroke would resize every lane as the user types. Adding,
+ * area a little, and re-measuring mid-keystroke would resize every group as the user types. Adding,
  * removing or moving a card is the change worth paying a measurement for.
  *
  * `layout` is in there because a card is not the same card in every layout - a sticky draws nothing like a
@@ -67,12 +67,12 @@ export interface LaneCards {
  * opened stacked kept serving that measurement after a flip to columns, and the ratio setting moved
  * nothing at all.
  */
-export function cardSignature(lanes: LaneCards[], layout: string): string {
-    const cards = lanes.map(lane => `${lane.value}:${(lane.child_notes ?? []).map(note => note.stable_id ?? '?').join(',')}`).join('|');
+export function cardSignature(groups: GroupCards[], layout: string): string {
+    const cards = groups.map(group => `${group.value}:${(group.child_notes ?? []).map(note => note.stable_id ?? '?').join(',')}`).join('|');
     return `${layout}#${cards}`;
 }
 
-/** the middle value of a list, which is the card the width is chosen for; one outsized note must not widen every lane beside it */
+/** the middle value of a list, which is the card the width is chosen for; one outsized note must not widen every group beside it */
 export function medianOf(values: number[]): number {
     if (values.length === 0) { return 0; }
     const sorted = [...values].sort((a, b) => a - b);
@@ -80,9 +80,9 @@ export function medianOf(values: number[]): number {
 }
 
 /**
- * The typical card's area at the probe width, in px squared, which stacked lanes read to size each card's
+ * The typical card's area at the probe width, in px squared, which stacked groups read to size each card's
  * width and which doubles as the test that a probe measured anything. Cards too small to have reflowed at all are
- * dropped: an empty lane's drop placeholder or a card mid-flight measures as a sliver and would drag the
+ * dropped: an empty group's drop placeholder or a card mid-flight measures as a sliver and would drag the
  * median down to a width no real card wants.
  */
 export function medianCardArea(cards: CardBox[]): number {
@@ -135,24 +135,24 @@ export function cardWidthsForHeight(cards: CardBox[], height: number, min_width:
 /**
  * What the board does with the width it has, given the width one column wants.
  *
- * Two outcomes, and the second is the point of the whole feature. When the lanes all fit they share the
- * slack and fill the board, so three lanes on a wide panel are three wide lanes rather than three narrow
+ * Two outcomes, and the second is the point of the whole feature. When the groups all fit they share the
+ * slack and fill the board, so three groups on a wide panel are three wide groups rather than three narrow
  * ones beside an empty strip. When they do not, every column sits at its target and the board scrolls,
- * so widening the panel reveals more lanes instead of fattening the ones already showing.
+ * so widening the panel reveals more groups instead of fattening the ones already showing.
  */
-export function solveColumnLayout(target: number, available: number, lane_count: number, gap: number): ColumnLayout {
+export function solveColumnLayout(target: number, available: number, group_count: number, gap: number): ColumnLayout {
     const width = Math.max(target, 1);
     const fit = Math.max(1, Math.floor((available + gap) / (width + gap)));
-    if (lane_count > 0 && fit >= lane_count) {
-        const spread = (available - gap * (lane_count - 1)) / lane_count;
-        return { width: Math.max(width, spread), fit: lane_count, scrolls: false };
+    if (group_count > 0 && fit >= group_count) {
+        const spread = (available - gap * (group_count - 1)) / group_count;
+        return { width: Math.max(width, spread), fit: group_count, scrolls: false };
     }
     return { width, fit, scrolls: true };
 }
 
 
 /**
- * A lane breadth held to the floor. Anything that is not a finite number answers the default, so a
+ * A group breadth held to the floor. Anything that is not a finite number answers the default, so a
  * corrupt saved value can never collapse the board.
  */
 export function clampBreadth(value: unknown): number {
@@ -171,13 +171,13 @@ export function parseBreadthInput(text: string): number | undefined {
 }
 
 /**
- * The breadth a dragged boundary implies. The boundary sits in the middle of the gap after `lanes_before`
- * lanes, so the pointer, measured from the board's start with its scroll added back, is over that many lane
+ * The breadth a dragged boundary implies. The boundary sits in the middle of the gap after `groups_before`
+ * groups, so the pointer, measured from the board's start with its scroll added back, is over that many group
  * breadths and one gap fewer between them plus half the gap it is standing in. Solving for the breadth
- * keeps the boundary under the pointer for as long as the lanes are not being filled out.
+ * keeps the boundary under the pointer for as long as the groups are not being filled out.
  */
-export function breadthFromPointer(offset: number, lanes_before: number, gap: number): number {
-    const count = Math.max(lanes_before, 1);
+export function breadthFromPointer(offset: number, groups_before: number, gap: number): number {
+    const count = Math.max(groups_before, 1);
     return clampBreadth((offset - gap / 2 - gap * (count - 1)) / count);
 }
 

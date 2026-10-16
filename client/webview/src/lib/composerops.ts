@@ -1,37 +1,13 @@
+import { resolvedSettingsFromCascade } from "../notethink-views/src/lib/viewregistryops";
 import { FOLDER_VIEW_STATE_ID } from "../notethink-views/src/lib/viewstateops";
-import { chainOf, normalizeGroupDisplayOverride, registryWithUserTypes } from "../notethink-views/src/lib/viewregistryops";
 import { INTEGRATION_MODE_AUTO, type IntegrationMode } from "../notethink-views/src/types/IntegrationMode";
 import { DEFAULT_SETTINGS_CASCADE } from "../constants";
 import type { ViewState } from "../hooks/usePersistedViewStates";
-import type { UserViewType } from "../notethink-views/src/types/Messages";
 import type { NoteDisplayOptions } from "../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../components/NoteRenderer";
 
 // the three aggregate fields describe the cascade, so they never enter the merged settings
 const CASCADE_AGGREGATE_FIELDS: string[] = ['diverged', 'hasWorkspaceOverrides', 'hasAnyOverrides'];
-
-/**
- * Fold the overrides of every minted view type on the resolved type's chain over the cascade block.
- *
- * A minted type IS its overrides - "Kanban by Assignee" means a kanban whose axis is assignee - so its
- * declared values layer OVER the saved configuration rather than under it. Selecting the type is what
- * asks for them, and a cascade value winning instead would make choosing the type do nothing. They are
- * keyed by cascade key, exactly as the drawer wrote them, so they apply with no structural translation.
- *
- * The chain is walked root-first so a type inheriting from another lets the nearer one win. The saved
- * types come from settings.json and are untrusted: registryWithUserTypes drops a malformed entry, an
- * orphaned parent simply yields a shorter chain, and an entry whose overrides are not an object is
- * skipped rather than spread.
- */
-function applyUserTypeOverrides(settings: Record<string, unknown>, view_type: string, user_types: UserViewType[]): void {
-    if (!Array.isArray(user_types) || user_types.length === 0) { return; }
-    const chain = chainOf(view_type, registryWithUserTypes(user_types));
-    for (const node_id of [...chain].reverse()) {
-        const minted = user_types.find(candidate => candidate?.id === node_id);
-        if (!minted || typeof minted.overrides !== 'object' || minted.overrides === null) { continue; }
-        Object.assign(settings, normalizeGroupDisplayOverride(minted.overrides));
-    }
-}
 
 /**
  * BuildViewDisplayOptionsResult is the bundle the composers consume.
@@ -51,6 +27,14 @@ export interface BuildViewDisplayOptionsResult {
  * from it, so a setting changed anywhere shows up everywhere - across integration modes, across
  * panels, and across a reload. A per-session viewState settings block is no longer merged over the
  * top; any stale one persisted by an earlier build is ignored rather than migrated.
+ *
+ * The settings block here is deliberately the RAW flat cascade - a saved type's own bag entry and a
+ * built-in view's own entry in the `views` bag are no longer folded in here at all.
+ * `GenericView.tsx` calls `resolvedSettingsForView` once, for the rendered view, to get the resolved
+ * values the board actually needs; the settings drawer calls the SAME resolver per row, for whichever
+ * node is selected there. Folding either kind of override in here would give the drawer no way to tell
+ * a flat home value from a value a saved type or a built-in descendant holds of its own, which is
+ * exactly the bug ("selecting an ancestor shows the wrong value") this split exists to avoid.
  *
  * viewType is the one member the view state still speaks for, because the rendered view's `type` is
  * also its identity: a type picked in the toolbar is dispatched to this view AND cascade-written, so
@@ -75,15 +59,14 @@ export function buildViewDisplayOptions(
     mode: IntegrationMode,
     integration_path?: string,
 ): BuildViewDisplayOptionsResult {
-    const cascade = props.settingsCascade ?? DEFAULT_SETTINGS_CASCADE;
+    const cascade = resolvedSettingsFromCascade(props.settingsCascade ?? DEFAULT_SETTINGS_CASCADE);
     const viewType = view_state?.type || cascade.viewType || 'auto';
     const cascade_settings: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(cascade)) {
         if (CASCADE_AGGREGATE_FIELDS.includes(key)) { continue; }
         cascade_settings[key] = value;
     }
-    applyUserTypeOverrides(cascade_settings, viewType, cascade.viewUserTypes);
-    // the cascade spells natural order (every lane shown) as an empty array and kanban as no groupDisplay at all
+    // the cascade spells natural order (every group shown) as an empty array, read as no groupDisplay at all
     if (Array.isArray(cascade_settings.groupDisplay) && cascade_settings.groupDisplay.length === 0) {
         delete cascade_settings.groupDisplay;
     }

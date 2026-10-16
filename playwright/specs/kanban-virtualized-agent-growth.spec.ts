@@ -40,8 +40,8 @@ async function harness(page: Page): Promise<void> {
 
 async function pinAgentCard(page: Page): Promise<void> {
     await page.evaluate(() => {
-        const harness = window as unknown as { __nt_settings: { workspace: Record<string, unknown> }; __nt_publishSettings: () => void };
-        harness.__nt_settings.workspace.cardType = 'agent';
+        const harness = window as unknown as { __nt_settings: { workspace: { cards: Record<string, Record<string, unknown>> } }; __nt_publishSettings: () => void };
+        harness.__nt_settings.workspace.cards.allcards = { ...harness.__nt_settings.workspace.cards.allcards, cardType: 'agent' };
         harness.__nt_publishSettings();
     });
 }
@@ -52,11 +52,11 @@ async function openViewSettings(page: Page): Promise<void> {
     await expect(page.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'true');
 }
 
-/** The long virtualized "doing" lane, agent card pinned, kanban view selected, before any activity arrives. */
-async function setupGrowingLaneBoard(page: Page): Promise<void> {
+/** The long virtualized "doing" group, agent card pinned, kanban view selected, before any activity arrives. */
+async function setupGrowingGroupBoard(page: Page): Promise<void> {
     await pinAgentCard(page);
     await injectMultipleDocsFromFixtures(page, [
-        { fixture: 'kanban-agent-long-lane.md', doc_path: TODO_DOC_PATH, relative_path: TODO_RELATIVE_PATH },
+        { fixture: 'kanban-agent-long-group.md', doc_path: TODO_DOC_PATH, relative_path: TODO_RELATIVE_PATH },
     ], { workspace_root: WORKSPACE_ROOT });
     await selectFolderMode(page);
     await page.waitForSelector('[data-folder-mode="true"]');
@@ -67,21 +67,21 @@ async function setupGrowingLaneBoard(page: Page): Promise<void> {
     await expect(page.locator('[role="region"][aria-label="doing"]')).toBeVisible({ timeout: 5000 });
 }
 
-test.describe('Kanban virtualized lane: a card growing after mount', () => {
+test.describe('Kanban virtualized group: a card growing after mount', () => {
 
     test.beforeEach(async ({ page }) => {
         await harness(page);
     });
 
     /*
-     * The bug: a card in a windowed lane grows after its row has been sized and positioned, and the
+     * The bug: a card in a windowed group grows after its row has been sized and positioned, and the
      * rows below it keep their stale offsets, drawing the next card's text over its content.
      */
     test('a card that grows after its row is measured pushes the following row down, with no overlap', async ({ page }) => {
-        await setupGrowingLaneBoard(page);
-        const lane = page.locator('[role="region"][aria-label="doing"]');
-        const growing_card = lane.locator('[role="row"]').filter({ hasText: 'Growing Story' });
-        const next_card = lane.locator('[role="row"]').filter({ hasText: 'Task After Growing' });
+        await setupGrowingGroupBoard(page);
+        const group = page.locator('[role="region"][aria-label="doing"]');
+        const growing_card = group.locator('[role="row"]').filter({ hasText: 'Growing Story' });
+        const next_card = group.locator('[role="row"]').filter({ hasText: 'Task After Growing' });
         await expect(growing_card).toBeVisible({ timeout: 5000 });
         await expect(next_card).toBeVisible({ timeout: 5000 });
         await expect(growing_card).toHaveAttribute('data-session-count', '0');
@@ -133,7 +133,7 @@ function manyGrowingActivity(): Record<string, unknown> {
     return { analyser: { state: 'live', refusals: [] }, sessions, trees: [] };
 }
 
-test.describe('Kanban virtualized lane: many cards growing in one commit', () => {
+test.describe('Kanban virtualized group: many cards growing in one commit', () => {
 
     test.beforeEach(async ({ page }) => {
         await harness(page);
@@ -150,19 +150,19 @@ test.describe('Kanban virtualized lane: many cards growing in one commit', () =>
         await page.getByTestId('view-radio-kanban').click();
         await expect(page.locator('[role="columnheader"]').first()).toBeVisible({ timeout: 5000 });
         await page.keyboard.press('Escape');
-        const lane = page.locator('[role="region"][aria-label="doing"]');
-        await expect(lane).toBeVisible({ timeout: 5000 });
-        await expect(lane.locator('[role="row"]').first()).toBeVisible({ timeout: 5000 });
+        const group = page.locator('[role="region"][aria-label="doing"]');
+        await expect(group).toBeVisible({ timeout: 5000 });
+        await expect(group.locator('[role="row"]').first()).toBeVisible({ timeout: 5000 });
 
         await page.evaluate((activity) => {
             window.dispatchEvent(new MessageEvent('message', { data: { type: 'activity', activity } }));
         }, manyGrowingActivity());
-        await expect(lane.locator('[data-testid="agent-row"]').first()).toBeVisible({ timeout: 5000 });
+        await expect(group.locator('[data-testid="agent-row"]').first()).toBeVisible({ timeout: 5000 });
         // let every growing card's resize observer settle
         await page.waitForTimeout(300);
 
         await expect(async () => {
-            const boxes = await lane.locator('[role="row"]').evaluateAll((rows) =>
+            const boxes = await group.locator('[role="row"]').evaluateAll((rows) =>
                 rows.map((row) => {
                     const rect = row.getBoundingClientRect();
                     return { text: (row.textContent || '').slice(0, 40), top: rect.top, bottom: rect.bottom };
@@ -182,7 +182,7 @@ test.describe('Kanban virtualized lane: many cards growing in one commit', () =>
  * a card already measured and cached by stable_id to a different index. Row heights are looked up by
  * stable_id, never by index, so the moved card must keep reserving its own real measured height.
  */
-test.describe('Kanban virtualized lane: a note reordered onto an already-cached index', () => {
+test.describe('Kanban virtualized group: a note reordered onto an already-cached index', () => {
 
     test.beforeEach(async ({ page }) => {
         await harness(page);
@@ -203,7 +203,7 @@ test.describe('Kanban virtualized lane: a note reordered onto an already-cached 
      * (the short card lands on the tall card's larger index).
      */
     test('a swap that moves a tall card onto a short cached slot and a short card onto a tall one produces neither an overlap nor a stale gap', async ({ page }) => {
-        const { path: doc_path } = await setupBoard(page, 'kanban-reorder-lane-v1.md');
+        const { path: doc_path } = await setupBoard(page, 'kanban-reorder-group-v1.md');
         const backlog = page.locator('[role="region"][aria-label="backlog"]');
         const short_card = backlog.locator('[role="row"]').filter({ hasText: 'Short A' });
         const tall_card = backlog.locator('[role="row"]').filter({ hasText: 'Tall C' });
@@ -229,7 +229,7 @@ test.describe('Kanban virtualized lane: a note reordered onto an already-cached 
         expect(short_height_before).toBeLessThan(150);
 
         // re-parse the same doc with Short A and Tall C swapped
-        await injectDocsFromFixture(page, 'kanban-reorder-lane-v2.md', doc_path);
+        await injectDocsFromFixture(page, 'kanban-reorder-group-v2.md', doc_path);
         await expect(tall_card).toBeVisible({ timeout: 5000 });
         await expect(short_card).toBeVisible({ timeout: 5000 });
 

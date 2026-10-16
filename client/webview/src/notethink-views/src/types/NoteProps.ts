@@ -17,9 +17,11 @@ export type NoteClickHandler = (event: MouseEvent<HTMLElement>, note: NoteProps 
  * - integration_mode_selection: the persisted integration-mode choice (auto / current_file / folder), carried alongside the composer-resolved concrete integration_mode so the toolbar selector can render "Auto (…)" vs the concrete label; never persisted itself - the composer re-stamps it from the canonical folder view-state each render
  * - view_caret: the view's own caret offset when no editor is live, in in-tree (merged-tree) offset space so it resolves via findDeepestNote in both single-file and folder mode; augmented state only, never text - files stay master
  * - parent_context_id / parent_context_seq: the note-hierarchy scope this view opens at. The id is the persisted half (a stable_id from a drill-in or breadcrumb click, else the authored nt_breadcrumb_last headline label) and is re-resolved against the current tree by resolveParentContextNote on every render; the seq is the resolved result, derived per render and never persisted
- * - settings: the resolved settings cascade, stamped by the composer from the single settingsCascade message the extension pushes; field names and value shapes mirror SETTINGS in client/extension/src/lib/settings.ts one for one, minus that payload's three aggregate fields. No per-view settings tier is layered over it, so a value read here is the value VS Code configuration resolved
- * - groupBy / kanbanGroupBy: the same lane-axis choice homed at two registry nodes, so a kanban board can carry an override the ancestor grouped view does not see; read whichever matches the rendered view type
- * - groupDisplay: each lane's order and visibility; absent means the natural (derived) order with every lane shown, which is how the cascade's empty array arrives here. A lane whose entry carries `shown: false` is dropped from both Kanban and Line view
+ * - settings: the resolved settings cascade, stamped by the composer from `resolvedSettingsFromCascade` (viewregistryops.ts) unpacking the single settingsCascade message the extension pushes; field names mirror ResolvedSettingsCascade in types/Messages.ts one for one, minus that shape's three aggregate fields. No per-view settings tier is layered over it, so a value read here is the value VS Code configuration resolved
+ * - groupBy: the group axis a grouped view groups by; GenericView resolves each per-view key (groupBy, orientation, lineBreadth, groupDisplay, groupOrder) for the rendered view's own chain before stamping it here, so a kanban board carrying its own value in viewOverrides reads it under this same flat field
+ * - showLinetagsInHeadlines / autoExpandFocusedNote / showLineNumbers / clockMode: card-drawn settings, resolved the same way for the rendered note's own card type before GenericNote stamps them here, so a sticky carrying its own value in cardOverrides reads it under this same flat field
+ * - groupDisplay: each group's order and visibility; absent means the natural (derived) order with every group shown, which is how the cascade's empty array arrives here. A group whose entry carries `shown: false` is dropped from both Kanban and Line view
+ * - groupOrder: how the groups are ordered - `custom` reads groupDisplay's own order, the other modes recompute it from the live notes on every render, `newestFirst` and `newestLast` from each card's ordering timestamp as its card type defines it
  * - view_expanded_ids: stable_ids of the notes the user manually expanded past their clip height, newest last and capped by nextExpandedIds so the persisted list cannot grow without bound; the manual override layer under autoExpandFocusedNote, and the reason expansion outlives a remount
  */
 export interface NoteDisplayOptions {
@@ -37,11 +39,12 @@ export interface NoteDisplayOptions {
         groupBy?: string;
         orientation?: 'columns' | 'rows';
         lineBreadth?: number;
-        kanbanGroupBy?: string;
         groupDisplay?: GroupDisplayEntry[];
-        kanbanCardRatio?: number;
-        kanbanAnimateTransitions?: boolean;
-        kanbanDefaultCardType?: string;
+        groupOrder?: 'custom' | 'newestFirst' | 'newestLast' | 'alphabetical' | 'cardCount';
+        cardRatio?: number;
+        animateTransitions?: boolean;
+        defaultCardType?: string;
+        clockMode?: 'span' | 'active' | 'sinceStart';
         watchUnopenedFilesInViewer?: boolean;
         openNewEditorIfNoneOpen?: boolean;
         includeFilter?: string;
@@ -49,6 +52,8 @@ export interface NoteDisplayOptions {
         maxNotesPerFile?: number;
         cardType?: string;
         viewUserTypes?: UserViewType[];
+        viewOverrides?: Record<string, Record<string, unknown>>;
+        cardOverrides?: Record<string, Record<string, unknown>>;
     };
     deepest?: {
         selectable_level?: number;
@@ -199,7 +204,7 @@ export interface NoteProps {
  * - file_view_type: the nt_view (legacy ng_view) value declared on the originating file's H1, if any; used by AutoView to majority-vote view type across the merged tree (one vote per file)
  * - file_card_type: the nt_card (legacy ng_card) value declared on the originating file's H1 (front-matter fallback), if any; majority-voted across files to auto-resolve the card type, the orthogonal axis to file_view_type
  * - file_group_by: the nt_group_by value declared on the originating file's H1 (front-matter fallback), if any; majority-voted across files to auto-resolve the Line view's group-by key, mirroring file_view_type
- * - file_group_order: the nt_group_order value declared on the originating file's H1 (front-matter fallback), if any; the authored per-axis lane order that seeds grouped's group order
+ * - file_group_order: the nt_group_order value declared on the originating file's H1 (front-matter fallback), if any; the authored per-axis group order that seeds grouped's group order
  * - file_rank: 0-based index of this story within its source file's selected story list (after the per-file cap + `order` reversal); the implicit ordering weight - equal across files means equal priority, which relevance ordering then breaks by file_mtime (newer first)
  * - file_mtime: on-disk mtime (epoch ms) of the source file at parse time; within a file_rank band, stories from more recently modified files sort first - background edits by another tool (or a save of the file currently open) naturally surface to the top without any explicit "active file" signal
  * - project_hue: identity hash of the project name (0-359), set-independent; stamped by mergeAggregateRoot via hueForProjectName(project_name) so the colour is fixed at the project name alone and cannot change as the workspace universe fills in on first paint

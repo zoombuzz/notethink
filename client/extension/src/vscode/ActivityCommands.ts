@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ACTIVITY_VENDOR_CLAUDE_CODE, type ActivityChangedFile, type ActivityTree } from '../types/AgentActivity';
+import { encodeClaudeProjectDirName } from '../lib/agenthomeops';
 import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
 import { isWithinWorkspace } from '../lib/pathops';
 import type { HashMapOf } from '../types/general';
@@ -31,7 +32,7 @@ const ACTIVITY_CHAT_COMMANDS: HashMapOf<string> = {
  */
 export interface ActivityTreeLookup {
 	treeFor(root_path: string): ActivityTree | undefined;
-	transcriptPathFor(session_id: string): string | undefined;
+	transcriptUriFor(session_id: string): vscode.Uri | undefined;
 }
 
 /**
@@ -54,6 +55,8 @@ export class ActivityCommands {
 		private readonly base_uri: vscode.Uri,
 		private readonly lookup: ActivityTreeLookup,
 		private readonly post: (message: Record<string, unknown>) => void,
+		// the group beside the viewer, anchored on the viewer's own column rather than VS Code's active group
+		private readonly targetColumn: () => vscode.ViewColumn,
 	) {}
 
 	/** true when the message was an activity command and has been handled, so the panel's own dispatch can carry on past it */
@@ -94,7 +97,7 @@ export class ActivityCommands {
 	 * `deleted` has no working-tree side, which is what `right` being undefined means.
 	 */
 	private async showSides(entry: ActivityChangedFile, left: vscode.Uri | undefined, right: vscode.Uri | undefined): Promise<void> {
-		const show_options = { viewColumn: vscode.ViewColumn.Beside, preview: false, preserveFocus: false };
+		const show_options = { viewColumn: this.targetColumn(), preview: false, preserveFocus: false };
 		if (left && right) {
 			await vscode.commands.executeCommand('vscode.diff', left, right, this.diffTitle(entry), show_options);
 			return;
@@ -151,9 +154,12 @@ export class ActivityCommands {
 
 	/**
 	 * Open a session in VS Code rather than on the card: in its vendor's chat panel where one takes a
-	 * session id, else as its own transcript in an editor beside the board. The vendor command resolves
-	 * even for a session id the vendor does not know, so a rejection is the only failure it can report,
-	 * and a rejection falls through to the transcript too.
+	 * session id and that panel can find it, else as its own transcript in the group beside the viewer.
+	 * Claude Code's CLI resumes a session from any project directory, but the chat panel its command
+	 * opens only activates a session listed under the first workspace folder's project directory; any
+	 * other id silently starts a blank chat instead. So the command is tried only for a session filed
+	 * there, and every other session, like a rejection from the command itself (the vendor's extension
+	 * absent, disabled, or the command moved on), opens its transcript.
 	 */
 	private async openChat(e: Record<string, unknown>): Promise<void> {
 		const vendor = typeof e.vendor === 'string' ? e.vendor : '';
@@ -164,29 +170,45 @@ export class ActivityCommands {
 			return;
 		}
 		const command = ACTIVITY_CHAT_COMMANDS[vendor];
-		if (command) {
+		if (command && this.sessionListsWorkspaceRoot(session_id)) {
 			try {
-				await vscode.commands.executeCommand(command, session_id);
+				await vscode.commands.executeCommand(command, session_id, undefined, this.targetColumn());
 				writeToLog('openChat', `handed session ${session_id} to ${command}`);
 				return;
 			} catch (err) {
-				// the vendor's extension is absent, disabled, or the command has moved on
 				writeToErrorLog('openChat', `${command} failed for session ${session_id}, opening its transcript instead`, err);
 			}
 		}
 		await this.openTranscript(session_id);
 	}
 
-	// the transcript path comes from the analyser's last scan, never the message, so the webview cannot name a file to open
+	/**
+	 * Whether the chat panel's session list would carry this session: its transcript directory is the
+	 * Claude Code project directory of `workspaceFolders[0]`, the folder that list is scoped to. That is
+	 * deliberately not `base_uri`, the folder holding the board, which differs in a multi-root
+	 * workspace. With no folder open nothing matches. The folder's path is compared as given, not
+	 * resolved through a symlink, so a first workspace folder opened through a symlinked alias misses
+	 * here and its sessions open as transcripts.
+	 */
+	private sessionListsWorkspaceRoot(session_id: string): boolean {
+		const workspace_root = vscode.workspace.workspaceFolders?.[0]?.uri.path;
+		if (!workspace_root) { return false; }
+		const transcript_uri = this.lookup.transcriptUriFor(session_id);
+		if (!transcript_uri) { return false; }
+		const session_project_dir = path.posix.basename(path.posix.dirname(transcript_uri.path));
+		return session_project_dir === encodeClaudeProjectDirName(workspace_root);
+	}
+
+	// the transcript URI comes from the analyser's last scan, never the message, and opens as read, so remote stays remote
 	private async openTranscript(session_id: string): Promise<void> {
-		const transcript_path = this.lookup.transcriptPathFor(session_id);
-		if (!transcript_path) {
+		const transcript_uri = this.lookup.transcriptUriFor(session_id);
+		if (!transcript_uri) {
 			this.post({ type: 'activityUnavailable', request: 'chat', reason: 'no_transcript', session_id });
 			return;
 		}
 		try {
-			const show_options = { viewColumn: vscode.ViewColumn.Beside, preview: false, preserveFocus: false };
-			await vscode.window.showTextDocument(vscode.Uri.file(transcript_path), show_options);
+			const show_options = { viewColumn: this.targetColumn(), preview: false, preserveFocus: false };
+			await vscode.window.showTextDocument(transcript_uri, show_options);
 			writeToLog('openTranscript', `opened the transcript of session ${session_id}`);
 		} catch (err) {
 			writeToErrorLog('openTranscript', `failed to open the transcript of session ${session_id}`, err);

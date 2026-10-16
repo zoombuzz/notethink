@@ -9,7 +9,7 @@ import {
     clearAnimationProbeEvents,
     type AnimationProbeEvent,
 } from './animationProbe';
-import { buildMoveKeyframes, KANBAN_ANIMATION_GLOBAL_CAP_MS } from './flipMath';
+import { buildMoveKeyframes, buildColumnMoveKeyframes, KANBAN_ANIMATION_GLOBAL_CAP_MS } from './flipMath';
 
 const CLASS_NAMES: FlipClassNames = { flipping: 'flipping', columnEntering: 'columnEntering', columnExiting: 'columnExiting' };
 
@@ -17,6 +17,8 @@ interface RectLookup { [id: string]: { left: number; top: number; width: number;
 
 // the test controls per-id rects; the mock reads data-flip-id off the element to pick its rect
 let rect_lookup: RectLookup = {};
+// the test controls per-group rects; the mock reads data-flip-column-id off the element to pick its rect
+let column_rect_lookup: RectLookup = {};
 // the board-root (`[data-flip-root]`) rect; tests shift it to simulate a scroll / folder-mode header growth
 let root_rect = { left: 0, top: 0, width: 0, height: 0 };
 
@@ -63,6 +65,9 @@ function Harness(props: HarnessProps): React.ReactElement {
 function moveEvents(): AnimationProbeEvent[] {
     return getAnimationProbeEvents().filter((e) => e.kind === 'move');
 }
+function columnMoveEvents(): AnimationProbeEvent[] {
+    return getAnimationProbeEvents().filter((e) => e.kind === 'column-move');
+}
 function eventsOfKind(kind: AnimationProbeEvent['kind']): AnimationProbeEvent[] {
     return getAnimationProbeEvents().filter((e) => e.kind === kind);
 }
@@ -80,6 +85,7 @@ describe('useFlipTransition', () => {
         enableAnimationProbe();
         clearAnimationProbeEvents();
         rect_lookup = {};
+        column_rect_lookup = {};
         root_rect = { left: 0, top: 0, width: 0, height: 0 };
 
         original_grbc = Element.prototype.getBoundingClientRect;
@@ -88,11 +94,13 @@ describe('useFlipTransition', () => {
         original_match_media = window.matchMedia;
         original_raf = globalThis.requestAnimationFrame;
 
-        // rect mock: a card returns its data-flip-id lookup; the board root returns root_rect; else a zero rect
+        // a card/group returns its own lookup; anything else falls back to root_rect, reading as board-stationary
         Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
             const id = this.getAttribute('data-flip-id');
+            const column = this.getAttribute('data-flip-column-id');
             const r = (id !== null && rect_lookup[id]) ||
-                (this.getAttribute('data-flip-root') !== null ? root_rect : { left: 0, top: 0, width: 0, height: 0 });
+                (column !== null && column_rect_lookup[column]) ||
+                root_rect;
             return { ...r, right: r.left + r.width, bottom: r.top + r.height, x: r.left, y: r.top, toJSON() {} } as DOMRect;
         };
 
@@ -314,14 +322,14 @@ describe('useFlipTransition', () => {
         expect(moves.find((m) => m.id === 'b')).toMatchObject({ dx: 0, dy: 50 });
     });
 
-    it('skips animating a bulk membership change (a virtualized lane scrolling to a non-overlapping window) instead of animating every card', () => {
+    it('skips animating a bulk membership change (a virtualized group scrolling to a non-overlapping window) instead of animating every card', () => {
         const gate = createPassiveUpdateGate();
         const baseline_cards = Array.from({ length: 5 }, (_, i) => ({ id: `a${i}`, column: 'todo' }));
         rect_lookup = Object.fromEntries(baseline_cards.map((c, i) => [c.id, { left: 0, top: i * 40, width: 100, height: 40 }]));
         const { rerender } = render(<Harness cards={baseline_cards} columns={['todo']} enabled={true} gate={gate} />);
         clearAnimationProbeEvents();
 
-        // simulate scrolling a virtualized lane to a disjoint window: every mounted id changes, well past the bulk threshold
+        // simulate scrolling a virtualized group to a disjoint window: every mounted id changes, well past the bulk threshold
         const scrolled_cards = Array.from({ length: 25 }, (_, i) => ({ id: `b${i}`, column: 'todo' }));
         rect_lookup = Object.fromEntries(scrolled_cards.map((c, i) => [c.id, { left: 0, top: i * 40, width: 100, height: 40 }]));
         act(() => {
@@ -332,5 +340,171 @@ describe('useFlipTransition', () => {
         expect(eventsOfKind('enter')).toHaveLength(0);
         expect(eventsOfKind('skip').some((e) => e.reason === 'bulk')).toBe(true);
         expect(animate_spy).not.toHaveBeenCalled();
+    });
+
+    // --- group (column) move ---
+
+    // two groups side by side, each 200px wide; 'todo' leads at left 0, 'done' follows at left 200
+    const GROUPS_BASELINE = {
+        todo: { left: 0, top: 0, width: 200, height: 400 },
+        done: { left: 200, top: 0, width: 200, height: 400 },
+    };
+    // the same two groups with their order swapped: 'done' now leads
+    const GROUPS_SWAPPED = {
+        todo: { left: 200, top: 0, width: 200, height: 400 },
+        done: { left: 0, top: 0, width: 200, height: 400 },
+    };
+
+    it('emits a column-move event with the correct dx when two groups swap order', () => {
+        const gate = createPassiveUpdateGate();
+        column_rect_lookup = GROUPS_BASELINE;
+        rect_lookup = { a: { left: 10, top: 10, width: 100, height: 40 }, b: { left: 210, top: 10, width: 100, height: 40 } };
+        const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }, { id: 'b', column: 'done' }]} columns={['todo', 'done']} enabled={true} gate={gate} />);
+        clearAnimationProbeEvents();
+
+        // passive reorder: the groups swap, each card riding along at the same offset inside its own group
+        column_rect_lookup = GROUPS_SWAPPED;
+        rect_lookup = { a: { left: 210, top: 10, width: 100, height: 40 }, b: { left: 10, top: 10, width: 100, height: 40 } };
+        act(() => {
+            rerender(<Harness cards={[{ id: 'a', column: 'todo' }, { id: 'b', column: 'done' }]} columns={['done', 'todo']} enabled={true} gate={gate} />);
+        });
+
+        const column_moves = columnMoveEvents();
+        // todo moved right (prev left 0, next left 200): inverse dx = 0 - 200 = -200
+        expect(column_moves.find((e) => e.id === 'todo')).toMatchObject({ dx: -200, dy: 0 });
+        // done moved left (prev left 200, next left 0): inverse dx = 200 - 0 = 200
+        expect(column_moves.find((e) => e.id === 'done')).toMatchObject({ dx: 200, dy: 0 });
+
+        // both cards rode along at an unchanged offset inside their own (moved) group - no card move for either
+        expect(moveEvents()).toHaveLength(0);
+
+        // PLAY step fires .animate with the group's own keyframes (no rotate/scale lift)
+        flushFrames();
+        const animated_with_group_move = animate_spy.mock.calls.some((call) => JSON.stringify(call[0]) === JSON.stringify(buildColumnMoveKeyframes({ dx: -200, dy: 0 })));
+        expect(animated_with_group_move).toBe(true);
+    });
+
+    it('still animates a card that reorders within its group while the group itself also moves', () => {
+        const gate = createPassiveUpdateGate();
+        column_rect_lookup = GROUPS_BASELINE;
+        // 'a' above 'c' inside todo, baseline
+        rect_lookup = { a: { left: 10, top: 10, width: 100, height: 40 }, c: { left: 10, top: 60, width: 100, height: 40 } };
+        const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }, { id: 'c', column: 'todo' }]} columns={['todo', 'done']} enabled={true} gate={gate} />);
+        clearAnimationProbeEvents();
+
+        // the groups swap (todo now at left 200) AND a/c swap their vertical order within todo
+        column_rect_lookup = GROUPS_SWAPPED;
+        rect_lookup = { a: { left: 210, top: 60, width: 100, height: 40 }, c: { left: 210, top: 10, width: 100, height: 40 } };
+        act(() => {
+            rerender(<Harness cards={[{ id: 'c', column: 'todo' }, { id: 'a', column: 'todo' }]} columns={['done', 'todo']} enabled={true} gate={gate} />);
+        });
+
+        // the group's own -200 dx is absorbed by the group move; what's left is each card's within-group vertical swap
+        const moves = moveEvents();
+        expect(moves.find((m) => m.id === 'a')).toMatchObject({ dx: 0, dy: -50 });
+        expect(moves.find((m) => m.id === 'c')).toMatchObject({ dx: 0, dy: 50 });
+    });
+
+    it('does not trip the card bulk guard when every id-present card is only riding along with its group', () => {
+        const gate = createPassiveUpdateGate();
+        const todo_cards = Array.from({ length: 12 }, (_, i) => ({ id: `t${i}`, column: 'todo' }));
+        const done_cards = Array.from({ length: 12 }, (_, i) => ({ id: `d${i}`, column: 'done' }));
+        column_rect_lookup = GROUPS_BASELINE;
+        rect_lookup = {
+            ...Object.fromEntries(todo_cards.map((c, i) => [c.id, { left: 10, top: i * 20, width: 100, height: 18 }])),
+            ...Object.fromEntries(done_cards.map((c, i) => [c.id, { left: 210, top: i * 20, width: 100, height: 18 }])),
+        };
+        const { rerender } = render(<Harness cards={[...todo_cards, ...done_cards]} columns={['todo', 'done']} enabled={true} gate={gate} />);
+        clearAnimationProbeEvents();
+
+        // 24 cards are present in both renders, past the bulk threshold, but each rides its own swapped group - zero GENUINE moves
+        column_rect_lookup = GROUPS_SWAPPED;
+        rect_lookup = {
+            ...Object.fromEntries(todo_cards.map((c, i) => [c.id, { left: 210, top: i * 20, width: 100, height: 18 }])),
+            ...Object.fromEntries(done_cards.map((c, i) => [c.id, { left: 10, top: i * 20, width: 100, height: 18 }])),
+        };
+        act(() => {
+            rerender(<Harness cards={[...todo_cards, ...done_cards]} columns={['done', 'todo']} enabled={true} gate={gate} />);
+        });
+
+        // not skipped as bulk: the groups animate and no 'bulk' skip was recorded
+        expect(eventsOfKind('skip').some((e) => e.reason === 'bulk')).toBe(false);
+        expect(columnMoveEvents().length).toBe(2);
+        expect(moveEvents()).toHaveLength(0);
+    });
+
+    it('carries the group delta in dy, not dx, for a rows-oriented board', () => {
+        const gate = createPassiveUpdateGate();
+        // stacked groups: 'todo' above 'done', both full board width
+        column_rect_lookup = { todo: { left: 0, top: 0, width: 400, height: 100 }, done: { left: 0, top: 100, width: 400, height: 100 } };
+        rect_lookup = { a: { left: 10, top: 10, width: 100, height: 40 } };
+        const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['todo', 'done']} enabled={true} gate={gate} />);
+        clearAnimationProbeEvents();
+
+        // the groups swap vertically: 'todo' drops below 'done'; the card rides along at the same in-group offset
+        column_rect_lookup = { todo: { left: 0, top: 100, width: 400, height: 100 }, done: { left: 0, top: 0, width: 400, height: 100 } };
+        rect_lookup = { a: { left: 10, top: 110, width: 100, height: 40 } };
+        act(() => {
+            rerender(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['done', 'todo']} enabled={true} gate={gate} />);
+        });
+
+        const column_moves = columnMoveEvents();
+        expect(column_moves.find((e) => e.id === 'todo')).toMatchObject({ dx: 0, dy: -100 });
+        expect(column_moves.find((e) => e.id === 'done')).toMatchObject({ dx: 0, dy: 100 });
+        // the card rode along: no card-level move
+        expect(moveEvents()).toHaveLength(0);
+    });
+
+    it('suppresses column-move events when the gate is hot', () => {
+        const gate = createPassiveUpdateGate();
+        column_rect_lookup = GROUPS_BASELINE;
+        rect_lookup = { a: { left: 10, top: 10, width: 100, height: 40 } };
+        const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['todo', 'done']} enabled={true} gate={gate} />);
+        clearAnimationProbeEvents();
+
+        gate.arm();
+        column_rect_lookup = GROUPS_SWAPPED;
+        rect_lookup = { a: { left: 210, top: 10, width: 100, height: 40 } };
+        act(() => {
+            rerender(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['done', 'todo']} enabled={true} gate={gate} />);
+        });
+
+        expect(columnMoveEvents()).toHaveLength(0);
+        expect(eventsOfKind('skip').some((e) => e.reason === 'gate-hot')).toBe(true);
+    });
+
+    it('no-ops group moves under prefers-reduced-motion', () => {
+        window.matchMedia = jest.fn().mockReturnValue({ matches: true, media: '', addEventListener() {}, removeEventListener() {} }) as unknown as typeof window.matchMedia;
+        const gate = createPassiveUpdateGate();
+        column_rect_lookup = GROUPS_BASELINE;
+        rect_lookup = { a: { left: 10, top: 10, width: 100, height: 40 } };
+        const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['todo', 'done']} enabled={true} gate={gate} />);
+        clearAnimationProbeEvents();
+
+        column_rect_lookup = GROUPS_SWAPPED;
+        rect_lookup = { a: { left: 210, top: 10, width: 100, height: 40 } };
+        act(() => {
+            rerender(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['done', 'todo']} enabled={true} gate={gate} />);
+        });
+
+        expect(columnMoveEvents()).toHaveLength(0);
+        expect(eventsOfKind('skip').some((e) => e.reason === 'reduced-motion')).toBe(true);
+    });
+
+    it('no-ops group moves when disabled (enabled=false)', () => {
+        const gate = createPassiveUpdateGate();
+        column_rect_lookup = GROUPS_BASELINE;
+        rect_lookup = { a: { left: 10, top: 10, width: 100, height: 40 } };
+        const { rerender } = render(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['todo', 'done']} enabled={false} gate={gate} />);
+        clearAnimationProbeEvents();
+
+        column_rect_lookup = GROUPS_SWAPPED;
+        rect_lookup = { a: { left: 210, top: 10, width: 100, height: 40 } };
+        act(() => {
+            rerender(<Harness cards={[{ id: 'a', column: 'todo' }]} columns={['done', 'todo']} enabled={false} gate={gate} />);
+        });
+
+        expect(columnMoveEvents()).toHaveLength(0);
+        expect(eventsOfKind('skip').some((e) => e.reason === 'disabled')).toBe(true);
     });
 });

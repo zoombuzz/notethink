@@ -8,16 +8,18 @@ import type { AgentToolInvocationEdit } from './vendors/agentvendorops';
  * note rather than guessed onto a story.
  *
  * Locating an edit: for each write call's own located edit (`AgentToolInvocationEdit`, carried by a
- * vendor reader per `agentvendorops.ts`), this searches the target board's CURRENT text for the
- * edit's `new_text`, falling back to individual "distinctive" lines of it when the whole snippet is
- * not found verbatim (a later edit can have altered surrounding lines), and only then to `old_text`
- * the same way. The match's enclosing `##`-`####` heading is the bound story. If the edit's own text
- * contains a heading line itself (a section moved wholesale, e.g. into `done.md`), that heading's
- * story binds too, independently of whether the edit's location could also be found. A call whose
- * edit is not found in its own target document is retried against that document's sibling board
- * (`todo.md`<->`done.md` in the same directory), so a story moved to `done.md` in the same write
- * keeps its credit rather than losing its binding the moment it left `todo.md`. A `whole_file` call
- * (a `Write`, or an `apply_patch` "Add File") carries no located content and binds nothing.
+ * vendor reader per `agentvendorops.ts`), this tries the edit's `new_text` and then its `old_text` as
+ * an exact, whole-snippet match occurring once in the call's own target board and then its sibling board
+ * (`todo.md`<->`done.md` in the same directory), so a story moved to `done.md` in the same write still
+ * matches exactly there before anything falls back to a looser search. Only when no board holds an
+ * exact match does it fall back to individual "distinctive" lines of the same two candidates, in the
+ * same board order, accepting a fallback line only when it occurs exactly once in that board's text
+ * (see GENERIC_SECTION_BULLET for the other fallback exclusion). The match's enclosing `##`-`####`
+ * heading is the bound story. If the edit's own text contains a heading line itself (a section moved
+ * wholesale, e.g. into `done.md`), that heading's story binds too, independently of whether the
+ * edit's location could also be found. A call whose edit matches nowhere, on either board, by either
+ * method, binds nothing rather than guessing. A `whole_file` call (a `Write`, or an `apply_patch` "Add
+ * File") carries no located content and binds nothing.
  *
  * The story key: a heading's stable id is its authored `[](?id=slug)` linetag value where one exists,
  * else the slug `storyStableIdSlug` (webview `lib/noteops.ts`) derives from the stripped headline
@@ -218,34 +220,63 @@ const MIN_DISTINCTIVE_LINE_LENGTH = 12;
 /**
  * This workspace's stories repeat a small set of bare section-divider bullets ("+ goal", "+
  * scope", "+ background") that are long enough to clear MIN_DISTINCTIVE_LINE_LENGTH but never
- * distinctive, so a fallback match on one usually lands on the wrong story. Matches a bare 1-3
- * word bullet with no digit, backtick or colon-then-content; a real content bullet is longer or
- * carries something specific enough to survive this filter.
+ * distinctive, so a fallback match on one usually lands on the wrong story - whether the bullet
+ * stands alone ("+ goal:"), carries trailing detail after its own label ("+ background, measured
+ * in code: ..."), or uses a `-` marker ("- scope"). Matches a `+` or `-` bullet whose segment up to
+ * the first comma, colon or end of line is 1-3 bare lowercase words, whatever follows that point:
+ * the label is the generic part, so detail after it does not rescue the line. This can also catch a
+ * genuinely distinctive sentence that happens to open with 1-3 words before early punctuation
+ * (accepted trade-off: uniqueness, not this pattern, is the fallback's main defence - see
+ * locateEditFallback).
  */
-const GENERIC_SECTION_BULLET = /^\+\s+(?:[a-z][a-z'-]*\s*){1,3}:?$/i;
-
-/** the 0-based line snippet is found on within doc's current text, via doc's cached line offsets - undefined when not found */
-function locateInText(doc: StoryDocument, snippet: string): number | undefined {
-    if (!snippet) { return undefined; }
-    const index = doc.text.indexOf(snippet);
-    if (index === -1) { return undefined; }
-    return lineForOffset(docIndex(doc).line_starts, index);
-}
+const GENERIC_SECTION_BULLET = /^[+-]\s+(?:[a-z][a-z'-]*)(?:\s+[a-z][a-z'-]*){0,2}\s*(?::|,|$)/i;
 
 /** the snippet's own lines, trimmed, long enough and specific enough to be a fallback locator - neither too short nor one of this workspace's own generic section-divider bullets (see GENERIC_SECTION_BULLET's header) */
 function distinctiveLines(snippet: string): string[] {
     return snippet.split('\n').map(line => line.trim()).filter(line => line.length >= MIN_DISTINCTIVE_LINE_LENGTH && !GENERIC_SECTION_BULLET.test(line));
 }
 
-/** where in `doc.text` one edit can be found: its `new_text` whole, then line by line, then `old_text` the same way - undefined when none of that locates anything */
-function locateEditInDoc(doc: StoryDocument, edit: AgentToolInvocationEdit): number | undefined {
+/** the 0-based line snippet is found on within doc's current text, only when it occurs exactly once there - a line found twice could belong to either occurrence, so it locates nothing rather than guessing the first */
+function locateUniqueInText(doc: StoryDocument, snippet: string): number | undefined {
+    if (!snippet) { return undefined; }
+    const first = doc.text.indexOf(snippet);
+    if (first === -1) { return undefined; }
+    if (doc.text.indexOf(snippet, first + 1) !== -1) { return undefined; }
+    return lineForOffset(docIndex(doc).line_starts, first);
+}
+
+/** where in `doc.text` edit's `new_text`, then `old_text`, is found as an exact whole-snippet match occurring once - undefined when neither is found verbatim exactly once */
+function locateEditExact(doc: StoryDocument, edit: AgentToolInvocationEdit): number | undefined {
     for (const candidate of [edit.new_text, edit.old_text]) {
         if (candidate === undefined) { continue; }
-        const direct = locateInText(doc, candidate);
+        const direct = locateUniqueInText(doc, candidate);
         if (direct !== undefined) { return direct; }
+    }
+    return undefined;
+}
+
+/** where in `doc.text` edit's `new_text`, then `old_text`, is found via one of its own distinctive lines - undefined when neither candidate has a usable line that occurs exactly once in doc */
+function locateEditFallback(doc: StoryDocument, edit: AgentToolInvocationEdit): number | undefined {
+    for (const candidate of [edit.new_text, edit.old_text]) {
+        if (candidate === undefined) { continue; }
         for (const line of distinctiveLines(candidate)) {
-            const found = locateInText(doc, line);
+            const found = locateUniqueInText(doc, line);
             if (found !== undefined) { return found; }
+        }
+    }
+    return undefined;
+}
+
+/** the one board and line an edit is found at: an exact match on the call's own board or its sibling first, a fallback line on either only when neither holds an exact match - undefined when nothing locates it */
+function locateEditOnBoards(call_doc_path: string, edit: AgentToolInvocationEdit, story_docs: ReadonlyArray<StoryDocument>): { doc: StoryDocument; line_index: number } | undefined {
+    const candidate_docs = [call_doc_path, siblingBoardPath(call_doc_path)]
+        .filter((path): path is string => path !== undefined)
+        .map(path => documentAt(story_docs, path))
+        .filter((doc): doc is StoryDocument => doc !== undefined);
+    for (const locate of [locateEditExact, locateEditFallback]) {
+        for (const doc of candidate_docs) {
+            const line_index = locate(doc, edit);
+            if (line_index !== undefined) { return { doc, line_index }; }
         }
     }
     return undefined;
@@ -255,7 +286,9 @@ function locateEditInDoc(doc: StoryDocument, edit: AgentToolInvocationEdit): num
  * Every story one located edit binds to: headings carried inside its own text ("the edited text
  * itself contains a story heading line", module header - `headingsInDoc` reads a heading line the
  * same way whether `text` is a whole document or a short snippet), plus the one enclosing heading at
- * the first document the edit's own content is found in.
+ * the one document and location the edit's own content is found at - every candidate board's exact
+ * match tried first, a fallback line on any of them only once none has an exact match (module header;
+ * `locateEditExact` / `locateEditFallback`).
  *
  * A heading match that is BOTH the candidate's own last line AND has no authored id is excluded here:
  * an Edit's old_string/new_string is trimmed to only as much of a line as uniqueness needs, so a large
@@ -278,15 +311,10 @@ function storiesForEdit(call_doc_path: string, edit: AgentToolInvocationEdit, st
             refs.push({ doc_path: call_doc_path, id: heading.id });
         }
     }
-    const sibling = siblingBoardPath(call_doc_path);
-    for (const doc_path of [call_doc_path, sibling].filter((path): path is string => path !== undefined)) {
-        const doc = documentAt(story_docs, doc_path);
-        if (!doc) { continue; }
-        const line_index = locateEditInDoc(doc, edit);
-        if (line_index === undefined) { continue; }
-        const heading = enclosingHeading(docIndex(doc).headings, line_index);
-        if (heading) { refs.push({ doc_path, id: heading.id }); }
-        break;
+    const located = locateEditOnBoards(call_doc_path, edit, story_docs);
+    if (located) {
+        const heading = enclosingHeading(docIndex(located.doc).headings, located.line_index);
+        if (heading) { refs.push({ doc_path: located.doc.doc_path, id: heading.id }); }
     }
     return refs;
 }

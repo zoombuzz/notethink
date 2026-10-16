@@ -178,4 +178,26 @@ describe('readGrokSession', () => {
             expect(resumed).toEqual(whole);
         });
     });
+
+    describe('active_ms', () => {
+        it('sums the gaps between consecutive events in events.jsonl', () => {
+            const result = readGrokSession(buildInput({
+                events: [
+                    { ts: '2026-09-07T14:19:53.000Z', type: 'tool_started', tool_name: 'run_terminal_command' },
+                    { ts: '2026-09-07T14:19:58.000Z', type: 'tool_completed', tool_name: 'run_terminal_command', outcome: 'ok' },
+                ],
+            }));
+            expect(result.active_ms).toBe(5_000);
+        });
+
+        it('leaves out a gap over the five minute idle threshold', () => {
+            const result = readGrokSession(buildInput({
+                events: [
+                    { ts: '2026-09-07T14:00:00.000Z', type: 'tool_started', tool_name: 'run_terminal_command' },
+                    { ts: '2026-09-07T14:10:00.000Z', type: 'tool_completed', tool_name: 'run_terminal_command', outcome: 'ok' },
+                ],
+            }));
+            expect(result.active_ms).toBe(0);
+        });
+    });
 });

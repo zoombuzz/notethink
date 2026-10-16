@@ -307,4 +307,30 @@ describe('readClaudeCodeSession', () => {
             expect(result.state).toBe('ended');
         });
     });
+
+    describe('active_ms', () => {
+        it('sums the gaps across the main transcript and every subagent transcript together', () => {
+            const lines = [
+                '{"type":"user","timestamp":"2026-09-22T10:00:00.000Z","message":{"role":"user","content":"go"}}',
+                '{"type":"assistant","timestamp":"2026-09-22T10:01:00.000Z","message":{"id":"msg_1","model":"claude-sonnet-5","role":"assistant","content":[{"type":"text","text":"ok"}]}}',
+            ];
+            const extra_lines = [
+                '{"type":"assistant","timestamp":"2026-09-22T10:01:30.000Z","message":{"id":"msg_sub","model":"claude-sonnet-5","role":"assistant","content":[{"type":"text","text":"sub"}]}}',
+            ];
+            const result = readClaudeCodeSession(makeInput(lines.join('\n'), {
+                extra_files: [{ path: 'subagent.jsonl', text: extra_lines.join('\n') }],
+            }));
+            // 60s main gap + 30s gap into the subagent record, both under the 5 minute threshold
+            expect(result.active_ms).toBe(90_000);
+        });
+
+        it('leaves out a gap over the five minute idle threshold', () => {
+            const lines = [
+                '{"type":"user","timestamp":"2026-09-22T10:00:00.000Z","message":{"role":"user","content":"go"}}',
+                '{"type":"assistant","timestamp":"2026-09-22T10:10:00.000Z","message":{"id":"msg_1","model":"claude-sonnet-5","role":"assistant","content":[{"type":"text","text":"ok"}]}}',
+            ];
+            const result = readClaudeCodeSession(makeInput(lines.join('\n')));
+            expect(result.active_ms).toBe(0);
+        });
+    });
 });

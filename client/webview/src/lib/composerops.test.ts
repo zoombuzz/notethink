@@ -2,8 +2,7 @@ import { buildViewDisplayOptions } from "./composerops";
 import { FOLDER_VIEW_STATE_ID } from "../notethink-views/src/lib/viewstateops";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../notethink-views/src/types/IntegrationMode";
 import { DEFAULT_SETTINGS_CASCADE } from "../constants";
-import type { SettingsCascadePayload, UserViewType } from "../notethink-views/src/types/Messages";
-import type { NoteDisplayOptions } from "../notethink-views/src/types/NoteProps";
+import type { SettingsCascadePayload } from "../notethink-views/src/types/Messages";
 import type { NoteRendererProps } from "../components/NoteRenderer";
 import type { ViewState } from "../hooks/usePersistedViewStates";
 
@@ -63,26 +62,26 @@ describe('composerops.buildViewDisplayOptions', () => {
 
         it('per-session viewState type wins over the cascade viewType', () => {
             const view_state: ViewState = { type: 'document' };
-            const props = buildProps({ settingsCascade: buildCascade({ viewType: 'kanban' }) });
+            const props = buildProps({ settingsCascade: buildCascade({ views: { root: { viewType: 'kanban' } } }) });
             const result = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.viewType).toBe('document');
         });
 
         it('cascade viewType is used when the viewState does not set one', () => {
-            const props = buildProps({ settingsCascade: buildCascade({ viewType: 'kanban' }) });
+            const props = buildProps({ settingsCascade: buildCascade({ views: { root: { viewType: 'kanban' } } }) });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.viewType).toBe('kanban');
         });
 
         it('attaches cascade groupDisplay to settings.groupDisplay when non-empty', () => {
             const entries = [{ value: 'done', shown: true }, { value: 'doing', shown: false }];
-            const props = buildProps({ settingsCascade: buildCascade({ groupDisplay: entries }) });
+            const props = buildProps({ settingsCascade: buildCascade({ views: { grouped: { groupDisplay: entries } } }) });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.view_display_options.settings?.groupDisplay).toEqual(entries);
         });
 
         it('does NOT attach groupDisplay to settings when the cascade list is empty', () => {
-            const props = buildProps({ settingsCascade: buildCascade({ groupDisplay: [] }) });
+            const props = buildProps({ settingsCascade: buildCascade({ views: { grouped: { groupDisplay: [] } } }) });
             const result = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.view_display_options.settings?.groupDisplay).toBeUndefined();
         });
@@ -93,7 +92,7 @@ describe('composerops.buildViewDisplayOptions', () => {
                 display_options: { settings: { showLinetagsInHeadlines: true, showLineNumbers: true } },
             };
             const props = buildProps({
-                settingsCascade: buildCascade({ showLinetagsInHeadlines: false, showLineNumbers: false }),
+                settingsCascade: buildCascade({ cards: { allcards: { showLinetagsInHeadlines: false, showLineNumbers: false } } }),
             });
             const result = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
             expect(result.view_display_options.settings?.showLinetagsInHeadlines).toBe(false);
@@ -103,34 +102,36 @@ describe('composerops.buildViewDisplayOptions', () => {
         it('threads every cascade value into settings, whichever node owns it', () => {
             const props = buildProps({
                 settingsCascade: buildCascade({
-                    showLineNumbers: true,
+                    cards: {
+                        allcards: { showLineNumbers: true, autoExpandFocusedNote: true },
+                    },
+                    views: {
+                        kanban: { animateTransitions: false },
+                        line: { orientation: 'rows' },
+                        grouped: { groupBy: 'project' },
+                        root: { scrollNoteIntoView: false },
+                    },
                     watchUnopenedFilesInViewer: false,
-                    kanbanAnimateTransitions: false,
                     openNewEditorIfNoneOpen: true,
-                    scrollNoteIntoView: false,
-                    autoExpandFocusedNote: true,
-                    orientation: 'rows',
-                    groupBy: 'project',
-                    kanbanGroupBy: 'status',
                     maxNotesPerFile: 4,
                 }),
             });
             const settings = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE).view_display_options.settings;
             expect(settings?.showLineNumbers).toBe(true);
             expect(settings?.watchUnopenedFilesInViewer).toBe(false);
-            expect(settings?.kanbanAnimateTransitions).toBe(false);
+            expect(settings?.animateTransitions).toBe(false);
             expect(settings?.openNewEditorIfNoneOpen).toBe(true);
             expect(settings?.scrollNoteIntoView).toBe(false);
             expect(settings?.autoExpandFocusedNote).toBe(true);
             expect(settings?.orientation).toBe('rows');
+            // read off the cascade's own flat home (grouped): that fold happens downstream in resolvedSettingsForView
             expect(settings?.groupBy).toBe('project');
-            expect(settings?.kanbanGroupBy).toBe('status');
             expect(settings?.maxNotesPerFile).toBe(4);
         });
 
         it('keeps the payload aggregates out of the settings block', () => {
             const props = buildProps({
-                settingsCascade: buildCascade({ diverged: ['showLineNumbers'], hasWorkspaceOverrides: true, hasAnyOverrides: true }),
+                settingsCascade: buildCascade({ diverged: ['views:allcards:showLineNumbers'], hasWorkspaceOverrides: true, hasAnyOverrides: true }),
             });
             const settings = buildViewDisplayOptions(props, undefined, INTEGRATION_MODE_CURRENT_FILE).view_display_options.settings as Record<string, unknown>;
             expect(settings.diverged).toBeUndefined();
@@ -209,73 +210,35 @@ describe('composerops.buildViewDisplayOptions', () => {
 
     });
 
-    describe('minted view types', () => {
+    /*
+     * Folding a saved type's own overrides (or a built-in view's own bag entry) onto the settings block
+     * moved out of here entirely, into `resolvedSettingsForView` in viewregistryops.ts - called once per
+     * rendered view by GenericView.tsx, and per row by the settings drawer for whichever node is selected
+     * there. Composerops.buildViewDisplayOptions now always passes the RAW flat values through
+     * `resolvedSettingsFromCascade` (one field per home node) and no further: folding a type's overrides
+     * in here, ahead of that one resolver, would give the drawer no way to tell a flat home value from a
+     * view's own, which is the bug ("selecting an ancestor shows the wrong value") the split avoids.
+     * Coverage of the fold itself lives in viewregistryops.test.ts (`resolvedSettingsForView`) and
+     * GenericView.test.tsx.
+     */
+    describe('minted view types are not folded here any more', () => {
 
-        const KANBAN_BY_ASSIGNEE: UserViewType = {
-            id: 'user-kanban-by-assignee',
-            label: 'Kanban by Assignee',
-            parent: 'kanban',
-            overrides: { kanbanGroupBy: 'assignee' },
-        };
-
-        function buildForType(view_type: string, user_types: UserViewType[], cascade_overrides: Partial<SettingsCascadePayload> = {}): NoteDisplayOptions {
-            const props = buildProps({ settingsCascade: buildCascade({ viewUserTypes: user_types, ...cascade_overrides }) });
-            const view_state: ViewState = { type: view_type };
-            return buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE).view_display_options;
-        }
-
-        it("applies a minted type's overrides over the cascade, so selecting the type does something", () => {
-            const settings = buildForType('user-kanban-by-assignee', [KANBAN_BY_ASSIGNEE], { kanbanGroupBy: 'status' }).settings!;
-            expect(settings.kanbanGroupBy).toBe('assignee');
-        });
-
-        it('leaves every other cascade value alone', () => {
-            const settings = buildForType('user-kanban-by-assignee', [KANBAN_BY_ASSIGNEE], { orientation: 'rows' }).settings!;
-            expect(settings.orientation).toBe('rows');
-        });
-
-        it('applies nothing to the parent type the minted one was saved from', () => {
-            const settings = buildForType('kanban', [KANBAN_BY_ASSIGNEE], { kanbanGroupBy: 'status' }).settings!;
-            expect(settings.kanbanGroupBy).toBe('status');
-        });
-
-        it('lets the nearer type win when one minted type inherits from another', () => {
-            const nested: UserViewType = {
-                id: 'user-kanban-by-assignee-rows',
-                label: 'Kanban by Assignee (rows)',
-                parent: 'user-kanban-by-assignee',
-                overrides: { kanbanGroupBy: 'owner', orientation: 'rows' },
-            };
-            const settings = buildForType('user-kanban-by-assignee-rows', [KANBAN_BY_ASSIGNEE, nested]).settings!;
-            expect(settings.kanbanGroupBy).toBe('owner');
-            expect(settings.orientation).toBe('rows');
-        });
-
-        it('ignores a saved type whose parent no longer exists rather than throwing', () => {
-            const orphan: UserViewType = { id: 'user-orphan', label: 'Orphan', parent: 'gone', overrides: { kanbanGroupBy: 'assignee' } };
-            const settings = buildForType('user-orphan', [orphan], { kanbanGroupBy: 'status' }).settings!;
-            expect(settings.kanbanGroupBy).toBe('status');
-        });
-
-        it('ignores a malformed saved type rather than spreading it', () => {
-            const malformed = [
-                { id: '', label: '', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' } },
-                { id: 'user-no-overrides', label: 'No overrides', parent: 'kanban', overrides: null },
-            ] as unknown as UserViewType[];
-            const settings = buildForType('user-no-overrides', malformed, { kanbanGroupBy: 'status' }).settings!;
-            expect(settings.kanbanGroupBy).toBe('status');
-        });
-
-        /*
-         * A type minted before groupDisplay existed carries the legacy columnOrder shape alone. The
-         * board must still honour it, so applyUserTypeOverrides migrates it on the way onto the
-         * settings block rather than leaving a dead columnOrder key the renderer never reads.
-         */
-        it("migrates a minted type's legacy columnOrder override to groupDisplay", () => {
-            const legacy = { id: 'user-legacy', label: 'Legacy Order', parent: 'kanban', overrides: { columnOrder: ['done', 'doing'] } } as unknown as UserViewType;
-            const settings = buildForType('user-legacy', [legacy]).settings!;
-            expect(settings.groupDisplay).toEqual([{ value: 'done', shown: true }, { value: 'doing', shown: true }]);
-            expect(settings.columnOrder).toBeUndefined();
+        it('passes the home value through even when the rendered type is a saved type that overrides it', () => {
+            const props = buildProps({
+                settingsCascade: buildCascade({
+                    views: {
+                        grouped: { groupBy: 'status' },
+                        'user-kanban-by-assignee': { parent: 'kanban', label: 'Kanban by Assignee', groupBy: 'assignee' },
+                    },
+                }),
+            });
+            const view_state: ViewState = { type: 'user-kanban-by-assignee' };
+            const result = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
+            const settings = result.view_display_options.settings!;
+            // the flat (home) value survives unresolved - GenericView.tsx resolves it for the rendered view
+            expect(settings.groupBy).toBe('status');
+            // the saved type is still recovered from the views bag, for the drawer and GenericView to resolve against
+            expect(settings.viewUserTypes).toEqual([{ id: 'user-kanban-by-assignee', parent: 'kanban', label: 'Kanban by Assignee', overrides: { groupBy: 'assignee' } }]);
         });
 
     });

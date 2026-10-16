@@ -1,42 +1,42 @@
 # Jest Test Results
-# Version: 0.4.8
-# Date: 2026-10-15T20:04:30Z
+# Version: 0.4.9
+# Date: 2026-10-16T20:13:28Z
 # Command: pnpm run test-jest
 # Exit status: 0
-# Tree: HEAD plus docstech/users/alex.stanhope/todo.md
+# Tree: HEAD fa7bead plus 197 changed paths
 # ---
 $ bash scripts/test-jest.sh
 $ jest --config jest.config.cjs
 
-[1mTest Suites: [22m[1m[32m32 passed[39m[22m, 32 total
-[1mTests:       [22m[1m[32m752 passed[39m[22m, 752 total
+[1mTest Suites: [22m[1m[32m34 passed[39m[22m, 34 total
+[1mTests:       [22m[1m[32m793 passed[39m[22m, 793 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        8.423 s, estimated 10 s
+[1mTime:[22m        3.578 s
 [2mRan all test suites[22m[2m.[22m
 
 $ jest --config jest.config.cjs
 
 [1mTest Suites: [22m[1m[32m16 passed[39m[22m, 16 total
-[1mTests:       [22m[1m[32m200 passed[39m[22m, 200 total
+[1mTests:       [22m[1m[32m196 passed[39m[22m, 196 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        [1m[33m5.373 s[39m[22m
+[1mTime:[22m        2.95 s
 [2mRan all test suites[22m[2m.[22m
 
 $ jest --config jest.config.cjs
 
-[1mTest Suites: [22m[1m[32m89 passed[39m[22m, 89 total
-[1mTests:       [22m[1m[32m1990 passed[39m[22m, 1990 total
+[1mTest Suites: [22m[1m[32m92 passed[39m[22m, 92 total
+[1mTests:       [22m[1m[32m2126 passed[39m[22m, 2126 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        6.699 s
+[1mTime:[22m        3.475 s
 [2mRan all test suites[22m[2m.[22m
 
 
 [1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
 [1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │    32 │ [32m   752[0m │ [2m     0[0m │ 8.423 s │
-│ webview          │    16 │ [32m   200[0m │ [2m     0[0m │ 5.373 s │
-│ notethink-views  │    89 │ [32m  1990[0m │ [2m     0[0m │ 6.699 s │
+│ extension        │    34 │ [32m   793[0m │ [2m     0[0m │ 3.578 s │
+│ webview          │    16 │ [32m   196[0m │ [2m     0[0m │  2.95 s │
+│ notethink-views  │    92 │ [32m  2126[0m │ [2m     0[0m │ 3.475 s │
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-[1m│ TOTAL            │   137 │[0m [32m  2942[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m│ TOTAL            │   142 │[0m [32m  3115[0m [1m│[0m [2m     0[0m [1m│         │[0m
 [1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

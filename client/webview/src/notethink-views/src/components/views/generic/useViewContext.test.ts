@@ -272,6 +272,95 @@ describe('useViewContext', () => {
         });
     });
 
+    /*
+     * A grouped view with nothing scoped yet descends to the document's lone H1 by default, so the
+     * H1's own children (the stories) become the cards - the fix for a view type pinned away from auto
+     * (a built-in rung or a saved type) stranding the whole document as one card, since AutoView's own
+     * caret-driven scope derivation runs only while resolving auto.
+     */
+    describe('default scope: a grouped view with no scope chosen descends to the document\'s lone H1', () => {
+        // root.child_notes is what findFileH1 reads, so it must name the H1(s) each case builds
+        function docWithOneH1(): { root: NoteProps; h1: NoteProps; story_a: NoteProps; story_b: NoteProps } {
+            const story_a = makeNote({ seq: 1, level: 2, depth: 2, stable_id: 'doc:story-a', child_notes: [] });
+            const story_b = makeNote({ seq: 2, level: 2, depth: 2, stable_id: 'doc:story-b', child_notes: [] });
+            // seq 0 is reserved for the synthetic root (convertMdastToNoteHierarchy); real content starts at 1
+            const h1 = makeNote({ seq: 3, level: 1, depth: 1, stable_id: 'doc:h1', child_notes: [story_a, story_b] });
+            const root = makeNote({ seq: 0, level: 0, stable_id: 'root', child_notes: [h1] });
+            return { root, h1, story_a, story_b };
+        }
+
+        it('descends past the H1 for a kanban view, so its stories (not the H1 itself) are the visible notes', () => {
+            const { root, h1, story_a, story_b } = docWithOneH1();
+            const { result } = renderHook(() => useViewContext(makeViewProps({
+                type: 'kanban',
+                notes: [root, h1, story_a, story_b],
+            })));
+            expect(result.current.parent_context?.stable_id).toBe('doc:h1');
+            expect(result.current.notes_within_parent_context.map(n => n.stable_id)).toEqual(['doc:story-a', 'doc:story-b']);
+        });
+
+        it('descends past the H1 for a line view the same way', () => {
+            const { root, h1, story_a, story_b } = docWithOneH1();
+            const { result } = renderHook(() => useViewContext(makeViewProps({
+                type: 'line',
+                notes: [root, h1, story_a, story_b],
+            })));
+            expect(result.current.parent_context?.stable_id).toBe('doc:h1');
+            expect(result.current.notes_within_parent_context.map(n => n.stable_id)).toEqual(['doc:story-a', 'doc:story-b']);
+        });
+
+        it('a saved type parented on kanban gets the same default, since it is a grouped view too', () => {
+            const { root, h1, story_a, story_b } = docWithOneH1();
+            const { result } = renderHook(() => useViewContext(makeViewProps({
+                type: 'user-kanban-copy',
+                notes: [root, h1, story_a, story_b],
+                display_options: { settings: { viewUserTypes: [{ id: 'user-kanban-copy', label: 'Kanban copy', parent: 'kanban', overrides: {} }] } },
+            })));
+            expect(result.current.parent_context?.stable_id).toBe('doc:h1');
+        });
+
+        it('leaves a document view scoped to the root, which already renders the whole tree itself', () => {
+            const { root, h1, story_a, story_b } = docWithOneH1();
+            const { result } = renderHook(() => useViewContext(makeViewProps({
+                type: 'document',
+                notes: [root, h1, story_a, story_b],
+            })));
+            expect(result.current.parent_context?.stable_id).toBe('root');
+        });
+
+        it('never overrides a scope already chosen upstream (a focused-note jump, a drill)', () => {
+            const { root, h1, story_a, story_b } = docWithOneH1();
+            const { result } = renderHook(() => useViewContext(makeViewProps({
+                type: 'kanban',
+                notes: [root, h1, story_a, story_b],
+                display_options: { parent_context_seq: 1 },
+            })));
+            expect(result.current.parent_context?.stable_id).toBe('doc:story-a');
+        });
+
+        it('stays at the root in folder mode, where the merged root\'s own children are already the cards', () => {
+            const { root, h1, story_a, story_b } = docWithOneH1();
+            const { result } = renderHook(() => useViewContext(makeViewProps({
+                type: 'kanban',
+                notes: [root, h1, story_a, story_b],
+                display_options: { integration_mode: 'folder' },
+            })));
+            expect(result.current.parent_context?.stable_id).toBe('root');
+        });
+
+        it('stays at the root when the document has no single H1 (zero or multiple top-level headings)', () => {
+            const story_a = makeNote({ seq: 1, level: 2, depth: 2, stable_id: 'doc:story-a', child_notes: [] });
+            const h1_one = makeNote({ seq: 4, level: 1, depth: 1, stable_id: 'doc:h1-one', child_notes: [story_a] });
+            const h1_two = makeNote({ seq: 3, level: 1, depth: 1, stable_id: 'doc:h1-two', child_notes: [] });
+            const root = makeNote({ seq: 0, level: 0, stable_id: 'root', child_notes: [h1_one, h1_two] });
+            const { result } = renderHook(() => useViewContext(makeViewProps({
+                type: 'kanban',
+                notes: [root, h1_one, story_a, h1_two],
+            })));
+            expect(result.current.parent_context?.stable_id).toBe('root');
+        });
+    });
+
     describe('editor-open vs editor-closed parity (single-caret ownership)', () => {
         // one caret, two owners: with the same view store, focus/selection must match real vs virtual caret
         const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });

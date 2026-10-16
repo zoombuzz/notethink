@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type DrawerKind = 'settings' | 'cards' | 'files' | 'collisions' | 'jump';
 export type ActiveDrawer = 'none' | DrawerKind;
@@ -15,24 +15,17 @@ export interface ToolbarDrawers {
 }
 
 /**
- * Owns the at-most-one-open toolbar drawer (settings | cards | files | collisions | jump) plus the shared
- * scroll-anchor, Escape, and outside-click behaviour. The trigger element's
- * viewport position is captured on toggle so the scroll-anchor effect keeps it
- * stable across the 150ms open/close animation; Escape restores focus to it.
+ * Owns the at-most-one-open toolbar drawer (settings | cards | files | collisions | jump) plus
+ * Escape and outside-click behaviour. The drawer floats over the view rather than reflowing it,
+ * so no scroll-anchoring is needed; Escape restores focus to the trigger that opened it.
  */
-// eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export function useToolbarDrawers(view_id: string): ToolbarDrawers {
     const [active_drawer, setActiveDrawer] = useState<ActiveDrawer>('none');
     const gear_button_ref = useRef<HTMLButtonElement>(null);
-    // held stable across the open/close animation and refocused on Escape: the gear for settings, breadcrumb count for files
+    // held stable so Escape and outside-click can refocus/exclude it: the gear for settings, breadcrumb count for files
     const anchor_el_ref = useRef<HTMLElement | null>(null);
-    const anchor_top_ref = useRef<number | null>(null);
-    // toggle a drawer, capturing the trigger's viewport position so the scroll-anchor effect keeps it stable
     const toggleDrawer = useCallback((which: DrawerKind, anchor: HTMLElement | null): void => {
-        if (anchor) {
-            anchor_el_ref.current = anchor;
-            anchor_top_ref.current = anchor.getBoundingClientRect().top;
-        }
+        if (anchor) { anchor_el_ref.current = anchor; }
         setActiveDrawer(prev => (prev === which ? 'none' : which));
     }, []);
     const toggle_settings = useCallback((): void => {
@@ -50,45 +43,15 @@ export function useToolbarDrawers(view_id: string): ToolbarDrawers {
     const toggle_jump = useCallback((anchor: HTMLElement): void => {
         toggleDrawer('jump', anchor);
     }, [toggleDrawer]);
-    // closes the open drawer (the in-drawer X); holds the trigger's position stable across the close, mirroring Escape
+    // closes the open drawer (the in-drawer X)
     const close_drawer = useCallback((): void => {
-        const anchor = anchor_el_ref.current;
-        if (anchor) { anchor_top_ref.current = anchor.getBoundingClientRect().top; }
         setActiveDrawer('none');
     }, []);
-    // scroll-anchor the trigger element across the open/close animation so the content the user was looking at stays visible
-    useLayoutEffect(() => {
-        if (anchor_top_ref.current === null) { return; }
-        const target_top = anchor_top_ref.current;
-        let raf_id: number;
-        const deadline = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + 250; // 150ms anim + margin
-        const tick = (): void => {
-            const anchor = anchor_el_ref.current;
-            if (anchor) {
-                const current_top = anchor.getBoundingClientRect().top;
-                const delta = current_top - target_top;
-                if (Math.abs(delta) > 0.5) {
-                    // legacy 2-arg form is always instant; avoids the 'instant' ScrollBehavior typing issue
-                    window.scrollBy(0, delta);
-                }
-            }
-            const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-            if (now < deadline) {
-                raf_id = requestAnimationFrame(tick);
-            }
-        };
-        raf_id = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(raf_id);
-    }, [active_drawer]);
     // Escape closes whichever drawer is open and returns focus to its trigger element
     useEffect(() => {
         if (active_drawer === 'none') { return; }
         const onKeyDown = (e: KeyboardEvent): void => {
             if (e.key === 'Escape') {
-                const anchor = anchor_el_ref.current;
-                if (anchor) {
-                    anchor_top_ref.current = anchor.getBoundingClientRect().top;
-                }
                 setActiveDrawer('none');
                 requestAnimationFrame(() => anchor_el_ref.current?.focus());
             }

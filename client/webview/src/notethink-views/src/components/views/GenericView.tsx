@@ -1,6 +1,6 @@
 import React, { lazy } from "react";
 import { documentRootForStrip, hasVisibleCard } from "../../lib/noteops";
-import { chainOf, isGroupedViewType, registryWithUserTypes } from "../../lib/viewregistryops";
+import { chainOf, isGroupedViewType, registryWithUserTypes, resolvedSettingsForView } from "../../lib/viewregistryops";
 import { INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode } from "../../types/IntegrationMode";
 import type { UserViewType } from "../../types/Messages";
 import type { ViewProps } from "../../types/ViewProps";
@@ -53,9 +53,9 @@ function viewComponentFor(view_type: string, user_types: UserViewType[]): React.
  * shows one, while folder mode's columns render empty rather than blank and the note says why.
  * - scanning: discovery_scanning is set from the start of a discovery run until its first aggregate
  *   payload lands, but only while no card is actually VISIBLE yet - a per-file merge update can land
- *   notes well before the scan settles, and a doc whose every note sits in a lane the group-display
+ *   notes well before the scan settles, and a doc whose every note sits in a group the group-display
  *   hides must not drop the panel for an empty-looking board; while it shows, the board is not
- *   rendered at all, so no empty lane headings appear under it, and it never covers a board already
+ *   rendered at all, so no empty group headings appear under it, and it never covers a board already
  *   showing a card. The same mode also covers the narrower window before discovery_scanning has even
  *   been raised yet - a folder-mode view restored from persisted state renders before any message
  *   from the extension host has arrived, so aggregate_total_discovered is undefined there too; without
@@ -81,6 +81,12 @@ function resolveFolderStatus(show_toolbar: boolean, integration_mode: ConcreteIn
  * single-file fallback for joining a story to agent activity: folder-mode notes carry an origin and
  * need none, and a single-file note's contract binds on a workspace-relative path, so an absolute one
  * is deliberately not substituted.
+ *
+ * The rendered view component gets its per-view settings (group axis, group order/visibility,
+ * orientation, group breadth) resolved for its OWN chain - so a kanban board with its own value in
+ * viewOverrides renders with it rather than with grouped's or line's - while the toolbar/drawer above
+ * keep reading display_options.settings unresolved, since the drawer resolves per whichever node the
+ * user has selected there, not necessarily the one on screen.
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function GenericView(props: ViewProps): React.ReactElement {
@@ -105,13 +111,23 @@ export default function GenericView(props: ViewProps): React.ReactElement {
     );
     // toolbar renders only at the leaf level; 'auto' delegates to AutoView, which renders GenericView again
     const show_toolbar = view_props.type !== 'auto';
+    // the user's saved types merged in, shared by the component lookup, the grouped check and the per-view resolution below
+    const registry = registryWithUserTypes(display_options.settings?.viewUserTypes ?? []);
     // the registry-keyed component for this type, inheriting a minted type's renderer from its parent
     const ViewComponent = viewComponentFor(view_props.type, display_options.settings?.viewUserTypes ?? []);
-    // whether a card is actually visible now: any note at all outside a grouped view, else one outside a hidden lane
-    const is_grouped_view = isGroupedViewType(view_props.type, registryWithUserTypes(display_options.settings?.viewUserTypes ?? []));
+    // whether a card is actually visible now: any note at all outside a grouped view, else one outside a hidden group
+    const is_grouped_view = isGroupedViewType(view_props.type, registry);
     const has_visible_card = hasVisibleCard(notes_within_parent_context, is_grouped_view, toolbar.active_axis_key, display_options.settings?.groupDisplay);
     // the toolbar's integration_mode, so the note tracks the same mode the Files drawer it opens gates on
     const folder_status = resolveFolderStatus(show_toolbar, toolbar.integration_mode, view_props, has_visible_card);
+    // every other key passes through display_options.settings unchanged
+    const per_view_settings = resolvedSettingsForView(
+        registry,
+        view_props.type,
+        display_options.settings ?? {},
+        display_options.settings?.viewUserTypes ?? [],
+        display_options.settings?.viewOverrides ?? {},
+    );
     // props for the rendered view component, enriched with the resolved card type and activity doc path
     const enriched_props: ViewProps = {
         ...view_props,
@@ -120,8 +136,8 @@ export default function GenericView(props: ViewProps): React.ReactElement {
             deepest,
             activity_doc_path: view_props.doc_relative_path,
             settings: show_toolbar
-                ? { ...display_options.settings, cardType: toolbar.resolved_card_type }
-                : display_options.settings,
+                ? { ...per_view_settings, cardType: toolbar.resolved_card_type }
+                : per_view_settings,
         },
         notes: view_props.notes as Array<NoteProps>,
         notes_within_parent_context,
@@ -146,6 +162,7 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     resolvedCardType={toolbar.resolved_card_type}
                     onCardTypeChange={toolbar.handle_card_type_change}
                     naturalColumnOrder={toolbar.natural_column_order}
+                    notesWithinParentContext={notes_within_parent_context}
                     collisions={collisions}
                     activeDrawer={drawers.active_drawer}
                     requestedJumpPath={jump.requested_jump_path}
@@ -165,7 +182,7 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                 />
             )}
             <div className={view_styles.viewContentRegion}>
-                {/* while scanning with no visible card the panel stands in for the board, so no empty lane headings show */}
+                {/* while scanning with no visible card the panel stands in for the board, so no empty group headings show */}
                 {ViewComponent && folder_status !== 'scanning' && <ViewComponent {...enriched_props} />}
                 {folder_status && (
                     <EmptyStoriesOverlay

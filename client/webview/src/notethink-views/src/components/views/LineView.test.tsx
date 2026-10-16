@@ -33,7 +33,7 @@ jest.mock('@hello-pangea/dnd', () => ({
         }</div>,
 }));
 
-// mock KanbanColumn to expose each lane's value + its notes
+// mock KanbanColumn to expose each group's value + its notes
 jest.mock('./kanban/KanbanColumn', () => ({
     __esModule: true,
     default: (props: { seq: number; value: string; type?: string; count?: number; children?: React.ReactNode }) => (
@@ -90,8 +90,8 @@ function makeViewProps(notes: NoteProps[], overrides: Partial<ViewProps> = {}): 
     };
 }
 
-describe('LineView lane derivation under an axis', () => {
-    it('groups notes into the same lane shape as kanban when the axis is status', () => {
+describe('LineView group derivation under an axis', () => {
+    it('groups notes into the same group shape as kanban when the axis is status', () => {
         const doing = makeNote(1, 0, { status: tag('status', 'doing', 1) });
         const untagged = makeNote(2, 60);
         render(<LineView {...makeViewProps([doing, untagged])} axis="status" />);
@@ -100,7 +100,7 @@ describe('LineView lane derivation under an axis', () => {
         expect(within(screen.getByTestId('column-doing-notes')).getByTestId('note-1')).toBeInTheDocument();
     });
 
-    it('groups notes into lanes on an arbitrary categorical attribute axis', () => {
+    it('groups notes into groups on an arbitrary categorical attribute axis', () => {
         const high = makeNote(1, 0, { priority: tag('priority', 'high', 1) });
         const low = makeNote(2, 60, { priority: tag('priority', 'low', 2) });
         render(<LineView {...makeViewProps([high, low])} axis="priority" />);
@@ -120,7 +120,7 @@ describe('LineView lane derivation under an axis', () => {
 });
 
 describe('LineView group-display is scoped to the active axis', () => {
-    it('hiding a lane on one axis does not hide the same-named lane on another axis', () => {
+    it('hiding a group on one axis does not hide the same-named group on another axis', () => {
         const doing = makeNote(1, 0, { status: tag('status', 'doing', 1) });
         const high_priority = makeNote(2, 60, { priority: tag('priority', 'high', 2) });
         const notes = [doing, high_priority];
@@ -130,27 +130,37 @@ describe('LineView group-display is scoped to the active axis', () => {
         ];
 
         const status_view = render(<LineView {...makeViewProps(notes, { display_options: { settings: { groupDisplay: group_display } } })} axis="status" />);
-        // the status axis's own entry hides its untagged lane (high_priority carries no status tag)
+        // the status axis's own entry hides its untagged group (high_priority carries no status tag)
         expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
         status_view.unmount();
 
         render(<LineView {...makeViewProps(notes, { display_options: { settings: { groupDisplay: group_display } } })} axis="priority" />);
-        // the priority axis's own entry leaves its untagged lane shown (doing carries no priority tag)
+        // the priority axis's own entry leaves its untagged group shown (doing carries no priority tag)
         expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
         expect(screen.getByTestId('column-high')).toBeInTheDocument();
     });
 });
 
+describe('LineView group order drops a stored entry no note carries', () => {
+    it('does not draw a group for a groupDisplay entry whose value no note carries', () => {
+        const doing = makeNote(1, 0, { status: tag('status', 'doing', 1) });
+        const group_display = [{ value: 'doing', shown: true }, { value: 'archived', shown: true }];
+        render(<LineView {...makeViewProps([doing], { display_options: { settings: { groupDisplay: group_display } } })} axis="status" />);
+        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        expect(screen.queryByTestId('column-archived')).not.toBeInTheDocument();
+    });
+});
+
 describe('LineView orientation', () => {
-    function laneNames(container: HTMLElement): string[] {
+    function groupNames(container: HTMLElement): string[] {
         return Array.from(container.querySelectorAll('[data-testid^="column-"]'))
             .map(el => el.getAttribute('data-testid') || '')
             .filter(id => !id.endsWith('-notes'))
             .map(id => id.replace('column-', ''));
     }
 
-    it('flips the board direction to rows without changing lane membership', () => {
+    it('flips the board direction to rows without changing group membership', () => {
         const doing = makeNote(1, 0, { status: tag('status', 'doing', 1) });
         const done = makeNote(2, 60, { status: tag('status', 'done', 2) });
         const notes = [doing, done];
@@ -158,16 +168,16 @@ describe('LineView orientation', () => {
         const columns_view = render(<LineView {...makeViewProps(notes, { display_options: { settings: { orientation: 'columns' } } })} axis="status" />);
         const columns_board = columns_view.container.querySelector('[data-flip-root]');
         expect(columns_board?.getAttribute('data-orientation')).toBe('columns');
-        const columns_lanes = laneNames(columns_view.container);
+        const columns_groups = groupNames(columns_view.container);
         columns_view.unmount();
 
         const rows_view = render(<LineView {...makeViewProps(notes, { display_options: { settings: { orientation: 'rows' } } })} axis="status" />);
         const rows_board = rows_view.container.querySelector('[data-flip-root]');
         expect(rows_board?.getAttribute('data-orientation')).toBe('rows');
-        const rows_lanes = laneNames(rows_view.container);
+        const rows_groups = groupNames(rows_view.container);
 
         // membership is identical between orientations - only the flex direction differs
-        expect(rows_lanes).toEqual(columns_lanes);
+        expect(rows_groups).toEqual(columns_groups);
         expect(within(rows_view.container.querySelector('[data-testid="column-doing-notes"]') as HTMLElement).getByTestId('note-1')).toBeInTheDocument();
     });
 
@@ -183,7 +193,7 @@ describe('LineView group-by resolution (no axis preset)', () => {
         return makeNote(seq, offset, undefined, { doc_id, doc_path: `/${folder}/f.md`, relative_path: `${folder}/f.md` });
     }
 
-    it('defaults to first-level-folder lanes and makes the cards non-draggable (read-only key)', () => {
+    it('defaults to first-level-folder groups and makes the cards non-draggable (read-only key)', () => {
         const a = fileNote(1, 0, 'projA', 'a');
         const b = fileNote(2, 60, 'projB', 'b');
         const { container } = render(<LineView {...makeViewProps([a, b], { type: 'line' })} />);

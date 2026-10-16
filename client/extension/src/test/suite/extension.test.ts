@@ -354,6 +354,53 @@ suite('Web Extension Test Suite', () => {
 				'Should have trace.server property'
 			);
 		});
+
+		test('A setting\'s home key carries its default and a copy below it holds no stored value', () => {
+			const config = vscode.workspace.getConfiguration('notethink.settings');
+			const copy = config.inspect('view.specific.kanban.orientation');
+			assert.strictEqual(config.inspect('view.specific.line.orientation')?.defaultValue, 'columns');
+			// VS Code reports its type's empty value as a copy's default, so only the stored scopes say inherit
+			assert.notStrictEqual(copy?.defaultValue, 'columns');
+			assert.strictEqual(copy?.workspaceValue, undefined);
+			assert.strictEqual(copy?.globalValue, undefined);
+		});
+
+		test('Every declared notethink.settings key can be written and read back at workspace scope', async () => {
+			const extension = vscode.extensions.getExtension(EXTENSION_ID);
+			assert.ok(extension);
+			const properties: Record<string, { type: string; enum?: string[] }> = extension.packageJSON.contributes.configuration[0].properties;
+			const declared = Object.entries(properties).filter(([full_key]) => full_key.startsWith('notethink.settings.'));
+			const sample = (schema: { type: string; enum?: string[] }): unknown => {
+				if (schema.enum) { return schema.enum[schema.enum.length - 1]; }
+				if (schema.type === 'boolean') { return true; }
+				if (schema.type === 'number' || schema.type === 'integer') { return 2; }
+				if (schema.type === 'array') { return []; }
+				return 'sample';
+			};
+			const config = vscode.workspace.getConfiguration('notethink.settings');
+			try {
+				for (const [full_key, schema] of declared) {
+					const config_path = full_key.slice('notethink.settings.'.length);
+					await config.update(config_path, sample(schema), vscode.ConfigurationTarget.Workspace);
+					const read_back = vscode.workspace.getConfiguration('notethink.settings').inspect(config_path)?.workspaceValue;
+					assert.deepStrictEqual(read_back, sample(schema), `${full_key} should read back what was written`);
+				}
+			} finally {
+				for (const [full_key] of declared) {
+					await config.update(full_key.slice('notethink.settings.'.length), undefined, vscode.ConfigurationTarget.Workspace);
+				}
+			}
+		});
+
+		test('Toggle line numbers writes the All cards key at workspace scope', async () => {
+			const config_path = 'card.generic.showLineNumbers';
+			try {
+				await vscode.commands.executeCommand('notethink.toggleLineNumbers');
+				assert.strictEqual(vscode.workspace.getConfiguration('notethink.settings').inspect(config_path)?.workspaceValue, true);
+			} finally {
+				await vscode.workspace.getConfiguration('notethink.settings').update(config_path, undefined, vscode.ConfigurationTarget.Workspace);
+			}
+		});
 	});
 
 	// keybindings contribution

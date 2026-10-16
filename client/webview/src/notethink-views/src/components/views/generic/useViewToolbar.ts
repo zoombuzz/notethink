@@ -1,10 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { buildIntegrationDispatch, resolveIntegrationMode } from "../../../lib/viewstateops";
-import { arraysEqual, deriveNaturalColumnOrder, isAggregateRoot, majorityCardType, replaceGroupDisplayForAxis } from "../../../lib/noteops";
-import { resolveGroupByAxisKey, resolveKanbanAxisKey } from "../../../lib/groupbyops";
+import { arraysEqual, deriveNaturalColumnOrder, isAggregateRoot, majorityCardType, replaceGroupDisplayForAxis, splitGroupDisplayByPresence } from "../../../lib/noteops";
+import { resolveGroupByAxisKey } from "../../../lib/groupbyops";
 import { KANBAN_AXIS_KEY } from "../../../lib/axisops";
-import { chainOf, isGroupedViewType, registryWithUserTypes, type ViewRegistry } from "../../../lib/viewregistryops";
+import { isGroupedViewType, registryWithUserTypes, resolveViewSetting, type ViewRegistry } from "../../../lib/viewregistryops";
 import { CARD_AUTO, cardRegistryWithViewSettings, resolveCardType } from "../../notes/cardregistryops";
 import { parentFolderOf } from "../../../lib/pathops";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
@@ -20,7 +20,7 @@ const EMPTY_USER_TYPES: UserViewType[] = [];
  * - handle_setting_change: the one write path every drawer control dispatches down, whatever node owns
  *   the setting it changed
  * - the integration/view-type/card-type groups each pair a persisted selection with its resolved value
- * - active_axis_key: the group-by key the board lanes by, which selects the group-display entries that apply
+ * - active_axis_key: the group-by key the board groups by, which selects the group-display entries that apply
  */
 export interface ViewToolbar {
     // --- integration mode ---
@@ -37,7 +37,7 @@ export interface ViewToolbar {
     handle_card_type_change: (card_type: string) => void;
     natural_column_order: string[];
     active_axis_key: string;
-    handle_setting_change: (key: SettingsCascadeKey, value: unknown) => void;
+    handle_setting_change: (key: SettingsCascadeKey | 'views' | 'cards', value: unknown) => void;
     handle_group_display_change: (next_display: GroupDisplayEntry[]) => void;
     handle_make_default: () => void;
     handle_reset_to_default: () => void;
@@ -47,22 +47,27 @@ export interface ViewToolbar {
 type DefaultActions = Pick<ViewToolbar, 'handle_make_default' | 'handle_reset_to_default' | 'handle_restore_builtin_default'>;
 
 /**
- * The axis the drawer's natural column order derives on: the same one the board lanes by. A kanban
- * chain pins status unless its own kanbanGroupBy says otherwise; everything else walks the generic auto
- * ladder (focused-note vote, majority vote, first-level-folder default), mirroring GenericViewToolbar's
- * group_by_resolved_key so the two never disagree about which axis is live.
+ * The axis the drawer's natural column order derives on: the same one the board groups by. The group-by
+ * selection resolves nearest-first along props.type's chain (its own bag entry or a saved type's
+ * overrides, else grouped's own value, with Kanban's own built-in status default folded in by
+ * `resolveViewSetting`), mirroring GenericViewToolbar's group_by_resolved_key so the two never disagree
+ * about which axis is live. A kanban chain's selection is therefore never `auto` by the time it reaches
+ * here; everything else still walks the generic auto ladder (focused-note vote, majority vote,
+ * first-level-folder default).
  */
 function resolveLiveGroupByAxis(props: ViewProps, registry: ViewRegistry): string {
-    const on_kanban_chain = chainOf(props.type, registry).includes('kanban');
-    const group_by_selection = (on_kanban_chain
-        ? props.display_options?.settings?.kanbanGroupBy
-        : props.display_options?.settings?.groupBy) ?? 'auto';
-    return on_kanban_chain
-        ? resolveKanbanAxisKey(group_by_selection)
-        : resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, group_by_selection);
+    const group_by_selection = resolveViewSetting(
+        registry,
+        props.type,
+        'groupBy',
+        props.display_options?.settings?.groupBy ?? 'auto',
+        props.display_options?.settings?.viewUserTypes ?? EMPTY_USER_TYPES,
+        props.display_options?.settings?.viewOverrides ?? {},
+    ).value as string;
+    return resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, group_by_selection);
 }
 
-/** derived for any lane view, not kanban alone: the drawer renders from the tree node the user selected */
+/** derived for any group view, not kanban alone: the drawer renders from the tree node the user selected */
 function useNaturalColumnOrder(props: ViewProps, user_view_types: UserViewType[], notes_within_parent_context: Array<NoteProps>): string[] {
     return useMemo<string[]>(() => {
         const registry = registryWithUserTypes(user_view_types);
@@ -71,8 +76,8 @@ function useNaturalColumnOrder(props: ViewProps, user_view_types: UserViewType[]
     }, [
         props.type,
         props.notes,
-        props.display_options?.settings?.kanbanGroupBy,
         props.display_options?.settings?.groupBy,
+        props.display_options?.settings?.viewOverrides,
         props.display_options?.focused_notes,
         notes_within_parent_context,
         user_view_types,
@@ -129,11 +134,13 @@ function readCardTypeState(props: ViewProps, display_options: NoteDisplayOptions
  * change is what configuration actually resolved.
  *
  * `handle_group_display_change` writes only the active axis's own entries: natural order with every
- * lane shown removes them (the unpin sentinel when it is the only axis stored), while every other
- * axis's stored entries survive the write via `replaceGroupDisplayForAxis`. When the rendered view
- * isn't a grouped one at all (natural_column_order empty - the drawer can be showing a highlighted
- * node's settings that differ from what is on screen), there is no live axis to scope to, so the list
- * is written through unscoped, as it was before axis scoping existed.
+ * group shown - present groups included, and any preserved-but-absent tail too - removes them (the unpin
+ * sentinel when it is the only axis stored), while every other axis's stored entries survive the write
+ * via `replaceGroupDisplayForAxis`. A hidden absent group blocks the unpin, since unpinning would lose
+ * its hidden flag; a shown one does not, since its default reconstruction (natural position, shown) is
+ * what it already was. When the rendered view isn't a grouped one at all (natural_column_order empty -
+ * the drawer can be showing a highlighted node's settings that differ from what is on screen), there is
+ * no live axis to scope to, so the list is written through unscoped, as it was before axis scoping existed.
  */
 export function useViewToolbar(
     props: ViewProps,
@@ -148,7 +155,7 @@ export function useViewToolbar(
     // view-type tree state - persisted selection plus the type AutoView resolved auto to
     const view_type_selection: string = (props.nested?.replaced_attributes?.type as string) || props.type;
     const auto_resolved_type: string | undefined = props.nested?.auto_resolved_type;
-    // the user's minted view types, read from the cascade so a saved kanban type is still a lane view
+    // the user's minted view types, read from the cascade so a saved kanban type is still a group view
     const user_view_types = display_options.settings?.viewUserTypes ?? EMPTY_USER_TYPES;
     const { selection: card_type_selection, resolved: resolved_card_type } = readCardTypeState(props, display_options, user_view_types);
     // dispatches to the canonical FOLDER_VIEW_STATE_ID so folder settings survive an integration flip and flip-back
@@ -179,7 +186,7 @@ export function useViewToolbar(
     const natural_column_order = useNaturalColumnOrder(props, user_view_types, notes_within_parent_context);
     const active_axis_key = resolveLiveGroupByAxis(props, registryWithUserTypes(user_view_types));
     // writes one setting in every integration mode; marks it plus the settingsCascade sentinel for the spinner
-    const cascade_write_setting = useCallback((setting: SettingsCascadeKey, value: unknown): void => {
+    const cascade_write_setting = useCallback((setting: SettingsCascadeKey | 'views' | 'cards', value: unknown): void => {
         markPending(setting);
         markPending('settingsCascade');
         handlers.postMessage?.({
@@ -191,20 +198,23 @@ export function useViewToolbar(
     // viewType is not integration-specific, so a type picked in current_file mode also applies in folder mode
     const handle_view_type_change = useCallback((view_type: string): void => {
         handlers.setViewManagedState([{ id: props.id, type: view_type }]);
-        cascade_write_setting('viewType', view_type);
+        cascade_write_setting('views', { sets: [{ node_id: 'root', key: 'viewType', value: view_type }] });
     }, [handlers, props.id, cascade_write_setting]);
-    // one cascade write; the card reaches every note via display_options rebuilt from the cascade
+    // one cascade write, into cardType's one home; the card reaches every note via display_options rebuilt from the cascade
     const handle_card_type_change = useCallback((card_type: string): void => {
-        cascade_write_setting('cardType', card_type);
+        cascade_write_setting('cards', { sets: [{ node_id: 'allcards', key: 'cardType', value: card_type }] });
     }, [cascade_write_setting]);
     const default_actions = useDefaultActions(handlers);
-    // writes only the active axis's entries; an ungrouped view (no live axis) writes the list through unscoped
+    // writes only the active axis's entries into groupDisplay's home; no live axis writes the list unscoped
     const handle_group_display_change = useCallback((next_display: GroupDisplayEntry[]): void => {
-        const matches_natural = arraysEqual(next_display.map(entry => entry.value), natural_column_order) && next_display.every(entry => entry.shown !== false);
+        // next_display may carry a preserved absent tail; unpinning to [] is safe only when every entry is shown
+        const { present } = splitGroupDisplayByPresence(next_display, natural_column_order);
+        const matches_natural = arraysEqual(present.map(entry => entry.value), natural_column_order) && next_display.every(entry => entry.shown !== false);
         // with no grouped view rendered, the drawer edits the kanban node's own status axis
         const write_axis = natural_column_order.length === 0 ? KANBAN_AXIS_KEY : active_axis_key;
         const next_for_axis = matches_natural ? [] : next_display;
-        cascade_write_setting('groupDisplay', replaceGroupDisplayForAxis(display_options.settings?.groupDisplay, write_axis, next_for_axis));
+        const merged = replaceGroupDisplayForAxis(display_options.settings?.groupDisplay, write_axis, next_for_axis);
+        cascade_write_setting('views', { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: merged }] });
     }, [natural_column_order, cascade_write_setting, display_options.settings?.groupDisplay, active_axis_key]);
     return {
         integration_selection,

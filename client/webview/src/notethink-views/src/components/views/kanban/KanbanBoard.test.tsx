@@ -6,7 +6,7 @@ import type { ViewProps } from '../../../types/ViewProps';
 import type { KanbanColumnDescriptor } from './useKanbanColumns';
 
 /*
- * Regression guard: a lane that fits the board's height ceiling must render the plain path, not
+ * Regression guard: a group that fits the board's height ceiling must render the plain path, not
  * VirtualizedKanbanColumn, which is mocked directly so the test can tell which path rendered.
  */
 jest.mock('@hello-pangea/dnd', () => ({
@@ -60,8 +60,8 @@ function makeView(): ViewProps {
     return { id: 'view-1', type: 'kanban', display_options: {} };
 }
 
-describe('KanbanBoard: virtualization is per-lane, not per-board', () => {
-    it('renders a short lane through the plain path, not VirtualizedKanbanColumn', () => {
+describe('KanbanBoard: virtualization is per-group, not per-board', () => {
+    it('renders a short group through the plain path, not VirtualizedKanbanColumn', () => {
         const short_column = makeColumn('doing', makeNotes('doing', 2, 0), 0);
         const { queryByTestId, getByTestId } = render(
             <KanbanBoard
@@ -78,7 +78,7 @@ describe('KanbanBoard: virtualization is per-lane, not per-board', () => {
         expect(getByTestId('note-1')).toBeInTheDocument();
     });
 
-    it('renders a lane whose content exceeds the ceiling through VirtualizedKanbanColumn', () => {
+    it('renders a group whose content exceeds the ceiling through VirtualizedKanbanColumn', () => {
         const long_column = makeColumn('backlog', makeNotes('backlog', 400, 0), 0);
         const { getByTestId, queryByTestId } = render(
             <KanbanBoard
@@ -94,7 +94,7 @@ describe('KanbanBoard: virtualization is per-lane, not per-board', () => {
         expect(queryByTestId('note-0')).toBeNull();
     });
 
-    it('mixes both paths in the same board when one lane is long and another is short', () => {
+    it('mixes both paths in the same board when one group is long and another is short', () => {
         const short_column = makeColumn('doing', makeNotes('doing', 1, 0), 0);
         const long_column = makeColumn('backlog', makeNotes('backlog', 400, 1), 1);
         const { getByTestId, queryByTestId } = render(
@@ -112,7 +112,7 @@ describe('KanbanBoard: virtualization is per-lane, not per-board', () => {
         expect(getByTestId('virtualized-backlog')).toBeInTheDocument();
     });
 
-    it('always uses the plain path in rows orientation, however long the lane', () => {
+    it('always uses the plain path in rows orientation, however long the group', () => {
         const long_column = makeColumn('backlog', makeNotes('backlog', 400, 0), 0);
         const { queryByTestId } = render(
             <KanbanBoard
@@ -125,5 +125,22 @@ describe('KanbanBoard: virtualization is per-lane, not per-board', () => {
             />,
         );
         expect(queryByTestId('virtualized-backlog')).toBeNull();
+    });
+});
+
+describe('KanbanBoard: the repeated footer renders for the plain path in every orientation', () => {
+    it.each(['columns', 'rows'] as const)('renders group-footer-doing under orientation=%s', (orientation) => {
+        const short_column = makeColumn('doing', makeNotes('doing', 2, 0), 0);
+        const { getByTestId } = render(
+            <KanbanBoard
+                visible_columns={[short_column]}
+                display_options={{}}
+                view={makeView()}
+                orientation={orientation}
+                onDragStart={jest.fn()}
+                onDragEnd={jest.fn()}
+            />,
+        );
+        expect(getByTestId('group-footer-doing')).toBeInTheDocument();
     });
 });

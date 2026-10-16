@@ -1,22 +1,22 @@
 /*
- * Pure sizing math for a virtualized (columns-orientation) lane's card list. `useCardHeightCache` wraps
+ * Pure sizing math for a virtualized (columns-orientation) group's card list. `useCardHeightCache` wraps
  * the measured-height map this reads and writes; `VirtualizedKanbanColumn` is the only caller.
  */
 
 // a card with no measurement yet (not rendered since the last board reflow) sizes its row at this guess
 export const DEFAULT_ESTIMATED_CARD_HEIGHT = 160;
 
-/** The gap `.notes { gap: 20px }` draws for a non-virtual lane, baked into each row's own size since an absolutely positioned row has no `gap` to inherit. */
+/** The gap `.notes { gap: 20px }` draws for a non-virtual group, baked into each row's own size since an absolutely positioned row has no `gap` to inherit. */
 export const CARD_ROW_GAP = 20;
 
 // rows kept mounted above/below the visible window, so a fast scroll or drag auto-scroll never outruns what's rendered
-export const LANE_OVERSCAN_COUNT = 8;
+export const GROUP_OVERSCAN_COUNT = 8;
 
-/** The shortest a lane's virtualized list is ever given, so an early render or short pane still shows more than a sliver of the first card. */
-export const MIN_LANE_LIST_HEIGHT = 160;
+/** The shortest a group's virtualized list is ever given, so an early render or short pane still shows more than a sliver of the first card. */
+export const MIN_GROUP_LIST_HEIGHT = 160;
 
-// space left below the lane list and the bottom of the window, matching the page's own scroll margins
-export const LANE_LIST_BOTTOM_MARGIN = 16;
+// space left below the group list and the bottom of the window, matching the page's own scroll margins
+export const GROUP_LIST_BOTTOM_MARGIN = 16;
 
 /**
  * One virtual row's height, in px: measured height (falling back to the shared target, then a flat
@@ -30,21 +30,21 @@ export function rowSizeFor(measured_height: number | undefined, estimated_card_h
 }
 
 /**
- * The lane list's height, clamped to the floor. `available` is undefined until the board has been
+ * The group list's height, clamped to the floor. `available` is undefined until the board has been
  * measured once, which tells the caller to keep whatever fallback height it was already rendering at.
  */
-export function laneListHeight(available: number | undefined): number {
-    if (available === undefined || !Number.isFinite(available)) { return MIN_LANE_LIST_HEIGHT; }
-    return Math.max(available - LANE_LIST_BOTTOM_MARGIN, MIN_LANE_LIST_HEIGHT);
+export function groupListHeight(available: number | undefined): number {
+    if (available === undefined || !Number.isFinite(available)) { return MIN_GROUP_LIST_HEIGHT; }
+    return Math.max(available - GROUP_LIST_BOTTOM_MARGIN, MIN_GROUP_LIST_HEIGHT);
 }
 
-/** the sum of every row's own size, in px - what a lane's list would stand were it not capped to the viewport */
+/** the sum of every row's own size, in px - what a group's list would stand were it not capped to the viewport */
 export function totalContentHeight(row_sizes: ReadonlyArray<number>): number {
     return row_sizes.reduce((total, size) => total + size, 0);
 }
 
 /**
- * Each row's top-edge offset (px) within the lane's content: row `i` spans `[offsets[i], offsets[i] +
+ * Each row's top-edge offset (px) within the group's content: row `i` spans `[offsets[i], offsets[i] +
  * row_sizes[i])`. Rebuilt fresh from the current id order on every call, so a reorder needs no
  * separate invalidation step.
  */
@@ -67,7 +67,7 @@ export interface VisibleRowRange {
 /**
  * Row indices intersecting `[scroll_offset, scroll_offset + viewport_size)`, padded by
  * `overscan_count` rows on each side and clamped to the list's bounds. `scroll_offset` is how far the
- * page has scrolled past the lane's top edge, not a `scrollTop` of the lane's own - it has none.
+ * page has scrolled past the group's top edge, not a `scrollTop` of the group's own - it has none.
  */
 export function visibleRowRange(
     row_sizes: ReadonlyArray<number>,
@@ -122,25 +122,25 @@ export function scrollOffsetForIndex(
     return Math.max(0, row_end - viewport_size);
 }
 
-/** clamp a scroll offset to what the content has to give, so an emptied lane cannot pin one past its own end */
+/** clamp a scroll offset to what the content has to give, so an emptied group cannot pin one past its own end */
 export function clampScrollOffset(offset: number, content_height: number, viewport_size: number): number {
     const max_offset = Math.max(0, content_height - viewport_size);
     return Math.min(Math.max(0, offset), max_offset);
 }
 
 /**
- * Whether a lane's content genuinely exceeds the board's ceiling - the only case windowing helps.
+ * Whether a group's content genuinely exceeds the board's ceiling - the only case windowing helps.
  * Estimated from the flat `DEFAULT_ESTIMATED_CARD_HEIGHT`, not the solved card-target height: the
  * target is a ceiling a card clips down to, never a floor a short card is stretched up to, so using
- * it would over-count most lanes on a small board.
+ * it would over-count most groups on a small board.
  *
- * `available_height` is `useLaneListHeight`'s unfloored reading, `undefined` before the board's first
+ * `available_height` is `useGroupListHeight`'s unfloored reading, `undefined` before the board's first
  * measurement; that case answers `false`. @hello-pangea/dnd's keyboard sensor cannot tolerate a
- * lane's Droppable switching between virtual and plain mode near a drag, so a lane that virtualizes
- * on the bootstrap render can carry a broken cross-column move even after it corrects itself - a lane
+ * group's Droppable switching between virtual and plain mode near a drag, so a group that virtualizes
+ * on the bootstrap render can carry a broken cross-column move even after it corrects itself - a group
  * that fits instead renders through the plain `Droppable`, never `VirtualizedKanbanColumn`.
  */
-export function laneNeedsVirtualization(card_count: number, available_height: number | undefined): boolean {
+export function groupNeedsVirtualization(card_count: number, available_height: number | undefined): boolean {
     if (card_count <= 0 || available_height === undefined) { return false; }
     return card_count * rowSizeFor(undefined, DEFAULT_ESTIMATED_CARD_HEIGHT) > available_height;
 }

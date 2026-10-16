@@ -188,7 +188,7 @@ describe('AgentNote', () => {
         expect(screen.queryByTestId('agent-question-band')).not.toBeInTheDocument();
     });
 
-    it('wraps everything after the headline in the shared body class, so the lane and document padding rules pick it up', () => {
+    it('wraps everything after the headline in the shared body class, so the group and document padding rules pick it up', () => {
         seed({ sessions: [makeSessionState(makeSession())] });
         const { container } = render(<AgentNote {...makeStoryNote()} />);
         const body = container.querySelector('.body');
@@ -215,15 +215,21 @@ describe('AgentNote', () => {
         expect(screen.queryByTestId('agent-meta-row')).not.toBeInTheDocument();
     });
 
-    it('draws each row how long the session ran, not how long ago it stopped, with both timestamps on hover', () => {
+    it('draws each row how long the session ran in span mode, not how long ago it stopped, with both timestamps on hover', () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-09-24T09:26:01Z'));
         seed({ sessions: [makeSessionState(makeSession({ state: 'ended', started_at: '2026-09-18T06:09:01Z', updated_at: '2026-09-18T09:14:01Z' }))] });
-        render(<AgentNote {...makeStoryNote()} />);
+        render(<AgentNote {...makeStoryNote({ display_options: { id: 'v1-n3', settings: { clockMode: 'span' } } })} />);
         const clock = screen.getByTestId('agent-clock');
         expect(clock).toHaveTextContent('3h 05m');
         expect(clock).toHaveAttribute('title', expect.stringContaining('2026-09-18T06:09:01Z'));
         expect(clock).toHaveAttribute('title', expect.stringContaining('2026-09-18T09:14:01Z'));
         jest.useRealTimers();
+    });
+
+    it('draws each row its active time by default, leaving out idle gaps over five minutes', () => {
+        seed({ sessions: [makeSessionState(makeSession({ state: 'ended', started_at: '2026-09-18T06:09:01Z', updated_at: '2026-09-18T09:14:01Z', active_ms: 7 * 60_000 }))] });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-clock')).toHaveTextContent('7m');
     });
 
     it('draws a refusal naming a session on that session own row', () => {

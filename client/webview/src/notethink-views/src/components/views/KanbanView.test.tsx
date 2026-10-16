@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import KanbanView from './KanbanView';
 import GenericNoteAttributes from '../notes/GenericNoteAttributes';
+import { FIRST_LEVEL_FOLDER_KEY } from '../../lib/axisops';
 import type { ViewProps } from '../../types/ViewProps';
 import type { NoteProps, NoteOrigin } from '../../types/NoteProps';
 import type { OrderingChangeSet } from '../../lib/linetagops';
@@ -146,10 +147,11 @@ describe('KanbanView', () => {
 
     /*
      * kanban's axis is a default, not a constant: `auto` means status, and its own group-by overrides it.
-     * These three cases are the whole contract - the drawer writes kanbanGroupBy, so a board that ignored
-     * it would leave the setting inert and the "Save as a new view type" offer meaningless.
+     * GenericView resolves kanban's own value (from viewOverrides, or a saved type) onto this same flat
+     * `groupBy` field before KanbanView ever renders, so this component reads it exactly as it would read
+     * Line's own value - these cases are the whole contract.
      */
-    it('lanes by status when its own group-by is auto or unset', () => {
+    it('groups by status when its own group-by is unset or already resolved to status', () => {
         const doing = makeNote({
             seq: 1,
             linetags: {
@@ -162,15 +164,16 @@ describe('KanbanView', () => {
         expect(screen.queryByTestId('column-ada')).not.toBeInTheDocument();
         unmount();
 
+        // 'status' arrives already resolved by GenericView before KanbanView ever renders, so 'auto' itself never reaches here
         render(<KanbanView {...makeViewProps({
             notes: [doing],
             notes_within_parent_context: [doing],
-            display_options: { settings: { kanbanGroupBy: 'auto' } },
+            display_options: { settings: { groupBy: 'status' } },
         })} />);
         expect(screen.getByTestId('column-doing')).toBeInTheDocument();
     });
 
-    it('lanes by its own group-by when one is chosen, so the setting is not written and ignored', () => {
+    it('groups by its own group-by when one is chosen, so the setting is not written and ignored', () => {
         const ada = makeNote({
             seq: 1,
             linetags: {
@@ -189,7 +192,7 @@ describe('KanbanView', () => {
         render(<KanbanView {...makeViewProps({
             notes: [ada, grace],
             notes_within_parent_context: [ada, grace],
-            display_options: { settings: { kanbanGroupBy: 'assignee' } },
+            display_options: { settings: { groupBy: 'assignee' } },
         })} />);
         expect(screen.getByTestId('column-ada')).toBeInTheDocument();
         expect(screen.getByTestId('column-grace')).toBeInTheDocument();
@@ -440,7 +443,7 @@ describe('KanbanView', () => {
         expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
     });
 
-    it('falls back to all columns when no column has stories (empty board not blank)', () => {
+    it('falls back to the untagged column alone when no note exists at all (empty board not blank)', () => {
         const props = makeViewProps({
             notes_within_parent_context: [],
             display_options: {
@@ -450,12 +453,13 @@ describe('KanbanView', () => {
             },
         });
         render(<KanbanView {...props} />);
-        expect(screen.getByTestId('column-done')).toBeInTheDocument();
-        expect(screen.getByTestId('column-doing')).toBeInTheDocument();
+        // 'done' and 'doing' name no current note and so draw no column at all; untagged is always present
         expect(screen.getByTestId('column-untagged')).toBeInTheDocument();
+        expect(screen.queryByTestId('column-done')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('column-doing')).not.toBeInTheDocument();
     });
 
-    it('drops a lane whose groupDisplay entry is hidden, even while it holds stories', () => {
+    it('drops a group whose groupDisplay entry is hidden, even while it holds stories', () => {
         const doing_note = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -488,7 +492,7 @@ describe('KanbanView', () => {
         expect(screen.queryByTestId('column-done')).not.toBeInTheDocument();
     });
 
-    it('renders no lanes at all when every lane is hidden', () => {
+    it('renders no groups at all when every group is hidden', () => {
         const doing_note = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -512,7 +516,7 @@ describe('KanbanView', () => {
         expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
     });
 
-    it('shows a lane added since the display was saved, since an unnamed lane arrives shown', () => {
+    it('shows a group added since the display was saved, since an unnamed group arrives shown', () => {
         const doing_note = makeNote({
             seq: 1,
             headline_raw: '## Task A',
@@ -560,6 +564,37 @@ describe('KanbanView', () => {
         expect(within(screen.getByTestId('column-doing-notes')).getByTestId('note-1')).toBeInTheDocument();
         // the content container carries its id (the node useFlipTransition measures within)
         expect(container.querySelector('#vtest-kanban-inner')).toBeInTheDocument();
+    });
+
+    /*
+     * A saved type's own Group by override arrives on display_options.settings.groupBy already resolved
+     * (GenericView's job, before KanbanView ever renders - see resolvedSettingsForView in
+     * viewregistryops.ts), so a kanban-descended board grouped by the first-level folder draws one
+     * column per folder exactly as a plain grouped view would, in a folder fixture (distinct
+     * origin.relative_path per note).
+     */
+    it('draws one column per folder when its own group-by resolves to the first-level folder', () => {
+        const project_a_note = makeNote({
+            seq: 1,
+            headline_raw: '## Task A',
+            origin: { doc_id: 'a', doc_path: '/repo/projA/f.md', relative_path: 'projA/f.md' },
+        });
+        const project_b_note = makeNote({
+            seq: 2,
+            headline_raw: '## Task B',
+            position: { start: { offset: 60, line: 6 }, end: { offset: 70, line: 7 }, end_body: { offset: 100, line: 10 } },
+            origin: { doc_id: 'b', doc_path: '/repo/projB/f.md', relative_path: 'projB/f.md' },
+        });
+        const props = makeViewProps({
+            type: 'user-next-up-by-project',
+            notes: [project_a_note, project_b_note],
+            notes_within_parent_context: [project_a_note, project_b_note],
+            display_options: { settings: { groupBy: FIRST_LEVEL_FOLDER_KEY } },
+        });
+        render(<KanbanView {...props} />);
+        expect(screen.getByTestId('column-projA')).toBeInTheDocument();
+        expect(screen.getByTestId('column-projB')).toBeInTheDocument();
+        expect(screen.queryByTestId('column-untagged')).not.toBeInTheDocument();
     });
 
     it('passes correct count to each column', () => {

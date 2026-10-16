@@ -9,7 +9,7 @@ const debug = Debug("nodejs:notethink-views:axisops");
  * the inverse projection now, while there is exactly one categorical axis, is what keeps grid/gantt
  * additive later instead of a rewrite.
  *
- * Ship: the categorical case (a single field grouped into lanes), forward + inverse projection, the
+ * Ship: the categorical case (a single field grouped into groups), forward + inverse projection, the
  * absent-value bucket, per-axis writability, and the intra-cell rank channel. Everything else -
  * continuous scales, log/time, bins, extents, compound keys, multi-axis cross-axis drag - is declared
  * in the types as a slot and NOT implemented here.
@@ -25,7 +25,7 @@ export type AxisScale = 'linear' | 'log' | 'time';
  * typed slots the drop handler already accommodates but no view builds yet.
  * - field: the attribute a note maps through; a single field is what ships, a string[] compound key is a slot
  * - kind: categorical ships; ordinal/continuous are slots
- * - order: categorical per-axis lane order (the group order)
+ * - order: categorical per-axis group order (the group order)
  * - scale/domain/bins/extent: continuous-only slots, not implemented
  * - writable: false marks a read-only (computed) axis a drop may not write; undefined/true means writable
  */
@@ -73,12 +73,12 @@ export interface IntraCellRank {
 }
 
 /**
- * DropCoordinate, one axis paired with the destination lane value the drop landed in. A drop carries one
+ * DropCoordinate, one axis paired with the destination group value the drop landed in. A drop carries one
  * coordinate per axis the view exposes (one today; grid would carry two).
  */
 export interface DropCoordinate {
     axis: Axis;
-    lane_value: string;
+    group_value: string;
 }
 
 /**
@@ -94,9 +94,9 @@ export interface DropInversion {
 }
 
 /**
- * The synthetic absent-value bucket: the lane a note with no value for the axis field lands in. No
- * file carries this value - the categorical projection invents it, and dropping onto this lane
- * deletes the field's linetag. The status axis uses 'untagged' as its absent lane.
+ * The synthetic absent-value bucket: the group a note with no value for the axis field lands in. No
+ * file carries this value - the categorical projection invents it, and dropping onto this group
+ * deletes the field's linetag. The status axis uses 'untagged' as its absent group.
  */
 export const ABSENT_VALUE_BUCKET = 'untagged';
 
@@ -110,14 +110,14 @@ export const INTRA_CELL_RANK_KEY = 'nt_kanban_ordering_weight';
  * The implicit read-only axis field for the first-level folder: a note's value on this axis comes
  * from its origin's relative_path, not a linetag. Namespaced to preserve the authored key space; a
  * permanent name. Read-only since a drop along it would have to move a file on disk. Lives here as
- * the neutral home both the lane helpers and the group-by enumeration import without a cycle.
+ * the neutral home both the group helpers and the group-by enumeration import without a cycle.
  */
 export const FIRST_LEVEL_FOLDER_KEY = 'nt_first_level_folder';
 
 /*
- * The axis kanban lanes by unless its own group-by says otherwise. It is kanban's identity rather than a
+ * The axis kanban groups by unless its own group-by says otherwise. It is kanban's identity rather than a
  * preference, which is why `auto` on a kanban board means this and not the first-level-folder default
- * every other grouped view falls back to. Several lane helpers still spell it as a default parameter -
+ * every other grouped view falls back to. Several group helpers still spell it as a default parameter -
  * that is the same value, kept as sugar so a caller grouping a kanban needs no import.
  */
 export const KANBAN_AXIS_KEY = 'status';
@@ -142,35 +142,35 @@ export function isAxisWritable(axis: Axis): boolean {
     return normalizeAxis(axis).writable !== false;
 }
 
-/** map a raw field value to its categorical lane: a present value is its own lane, an absent/empty value is the absent bucket */
-export function categoricalLaneFor(raw_value: string | undefined): string {
+/** map a raw field value to its categorical group: a present value is its own group, an absent/empty value is the absent bucket */
+export function categoricalGroupFor(raw_value: string | undefined): string {
     return raw_value || ABSENT_VALUE_BUCKET;
 }
 
 /**
- * Forward projection: the categorical lane a note occupies on an axis, read from its linetag for the
+ * Forward projection: the categorical group a note occupies on an axis, read from its linetag for the
  * axis field. An implicit key computed from origin (e.g. the first-level folder) is not a linetag,
- * so the caller resolves its value and passes it through `categoricalLaneFor` instead.
+ * so the caller resolves its value and passes it through `categoricalGroupFor` instead.
  */
 export function projectNoteOntoAxis(note: NoteProps, axis: Axis): string {
-    return categoricalLaneFor(note.linetags?.[axisField(axis)]?.value);
+    return categoricalGroupFor(note.linetags?.[axisField(axis)]?.value);
 }
 
 /**
- * Inverse projection for one categorical axis: turns the lane a card was dropped into back into an
- * attribute write. A read-only axis is rejected (the card snaps back); the absent-value lane
- * produces a delete, any other lane a set to that value.
+ * Inverse projection for one categorical axis: turns the group a card was dropped into back into an
+ * attribute write. A read-only axis is rejected (the card snaps back); the absent-value group
+ * produces a delete, any other group a set to that value.
  */
-export function invertCategoricalAxis(axis: Axis, lane_value: string): AxisInversion {
+export function invertCategoricalAxis(axis: Axis, group_value: string): AxisInversion {
     const field = axisField(axis);
     if (!isAxisWritable(axis)) {
         debug('invertCategoricalAxis: read-only axis rejected, field=%s', field);
         return { kind: 'rejected', reason: 'read-only', field };
     }
-    if (lane_value === ABSENT_VALUE_BUCKET) {
+    if (group_value === ABSENT_VALUE_BUCKET) {
         return { kind: 'write', write: { field, op: 'delete' } };
     }
-    return { kind: 'write', write: { field, op: 'set', value: lane_value } };
+    return { kind: 'write', write: { field, op: 'set', value: group_value } };
 }
 
 /**
@@ -182,7 +182,7 @@ export function invertDrop(coordinates: DropCoordinate[], rank?: IntraCellRank):
     const writes: AxisBucketWrite[] = [];
     const rejected_fields: string[] = [];
     for (const coordinate of coordinates) {
-        const inversion = invertCategoricalAxis(coordinate.axis, coordinate.lane_value);
+        const inversion = invertCategoricalAxis(coordinate.axis, coordinate.group_value);
         if (inversion.kind === 'write') {
             writes.push(inversion.write);
         } else {

@@ -67,12 +67,43 @@ export interface OpenRelativeMessage {
  * falling back to the user scope in a folderless window where a workspace write throws; 'global'
  * is the promote path. This is the only message that writes a setting; there is no second
  * channel for a subset of keys.
+ *
+ * `setting: 'views'` / `'cards'` are the one exception to `value` being the setting's own shape:
+ * `value` is a `BagDelta` (one or more single-cell changes to that bag) rather than the whole map,
+ * because the map spans both config scopes merged node by node and key by key, and only the extension
+ * can read the scopes apart to apply the change without clobbering the other. `settingWriteFor` in
+ * viewregistryops.ts builds a single-cell delta; a multi-cell delta (minting, renaming or deleting a
+ * saved type) is built where it is dispatched, so every related cell lands in one atomic write.
  */
 export interface UpdateSettingMessage {
     type: 'updateSetting';
-    setting: SettingsCascadeKey;
+    setting: SettingsCascadeKey | 'views' | 'cards';
     value: unknown;
     scope?: 'workspace' | 'global';
+}
+
+/**
+ * One cell change inside a `views` or `cards` bag.
+ * - node_id: the bag entry the change applies to - a built-in tree node or a saved type's id
+ * - key: the field inside that entry, or `null` for a whole-entry operation (minting or deleting a
+ *   saved type), since a saved type's creation and removal touch more than one field at once
+ * - value: the new value for `key`, `undefined` clearing it (pruning the whole entry once empty); for
+ *   a whole-entry operation, the complete replacement object, or `undefined` to delete the entry
+ */
+export interface BagCellOp {
+    node_id: string;
+    key: string | null;
+    value: unknown;
+}
+
+/**
+ * The `value` an `UpdateSettingMessage` carries for `setting: 'views'` or `'cards'`: every cell change
+ * applies together against the target scope's own copy of that bag, in order, so a multi-field
+ * operation (minting a type, renaming it, deleting it and its descendants) is one atomic write rather
+ * than a race between several round trips.
+ */
+export interface BagDelta {
+    sets: BagCellOp[];
 }
 
 /**
@@ -158,13 +189,13 @@ export interface CommandMessage {
 }
 
 /**
- * One lane's position and visibility in the group-display order, the cascade's `groupDisplay` entry
+ * One group's position and visibility in the group-display order, the cascade's `groupDisplay` entry
  * shape. Mirrored from GroupDisplayEntry in client/extension/src/lib/settings.ts, which the webview
  * cannot import - the two are separate webpack bundles with no shared module graph, so this
  * duplication is the wire contract.
- * - value: the lane's raw status/group value ('doing', 'done', 'untagged', ...)
- * - shown: false removes the lane from the board (Kanban and Line view both read it); true (or absent) shows it
- * - axis: the group-by key the board laned by when the entry was written; absent means status
+ * - value: the group's raw status/group value ('doing', 'done', 'untagged', ...)
+ * - shown: false removes the group from the board (Kanban and Line view both read it); true (or absent) shows it
+ * - axis: the group-by key the board groupd by when the entry was written; absent means status
  */
 export interface GroupDisplayEntry {
     value: string;
@@ -173,9 +204,10 @@ export interface GroupDisplayEntry {
 }
 
 /**
- * A view type the user minted by saving a change to a setting an ancestor owns. Mirrored from
- * UserViewTypeDef in client/extension/src/lib/settings.ts, which the webview cannot import - the two are
- * separate webpack bundles with no shared module graph, so this duplication is the wire contract.
+ * A view type the user minted by saving a change to a setting an ancestor owns. Derived from its entry
+ * in the `views` bag (`UserViewTypesFromViews` in viewregistryops.ts): a saved type's bag entry carries
+ * `parent` and `label` alongside its override keys, which is what tells it apart from a built-in node's
+ * own entry.
  * - id: the registry node id, frozen once written
  * - label: what the tree shows
  * - parent: the built-in node it was saved from and inherits from
@@ -189,35 +221,60 @@ export interface UserViewType {
 }
 
 /**
- * Resolved values for every notethink setting, sent on requestInitialState and whenever any underlying
- * key changes. It is the only channel carrying a setting into the webview, with no per-session tier
- * layered over it.
- * - diverged: keys whose resolved value differs from their saved default; drives the drawer's M markers
- *   and diverged count, emptying when the user saves or reverts the defaults
- * - hasWorkspaceOverrides: true iff a key has a Workspace-scope value; drives "Revert to defaults"
- * - hasAnyOverrides: true iff a key has a Workspace- or User-scope value; drives whether the built-in
- *   restore is enabled, since there is nothing to restore when everything is already at built-in defaults
+ * The settings identifiers every row, label and resolution rule is keyed by, mirrored from
+ * client/extension/src/lib/settings.ts's `CASCADE_KEY_DEFAULTS`, which the webview cannot import - the
+ * two are separate webpack bundles with no shared module graph, so this duplication is the wire contract.
+ * `viewType` and `cardType` are their tree's selection rather than a row; every other key is a row on
+ * one drawer pane. Declared as a const array (rather than derived from a payload's keys, as before this
+ * story) because the wire payload no longer carries one field per setting - every view- and card-tree
+ * setting now lives in the `views` / `cards` bag instead.
+ */
+export const CASCADE_SETTING_KEYS = [
+    'viewType',
+    'cardType',
+    'showLinetagsInHeadlines',
+    'scrollNoteIntoView',
+    'autoExpandFocusedNote',
+    'showLineNumbers',
+    'groupBy',
+    'orientation',
+    'lineBreadth',
+    'groupDisplay',
+    'groupOrder',
+    'cardRatio',
+    'animateTransitions',
+    'defaultCardType',
+    'clockMode',
+    'watchUnopenedFilesInViewer',
+    'openNewEditorIfNoneOpen',
+    'includeFilter',
+    'excludeFilter',
+    'maxNotesPerFile',
+] as const;
+
+export type SettingsCascadeKey = typeof CASCADE_SETTING_KEYS[number];
+
+/**
+ * The raw settings message the extension pushes on requestInitialState and whenever any underlying
+ * key changes - the wire shape, not the flat shape a view or a drawer reads. `views` and `cards` are
+ * one bag per tree node (built-in nodes and saved types alike for `views`; `allcards`, `card`,
+ * `sticky`, `agent` for `cards`), each holding every value that node sets for itself, whatever its
+ * key's home. `viewregistryops.ts`'s `resolvedSettingsFromCascade` is the one place this gets unpacked
+ * into the flat `ResolvedSettingsCascade` every view, drawer and composer actually reads.
+ * - diverged: cells whose resolved value differs from their saved default - the five flat keys below by
+ *   name, and a bag cell as `views:<node_id>:<key>` / `cards:<node_id>:<key>`; drives the drawer's M
+ *   markers and diverged count, emptying when the user saves or reverts the defaults
+ * - hasWorkspaceOverrides: true iff anything has a Workspace-scope value; drives "Revert to defaults"
+ * - hasAnyOverrides: true iff anything has a Workspace- or User-scope value; drives whether the
+ *   built-in restore is enabled, since there is nothing to restore when everything is already default
  *
  * Settings identifiers stay camelCase end-to-end (TS keys, wire IDs, payload fields, VS Code config
  * paths), unlike the project-wide snake_case wire convention, since bridging the two cases would mean
  * every setting carries two names.
  */
 export interface SettingsCascadePayload {
-    viewType: string;
-    cardType: string;
-    viewUserTypes: UserViewType[];
-    showLinetagsInHeadlines: boolean;
-    scrollNoteIntoView: boolean;
-    autoExpandFocusedNote: boolean;
-    showLineNumbers: boolean;
-    groupBy: string;
-    orientation: 'columns' | 'rows';
-    lineBreadth: number;
-    kanbanGroupBy: string;
-    groupDisplay: GroupDisplayEntry[];
-    kanbanCardRatio: number;
-    kanbanAnimateTransitions: boolean;
-    kanbanDefaultCardType: string;
+    views: Record<string, Record<string, unknown>>;
+    cards: Record<string, Record<string, unknown>>;
     watchUnopenedFilesInViewer: boolean;
     openNewEditorIfNoneOpen: boolean;
     includeFilter: string;
@@ -228,7 +285,40 @@ export interface SettingsCascadePayload {
     hasAnyOverrides: boolean;
 }
 
-export type SettingsCascadeKey = Exclude<keyof SettingsCascadePayload, 'diverged' | 'hasWorkspaceOverrides' | 'hasAnyOverrides'>;
+/**
+ * The flat, resolved shape every view, drawer and composer reads: one field per `SettingsCascadeKey`,
+ * plus `viewUserTypes` and `viewOverrides` derived from the wire payload's `views` bag so the rest of
+ * the webview - which predates the bag storage model - keeps reading the same two shapes it always has.
+ * Built by `resolvedSettingsFromCascade` (viewregistryops.ts); nothing else constructs one by hand.
+ */
+export interface ResolvedSettingsCascade {
+    viewType: string;
+    cardType: string;
+    viewUserTypes: UserViewType[];
+    viewOverrides: Record<string, Record<string, unknown>>;
+    cardOverrides: Record<string, Record<string, unknown>>;
+    showLinetagsInHeadlines: boolean;
+    scrollNoteIntoView: boolean;
+    autoExpandFocusedNote: boolean;
+    showLineNumbers: boolean;
+    groupBy: string;
+    orientation: 'columns' | 'rows';
+    lineBreadth: number;
+    groupDisplay: GroupDisplayEntry[];
+    groupOrder: 'custom' | 'newestFirst' | 'newestLast' | 'alphabetical' | 'cardCount';
+    cardRatio: number;
+    animateTransitions: boolean;
+    defaultCardType: string;
+    clockMode: 'span' | 'active' | 'sinceStart';
+    watchUnopenedFilesInViewer: boolean;
+    openNewEditorIfNoneOpen: boolean;
+    includeFilter: string;
+    excludeFilter: string;
+    maxNotesPerFile: number;
+    diverged: string[];
+    hasWorkspaceOverrides: boolean;
+    hasAnyOverrides: boolean;
+}
 
 export interface SettingsCascadeMessage {
     type: 'settingsCascade';

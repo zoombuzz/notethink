@@ -1,13 +1,14 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
+import { pointerDrag } from '../helpers/pointer-drag';
 
 /**
  * One scheduled animation as the FLIP hook planned it. The hook pushes every scheduled animation
  * onto the global mirror array when __NOTETHINK_ANIM_PROBE__ is set, read via page.evaluate.
  */
 interface AnimationProbeEvent {
-    kind: 'move' | 'enter' | 'exit' | 'column-enter' | 'column-exit' | 'cap' | 'skip';
+    kind: 'move' | 'enter' | 'exit' | 'column-move' | 'column-enter' | 'column-exit' | 'cap' | 'skip';
     id?: string;
     dx?: number;
     dy?: number;
@@ -30,6 +31,27 @@ async function getAnimationEvents(page: Page): Promise<AnimationProbeEvent[]> {
 // drop every buffered probe event so the next passive update starts from a clean slate
 async function clearAnimationEvents(page: Page): Promise<void> {
     await page.evaluate(() => { window.__notethinkAnimationEvents = []; });
+}
+
+/** the group values the board is currently drawing, in board order */
+async function groupValues(page: Page): Promise<string[]> {
+    return page.locator('[data-flip-column-id]').evaluateAll(els => els.map(el => el.getAttribute('data-flip-column-id') ?? ''));
+}
+
+/** a card's FLIP registry id (its `data-flip-id`), found via the ancestor carrying its heading text */
+async function cardFlipId(page: Page, headline: string): Promise<string | null> {
+    const card = page.getByRole('heading', { name: headline }).locator('xpath=ancestor::*[@data-flip-id]').first();
+    return card.getAttribute('data-flip-id');
+}
+
+/** put a value in one view node's own `views` bag entry at the workspace scope and re-publish the cascade, the way the drawer's own settings do */
+async function seedWorkspaceViewSetting(page: Page, node_id: string, key: string, value: unknown): Promise<void> {
+    await page.evaluate(([node, setting_key, setting_value]) => {
+        const harness = window as unknown as { __nt_settings: { workspace: { views: Record<string, Record<string, unknown>> } }; __nt_publishSettings?: () => void };
+        const views = harness.__nt_settings.workspace.views;
+        views[node as string] = { ...views[node as string], [setting_key as string]: setting_value };
+        harness.__nt_publishSettings?.();
+    }, [node_id, key, value] as [string, string, unknown]);
 }
 
 test.describe('Kanban Passive Transition Animations', () => {
@@ -278,7 +300,7 @@ test.describe('Kanban Passive Transition Animations', () => {
         expect(task_a_in_backlog).toBe(0);
     });
 
-    test('kanbanAnimateTransitions=false disables the FLIP layer', async ({ page }) => {
+    test('animateTransitions=false disables the FLIP layer', async ({ page }) => {
         const { path: doc_path } = await setupKanbanView(page);
 
         await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
@@ -288,11 +310,7 @@ test.describe('Kanban Passive Transition Animations', () => {
         await expect(backlog_column.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 3000 });
 
         // goes through the harness store, not a hand-built payload, which would replace the cascade and drop other keys
-        await page.evaluate(() => {
-            const harness = window as unknown as { __nt_settings: { workspace: Record<string, unknown> }; __nt_publishSettings?: () => void };
-            harness.__nt_settings.workspace.kanbanAnimateTransitions = false;
-            harness.__nt_publishSettings?.();
-        });
+        await seedWorkspaceViewSetting(page, 'kanban', 'animateTransitions', false);
         await page.waitForTimeout(500);
 
         await clearAnimationEvents(page);
@@ -313,5 +331,130 @@ test.describe('Kanban Passive Transition Animations', () => {
         await expect(doing_column.getByRole('heading', { name: 'Task A' })).toBeVisible({ timeout: 5000 });
         const task_a_in_backlog = await backlog_column.getByRole('heading', { name: 'Task A' }).count();
         expect(task_a_in_backlog).toBe(0);
+    });
+
+    /*
+     * groupOrder substitutes for 'newestFirst'/'newestLast' here: those read a card's agent-activity or
+     * file-mtime timestamp, which a spec cannot pin precisely, while cardCount recomputes the same group
+     * order from the injected fixture's own content - the identical code path (`orderGroupValues` -> the
+     * board's group order -> this FLIP layer), fully deterministic.
+     */
+    test('a passive cardCount group reorder animates the groups and rides the cards that did not themselves move', async ({ page }) => {
+        const { path: doc_path } = await setupKanbanView(page, 'kanban-groupcount-a.md');
+
+        await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
+        await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
+
+        await seedWorkspaceViewSetting(page, 'grouped', 'groupOrder', 'cardCount');
+        await page.waitForTimeout(500);
+
+        // baseline: done (3 cards) leads; backlog and doing (1 card each) tie behind it, alphabetically
+        await expect.poll(() => groupValues(page)).toEqual(['done', 'backlog', 'doing']);
+
+        const task_b_id = await cardFlipId(page, 'Task B');
+        const task_c_id = await cardFlipId(page, 'Task C');
+        expect(task_b_id).not.toBeNull();
+        expect(task_c_id).not.toBeNull();
+
+        await clearAnimationEvents(page);
+
+        // passive update: Task D and Task E move from done into doing, so doing now leads and done drops to the tail
+        await injectDocsFromFixture(page, 'kanban-groupcount-b.md', doc_path);
+        await page.waitForTimeout(500);
+
+        await expect.poll(() => groupValues(page)).toEqual(['doing', 'backlog', 'done']);
+
+        const events = await getAnimationEvents(page);
+        const column_moves = events.filter(e => e.kind === 'column-move');
+        expect(column_moves.some(e => e.id === 'doing')).toBe(true);
+        expect(column_moves.some(e => e.id === 'done')).toBe(true);
+        // backlog sits in the middle both times - no group move for it
+        expect(column_moves.some(e => e.id === 'backlog')).toBe(false);
+
+        // Task B and Task C each stayed exactly where they were in their own group - no card-level move for either
+        const move_ids = events.filter(e => e.kind === 'move').map(e => e.id);
+        expect(move_ids).not.toContain(task_b_id);
+        expect(move_ids).not.toContain(task_c_id);
+
+        // Task D and Task E crossed from 'done' into 'doing' - a cross-group move still animates
+        const task_d_id = await cardFlipId(page, 'Task D');
+        const task_e_id = await cardFlipId(page, 'Task E');
+        expect(move_ids).toContain(task_d_id);
+        expect(move_ids).toContain(task_e_id);
+    });
+
+    test('dragging a group chip (custom order) in the settings drawer animates the board behind it', async ({ page }) => {
+        await setupKanbanView(page);
+        await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
+        await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
+
+        const before = await groupValues(page);
+        expect(before.length).toBeGreaterThanOrEqual(2);
+
+        const settings_tab = page.getByTestId('view-settings-button');
+        if (await settings_tab.getAttribute('aria-expanded') !== 'true') { await settings_tab.click(); }
+        await expect(page.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'true');
+        await page.getByTestId('view-node-kanban').click();
+        await expect(page.getByTestId('setting-row-groupDisplay')).toBeVisible();
+
+        await clearAnimationEvents(page);
+
+        // drags the second chip onto the first, the same gesture view-settings-drawer.spec.ts drives
+        const chips = page.getByTestId(/^group-display-chip-/);
+        await chips.first().scrollIntoViewIfNeeded();
+        const second = chips.nth(1);
+        const inset = ((await second.boundingBox())?.height ?? 2) / 2;
+        await pointerDrag(page, second, chips.nth(0), { destination_inset_y: inset });
+
+        await expect.poll(() => groupValues(page)).not.toEqual(before);
+
+        const events = await getAnimationEvents(page);
+        expect(events.filter(e => e.kind === 'column-move').length).toBeGreaterThanOrEqual(1);
+    });
+
+    test('animateTransitions=false disables group animation too, and the order still lands correctly', async ({ page }) => {
+        const { path: doc_path } = await setupKanbanView(page, 'kanban-groupcount-a.md');
+        await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
+        await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
+
+        await seedWorkspaceViewSetting(page, 'grouped', 'groupOrder', 'cardCount');
+        await page.waitForTimeout(500);
+        await expect.poll(() => groupValues(page)).toEqual(['done', 'backlog', 'doing']);
+
+        await seedWorkspaceViewSetting(page, 'kanban', 'animateTransitions', false);
+        await page.waitForTimeout(500);
+        await clearAnimationEvents(page);
+
+        await injectDocsFromFixture(page, 'kanban-groupcount-b.md', doc_path);
+        await page.waitForTimeout(500);
+
+        const events = await getAnimationEvents(page);
+        expect(events.filter(e => e.kind === 'column-move')).toHaveLength(0);
+        expect(events.filter(e => e.kind === 'move')).toHaveLength(0);
+        expect(events.some(e => e.kind === 'skip' && e.reason === 'disabled')).toBe(true);
+
+        await expect.poll(() => groupValues(page)).toEqual(['doing', 'backlog', 'done']);
+    });
+
+    test('prefers-reduced-motion skips group animation too, and the order still lands correctly', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        const { path: doc_path } = await setupKanbanView(page, 'kanban-groupcount-a.md');
+        await page.waitForSelector('[data-auto-selected-viewtype="kanban"]', { timeout: 5000 });
+        await page.waitForSelector('[role="columnheader"]', { timeout: 5000 });
+
+        await seedWorkspaceViewSetting(page, 'grouped', 'groupOrder', 'cardCount');
+        await page.waitForTimeout(500);
+        await expect.poll(() => groupValues(page)).toEqual(['done', 'backlog', 'doing']);
+
+        await clearAnimationEvents(page);
+        await injectDocsFromFixture(page, 'kanban-groupcount-b.md', doc_path);
+        await page.waitForTimeout(500);
+
+        const events = await getAnimationEvents(page);
+        expect(events.filter(e => e.kind === 'column-move')).toHaveLength(0);
+        expect(events.filter(e => e.kind === 'move')).toHaveLength(0);
+        expect(events.some(e => e.kind === 'skip' && e.reason === 'reduced-motion')).toBe(true);
+
+        await expect.poll(() => groupValues(page)).toEqual(['doing', 'backlog', 'done']);
     });
 });

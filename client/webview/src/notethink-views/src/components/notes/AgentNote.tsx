@@ -108,6 +108,7 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
                     storyKey={model.story_key}
                     refusals={model.refusals}
                     unavailable={unavailable}
+                    clockMode={note_props.display_options?.settings?.clockMode}
                     onOpen={handleOpenChat}
                 />
                 <AgentQuestionBand sessions={model.sessions} />

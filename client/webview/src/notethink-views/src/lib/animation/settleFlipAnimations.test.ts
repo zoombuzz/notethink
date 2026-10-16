@@ -22,6 +22,18 @@ function seedCard(container: HTMLElement, flip_id: string, flip_class: string): 
     return { el, finish };
 }
 
+// build a FLIP group mid-animation: a [data-flip-column-id] node with a running animation and a transform
+function seedGroup(container: HTMLElement, column_value: string): SeededCard {
+    const el = document.createElement('div');
+    el.setAttribute('data-flip-column-id', column_value);
+    el.classList.add('column');
+    el.style.transform = 'translate(-200px, 0px)';
+    const finish = jest.fn();
+    attachAnimations(el, [{ finish }]);
+    container.appendChild(el);
+    return { el, finish };
+}
+
 describe('settleFlipAnimations', () => {
 
     it('finishes every running animation, clears inline transforms, and strips flip/column classes', () => {
@@ -111,5 +123,33 @@ describe('settleFlipAnimations', () => {
     it('is a no-op on an empty container', () => {
         const container = document.createElement('div');
         expect(() => settleFlipAnimations(container)).not.toThrow();
+    });
+
+    it('also finishes every running group animation and clears its inline transform', () => {
+        const container = document.createElement('div');
+        const group_a = seedGroup(container, 'todo');
+        const group_b = seedGroup(container, 'done');
+
+        settleFlipAnimations(container);
+
+        expect(group_a.finish).toHaveBeenCalledTimes(1);
+        expect(group_b.finish).toHaveBeenCalledTimes(1);
+        expect(group_a.el.style.transform).toBe('');
+        expect(group_b.el.style.transform).toBe('');
+        // groups carry no flip class to strip, but they must keep whatever class they already had
+        expect(group_a.el.classList.contains('column')).toBe(true);
+    });
+
+    it('settles both a card and its enclosing group together', () => {
+        const container = document.createElement('div');
+        const group = seedGroup(container, 'todo');
+        const card = seedCard(group.el, 'doc:a', 'flipping');
+
+        settleFlipAnimations(container);
+
+        expect(group.finish).toHaveBeenCalledTimes(1);
+        expect(card.finish).toHaveBeenCalledTimes(1);
+        expect(group.el.style.transform).toBe('');
+        expect(card.el.style.transform).toBe('');
     });
 });

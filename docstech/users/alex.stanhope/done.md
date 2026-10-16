@@ -7221,3 +7221,391 @@ NoteThink ships only a web worker bundle, so in a Remote-SSH window every file r
   + no-go: the first criterion fails, since the measured window does not fall short
   + the second and third criteria were not assessed, as all three must hold
   + reopen if the first scan proves slow on a slower link, since it carries the whole 30-day window across the connection
+
+
+### Store each setting under its own key again [](?id=settings-declared-keys)
+
+The two bags hide every view and card setting from VS Code's Settings editor and rename all 21 settings that shipped in 0.4.7, so anyone upgrading would lose them. VS Code expects one declared key per setting, which is the shape 0.4.7 already had. Each setting goes back to its own key, a view or card below a setting's home gets a key of its own, and the resolver, drawer and pills stay as they are.
+
++ background
+  + VS Code's Settings editor does not render an object-valued setting, showing "Edit in settings.json" instead, and its extension guidelines ask for one unique id per setting
+  + measured: the Marketplace's latest version is 0.4.7, and its settings contributions match 0.4.8's (`package.json` at HEAD)
+  + measured in code: 0.4.7 declares one key per setting under `notethink.settings.` (`view.type`, `view.generic.*`, `view.specific.<view>.*`, `view.userTypes`, `card.type`, `files.*`)
+  + measured in code: 0.4.7 already holds one per-view copy, `view.specific.kanban.groupBy` beside `view.specific.grouped.groupBy`
+  + measured in code: the webview sends bag cell edits as `{node_id, key, value}` and reads one merged entry per node, so storage can change without changing the wire (`handleUpdateBag`, `PanelSession.ts`)
+  + no PATTERNS.md entry; new pattern
++ decisions
+  + keep every 0.4.7 key whose meaning is unchanged, with its exact name, signed off
+  + a value held at the top of a tree is `view.generic.<key>` or `card.generic.<key>`; one held by a node below it is `view.specific.<node>.<key>` or `card.specific.<node>.<key>`
+  + the selections stay `view.type` and `card.type`
+  + the two global settings stay at `view.generic.watchUnopenedFilesInViewer` and `view.generic.openNewEditorIfNoneOpen`, signed off
+  + the three card settings move from `view.generic.*` to `card.generic.*`
+  + Group display homes at Grouped (`view.specific.grouped.groupDisplay`); `view.specific.kanban.groupDisplay` becomes Kanban's own value
+  + every node below a setting's home gets a declared key with no default, so unset means inherit; only a home key declares a default
+  + a copy's description names the node it inherits from, such as "Leave unset to inherit from Line"
+  + Kanban's built-in Group by stays in `BUILTIN_NODE_DEFAULTS`; `view.specific.kanban.groupBy` loses its declared default
+  + saved types stay in `view.userTypes`, an array of id, label, parent and overrides, since a saved type's id cannot be declared in advance
+  + a 0.4.7 saved type's `kanbanGroupBy`, `kanbanCardRatio`, `kanbanAnimateTransitions` and `kanbanDefaultCardType` read as `groupBy`, `cardRatio`, `animateTransitions` and `defaultCardType`, signed off
+  + saved types merge across User and Workspace by id, key by key, as the bags did
+  + `view.specific.kanban.columnOrder` is dropped
+  + the declared keys come from one table in the extension, and a test fails when `package.json` or the nls files drift from it
+  + the extension-webview messages keep their shape; only the extension's storage layer changes
++ [X] declare one key per node per setting from a single table, with home defaults and inherit-from descriptions in all five nls files
+  + 42 declared settings, built by `buildDeclaredSettingsContributions` (`settings.ts`) from `VIEW_NODE_KEYS` and `CARD_NODE_KEYS`
+  + a copy's description names the node it inherits from, in the drawer's own words for each language
+  + measured in VS Code: a key with no declared default reports its type's empty value as its default, so the Settings editor shows an inheriting copy blank; storage reads only User and Workspace values, so inheritance is unaffected
+  + measured in VS Code: every declared key can be written and read back (`extension.test.ts`, mocha)
++ [X] read and write every view and card value through its declared key, and saved types through `view.userTypes`
+  + only the storage under `bagAt` and `applyBagDelta` changed; the messages to the webview keep their shape
+  + editing a saved type held at User scope from a workspace writes a complete Workspace entry; a rename sets its label
++ [X] translate the four 0.4.7 saved-type names on read
+  + an edited entry is rewritten under the short names
++ [X] keep divergence, Save as user default, Revert and Restore built-in defaults working per declared key and per saved type
++ [X] cover with Jest, including a drift test between the table, `package.json` and the nls files
+  + `settings.test.ts` checks the table against `package.json` and the five nls files; `viewregistryops.test.ts` checks the webview's trees and homes against `package.json`
+  + 3115 Jest tests passing
++ [X] verify in the Playwright harness and in a settled capture that the drawer, board and saved types behave as before, with lint, build, Jest and Playwright green
+  + seen in a settled capture: a saved type draws its folder groups, and its drawer shows the same pills and owners as before
+  + lint clean, 3115 Jest, 38 mocha and 263 Playwright tests passing
+  + the intermittent group chip drag test measured its press point before the drawer had settled; `pointerDrag` now waits for a stable box, passing 120 of 120 repeats
++ [X] convert settings written in the bag shape during development to the declared keys, from backups
+  + every converted key checked against `package.json`'s declared keys
+
+
+### Store each view's and card's settings in one bag [](?id=settings-bags)
+
+A view's settings are stored in up to three places: a key under its home (`view.specific.kanban.cardRatio`), the `view.overrides` map for values it sets for a setting homed higher up, and `view.userTypes` for a saved type. Card settings sit under `view.generic`, and so do two global settings. As settings accrue, users would carry a growing, flat namespace of similar names for the life of their VS Code install, and a new view or card type could never start afresh.
+
++ background
+  + measured in code: VS Code refuses to write a configuration key not declared in `package.json`, so a view could only hold its own value through a declared key or a declared map
+  + measured in code: `showLineNumbers`, `showLinetagsInHeadlines` and `autoExpandFocusedNote` are card settings stored under `view.generic` (`settings.ts` `SETTINGS`)
+  + measured in code: `watchUnopenedFilesInViewer` and `openNewEditorIfNoneOpen` are global settings stored under `view.generic`
+  + measured in code: one resolver already reads a view's own values nearest-first along its chain (`resolveViewSetting`, `viewregistryops.ts`)
+  + no PATTERNS.md entry; new pattern
++ decisions
+  + every view has one bag at `notethink.settings.views.<view id>`, built-in and saved types alike, signed off
+  + every card type has one bag at `notethink.settings.cards.<card id>`, signed off
+  + a bag holds every value that view or card sets itself, whether the setting's home is that view or one above it
+  + a saved type's bag also carries its parent and label
+  + a built-in view's bag can ship built-in values: Kanban's carries Group by status, replacing the special case in `resolveKanbanAxisKey` (`groupbyops.ts`)
+  + keys inside a bag drop their view prefix (`cardRatio`, not `kanbanCardRatio`), since the bag already names the view
+  + `files` and `global` stay individual settings, at `notethink.settings.files.*` and `notethink.settings.global.*`: they inherit nothing, belong to no view or card, and VS Code's Settings editor shows them as controls
+  + each bag map carries a JSON schema, so hand edits to `settings.json` get descriptions, allowed values and completion
+  + User and Workspace bags merge per view or card, key by key
+  + the old keys are not read, since nobody relies on them
+  + storage superseded before release by [[settings-declared-keys]]: declared keys per node replace the two bags, keeping 0.4.7's key names
++ [X] contribute the `views` and `cards` bag maps with their schemas, and move the two global settings to `global.*`
++ [X] store and read every view and card setting through its bag, retiring `view.specific.*`, `view.generic.*`, `view.overrides`, `view.userTypes` and `card.specific.*`
+  + Kanban's Group by status is one entry in `BUILTIN_NODE_DEFAULTS`; the special case in `groupbyops.ts` is gone
++ [X] give card settings the same nearest-first inheritance along the card tree as views have
+  + signed off; the card drawer has the same pills, labels and banding
++ [X] keep divergence, Save as user default, Revert and Restore built-in defaults working per bag entry
+  + divergence cells read `views:<node>:<key>` and `cards:<node>:<key>`
++ [X] cover with Jest and Playwright, with lint, build and the full suite green
+  + lint clean, 3097 Jest and 262 Playwright tests passing after the review fixes
++ [X] draw a saved view type's board exactly as its parent's, plus its own values
+  + seen in review: a type saved from Kanban draws one Untagged group holding the whole document
+  + cause: a pinned grouped view on a single file scoped to the document root, since only `AutoView` ever descended to the file's heading; `useViewContext` now descends structurally (`findFileH1`)
+  + epic flattening keyed on the literal id `kanban`; it now follows the chain (`drawsAsKanban`, `NoteTreeComposer.tsx`)
+  + seen in a settled capture: the saved type draws all seven status groups, as Kanban does
++ [X] start a newly saved view type with an empty bag, inheriting everything from the view it was saved from
+  + `handle_save_new_type` writes only `parent` and `label`
++ [X] show a built-in default as inherited, keeping VS for values stored in settings.json
+  + `hasStoredValue` decides VS; a built-in default shows the eye with the hover "Kanban's built-in default", in both drawers
+  + seen in a settled capture: Kanban's Group by reads inherited, "Status (inherited)"
+
+
+### Call groups groups throughout the code [](?id=rename-lanes-to-groups)
+
+The settings and strings call a grouped board's strips groups, but the code still calls them lanes: identifiers, file names, test ids, comments and test titles, around 1400 mentions across about 90 files, and new code kept adding more.
+
++ background
+  + measured: 223 lines mentioning lane were added in one session alone, none of them user-visible
+  + `CODING_STANDARDS.md` > Naming Conventions now says group everywhere, code included
++ decisions
+  + rename every lane to group in code, file names, test ids, comments and test titles
+  + a persisted name a rename would break keeps its spelling until a migration story moves it
+  + every file is copied to the scratchpad before it is edited, since the tree carries other uncommitted work
+  + `done.md` and other stories keep their wording, as history
++ [X] list every lane mention and every persisted name among them, before editing
+  + 1325 mentions across 114 files; no persisted name contains lane, so none keeps its spelling
++ [X] rename identifiers, files and test ids, and reword comments and test titles
+  + 14 files renamed (`GroupSeparator.tsx`, `useGroupBreadth.ts`, `kanban-group-breadth.spec.ts`, fixtures); every touched file backed up first
+  + the comments read back afterwards for doubled wording such as "the groups group by"
++ [X] verify no lane mention remains outside persisted names, with lint, Jest, build and Playwright green
+  + the only lane left is the naming rule's own "never lanes"; lint clean, 3079 Jest and 258 Playwright tests passing
+
+
+### Fill the view with groups and repeat their headers [](?id=groups-fill-view)
+
+A grouped board with few cards draws short groups, so with a drawer open over the view a group's separator can sit entirely under it and cannot be dragged, and on a long group the header scrolls away, leaving no way to tell which group is in view or how many cards it holds.
+
++ background
+  + measured in the Playwright harness: with the settings drawer open its bottom edge is at y=451 while the first separator ends at y=261, so the separator is wholly covered (`kanban-lane-breadth.spec.ts` "dragging one boundary resizes every lane")
+  + measured in code: groups take their content's height, and the separator takes its group's (`KanbanColumn.tsx`, `LaneSeparator.tsx`)
+  + the user-visible strings for these settings still say lane, for example "Breadth of each lane" (`package.nls.json`)
+  + no PATTERNS.md entry; new pattern
++ decisions
+  + groups stretch to fill the visible view, so their separators always reach below an open drawer
+  + each group repeats its header, name and card count, at its far end: the bottom when groups are columns, the right when they are rows
+  + the board's scrolling stays exactly as it is; nothing is restructured to keep the repeated header in view
+  + every string a user reads says group, not lane
++ [X] stretch groups to fill the visible view in both orientations
+  + columns: `.board` takes `min-height: calc(100vh - toolbar)` and each group is a flex column; rows already span the width (`min-width: 100%`)
++ [X] repeat each group's header, with its name and card count, at the group's far end
+  + a `.footer` after `.notes` in `KanbanColumn.tsx`, `group-footer-<value>`, at the bottom in columns and the right in rows
+  + in rows it sticks to the right edge, mirroring the heading's existing stick to the left; in columns it scrolls with its group, as the heading does
+  + a group carries no padding at its footer's end, in either orientation, so the footer closes the group off flush
++ [X] reword every user-visible lane string to group, in all five nls and l10n files and README
+  + no "lane" left in `package.nls*.json`, README or any `l10n.t` string
++ [X] cover with Jest: the repeated header's name and count, and its placement per orientation
+  + `KanbanColumn.test.tsx`, `KanbanBoard.test.tsx`
++ [X] cover with Playwright: a short board's groups reach the bottom of the view, a separator can be dragged below an open settings drawer, and each group's repeated header sits at its far end
+  + `kanban-group-fill.spec.ts` (4 tests, columns and rows) and `kanban-lane-breadth.spec.ts`, all passing
+
+
+### Keep view settings specific to the view they are set in [](?id=view-specific-settings)
+
+Changing a setting with a lower view selected changes it for every view above it too: an Orientation edit on Next up by project rewrites Line's own value, and so every Line and Kanban board. A setting should change only for the view it is edited in, an edit to a higher view should reach every view below that has not set its own value, and the drawer should show which values are inherited.
+
++ background
+  + measured in code: a drawer edit writes the setting's one stored value unless a selected saved type already holds the key (`handle_row_change`, `SettingsViewDrawer.tsx:965`)
+  + measured in code: each setting has exactly one stored path, so a built-in view can hold its own value only through a key made for it, such as `view.specific.kanban.groupBy` (`SETTING_HOMES`, `viewregistryops.ts:129-152`)
+  + measured in code: a saved type's overrides already layer over the cascade, nearest type winning (`applyUserTypeOverrides`, `composerops.ts:26-33`)
+  + measured in code: rows are ordered by the view their pill names, not by home (`rowsOnChain`, `settingRows.ts:150-158`)
+  + measured in code: M means the workspace value differs from the saved user default, whichever view is selected (`settings.ts:221-236`)
+  + measured in code: nothing lets a row return to inheriting (`GroupDisplayControl` header, `SettingsViewDrawer.tsx:175`)
+  + VS Code resolves the same way: later scopes override earlier ones, and a language-specific block overrides the general setting only for the keys it sets
+  + no PATTERNS.md entry; new pattern
++ decisions
+  + each view has its own bag of settings; the nearest view on the chain that sets a key wins, else the home value, else the built-in default
+  + a setting's home value stays in its own key, such as `view.specific.line.orientation`
+  + built-in views below a home keep their values in `notethink.settings.view.overrides`, a map from view id to settings, signed off
+    + storage superseded before release, first by [[settings-bags]], then by [[settings-declared-keys]]
+  + saved types keep their values in `viewUserTypes` overrides, resolved the same way
+  + Kanban's own Group by moves into the map as Kanban's entry, with status as Kanban's built-in value; `view.specific.kanban.groupBy` is dropped with no fallback read, signed off
+  + an edit with a view selected writes that view's own value; at a setting's home it writes the home value; never an ancestor's
+  + an edit equal to the inherited value clears the view's own value, so the view inherits again
+  + the map is stored per scope like any setting, a Workspace entry overriding a User entry key by key
+  + rows band by home (Grouped, Line, Kanban, All views), with a thin line between bands
+  + a row reads name, inherited or VS pill, M pill, control, owner label
+  + the inherited pill is grey with an eye, the VS pill white with "VS", each with a hover naming where the value comes from
+  + a setting's own home view shows no inherited or VS pill
+  + M becomes a pill, with a hover saying the value differs from the saved user default
+  + a dropdown labels the option matching the inherited value "(inherited)"
+  + saving a new view type becomes an explicit button in Custom view types; the automatic offer goes
+  + clicking a view in the tree shows its settings; its radio displays it
++ [X] add the per-view overrides map, resolving each view's settings nearest-first along its chain
+  + `resolveViewSetting` and `inheritedViewSetting` in `viewregistryops.ts`, used by the board (`resolvedSettingsForView`, `GenericView.tsx`) and every drawer row, so the two cannot disagree
+  + every view-drawer setting is per-view (`isPerViewKey`); the two global settings stay global
+  + the map merges User and Workspace key by key within each view (`mergedViewOverrides`, `settings.ts`)
++ [X] move Kanban's own Group by into the map, with status as Kanban's built-in value
+  + `kanbanGroupBy` and `view.specific.kanban.groupBy` removed
++ [X] write a drawer edit into the selected view's own value, or the home value at the home view
+  + `settingWriteFor`; the drawer shows the selected view's own resolved values, not the rendered view's
++ [X] clear a view's own value when an edit equals the inherited value
+  + structural equality, so arrays such as Group display clear too
++ [X] band the drawer rows by home, with the thin line between bands
++ [X] add the inherited and VS pill column with hovers, and label a dropdown's inherited option "(inherited)"
++ [X] make M a pill with a hover
+  + M covers a view's own values too: `diverged` carries `viewOverrides:<view>:<key>` and `viewUserTypes:<type>:<key>` entries
++ [X] replace the automatic new view type offer with an explicit Save as new view type button
+  + Update <type> goes too: an edit with a saved type selected already lands in that type
++ [X] cover with Jest: nearest-first resolution, per-view writes, clearing on an equal value, banding, the pills and the dropdown label
+  + `viewregistryops.test.ts`, `settings.test.ts`, `SettingsViewDrawer.test.tsx`, `SettingsRow.test.tsx`; 3079 Jest tests passing
++ [X] cover with a Playwright spec: an Orientation edit on Next up by project leaves Line and Kanban unchanged, choosing the inherited option reverts it, and an edit at Line reaches a Kanban that sets none
+  + `view-specific-settings.spec.ts`, with `view-settings-drawer.spec.ts` and `user-view-type-update.spec.ts` rewritten to the new model; full suite 257 passing
+
+
+### Open toolbar drawers over the view [](?id=drawers-overlay-view)
+
+Opening a drawer from the toolbar pushes the whole board or document down, which often pushes the selected card out of view and sets off scroll corrections. A drawer should slide down over the view as one element, nothing beneath it should move, and the selected card should stay visible.
+
++ background
+  + measured in code: all five drawers are always mounted in normal flow below the sticky toolbar, opened by a 0fr to 1fr `grid-template-rows` transition (`ViewRenderer.module.scss:348-369`, `GenericViewToolbar.tsx:166-267`)
+  + measured in code: `.drawerBody` already caps itself at `max-height: 50vh` and scrolls (`ViewRenderer.module.scss:371-376`)
+  + measured in code: a RAF loop holds the toolbar trigger steady while the page reflows, and nothing else reacts to a drawer opening (`useToolbarDrawers.ts:59-82`)
+  + measured in code: focused-note framing already takes a top inset from the toolbar and open drawers, but counts only the settings and files drawers (`stickyOccluderBottomPx`, `viewhooks.ts:97-109`)
+  + measured in code: `useScrollToCaret` re-frames only on a focus or caret change, never when a drawer opens or closes (`viewhooks.ts:120-164`)
+  + pushing down kept the whole view visible below an open drawer; an overlay gives that up, covering the top of the view while a drawer is open
+  + no PATTERNS.md entry; new pattern
++ approach
+  + take the drawer out of flow, positioned under the toolbar above the view, sliding down as one element
+  + keep the 50vh cap, so some of the view always shows beneath an open drawer
+  + count every drawer in the framing inset, and re-frame the selected card when a drawer opens or closes, within the `scrollNoteIntoView` setting
+  + drop the trigger-steadying loop, which exists only to counter the reflow
++ [X] position the toolbar drawers over the view, animating one element, with nothing beneath reflowing
+  + `.drawerGrid` is a zero-height sticky anchor under the toolbar; `.drawer` is absolute over the view and carries the slide
++ [X] collapse a closed drawer to nothing: no text, close button, shadow, clicks or focus
+  + seen in VS Code: closed drawers stayed 25px tall, stacked over the top of the board, because the body's own padding survives the 0fr row
+  + a bare `.drawerContent` wrapper is the collapsing grid item; closed drawers are `inert` and take no pointer events
+  + `drawer-overlay.spec.ts`: with every drawer closed none is visible and the board is reachable below the toolbar; with one open, only it shows
++ [X] count every open drawer in `stickyOccluderBottomPx`
+  + all five drawer ids, reading the bottom edge off the drawer box rather than its zero-height anchor
++ [X] re-frame the selected card when a drawer opens or closes, so it is never left under the drawer
+  + `frameFocusedStoryIntoView` in `viewhooks.ts`, run once the drawer's slide ends, within `scrollNoteIntoView`
++ [X] remove the trigger-steadying scroll loop from `useToolbarDrawers`
++ [X] cover with Jest: the occluder counts each drawer, and a drawer opening re-frames a card it covers
+  + `viewhooks.test.ts`, and a new `useToolbarDrawers.test.ts` for Escape and outside-click closing
++ [X] cover with a Playwright spec: opening a drawer leaves the view's position unchanged and keeps a selected card visible below the drawer
+  + `drawer-overlay.spec.ts`, passing in the full 257-test run
+
+
+### Stop binding old edits to the wrong story [](?id=agent-story-binding-false-matches)
+
+Agent cards show sessions on stories they never worked on. When a board loses most of its stories, an older edit is searched for in today's text, and one generic line from it matches whichever surviving story happens to contain that line.
+
++ background
+  + measured in code: `locateEditInDoc` searches the board's current text for the edit's whole `new_text`, then each of its lines, then `old_text` the same way (`agentstorybindingops.ts:241`)
+  + measured in code: a fallback line need only be 12 characters (`MIN_DISTINCTIVE_LINE_LENGTH`, `:217`) and fail `GENERIC_SECTION_BULLET` (`:225`)
+  + that filter catches a bare `+` bullet of one to three words; a `-` bullet, or a section bullet with trailing text such as `+ background, measured`, passes
+  + measured in code: `storiesForEdit` tries the edit's own board before its sibling and stops at the first one with any match (`:282-290`)
+    + so a loose single-line match in `todo.md` beats an exact match in `done.md`, where a finished story now lives
+  + measured on a real board cut from about twenty stories to three: of ten session bindings on the three left, four came from sessions that ran before their story existed, and one is doubtful
+  + no PATTERNS.md entry; design freely
++ approach
+  + look for the whole `new_text`, then the whole `old_text`, in both boards before any single-line fallback
+  + accept a fallback line only when it occurs exactly once in the board and is not a section bullet in any form
+  + leave an edit unbound rather than guess
++ [X] try exact whole-text matches against both boards before any single-line fallback
+  + `locateEditOnBoards`; an exact match must also occur once, so an edit found twice is left unbound
++ [X] accept a fallback line only when it is unique in the board and is not a `+` or `-` section bullet, with or without trailing text
+  + `locateUniqueInText`, and `GENERIC_SECTION_BULLET` now matches a 1-3 word label ending at a comma, colon or line end
++ [X] cover with Jest: a board cut to a few stories with older edits whose only surviving text is generic bullets, and an edit whose story has moved to `done.md`
+  + `agentstorybindingops.test.ts`, plus cases for a fallback line and an exact match each found twice
++ [X] verify on a live board that a session which ran before a story existed no longer binds to it
+  + replayed against the real board: every genuine binding kept, three of the four false ones gone
+  + the fourth wrote a task that a later split moved, word for word, into the story it now binds to; locating against today's text cannot tell the difference
+  + accepted: that session did write text the story now holds
++ [X] bump the patch version
+
+
+### Open activity files in the group beside the viewer [](?id=activity-open-target-group)
+
+Clicking a changed file on an agent card sometimes opens it in group 2 and sometimes creates a group 3. Opens from the viewer exist to cross-reference files and chats beside the board, so they should always reuse the group next to it, and create one only when the viewer is the only group.
+
++ background
+  + measured in code: diffs and single sides open with `ViewColumn.Beside` (`ActivityCommands.ts:97`), and so do transcripts (`:188`)
+  + `Beside` means right of the active group, not right of the viewer
+  + inferred, untested: after a file opens in group 2 with focus, a click in the webview does not always make the viewer's group active before the command runs, so `Beside` creates group 3
+  + measured in code: note clicks already choose well: the group already showing the document, else the first group not holding the viewer, else beside the viewer when it is alone (`PanelSession.revealByOpening`, `PanelSession.ts:760`)
+  + `PanelSession` constructs `ActivityCommands` (`PanelSession.ts:142`), so it can hand the choice over
+  + no PATTERNS.md entry; design freely
++ approach
+  + one helper picks the target column, anchored on the viewer panel's own `viewColumn` rather than the active group
+  + note clicks and activity opens both use it
+  + an activity open creates a group beside the viewer when the viewer is alone, whatever `openNewEditorIfNoneOpen` says
++ [X] extract the target-column choice from `revealByOpening` into a helper taking the viewer's column and the open groups
+  + `lib/chooseTargetColumn.ts`; note clicks keep the `openNewEditorIfNoneOpen` gate
++ [X] use it in `ActivityCommands` for diffs, single sides and transcripts
+  + `PanelSession` hands `ActivityCommands` a `targetColumn` callback that always resolves a column
++ [X] cover with Jest: viewer alone, viewer plus one group holding focus, viewer plus two groups, and the document already open in some group
++ [X] verify in VS Code: alternate clicks between changed files and the board, and every file lands in group 2
+  + confirmed in a Remote-SSH window on 0.4.8
++ [X] bump the patch version
+
+
+### Choose what the agent clock measures [](?id=agent-clock-mode)
+
+Each session row's clock shows the span from its first event to its last, so a chat left open overnight reads 29 hours. A setting on the agent card type chooses between three measures.
+
++ background
+  + measured in code: the clock is `formatDurationClock(started_at, updated_at)` (`AgentSessionRow.tsx:95`), idle gaps included
+  + measured in code: `ActivitySession` carries only `started_at`, `updated_at` and `ended_at` (`types/AgentActivity.ts`), so the webview cannot work out active time
+  + each reader already walks every timestamped record (`claudecodeops.ts:229`, `codexops.ts:346`, Grok turns at `grokops.ts:130`)
+  + measured in code: the row keeps no clock of its own, so a since-start value would not advance between snapshots
+  + measured in code: every card setting homes at the card root today (`offersNewCardType` header, `cardregistryops.ts`); this is the first to home at the `agent` node (`AGENT_CARD_TYPE`, `cardregistryops.ts:70`; `SETTING_HOMES`, `viewregistryops.ts:128`)
+  + inferred: a single tool call running over five minutes, such as a long test run, records nothing in between, so active mode counts it as idle
+  + no PATTERNS.md entry; design freely
++ modes
+  + span, today's behaviour: first event to last event
+  + active: the sum of the gaps between consecutive events, leaving out any gap over five minutes
+  + since start: first event to now, advancing while the card is on screen
++ approach
+  + each reader computes `active_ms` and sends it with the session; span and since start stay webview arithmetic
+  + the tooltip names the mode and keeps the start and end times
+  + the key, its path and its values are permanent names, signed off: `agentClockMode` at `card.specific.agent.clockMode`, values `span`, `active`, `sinceStart`, default `active`
++ [X] compute `active_ms` in each vendor reader with a five-minute idle threshold, and carry it on `ActivitySession`
+  + one shared gap sum, `activeMsFromTimestamps` in `vendors/agentclockops.ts`; Claude Code includes its subagent transcripts
++ [X] add the setting, homed at the `agent` card node, with its settings contribution and l10n strings
+  + `MarkdownNote`'s memo comparator lists the key too, or a document view never redraws its cards on a change
++ [X] draw the clock by the setting, advancing once a minute in since-start mode
+  + `formatAgentClock` and `agentClockTooltip`; `useAgentClockNow` ticks only in since-start mode
++ [X] cover with Jest: gaps at and over the threshold, each mode's drawn value, and the setting's home
++ [X] cover switching the mode in the card settings drawer with a Playwright spec
+  + `agent-card.spec.ts`, in the document view and on a kanban board
++ [X] verify in VS Code that an overnight session reads its working time in active mode
+  + confirmed in a Remote-SSH window on 0.4.8
++ [X] bump the patch version
+
+
+### Show only sessions that worked in the workspace [](?id=agent-sessions-workspace-scope)
+
+The board draws every agent session on the host, wherever it ran. A tool run deliberately from a folder outside the workspace, so that it stays off the board, instead floods the Untagged lane: one "grok in grok" card per session, hundreds of them over the 29-day window.
+
++ background
+  + measured in code: discovery reads every session under each vendor home, whatever its `cwd` (`AgentAnalyser.ts` `discoverGrok`, `discoverClaudeCode`)
+  + measured in code: `foldBatch` keeps a session whose `cwd` matches no repository; `root` is just `undefined` (`AgentAnalyser.ts:1126-1170`)
+  + measured in code: every session not bound to a story becomes an Untagged virtual note (`agentactivityops.ts:316`)
+  + keeping unmatched sessions protected a workspace opened through a symlink; done.md's "Bind sessions recorded under a symlinked path" now maps those by alias instead
+  + a Grok session records no file paths, so its `cwd` is the only thing tying it to the workspace
+  + the card title is `vendor in basename(cwd)` (`agentactivityops.ts:359`), hence "grok in grok"
+  + no PATTERNS.md entry; design freely
++ approach
+  + a session is in scope when its alias-mapped `cwd` is inside a workspace folder
+  + it is also in scope when any of its write calls lands inside a workspace folder
+    + a chat started from the home directory that edits a story file is real work on that story
+  + an out-of-scope session is dropped from the snapshot entirely, not drawn as Untagged
+  + Grok can be filtered at discovery, before any read, since its session directory name is the encoded `cwd`
+  + Claude Code and Codex are filtered after the read, since the write-call exception needs their calls
++ [X] drop out-of-scope sessions in `foldBatch`, after alias mapping, using `workspaceRelative`
+  + dropped after file and commit attribution has run, so another card's attribution is unchanged
++ [X] skip a Grok session directory at discovery when its decoded `cwd` is outside every workspace folder
++ [X] cover with Jest: `cwd` inside, `cwd` outside, `cwd` outside with a write inside, and a symlinked alias `cwd`
+  + `AgentAnalyser workspace scope` describe; the symlinked lookalike-tree case now asserts the session is dropped
++ [X] verify in a Remote-SSH window that out-of-scope Grok sessions no longer draw, and in-workspace ones still do
+  + confirmed on 0.4.8: the out-of-workspace Grok cards are gone and the in-workspace ones remain; the first scan read 315 sessions where it read over 800 before
++ [X] bump the patch version
+
+
+### Read agent usage files on the remote host [](?id=agent-extra-files-remote-read)
+
+In a Remote-SSH window every Grok card shows no model and "0 tokens", although each session's `usage.json` on the remote host carries both. Claude Code subagent transcripts are lost the same way, so their write calls never reach file attribution.
+
++ background
+  + measured in code: `readExtraFileBytes` rebuilds each file as `vscode.Uri.file(entry.path)` (`AgentAnalyser.ts:1652`)
+  + measured in code: `AgentFileIdentity.path` is the bare `uri.path`, so scheme and authority are already gone (`AgentAnalyser.ts:106`)
+  + the extension declares only `browser`, so in a Remote-SSH window it runs on the UI side and `Uri.file` reads the local disk
+    + the header of `ResolvedAgentVendorHome` (`AgentAnalyser.ts:76-80`) states this rule; this call site breaks it
+  + measured on a remote host: almost every in-window Grok session has a `usage.json` with turns, tokens and a model id
+  + an unreadable extra file is dropped silently, so `buildGrokResult` sees no usage file (`grokops.ts:244-246`)
+  + an unchanged session then reuses that empty result until the window reloads (`file_cache` is in memory only, `AgentAnalyser.ts:302`)
+  + both call sites: Claude Code subagents (`AgentAnalyser.ts:1741`) and Grok `usage.json` (`AgentAnalyser.ts:1907`)
+  + Codex is unaffected: it reads its single file through its own URI
+  + no test drives an extra-file read under a remote URI; the remote tests cover `resolveVendorHome` only
++ [X] carry each extra file's full `vscode.Uri` through discovery to `readExtraFileBytes`, never rebuilding it from a path
+  + carried as `AgentFileIdentity.uri_string`, since the identity crosses the worker's structured-clone boundary
++ [X] add Jest tests reading a Grok `usage.json` and a Claude Code subagent file under a `vscode-remote` URI
+  + `AgentAnalyser remote extra file reads`; both fail with the old `Uri.file` read
++ [X] verify in a Remote-SSH window that Grok cards show their model and tokens
+  + confirmed on 0.4.8
++ [X] bump the patch version
+
+
+### Confirm notethink's standards name test-mocha [](?id=standards-name-test-mocha)
+
+The standards review found test-mocha missing from the documented verification scripts, though `check` runs it.
+
++ from the 2026-10-15 standards review; commit 8d8ce0b ([[one-home-per-rule]]) may already cover it
++ [X] confirm notethink's CODING_STANDARDS.md names test-mocha, ticking from 8d8ce0b's evidence if it already does - `CODING_STANDARDS.md:289` points verification at `package.json`'s `scripts.check`, landed by 8d8ce0b
++ [X] verify notethink's own standards doc names test-mocha - `CODING_STANDARDS.md:297` has a `| Mocha | pnpm run test-mocha |` table row, and `:299` names Mocha in the combined check row; `:275` already documented `pnpm run test-mocha` before 8d8ce0b
+
+
+### Give each notethink rule one home [](?id=one-home-per-rule)
+
+notethink's AGENTS.md restates six rules its CODING_STANDARDS.md already holds, several beside its own pointer to them, CODING_STANDARDS.md re-explains the workspace eslint-canary note, and its verification sentence omits `test-mocha`, which `check` runs. Two copies of a rule eventually disagree; each copy becomes a pointer.
+
++ [X] replace AGENTS.md's restated rules with pointers to their CODING_STANDARDS.md sections - AGENTS.md's Architecture tree, Naming Conventions, Import Organization, Debug Logging and Testing Guidelines sections now each point to their CODING_STANDARDS.md section
++ [X] point CODING_STANDARDS.md's eslint-canary paragraph at the workspace AGENTS.md - CODING_STANDARDS.md now reads "workspace `../AGENTS.md` > Projects" in place of the restated paragraph
++ [X] make CODING_STANDARDS.md's verification sentence match what `check` runs, `test-mocha` included - sentence now points at `package.json`'s `scripts.check`, and the table gained a Mocha row and a corrected summary row
++ acceptance: each rule has one home, both files are shorter (AGENTS.md 1401 -> 1116 words, CODING_STANDARDS.md 4929 -> 4867 words, `wc -w`), and the standards checker reports no new finding

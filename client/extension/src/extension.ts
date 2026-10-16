@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { initLogDir, writeToErrorLog, writeToLog } from './lib/errorops';
-import { editTarget, readSetting, writeSetting } from './lib/settings';
+import { applyBagDelta, CASCADE_KEY_DEFAULTS, editTarget, readBagCell } from './lib/settings';
 import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 
 const PANEL_VIEWTYPE = 'notethink';
@@ -83,7 +83,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	}
 	// line numbers: one write path, so onDidChangeConfiguration pushes the change to every open board
 	context.subscriptions.push(vscode.commands.registerCommand('notethink.toggleLineNumbers', async () => {
-		await writeSetting('showLineNumbers', !readSetting('showLineNumbers'), editTarget());
+		const current = (readBagCell('cards', 'allcards', 'showLineNumbers') ?? CASCADE_KEY_DEFAULTS.showLineNumbers) as boolean;
+		await applyBagDelta('cards', [{ node_id: 'allcards', key: 'showLineNumbers', value: !current }], editTarget());
 	}));
 	// navigation commands
 	for (const direction of ['up', 'down', 'drillIn', 'drillOut', 'clearFocus'] as const) {

@@ -12,7 +12,7 @@ import * as vscode from 'vscode';
 import { createMockWebviewPanel, Position, RelativePattern, Selection, Uri } from '../__mocks__/vscode';
 import { NotethinkEditorProvider } from './notethinkEditor';
 import { PanelSession } from './PanelSession';
-import { SETTINGS, settingKeys } from '../lib/settings';
+import { FLAT_SETTINGS, buildDeclaredSettingsContributions, flatSettingKeys } from '../lib/settings';
 import { DEFAULT_EXCLUDE_FILTER } from '../constants';
 
 // ---- helpers ----------------------------------------------------------------
@@ -1384,45 +1384,44 @@ describe('NotethinkEditorProvider', () => {
 			expect(findByType(panelHelper.postedMessages, 'globalSettings')).toBeUndefined();
 		});
 
-		it('writes an updateSetting to the workspace scope by default, whatever the value type', async () => {
-			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'viewType', value: 'kanban' });
-			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'showLinetagsInHeadlines', value: true });
-			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'groupDisplay', value: [{ value: 'done', shown: true }] });
+		// every declared view/card key and the five flat keys this module could possibly write to
+		const every_declared_path = Object.keys(buildDeclaredSettingsContributions()).map(key => key.slice('notethink.settings.'.length));
+
+		it('writes an updateSetting to the workspace scope by default, each cell against its own declared key', async () => {
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'root', key: 'viewType', value: 'kanban' }] } });
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'cards', value: { sets: [{ node_id: 'allcards', key: 'showLinetagsInHeadlines', value: true }] } });
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [{ value: 'done', shown: true }] }] } });
 			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'maxNotesPerFile', value: 25 });
 
 			expect(settings_updates).toEqual([
-				[SETTINGS.viewType.path, 'kanban', vscode.ConfigurationTarget.Workspace],
-				[SETTINGS.showLinetagsInHeadlines.path, true, vscode.ConfigurationTarget.Workspace],
-				[SETTINGS.groupDisplay.path, [{ value: 'done', shown: true }], vscode.ConfigurationTarget.Workspace],
-				// writeSetting's unconditional legacy-path clear, so a stale columnOrder value can never resurface
-				['view.specific.kanban.columnOrder', undefined, vscode.ConfigurationTarget.Workspace],
-				[SETTINGS.maxNotesPerFile.path, 25, vscode.ConfigurationTarget.Workspace],
+				['view.type', 'kanban', vscode.ConfigurationTarget.Workspace],
+				['card.generic.showLinetagsInHeadlines', true, vscode.ConfigurationTarget.Workspace],
+				['view.specific.grouped.groupDisplay', [{ value: 'done', shown: true }], vscode.ConfigurationTarget.Workspace],
+				[FLAT_SETTINGS.maxNotesPerFile.path, 25, vscode.ConfigurationTarget.Workspace],
 			]);
 		});
 
-		// every key is writable on this message, so a guard narrowing it would drop writes silently
-		it('accepts an updateSetting for every SETTINGS key', async () => {
-			for (const key of settingKeys()) {
-				await panelHelper.simulateMessage({ type: 'updateSetting', setting: key, value: SETTINGS[key].default });
+		// every flat key is writable on this message, so a guard narrowing it would drop writes silently
+		it('accepts an updateSetting for every flat SETTINGS key', async () => {
+			for (const key of flatSettingKeys()) {
+				await panelHelper.simulateMessage({ type: 'updateSetting', setting: key, value: FLAT_SETTINGS[key].default });
 			}
 
-			// filters out groupDisplay's extra legacy-clear write, which carries no key's own path
-			const primary_writes = settings_updates.filter(([path]) => settingKeys().some(key => SETTINGS[key].path === path));
-			expect(primary_writes.map(([path]) => path)).toEqual(settingKeys().map(key => SETTINGS[key].path));
+			expect(settings_updates.map(([path]) => path)).toEqual(flatSettingKeys().map(key => FLAT_SETTINGS[key].path));
 		});
 
 		it('falls back to the user scope for an updateSetting in a folderless window', async () => {
 			setWorkspaceRoots(undefined);
 
-			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'viewType', value: 'kanban' });
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'root', key: 'viewType', value: 'kanban' }] } });
 
-			expect(settings_updates).toEqual([[SETTINGS.viewType.path, 'kanban', vscode.ConfigurationTarget.Global]]);
+			expect(settings_updates).toEqual([['view.type', 'kanban', vscode.ConfigurationTarget.Global]]);
 		});
 
 		it('honours an explicit global scope on an updateSetting', async () => {
-			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'viewType', value: 'kanban', scope: 'global' });
+			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'root', key: 'viewType', value: 'kanban' }] }, scope: 'global' });
 
-			expect(settings_updates).toEqual([[SETTINGS.viewType.path, 'kanban', vscode.ConfigurationTarget.Global]]);
+			expect(settings_updates).toEqual([['view.type', 'kanban', vscode.ConfigurationTarget.Global]]);
 		});
 
 		it('ignores an updateSetting naming a key that is not a setting', async () => {
@@ -1431,48 +1430,62 @@ describe('NotethinkEditorProvider', () => {
 			expect(settings_updates).toEqual([]);
 		});
 
-		it('promotes every key to the user scope and clears the workspace overrides it found', async () => {
+		it('promotes every declared key and every flat key to the user scope, and clears every declared key of a bag that held a workspace override', async () => {
 			mockSettingsStore({
-				[SETTINGS.viewType.path]: { workspaceValue: 'kanban' },
-				[SETTINGS.showLineNumbers.path]: { workspaceValue: true },
+				'view.type': { workspaceValue: 'kanban' },
+				'card.generic.showLineNumbers': { workspaceValue: true },
 			});
 
 			await panelHelper.simulateMessage({ type: 'promoteSettingsToUser' });
 
-			// filters out groupDisplay's extra legacy-clear write, which carries no key's own path
-			const primary_global_writes = pathsWrittenTo(vscode.ConfigurationTarget.Global).filter(path => settingKeys().some(key => SETTINGS[key].path === path));
-			expect(primary_global_writes).toEqual(settingKeys().map(key => SETTINGS[key].path));
+			// every declared key (both trees, userTypes included) and every flat key is promoted unconditionally
+			expect(pathsWrittenTo(vscode.ConfigurationTarget.Global).sort()).toEqual([...every_declared_path].sort());
 			// the resolved workspace value is what gets promoted, not the built-in default it was shadowing
-			const promoted_view_type = settings_updates.find(([path, , target]) => path === SETTINGS.viewType.path && target === vscode.ConfigurationTarget.Global);
+			const promoted_view_type = settings_updates.find(([path, , target]) => path === 'view.type' && target === vscode.ConfigurationTarget.Global);
 			expect(promoted_view_type?.[1]).toBe('kanban');
-			expect(pathsWrittenTo(vscode.ConfigurationTarget.Workspace)).toEqual([SETTINGS.viewType.path, SETTINGS.showLineNumbers.path]);
+			// both bags held a workspace override, so every declared key of both is cleared, not only the two actually set
+			const cleared_workspace = pathsWrittenTo(vscode.ConfigurationTarget.Workspace);
+			expect(cleared_workspace).toContain('view.type');
+			expect(cleared_workspace).toContain('card.generic.showLineNumbers');
+			expect(cleared_workspace).toContain('view.userTypes');
+			for (const flat_path of flatSettingKeys().map(key => FLAT_SETTINGS[key].path)) {
+				expect(cleared_workspace).not.toContain(flat_path);
+			}
 		});
 
 		it('clears only the workspace scope on reset, leaving a user default alone', async () => {
 			mockSettingsStore({
-				[SETTINGS.viewType.path]: { workspaceValue: 'kanban', globalValue: 'document' },
-				[SETTINGS.excludeFilter.path]: { globalValue: '**/{vendor}/**' },
+				'view.type': { workspaceValue: 'kanban', globalValue: 'document' },
+				[FLAT_SETTINGS.excludeFilter.path]: { globalValue: '**/{vendor}/**' },
 			});
 
 			await panelHelper.simulateMessage({ type: 'resetSettingsToDefault' });
 
-			expect(settings_updates).toEqual([[SETTINGS.viewType.path, undefined, vscode.ConfigurationTarget.Workspace]]);
+			// the views bag held a workspace override, so every declared view key is cleared; cards and the flats held none
+			const cleared_workspace = pathsWrittenTo(vscode.ConfigurationTarget.Workspace);
+			expect(cleared_workspace).toContain('view.type');
+			expect(cleared_workspace).toContain('view.userTypes');
+			expect(cleared_workspace).not.toContain('card.generic.showLineNumbers');
+			expect(cleared_workspace).not.toContain(FLAT_SETTINGS.excludeFilter.path);
+			expect(pathsWrittenTo(vscode.ConfigurationTarget.Global)).toEqual([]);
 		});
 
 		it('clears both scopes on restore, for every key carrying an override', async () => {
 			mockSettingsStore({
-				[SETTINGS.viewType.path]: { workspaceValue: 'kanban' },
-				[SETTINGS.excludeFilter.path]: { globalValue: '**/{vendor}/**' },
+				'view.type': { workspaceValue: 'kanban' },
+				[FLAT_SETTINGS.excludeFilter.path]: { globalValue: '**/{vendor}/**' },
 			});
 
 			await panelHelper.simulateMessage({ type: 'restoreSettingsToBuiltinDefault' });
 
-			expect(settings_updates).toEqual([
-				[SETTINGS.viewType.path, undefined, vscode.ConfigurationTarget.Workspace],
-				[SETTINGS.viewType.path, undefined, vscode.ConfigurationTarget.Global],
-				[SETTINGS.excludeFilter.path, undefined, vscode.ConfigurationTarget.Workspace],
-				[SETTINGS.excludeFilter.path, undefined, vscode.ConfigurationTarget.Global],
-			]);
+			const cleared_workspace = pathsWrittenTo(vscode.ConfigurationTarget.Workspace);
+			const cleared_global = pathsWrittenTo(vscode.ConfigurationTarget.Global);
+			// the views bag held a workspace-only override, so its declared keys are cleared at Workspace, never Global
+			expect(cleared_workspace).toContain('view.type');
+			expect(cleared_global).not.toContain('view.type');
+			// excludeFilter held a User-scope override, so both scopes are cleared for it
+			expect(cleared_workspace).toContain(FLAT_SETTINGS.excludeFilter.path);
+			expect(cleared_global).toContain(FLAT_SETTINGS.excludeFilter.path);
 		});
 
 		it('writes nothing on restore when no key carries an override', async () => {

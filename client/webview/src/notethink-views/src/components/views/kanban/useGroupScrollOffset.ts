@@ -3,19 +3,19 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import { findScrollParent } from "../../../lib/viewhooks";
 import { clampScrollOffset } from "./virtualCardSizingOps";
 
-const debug = Debug("nodejs:notethink-views:useLaneScrollOffset");
+const debug = Debug("nodejs:notethink-views:useGroupScrollOffset");
 
 // re-measure at most this often while scrolling, so a fast fling costs one timer, not one per event
 const SCROLL_MEASURE_THROTTLE_MS = 100;
 
 /**
- * Lane's own scroll offset, in px, and a setter for pinning it directly.
- * - scroll_offset: how far the page has scrolled the lane's content past its top edge; never a
- *   scrollport's own scrollTop, since the lane owns no scrollable element itself.
+ * Group's own scroll offset, in px, and a setter for pinning it directly.
+ * - scroll_offset: how far the page has scrolled the group's content past its top edge; never a
+ *   scrollport's own scrollTop, since the group owns no scrollable element itself.
  * - setScrollOffset: pins the offset with no DOM measurement, so a row can mount before the page
  *   actually scrolls there.
  */
-export interface LaneScrollOffset {
+export interface GroupScrollOffset {
     scroll_offset: number;
     setScrollOffset: (offset: number) => void;
 }
@@ -26,11 +26,11 @@ export interface LaneScrollOffset {
  * `findScrollParent` locates the real ancestor to listen on. Bounds are read via a ref so the
  * scroll listener is set up once per mount, not resubscribed on every measurement.
  */
-export function useLaneScrollOffset(
+export function useGroupScrollOffset(
     container_ref: RefObject<HTMLElement | null>,
     content_height: number,
     viewport_size: number,
-): LaneScrollOffset {
+): GroupScrollOffset {
     const [scroll_offset, setScrollOffsetState] = useState(0);
     const throttle_ref = useRef<ReturnType<typeof setTimeout> | null>(null);
     const bounds_ref = useRef({ content_height, viewport_size });
@@ -66,6 +66,6 @@ export function useLaneScrollOffset(
             if (throttle_ref.current !== null) { clearTimeout(throttle_ref.current); }
         };
     }, [container_ref, setScrollOffset]);
-    debug('lane scroll offset %dpx', scroll_offset);
+    debug('group scroll offset %dpx', scroll_offset);
     return { scroll_offset, setScrollOffset };
 }

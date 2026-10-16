@@ -2,6 +2,7 @@ import React, { Suspense, createRef, type MouseEvent as ReactMouseEvent } from '
 import { render, screen, waitFor, fireEvent, act, within, type RenderResult } from '@testing-library/react';
 import GenericView from './GenericView';
 import { PendingWorkProvider } from '../../hooks/PendingWorkContext';
+import { FIRST_LEVEL_FOLDER_KEY } from '../../lib/axisops';
 import type { UsePendingWorkApi } from '../../hooks/usePendingWork';
 import type { ViewProps, ViewApi } from '../../types/ViewProps';
 import type { NoteProps, ClickPositionInfo } from '../../types/NoteProps';
@@ -141,13 +142,39 @@ describe('GenericView', () => {
                     type: 'user-kanban-by-assignee',
                     display_options: {
                         settings: {
-                            viewUserTypes: [{ id: 'user-kanban-by-assignee', label: 'Kanban by Assignee', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' } }],
+                            viewUserTypes: [{ id: 'user-kanban-by-assignee', label: 'Kanban by Assignee', parent: 'kanban', overrides: { groupBy: 'assignee' } }],
                         },
                     },
                 })} />
             </Suspense>
         );
         await waitFor(() => expect(screen.getByTestId('kanban-view')).toBeInTheDocument());
+    });
+
+    /*
+     * The board a saved type renders with is the same KanbanView its parent uses (viewComponentFor walks
+     * the chain), fed its OWN group-by override already resolved onto display_options.settings.groupBy
+     * (resolvedSettingsForView) rather than kanban's status default or grouped's generic auto - the two
+     * things a saved type parented on kanban must inherit correctly to draw as anything but an empty or
+     * collapsed board.
+     */
+    it('resolves a saved type\'s own group-by override onto the board it renders with, not kanban\'s status default', async () => {
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'user-next-up-by-project',
+                    display_options: {
+                        settings: {
+                            viewUserTypes: [{ id: 'user-next-up-by-project', label: 'Next up by project', parent: 'kanban', overrides: { groupBy: FIRST_LEVEL_FOLDER_KEY } }],
+                        },
+                    },
+                })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('kanban-view')).toBeInTheDocument());
+        expect(mockKanbanViewRender).toHaveBeenCalledWith(expect.objectContaining({
+            display_options: expect.objectContaining({ settings: expect.objectContaining({ groupBy: FIRST_LEVEL_FOLDER_KEY }) }),
+        }));
     });
 
     it('renders no board for a saved type whose parent has gone, rather than throwing on untrusted config', async () => {
@@ -1136,8 +1163,8 @@ describe('GenericView navigation callback', () => {
             fireEvent.click(screen.getByTestId('card-radio-sticky'));
             expect(post_message).toHaveBeenCalledWith({
                 type: 'updateSetting',
-                setting: 'cardType',
-                value: 'sticky',
+                setting: 'cards',
+                value: { sets: [{ node_id: 'allcards', key: 'cardType', value: 'sticky' }] },
             });
             expect(set_state).not.toHaveBeenCalled();
         });
@@ -1156,10 +1183,11 @@ describe('GenericView navigation callback', () => {
             });
             fireEvent.click(await screen.findByTestId('card-settings-button'));
             fireEvent.click(screen.getByTestId('setting-control-showLinetagsInHeadlines'));
+            // the drawer opens on the rendered card type (card, document's default), its own cell now that cards inherit
             expect(post_message).toHaveBeenCalledWith({
                 type: 'updateSetting',
-                setting: 'showLinetagsInHeadlines',
-                value: true,
+                setting: 'cards',
+                value: { sets: [{ node_id: 'card', key: 'showLinetagsInHeadlines', value: true }] },
             });
             expect(set_state).not.toHaveBeenCalled();
         });
@@ -1177,19 +1205,20 @@ describe('GenericView navigation callback', () => {
             });
             fireEvent.click(await screen.findByTestId('card-settings-button'));
             fireEvent.click(screen.getByTestId('setting-control-showLineNumbers'));
+            // the drawer opens on the rendered card type (card, document's default), its own cell now that cards inherit
             expect(post_message).toHaveBeenCalledWith({
                 type: 'updateSetting',
-                setting: 'showLineNumbers',
-                value: true,
+                setting: 'cards',
+                value: { sets: [{ node_id: 'card', key: 'showLineNumbers', value: true }] },
             });
         });
 
         /*
-         * The label has to name the axis the board will actually lane by. The generic auto ladder ends at
+         * The label has to name the axis the board will actually group by. The generic auto ladder ends at
          * the first-level folder, so before kanban had its own resolver this row read "Auto (First Level
-         * Folder)" over lanes that were statuses - the drawer describing a board it was not driving.
+         * Folder)" over groups that were statuses - the drawer describing a board it was not driving.
          */
-        it('reads Auto (Status) on a kanban board, not the generic folder default', async () => {
+        it('reads Status on a kanban board, kanban\'s own built-in default, not the generic folder default', async () => {
             const status_note = makeNote({
                 seq: 1, level: 2,
                 position: { start: { offset: 10, line: 2 }, end: { offset: 20, line: 2 }, end_body: { offset: 30, line: 3 } },
@@ -1199,11 +1228,14 @@ describe('GenericView navigation callback', () => {
             const root = makeNote({ seq: 0, level: 1, child_notes: [status_note] });
             renderWithToolbar({ type: 'kanban', notes: [root, status_note] });
             fireEvent.click(await screen.findByTestId('view-settings-button'));
-            const axis = screen.getByTestId('group-by-selector');
-            expect(within(axis).getByRole('option', { name: 'Auto (Status)' })).toBeInTheDocument();
+            const axis = screen.getByTestId('group-by-selector') as HTMLSelectElement;
+            // kanban holds no explicit groupBy here, so its own built-in default (status) resolves and is selected
+            expect(axis.value).toBe('status');
+            // that built-in default is also what kanban would inherit holding nothing of its own, so the option says so too
+            expect(within(axis).getByRole('option', { name: 'Status (inherited)' })).toBeInTheDocument();
         });
 
-        it('the lane-order control lists the lanes derived from the board\'s own notes', async () => {
+        it('the group-order control lists the groups derived from the board\'s own notes', async () => {
             const set_state = jest.fn();
             const post_message = jest.fn();
             const status_note_a = makeNote({
@@ -1563,7 +1595,7 @@ describe('GenericView drawer tabs', () => {
 
     // minted type ids are slugified for the nt_view= linetag; the tab title reads the label, not the id
     const MINTED_TYPE: UserViewType = {
-        id: 'user-next-up-by-project', label: 'User next up by project', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee' },
+        id: 'user-next-up-by-project', label: 'User next up by project', parent: 'kanban', overrides: { groupBy: 'assignee' },
     };
 
     it('titles the View settings tab with a minted type\'s name rather than its slugified id', async () => {
@@ -1721,7 +1753,7 @@ describe('GenericView empty stories overlay', () => {
         expect(screen.queryByText('No stories found')).not.toBeInTheDocument();
     });
 
-    it('shows the loading note in place of the board while discovery_scanning is set, with no spinner, so no lane headings show', async () => {
+    it('shows the loading note in place of the board while discovery_scanning is set, with no spinner, so no group headings show', async () => {
         render(
             withPending(false, (
                 <Suspense fallback={<div>loading</div>}>
@@ -1766,7 +1798,7 @@ describe('GenericView empty stories overlay', () => {
         expect(screen.getByTestId('kanban-view')).toBeInTheDocument();
     });
 
-    it('keeps the loading note up while every streamed-in note sits in a lane the group-display hides', async () => {
+    it('keeps the loading note up while every streamed-in note sits in a group the group-display hides', async () => {
         render(
             withPending(false, (
                 <Suspense fallback={<div>loading</div>}>
@@ -1777,7 +1809,7 @@ describe('GenericView empty stories overlay', () => {
                         aggregate_total_discovered: undefined,
                         notes: [makeNote({
                             seq: 1,
-                            headline_raw: '### Hidden lane card',
+                            headline_raw: '### Hidden group card',
                             linetags: { 'status': { key: 'status', value: 'doing', note_seq: 1, key_offset: 0, value_offset: 0, linktext_offset: 0 } },
                         })],
                         display_options: { integration_mode: 'folder', integration_path: '/workspace/project', settings: { groupDisplay: [{ value: 'doing', shown: false }] } },

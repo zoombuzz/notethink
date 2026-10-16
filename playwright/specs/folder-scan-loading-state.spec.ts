@@ -34,7 +34,7 @@ test.describe('Folder scan loading state', () => {
         // the note is quiet: no spinner, no progress counts of its own
         await expect(note.getByTestId('pending-work-spinner')).toHaveCount(0);
 
-        // the panel stands in for the board, so no lane heading shows while nothing has loaded
+        // the panel stands in for the board, so no group heading shows while nothing has loaded
         for (const value of ['untagged', 'doing', 'code-review', 'testing', 'done']) {
             await expect(page.locator(`[role="region"][aria-label="${value}"]`)).toHaveCount(0);
         }
@@ -70,23 +70,24 @@ test.describe('Folder scan loading state', () => {
         await expect(page.getByTestId('loading-note')).toHaveCount(0);
     });
 
-    test('keeps the loading note up while a streamed-in doc holds notes only in a hidden lane', async ({ page }) => {
+    test('keeps the loading note up while a streamed-in doc holds notes only in a hidden group', async ({ page }) => {
         await sendCommand(page, 'setIntegrationScope', { mode: 'folder', path: WORKSPACE_ROOT });
-        // hides the 'doing' lane the injected doc's only story carries, so no card in it counts as visible
+        // hides the 'doing' group the injected doc's only story carries, so no card in it counts as visible
         await page.evaluate(() => {
-            const harness = window as unknown as { __nt_settings: { workspace: Record<string, unknown> }; __nt_publishSettings: () => void };
-            harness.__nt_settings.workspace.groupDisplay = ['untagged', 'doing', 'code-review', 'testing', 'done']
+            const harness = window as unknown as { __nt_settings: { workspace: { views: Record<string, Record<string, unknown>> } }; __nt_publishSettings: () => void };
+            const group_display = ['untagged', 'doing', 'code-review', 'testing', 'done']
                 .map(value => ({ value, shown: value !== 'doing' }));
+            harness.__nt_settings.workspace.views.grouped = { ...harness.__nt_settings.workspace.views.grouped, groupDisplay: group_display };
             harness.__nt_publishSettings();
         });
         await sendPendingChange(page, 'folderDiscovery', true);
 
-        // card-sticky-kanban-a.md's only story, "Alpha one", carries status=doing - the lane this test hides
+        // card-sticky-kanban-a.md's only story, "Alpha one", carries status=doing - the group this test hides
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'card-sticky-kanban-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
         ], { workspace_root: WORKSPACE_ROOT, aggregate_total_discovered: 1 });
 
-        // the doc streamed in, but its only card sits in a hidden lane, so the scan still reads as in progress
+        // the doc streamed in, but its only card sits in a hidden group, so the scan still reads as in progress
         await expect(page.getByTestId('loading-note')).toBeVisible();
         await expect(page.getByTestId('loading-note')).toContainText('NoteThink is loading…');
         await expect(page.getByText('Alpha one')).toHaveCount(0);

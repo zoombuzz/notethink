@@ -2,10 +2,13 @@ import {
     KANBAN_ANIMATION_TRANSITION_MAX_MS,
     KANBAN_ANIMATION_ENTER_MS,
     KANBAN_ANIMATION_EASING,
+    KANBAN_ANIMATION_BULK_THRESHOLD,
     classifyTransitions,
     computeInverseTransform,
     isSignificantDelta,
+    isBulkTransition,
     buildMoveKeyframes,
+    buildColumnMoveKeyframes,
     buildEnterKeyframes,
     buildExitKeyframes,
     moveTiming,
@@ -96,6 +99,23 @@ describe('isSignificantDelta', () => {
     });
 });
 
+// --- isBulkTransition ---
+
+describe('isBulkTransition', () => {
+    it('is false when the combined count is below the threshold', () => {
+        expect(isBulkTransition(1, KANBAN_ANIMATION_BULK_THRESHOLD - 3, 1)).toBe(false);
+    });
+
+    it('is true when the combined count meets the threshold', () => {
+        expect(isBulkTransition(0, KANBAN_ANIMATION_BULK_THRESHOLD, 0)).toBe(true);
+    });
+
+    it('takes the three counts directly rather than id-presence, so a caller can pass a genuine-move count smaller than the raw moving-id count', () => {
+        // 24 ids are present in both renders (would read as "bulk" by raw count alone), but none of them genuinely moved
+        expect(isBulkTransition(0, 0, 0)).toBe(false);
+    });
+});
+
 // --- buildMoveKeyframes ---
 
 describe('buildMoveKeyframes', () => {
@@ -109,6 +129,17 @@ describe('buildMoveKeyframes', () => {
         const frames = buildMoveKeyframes({ dx: 40, dy: -20 });
         const mid = frames.find(f => f.offset === 0.5);
         expect(mid?.transform).toBe('translate(20px, -10px) rotate(2deg) scale(1.02)');
+    });
+});
+
+// --- buildColumnMoveKeyframes ---
+
+describe('buildColumnMoveKeyframes', () => {
+    it('starts at the inverted translate and lands at identity, with no rotate/scale lift', () => {
+        const frames = buildColumnMoveKeyframes({ dx: -200, dy: 0 });
+        expect(frames[0].transform).toBe('translate(-200px, 0px)');
+        expect(frames[frames.length - 1].transform).toBe('translate(0px, 0px)');
+        expect(frames.every((f) => !String(f.transform).includes('rotate') && !String(f.transform).includes('scale'))).toBe(true);
     });
 });
 

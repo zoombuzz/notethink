@@ -10,7 +10,7 @@ const FOCUS_RING_MARGIN_PX = 8;
 
 /**
  * Waits until `locator`'s bounding box is stable, so a caller grabbing it for a gesture doesn't read a
- * position the windowed lane is still correcting as a row's flat estimate is replaced by its real
+ * position the windowed group is still correcting as a row's flat estimate is replaced by its real
  * measured height. Fails after 6s rather than silently racing ahead on a stale box.
  */
 async function stabilizeBoundingBox(locator: Locator): Promise<void> {
@@ -26,7 +26,7 @@ async function stabilizeBoundingBox(locator: Locator): Promise<void> {
     }).toPass({ timeout: 6000, intervals: [200] });
 }
 
-// in columns orientation every lane always mounts; only a lane's own length is windowed
+// in columns orientation every group always mounts; only a group's own length is windowed
 test.describe('Kanban virtualized columns', () => {
 
     test.beforeEach(async ({ page }) => {
@@ -37,8 +37,8 @@ test.describe('Kanban virtualized columns', () => {
     /** Pins the view's card type before any doc is injected. */
     async function setCardType(page: Page, card_type: string): Promise<void> {
         await page.evaluate((type) => {
-            const harness = window as unknown as { __nt_settings: { workspace: Record<string, unknown> }; __nt_publishSettings: () => void };
-            harness.__nt_settings.workspace.cardType = type;
+            const harness = window as unknown as { __nt_settings: { workspace: { cards: Record<string, Record<string, unknown>> } }; __nt_publishSettings: () => void };
+            harness.__nt_settings.workspace.cards.allcards = { ...harness.__nt_settings.workspace.cards.allcards, cardType: type };
             harness.__nt_publishSettings();
         }, card_type);
     }
@@ -98,11 +98,11 @@ test.describe('Kanban virtualized columns', () => {
         }
     }
 
-    test('every lane stays mounted while the board scrolls horizontally', async ({ page }) => {
+    test('every group stays mounted while the board scrolls horizontally', async ({ page }) => {
         await setupKanbanView(page, 'kanban-many-columns.md');
-        const lanes = page.locator('[data-flip-column-id]');
-        const lane_count_before = await lanes.count();
-        expect(lane_count_before).toBe(14);
+        const groups = page.locator('[data-flip-column-id]');
+        const group_count_before = await groups.count();
+        expect(group_count_before).toBe(14);
 
         await page.evaluate(() => {
             const board = document.querySelector<HTMLElement>('[data-flip-root]');
@@ -111,13 +111,13 @@ test.describe('Kanban virtualized columns', () => {
         });
         await page.waitForTimeout(100);
 
-        // a horizontal scroll mounts no new lanes and drops none - every lane was already in the DOM
-        expect(await lanes.count()).toBe(lane_count_before);
+        // a horizontal scroll mounts no new groups and drops none - every group was already in the DOM
+        expect(await groups.count()).toBe(group_count_before);
         await expect(page.getByRole('heading', { name: 'Task 14' })).toBeVisible();
     });
 
-    test('a long lane windows its cards: far fewer are mounted than the corpus it holds', async ({ page }) => {
-        await setupKanbanView(page, 'kanban-long-lane.md');
+    test('a long group windows its cards: far fewer are mounted than the corpus it holds', async ({ page }) => {
+        await setupKanbanView(page, 'kanban-long-group.md');
         const backlog = page.locator('[role="region"][aria-label="backlog"]');
         await expect(backlog.getByRole('heading', { name: 'Backlog Task 01' })).toBeVisible();
 
@@ -128,7 +128,7 @@ test.describe('Kanban virtualized columns', () => {
     });
 
     test('scrolling the page streams a previously-unmounted card in', async ({ page }) => {
-        await setupKanbanView(page, 'kanban-long-lane.md');
+        await setupKanbanView(page, 'kanban-long-group.md');
         const backlog = page.locator('[role="region"][aria-label="backlog"]');
         await expect(backlog.getByRole('heading', { name: 'Backlog Task 40' })).not.toBeAttached();
 
@@ -136,8 +136,8 @@ test.describe('Kanban virtualized columns', () => {
         await expect(backlog.getByRole('heading', { name: 'Backlog Task 40' })).toBeVisible({ timeout: 3000 });
     });
 
-    test('no lane grows its own vertical scrollbar - the page is the only vertical scroller', async ({ page }) => {
-        await setupKanbanView(page, 'kanban-long-lane.md');
+    test('no group grows its own vertical scrollbar - the page is the only vertical scroller', async ({ page }) => {
+        await setupKanbanView(page, 'kanban-long-group.md');
         const backlog = page.locator('[role="region"][aria-label="backlog"]');
         await expect(backlog.getByRole('heading', { name: 'Backlog Task 01' })).toBeVisible();
 
@@ -145,7 +145,7 @@ test.describe('Kanban virtualized columns', () => {
             const board = document.querySelector<HTMLElement>('[data-flip-root]');
             if (!board) { throw new Error('no board'); }
             // no element inside the board may be its own vertical scrollport
-            const lane_scrollers = Array.from(board.querySelectorAll<HTMLElement>('*')).filter((el) => {
+            const group_scrollers = Array.from(board.querySelectorAll<HTMLElement>('*')).filter((el) => {
                 const style = getComputedStyle(el);
                 return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight;
             }).map((el) => el.className || el.tagName);
@@ -160,18 +160,18 @@ test.describe('Kanban virtualized columns', () => {
             const scrolling_element = (document.scrollingElement as HTMLElement | null) ?? document.body;
             const page_scroll_height = found_explicit_scroller ? (page_scroller as HTMLElement).scrollHeight : scrolling_element.scrollHeight;
             const page_client_height = found_explicit_scroller ? (page_scroller as HTMLElement).clientHeight : scrolling_element.clientHeight;
-            return { lane_scrollers, page_actually_overflows: page_scroll_height > page_client_height };
+            return { group_scrollers, page_actually_overflows: page_scroll_height > page_client_height };
         });
-        expect(result.lane_scrollers, `element(s) inside the board are their own vertical scrollport: ${result.lane_scrollers.join(', ')}`).toEqual([]);
-        expect(result.page_actually_overflows, 'the page itself must still be tall enough to scroll - the 40-card lane\'s content has to end up somewhere').toBe(true);
+        expect(result.group_scrollers, `element(s) inside the board are their own vertical scrollport: ${result.group_scrollers.join(', ')}`).toEqual([]);
+        expect(result.page_actually_overflows, 'the page itself must still be tall enough to scroll - the 40-card group\'s content has to end up somewhere').toBe(true);
     });
 
     test('pointer-dragging a card that starts off-screen (scrolled into view) to another column completes the drop', async ({ page }) => {
-        await setupKanbanView(page, 'kanban-long-lane.md');
+        await setupKanbanView(page, 'kanban-long-group.md');
         const backlog = page.locator('[role="region"][aria-label="backlog"]');
         const done_column = page.locator('[role="region"][aria-label="done"]');
 
-        // the card "Backlog Task 40" starts outside the lane's initially mounted window
+        // the card "Backlog Task 40" starts outside the group's initially mounted window
         await expect(backlog.getByRole('heading', { name: 'Backlog Task 40' })).not.toBeAttached();
         await scrollPageToBottom(page);
         await expect(backlog.getByRole('heading', { name: 'Backlog Task 40' })).toBeVisible({ timeout: 3000 });
@@ -196,8 +196,8 @@ test.describe('Kanban virtualized columns', () => {
      * ArrowLeft is the direction with a droppable to move into. `backlog` genuinely virtualizes (40
      * cards), unlike the short fixtures the other kanban drag specs use.
      */
-    test('keyboard-dragging a card OUT of a genuinely virtualized lane completes the drop', async ({ page }) => {
-        await setupKanbanView(page, 'kanban-long-lane.md');
+    test('keyboard-dragging a card OUT of a genuinely virtualized group completes the drop', async ({ page }) => {
+        await setupKanbanView(page, 'kanban-long-group.md');
         const backlog = page.locator('[role="region"][aria-label="backlog"]');
         const handle = backlog.locator('[data-rfd-drag-handle-draggable-id]').filter({ hasText: 'Backlog Task 01' });
         await expect(handle).toBeVisible({ timeout: 3000 });
@@ -214,15 +214,15 @@ test.describe('Kanban virtualized columns', () => {
 
         const messages = await getCapturedMessages(page);
         const edit_msg = messages.find((m) => m.type === 'editText') as { changes?: Array<{ insert: string }> } | undefined;
-        expect(edit_msg, 'keyboard drag out of a virtualized lane did not produce an editText').toBeDefined();
+        expect(edit_msg, 'keyboard drag out of a virtualized group did not produce an editText').toBeDefined();
         // the destination status must be a real column, not backlog's own value written back onto itself
         const inserts = (edit_msg?.changes ?? []).map((c) => c.insert);
-        expect(inserts, 'keyboard drag out of a virtualized lane must not write its own source status back onto itself').not.toContain('backlog');
+        expect(inserts, 'keyboard drag out of a virtualized group must not write its own source status back onto itself').not.toContain('backlog');
     });
 
-    // the mirror direction: a short plain-path lane as source, moving into the virtualized destination
-    test('keyboard-dragging a card INTO a genuinely virtualized lane completes the drop', async ({ page }) => {
-        await setupKanbanView(page, 'kanban-long-lane.md');
+    // the mirror direction: a short plain-path group as source, moving into the virtualized destination
+    test('keyboard-dragging a card INTO a genuinely virtualized group completes the drop', async ({ page }) => {
+        await setupKanbanView(page, 'kanban-long-group.md');
         const done_column = page.locator('[role="region"][aria-label="done"]');
         const handle = done_column.locator('[data-rfd-drag-handle-draggable-id]').filter({ hasText: 'Done Task' });
         await expect(handle).toBeVisible({ timeout: 3000 });
@@ -239,9 +239,9 @@ test.describe('Kanban virtualized columns', () => {
 
         const messages = await getCapturedMessages(page);
         const edit_msg = messages.find((m) => m.type === 'editText') as { changes?: Array<{ insert: string }> } | undefined;
-        expect(edit_msg, 'keyboard drag into a virtualized lane did not produce an editText').toBeDefined();
+        expect(edit_msg, 'keyboard drag into a virtualized group did not produce an editText').toBeDefined();
         const inserts = (edit_msg?.changes ?? []).map((c) => c.insert);
-        expect(inserts, 'keyboard drag into a virtualized lane must not write its own source status back onto itself').not.toContain('done');
+        expect(inserts, 'keyboard drag into a virtualized group must not write its own source status back onto itself').not.toContain('done');
         expect(inserts).toContain('backlog');
     });
 
@@ -250,8 +250,8 @@ test.describe('Kanban virtualized columns', () => {
      * pointer sensor resolves the drop from live hit-testing, a genuinely different code path than the
      * keyboard sensor's candidate search.
      */
-    test('pointer-dragging a card into a genuinely virtualized lane completes the drop', async ({ page }) => {
-        await setupKanbanView(page, 'kanban-long-lane.md');
+    test('pointer-dragging a card into a genuinely virtualized group completes the drop', async ({ page }) => {
+        await setupKanbanView(page, 'kanban-long-group.md');
         const done_column = page.locator('[role="region"][aria-label="done"]');
         const backlog = page.locator('[role="region"][aria-label="backlog"]');
         const handle = done_column.locator('[data-rfd-drag-handle-draggable-id]').filter({ hasText: 'Done Task' });
@@ -262,23 +262,23 @@ test.describe('Kanban virtualized columns', () => {
 
         const messages = await getCapturedMessages(page);
         const edit_msg = messages.find((m) => m.type === 'editText') as { changes?: Array<{ insert: string }> } | undefined;
-        expect(edit_msg, 'pointer drag into a virtualized lane did not produce an editText').toBeDefined();
+        expect(edit_msg, 'pointer drag into a virtualized group did not produce an editText').toBeDefined();
         const inserts = (edit_msg?.changes ?? []).map((c) => c.insert);
-        expect(inserts, 'pointer drag into a virtualized lane must not write its own source status back onto itself').not.toContain('done');
+        expect(inserts, 'pointer drag into a virtualized group must not write its own source status back onto itself').not.toContain('done');
         expect(inserts).toContain('backlog');
     });
 
     /*
-     * CODING_STANDARDS.md > Focused-note scroll framing: a virtualized lane's note can start genuinely
-     * unmounted, not merely scrolled out of view, so framing it needs the scrollVirtualLaneToNoteId
+     * CODING_STANDARDS.md > Focused-note scroll framing: a virtualized group's note can start genuinely
+     * unmounted, not merely scrolled out of view, so framing it needs the scrollVirtualGroupToNoteId
      * registry hop to mount it before the usual box-measuring framing logic can run.
      */
-    test('keyboard-focusing a note outside a virtualized lane\'s window mounts it and frames its ring fully visible', async ({ page }) => {
-        const { path: doc_path } = await setupKanbanView(page, 'kanban-long-lane.md');
+    test('keyboard-focusing a note outside a virtualized group\'s window mounts it and frames its ring fully visible', async ({ page }) => {
+        const { path: doc_path } = await setupKanbanView(page, 'kanban-long-group.md');
         const backlog = page.locator('[role="region"][aria-label="backlog"]');
         await expect(backlog.getByRole('heading', { name: 'Backlog Task 40' })).not.toBeAttached();
 
-        await simulateSelectionChanged(page, doc_path, fixtureOffsetOf('kanban-long-lane.md', 'Backlog Task 40'));
+        await simulateSelectionChanged(page, doc_path, fixtureOffsetOf('kanban-long-group.md', 'Backlog Task 40'));
 
         const card = backlog.locator('[role="row"]').filter({ hasText: 'Backlog Task 40' });
         await expect(card).toBeVisible({ timeout: 3000 });
@@ -314,11 +314,11 @@ test.describe('Kanban virtualized columns', () => {
         }).toPass({ timeout: 3000, intervals: [100] });
     });
 
-    // regression guard: a windowed lane's deeper row wrapper broke the card-surface selector; loops over all card types
+    // regression guard: a windowed group's deeper row wrapper broke the card-surface selector; loops over all card types
     for (const card_type of ['card', 'sticky', 'agent']) {
-        test(`a windowed lane's "${card_type}" card looks identical to a non-windowed lane's`, async ({ page }) => {
+        test(`a windowed group's "${card_type}" card looks identical to a non-windowed group's`, async ({ page }) => {
             await setCardType(page, card_type);
-            await setupKanbanView(page, 'kanban-long-lane.md');
+            await setupKanbanView(page, 'kanban-long-group.md');
             const windowed_card = page.locator('[role="region"][aria-label="backlog"]').locator('[role="row"]').first();
             const plain_card = page.locator('[role="region"][aria-label="doing"]').locator('[role="row"]').first();
             await expect(windowed_card).toBeVisible({ timeout: 3000 });

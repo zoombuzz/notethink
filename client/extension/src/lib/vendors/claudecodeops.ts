@@ -3,6 +3,7 @@ import {
     type ActivityEventBody,
     type ActivityState,
 } from '../../types/AgentActivity';
+import { activeMsFromTimestamps } from './agentclockops';
 import {
     AGENT_EDIT_SNIPPET_MAX_CHARS,
     AGENT_TRANSCRIPT_MAX_BYTES,
@@ -106,6 +107,8 @@ export function buildClaudeCodeResult(input: AgentSessionInput, records: ClaudeT
     const current = currentFromRecords(in_window);
     const state = deriveState(input.vendor_live, current);
     const { started_at, updated_at } = sessionSpan(records, input.now_ms);
+    // active time counts gaps across the main transcript and every subagent transcript together, regardless of window
+    const all_timestamps = [...records, ...extra_records.flat()].map((record) => record.timestamp);
     return {
         session_id: input.session_id,
         cwd: input.cwd,
@@ -115,6 +118,7 @@ export function buildClaudeCodeResult(input: AgentSessionInput, records: ClaudeT
         ended_at: state === 'ended' ? updated_at : undefined,
         current,
         model: lastModelInRecords(records),
+        active_ms: activeMsFromTimestamps(all_timestamps),
         calls,
         tool_invocations: buildToolInvocations(in_window),
     };

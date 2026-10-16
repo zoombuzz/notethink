@@ -55,6 +55,9 @@ export const VIRTUAL_NOTE_POSITION_STRIDE = 1_000;
  * - key: unique within the namespace for as long as the thing it stands for exists, since it is the identity React keys and FLIP rect-capture match on across updates
  * - headline: plain text drawn as the note's headline, rendered as text and never as markdown, because it carries a name this codebase did not author
  * - project: the project name the note belongs to, which colours its origin pill; omitted leaves the note without a project link
+ * - relative_path: the workspace-relative path the project axis groups the note by, so it joins its
+ *   own repository's group beside that repository's stories; omitted leaves the note in the same group
+ *   as a view whose own notes carry no relative_path either
  */
 export interface VirtualNoteSpec {
     namespace: string;
@@ -63,6 +66,7 @@ export interface VirtualNoteSpec {
     project?: string;
     project_hue?: number;
     project_label?: string;
+    relative_path?: string;
 }
 
 /** the stable_id a virtual note of this namespace and key carries, and the only place that format is built */
@@ -105,6 +109,7 @@ export function makeVirtualNote(spec: VirtualNoteSpec): NoteProps {
     const origin: NoteOrigin = {
         doc_id: VIRTUAL_NOTE_DOC_ID,
         doc_path: VIRTUAL_NOTE_DOC_PATH,
+        relative_path: spec.relative_path,
         project_hue: spec.project_hue,
         project_label: spec.project_label,
     };

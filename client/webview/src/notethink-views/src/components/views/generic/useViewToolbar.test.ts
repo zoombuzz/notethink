@@ -16,7 +16,7 @@ function makeHandlers(): { handlers: ViewApi; set_view_managed_state: jest.Mock;
     return { handlers, set_view_managed_state, post_message };
 }
 
-// two lane values plus the untagged bucket deriveNaturalColumnOrder always appends
+// two group values plus the untagged bucket deriveNaturalColumnOrder always appends
 function makeStatusNote(seq: number, status: string): NoteProps {
     return {
         seq, level: 1, children_body: [], children: [],
@@ -26,9 +26,9 @@ function makeStatusNote(seq: number, status: string): NoteProps {
     };
 }
 
-const LANE_NOTES: NoteProps[] = [makeStatusNote(1, 'doing'), makeStatusNote(2, 'done')];
+const GROUP_NOTES: NoteProps[] = [makeStatusNote(1, 'doing'), makeStatusNote(2, 'done')];
 
-// a note whose only lane signal is its originating file's first-level folder, for the folder-axis cases
+// a note whose only group signal is its originating file's first-level folder, for the folder-axis cases
 function makeFolderNote(seq: number, folder: string): NoteProps {
     return {
         seq, level: 1, children_body: [], children: [],
@@ -253,7 +253,7 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
         act(() => { result.current.handle_view_type_change('kanban'); });
         expect(set_view_managed_state).toHaveBeenCalledWith([{ id: 'doc-id-1', type: 'kanban' }]);
-        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'viewType', value: 'kanban' });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'root', key: 'viewType', value: 'kanban' }] } });
     });
 
     it('handle_setting_change posts one updateSetting for the key it was handed, whatever node owns it', () => {
@@ -268,16 +268,16 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         expect(set_view_managed_state).not.toHaveBeenCalled();
     });
 
-    it('handle_group_display_change cascade-writes only, and spells natural order (every lane shown) as an empty array', () => {
+    it('handle_group_display_change cascade-writes only, and spells natural order (every group shown) as an empty array', () => {
         const { handlers, set_view_managed_state, post_message } = makeHandlers();
         // kanban's auto axis is status, so these entries carry no axis and round-trip untagged
         const props = makeProps({ type: 'kanban' });
         const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
         act(() => { result.current.handle_group_display_change([{ value: 'done', shown: true }, { value: 'doing', shown: true }]); });
-        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [{ value: 'done', shown: true }, { value: 'doing', shown: true }] });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [{ value: 'done', shown: true }, { value: 'doing', shown: true }] }] } });
         // writing an empty list removes the status axis's own entries, and there is nothing else stored to survive
         act(() => { result.current.handle_group_display_change([]); });
-        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [] });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [] }] } });
         expect(set_view_managed_state).not.toHaveBeenCalled();
     });
 
@@ -287,7 +287,7 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         const props = makeProps({ type: 'document' });
         const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
         act(() => { result.current.handle_group_display_change([{ value: 'done', shown: true }, { value: 'doing', shown: true }]); });
-        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [{ value: 'done', shown: true }, { value: 'doing', shown: true }] });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [{ value: 'done', shown: true }, { value: 'doing', shown: true }] }] } });
     });
 
     it('a write with no grouped view rendered keeps another axis\'s stored entries', () => {
@@ -297,7 +297,7 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         const props = makeProps({ type: 'document', display_options });
         const { result } = renderHook(() => useViewToolbar(props, handlers, display_options, []));
         act(() => { result.current.handle_group_display_change([{ value: 'doing', shown: false }]); });
-        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'groupDisplay', value: [{ value: 'doing', shown: false }, folder_entry] });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [{ value: 'doing', shown: false }, folder_entry] }] } });
     });
 
     it('a write on the folder axis keeps the stored status entries intact, tagging its own rows with the axis', () => {
@@ -312,13 +312,13 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         act(() => { result.current.handle_group_display_change([{ value: 'beta', shown: true }, { value: 'alpha', shown: false }]); });
         expect(post_message).toHaveBeenCalledWith({
             type: 'updateSetting',
-            setting: 'groupDisplay',
-            value: [
+            setting: 'views',
+            value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [
                 { value: 'beta', shown: true, axis: 'nt_first_level_folder' },
                 { value: 'alpha', shown: false, axis: 'nt_first_level_folder' },
                 { value: 'doing', shown: false },
                 { value: 'done', shown: true },
-            ],
+            ] }] },
         });
     });
 
@@ -329,22 +329,22 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
             settings: { groupDisplay: [{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }, { value: 'beta', shown: false, axis: 'nt_first_level_folder' }] },
         };
         const props = makeProps({ type: 'kanban', display_options });
-        const { result } = renderHook(() => useViewToolbar(props, handlers, display_options, LANE_NOTES));
-        // natural_column_order for LANE_NOTES on status is ['doing', 'done', 'untagged'], every lane shown
+        const { result } = renderHook(() => useViewToolbar(props, handlers, display_options, GROUP_NOTES));
+        // natural_column_order for GROUP_NOTES on status is ['doing', 'done', 'untagged'], every group shown
         act(() => { result.current.handle_group_display_change([
             { value: 'doing', shown: true }, { value: 'done', shown: true }, { value: 'untagged', shown: true },
         ]); });
         expect(post_message).toHaveBeenCalledWith({
             type: 'updateSetting',
-            setting: 'groupDisplay',
-            value: [{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }, { value: 'beta', shown: false, axis: 'nt_first_level_folder' }],
+            setting: 'views',
+            value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }, { value: 'beta', shown: false, axis: 'nt_first_level_folder' }] }] },
         });
     });
 
-    it('handle_group_display_change writes the full entry list when a lane is hidden, even if the order matches natural', () => {
+    it('handle_group_display_change writes the full entry list when a group is hidden, even if the order matches natural', () => {
         const { handlers, post_message } = makeHandlers();
         const line_props = makeProps({ type: 'line', display_options: { integration_mode: 'folder', settings: { groupBy: 'status' } } });
-        const { result } = renderHook(() => useViewToolbar(line_props, handlers, line_props.display_options!, LANE_NOTES));
+        const { result } = renderHook(() => useViewToolbar(line_props, handlers, line_props.display_options!, GROUP_NOTES));
         // natural_column_order is ['doing', 'done', 'untagged']; same order, but 'done' is hidden
         act(() => { result.current.handle_group_display_change([
             { value: 'doing', shown: true },
@@ -353,26 +353,83 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         ]); });
         expect(post_message).toHaveBeenCalledWith({
             type: 'updateSetting',
-            setting: 'groupDisplay',
-            value: [{ value: 'doing', shown: true }, { value: 'done', shown: false }, { value: 'untagged', shown: true }],
+            setting: 'views',
+            value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [{ value: 'doing', shown: true }, { value: 'done', shown: false }, { value: 'untagged', shown: true }] }] },
         });
     });
 
-    it('natural_column_order is derived for every lane view, not only kanban, so the drawer can offer the row from any node', () => {
+    it('unpins to [] even when the write carries a shown entry naming no live group, which loses no information once unpinned', () => {
+        const { handlers, post_message } = makeHandlers();
+        const props = makeProps({ type: 'kanban' });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, GROUP_NOTES));
+        // natural_column_order is ['doing', 'done', 'untagged']; 'archived' names no live group and is shown
+        act(() => { result.current.handle_group_display_change([
+            { value: 'doing', shown: true },
+            { value: 'done', shown: true },
+            { value: 'untagged', shown: true },
+            { value: 'archived', shown: true },
+        ]); });
+        expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [] }] } });
+    });
+
+    it('does not unpin when the write carries a hidden entry naming no live group, preserving the full list instead', () => {
+        const { handlers, post_message } = makeHandlers();
+        const props = makeProps({ type: 'kanban' });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, GROUP_NOTES));
+        act(() => { result.current.handle_group_display_change([
+            { value: 'doing', shown: true },
+            { value: 'done', shown: true },
+            { value: 'untagged', shown: true },
+            { value: 'archived', shown: false },
+        ]); });
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'updateSetting',
+            setting: 'views',
+            value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [
+                { value: 'doing', shown: true },
+                { value: 'done', shown: true },
+                { value: 'untagged', shown: true },
+                { value: 'archived', shown: false },
+            ] }] },
+        });
+    });
+
+    it('unpinning the status axis to [] still leaves another axis\'s stored entries untouched, even with an absent entry in the write', () => {
+        const { handlers, post_message } = makeHandlers();
+        const display_options: NoteDisplayOptions = {
+            integration_mode: 'folder',
+            settings: { groupDisplay: [{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }] },
+        };
+        const props = makeProps({ type: 'kanban', display_options });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, display_options, GROUP_NOTES));
+        act(() => { result.current.handle_group_display_change([
+            { value: 'doing', shown: true },
+            { value: 'done', shown: true },
+            { value: 'untagged', shown: true },
+            { value: 'archived', shown: true },
+        ]); });
+        expect(post_message).toHaveBeenCalledWith({
+            type: 'updateSetting',
+            setting: 'views',
+            value: { sets: [{ node_id: 'grouped', key: 'groupDisplay', value: [{ value: 'alpha', shown: true, axis: 'nt_first_level_folder' }] }] },
+        });
+    });
+
+    it('natural_column_order is derived for every group view, not only kanban, so the drawer can offer the row from any node', () => {
         const { handlers } = makeHandlers();
         const line_props = makeProps({ type: 'line', display_options: { integration_mode: 'folder', settings: { groupBy: 'status' } } });
-        const { result } = renderHook(() => useViewToolbar(line_props, handlers, line_props.display_options!, LANE_NOTES));
+        const { result } = renderHook(() => useViewToolbar(line_props, handlers, line_props.display_options!, GROUP_NOTES));
         expect(result.current.natural_column_order).toEqual(['doing', 'done', 'untagged']);
     });
 
-    it('a kanban board with no explicit group-by lanes by status, same as today', () => {
+    it('a kanban board with no explicit group-by groups by status, same as today', () => {
         const { handlers } = makeHandlers();
         const props = makeProps({ type: 'kanban' });
-        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, LANE_NOTES));
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, GROUP_NOTES));
         expect(result.current.natural_column_order).toEqual(['doing', 'done', 'untagged']);
     });
 
-    it('a kanban board grouped by first level folder lists the folder lanes, not the status ones', () => {
+    it('a kanban board grouped by first level folder lists the folder groups, not the status ones', () => {
         const { handlers } = makeHandlers();
         const folder_notes: NoteProps[] = [
             makeFolderNote(1, 'alpha'),
@@ -380,13 +437,13 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         ];
         const props = makeProps({
             type: 'kanban',
-            display_options: { integration_mode: 'folder', settings: { kanbanGroupBy: 'nt_first_level_folder' } },
+            display_options: { integration_mode: 'folder', settings: { viewOverrides: { kanban: { groupBy: 'nt_first_level_folder' } } } },
         });
         const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, folder_notes));
         expect(result.current.natural_column_order).toEqual(['alpha', 'beta', 'untagged']);
     });
 
-    it('a non-kanban grouped view explicitly grouped by first level folder lists the folder lanes', () => {
+    it('a non-kanban grouped view explicitly grouped by first level folder lists the folder groups', () => {
         const { handlers } = makeHandlers();
         const folder_notes: NoteProps[] = [
             makeFolderNote(1, 'alpha'),
@@ -404,7 +461,7 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         const { handlers } = makeHandlers();
         const props = makeProps({
             type: 'kanban',
-            display_options: { integration_mode: 'folder', settings: { kanbanGroupBy: 'nt_first_level_folder' } },
+            display_options: { integration_mode: 'folder', settings: { viewOverrides: { kanban: { groupBy: 'nt_first_level_folder' } } } },
         });
         const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
         expect(result.current.natural_column_order).toEqual(['untagged']);

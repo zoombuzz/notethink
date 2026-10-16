@@ -5,7 +5,7 @@ import { simulateSelectionChanged } from '../helpers/simulate-selection';
 /*
  * The shape a card comes out at side by side, driven in the browser against the real bundle.
  *
- * The ratio setting is a claim about the CARD, not about the lane around it: a board set to 1 : 1.4 must
+ * The ratio setting is a claim about the CARD, not about the group around it: a board set to 1 : 1.4 must
  * draw cards 1.4 times as tall as they are wide. A card reaches that height by clipping its own body to
  * whatever is left of the target once its heading and attribute rows are taken off, so the claim can only
  * be checked where text really reflows and a clip really applies, which is a browser and not jsdom. What
@@ -38,7 +38,7 @@ async function openKanbanSettings(page: Page): Promise<void> {
     if (await tab.getAttribute('aria-expanded') !== 'true') {
         await tab.click();
     }
-    await expect(page.getByTestId('setting-row-kanbanCardRatio')).toBeVisible();
+    await expect(page.getByTestId('setting-row-cardRatio')).toBeVisible();
 }
 
 /** the card carrying that heading, which is the box the ratio is a claim about */
@@ -69,8 +69,8 @@ async function solvedCardWidth(page: Page, heading: string): Promise<number> {
 /** put an orientation at the workspace scope before the board first renders, so the first probe runs under it */
 async function seedOrientation(page: Page, orientation: string): Promise<void> {
     await page.evaluate((value) => {
-        const harness = window as unknown as { __nt_settings: { workspace: Record<string, unknown> }; __nt_publishSettings?: () => void };
-        harness.__nt_settings.workspace.orientation = value;
+        const harness = window as unknown as { __nt_settings: { workspace: { views: Record<string, Record<string, unknown>> } }; __nt_publishSettings?: () => void };
+        harness.__nt_settings.workspace.views.line = { ...harness.__nt_settings.workspace.views.line, orientation: value };
         harness.__nt_publishSettings?.();
     }, orientation);
 }
@@ -83,9 +83,9 @@ test.describe('Kanban card ratio', () => {
     });
 
     /*
-     * What the setting promises. Side by side the ratio used to reach the lane and stop there: no target
+     * What the setting promises. Side by side the ratio used to reach the group and stop there: no target
      * height reached the card, so its body clipped at its own width instead and a board asked for 1 : 1.4
-     * drew cards nearer 1 : 1.5, moving the lane far more than it moved the card.
+     * drew cards nearer 1 : 1.5, moving the group far more than it moved the card.
      */
     test('a clipped card stands at the target ratio, and a short one is left short', async ({ page }) => {
         await page.setViewportSize({ width: 520, height: 800 });
@@ -93,7 +93,7 @@ test.describe('Kanban card ratio', () => {
         await openKanbanSettings(page);
 
         for (const ratio of [1, 2]) {
-            await page.selectOption('[data-testid="setting-control-kanbanCardRatio"]', `${ratio}`);
+            await page.selectOption('[data-testid="setting-control-cardRatio"]', `${ratio}`);
             // the card has more to say than any of these targets, so it is the clip that lands it on the ratio
             await expect(cardNamed(page, CLIPPED_CARD).getByRole('button', { name: /show more/i }).first()).toBeVisible();
             await expect.poll(() => ratioError(page, CLIPPED_CARD, ratio)).toBeLessThan(RATIO_TOLERANCE);

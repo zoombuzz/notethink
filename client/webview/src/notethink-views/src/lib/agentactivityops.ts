@@ -55,6 +55,11 @@ export const AGENT_SCAN_PENDING_KEY = 'agentScan';
 export const ACTIVITY_BAND_UNCOMMITTED = 'uncommitted';
 export type ActivityBand = typeof ACTIVITY_BAND_UNCOMMITTED;
 
+// the three measures the agent card's clockMode setting can draw; mirrors CASCADE_KEY_DEFAULTS.clockMode
+export const AGENT_CLOCK_MODES = ['span', 'active', 'sinceStart'] as const;
+export type AgentClockMode = typeof AGENT_CLOCK_MODES[number];
+export const AGENT_CLOCK_MODE_DEFAULT: AgentClockMode = 'active';
+
 const MINUTES_PER_HOUR = 60;
 const HOURS_PER_DAY = 24;
 const MS_PER_HOUR = 60 * 60 * 1000;
@@ -360,18 +365,62 @@ export function unboundSessionHeadline(session: ActivitySession): string {
 }
 
 /**
- * The virtual notes this snapshot calls for: one per session whose own write calls bound it to no
- * story, so an unbound agent is drawn away from every story's card rather than guessed onto one.
+ * ActivityViewScope answers "which unbound sessions belong beside this view's own documents",
+ * resolved once per view rather than once per session.
+ * - root_paths: the repository root_paths the view's documents resolve to; `undefined` stands for the
+ *   "outside every repository" bucket, so a rootless session is admitted only alongside a document
+ *   that itself resolved to no tree
+ * - notes_carry_relative_path: true when the view's own notes stamp an origin.relative_path (folder
+ *   mode), so a minted virtual note knows whether to carry one too; false in single-file mode, where
+ *   no note carries one and a virtual note must stay in the same (untagged) group as the file's stories
  */
-export function virtualNotesForActivity(snapshot: ActivitySnapshot | undefined): NoteProps[] {
-    return unboundSessions(snapshot).map(state => makeVirtualNote({
-        namespace: AGENT_VIRTUAL_NAMESPACE,
-        key: unboundSessionKey(state),
-        headline: unboundSessionHeadline(state.session),
-        project: state.session.project,
-        project_hue: state.session.project ? hueForProjectName(state.session.project) : undefined,
-        project_label: state.session.project ? state.session.project.slice(0, 2).toUpperCase() : undefined,
-    }));
+export interface ActivityViewScope {
+    root_paths: ReadonlySet<string | undefined>;
+    notes_carry_relative_path: boolean;
+}
+
+/**
+ * The scope a view's own documents resolve to: the distinct document paths - every note's
+ * `origin.relative_path` in folder mode, plus the view's own `doc_relative_path` in single-file mode -
+ * deduped before resolving since notes can number in the thousands, each mapped to its repository's
+ * tree via `treeForDocPath`. A path resolving to no tree contributes the "outside every repository"
+ * bucket (`undefined`) rather than being dropped.
+ */
+export function viewedActivityScope(snapshot: ActivitySnapshot | undefined, notes: ReadonlyArray<NoteProps> | undefined, doc_relative_path: string | undefined): ActivityViewScope {
+    const note_paths = (notes ?? []).map(note => note.origin?.relative_path).filter((path): path is string => path !== undefined);
+    const candidates = doc_relative_path ? [...note_paths, doc_relative_path] : note_paths;
+    const distinct = new Set(candidates.map(normaliseActivityPath).filter(path => path.length > 0));
+    const root_paths = new Set<string | undefined>();
+    for (const path of distinct) { root_paths.add(treeForDocPath(snapshot, path)?.root_path); }
+    return { root_paths, notes_carry_relative_path: note_paths.length > 0 };
+}
+
+/** true when an unbound session's own repository is one the view's documents resolved to, root-less sessions included */
+function isSessionInViewScope(state: ActivitySessionState, scope: ActivityViewScope): boolean {
+    return scope.root_paths.has(state.root_path);
+}
+
+/**
+ * The virtual notes this snapshot calls for: one per session whose own write calls bound it to no
+ * story AND whose repository is one of `scope`'s, so an unbound agent is drawn beside its own
+ * repository's documents rather than beside every repository the workspace happens to hold. A session
+ * admitted here takes its repository's `root_relative` as its virtual note's `relative_path`, but only
+ * when the view's own notes carry one too (`notes_carry_relative_path`) and the repository's own
+ * `root_relative` is non-empty (a repository that IS the workspace folder has none to give).
+ */
+export function virtualNotesForActivity(snapshot: ActivitySnapshot | undefined, scope: ActivityViewScope): NoteProps[] {
+    return unboundSessions(snapshot).filter(state => isSessionInViewScope(state, scope)).map(state => {
+        const root_relative = scope.notes_carry_relative_path ? normaliseActivityPath(treeForRoot(snapshot, state.root_path)?.root_relative) : '';
+        return makeVirtualNote({
+            namespace: AGENT_VIRTUAL_NAMESPACE,
+            key: unboundSessionKey(state),
+            headline: unboundSessionHeadline(state.session),
+            project: state.session.project,
+            project_hue: state.session.project ? hueForProjectName(state.session.project) : undefined,
+            project_label: state.session.project ? state.session.project.slice(0, 2).toUpperCase() : undefined,
+            relative_path: root_relative || undefined,
+        });
+    });
 }
 
 /**
@@ -393,21 +442,61 @@ export function shortModelId(model: string | undefined): string {
 }
 
 /**
- * A compact duration clock between two ISO timestamps: `7m`, `3h 05m`, and whole days (`18d`) past
- * two days. A numeric-unit convention like `formatActivityTokens`'s `k`/`M`, not prose, so it is not
- * run through `l10n.t`. Either timestamp unparseable draws no clock rather than `NaNm`, and an end
- * before its start reads `0m`.
+ * A compact duration clock for a span already in milliseconds: `7m`, `3h 05m`, and whole days
+ * (`18d`) past two days. A numeric-unit convention like `formatActivityTokens`'s `k`/`M`, not prose,
+ * so it is not run through `l10n.t`. A negative span (clock skew, or an end before its start) reads
+ * `0m` rather than going negative.
  */
-export function formatDurationClock(from: string, to: string): string {
-    const from_ms = new Date(from).getTime();
-    const to_ms = new Date(to).getTime();
-    if (Number.isNaN(from_ms) || Number.isNaN(to_ms)) { return ''; }
-    const minutes = Math.max(0, Math.floor((to_ms - from_ms) / 60000));
+export function formatDurationClockMs(duration_ms: number): string {
+    const minutes = Math.max(0, Math.floor(duration_ms / 60000));
     if (minutes < MINUTES_PER_HOUR) { return `${minutes}m`; }
     const hours = Math.floor(minutes / MINUTES_PER_HOUR);
     if (hours >= CLOCK_HOURS_BEFORE_DAYS) { return `${Math.floor(hours / HOURS_PER_DAY)}d`; }
     const rest = String(minutes % MINUTES_PER_HOUR).padStart(2, '0');
     return `${hours}h ${rest}m`;
+}
+
+/** formatDurationClockMs between two ISO timestamps; either one unparseable draws no clock rather than `NaNm` */
+export function formatDurationClock(from: string, to: string): string {
+    const from_ms = new Date(from).getTime();
+    const to_ms = new Date(to).getTime();
+    if (Number.isNaN(from_ms) || Number.isNaN(to_ms)) { return ''; }
+    return formatDurationClockMs(to_ms - from_ms);
+}
+
+/**
+ * The session row's clock, by mode: `span` is today's two-timestamp arithmetic unchanged, `active`
+ * draws the reader-computed figure (`ActivitySession.active_ms`, absent reading as 0 - a session no
+ * reader has priced yet), and `sinceStart` measures against the caller's own clock rather than the
+ * session's `updated_at`, so it keeps advancing while the card is on screen. Either `span` or
+ * `sinceStart` draws no clock for an unparseable `started_at`, same as formatDurationClock.
+ */
+export function formatAgentClock(session: ActivitySession, mode: AgentClockMode, now_ms: number): string {
+    if (mode === 'active') { return formatDurationClockMs(session.active_ms ?? 0); }
+    if (mode === 'sinceStart') {
+        const from_ms = new Date(session.started_at).getTime();
+        return Number.isNaN(from_ms) ? '' : formatDurationClockMs(now_ms - from_ms);
+    }
+    return formatDurationClock(session.started_at, session.updated_at);
+}
+
+/** the clock mode's name, for the settings drawer's select and the row's own tooltip */
+export function agentClockModeLabel(mode: AgentClockMode): string {
+    if (mode === 'active') { return l10n.t('Active time'); }
+    if (mode === 'sinceStart') { return l10n.t('Since start'); }
+    return l10n.t('Span');
+}
+
+/**
+ * The clock's tooltip: names the mode, then keeps the start and end times it measures between. The
+ * end is `now_iso` for `sinceStart`, since nothing else bounds an open-ended count; the other two
+ * modes keep the session's own `updated_at`.
+ */
+export function agentClockTooltip(session: ActivitySession, mode: AgentClockMode, now_iso: string): string {
+    const end = mode === 'sinceStart' ? now_iso : session.updated_at;
+    if (mode === 'active') { return l10n.t('{0}, excluding gaps over five minutes: ran from {1} to {2}', agentClockModeLabel(mode), session.started_at, end); }
+    if (mode === 'sinceStart') { return l10n.t('{0}: running since {1}, now at {2}', agentClockModeLabel(mode), session.started_at, end); }
+    return l10n.t('{0}: ran from {1} to {2}', agentClockModeLabel(mode), session.started_at, end);
 }
 
 /** an argument shortened for display; a session that overruns the bound loses the rest of its own line, so a reader truncates rather than refusing */

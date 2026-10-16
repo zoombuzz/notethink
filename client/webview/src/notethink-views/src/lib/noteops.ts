@@ -2,7 +2,7 @@ import Debug from "debug";
 import type { NoteProps, MdastNode, TextSelection, ClickPositionInfo, LineTag } from "../types/NoteProps";
 import type { GroupDisplayEntry } from "../types/Messages";
 import { INTEGRATION_MODE_CURRENT_FILE } from "../types/IntegrationMode";
-import { ABSENT_VALUE_BUCKET, FIRST_LEVEL_FOLDER_KEY, KANBAN_AXIS_KEY, axisField, categoricalLaneFor, projectNoteOntoAxis, type Axis } from "./axisops";
+import { ABSENT_VALUE_BUCKET, FIRST_LEVEL_FOLDER_KEY, KANBAN_AXIS_KEY, axisField, categoricalGroupFor, projectNoteOntoAxis, type Axis } from "./axisops";
 import { projectNameFromRelativePath } from "./originops";
 import { isVirtualNote } from "./virtualnoteops";
 
@@ -503,37 +503,64 @@ export function formatColumnLabel(value: string): string {
 }
 
 /**
- * Natural lane order for an axis: the distinct lane values present in the notes, sorted alphabetically,
+ * Natural group order for an axis: the distinct group values present in the notes, sorted alphabetically,
  * with the synthetic absent-value bucket always last. `axis` selects the categorical field to group by
  * and defaults to the status axis, so a bare call orders kanban's status columns (untagged is the absent bucket).
  */
 export function deriveNaturalColumnOrder(notes: Array<NoteProps>, axis: Axis = 'status'): string[] {
-    const lane_values = new Set<string>();
+    const group_values = new Set<string>();
     for (const note of (notes || [])) {
         const value = kanbanColumnValue(note, axis);
-        if (value !== ABSENT_VALUE_BUCKET) { lane_values.add(value); }
+        if (value !== ABSENT_VALUE_BUCKET) { group_values.add(value); }
     }
-    return [...Array.from(lane_values).sort(), ABSENT_VALUE_BUCKET];
+    return [...Array.from(group_values).sort(), ABSENT_VALUE_BUCKET];
 }
 
 /**
- * The lane order AND visibility the settings drawer edits: the saved entries first, then every live
- * lane the saved list does not name, appended as shown, so a status added since the order was saved is
- * still reachable and defaults to visible. This is the same layering `useKanbanColumns` applies when it
- * builds the board's lanes (over the entries' values alone), so the editor lists the lanes in the order
- * the board draws them. A hidden lane stays in this list, still reorderable, while the board leaves it out.
+ * The group order AND visibility the settings drawer edits: the saved entries that name a group actually
+ * present in `natural`, in their saved order, then every live group the saved list does not name, appended
+ * as shown, so a status added since the order was saved is still reachable and defaults to visible. A
+ * saved entry naming a group not in `natural` (its project folder gone, its status unused) is left out here
+ * - it is not dropped from storage, only from what this merge lists, and `splitGroupDisplayByPresence` /
+ * `recombineGroupDisplay` are how a write preserves it. An empty `natural` is the sentinel for "no live
+ * axis to filter against" (the drawer showing a highlighted node that isn't what's on screen), so every
+ * saved entry is listed as-is, unfiltered. This is the same layering `useKanbanColumns` applies when it
+ * builds the board's groups (over the entries' values alone), so the editor lists the groups in the order
+ * the board draws them. A hidden group stays in this list, still reorderable, while the board leaves it out.
  */
 export function mergeSavedGroupDisplay(saved: GroupDisplayEntry[] | undefined, natural: string[]): GroupDisplayEntry[] {
     if (!saved || saved.length === 0) { return natural.map(value => ({ value, shown: true })); }
-    const saved_values = new Set(saved.map(entry => entry.value));
+    const { present } = splitGroupDisplayByPresence(saved, natural);
+    const saved_values = new Set(present.map(entry => entry.value));
     const appended = natural.filter(value => !saved_values.has(value)).map(value => ({ value, shown: true }));
-    return [...saved, ...appended];
+    return [...present, ...appended];
+}
+
+/**
+ * Splits stored group-display entries by whether their value is in `natural` (the live group values):
+ * `present` are listed and editable as chips, `absent` name a group no current note carries and are
+ * carried verbatim by a write so a transiently empty group (a filter, a single-file view, folder
+ * discovery still streaming in) does not lose its position or hidden flag. An empty `natural` is the
+ * sentinel for "no live axis to filter against", so nothing is treated as absent.
+ */
+export function splitGroupDisplayByPresence(entries: GroupDisplayEntry[], natural: string[]): { present: GroupDisplayEntry[]; absent: GroupDisplayEntry[] } {
+    if (natural.length === 0) { return { present: entries, absent: [] }; }
+    const natural_set = new Set(natural);
+    return {
+        present: entries.filter(entry => natural_set.has(entry.value)),
+        absent: entries.filter(entry => !natural_set.has(entry.value)),
+    };
+}
+
+/** every Group display write's shape: the edited, on-screen present entries, then the untouched absent tail in its stored relative order */
+export function recombineGroupDisplay(edited_present: GroupDisplayEntry[], absent: GroupDisplayEntry[]): GroupDisplayEntry[] {
+    return [...edited_present, ...absent];
 }
 
 /**
  * The stored group-display entries that belong to one axis. An entry with no `axis` belongs to status,
  * so a list saved before entries carried an axis, and the contributed default, read as the status
- * display unchanged. Every other axis sees only the entries written while the board laned by it.
+ * display unchanged. Every other axis sees only the entries written while the board groupd by it.
  */
 export function groupDisplayForAxis(entries: GroupDisplayEntry[] | undefined, axis_key: string): GroupDisplayEntry[] {
     return (entries ?? []).filter(entry => (entry.axis ?? KANBAN_AXIS_KEY) === axis_key);
@@ -550,7 +577,7 @@ export function replaceGroupDisplayForAxis(entries: GroupDisplayEntry[] | undefi
     return [...tagged, ...others];
 }
 
-/** `entries` with one lane's `shown` flipped, reading a missing flag as shown; an absent value changes nothing */
+/** `entries` with one group's `shown` flipped, reading a missing flag as shown; an absent value changes nothing */
 export function toggleShownInDisplay(entries: GroupDisplayEntry[], value: string): GroupDisplayEntry[] {
     return entries.map(entry => (entry.value === value ? { ...entry, shown: entry.shown === false } : entry));
 }
@@ -566,21 +593,21 @@ export function moveInOrder<T>(order: T[], from_index: number, to_index: number)
 }
 
 /**
- * The lane a note belongs to on an axis: its linetag value for the axis field, or the absent-value
- * bucket when it has none (empty also falls through). Single source of truth for the note->lane
- * rule, shared by the lane builder, drag projection, and natural lane order.
+ * The group a note belongs to on an axis: its linetag value for the axis field, or the absent-value
+ * bucket when it has none (empty also falls through). Single source of truth for the note->group
+ * rule, shared by the group builder, drag projection, and natural group order.
  */
 export function kanbanColumnValue(note: NoteProps, axis: Axis = 'status'): string {
     // the first-level-folder axis is computed from origin, not a linetag; every other axis reads its linetag
     if (axisField(axis) === FIRST_LEVEL_FOLDER_KEY) {
-        return categoricalLaneFor(projectNameFromRelativePath(note.origin?.relative_path));
+        return categoricalGroupFor(projectNameFromRelativePath(note.origin?.relative_path));
     }
     return projectNoteOntoAxis(note, axis);
 }
 
 /**
- * Notes in one lane on an axis, in display order: selected by `kanbanColumnValue`, sorted by
- * `kanbanNoteOrder`. Shared so the lane builder and drag projection agree on membership and order.
+ * Notes in one group on an axis, in display order: selected by `kanbanColumnValue`, sorted by
+ * `kanbanNoteOrder`. Shared so the group builder and drag projection agree on membership and order.
  */
 export function notesInKanbanColumn(notes: Array<NoteProps>, column_value: string, axis: Axis = 'status'): Array<NoteProps> {
     return notes.filter(note => kanbanColumnValue(note, axis) === column_value).sort(kanbanNoteOrder);
@@ -742,9 +769,9 @@ export function collisionNoteLocation(note: NoteProps): CollisionNoteLocation {
 
 /**
  * Whether at least one note in `notes` would actually render as a visible card. A document view has
- * no lanes, so any note counts; a grouped view (line, kanban) hides a note whose lane on `axis_key`
- * the group-display marks `shown: false`, so a doc that streamed in with every note in a hidden lane
- * does not count until a visible lane holds one. Drives whether folder discovery's loading panel can
+ * no groups, so any note counts; a grouped view (line, kanban) hides a note whose group on `axis_key`
+ * the group-display marks `shown: false`, so a doc that streamed in with every note in a hidden group
+ * does not count until a visible group holds one. Drives whether folder discovery's loading panel can
  * give way to the board, rather than just whether any note has loaded.
  */
 export function hasVisibleCard(notes: Array<NoteProps>, is_grouped_view: boolean, axis_key: string, group_display: GroupDisplayEntry[] | undefined): boolean {

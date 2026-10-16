@@ -3,7 +3,7 @@ import { rowSizeFor } from "./virtualCardSizingOps";
 
 /**
  * CardHeightCacheApi:
- * - getRowSize: the row size the lane should reserve for `stable_ids[index]`, in px
+ * - getRowSize: the row size the group should reserve for `stable_ids[index]`, in px
  * - reportMeasuredHeight: records a card's own measured height (not the row including the gap);
  *   calls `on_changed` only when the cached answer for that id actually moved
  */
@@ -13,7 +13,7 @@ export interface CardHeightCacheApi {
 }
 
 /**
- * Per-lane measured-card-height cache, keyed by stable_id so it survives a reorder without a visible
+ * Per-group measured-card-height cache, keyed by stable_id so it survives a reorder without a visible
  * jump. Kept in a ref, not state: `on_changed` tells the caller (VirtualizedKanbanColumn) to bump its
  * own state and recompute row offsets.
  */

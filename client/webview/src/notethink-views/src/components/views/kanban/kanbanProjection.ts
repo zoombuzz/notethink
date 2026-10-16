@@ -8,10 +8,10 @@ const debug = Debug("nodejs:notethink-views:kanbanProjection");
 /**
  * KanbanMove: a single drag-and-drop move that applyKanbanMove and projectionSatisfied interpret.
  * - dragged_stable_id: the stable_id of the note being moved
- * - destination_column_value: the target lane's value on the group axis ('done', 'doing', 'untagged', …)
- * - destination_index: zero-based insertion slot within the destination lane (clamped to valid range)
- * - group_field: the axis field the lanes group by; defaults to 'status' so kanban is unchanged. The
- *   projection re-tags the dragged note on this field (or deletes it for the absent-value lane).
+ * - destination_column_value: the target group's value on the group axis ('done', 'doing', 'untagged', …)
+ * - destination_index: zero-based insertion slot within the destination group (clamped to valid range)
+ * - group_field: the axis field the board groups by; defaults to 'status' so kanban is unchanged. The
+ *   projection re-tags the dragged note on this field (or deletes it for the absent-value group).
  */
 export interface KanbanMove {
     dragged_stable_id: string;
@@ -48,7 +48,7 @@ function cloneWithoutLinetag(note: NoteProps, key: string): NoteProps {
     return { ...note, linetags: cloned_linetags };
 }
 
-/** build the dragged note clone with its destination-lane value applied to the group field (absent lane deletes it) */
+/** build the dragged note clone with its destination-group value applied to the group field (absent group deletes it) */
 function cloneDraggedWithFieldValue(note: NoteProps, group_field: string, destination_column_value: string): NoteProps {
     if (destination_column_value === ABSENT_VALUE_BUCKET) {
         return cloneWithoutLinetag(note, group_field);
@@ -118,7 +118,7 @@ function buildCloneMap(
     move: KanbanMove,
 ): Map<number, NoteProps> {
     const clone_map = new Map<number, NoteProps>();
-    // first pass: apply the destination lane's value to the dragged note's group field
+    // first pass: apply the destination group's value to the dragged note's group field
     const dragged_clone = cloneDraggedWithFieldValue(dragged_note, move.group_field ?? 'status', move.destination_column_value);
     clone_map.set(dragged_note.seq, dragged_clone);
     // second pass: apply synthetic weight to every position in the ordered destination list

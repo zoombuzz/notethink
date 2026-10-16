@@ -1,7 +1,7 @@
 import Debug from "debug";
 import { useMemo } from "react";
 import { useAgentActivity } from "../../../lib/activityhooks";
-import { virtualNotesForActivity } from "../../../lib/agentactivityops";
+import { viewedActivityScope, virtualNotesForActivity } from "../../../lib/agentactivityops";
 import { findStableIdCollisions } from "../../../lib/noteops";
 import { admitVirtualNotes, guardVirtualNoteWrites } from "../../../lib/virtualnoteops";
 import { AGENT_CARD_TYPE, cardRegistryWithViewSettings, resolveCardType } from "../../notes/cardregistryops";
@@ -62,15 +62,18 @@ function resolvedCardTypeHint(props: ViewProps): string {
  *
  * The admission is gated on the agent card, which is the axis the question belongs to: a virtual note
  * exists to be drawn as a card, and drawing an unbound agent into a board the user has on the full
- * card would put an agent among their stories uninvited.
+ * card would put an agent among their stories uninvited. It is further gated on the viewed documents'
+ * own repositories (`viewedActivityScope`), so a workspace rooted above several repositories never
+ * draws an unbound session from a repository none of this view's documents sit inside.
  */
 function useAdmittedViewProps(props: ViewProps): ViewProps {
     const activity = useAgentActivity();
     const card_type_hint = resolvedCardTypeHint(props);
-    const virtual_notes = useMemo(
-        () => (card_type_hint === AGENT_CARD_TYPE ? virtualNotesForActivity(activity) : NO_VIRTUAL_NOTES),
-        [activity, card_type_hint],
-    );
+    const virtual_notes = useMemo(() => {
+        if (card_type_hint !== AGENT_CARD_TYPE) { return NO_VIRTUAL_NOTES; }
+        const scope = viewedActivityScope(activity, props.notes, props.doc_relative_path);
+        return virtualNotesForActivity(activity, scope);
+    }, [activity, card_type_hint, props.notes, props.doc_relative_path]);
     const admitted_notes = useMemo(() => admitVirtualNotes(props.notes, virtual_notes), [props.notes, virtual_notes]);
     const guarded_handlers = useMemo(() => guardVirtualNoteWrites(props.handlers), [props.handlers]);
     return { ...props, notes: admitted_notes, handlers: guarded_handlers };

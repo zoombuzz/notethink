@@ -8,7 +8,7 @@
  * to a literal, because the chart colours are not among the variables a bare webview host is
  * guaranteed to stamp and an unresolved var() would leave a rail with no colour at all.
  *
- * The card keeps the lane's card surface, shadow included, unchanged on hover: the card itself carries
+ * The card keeps the group's card surface, shadow included, unchanged on hover: the card itself carries
  * no state rail, since the meta row's chip and the row rails already say what state it is in.
  */
 
@@ -22,7 +22,7 @@
   display: flex;
   flex-direction: column;
 
-  // the shared .note list rule (ViewRenderer.module.scss) puts a disc and a top margin on every list in a card, and the lane an indent; these lists are rosters, not prose
+  // the shared .note list rule (ViewRenderer.module.scss) puts a disc and a top margin on every list in a card, and the group an indent; these lists are rosters, not prose
   .agentRows,
   .questionBands,
   .fileRows {
@@ -99,7 +99,7 @@
 
 /*
  * The roster is the size container its rows are laid out against, so a row reads the card's own width
- * whichever view the card sits in: a kanban lane, a line view column or a full-width document.
+ * whichever view the card sits in: a kanban group, a line view column or a full-width document.
  */
 .agentRows {
   container-type: inline-size;

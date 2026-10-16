@@ -154,6 +154,66 @@ describe('bindSessionToStory', () => {
         expect(bindSessionToStory(calls, board_with_divider)).toEqual([]);
     });
 
+    it('skips a dash-marker bullet, and a bullet carrying trailing detail after its own label, as fallback locators', () => {
+        const board: StoryDocument[] = [{
+            doc_path: TODO_PATH,
+            text: TODO_TEXT.replace('+ [ ] still working', '+ [ ] still working\n- scope, not goal\n+ background, measured in code: something specific enough to be long'),
+        }];
+        // no verbatim match; each surviving line is a generic-labelled bullet, just in a form the old filter let through
+        const calls = [call(TODO_PATH, { edits: [edit('- scope, not goal\n+ background, measured in code: something else entirely')] })];
+        expect(bindSessionToStory(calls, board)).toEqual([]);
+    });
+
+    it('leaves an edit unbound when a board has shrunk to a few stories and all that survives of the edit is a generic section bullet repeated across them', () => {
+        const shrunk_text = '# Todo\n\n\n### First story [](?id=first-story&status=code-review)\n\n+ background\n+ [X] done already\n\n\n### Third story [](?id=third-story)\n\n+ background\n+ [ ] untagged, not doing\n';
+        const shrunk_docs: StoryDocument[] = [{ doc_path: TODO_PATH, text: shrunk_text }];
+        // the story this edit touched is gone; its text survives only as a shared divider and a vanished line
+        const calls = [call(TODO_PATH, { edits: [edit('+ background\n+ [ ] a task that no longer exists anywhere')] })];
+        expect(bindSessionToStory(calls, shrunk_docs)).toEqual([]);
+    });
+
+    it('binds to the story moved into done.md via its exact match, even though a looser single-line match for the same edit also sits in todo.md', () => {
+        const shared_line = 'review the shared decision point before merging';
+        const moved_docs: StoryDocument[] = [
+            {
+                doc_path: TODO_PATH,
+                text: `${TODO_TEXT.replace(/### Second story.*\n\n\+ \[ \] still working\n\n\n/s, '')}### Unrelated story [](?id=unrelated-story)\n\n+ [ ] ${shared_line}\n`,
+            },
+            {
+                doc_path: DONE_PATH,
+                text: `# Done\n\n\n### Second story [](?id=second-story&status=doing)\n\n+ [X] still working\n+ [ ] ${shared_line}\n`,
+            },
+        ];
+        // todo.md's "Unrelated story" shares one line with the edit, which an own-board-first fallback would wrongly match first
+        const calls = [call(TODO_PATH, { edits: [edit(`+ [X] still working\n+ [ ] ${shared_line}`)] })];
+        expect(bindSessionToStory(calls, moved_docs)).toEqual([{ doc_path: DONE_PATH, id: 'second-story' }]);
+    });
+
+    it('leaves an edit unbound when its only fallback-eligible line occurs more than once in the board, rather than guessing the first', () => {
+        const duplicate_line = 'investigate the timeout before retrying the sync job';
+        const board_with_duplicate: StoryDocument[] = [{
+            doc_path: TODO_PATH,
+            text: TODO_TEXT
+                .replace('+ [ ] still working', `+ [ ] still working\n+ [ ] ${duplicate_line}`)
+                .replace('+ [ ] untagged, not doing', `+ [ ] untagged, not doing\n+ [ ] ${duplicate_line}`),
+        }];
+        // the snippet's first line no longer exists; its second line, the only other fallback candidate, now occurs twice
+        const calls = [call(TODO_PATH, { edits: [edit(`some context that has since changed\n+ [ ] ${duplicate_line}`)] })];
+        expect(bindSessionToStory(calls, board_with_duplicate)).toEqual([]);
+    });
+
+    it('leaves an edit unbound when its whole text matches exactly but occurs more than once in the board', () => {
+        const duplicate_line = '+ [ ] investigate the timeout before retrying the sync job';
+        const board_with_duplicate: StoryDocument[] = [{
+            doc_path: TODO_PATH,
+            text: TODO_TEXT
+                .replace('+ [ ] still working', `+ [ ] still working\n${duplicate_line}`)
+                .replace('+ [ ] untagged, not doing', `+ [ ] untagged, not doing\n${duplicate_line}`),
+        }];
+        const calls = [call(TODO_PATH, { edits: [edit(duplicate_line)] })];
+        expect(bindSessionToStory(calls, board_with_duplicate)).toEqual([]);
+    });
+
     it('a write outside any board binds nothing', () => {
         const calls = [call('README.md', { edits: [edit('some new readme text')] })];
         expect(bindSessionToStory(calls, docs)).toEqual([]);

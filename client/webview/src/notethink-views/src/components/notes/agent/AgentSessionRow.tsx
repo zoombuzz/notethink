@@ -1,8 +1,9 @@
 import React from "react";
 import * as l10n from "@vscode/l10n";
 import { ACTIVITY_ARG_MAX_CHARS } from "../../../types/AgentActivity";
-import { factStateFor, formatActivityUsage, formatDurationClock, sessionStateOf, sessionUsageForStory, shortModelId, truncateActivityArg, vendorMonogram, type ActivityRefusal, type ActivitySessionState, type ActivityStoryKey } from "../../../lib/agentactivityops";
+import { AGENT_CLOCK_MODE_DEFAULT, agentClockTooltip, factStateFor, formatActivityUsage, formatAgentClock, sessionStateOf, sessionUsageForStory, shortModelId, truncateActivityArg, vendorMonogram, type ActivityRefusal, type AgentClockMode, type ActivitySessionState, type ActivityStoryKey } from "../../../lib/agentactivityops";
 import { agentStateLabel } from "./agentStateLabel";
+import { useAgentClockNow } from "./useAgentClockNow";
 import styles from "../AgentNote.module.scss";
 
 /**
@@ -16,8 +17,10 @@ import styles from "../AgentNote.module.scss";
  *
  * The counter is this session's share of this story, the same figure the story's own total sums, so
  * the row never outweighs the card it is drawn on; it leaves the window to that total. The clock beside
- * the state is how long the session ran, from its first record to its last, so like the counter it
- * measures what the session consumed rather than how long ago it stopped.
+ * the state draws by `clockMode`: `span` (its first record to its last), `active` (time spent, idle
+ * gaps over five minutes left out) or `sinceStart` (its first record to now, advancing once a minute
+ * while the row is on screen) - like the counter, measuring what the session consumed rather than how
+ * long ago it stopped.
  *
  * State owns the colour and the monogram is monochrome type, so the only saturated mark on the card is
  * the one worth acting on. The live line distinguishes the three things it may honestly say: the tool
@@ -36,12 +39,15 @@ import styles from "../AgentNote.module.scss";
  * - storyKey: the card's join key, so the counter shows this session's split share of the story;
  *   undefined on a virtual note, whose one session is its whole usage
  * - openRefusal: the host's reason this session could not be opened, undefined when it has not refused
+ * - clockMode: which of the three measures the clock draws; defaults to AGENT_CLOCK_MODE_DEFAULT so a
+ *   caller rendering a row before the settingsCascade has arrived still draws a sensible clock
  */
 export interface AgentSessionRowProps {
     state: ActivitySessionState;
     storyKey?: ActivityStoryKey;
     refusals: ReadonlyArray<ActivityRefusal>;
     openRefusal?: string;
+    clockMode?: AgentClockMode;
     onOpen: (vendor: string, session_id: string) => void;
 }
 
@@ -74,6 +80,8 @@ function liveLine(state: ActivitySessionState): { text: string; fact: string } {
 
 function AgentSessionRow(props: AgentSessionRowProps): React.ReactElement {
     const session = props.state.session;
+    const clock_mode = props.clockMode ?? AGENT_CLOCK_MODE_DEFAULT;
+    const now_ms = useAgentClockNow(clock_mode === 'sinceStart');
     const live = liveLine(props.state);
     const usage = formatActivityUsage(sessionUsageForStory(props.state, props.storyKey));
     return (
@@ -92,7 +100,7 @@ function AgentSessionRow(props: AgentSessionRowProps): React.ReactElement {
                 </span>
                 <span className={styles.agentStatus}>
                     <span className={styles.agentState} data-testid="agent-state">{agentStateLabel(sessionStateOf(session))}</span>
-                    <span className={styles.agentClock} data-testid="agent-clock" title={l10n.t('Ran from {0} to {1}', session.started_at, session.updated_at)}>{formatDurationClock(session.started_at, session.updated_at)}</span>
+                    <span className={styles.agentClock} data-testid="agent-clock" title={agentClockTooltip(session, clock_mode, new Date(now_ms).toISOString())}>{formatAgentClock(session, clock_mode, now_ms)}</span>
                 </span>
                 <span className={styles.agentLive} data-testid="agent-live" data-fact={live.fact} title={live.text}>{live.text}</span>
                 <span className={styles.agentUsage} data-testid="agent-usage" title={usage}>{usage}</span>

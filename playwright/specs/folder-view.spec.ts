@@ -206,8 +206,8 @@ test.describe('Aggregate (Folder) view', () => {
         await page.getByTestId('files-drawer-include').click();
         await expect(files_drawer).toHaveAttribute('data-open', 'true');
 
-        // click a merged note in the view body - drawer closes
-        await page.locator('[data-seq]').first().click();
+        // click a merged note in the view body - the last heading sits clear of the open drawer
+        await page.locator('[role="row"][data-mdast-type="heading"]').last().click();
         await expect(files_drawer).toHaveAttribute('data-open', 'false');
 
         // clicking the gear again toggles the drawer closed, not re-opened by the outside-click handler racing it

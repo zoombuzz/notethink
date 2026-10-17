@@ -7609,3 +7609,24 @@ notethink's AGENTS.md restates six rules its CODING_STANDARDS.md already holds, 
 + [X] point CODING_STANDARDS.md's eslint-canary paragraph at the workspace AGENTS.md - CODING_STANDARDS.md now reads "workspace `../AGENTS.md` > Projects" in place of the restated paragraph
 + [X] make CODING_STANDARDS.md's verification sentence match what `check` runs, `test-mocha` included - sentence now points at `package.json`'s `scripts.check`, and the table gained a Mocha row and a corrected summary row
 + acceptance: each rule has one home, both files are shorter (AGENTS.md 1401 -> 1116 words, CODING_STANDARDS.md 4929 -> 4867 words, `wc -w`), and the standards checker reports no new finding
+
+
+### Upgrade NPM packages for notethink (wave 1 minor/patch bulk, pnpm 12.14.0)
+
++ [X] run npm-check-updates
++ [X] revisit prior pins (try to unpin transient holds recorded in the last upgrade story)
+  + memfs and sass (last wave's cooldown ceilings) both cleared and took their next patch (4.80.0, 1.105.2); typescript stays held, unmet (still `--target minor` ceiling, `@typescript-eslint` still peers `<6.1.0`); eslint continues as the fleet canary, no reject entry by design
++ [X] pnpm install
++ [X] refresh the lockfile
++ [X] verify lint passes
++ [X] verify jest tests pass
++ [X] fix the folder-view outside-click spec, which failed after the Playwright 1.64 Chromium update
+  + it clicked the first `[data-seq]` row, the document root, whose click point sat about 1.5px from the open Files drawer's edge; it now clicks the last heading row, clear of the drawer (`playwright/specs/folder-view.spec.ts:210`); Playwright 263/263
+
+Pins in effect after this wave (snapshot):
+- typescript @^6.0.3 - structural - `@typescript-eslint/eslint-plugin`/`parser`@8.71.2 still peer `typescript >=4.8.4 <6.1.0`, `ts-jest` not used here but TypeScript 7.x remains unapproved. Held by `--target minor`, not an `.ncurc.json` entry (none exists for notethink by design). Clear-condition: `@typescript-eslint` ships a TS7-compatible line and the operator approves the major
+- eslint @10.12.0 exact - NOT a hold - notethink takes each eslint release first and is never pinned back; 10.13.0 withheld only by `--cooldown 24h` (published 2026-10-16T14:24Z, inside the window at run time) and clears on the next sweep with no intervention
+- @eslint/js @10.0.1 - NOT a hold - this is the actual latest published version of `@eslint/js` (confirmed via `npm view @eslint/js versions`); eslint itself has moved past 10.0.x on its own cadence, @eslint/js has not yet
+- allowBuilds: false for @parcel/watcher, @playwright/browser-chromium, @vscode/vsce-sign, keytar (root) and nested roots - structural, unchanged this wave
+
+Unpinned this wave: memfs (4.79.0 -> 4.80.0), sass (1.105.0 -> 1.105.2) - both were ordinary cooldown ceilings from the last wave, not true holds; cleared with no issue. packageManager raised 12.8.1 -> 12.14.0.

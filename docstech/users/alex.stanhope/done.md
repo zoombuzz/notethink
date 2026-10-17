@@ -7630,3 +7630,13 @@ Pins in effect after this wave (snapshot):
 - allowBuilds: false for @parcel/watcher, @playwright/browser-chromium, @vscode/vsce-sign, keytar (root) and nested roots - structural, unchanged this wave
 
 Unpinned this wave: memfs (4.79.0 -> 4.80.0), sass (1.105.0 -> 1.105.2) - both were ordinary cooldown ceilings from the last wave, not true holds; cleared with no issue. packageManager raised 12.8.1 -> 12.14.0.
+
+
+### Hold @types/vscode at the extension's engine floor
+
+`vsce package` refuses an `@types/vscode` newer than `engines.vscode`, and the 0.4.10 dependency upgrade took `@types/vscode` to ^1.140.0 against an engine floor of ^1.138.0, so the Build & Release workflow failed at Package .vsix.
+
++ [X] pin `@types/vscode` to 1.138.0, the engine floor, and reject it in `.ncurc.json` so a dependency upgrade cannot raise it again
+  + structural pin: it moves only together with `engines.vscode`, which sets the oldest VS Code the extension supports
++ [X] confirm `pnpm run package:vsix` packages the extension
++ [X] verify lint, Jest and Playwright pass

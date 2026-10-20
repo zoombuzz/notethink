@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
-import { pointerDrag } from '../helpers/pointer-drag';
+import { centreInDrawer, pointerDrag } from '../helpers/pointer-drag';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
 
 /*
@@ -104,9 +104,9 @@ async function openSettingsDrawer(page: Page): Promise<void> {
 /*
  * Show the kanban node's settings on a board that is already a kanban.
  *
- * The fixture declares nt_view=kanban rather than the test switching type through the radio: a switch
- * remounts the view and the remount closes the drawer, so driving it that way tests the remount rather
- * than the pane. Clicking the node moves the highlight only, which is the point of the two marks.
+ * The fixture declares nt_view=kanban rather than the test switching type through the radio, so these
+ * tests read the pane rather than a type switch, which has its own test below. Clicking the node moves
+ * the highlight only, which is the point of the two marks.
  */
 async function showKanbanSettings(page: Page): Promise<void> {
     await openSettingsDrawer(page);
@@ -168,6 +168,92 @@ test.describe('View settings drawer', () => {
     });
 
     /*
+     * Rows are banded by the view their value comes from, most specific first, so a value kanban holds
+     * for a Grouped setting reads in kanban's band, above Line's, rather than staying with Grouped's.
+     */
+    test('a setting kanban holds itself moves into kanban\'s band, ahead of line\'s, with hollow I and VS pills', async ({ page }) => {
+        await showKanbanSettings(page);
+        await seedWorkspaceViewSetting(page, 'kanban', 'groupOrder', 'alphabetical');
+        await expect(page.getByTestId('setting-pill-groupOrder')).toHaveText('Kanban');
+
+        const row_keys = await page.getByTestId(/^setting-row-/).evaluateAll(els => els.map(el => (el.getAttribute('data-testid') ?? '').replace('setting-row-', '')));
+        expect(row_keys.indexOf('groupOrder')).toBeLessThan(row_keys.indexOf('orientation'));
+        expect(row_keys.indexOf('groupOrder')).toBeLessThan(row_keys.indexOf('groupDisplay'));
+
+        const specific = page.getByTestId('setting-pill-specific-groupOrder');
+        const inherited = page.getByTestId('setting-pill-inherited-orientation');
+        await expect(specific).toHaveText('VS');
+        await expect(specific).toHaveAttribute('title', /^View specific; /);
+        await expect(inherited).toHaveText('I');
+        for (const pill of [specific, inherited]) {
+            const style = await pill.evaluate(el => {
+                const computed = window.getComputedStyle(el);
+                return { background: computed.backgroundColor, border: computed.borderTopWidth };
+            });
+            expect(style).toEqual({ background: 'rgba(0, 0, 0, 0)', border: '1px' });
+        }
+    });
+
+    test('on a narrow drawer the names wrap and no control overruns the owner pill beside it', async ({ page }) => {
+        await page.setViewportSize({ width: 560, height: 800 });
+        await showKanbanSettings(page);
+        for (const key of ['groupBy', 'groupOrder', 'cardRatio', 'defaultCardType']) {
+            const control_right = await page.getByTestId(`setting-row-${key}`).locator('select').first().evaluate(el => el.getBoundingClientRect().right);
+            const pill_left = await page.getByTestId(`setting-pill-${key}`).evaluate(el => el.getBoundingClientRect().left);
+            expect(control_right).toBeLessThanOrEqual(pill_left);
+        }
+        const name_box = await page.getByTestId('setting-row-animateTransitions').locator('span').first().evaluate(el => {
+            const rect = el.getBoundingClientRect();
+            return { height: rect.height, line: parseFloat(window.getComputedStyle(el).lineHeight) || 18 };
+        });
+        expect(name_box.height).toBeGreaterThan(name_box.line * 1.5);
+    });
+
+    /*
+     * Too narrow for two panes side by side, the tree stacks above the rows: its view names read whole
+     * rather than truncating, every select keeps room to show its value, and the group chips stay inside
+     * the control column instead of running under the owner pill.
+     */
+    test('on a very narrow drawer the view tree stacks above the rows and every control keeps its value visible', async ({ page }) => {
+        await page.setViewportSize({ width: 440, height: 800 });
+        await showKanbanSettings(page);
+        const tree = await page.getByTestId('view-node-kanban').evaluate(el => {
+            const node_rect = el.getBoundingClientRect();
+            const label = el.querySelector('span');
+            return { bottom: node_rect.bottom, truncated: label ? label.scrollWidth > label.clientWidth : false };
+        });
+        expect(tree.truncated).toBe(false);
+        const first_row_top = await page.getByTestId(/^setting-row-/).first().evaluate(el => {
+            const cells = Array.from(el.children) as HTMLElement[];
+            return Math.min(...cells.map(cell => cell.getBoundingClientRect().top));
+        });
+        expect(first_row_top).toBeGreaterThan(tree.bottom);
+        for (const key of ['cardRatio', 'defaultCardType', 'groupBy']) {
+            const width = await page.getByTestId(`setting-row-${key}`).locator('select').first().evaluate(el => el.getBoundingClientRect().width);
+            expect(width).toBeGreaterThan(60);
+        }
+        const pill_left = await page.getByTestId('setting-pill-groupDisplay').evaluate(el => el.getBoundingClientRect().left);
+        const chip_rights = await page.getByTestId(/^group-display-chip-/).evaluateAll(els => els.map(el => el.getBoundingClientRect().right));
+        for (const right of chip_rights) {
+            expect(right).toBeLessThanOrEqual(pill_left);
+        }
+    });
+
+    // choosing a type in the tree redraws the board under the drawer it was chosen in, rather than closing it
+    test('choosing another view type in the tree keeps the settings drawer open', async ({ page }) => {
+        await openSettingsDrawer(page);
+        await page.getByTestId('view-radio-line').click();
+        await expect(page.getByTestId('view-settings-button')).toHaveText(/Line/);
+        await expect(page.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'true');
+        await page.getByTestId('view-radio-auto').click();
+        await expect(page.getByTestId('view-settings-button')).toHaveText(/Auto/);
+        await expect(page.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'true');
+        await page.getByTestId('view-radio-kanban').click();
+        await expect(page.getByTestId('view-settings-button')).toHaveText(/Kanban/);
+        await expect(page.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'true');
+    });
+
+    /*
      * The group order is reordered by dragging a chip, so this drives the real pointer sensor rather than
      * a button. Two details the gesture needs: the drawer body scrolls at 50vh, so the chip has to be
      * brought into the viewport before it has a pressable box at all, and the chips are stacked one line
@@ -180,7 +266,7 @@ test.describe('View settings drawer', () => {
         await expect(page.getByTestId('setting-pill-groupDisplay')).toHaveText('Grouped');
 
         const chips = page.getByTestId(/^group-display-chip-/);
-        await chips.first().scrollIntoViewIfNeeded();
+        await centreInDrawer(chips.first());
         const before = await chips.allInnerTexts();
         expect(before.length).toBeGreaterThan(1);
 
@@ -392,6 +478,8 @@ test.describe('View settings drawer', () => {
         await expect(page.getByTestId('setting-pill-inherited-groupBy')).toBeVisible();
         // the tab states the default name the save form offered: the selected view named as a copy of it
         await expect(page.getByTestId('view-settings-button')).toHaveText(/Kanban copy/);
+        // the board switched to the new type under the drawer, which stays open on it
+        await expect(page.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'true');
     });
 
     /*
@@ -507,7 +595,7 @@ test.describe('View settings drawer', () => {
         await expect.poll(async () => groupDisplayChipValues(page)).toEqual(['code-review', 'doing', 'done', 'testing', 'untagged']);
 
         const chips = page.getByTestId(/^group-display-chip-/);
-        await chips.first().scrollIntoViewIfNeeded();
+        await centreInDrawer(chips.first());
         const second = chips.nth(1);
         const inset = ((await second.boundingBox())?.height ?? 2) / 2;
         await pointerDrag(page, second, chips.nth(0), { destination_inset_y: inset });

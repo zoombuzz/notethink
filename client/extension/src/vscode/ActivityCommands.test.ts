@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { createMockWebviewPanel } from '../__mocks__/vscode';
 import { ActivityCommands } from './ActivityCommands';
 import type { ActivityTree } from '../types/AgentActivity';
 
@@ -13,6 +14,7 @@ const TRANSCRIPTS: Record<string, string> = {
 	'claude-root-session': '/home/test/.claude/projects/-ws/claude-root-session.jsonl',
 	'claude-bound-busy': '/home/test/.claude/projects/-ws-notethink/claude-bound-busy.jsonl',
 	'codex-no-question': '/home/test/.codex/sessions/2026/09/22/rollout-codex-no-question.jsonl',
+	'grok-no-text': '/home/test/.grok/sessions/-ws/grok-no-text/events.jsonl',
 };
 
 function makeTree(): ActivityTree {
@@ -63,6 +65,14 @@ describe('opening what an activity row points at', () => {
 			() => vscode.ViewColumn.Two,
 		);
 	});
+
+	// the chat view reads the transcript's bytes and opens a webview panel in the viewer-anchored column
+	function mockChatPanel(transcript_text: string = ''): ReturnType<typeof createMockWebviewPanel> {
+		const helper = createMockWebviewPanel();
+		(vscode.window.createWebviewPanel as jest.Mock).mockReturnValue(helper.panel);
+		(vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(new TextEncoder().encode(transcript_text));
+		return helper;
+	}
 
 	async function openDiff(file_path: string): Promise<boolean> {
 		return commands.handleMessage({ type: 'openActivityDiff', root_path: ROOT_PATH, path: file_path });
@@ -121,12 +131,17 @@ describe('opening what an activity row points at', () => {
 		expect(posted).toEqual([]);
 	});
 
-	it('opens the transcript instead of the chat panel for a session started in a subfolder, since the panel would only start a blank chat', async () => {
+	it('opens the notethink chat view instead of the chat panel for a session started in a subfolder, since the panel would only start a blank chat', async () => {
+		const line = JSON.stringify({ type: 'user', timestamp: '2026-09-22T10:00:00Z', message: { role: 'user', content: 'hello from a subfolder' } });
+		const helper = mockChatPanel(`${line}\n`);
 		await commands.handleMessage({ type: 'openActivityChat', vendor: 'claude-code', session_id: 'claude-bound-busy' });
 		expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
-		const [uri, options] = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
-		expect((uri as vscode.Uri).path).toBe(TRANSCRIPTS['claude-bound-busy']);
-		expect(options).toEqual(expect.objectContaining({ viewColumn: vscode.ViewColumn.Two }));
+		expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
+		const [, , show_options] = (vscode.window.createWebviewPanel as jest.Mock).mock.calls[0];
+		expect(show_options).toEqual(expect.objectContaining({ viewColumn: vscode.ViewColumn.Two }));
+		expect(((vscode.workspace.fs.readFile as jest.Mock).mock.calls[0][0] as vscode.Uri).path).toBe(TRANSCRIPTS['claude-bound-busy']);
+		expect((helper.panel as { webview: { html: string } }).webview.html).toContain('hello from a subfolder');
+		expect(posted).toEqual([]);
 	});
 
 	it('in a multi-root workspace, opens the chat for a session under workspaceFolders[0] even when the board sits in a different folder', async () => {
@@ -145,7 +160,7 @@ describe('opening what an activity row points at', () => {
 		expect(vscode.commands.executeCommand).toHaveBeenCalledWith('claude-vscode.editor.open', 'claude-root-session', undefined, vscode.ViewColumn.Two);
 	});
 
-	it('in a multi-root workspace, opens the transcript for a session under the board\'s own folder when that is not workspaceFolders[0]', async () => {
+	it('in a multi-root workspace, opens the chat view for a session under the board\'s own folder when that is not workspaceFolders[0]', async () => {
 		(vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
 			{ uri: vscode.Uri.file(WORKSPACE_PATH), name: 'ws', index: 0 },
 			{ uri: vscode.Uri.file('/ws2'), name: 'ws2', index: 1 },
@@ -158,13 +173,13 @@ describe('opening what an activity row points at', () => {
 			message => posted.push(message),
 			() => vscode.ViewColumn.Two,
 		);
+		mockChatPanel();
 		await multi_root_commands.handleMessage({ type: 'openActivityChat', vendor: 'claude-code', session_id: 'claude-second-folder-session' });
 		expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
-		const [uri] = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
-		expect((uri as vscode.Uri).path).toBe(second_folder_transcript);
+		expect(((vscode.workspace.fs.readFile as jest.Mock).mock.calls[0][0] as vscode.Uri).path).toBe(second_folder_transcript);
 	});
 
-	it('opens a transcript on the remote host it was read from, never rebuilding it as a local file', async () => {
+	it('reads a transcript on the remote host it came from, never rebuilding it as a local file', async () => {
 		const remote_transcript = vscode.Uri.parse('vscode-remote://ssh-remote%2Bdevhost/home/test/.claude/projects/-ws-notethink/claude-bound-busy.jsonl');
 		const remote_commands = new ActivityCommands(
 			vscode.Uri.file(WORKSPACE_PATH),
@@ -172,27 +187,64 @@ describe('opening what an activity row points at', () => {
 			message => posted.push(message),
 			() => vscode.ViewColumn.Two,
 		);
+		mockChatPanel();
 		await remote_commands.handleMessage({ type: 'openActivityChat', vendor: 'claude-code', session_id: 'claude-bound-busy' });
-		const [uri] = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
-		expect((uri as vscode.Uri).toString()).toBe(remote_transcript.toString());
+		expect(((vscode.workspace.fs.readFile as jest.Mock).mock.calls[0][0] as vscode.Uri).toString()).toBe(remote_transcript.toString());
 		expect(posted).toEqual([]);
 	});
 
-	it('opens a session from a vendor with no chat panel as its own transcript, in the viewer-anchored column', async () => {
+	it('opens a session from a vendor with no chat panel as a chat view, in the viewer-anchored column', async () => {
+		const line = JSON.stringify({ type: 'response_item', timestamp: '2026-09-22T10:00:00Z', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'codex says hi' }] } });
+		const helper = mockChatPanel(`${line}\n`);
 		await commands.handleMessage({ type: 'openActivityChat', vendor: 'codex', session_id: 'codex-no-question' });
 		expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+		const [, , show_options] = (vscode.window.createWebviewPanel as jest.Mock).mock.calls[0];
+		expect(show_options).toEqual(expect.objectContaining({ viewColumn: vscode.ViewColumn.Two }));
+		expect((helper.panel as { webview: { html: string } }).webview.html).toContain('codex says hi');
+		expect(posted).toEqual([]);
+	});
+
+	it('shows a clear notice, not an empty page, for a vendor whose transcript carries no conversation', async () => {
+		const helper = mockChatPanel('{"type":"tool_started","tool_name":"x"}\n');
+		await commands.handleMessage({ type: 'openActivityChat', vendor: 'grok', session_id: 'grok-no-text' });
+		expect((vscode.workspace.fs.readFile as jest.Mock)).not.toHaveBeenCalled();
+		expect((helper.panel as { webview: { html: string } }).webview.html).toContain('cannot be rendered as a chat');
+	});
+
+	it('reveals and refreshes the existing chat view when the same session is clicked again, rather than opening a second', async () => {
+		const helper = mockChatPanel('');
+		const message = { type: 'openActivityChat', vendor: 'codex', session_id: 'codex-no-question' };
+		await commands.handleMessage(message);
+		await commands.handleMessage(message);
+		expect(vscode.window.createWebviewPanel).toHaveBeenCalledTimes(1);
+		expect((helper.panel as { reveal: jest.Mock }).reveal).toHaveBeenCalledWith(vscode.ViewColumn.Two, false);
+		expect(vscode.workspace.fs.readFile).toHaveBeenCalledTimes(2);
+	});
+
+	it('opens the raw transcript when the chat view asks for it, as the old fallback did', async () => {
+		const helper = mockChatPanel('');
+		await commands.handleMessage({ type: 'openActivityChat', vendor: 'codex', session_id: 'codex-no-question' });
+		await helper.simulateMessage({ type: 'openRaw' });
 		const [uri, options] = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
 		expect((uri as vscode.Uri).path).toBe(TRANSCRIPTS['codex-no-question']);
 		expect(options).toEqual(expect.objectContaining({ viewColumn: vscode.ViewColumn.Two }));
-		expect(posted).toEqual([]);
 	});
 
-	it('opens the transcript, in the viewer-anchored column, when the vendor command rejects a session it should have been able to open', async () => {
+	it('reports activityUnavailable when the transcript cannot be read, never throwing at the webview', async () => {
+		mockChatPanel();
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
+		await commands.handleMessage({ type: 'openActivityChat', vendor: 'codex', session_id: 'codex-no-question' });
+		expect(vscode.window.createWebviewPanel).not.toHaveBeenCalled();
+		expect(posted).toEqual([{ type: 'activityUnavailable', request: 'chat', reason: 'open_failed', session_id: 'codex-no-question' }]);
+	});
+
+	it('opens the chat view, in the viewer-anchored column, when the vendor command rejects a session it should have been able to open', async () => {
 		(vscode.commands.executeCommand as jest.Mock).mockRejectedValueOnce(new Error('command not found'));
+		mockChatPanel();
 		await commands.handleMessage({ type: 'openActivityChat', vendor: 'claude-code', session_id: 'claude-root-session' });
-		const [uri, options] = (vscode.window.showTextDocument as jest.Mock).mock.calls[0];
-		expect((uri as vscode.Uri).path).toBe(TRANSCRIPTS['claude-root-session']);
-		expect(options).toEqual(expect.objectContaining({ viewColumn: vscode.ViewColumn.Two }));
+		expect(((vscode.workspace.fs.readFile as jest.Mock).mock.calls[0][0] as vscode.Uri).path).toBe(TRANSCRIPTS['claude-root-session']);
+		const [, , show_options] = (vscode.window.createWebviewPanel as jest.Mock).mock.calls[0];
+		expect(show_options).toEqual(expect.objectContaining({ viewColumn: vscode.ViewColumn.Two }));
 		expect(posted).toEqual([]);
 	});
 

@@ -455,6 +455,33 @@ describe('cardregistryops', () => {
             expect(timestamp_of(makeStoryNote('solo'))).toBe(Date.parse('2026-10-05T00:00:00Z'));
         });
 
+        it("the agent card type reads a story's own last write rather than the whole session's end, so one session bound to two stories does not tie them", () => {
+            const snapshot = snapshotOf([
+                {
+                    root_path: ROOT_PATH,
+                    session: makeSession('s1', {
+                        story_binding: 'bound',
+                        stories: [{ doc_path: 'todo.md', id: 'early' }, { doc_path: 'todo.md', id: 'late' }],
+                        story_usage: [
+                            { story: { doc_path: 'todo.md', id: 'early' }, usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, is_estimate: true }, last_at: '2026-10-01T00:00:00Z' },
+                            { story: { doc_path: 'todo.md', id: 'late' }, usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, is_estimate: true }, last_at: '2026-10-08T00:00:00Z' },
+                        ],
+                        updated_at: '2026-10-09T00:00:00Z',
+                    }),
+                },
+            ]);
+            const timestamp_of = noteOrderTimestampFn(AGENT_CARD_TYPE, { snapshot });
+            expect(timestamp_of(makeStoryNote('early'))).toBe(Date.parse('2026-10-01T00:00:00Z'));
+            expect(timestamp_of(makeStoryNote('late'))).toBe(Date.parse('2026-10-08T00:00:00Z'));
+        });
+
+        it("the agent card type falls back to the session's updated_at for a story whose usage entry carries no last write", () => {
+            const snapshot = snapshotOf([
+                { root_path: ROOT_PATH, session: makeSession('s1', { story_binding: 'bound', stories: [{ doc_path: 'todo.md', id: 'solo' }], updated_at: '2026-10-03T00:00:00Z' }) },
+            ]);
+            expect(noteOrderTimestampFn(AGENT_CARD_TYPE, { snapshot })(makeStoryNote('solo'))).toBe(Date.parse('2026-10-03T00:00:00Z'));
+        });
+
         it("the agent card type ignores file_mtime entirely, reading the activity snapshot instead", () => {
             const timestamp_of = noteOrderTimestampFn(AGENT_CARD_TYPE, { snapshot: undefined });
             expect(timestamp_of(makeStoryNote('solo', Date.parse('2026-10-05T00:00:00Z')))).toBeUndefined();

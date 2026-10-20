@@ -120,3 +120,22 @@ export async function pointerDrag(page: Page, handle: Locator, destination: Loca
         await page.waitForTimeout(post_release_settle_ms);
     }
 }
+
+/*
+ * Bring a chip to the middle of the drawer's own scroll box, with every scroller outside the drawer back
+ * at its top. Scrolling a control into view (scrollIntoView, or Playwright's own actionability scroll
+ * before a click or select) also scrolls the containers around the drawer, which can leave the drawer
+ * partly above the viewport and the chips against its edge, where the drag library's auto-scroll fires
+ * mid-gesture and the drop lands nowhere. In VS Code the drawer hangs under the toolbar, so this is the
+ * position a person actually drags from.
+ */
+export async function centreInDrawer(target: Locator): Promise<void> {
+    await target.evaluate(el => {
+        let body = el.parentElement;
+        while (body && body.scrollHeight <= body.clientHeight + 1) { body = body.parentElement; }
+        if (!body) { return; }
+        for (let outer = body.parentElement; outer; outer = outer.parentElement) { outer.scrollTop = 0; }
+        window.scrollTo(0, 0);
+        body.scrollTop += el.getBoundingClientRect().top - body.getBoundingClientRect().top - body.clientHeight / 2;
+    });
+}

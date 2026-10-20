@@ -1,5 +1,5 @@
 import { NODE_FILES, NODE_GLOBAL, registryWithUserTypes } from '../../lib/viewregistryops';
-import { CARD_SETTING_ROWS, cardRowsForNode, globalSettingRows, rowHome, settingRowLabel, viewRowsForNode, VIEW_SETTING_ROWS } from './settingRows';
+import { CARD_SETTING_ROWS, cardRowsForNode, globalSettingRows, orderRowsByOwner, rowHome, settingRowLabel, viewRowsForNode, VIEW_SETTING_ROWS } from './settingRows';
 
 function keysFor(node_id: string): string[] {
     return viewRowsForNode(node_id).map(def => def.key);
@@ -133,5 +133,41 @@ describe('settingRows - the card pane', () => {
 
     it('never renders the card type itself as a row - it is the tree radio, like the view type', () => {
         expect(CARD_SETTING_ROWS.map(def => def.key)).not.toContain('cardType');
+    });
+});
+
+
+describe('settingRows - orderRowsByOwner', () => {
+
+    const chain = ['user-next-up', 'kanban', 'line', 'grouped', 'root'];
+
+    it('orders rows most specific owner first, keeping the incoming order within each owner', () => {
+        const rows = [
+            { key: 'cardRatio', owner_id: 'user-next-up' },
+            { key: 'animateTransitions', owner_id: 'kanban' },
+            { key: 'orientation', owner_id: 'line' },
+            { key: 'lineBreadth', owner_id: 'user-next-up' },
+            { key: 'groupBy', owner_id: 'user-next-up' },
+            { key: 'groupOrder', owner_id: 'kanban' },
+            { key: 'scrollNoteIntoView', owner_id: 'root' },
+        ];
+        expect(orderRowsByOwner(rows, chain).map(row => row.key)).toEqual([
+            'cardRatio', 'lineBreadth', 'groupBy', 'animateTransitions', 'groupOrder', 'orientation', 'scrollNoteIntoView',
+        ]);
+    });
+
+    it('sorts a row with no owner, or an owner off the chain, last', () => {
+        const rows = [
+            { key: 'global', owner_id: undefined },
+            { key: 'stranger', owner_id: 'elsewhere' },
+            { key: 'root', owner_id: 'root' },
+        ];
+        expect(orderRowsByOwner(rows, chain).map(row => row.key)).toEqual(['root', 'global', 'stranger']);
+    });
+
+    it('leaves the input array untouched', () => {
+        const rows = [{ key: 'b', owner_id: 'root' }, { key: 'a', owner_id: 'kanban' }];
+        orderRowsByOwner(rows, chain);
+        expect(rows.map(row => row.key)).toEqual(['b', 'a']);
     });
 });

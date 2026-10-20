@@ -189,9 +189,8 @@ test.describe('manual check: the M marker takes the modified-file colour', () =>
      * The manual wording is "compare the M colour against a modified file in the VS Code explorer side by
      * side". A browser cannot make that comparison, but it can check the half that would make it fail: the
      * marker has to take its colour from the same token VS Code paints a modified filename with, rather
-     * than from a literal that merely looks close in one theme. M is a pill now, matching the inherited
-     * and VS pills' own shape - a tinted background with contrasting text, rather than tinted text alone -
-     * so the token is read off backgroundColor, not color.
+     * than from a literal that merely looks close in one theme. M is a hollow pill, matching the I and VS
+     * pills - tinted text and outline with no fill - so the token is read off color and the outline.
      */
     test('the marker and its label read from the gitDecoration modified token', async ({ page }) => {
         await harness(page);
@@ -202,12 +201,14 @@ test.describe('manual check: the M marker takes the modified-file colour', () =>
 
         const painted = await page.getByTestId('setting-marker-scrollNoteIntoView').evaluate((el) => {
             const token = getComputedStyle(document.documentElement).getPropertyValue('--vscode-gitDecoration-modifiedResourceForeground').trim();
-            return { colour: getComputedStyle(el).backgroundColor, token };
+            // the pill is hollow, so the token paints its text and outline rather than a fill
+            return { colour: getComputedStyle(el).color, outline: getComputedStyle(el).borderTopColor, token };
         });
         expect(painted.token).not.toBe('');
         // the harness stubs the token to Dark+'s own value, so a marker reading the token resolves to it
         const [r, g, b] = painted.colour.match(/\d+/g)!.map(Number);
         const hex = `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`;
         expect(hex.toLowerCase()).toBe(painted.token.toLowerCase());
+        expect(painted.outline).toBe(painted.colour);
     });
 });

@@ -7640,3 +7640,207 @@ Unpinned this wave: memfs (4.79.0 -> 4.80.0), sass (1.105.0 -> 1.105.2) - both w
   + structural pin: it moves only together with `engines.vscode`, which sets the oldest VS Code the extension supports
 + [X] confirm `pnpm run package:vsix` packages the extension
 + [X] verify lint, Jest and Playwright pass
+
+
+### Settings drawer reads by owner and fits a narrow drawer [](?id=settings-drawer-owner-order)
+
+The view settings drawer listed each row in the band of the view that declares it, so a saved view type's own values were scattered through the Kanban, Line and Grouped bands. On a narrow editor the names did not wrap, a select could overrun the owner column beside it, and the I, VS and M pills read as loud filled badges.
+
++ background
+  + measured in code: `rowsBandedByHome` in `settingRows.ts` ordered rows by declared home, never by owner
+  + measured in the Playwright harness: a hand-picked chip drag only misses because Playwright's own scroll-into-view also scrolls the containers around the drawer
++ decisions
+  + rows order by owner, the view the value comes from, most specific first; home order is kept within each owner
+  + a divider opens each owner's band
+  + I, VS and M are hollow outlines in the text colour; I is grey and dimmer than VS; VS hover reads "View specific"
++ [X] order view and card drawer rows by owner
+  + `orderRowsByOwner` in `settingRows.ts`, used by `SettingsPane` and `CardSettingsPane`; Jest in `settingRows.test.ts` and `SettingsViewDrawer.test.tsx`
++ [X] wrap setting names and owner labels, cap their columns, and narrow the tree below 900px
+  + `.settingsRowGrid` and the `max-width: 900px` block in `ViewRenderer.module.scss`
++ [X] restyle the I, VS and M pills as hollow outlines, with I as a letter
+  + `SettingsRow.tsx`, `ViewRenderer.module.scss`; l10n bundles carry "I" and the "View specific" hover
++ [X] cover with Playwright: an owned setting rises into its owner's band, the pills are hollow, a narrow drawer wraps without overlap
+  + `view-settings-drawer.spec.ts`; `manual-check-coverage.spec.ts` reads M's colour off its text and outline
+  + drag specs centre the chip inside the drawer through `centreInDrawer` in `pointer-drag.ts`
++ [X] stack the view tree above the rows below 640px, keep each select wide enough to show its value, and wrap group chips inside their column
+  + measured in a browser-hosted VS Code workbench at a 430px drawer: side by side, selects shrank to a bare chevron, tree names truncated and chips ran under the owner pill
+  + the `max-width: 640px` block and `.settingsDrawerGroupDisplayChip` in `ViewRenderer.module.scss`; Playwright "on a very narrow drawer the view tree stacks above the rows"
++ [X] wrap view names in the settings tree rather than truncating them
+  + a saved type's name read "Next up by p..." at full width; `.settingsTreePane .drawerTreeLabel` in `ViewRenderer.module.scss`
++ [X] keep the settings drawer open when a view type is chosen or saved
+  + measured: an Auto board draws its toolbar one level down, so choosing a concrete type, or saving a new one, remounted the toolbar and closed the drawer
+  + `useToolbarDrawers.ts` shares one open drawer per view id across every instance holding it, through `useSyncExternalStore`, and drops it once none does
+  + Jest in `useToolbarDrawers.test.ts`; Playwright "choosing another view type in the tree keeps the settings drawer open" and the minting test, both failing against the previous hook
++ [X] verify in VS Code on a narrow editor group that a saved view type's rows read top to bottom by owner
+  + desktop VS Code with a saved type under Kanban: the type's own row leads, then Kanban, Line, Grouped, All views, each band opened by a divider
+  + browser-hosted VS Code at a 430px drawer: a minted type's own row leads, the tree stacks above, names wrap, pills hollow with I dimmer than VS
++ [X] bump the patch version
+
+
+### Read the setting keys 0.4.9 moved [](?id=settings-legacy-reads)
+
+0.4.9 moved three card settings from `view.generic.*` to `card.generic.*` and dropped the `columnOrder` fallbacks, so a value saved under an old key is silently ignored after upgrading.
+
++ background
+  + measured in code: no read of `notethink.settings.view.generic.showLineNumbers`, `.showLinetagsInHeadlines` or `.autoExpandFocusedNote` at HEAD
+  + measured in code: the `kanban.columnOrder` fallback and the saved view type `columnOrder` migration were removed, with their tests
++ approach
+  + read the old key when the new key holds nothing at the same scope
+  + writing or clearing the new key clears the old key at that scope, as 0.4.7 did, so a reset never resurfaces a stale value
+  + the old keys are declared again as deprecated, so VS Code returns their values without an unknown-setting warning
++ [X] read the three old card keys as fallbacks
+  + `LEGACY_CELLS` and `legacyCellValueAt` in `settings.ts`, read per scope by `builtinNodeEntryAt`
++ [X] restore the `columnOrder` fallback and the saved view type migration
+  + `groupDisplayFromColumnOrder`; a saved type's `columnOrder` is translated in `translatedOverrides`
++ [X] clear the old key when its replacing cell is written
+  + `clearLegacyCell`, called from `writeDeclaredCascadeCell`; no extra update when the old key holds nothing
++ [X] cover each with Jest
+  + `settings.test.ts`: "0.4.7 keys are read as a fallback" and "writing a replacing cell clears its old key at the same scope"
++ [X] bump the patch version
+
+
+### Draw unbound agents only beside their own repository [](?id=agent-unbound-repo-scope)
+
+Opening one repository's todo.md with the agent card, in a workspace rooted above several repositories, draws a card for every unbound agent session in the workspace: one "grok in calfam" card per session, ahead of the file's own stories, all in one Untagged group.
+
++ background
+  + measured in code: `useAdmittedViewProps` admits `virtualNotesForActivity(activity)` for the whole snapshot whenever the card is the agent card (`useGenericView.ts:67-77`)
+  + measured in code: `virtualNotesForActivity` mints one note per unbound session, with no filter (`agentactivityops.ts:371`)
+  + measured in code: workspace scope drops only sessions outside every workspace folder, so a parent-folder workspace keeps every repository's sessions (`AgentAnalyser.ts` `foldBatch`)
+  + measured in code: the snapshot carries one tree per repository the git extension reports, and a session's `root_path` is resolved against the same set (`AgentAnalyser.ts:1139`, `:1578-1582`)
+  + measured in code: `treeForDocPath` already maps a workspace-relative document path to its repository's tree (`agentactivityops.ts:258`)
+  + measured in code: a virtual note's origin has no `relative_path`, so the project axis puts every one in Untagged (`virtualnoteops.ts:104`, `noteops.ts:573`)
+  + measured in code: single-file notes carry no origin at all, so on the project axis a single file's stories are Untagged too (`NoteTreeComposer.tsx:22`)
+  + no PATTERNS.md entry; design freely
++ approach
+  + the viewed repositories are the trees of every viewed document path: each note's `origin.relative_path`, plus the view's `doc_relative_path`
+  + an unbound session is admitted only when its `root_path` is one of them
+  + a document outside every repository admits only sessions outside every repository
+  + a virtual note's origin takes its repository's `root_relative` as `relative_path` when the view's own notes carry relative paths, so it joins its project's lane
+  + in a single-file view no note carries one, so a virtual note stays in the same lane as the file's stories
++ [X] admit only unbound sessions from the viewed documents' repositories
+  + `viewedActivityScope` and a scoped `virtualNotesForActivity` in `agentactivityops.ts`, called from `useAdmittedViewProps`
++ [X] give a virtual note its repository's relative path when the view's notes carry relative paths
+  + `VirtualNoteSpec.relative_path`, stamped on the origin by `makeVirtualNote`
++ [X] cover with Jest: two repositories with unbound sessions, a single-file view of one, a folder view of both, and a document outside every repository
+  + `agentactivityops.test.ts` "drawing unbound agents only beside their own repository", including a workspace folder that is the repository
++ [X] cover with a Playwright spec: an unbound session from another repository does not draw on a single-file board
+  + `agent-card.spec.ts`; the declared-path spec now also expects no card for a session whose repository holds no viewed document
++ [X] verify in VS Code on a parent-folder workspace that a repository's todo.md draws only that repository's unbound sessions
+  + desktop VS Code on a parent-folder workspace: notethink's todo.md drew only "grok in notethink" cards, while the workspace-root board drew another repository's unbound session from the same snapshot
++ [X] bump the patch version
+
+
+### Order groups automatically or by hand [](?id=group-order-modes)
+
+A board grouped by project lists its groups alphabetically, or in an order dragged by hand. When agents are busy across several projects, the group worth looking at is the one an agent touched last, so a board should be able to order its groups by recent agent activity and keep that order current as agents work.
+
++ background
+  + measured in code: lane order is the saved `groupDisplay` order, then any unsaved lane alphabetically, Untagged last (`useKanbanColumns.ts:50-75`, `noteops.ts:505`)
+  + measured in code: `groupDisplay` stores a literal order per axis and has no slot for a mode (`settings.ts:70-74`, `noteops.ts:538-556`)
+  + measured in code: lanes are reordered by dragging chips in the view settings drawer's Group display row (`SettingsViewDrawer.tsx:167-224`)
+  + measured in code: a saved view type can hold its own value for any cascade key, and a drawer edit to a key it holds is written into the type (`viewregistryops.ts:429-449`)
+  + measured in code: a story card's sessions come from `sessionsForStory`, and a virtual note's from its unbound key (`agentactivityops.ts:296`, `:345`)
+  + no PATTERNS.md entry; design freely
++ approach
+  + one select beside Group display chooses the lane order: custom, or one of several automatic orders
+  + custom is today's behaviour, and the default
+  + newest last and newest first order groups by the latest ordering timestamp of any card in the group, ties alphabetical
+  + the card type defines a card's ordering timestamp, so the view never names agents and view and card type stay independent
+    + agent card: when an agent last wrote to the card
+    + default card, and any card type that defines none: when the file holding the story last changed (`file_mtime`)
+  + newest last runs time left to right: groups with no timestamp first, alphabetically, then oldest to newest, so the group last touched is rightmost
+  + newest first runs newest to oldest, then groups with no timestamp, alphabetically
+  + Untagged stays last in every order
+  + the order recomputes on every render, so groups move as agents work and files change
+  + hiding a lane keeps working in every order
++ decisions
+  + the key is `groupOrder` at `view.specific.grouped.groupOrder`, values `custom`, `newestFirst`, `newestLast`, `alphabetical`, `cardCount`, default `custom`, signed off
+  + Group display and Group order home at the Grouped node, one value shared by Line and Kanban; Group by keeps Kanban's own value, so Kanban still defaults to status
+  + Group display moves to `view.specific.grouped.groupDisplay` with no fallback read of the old kanban path, signed off
+  + dragging a chip while an automatic order is selected switches to custom, seeded with the order on screen
++ [X] add the lane order setting with its settings contribution and l10n strings
+  + homed at the `kanban` node beside `groupDisplay`, so a saved view type can hold its own order; the drawer labels it "Lane order"
++ [X] compute each automatic order from the lanes and the activity snapshot
+  + `orderGroupValues` in `lib/grouporderops.ts`; custom reuses `mergeSavedGroupDisplay`, so it is unchanged
++ [X] draw lanes, and the Group display chips, in the chosen order
+  + `LineView` and `GroupDisplayControl` both call `orderGroupValues`; a drag that sets both keys on one saved type is one write
++ [X] cover with Jest: each order, ties, lanes without activity, Untagged last, and a saved view type holding its own order
+  + `grouporderops.test.ts`, and `SettingsViewDrawer.test.tsx` for the select, chip order and the combined and split writes
++ [X] cover with a Playwright spec: choosing agent activity reorders a project board, and new activity moves its lane first
+  + `view-settings-drawer.spec.ts`, plus a chip drag in an automatic order switching to Custom
++ [X] label the setting "Group order", matching Group by and Group display
+  + every other setting and the code call the thing a group, and so does everything a user reads (`CODING_STANDARDS.md` > Naming Conventions)
+  + `settingRowLabel` in `settingRows.ts`, nls descriptions, README and all five l10n bundles
++ [X] replace the agent activity order with newest first and newest last, taking each card's ordering timestamp from its card type
+  + `orderGroupValues` takes a plain note-to-timestamp function; `orderTimestampFnFor` in `cardregistryops.ts` gives the agent card its activity and every other type `file_mtime`
+  + the board and the drawer's chips resolve the card type the way `GenericNote` does, so the order follows the card on screen
++ [X] home Group display and Group order at the Grouped node, stored under `view.specific.grouped.*`
+  + kanban's open overrides for both removed; Kanban keeps its fixed status axis and its own Group by
+  + an edit to either from a Kanban board now offers to save a new view type, as Group by already did
++ [X] list only groups present in the notes in the Group display chips, keeping stored entries for absent groups
+  + `splitGroupDisplayByPresence` and `recombineGroupDisplay` in `noteops.ts`, used by `LineView` and `GroupDisplayControl`
+  + measured in code: `mergeSavedGroupDisplay` keeps every stored entry (`noteops.ts:526`), and nothing ever writes `groupDisplay` when a group appears or disappears, so a deleted project folder keeps its chip
+  + measured in code: the board draws only groups that hold cards (`LineView.tsx:113-115`), so a stale group shows as a chip, never on the board
+  + absent entries stay stored because the value is shared by every board on that axis, and a group can be absent only transiently (single-file view, filter, folder discovery streaming in)
++ [X] rule a thin line in the view settings drawer wherever the owning view changes, so each view's settings read as a band
+  + `settingsOwnerDivider` in `SettingsPane`; Jest in `SettingsViewDrawer.test.tsx`; seen rendered in the Playwright harness between the Kanban, Line, Grouped and All views bands
++ [X] animate a group to its new position whenever the group order changes, the same way cards animate when they move
+  + every cause alike: a newest first or newest last order recomputing, a chip dragged in Group display, a group appearing or disappearing
+  + so a board ordered by recency shows groups moving about as activity happens, as a status board shows cards moving
+  + `playColumnMove` in `useFlipTransition.ts`: a group slides as one box, and a card measured relative to its group animates only if it moved within or between groups
+  + the card bulk guard counts only genuine card moves, so a reorder on a busy board still animates
+  + Jest in `useFlipTransition.test.tsx`; Playwright in `kanban-animation.spec.ts`, passed in the full run
++ [X] order an agent card by its own story's last write, not by the end of the whole session
+  + measured: one agent session can write stories in a dozen projects, and every one of those groups took the session's single end time, so they tied and fell back to alphabetical
+  + `ActivityStoryUsage.last_at` from `splitUsageByTurn` in `AgentAnalyser.ts`; `storyLastActiveMs` in `agentactivityops.ts`, used by `agentOrderTimestamp`
+  + a snapshot without `last_at` falls back to the session's end time
+  + Jest in `cardregistryops.test.ts` and `AgentAnalyser.test.ts`; Playwright in `group-order-saved-type.spec.ts`, which also covers a saved type under kanban inheriting newest last after a reopen
++ [X] verify in VS Code on a project board under newest last that the group an agent last touched is rightmost, before Untagged
+  + desktop VS Code, folder board at the workspace root on a saved type grouped by project, newest last: groups with no activity first and alphabetical, then the active ones, with notethink rightmost
+  + notethink was the only project whose story files an agent had edited in the last three days, read independently from the transcripts; that board has no Untagged group
++ [X] bump the patch version
+
+
+### Open a session's own chat from its card [](?id=agent-session-open-chat)
+
+Clicking a Claude Code session on an agent card opens a Claude chat tab, but not that session's conversation.
+
++ background
+  + measured in code: a Claude Code session runs `claude-vscode.editor.open` with the session id alone (`ActivityCommands.ts:24`, `:169`)
+  + the transcript fallback (`openTranscript`, `:181`) runs only when the command throws, and the command does not throw for an unknown id
+  + read from the Claude Code extension's bundle: the command's third argument is an editor column, and it starts its chat process with `--resume <id>`
+  + measured: the folder a session started in does not stop it resuming
+    + the CLI's `--resume <id>` run from an unrelated folder resumed a session started elsewhere and appended to its transcript
+    + the extension's own resumable check looks under the first workspace folder's project directory, then searches every project directory for the id
+  + measured: the chat panel then looks the id up in its own session list, which covers only the first workspace folder's project directory
+    + an id missing from that list starts a blank chat instead; the extension's log shows the launch with no session id to resume
+    + so a session started in a subfolder, or outside the workspace, cannot open its own chat
+  + depends on [[activity-open-target-group]] for the column
++ approach
+  + settle first which sessions the command resumes
+  + a session that resumes opens its chat in the group [[activity-open-target-group]] picks
+  + a session that cannot resume opens a read-only chat view of its latest messages in that group instead
+  + the raw transcript stays one click away from that view
++ [X] find which sessions `claude-vscode.editor.open` resumes: one started in the workspace root, one in a subfolder, one outside the workspace
+  + only a session filed under the first workspace folder's project directory opens its own chat, per the background above
++ [X] pass the target column as the command's third argument
++ [X] open the transcript instead for a session the command cannot resume
+  + `sessionListsWorkspaceRoot` in `ActivityCommands.ts`; a command that throws also falls back to the transcript
+  + the transcript opens through the URI the analyser read it from (`transcriptUriFor`), so in a Remote-SSH window it opens on the remote host rather than failing on the local disk
+  + a symlinked first workspace folder is compared by its own path, not resolved; the panel resolves it
++ [X] cover the choice between chat and transcript with Jest
+  + `ActivityCommands.test.ts`, including a multi-root workspace whose board sits in the second folder
++ [X] settle whether the Claude Code panel can open a session from another project directory
+  + read from the extension's bundle (2.1.301): every entry point, `editor.open`, `primaryEditor.open` and the `/open` URI handler, looks a session up under the first workspace folder or its git worktrees only, and none takes a folder
+  + the extension's documentation states the same limit, so the panel stays limited to those sessions
++ [X] replace the raw transcript fallback with a read-only chat view of the session's last 50 messages
+  + `chatviewops.ts` parses Claude Code and Codex transcripts; Grok's event log holds no conversation text, so its view says so and offers the raw file
+  + `ChatTranscriptView.ts` opens one panel per session, beside the viewer, scrolled to the newest message, with Refresh and Open raw transcript
+  + a Remote-SSH window runs this extension on the UI side, where `vscode.workspace.fs` has no ranged read, so the file is read whole and only its tail is decoded and parsed
+  + every piece of transcript text is escaped; Jest in `chatviewops.test.ts` includes a hostile script payload
++ [X] verify in VS Code that a resumable session shows its conversation and an unresumable one its transcript, both in group 2
+  + desktop VS Code with the notethink folder first: a Claude Code session filed there opened its own conversation in the Claude panel in group 2
+  + with the parent folder first: every Claude Code session from a project below it opened the chat view in group 2, newest message at the bottom, tool calls folded
+  + a Grok session opened the chat view's notice that its transcript cannot be rendered, with Open raw transcript
++ [X] bump the patch version

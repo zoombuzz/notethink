@@ -137,7 +137,7 @@ describe('buildDeclaredSettingsContributions - the single source of truth for pa
 
     it('leaves no config.settings.* nls key that nothing in the table names', () => {
         const contributions = buildDeclaredSettingsContributions();
-        const named_tokens = new Set(Object.values(contributions).map(c => c.description.slice(1, -1)));
+        const named_tokens = new Set(Object.values(contributions).flatMap(c => [c.description, c.markdownDeprecationMessage]).filter((t): t is string => t !== undefined).map(t => t.slice(1, -1)));
         const en_nls = JSON.parse(fs.readFileSync(PACKAGE_NLS_PATHS[0], 'utf-8')) as Record<string, string>;
         const unused = Object.keys(en_nls).filter(key => key.startsWith('config.settings.') && !named_tokens.has(key));
         expect(unused).toEqual([]);
@@ -414,6 +414,226 @@ describe('saved view types, read through view.userTypes', () => {
             },
         });
         expect(buildSettingsCascadePayload().views['user-a']).toEqual({ parent: 'kanban', label: 'A', groupBy: 'assignee', cardRatio: 2 });
+    });
+});
+
+describe('0.4.7 keys are read as a fallback for the cells that replaced them', () => {
+
+    const CARD_KEYS = ['showLineNumbers', 'showLinetagsInHeadlines', 'autoExpandFocusedNote'] as const;
+    const legacyCardPath = (key: string): string => `view.generic.${key}`;
+    const newCardPath = (key: string): string => `card.generic.${key}`;
+    const COLUMN_ORDER_PATH = 'view.specific.kanban.columnOrder';
+    const GROUP_DISPLAY_PATH = 'view.specific.kanban.groupDisplay';
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    describe.each(CARD_KEYS)('card key %s, formerly view.generic.%s', (key) => {
+
+        it('reads the old Workspace value when the new key has no Workspace value', () => {
+            mockConfigStore({ [legacyCardPath(key)]: { workspaceValue: true } });
+            expect(buildSettingsCascadePayload().cards).toEqual({ allcards: { [key]: true } });
+        });
+
+        it('reads the old User value when the new key has no User value', () => {
+            mockConfigStore({ [legacyCardPath(key)]: { globalValue: true } });
+            expect(readBagCell('cards', 'allcards', key)).toBe(true);
+        });
+
+        it('prefers the new key when both are set at the same scope', () => {
+            mockConfigStore({ [legacyCardPath(key)]: { workspaceValue: true }, [newCardPath(key)]: { workspaceValue: false } });
+            expect(readBagCell('cards', 'allcards', key)).toBe(false);
+        });
+
+        it('gives nothing (so the built-in default applies) when neither key is set', () => {
+            mockConfigStore({});
+            expect(readBagCell('cards', 'allcards', key)).toBeUndefined();
+            expect(buildSettingsCascadePayload().cards).toEqual({});
+        });
+
+        it('respects scope: a new Workspace value beats an old User value, an old Workspace value beats a new User value', () => {
+            mockConfigStore({ [legacyCardPath(key)]: { globalValue: true }, [newCardPath(key)]: { workspaceValue: false } });
+            expect(readBagCell('cards', 'allcards', key)).toBe(false);
+            mockConfigStore({ [legacyCardPath(key)]: { workspaceValue: true }, [newCardPath(key)]: { globalValue: false } });
+            expect(readBagCell('cards', 'allcards', key)).toBe(true);
+        });
+
+        it('keeps the old value at its own scope: the User fallback shows beneath the Workspace one', () => {
+            mockConfigStore({ [legacyCardPath(key)]: { globalValue: true }, [newCardPath(key)]: { workspaceValue: true } });
+            const payload = buildSettingsCascadePayload();
+            expect((payload.cards as Record<string, Record<string, unknown>>).allcards[key]).toBe(true);
+            expect(payload.diverged).not.toContain(`cards:allcards:${key}`);
+        });
+
+        it('ignores an old value that is not a boolean', () => {
+            mockConfigStore({ [legacyCardPath(key)]: { workspaceValue: 'yes' } });
+            expect(readBagCell('cards', 'allcards', key)).toBeUndefined();
+        });
+
+        it('counts an old Workspace value that differs from the default as diverged, like a new one', () => {
+            mockConfigStore({ [legacyCardPath(key)]: { workspaceValue: true } });
+            expect(buildSettingsCascadePayload().diverged).toContain(`cards:allcards:${key}`);
+        });
+
+        it('does not count an old Workspace value that matches the old User value as diverged', () => {
+            mockConfigStore({ [legacyCardPath(key)]: { workspaceValue: true, globalValue: true } });
+            expect(buildSettingsCascadePayload().diverged).not.toContain(`cards:allcards:${key}`);
+        });
+
+        it('does not count an old User value alone as diverged, though it sets hasAnyOverrides', () => {
+            mockConfigStore({ [legacyCardPath(key)]: { globalValue: true } });
+            const payload = buildSettingsCascadePayload();
+            expect(payload.diverged).not.toContain(`cards:allcards:${key}`);
+            expect(payload.hasWorkspaceOverrides).toBe(false);
+            expect(payload.hasAnyOverrides).toBe(true);
+        });
+
+        it('never writes or clears the old key while reading it', () => {
+            const update = mockConfigStore({ [legacyCardPath(key)]: { workspaceValue: true } });
+            buildSettingsCascadePayload();
+            expect(update).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('writing a replacing cell clears its old key at the same scope', () => {
+
+        it('clears the old key at the written scope only, and only when it holds a value there', async () => {
+            const update = mockConfigStore({ [legacyCardPath('showLineNumbers')]: { workspaceValue: true, globalValue: true } });
+            await applyBagDelta('cards', [{ node_id: 'allcards', key: 'showLineNumbers', value: false }], vscode.ConfigurationTarget.Workspace);
+            expect(update).toHaveBeenCalledTimes(2);
+            expect(update).toHaveBeenNthCalledWith(1, newCardPath('showLineNumbers'), false, vscode.ConfigurationTarget.Workspace);
+            expect(update).toHaveBeenNthCalledWith(2, legacyCardPath('showLineNumbers'), undefined, vscode.ConfigurationTarget.Workspace);
+        });
+
+        it('makes no extra update when the old key holds nothing at that scope', async () => {
+            const update = mockConfigStore({ [legacyCardPath('showLineNumbers')]: { globalValue: true } });
+            await applyBagDelta('cards', [{ node_id: 'allcards', key: 'showLineNumbers', value: false }], vscode.ConfigurationTarget.Workspace);
+            expect(update).toHaveBeenCalledTimes(1);
+            const absent = mockConfigStore({});
+            await applyBagDelta('cards', [{ node_id: 'allcards', key: 'showLineNumbers', value: false }], vscode.ConfigurationTarget.Global);
+            expect(absent).toHaveBeenCalledTimes(1);
+        });
+
+        it('clears the old columnOrder when groupDisplay is written', async () => {
+            const update = mockConfigStore({ [COLUMN_ORDER_PATH]: { globalValue: ['done'] } });
+            await applyBagDelta('views', [{ node_id: 'kanban', key: 'groupDisplay', value: [{ value: 'doing', shown: true }] }], vscode.ConfigurationTarget.Global);
+            expect(update).toHaveBeenCalledWith(COLUMN_ORDER_PATH, undefined, vscode.ConfigurationTarget.Global);
+        });
+
+        it('leaves nothing to resurface when the new key is reset with the old one present', async () => {
+            const store: Record<string, FakeConfigEntry> = { [legacyCardPath('showLineNumbers')]: { workspaceValue: true } };
+            const update = mockConfigStore(store);
+            update.mockImplementation(async (config_path: string, value: unknown) => { store[config_path] = { ...store[config_path], workspaceValue: value }; });
+            await applyBagDelta('cards', [{ node_id: 'allcards', key: 'showLineNumbers', value: undefined }], vscode.ConfigurationTarget.Workspace);
+            expect(readBagCell('cards', 'allcards', 'showLineNumbers')).toBeUndefined();
+        });
+
+        it('clears the old keys when a whole bag is reset at the workspace scope', async () => {
+            const update = mockConfigStore({ [legacyCardPath('autoExpandFocusedNote')]: { workspaceValue: true } });
+            await resetSettingsToDefault();
+            expect(update).toHaveBeenCalledWith(legacyCardPath('autoExpandFocusedNote'), undefined, vscode.ConfigurationTarget.Workspace);
+        });
+    });
+
+    describe('kanban.columnOrder, read as kanban groupDisplay', () => {
+
+        it('reads the old Workspace value, converted, when groupDisplay has no Workspace value', () => {
+            mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: ['done', 'doing'] } });
+            expect(readBagCell('views', 'kanban', 'groupDisplay')).toEqual([{ value: 'done', shown: true }, { value: 'doing', shown: true }]);
+        });
+
+        it('reads the old User value, converted, when groupDisplay has no User value', () => {
+            mockConfigStore({ [COLUMN_ORDER_PATH]: { globalValue: ['done'] } });
+            expect(readBagCell('views', 'kanban', 'groupDisplay')).toEqual([{ value: 'done', shown: true }]);
+        });
+
+        it('stores no axis on a converted entry, so it reads as the status axis', () => {
+            mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: ['done'] } });
+            const entries = readBagCell('views', 'kanban', 'groupDisplay') as Array<Record<string, unknown>>;
+            expect(entries[0]).not.toHaveProperty('axis');
+        });
+
+        it('prefers groupDisplay when both are set at the same scope', () => {
+            mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: ['done'] }, [GROUP_DISPLAY_PATH]: { workspaceValue: [{ value: 'doing', shown: false }] } });
+            expect(readBagCell('views', 'kanban', 'groupDisplay')).toEqual([{ value: 'doing', shown: false }]);
+        });
+
+        it('drops a non-string item and ignores a non-array old value', () => {
+            mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: ['done', 7, null] } });
+            expect(readBagCell('views', 'kanban', 'groupDisplay')).toEqual([{ value: 'done', shown: true }]);
+            mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: 'done' } });
+            expect(readBagCell('views', 'kanban', 'groupDisplay')).toBeUndefined();
+        });
+
+        it('carries the converted value under groupDisplay in the payload, never columnOrder, and counts it diverged', () => {
+            mockConfigStore({ [COLUMN_ORDER_PATH]: { workspaceValue: ['done'] } });
+            const payload = buildSettingsCascadePayload();
+            expect(payload.views).toEqual({ kanban: { groupDisplay: [{ value: 'done', shown: true }] } });
+            expect(payload.diverged).toContain('views:kanban:groupDisplay');
+        });
+
+        it('reads nothing once the old key is gone, and never writes while reading', () => {
+            const update = mockConfigStore({});
+            expect(readBagCell('views', 'kanban', 'groupDisplay')).toBeUndefined();
+            expect(update).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('a saved type\'s legacy columnOrder override', () => {
+
+        it('migrates to groupDisplay, every group shown, dropping columnOrder and keeping its other overrides', () => {
+            mockConfigStore({
+                [USER_TYPES_PATH]: { workspaceValue: [{ id: 'user-legacy', label: 'Legacy', parent: 'kanban', overrides: { kanbanGroupBy: 'assignee', columnOrder: ['done', 'doing'] } }] },
+            });
+            expect(buildSettingsCascadePayload().views['user-legacy']).toEqual({
+                parent: 'kanban', label: 'Legacy', groupBy: 'assignee', groupDisplay: [{ value: 'done', shown: true }, { value: 'doing', shown: true }],
+            });
+        });
+
+        it('leaves groupDisplay alone when it is already present beside a stale columnOrder', () => {
+            mockConfigStore({
+                [USER_TYPES_PATH]: { workspaceValue: [{ id: 'user-legacy', label: 'Legacy', parent: 'kanban', overrides: { columnOrder: ['done'], groupDisplay: [{ value: 'doing', shown: false }] } }] },
+            });
+            expect(buildSettingsCascadePayload().views['user-legacy']).toEqual({
+                parent: 'kanban', label: 'Legacy', groupDisplay: [{ value: 'doing', shown: false }],
+            });
+        });
+
+        it('passes a non-array columnOrder through untouched', () => {
+            mockConfigStore({ [USER_TYPES_PATH]: { workspaceValue: [{ id: 'user-legacy', label: 'Legacy', parent: 'kanban', overrides: { columnOrder: 'done' } }] } });
+            expect(buildSettingsCascadePayload().views['user-legacy']).toEqual({ parent: 'kanban', label: 'Legacy', columnOrder: 'done' });
+        });
+
+        it('is rewritten as groupDisplay when another override of the type is edited', async () => {
+            const update = jest.fn(async () => {});
+            mockConfigStore({ [USER_TYPES_PATH]: { workspaceValue: [{ id: 'user-legacy', label: 'Legacy', parent: 'kanban', overrides: { columnOrder: ['done'] } }] } }, update);
+
+            await applyBagDelta('views', [{ node_id: 'user-legacy', key: 'cardRatio', value: 2 }], vscode.ConfigurationTarget.Workspace);
+
+            expect(update).toHaveBeenCalledWith(
+                USER_TYPES_PATH,
+                [{ id: 'user-legacy', label: 'Legacy', parent: 'kanban', overrides: { groupDisplay: [{ value: 'done', shown: true }], cardRatio: 2 } }],
+                vscode.ConfigurationTarget.Workspace,
+            );
+        });
+    });
+
+    describe('the old keys stay declared, deprecated, so VS Code still returns their values', () => {
+
+        it('declares each with a deprecation message token present in all five nls files', () => {
+            const nls_bundles = PACKAGE_NLS_PATHS.map(p => JSON.parse(fs.readFileSync(p, 'utf-8')) as Record<string, string>);
+            const contributions = buildDeclaredSettingsContributions();
+            const old_paths = [...CARD_KEYS.map(legacyCardPath), COLUMN_ORDER_PATH];
+            for (const old_path of old_paths) {
+                const contribution = contributions[`notethink.settings.${old_path}`];
+                expect(contribution.markdownDeprecationMessage).toBe(`%config.settings.${old_path}.deprecationMessage%`);
+                expect(contribution.default).toBeUndefined();
+                for (const bundle of nls_bundles) {
+                    expect(bundle[`config.settings.${old_path}.deprecationMessage`]).toBeDefined();
+                }
+            }
+        });
     });
 });
 

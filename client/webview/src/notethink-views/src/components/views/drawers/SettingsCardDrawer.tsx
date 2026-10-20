@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import {
     CARD_AUTO,
     CARD_REGISTRY,
+    cardChainOf,
     cardSettingWriteFor,
     childCardNodes,
     getCardNode,
@@ -17,7 +18,7 @@ import type { ResolvedSettingsCascade, SettingsCascadeKey } from "../../../types
 import styles from "../../ViewRenderer.module.scss";
 import SettingsRow from "../SettingsRow";
 import { viewTypeLabel } from "../viewTypeLabel";
-import { CARD_SETTING_ROWS, cardRowsForNode, divergedCountLabel, rowHome, settingRowLabel, type SettingRowDef, type SettingRowValues } from "../settingRows";
+import { CARD_SETTING_ROWS, cardRowsForNode, divergedCountLabel, orderRowsByOwner, settingRowLabel, type SettingRowDef, type SettingRowValues } from "../settingRows";
 import DrawerTree, { type DrawerTreeNode } from "./DrawerTree";
 
 const debug = Debug("nodejs:notethink-views:SettingsCardDrawer");
@@ -188,6 +189,7 @@ function buildCardTreeNodes(parent_id: string | undefined, ctx: CardTreeContext)
  */
 interface ResolvedCardRow {
     value: unknown;
+    owner_id: string | undefined;
     ownerLabel: string | undefined;
     inheritedFrom: string | undefined;
     inheritedIsBuiltinDefault: boolean;
@@ -200,6 +202,7 @@ function resolveCardRow(def: SettingRowDef, selected_node: string, settings: Set
     const resolved = resolveCardTreeRow(selected_node, def.key, home_value, card_overrides, diverged_keys);
     return {
         value: resolved.value,
+        owner_id: resolved.ownerId,
         ownerLabel: ownerLabelFor(selected_node, def.key, card_overrides),
         inheritedFrom: labelOf(resolved.inheritedFromId),
         inheritedIsBuiltinDefault: resolved.inheritedIsBuiltinDefault,
@@ -218,13 +221,14 @@ interface CardSettingsPaneProps {
 }
 
 /**
- * The right pane: one five-column grid holding the selected node's chain rows, banded by home exactly
- * as the view pane's rows are, with a thin rule wherever the band changes. The columns carry no heads of
+ * The right pane: one five-column grid holding the selected node's chain rows, banded by owner exactly
+ * as the view pane's rows are, with a thin rule wherever the owner changes. The columns carry no heads of
  * their own - the "Card settings" heading above the pane says what the rows are. There is no Global
  * settings group here: a global belongs to no tree, and the view pane is where it is listed.
  */
 function CardSettingsPane(props: CardSettingsPaneProps): React.ReactElement {
-    const resolved_rows = props.rows.map(def => resolveCardRow(def, props.selectedNode, props.settings, props.cardOverrides, props.diverged));
+    const resolved_rows = props.rows.map(def => ({ def, ...resolveCardRow(def, props.selectedNode, props.settings, props.cardOverrides, props.diverged) }));
+    const ordered_rows = orderRowsByOwner(resolved_rows, cardChainOf(props.selectedNode));
     const renderRow = (def: SettingRowDef, resolved: ResolvedCardRow): React.ReactElement => (
         <SettingsRow
             key={def.key}
@@ -246,11 +250,11 @@ function CardSettingsPane(props: CardSettingsPaneProps): React.ReactElement {
     );
     return (
         <div className={styles.settingsRowGrid} data-testid="card-settings-rows">
-            {props.rows.flatMap((def, index) => {
-                const row = renderRow(def, resolved_rows[index]);
-                // a thin rule opens each run of rows homed at a different card node, as the view pane's bands do
-                if (index === 0 || rowHome(def) === rowHome(props.rows[index - 1])) { return [row]; }
-                return [<div key={`owner-divider-${def.key}`} className={styles.settingsOwnerDivider} data-testid="settings-owner-divider" aria-hidden="true" />, row];
+            {ordered_rows.flatMap((entry, index) => {
+                const row = renderRow(entry.def, entry);
+                // a thin rule opens each run of rows owned by a different card node, as the view pane's bands do
+                if (index === 0 || entry.owner_id === ordered_rows[index - 1].owner_id) { return [row]; }
+                return [<div key={`owner-divider-${entry.def.key}`} className={styles.settingsOwnerDivider} data-testid="settings-owner-divider" aria-hidden="true" />, row];
             })}
         </div>
     );

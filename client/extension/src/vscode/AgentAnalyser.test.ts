@@ -2114,9 +2114,9 @@ describe('AgentAnalyser usage split by turn', () => {
 		});
 	}
 
-	function storyUsageFrom(posted: Array<Record<string, unknown>>): Array<{ story: { doc_path: string; id: string }; usage: { input_tokens: number }; first_at?: string }> {
+	function storyUsageFrom(posted: Array<Record<string, unknown>>): Array<{ story: { doc_path: string; id: string }; usage: { input_tokens: number }; first_at?: string; last_at?: string }> {
 		const last = posted[posted.length - 1];
-		const sessions = (last.activity as { sessions: Array<{ session: { session_id: string; story_usage?: Array<{ story: { doc_path: string; id: string }; usage: { input_tokens: number }; first_at?: string }> } }> }).sessions;
+		const sessions = (last.activity as { sessions: Array<{ session: { session_id: string; story_usage?: Array<{ story: { doc_path: string; id: string }; usage: { input_tokens: number }; first_at?: string; last_at?: string }> } }> }).sessions;
 		return sessions.find(s => s.session.session_id === CLAUDE_SESSION_ID)?.session.story_usage ?? [];
 	}
 
@@ -2145,6 +2145,9 @@ describe('AgentAnalyser usage split by turn', () => {
 		// each story's span starts at the earliest call credited to it: m1 for A, m4 for B
 		expect(Date.parse(a?.first_at ?? '')).toBe(Date.parse('2026-09-22T10:00:00Z'));
 		expect(Date.parse(b?.first_at ?? '')).toBe(Date.parse('2026-09-22T10:03:00Z'));
+		// each story's last write is its own edit call, not the session's end: A at m2, B at m4
+		expect(Date.parse(a?.last_at ?? '')).toBe(Date.parse('2026-09-22T10:01:00Z'));
+		expect(Date.parse(b?.last_at ?? '')).toBe(Date.parse('2026-09-22T10:03:00Z'));
 	});
 
 	it('splits one turn\'s own usage evenly across every story it edited', async () => {

@@ -53,7 +53,8 @@
   "Folder": "Folder",
   "View integration": "View integration",
   "Inherited from {0}": "Inherited from {0}",
-  "Specific to this view; set it to the inherited value to inherit from {0} again": "Specific to this view; set it to the inherited value to inherit from {0} again",
+  "I": "I",
+  "View specific; set it to the inherited value to inherit from {0} again": "View specific; set it to the inherited value to inherit from {0} again",
   "VS": "VS",
   "Differs from your saved user default": "Differs from your saved user default",
   "M": "M",
@@ -184,5 +185,12 @@
   "No agent has worked on this story in the last 30 days.": "No agent has worked on this story in the last 30 days.",
   "{0} session(s) could not be fully read, so this card is not the whole picture.": "{0} session(s) could not be fully read, so this card is not the whole picture.",
   "Waiting for extension host...": "Waiting for extension host...",
-  "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"": "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\""
+  "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"": "If this persists, reload the window: Ctrl+Shift+P → \"Developer: Reload Window\"",
+  "Showing the last {0} messages": "Showing the last {0} messages",
+  "Open raw transcript": "Open raw transcript",
+  "Refresh": "Refresh",
+  "This vendor's transcript cannot be rendered as a chat.": "This vendor's transcript cannot be rendered as a chat.",
+  "No conversation messages found in this transcript.": "No conversation messages found in this transcript.",
+  "{0} tool calls": "{0} tool calls",
+  "No result in view": "No result in view"
 }

@@ -1,7 +1,7 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { injectDocsFromFixture } from '../helpers/inject-docs';
 import { simulateSelectionChanged } from '../helpers/simulate-selection';
-import { pointerDrag } from '../helpers/pointer-drag';
+import { centreInDrawer, pointerDrag } from '../helpers/pointer-drag';
 
 /**
  * One scheduled animation as the FLIP hook planned it. The hook pushes every scheduled animation
@@ -401,7 +401,7 @@ test.describe('Kanban Passive Transition Animations', () => {
 
         // drags the second chip onto the first, the same gesture view-settings-drawer.spec.ts drives
         const chips = page.getByTestId(/^group-display-chip-/);
-        await chips.first().scrollIntoViewIfNeeded();
+        await centreInDrawer(chips.first());
         const second = chips.nth(1);
         const inset = ((await second.boundingBox())?.height ?? 2) / 2;
         await pointerDrag(page, second, chips.nth(0), { destination_inset_y: inset });

@@ -1225,7 +1225,16 @@ export class AgentAnalyser {
                 if (!first_at.has(k)) { first_at.set(k, entry.at); }
             }
         }
-        return stories.map(story => ({ story, usage: totals.get(key(story)) ?? emptyActivityUsage(), first_at: first_at.get(key(story)) }));
+        const last_at_ms = new Map<string, number>();
+        for (const event of timed_events) {
+            for (const ref of event.stories) {
+                if (event.at_ms > (last_at_ms.get(key(ref)) ?? -Infinity)) { last_at_ms.set(key(ref), event.at_ms); }
+            }
+        }
+        return stories.map(story => {
+            const last_ms = last_at_ms.get(key(story));
+            return { story, usage: totals.get(key(story)) ?? emptyActivityUsage(), first_at: first_at.get(key(story)), last_at: last_ms === undefined ? undefined : new Date(last_ms).toISOString() };
+        });
     }
 
     // an even split of one usage total across every story, for when there is no per-call timeline to place usage against

@@ -20,7 +20,7 @@ import styles from "../ViewRenderer.module.scss";
  * - rowKey: the setting key this row writes; the suffix on every testid the row publishes
  * - ownerLabel: the view the effective value comes from, omitted for a setting that belongs to no view type (a global)
  * - diverged: the value differs from its saved default, so the row takes the M pill and a modified tint
- * - inheritedFrom: the view label the value is inherited from; renders the grey eye pill. Omitted at the
+ * - inheritedFrom: the view label the value is inherited from; renders the grey I pill. Omitted at the
  *   setting's own home view and whenever the selected view genuinely stores its own value.
  * - inheritedIsBuiltinDefault: true when `inheritedFrom` names a node supplying the value from its own
  *   built-in default rather than something saved - the hover then names it as that node's built-in
@@ -37,18 +37,6 @@ export interface SettingsRowProps {
     inheritedFrom?: string;
     inheritedIsBuiltinDefault?: boolean;
     specificFrom?: string;
-}
-
-/** a small inline eye, since the webview has no icon font to reach for */
-function EyeGlyph(): React.ReactElement {
-    return (
-        <svg viewBox="0 0 16 16" width="0.9em" height="0.9em" aria-hidden="true" focusable="false">
-            <path
-                fill="currentColor"
-                d="M8 3.5c-3.2 0-5.6 2.1-6.9 4.1a.6.6 0 0 0 0 .8C2.4 10.4 4.8 12.5 8 12.5s5.6-2.1 6.9-4.1a.6.6 0 0 0 0-.8C13.6 5.6 11.2 3.5 8 3.5Zm0 7.2A2.7 2.7 0 1 1 8 5.3a2.7 2.7 0 0 1 0 5.4Z"
-            />
-        </svg>
-    );
 }
 
 function SettingsRow(props: SettingsRowProps): React.ReactElement {
@@ -69,14 +57,14 @@ function SettingsRow(props: SettingsRowProps): React.ReactElement {
                             ? l10n.t("{0}'s built-in default", props.inheritedFrom)
                             : l10n.t('Inherited from {0}', props.inheritedFrom)}
                     >
-                        <EyeGlyph />
+                        {l10n.t('I')}
                     </span>
                 )}
                 {props.specificFrom !== undefined && (
                     <span
                         className={styles.settingsPillSpecific}
                         data-testid={`setting-pill-specific-${props.rowKey}`}
-                        title={l10n.t('Specific to this view; set it to the inherited value to inherit from {0} again', props.specificFrom)}
+                        title={l10n.t('View specific; set it to the inherited value to inherit from {0} again', props.specificFrom)}
                     >
                         {l10n.t('VS')}
                     </span>

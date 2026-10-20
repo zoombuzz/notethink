@@ -12,7 +12,7 @@ import {
     type ResolvedTreeRow,
     type ViewOverridesMap,
 } from "../../lib/viewregistryops";
-import { AGENT_VIRTUAL_NAMESPACE, sessionForUnboundKey, sessionsForStory, storyKeyForNote, type ActivitySnapshot } from "../../lib/agentactivityops";
+import { AGENT_VIRTUAL_NAMESPACE, sessionForUnboundKey, sessionsForStory, storyKeyForNote, storyLastActiveMs, type ActivitySnapshot } from "../../lib/agentactivityops";
 import { isVirtualNote, virtualNoteKeyOf } from "../../lib/virtualnoteops";
 import type { ResolvedSettingsCascade, SettingsCascadeKey, UserViewType } from "../../types/Messages";
 import type { NoteProps } from "../../types/NoteProps";
@@ -349,17 +349,18 @@ export type OrderTimestampFn = (note: NoteProps, ctx: OrderTimestampContext) => 
 
 /**
  * The agent card's ordering timestamp: when an agent last wrote to this card, i.e. the latest
- * `updated_at` among the sessions bound to its story, or, for a virtual unbound-agent note, its own
- * session. This is the one place a card's agent activity is read for ordering, so a board and its
+ * write to its own story among the sessions bound to it (a session's `updated_at` where it carries no
+ * per-story time), or, for a virtual unbound-agent note, its own session's `updated_at`. This is the one place a card's agent activity is read for ordering, so a board and its
  * settings drawer read it alike.
  */
 function agentOrderTimestamp(note: NoteProps, ctx: OrderTimestampContext): number | undefined {
     const own_session = isVirtualNote(note) ? sessionForUnboundKey(ctx.snapshot, virtualNoteKeyOf(note, AGENT_VIRTUAL_NAMESPACE)) : undefined;
-    const sessions = own_session ? [own_session] : sessionsForStory(ctx.snapshot, storyKeyForNote(note, ctx.fallback_doc_path));
+    const story_key = own_session ? undefined : storyKeyForNote(note, ctx.fallback_doc_path);
+    const sessions = own_session ? [own_session] : sessionsForStory(ctx.snapshot, story_key);
     let latest: number | undefined;
     for (const state of sessions) {
-        const ms = Date.parse(state.session.updated_at);
-        if (Number.isNaN(ms)) { continue; }
+        const ms = story_key ? storyLastActiveMs(state, story_key) : Date.parse(state.session.updated_at);
+        if (ms === undefined || Number.isNaN(ms)) { continue; }
         if (latest === undefined || ms > latest) { latest = ms; }
     }
     return latest;

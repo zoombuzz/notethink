@@ -320,6 +320,8 @@ export function createMockWebviewPanel(): MockWebviewPanelHelper {
 		active: true,
 		// visible by default, matching a real WebviewPanel in the active column; a hidden-panel test overrides it
 		visible: true,
+		title: '',
+		reveal: jest.fn(),
 		webview: {
 			options: {},
 			html: '',

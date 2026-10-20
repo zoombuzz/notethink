@@ -125,11 +125,10 @@ export function divergedCountLabel(count: number): string {
 
 /**
  * The declared rows banded by HOME in chain order: the selected node's own band first (if it homes any
- * rows at all), then each ancestor's, ending with the tree's root. Banding by home rather than by a
- * row's resolved owner is what lets a thin divider mark each band boundary regardless of which node,
- * built-in or saved, actually holds a value today - the band a row sits in never moves as a value is set
- * or cleared, only the pill beside it does. Shared by the view and card panes, which differ only in
- * which rows and which chain they band.
+ * rows at all), then each ancestor's, ending with the tree's root. This decides which rows a node lists
+ * and their base order; the pane then re-orders them by owner (`orderRowsByOwner`), so home order is
+ * what survives within each owner's band. Shared by the view and card panes, which differ only in which
+ * rows and which chain they band.
  *
  * Declaration order survives as the within-band order. A row homed off `chain` entirely never appears.
  */
@@ -150,6 +149,25 @@ export function viewRowsForNode(node_id: string, registry: ViewRegistry = VIEW_R
  */
 export function cardRowsForNode(node_id: string, registry: CardRegistry = CARD_REGISTRY): SettingRowDef[] {
     return rowsBandedByHome(CARD_SETTING_ROWS, cardChainOf(node_id, registry));
+}
+
+/**
+ * Resolved rows ordered by OWNER, the node the effective value comes from (the pane's right-hand
+ * column), most specific first: every row the selected node holds itself, then every row it inherits
+ * from its parent, and so on up to the tree's root. A saved view type that overrides one Kanban and one
+ * Grouped setting therefore lists both at the top under its own name, rather than leaving each in the
+ * band of the view that declares it. The pane rules a divider wherever the owner changes, so each
+ * view's settings read as one band.
+ *
+ * The sort is stable, so the incoming home-banded order is the within-owner order. A row whose owner is
+ * off `chain` (a global, or an id the chain does not know) sorts last.
+ */
+export function orderRowsByOwner<T extends { owner_id: string | undefined }>(rows: T[], chain: string[]): T[] {
+    const rank = (row: T): number => {
+        const index = row.owner_id === undefined ? -1 : chain.indexOf(row.owner_id);
+        return index === -1 ? chain.length : index;
+    };
+    return [...rows].sort((a, b) => rank(a) - rank(b));
 }
 
 /** the rows belonging to no view type, listed under the view pane's Global settings heading with no pill */

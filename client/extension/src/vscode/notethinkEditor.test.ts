@@ -1384,8 +1384,8 @@ describe('NotethinkEditorProvider', () => {
 			expect(findByType(panelHelper.postedMessages, 'globalSettings')).toBeUndefined();
 		});
 
-		// every declared view/card key and the five flat keys this module could possibly write to
-		const every_declared_path = Object.keys(buildDeclaredSettingsContributions()).map(key => key.slice('notethink.settings.'.length));
+		// every declared view/card key and flat key this module could write to, less the read-only deprecated keys
+		const every_declared_path = Object.entries(buildDeclaredSettingsContributions()).filter(([, contribution]) => contribution.markdownDeprecationMessage === undefined).map(([key]) => key.slice('notethink.settings.'.length));
 
 		it('writes an updateSetting to the workspace scope by default, each cell against its own declared key', async () => {
 			await panelHelper.simulateMessage({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'root', key: 'viewType', value: 'kanban' }] } });

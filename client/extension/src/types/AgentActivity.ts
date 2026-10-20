@@ -73,11 +73,15 @@ export interface ActivityStoryRef {
  * the session's own whole `usage` repeated per story.
  * - first_at: ISO 8601 UTC of the earliest priced call counted toward this story, so a card can state
  *   the span its figure covers; undefined when no priced call was credited to it
+ * - last_at: ISO 8601 UTC of the latest write call that changed this story, so a group of cards can
+ *   be ordered by when an agent last wrote to each story rather than by its session's whole span;
+ *   undefined when no write call carried a parseable time
  */
 export interface ActivityStoryUsage {
     story: ActivityStoryRef;
     usage: ActivityUsage;
     first_at?: string;
+    last_at?: string;
 }
 
 /**

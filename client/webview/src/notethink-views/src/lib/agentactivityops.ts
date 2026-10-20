@@ -303,6 +303,20 @@ function storyUsageEntryFor(state: ActivitySessionState, key: ActivityStoryKey):
     return state.session.story_usage?.find(entry => entry.story.id === key.id && entry.story.doc_path === key.doc_path);
 }
 
+/**
+ * When this session last wrote to this story, in epoch ms: the story's own `last_at` where the session
+ * carries one, else the session's `updated_at` (a session that bound several stories across files would
+ * otherwise tie every one of them at the moment it ended). Undefined when neither parses.
+ */
+export function storyLastActiveMs(state: ActivitySessionState, key: ActivityStoryKey): number | undefined {
+    for (const candidate of [storyUsageEntryFor(state, key)?.last_at, state.session.updated_at]) {
+        if (candidate === undefined) { continue; }
+        const ms = Date.parse(candidate);
+        if (!Number.isNaN(ms)) { return ms; }
+    }
+    return undefined;
+}
+
 /** one session's own split usage for this story; undefined when it carries no split entry for this story, which the caller then falls back to the session's whole usage for */
 function storyUsageFor(state: ActivitySessionState, key: ActivityStoryKey): ActivityUsage | undefined {
     return storyUsageEntryFor(state, key)?.usage;

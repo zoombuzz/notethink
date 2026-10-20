@@ -24,8 +24,10 @@ const ALLOWED_SAME_EVERY_LOCALE = [
     '~${0}',
     // the diverged-row badge - a single letter, kept identical in every locale by design
     'M',
-    // the "specific to this view" pill badge - a two-letter abbreviation, kept identical in every locale by design
+    // the "view specific" pill badge - a two-letter abbreviation, kept identical in every locale by design
     'VS',
+    // the inherited pill badge - a single letter, kept identical in every locale beside VS and M by design
+    'I',
 ];
 
 const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {

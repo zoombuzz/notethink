@@ -212,15 +212,15 @@ describe('SettingsViewDrawer rows', () => {
         jest.clearAllMocks();
     });
 
-    it('bands the rows by home - kanban, then line, then grouped, then root - and pills each by where its value actually comes from', () => {
+    it('bands the rows by owner - kanban, then line, then grouped, then root - and pills each by where its value actually comes from', () => {
         renderDrawer();
         expect(renderedRowKeys()).toEqual([
             'cardRatio',
             'animateTransitions',
             'defaultCardType',
+            'groupBy',
             'orientation',
             'lineBreadth',
-            'groupBy',
             'groupOrder',
             'groupDisplay',
             'scrollNoteIntoView',
@@ -236,17 +236,44 @@ describe('SettingsViewDrawer rows', () => {
         expect(screen.getByTestId('setting-pill-scrollNoteIntoView')).toHaveTextContent('All views');
     });
 
-    it('rules a thin line wherever the HOME band changes, and none between rows of one band', () => {
+    it('rules a thin line wherever the OWNER changes, and none between rows of one owner', () => {
         renderDrawer();
         const sequence = Array.from(screen.getByTestId('settings-rows').children).map(el => el.getAttribute('data-testid'));
         const opened_by_divider = sequence.flatMap((id, index) => (id === 'settings-owner-divider' ? [sequence[index + 1]] : []));
-        // kanban's band ends after defaultCardType, line's after lineBreadth, grouped's after groupDisplay
-        expect(opened_by_divider).toEqual(['setting-row-orientation', 'setting-row-groupBy', 'setting-row-scrollNoteIntoView']);
+        // kanban's band ends after groupBy, line's after lineBreadth, grouped's after groupDisplay
+        expect(opened_by_divider).toEqual(['setting-row-orientation', 'setting-row-groupOrder', 'setting-row-scrollNoteIntoView']);
+    });
+
+    /*
+     * A saved type under kanban holding its own groupBy (homed at grouped) and orientation (homed at
+     * line) lists both first under its own name, rather than leaving each in the band of the view that
+     * declares it, so every setting the selected view holds itself reads together at the top.
+     */
+    it('lifts every row a saved type holds itself to the top, ahead of kanban, line, grouped and root', () => {
+        const minted: UserViewType = { id: 'user-next-up', label: 'Next up', parent: 'kanban', overrides: { groupBy: 'assignee', orientation: 'rows' } };
+        renderDrawer({ userTypes: [minted], viewTypeSelection: minted.id, currentType: minted.id });
+        // within one owner the rows keep their home order, so line's orientation precedes grouped's groupBy
+        expect(renderedRowKeys()).toEqual([
+            'orientation',
+            'groupBy',
+            'cardRatio',
+            'animateTransitions',
+            'defaultCardType',
+            'lineBreadth',
+            'groupOrder',
+            'groupDisplay',
+            'scrollNoteIntoView',
+            'watchUnopenedFilesInViewer',
+            'openNewEditorIfNoneOpen',
+        ]);
+        expect(screen.getByTestId('setting-pill-groupBy')).toHaveTextContent('Next up');
+        expect(screen.getByTestId('setting-pill-orientation')).toHaveTextContent('Next up');
+        expect(screen.getByTestId('setting-pill-cardRatio')).toHaveTextContent('Kanban');
     });
 
     /*
      * Kanban's own built-in status default (BUILTIN_NODE_DEFAULTS) is not something settings.json holds,
-     * so VS (specific to this view) would be a false claim: the row reads as inherited, with a hover
+     * so VS (view specific) would be a false claim: the row reads as inherited, with a hover
      * naming the default rather than an ancestor that holds nothing.
      */
     it('shows the inherited pill, not VS, for kanban\'s groupBy while nothing is actually stored', () => {
@@ -269,15 +296,15 @@ describe('SettingsViewDrawer rows', () => {
         expect(pill).toHaveAttribute('title', "Kanban's built-in default");
     });
 
-    it('keeps the band the same, and only the pill\'s view changes, once kanban holds its own groupBy', () => {
+    it('keeps groupBy in kanban\'s band once kanban stores its own value, since kanban already owned it by default', () => {
         renderDrawer({ settings: { viewOverrides: { kanban: { groupBy: 'assignee' } } } });
         expect(renderedRowKeys()).toEqual([
             'cardRatio',
             'animateTransitions',
             'defaultCardType',
+            'groupBy',
             'orientation',
             'lineBreadth',
-            'groupBy',
             'groupOrder',
             'groupDisplay',
             'scrollNoteIntoView',

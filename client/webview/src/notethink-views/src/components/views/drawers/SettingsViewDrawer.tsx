@@ -10,6 +10,7 @@ import { useAgentActivity } from "../../../lib/activityhooks";
 import { GROUP_ORDERS, GROUP_ORDER_DEFAULT, groupOrderLabel, orderGroupValues, resolveGroupOrderMode, type GroupOrderMode, type NoteTimestampFn } from "../../../lib/grouporderops";
 import {
     VIEW_REGISTRY,
+    chainOf,
     childViewNodes,
     doomedUserTypeIds,
     getViewNode,
@@ -34,7 +35,7 @@ import { DEFAULT_CARD_TYPE, noteOrderTimestampFn, renderableCardIds } from "../.
 import GroupBySelector from "../GroupBySelector";
 import SettingsRow from "../SettingsRow";
 import { viewTypeLabel } from "../viewTypeLabel";
-import { divergedCountLabel, globalSettingRows, rowHome, settingRowLabel, viewRowsForNode, VIEW_SETTING_ROWS, type SettingRowDef, type SettingRowValues } from "../settingRows";
+import { divergedCountLabel, globalSettingRows, orderRowsByOwner, rowHome, settingRowLabel, viewRowsForNode, VIEW_SETTING_ROWS, type SettingRowDef, type SettingRowValues } from "../settingRows";
 import DrawerTree, { type DrawerTreeNode } from "./DrawerTree";
 
 const debug = Debug("nodejs:notethink-views:SettingsViewDrawer");
@@ -562,6 +563,7 @@ interface SettingsPaneProps {
  * - value: the control's own value - resolved for the selected node when the key is per-view, else the
  *   flat cascade value, exactly as before
  * - inherited: the value the row would inherit if it held none of its own; undefined for a non-per-view key
+ * - owner_id: the node the effective value comes from, which orders the rows; undefined for a global
  * - ownerLabel: the view the effective value comes from (the rightmost column)
  * - inheritedFrom / specificFrom: which state pill to render, if any (mutually exclusive)
  * - diverged: whether the value the row actually shows diverges from ITS OWN saved default - the flat
@@ -571,6 +573,7 @@ interface SettingsPaneProps {
 interface ResolvedRow {
     value: unknown;
     inherited: unknown;
+    owner_id: string | undefined;
     ownerLabel: string | undefined;
     inheritedFrom: string | undefined;
     inheritedIsBuiltinDefault: boolean;
@@ -601,6 +604,7 @@ function resolveRow(def: SettingRowDef, props: SettingsPaneProps): ResolvedRow {
     return {
         value: resolved.value,
         inherited: resolved.inherited,
+        owner_id: resolved.ownerId,
         ownerLabel: owner_label,
         inheritedFrom: labelOf(resolved.inheritedFromId, props.registry),
         inheritedIsBuiltinDefault: resolved.inheritedIsBuiltinDefault,
@@ -610,7 +614,7 @@ function resolveRow(def: SettingRowDef, props: SettingsPaneProps): ResolvedRow {
 }
 
 /**
- * The right pane: one five-column grid holding the selected node's chain rows, banded by home, and then
+ * The right pane: one five-column grid holding the selected node's chain rows, banded by owner, and then
  * the global rows under their own heading. Everything sits in a single grid so the groups share one set
  * of column widths and the names and controls stay aligned across the heading. The columns carry no
  * heads of their own - the "View settings" heading above the pane says what the rows are, and the pill
@@ -653,14 +657,15 @@ function SettingsPane(props: SettingsPaneProps): React.ReactElement {
             }
         />
     );
-    const resolved_rows = props.rows.map(def => resolveRow(def, props));
+    const chain = chainOf(props.selectedNode, props.registry);
+    const ordered_rows = orderRowsByOwner(props.rows.map(def => ({ def, ...resolveRow(def, props) })), chain);
     return (
         <div className={styles.settingsRowGrid} data-testid="settings-rows">
-            {props.rows.flatMap((def, index) => {
-                const row = renderRow(def, resolved_rows[index]);
-                // a thin rule opens each run of rows homed at a different view, so the views read as bands
-                if (index === 0 || rowHome(def) === rowHome(props.rows[index - 1])) { return [row]; }
-                return [<div key={`owner-divider-${def.key}`} className={styles.settingsOwnerDivider} data-testid="settings-owner-divider" aria-hidden="true" />, row];
+            {ordered_rows.flatMap((entry, index) => {
+                const row = renderRow(entry.def, entry);
+                // a thin rule opens each run of rows owned by a different view, so the views read as bands
+                if (index === 0 || entry.owner_id === ordered_rows[index - 1].owner_id) { return [row]; }
+                return [<div key={`owner-divider-${entry.def.key}`} className={styles.settingsOwnerDivider} data-testid="settings-owner-divider" aria-hidden="true" />, row];
             })}
             {props.globalRows.length > 0 && (
                 <div className={styles.settingsGroupHeading} data-testid="global-settings-heading">{l10n.t('Global settings')}</div>

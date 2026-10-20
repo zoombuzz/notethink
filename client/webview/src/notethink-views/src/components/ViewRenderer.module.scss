@@ -595,7 +595,9 @@ body.disableAddressBarHidingOnScroll {
   border-radius: 4px;
   padding: 0 0.5em;
   color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
-  white-space: nowrap;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   cursor: grab;
   user-select: none;
 
@@ -2098,10 +2100,16 @@ body.disableAddressBarHidingOnScroll {
 
 .settingsTreePane {
   grid-column: 1;
-  min-width: 11em;
+  min-width: 8em;
   max-width: 18em;
   padding-right: $settings_pane_gutter;
   border-right: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.25)));
+}
+
+// a saved type's name is the user's own words, so it wraps rather than losing its end to an ellipsis
+.settingsTreePane .drawerTreeLabel {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .settingsRowsPane {
@@ -2122,6 +2130,10 @@ body.disableAddressBarHidingOnScroll {
  * pill. Rows are display:contents so every cell joins this grid and the columns stay aligned down the
  * whole pane rather than per row.
  *
+ * The name and owner columns are capped with fit-content and their text wraps, so on a narrow drawer the
+ * words fold onto a second line rather than squeezing the control column until a select overruns the
+ * owner beside it.
+ *
  * Baseline rather than centre, because one control is several lines tall. Column order stacks a chip per
  * group, and centring set its name halfway down that stack, level with the third group for no reason a
  * reader could infer; on a baseline the name sits on the first chip's own line. Every other row is one
@@ -2129,7 +2141,7 @@ body.disableAddressBarHidingOnScroll {
  */
 .settingsRowGrid {
   display: grid;
-  grid-template-columns: auto 1.4em 1.2em minmax(0, 1fr) auto;
+  grid-template-columns: fit-content(10em) 1.4em 1.2em minmax(0, 1fr) fit-content(9em);
   align-items: baseline;
   column-gap: 0.8em;
   row-gap: 0.25em;
@@ -2140,9 +2152,8 @@ body.disableAddressBarHidingOnScroll {
 }
 
 .settingsRowName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 // the inherited/specific pill slot; empty and zero-opinion when the row is at its own home view
@@ -2157,13 +2168,74 @@ body.disableAddressBarHidingOnScroll {
 
 .settingsRowControl {
   min-width: 0;
+
+  // a select or text box never grows past its cell into the owner column beside it
+  select,
+  input[type="text"],
+  input[type="number"] {
+    max-width: 100%;
+  }
 }
 
 // the view the effective value comes from, stated quietly so it reads as provenance rather than as a control
 .settingsRowPill {
   justify-self: end;
+  min-width: 0;
   opacity: 0.65;
-  white-space: nowrap;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+// a narrow drawer gives the tree and the name column less, so the controls keep their room
+@media (max-width: 900px) {
+  .settingsTreePane {
+    min-width: 6em;
+    max-width: 11em;
+  }
+
+  .settingsRowGrid {
+    grid-template-columns: fit-content(7.5em) 1.4em 1.2em minmax(6em, 1fr) fit-content(6.5em);
+    column-gap: 0.5em;
+  }
+}
+
+/*
+ * Too narrow for the tree beside the rows: the tree stacks above them at the full drawer width, so its
+ * view names read whole and the rows keep every column, rather than both panes truncating side by side.
+ */
+@media (max-width: 640px) {
+  .settingsPanes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settingsHeadTree {
+    grid-column: 1;
+    grid-row: 1;
+    padding-right: 0;
+  }
+
+  .settingsTreePane {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+    max-width: none;
+    padding-right: 0;
+    padding-bottom: 0.6em;
+    margin-bottom: 0.6em;
+    border-right: none;
+  }
+
+  .settingsHeadRows {
+    grid-column: 1;
+    grid-row: 3;
+    padding-left: 0;
+  }
+
+  .settingsRowsPane {
+    grid-column: 1;
+    grid-row: 4;
+    padding-left: 0;
+  }
 }
 
 // a diverged setting's name, tinted the way the Explorer tints a modified file
@@ -2175,44 +2247,48 @@ body.disableAddressBarHidingOnScroll {
   }
 }
 
-// shared pill shape for the inherited, specific and diverged markers; colour alone tells them apart
+/*
+ * Shared pill shape for the inherited (I), view-specific (VS) and diverged (M) markers: hollow, a thin
+ * outline in the text's own colour with no fill, so they read as quiet annotations beside the controls
+ * rather than as badges. Colour alone tells them apart.
+ */
 .settingsPillInherited,
 .settingsPillSpecific,
 .settingsPillDiverged {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.2em;
-  height: 1.2em;
+  box-sizing: border-box;
+  min-width: 1.5em;
+  height: 1.3em;
   padding: 0 0.3em;
+  border: 1px solid currentColor;
   border-radius: 999px;
-  font-size: 0.75em;
-  font-weight: 600;
+  background: transparent;
+  font-size: 0.7em;
+  font-weight: 500;
   line-height: 1;
 }
 
-// grey: the value comes from an ancestor view
+// grey and dimmer than VS: inheriting is the ordinary case, so it is the least noticeable
 .settingsPillInherited {
-  background: var(--vscode-badge-background, rgba(128, 128, 128, 0.25));
-  color: var(--vscode-badge-foreground, var(--vscode-foreground));
-  opacity: 0.8;
+  color: var(--vscode-descriptionForeground, rgba(128, 128, 128, 0.9));
+  opacity: 0.7;
 }
 
-// white: this view holds its own value
+// the foreground colour (white on a dark theme): this view holds its own value
 .settingsPillSpecific {
-  background: var(--vscode-editor-background, #fff);
-  color: var(--vscode-editor-foreground, #000);
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.4)));
+  color: var(--vscode-editor-foreground, var(--vscode-foreground));
+  opacity: 0.85;
 }
 
 // modified tint, the same family the Explorer uses for a changed file
 .settingsPillDiverged {
-  background: var(--vscode-gitDecoration-modifiedResourceForeground, #895503);
-  color: var(--vscode-editor-background, #fff);
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, #895503);
+  opacity: 0.85;
 
   :global(body.vscode-dark) & {
-    background: var(--vscode-gitDecoration-modifiedResourceForeground, #E2C08D);
-    color: var(--vscode-editor-background, #000);
+    color: var(--vscode-gitDecoration-modifiedResourceForeground, #E2C08D);
   }
 }
 

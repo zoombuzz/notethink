@@ -213,21 +213,71 @@ const LEGACY_USER_TYPE_OVERRIDE_NAMES: Record<string, string> = {
     kanbanDefaultCardType: 'defaultCardType',
 };
 
+/** 0.4.7's `columnOrder` (a plain string[]) as `groupDisplay` entries, every group shown; an entry with no axis is the status axis. Undefined for anything that is not an array. */
+function groupDisplayFromColumnOrder(value: unknown): GroupDisplayEntry[] | undefined {
+    if (!Array.isArray(value)) { return undefined; }
+    return value.filter((item): item is string => typeof item === 'string').map(item => ({ value: item, shown: true }));
+}
+
 /**
- * Translates a saved type's overrides from 0.4.7's kanban-prefixed names to today's short ones. A legacy
- * name is dropped once translated; a short name already present wins over the legacy one it duplicates,
- * so a rewritten entry never carries both. Every other key passes through unchanged.
+ * Translates a saved type's overrides from 0.4.7's names to today's. A kanban-prefixed name becomes its
+ * short one, and a `columnOrder` array becomes `groupDisplay`. A legacy name is dropped once translated; a
+ * current name already present wins over the legacy one it duplicates, so a rewritten entry never carries
+ * both. Every other key passes through unchanged.
  */
 function translatedOverrides(overrides: Record<string, unknown> | undefined): Record<string, unknown> {
     const source = overrides ?? {};
     const translated: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(source)) {
+        if (key === 'columnOrder') {
+            const group_display = groupDisplayFromColumnOrder(value);
+            if (group_display === undefined) { translated[key] = value; continue; }
+            if (!('groupDisplay' in source)) { translated.groupDisplay = group_display; }
+            continue;
+        }
         const short_key = LEGACY_USER_TYPE_OVERRIDE_NAMES[key];
         if (short_key === undefined) { translated[key] = value; continue; }
         if (short_key in source) { continue; }
         translated[short_key] = value;
     }
     return translated;
+}
+
+/**
+ * A 0.4.7 config key whose value moved to a declared (tree, node, key) cell. `bagAt` reads it, at the same
+ * scope, whenever the cell's own key holds nothing there, so a user upgrading keeps what they saved. It is
+ * read-only: the old key is never written or cleared, and the new key wins when both are set at a scope.
+ * - path: the old config path below `notethink.settings.`
+ * - schema: the old key's JSON-schema fragment, for its deprecated package.json declaration
+ * - convert: the old value as the new cell stores it, or undefined when it is not usable
+ */
+interface LegacyCell {
+    tree: 'view' | 'card';
+    node_id: string;
+    key: CascadeKey;
+    path: string;
+    schema: CascadeKeySchema;
+    convert: (value: unknown) => unknown;
+}
+
+function booleanOrUndefined(value: unknown): boolean | undefined {
+    return typeof value === 'boolean' ? value : undefined;
+}
+
+const LEGACY_CELLS: LegacyCell[] = [
+    { tree: 'card', node_id: 'allcards', key: 'showLineNumbers', path: 'view.generic.showLineNumbers', schema: { type: 'boolean' }, convert: booleanOrUndefined },
+    { tree: 'card', node_id: 'allcards', key: 'showLinetagsInHeadlines', path: 'view.generic.showLinetagsInHeadlines', schema: { type: 'boolean' }, convert: booleanOrUndefined },
+    { tree: 'card', node_id: 'allcards', key: 'autoExpandFocusedNote', path: 'view.generic.autoExpandFocusedNote', schema: { type: 'boolean' }, convert: booleanOrUndefined },
+    { tree: 'view', node_id: 'kanban', key: 'groupDisplay', path: 'view.specific.kanban.columnOrder', schema: { type: 'array', items: { type: 'string' } }, convert: groupDisplayFromColumnOrder },
+];
+
+/** the value a cell's 0.4.7 key holds at one scope, converted; undefined when the cell has no legacy key or it holds nothing usable there */
+function legacyCellValueAt(tree: 'view' | 'card', node_id: string, key: CascadeKey, scope: 'workspaceValue' | 'globalValue'): unknown {
+    const legacy = LEGACY_CELLS.find(cell => cell.tree === tree && cell.node_id === node_id && cell.key === key);
+    if (legacy === undefined) { return undefined; }
+    const inspected = vscode.workspace.getConfiguration(CONFIG_ROOT).inspect(legacy.path);
+    const value = inspected?.[scope];
+    return value === undefined ? undefined : legacy.convert(value);
 }
 
 /** a saved view type exactly as `view.userTypes` stores one entry */
@@ -326,12 +376,12 @@ function flatDivergedKeys(): FlatSettingKey[] {
     return flatSettingKeys().filter(key => isFlatDivergedFromDefault(key));
 }
 
-/** one built-in node's declared-key values at one scope, as a plain object - empty when nothing is set there */
+/** one built-in node's declared-key values at one scope, as a plain object - empty when nothing is set there; a cell with a 0.4.7 key falls back to it when its own key holds nothing */
 function builtinNodeEntryAt(tree: 'view' | 'card', node_id: string, keys: CascadeKey[], scope: 'workspaceValue' | 'globalValue'): Record<string, unknown> {
     const entry: Record<string, unknown> = {};
     for (const key of keys) {
         const inspected = vscode.workspace.getConfiguration(CONFIG_ROOT).inspect(cascadeKeyPath(tree, node_id, key));
-        const value = inspected?.[scope];
+        const value = inspected?.[scope] ?? legacyCellValueAt(tree, node_id, key, scope);
         if (value !== undefined) { entry[key] = value; }
     }
     return entry;
@@ -383,6 +433,17 @@ export function readBagCell(bag: SettingsBag, node_id: string, key: string): unk
 
 async function writeDeclaredCascadeCell(tree: 'view' | 'card', node_id: string, key: CascadeKey, value: unknown, target: vscode.ConfigurationTarget): Promise<void> {
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update(cascadeKeyPath(tree, node_id, key), value, target);
+    await clearLegacyCell(tree, node_id, key, target);
+}
+
+/** clears a cell's 0.4.7 key at the target's scope, only when it holds a value there, so a write or clear of the cell never lets the old value resurface */
+async function clearLegacyCell(tree: 'view' | 'card', node_id: string, key: CascadeKey, target: vscode.ConfigurationTarget): Promise<void> {
+    const legacy = LEGACY_CELLS.find(cell => cell.tree === tree && cell.node_id === node_id && cell.key === key);
+    if (legacy === undefined) { return; }
+    const scope = target === vscode.ConfigurationTarget.Global ? 'globalValue' : 'workspaceValue';
+    const inspected = vscode.workspace.getConfiguration(CONFIG_ROOT).inspect(legacy.path);
+    if (inspected?.[scope] === undefined) { return; }
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update(legacy.path, undefined, target);
 }
 
 /**
@@ -648,6 +709,7 @@ interface DeclaredSettingContribution {
     items?: Record<string, unknown>;
     default?: unknown;
     description: string;
+    markdownDeprecationMessage?: string;
 }
 
 /**
@@ -680,6 +742,14 @@ export function buildDeclaredSettingsContributions(): Record<string, DeclaredSet
         default: [],
         description: '%config.settings.view.userTypes.description%',
     };
+    for (const legacy of LEGACY_CELLS) {
+        contributions[`${CONFIG_ROOT}.${legacy.path}`] = {
+            ...legacy.schema,
+            scope: 'window',
+            description: `%config.settings.${legacy.path}.description%`,
+            markdownDeprecationMessage: `%config.settings.${legacy.path}.deprecationMessage%`,
+        };
+    }
     for (const key of flatSettingKeys()) {
         const def = FLAT_SETTINGS[key];
         contributions[`${CONFIG_ROOT}.${def.path}`] = {

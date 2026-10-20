@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { ACTIVITY_VENDOR_CLAUDE_CODE, type ActivityChangedFile, type ActivityTree } from '../types/AgentActivity';
 import { encodeClaudeProjectDirName } from '../lib/agenthomeops';
 import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
+import { ChatTranscriptViews } from './ChatTranscriptView';
 import { isWithinWorkspace } from '../lib/pathops';
 import type { HashMapOf } from '../types/general';
 
@@ -18,7 +19,7 @@ const ACTIVITY_SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
  * The chat panel each vendor's session can be opened in, by the vendor slug the analyser carries.
  * Claude Code is the only vendor shipping a VS Code extension whose command takes a session id, and
  * that command is undocumented with no stability contract, so the call is guarded and a vendor absent
- * from this map opens the session's own transcript instead. The map is where the next vendor's
+ * from this map opens the notethink chat view instead. The map is where the next vendor's
  * command goes.
  */
 const ACTIVITY_CHAT_COMMANDS: HashMapOf<string> = {
@@ -51,6 +52,8 @@ export interface ActivityTreeLookup {
  * not be opened rather than opening an empty pane.
  */
 export class ActivityCommands {
+	private readonly chat_views: ChatTranscriptViews = new ChatTranscriptViews(session_id => this.openTranscript(session_id));
+
 	constructor(
 		private readonly base_uri: vscode.Uri,
 		private readonly lookup: ActivityTreeLookup,
@@ -154,7 +157,8 @@ export class ActivityCommands {
 
 	/**
 	 * Open a session in VS Code rather than on the card: in its vendor's chat panel where one takes a
-	 * session id and that panel can find it, else as its own transcript in the group beside the viewer.
+	 * session id and that panel can find it, else in a read-only chat view of the transcript's tail, in
+	 * the group beside the viewer.
 	 * Claude Code's CLI resumes a session from any project directory, but the chat panel its command
 	 * opens only activates a session listed under the first workspace folder's project directory; any
 	 * other id silently starts a blank chat instead. So the command is tried only for a session filed
@@ -176,10 +180,26 @@ export class ActivityCommands {
 				writeToLog('openChat', `handed session ${session_id} to ${command}`);
 				return;
 			} catch (err) {
-				writeToErrorLog('openChat', `${command} failed for session ${session_id}, opening its transcript instead`, err);
+				writeToErrorLog('openChat', `${command} failed for session ${session_id}, opening the chat view instead`, err);
 			}
 		}
-		await this.openTranscript(session_id);
+		await this.openChatView(vendor, session_id);
+	}
+
+	// the read-only chat view of a transcript tail; the URI comes from the analyser scan, never the message
+	private async openChatView(vendor: string, session_id: string): Promise<void> {
+		const transcript_uri = this.lookup.transcriptUriFor(session_id);
+		if (!transcript_uri) {
+			this.post({ type: 'activityUnavailable', request: 'chat', reason: 'no_transcript', session_id });
+			return;
+		}
+		try {
+			await this.chat_views.show(session_id, vendor, transcript_uri, this.targetColumn());
+			writeToLog('openChatView', `opened the chat view of session ${session_id}`);
+		} catch (err) {
+			writeToErrorLog('openChatView', `failed to open the chat view of session ${session_id}`, err);
+			this.post({ type: 'activityUnavailable', request: 'chat', reason: 'open_failed', session_id });
+		}
 	}
 
 	/**

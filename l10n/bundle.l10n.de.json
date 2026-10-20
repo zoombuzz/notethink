@@ -178,11 +178,19 @@
   "No .claude, .codex or .grok directory was found on the remote host for this workspace.": "Für diesen Arbeitsbereich wurde auf dem Remote-Host kein Verzeichnis .claude, .codex oder .grok gefunden.",
   "NoteThink cannot read local agent session files on this host, such as a web host with no local disk or an unrecognised user-data layout.": "NoteThink kann lokale Sitzungsdateien von Agenten auf diesem Host nicht lesen, etwa auf einem Web-Host ohne lokale Festplatte oder mit einem nicht erkannten Benutzerdaten-Layout.",
   "Inherited from {0}": "Übernommen von {0}",
-  "Specific to this view; set it to the inherited value to inherit from {0} again": "Spezifisch für diese Ansicht; auf den übernommenen Wert setzen, um wieder von {0} zu übernehmen",
+  "I": "I",
+  "View specific; set it to the inherited value to inherit from {0} again": "Ansichtsspezifisch; auf den übernommenen Wert setzen, um wieder von {0} zu übernehmen",
   "VS": "VS",
   "Differs from your saved user default": "Weicht von Ihrem gespeicherten Benutzerstandard ab",
   "M": "M",
   "{0} (inherited)": "{0} (übernommen)",
   "{0} copy": "{0} Kopie",
-  "Save as new view type": "Als neuen Ansichtstyp speichern"
+  "Save as new view type": "Als neuen Ansichtstyp speichern",
+  "Showing the last {0} messages": "Die letzten {0} Nachrichten werden angezeigt",
+  "Open raw transcript": "Rohtranskript öffnen",
+  "Refresh": "Aktualisieren",
+  "This vendor's transcript cannot be rendered as a chat.": "Das Transkript dieses Anbieters kann nicht als Chat dargestellt werden.",
+  "No conversation messages found in this transcript.": "In diesem Transkript wurden keine Chat-Nachrichten gefunden.",
+  "{0} tool calls": "{0} Werkzeugaufrufe",
+  "No result in view": "Kein Ergebnis in der Ansicht"
 }

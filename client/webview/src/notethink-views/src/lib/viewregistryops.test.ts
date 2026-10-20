@@ -647,7 +647,7 @@ describe('resolvedSettingsFromCascade - unpacking the wire payload into the flat
 describe('package.json declares a key for every node that can hold a tree setting', () => {
     const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', '..', '..', '..', '..', 'package.json');
     const manifest = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
-    const properties: Record<string, { default?: unknown }> = manifest.contributes.configuration[0].properties;
+    const properties: Record<string, { default?: unknown; markdownDeprecationMessage?: string }> = manifest.contributes.configuration[0].properties;
     // the two global settings and the saved-type list sit under the view prefix but belong to no tree node
     const NON_TREE_PATHS = new Set(['view.userTypes', 'view.generic.watchUnopenedFilesInViewer', 'view.generic.openNewEditorIfNoneOpen']);
     function declaredPath(bag: 'views' | 'cards', node_id: string, key: string): string {
@@ -671,9 +671,11 @@ describe('package.json declares a key for every node that can hold a tree settin
         }
         return expected;
     }
+    // a deprecated declaration is a pre-0.4.9 key kept only so its old value can still be read, never a cell
     it('declares exactly the tree keys the view and card trees can hold', () => {
         const declared = Object.keys(properties)
             .filter(full => full.startsWith('notethink.settings.view.') || full.startsWith('notethink.settings.card.'))
+            .filter(full => properties[full]?.markdownDeprecationMessage === undefined)
             .map(full => full.slice('notethink.settings.'.length))
             .filter(config_path => !NON_TREE_PATHS.has(config_path));
         expect(declared.sort()).toEqual([...expectedTreePaths().keys()].sort());

@@ -261,7 +261,7 @@ The worked examples:
 
 ### Mirrored constants across the extension/webview boundary
 
-A small set of folder-view defaults is duplicated in `client/extension/src/constants.ts` and `client/webview/src/constants.ts`. The two are separate webpack bundles with no shared module graph, so there is no import path to one source: the duplication is the wire contract, and neither side is `*ops.ts`-ified. **The shared subset must agree; the files are not identical.** Shared: the include/exclude glob defaults and `DEFAULT_COLUMN_ORDER`, each cross-referenced in a comment on both sides. Every other constant in either file is one-sided by design (`DEFAULT_MAX_NOTES_PER_FILE`, for instance, is webview-only and not round-tripped), so do not push it across.
+A small set of folder-view defaults is duplicated in `client/extension/src/constants.ts` and `client/webview/src/constants.ts`. The two are separate webpack bundles with no shared module graph, so there is no import path to one source: the duplication is the wire contract, and neither side is `*ops.ts`-ified. **The shared subset must agree; the files are not identical.** Shared: the include/exclude glob defaults (`DEFAULT_INCLUDE_FILTER`, `DEFAULT_EXCLUDE_FILTER`), each cross-referenced in a comment on both sides. Every other constant in either file is one-sided by design (`DEFAULT_COLUMN_ORDER` and `DEFAULT_MAX_NOTES_PER_FILE`, for instance, are webview-only), so do not push one across unless the extension gains a copy.
 
 ## Code Quality
 

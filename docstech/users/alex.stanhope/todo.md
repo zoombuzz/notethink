@@ -1,6 +1,15 @@
 # Todo [](?nt_view=kanban)
 
 
+### notethink docs: fix invented commit examples, constants list, @types/vscode reject [](?id=doc-notethink&status=doing)
+
+Docs-only corrections where AGENTS.md and CODING_STANDARDS.md disagree with the tree.
+
++ [X] delete the invented commit-message examples from AGENTS.md, keeping the pointer to `git log --oneline`
++ [X] restate the mirrored-constants subset as only the include/exclude globs; `DEFAULT_COLUMN_ORDER` is webview-only
++ [X] lift the `@types/vscode` reject in `.ncurc.json` so each dependency wave takes the latest types and raises `engines.vscode` with them, as the CODING_STANDARDS.md wave rule says
+
+
 ### Watcher applies dependency and config changes [](?id=watch-restarts-on-config)
 
 `pnpm run watch` recompiles on source changes, including those a `git pull` lands. A pull that changes a `package.json`, a `pnpm-lock.yaml`, `webpack.config.js` or a `tsconfig*.json` is not applied: the bundles keep building against stale config or modules until someone restarts the watcher by hand.

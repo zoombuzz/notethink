@@ -64,12 +64,6 @@ Canonical: [`CODING_STANDARDS.md`](CODING_STANDARDS.md) > Testing Standards.
 
 Commit policy (when to commit, single-line messages, test-summary suffix, explicit staging) lives in workspace [`../AGENTS.md`](../AGENTS.md) > Commit policy. notethink-specific override: match this repo's existing commit history (`git log --oneline`) for style.
 
-**Examples from this repo's history:**
-```
-sorted out linting config for all modules; tests 157, 21
-added component views including context; added playwright e2e tests; tests 157, 21
-```
-
 ## Dev Server
 
 notethink is a VS Code extension with no HTTP dev server, so there is no port to probe and no browser page to open. It is **not** exempt from the workspace dev-server start pattern: `/open-dev` launches its `webpack --watch` (`pnpm run watch`) with `systemd-run --user --scope --slice=devservers.slice`, logging to `test-results/dev.log`, and workspace `AGENTS.md` > Dev servers names zahara as its only exception. `/open-dev` previews the bundles in an ordinary VS Code window, not the Extension Development Host: VS Code loads the working copy through a hand-made `~/.vscode/extensions/notethink-dev` symlink, and **Developer: Reload Window** picks up a rebuild. The symlink is per machine and nothing provisions it, so check `ls ~/.vscode/extensions` first. The F5 Extension Development Host in `README.md` is the manual alternative.

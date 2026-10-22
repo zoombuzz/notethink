@@ -7844,3 +7844,17 @@ Clicking a Claude Code session on an agent card opens a Claude chat tab, but not
   + with the parent folder first: every Claude Code session from a project below it opened the chat view in group 2, newest message at the bottom, tool calls folded
   + a Grok session opened the chat view's notice that its transcript cannot be rendered, with Open raw transcript
 + [X] bump the patch version
+
+
+### Skip unchanged lint and test-jest runs [](?id=notethink-green-stamp-wrap)
+
+notethink ran its eslint/tsc lint chain and the full Jest suite on every invocation, even when nothing in the tree had changed since the last green run.
+
++ the stamp helper execs its command directly rather than through a shell, so the compound lint chain (`node --test ... && eslint . && tsc ...`) moved into a new `scripts/lint.sh`
++ new `scripts/run-checked.sh <check> '<command>'` runs the check through the stamp helper only when it is present, and runs `<command>` directly otherwise, so a contributor's clone and CI need no special-casing; `package.json` and `.github/workflows/release.yml` stay on the plain `pnpm run lint`/`test-jest` names
++ the helper is not executable, so the wrapper tests for it with `[ -f ... ]` and invokes it as `bash <path>`
++ [X] wrap lint: `package.json`'s `lint` now runs `bash scripts/run-checked.sh lint 'bash scripts/lint.sh'`
++ [X] wrap test-jest: `bash scripts/run-checked.sh test-jest 'bash scripts/test-jest.sh'`
++ [X] verify `test-results/` is already gitignored (`.gitignore`, `**/test-results`), so the stamp and `.log` files are not committed
++ [X] verify `pnpm run lint` and `pnpm run test-jest` both exit 0 and stamp correctly with the helper present
++ [X] verify both checks still exit 0, with the real checks run, when the helper is unreachable

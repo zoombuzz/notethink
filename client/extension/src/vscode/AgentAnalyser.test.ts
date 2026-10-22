@@ -4,6 +4,9 @@ import { AgentAnalyser, setFileStatMaxEntriesForTest } from './AgentAnalyser';
 import { handleAgentAnalyserRequest, resetTailCacheForTest, setTailCacheMaxBytesForTest, setTranscriptMaxBytesForTest, type AgentAnalyserWorkerRequest, type AgentAnalyserWorkerResponse } from './AgentAnalyserWorker';
 import * as errorops from '../lib/errorops';
 
+// fixed clock just after the 2026-09-22 fixtures, so they never age out of the analyser's 30 day window
+const FIXTURE_NOW_MS = Date.parse('2026-09-22T12:00:00Z');
+
 /**
  * AgentAnalyser is one shared instance per extension host, so these tests exercise the lifecycle
  * every panel drives it through: demand() ref-counts, withdraw() stops it only once nothing demands
@@ -274,7 +277,7 @@ function transcriptReadCount(): number {
 describe('AgentAnalyser lifecycle', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
 		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
@@ -1003,7 +1006,7 @@ describe('AgentAnalyser vendor home resolution', () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
 		(vscode.workspace.fs.stat as jest.Mock).mockRejectedValue(new Error('not found'));
@@ -1189,7 +1192,7 @@ describe('AgentAnalyser vendor home resolution', () => {
 describe('AgentAnalyser story board discovery', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
 	});
 
@@ -1302,7 +1305,7 @@ describe('AgentAnalyser symlinked session binding', () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 	});
 
 	afterEach(() => { jest.useRealTimers(); });
@@ -1486,7 +1489,7 @@ describe('AgentAnalyser symlinked session binding', () => {
 describe('AgentAnalyser workspace scope', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
 		(vscode.workspace.fs.stat as jest.Mock).mockRejectedValue(new Error('not found'));
@@ -1606,7 +1609,7 @@ describe('AgentAnalyser remote extra file reads', () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.env as unknown as { remoteName: string | undefined }).remoteName = REMOTE_AUTHORITY;
 		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: remoteFolderUri(), name: 'notethink', index: 0 }];
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
@@ -1714,7 +1717,7 @@ describe('AgentAnalyser line diff counts', () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
 		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(REPO_ROOT), name: 'ws', index: 0 }];
@@ -1889,7 +1892,7 @@ describe('AgentAnalyser line diff cost across batches', () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(REPO_ROOT), name: 'ws', index: 0 }];
 	});
 
@@ -1992,7 +1995,7 @@ describe('AgentAnalyser git repository discovery logging', () => {
 		jest.clearAllMocks();
 		(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
 		(vscode.commands.executeCommand as jest.Mock).mockReset();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
 		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(REPO_ROOT), name: 'ws', index: 0 }];
@@ -2048,7 +2051,7 @@ describe('AgentAnalyser usage split by turn', () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
 	});
 
@@ -2170,7 +2173,7 @@ describe('AgentAnalyser usage split by turn', () => {
 describe('AgentAnalyser newest-first batching', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
 		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
@@ -2342,7 +2345,7 @@ describe('AgentAnalyser newest-first batching', () => {
 describe('AgentAnalyser session fold caching', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
 		(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
@@ -2486,7 +2489,7 @@ describe('AgentAnalyser session fold caching', () => {
 describe('AgentAnalyser discovery concurrency', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
 		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
 		// '/ws' so these sessions' cwd (baked into claudeTranscriptLine) is in scope and actually folds into a card

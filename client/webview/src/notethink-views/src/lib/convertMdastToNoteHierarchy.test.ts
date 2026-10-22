@@ -677,10 +677,7 @@ describe('benchmark: large file parsing', () => {
         // warm-up run (JIT compilation)
         convertMdastToNoteHierarchy(mdast, text);
 
-        // timed run
-        const start = performance.now();
-        const root = convertMdastToNoteHierarchy(mdast, text);
-        const elapsed = performance.now() - start;
+        const { root, elapsed } = timeFastestRun(mdast, text);
 
         // 200ms: 1-30ms under parallel suite load, while an O(n^2) over 274 headings would take hundreds of ms
         expect(elapsed).toBeLessThan(200);
@@ -695,15 +692,28 @@ describe('benchmark: large file parsing', () => {
         // warm-up
         convertMdastToNoteHierarchy(mdast, text);
 
-        const start = performance.now();
-        const root = convertMdastToNoteHierarchy(mdast, text);
-        const elapsed = performance.now() - start;
+        const { root, elapsed } = timeFastestRun(mdast, text);
 
         expect(elapsed).toBeLessThan(100);
         const all_notes = flattenNotes(root);
         expect(all_notes.length).toBe(500);
     });
 });
+
+/**
+ * Time several conversions and return the fastest, so a scheduler or GC pause under a loaded
+ * parallel suite cannot fail a threshold that only guards against quadratic behaviour.
+ */
+function timeFastestRun(mdast: MdastNode, text: string): { root: NoteProps; elapsed: number } {
+    let root = convertMdastToNoteHierarchy(mdast, text);
+    let elapsed = Infinity;
+    for (let i = 0; i < 5; i++) {
+        const start = performance.now();
+        root = convertMdastToNoteHierarchy(mdast, text);
+        elapsed = Math.min(elapsed, performance.now() - start);
+    }
+    return { root, elapsed };
+}
 
 /**
  * Helper to extract all NoteProps (by seq) from a root note's children_body tree.

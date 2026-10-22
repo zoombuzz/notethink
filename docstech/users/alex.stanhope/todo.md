@@ -1,7 +1,7 @@
 # Todo [](?nt_view=kanban)
 
 
-### notethink docs: fix invented commit examples, constants list, @types/vscode reject [](?id=doc-notethink&status=doing)
+### notethink docs: fix invented commit examples, constants list, @types/vscode reject [](?id=doc-notethink&status=code-review)
 
 Docs-only corrections where AGENTS.md and CODING_STANDARDS.md disagree with the tree.
 

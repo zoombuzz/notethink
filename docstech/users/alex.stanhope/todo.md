@@ -1,6 +1,23 @@
 # Todo [](?nt_view=kanban)
 
 
+### Upgrade NPM packages for notethink (wave 1 minor/patch, 2026-10-23) [](?status=code-review)
+
+Minor/patch upgrade: pnpm 12.15.0, eslint 10.13.0, typescript-eslint 8.72.0, sass 1.106.1; all four lockfiles regenerated. The 1500-line parse benchmark in `parseops.test.ts` now times the fastest of five runs, as the `convertMdastToNoteHierarchy` benchmarks do, so suite load cannot fail it.
+
++ [X] run npm-check-updates
++ [X] revisit prior pins (`@types/vscode` held, see snapshot)
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
+
+Pins in effect after this wave (snapshot):
+- `@types/vscode` 1.138.0, exact - transient - 1.140.0 is on offer, but the notegit editor bundles a VS Code older than 1.138, and `engines.vscode` must rise with the types; clears when the bundled editor moves to 1.140 or later
+- `eslint` 10.13.0 - not a pin: notethink deliberately leads on eslint
+- majors held: typescript 7
+Unpinned this wave: none
+
+
 ### notethink docs: fix invented commit examples, constants list, @types/vscode reject [](?id=doc-notethink&status=code-review)
 
 Docs-only corrections where AGENTS.md and CODING_STANDARDS.md disagree with the tree.

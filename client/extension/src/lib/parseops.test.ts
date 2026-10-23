@@ -284,9 +284,13 @@ describe('parseops', () => {
 			// warm-up
 			parse(markdown);
 
-			const start = performance.now();
-			parse(markdown);
-			const elapsed = performance.now() - start;
+			// fastest of five, so load on a parallel suite cannot fail a threshold that only guards against quadratic behaviour
+			let elapsed = Infinity;
+			for (let i = 0; i < 5; i++) {
+				const start = performance.now();
+				parse(markdown);
+				elapsed = Math.min(elapsed, performance.now() - start);
+			}
 			// 1s: a CPU-bound parse that runs 180-560ms under suite load, yet a regression still lands well above it
 			expect(elapsed).toBeLessThan(1000);
 		});

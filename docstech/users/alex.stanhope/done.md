@@ -7858,3 +7858,29 @@ notethink ran its eslint/tsc lint chain and the full Jest suite on every invocat
 + [X] verify `test-results/` is already gitignored (`.gitignore`, `**/test-results`), so the stamp and `.log` files are not committed
 + [X] verify `pnpm run lint` and `pnpm run test-jest` both exit 0 and stamp correctly with the helper present
 + [X] verify both checks still exit 0, with the real checks run, when the helper is unreachable
+
+
+### Upgrade NPM packages for notethink (wave 1 minor/patch, 2026-10-23)
+
+Minor/patch upgrade: pnpm 12.15.0, eslint 10.13.0, typescript-eslint 8.72.0, sass 1.106.1; all four lockfiles regenerated. The 1500-line parse benchmark in `parseops.test.ts` now times the fastest of five runs, as the `convertMdastToNoteHierarchy` benchmarks do, so suite load cannot fail it.
+
++ [X] run npm-check-updates
++ [X] revisit prior pins (`@types/vscode` held, see snapshot)
++ [X] pnpm install
++ [X] verify lint passes
++ [X] verify jest tests pass
+
+Pins in effect after this wave (snapshot):
+- `@types/vscode` 1.138.0, exact - transient - 1.140.0 is on offer, but the notegit editor bundles a VS Code older than 1.138, and `engines.vscode` must rise with the types; clears when the bundled editor moves to 1.140 or later
+- `eslint` 10.13.0 - not a pin: notethink deliberately leads on eslint
+- majors held: typescript 7
+Unpinned this wave: none
+
+
+### notethink docs: fix invented commit examples, constants list, @types/vscode reject [](?id=doc-notethink)
+
+Docs-only corrections where AGENTS.md and CODING_STANDARDS.md disagree with the tree.
+
++ [X] delete the invented commit-message examples from AGENTS.md, keeping the pointer to `git log --oneline`
++ [X] restate the mirrored-constants subset as only the include/exclude globs; `DEFAULT_COLUMN_ORDER` is webview-only
++ [X] lift the `@types/vscode` reject in `.ncurc.json` so each dependency wave takes the latest types and raises `engines.vscode` with them, as the CODING_STANDARDS.md wave rule says

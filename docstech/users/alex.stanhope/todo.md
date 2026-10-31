@@ -1,7 +1,7 @@
 # Todo [](?nt_view=kanban)
 
 
-### Docs match the tree: shared constants list [](?id=docs-match-tree&status=doing)
+### Docs match the tree: shared constants list [](?id=docs-match-tree&status=code-review)
 
 `CODING_STANDARDS.md` lists the constants shared between the extension and webview bundles; `DEFAULT_GROUP_DISPLAY` is exported from both and was missing.
 

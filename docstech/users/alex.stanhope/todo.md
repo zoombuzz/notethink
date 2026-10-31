@@ -1,6 +1,13 @@
 # Todo [](?nt_view=kanban)
 
 
+### Docs match the tree: shared constants list [](?id=docs-match-tree&status=doing)
+
+`CODING_STANDARDS.md` lists the constants shared between the extension and webview bundles; `DEFAULT_GROUP_DISPLAY` is exported from both and was missing.
+
++ [X] add `DEFAULT_GROUP_DISPLAY` to the shared subset in `CODING_STANDARDS.md` and point at the grep that lists the one-sided constants
+
+
 ### Watcher applies dependency and config changes [](?id=watch-restarts-on-config)
 
 `pnpm run watch` recompiles on source changes, including those a `git pull` lands. A pull that changes a `package.json`, a `pnpm-lock.yaml`, `webpack.config.js` or a `tsconfig*.json` is not applied: the bundles keep building against stale config or modules until someone restarts the watcher by hand.

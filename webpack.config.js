@@ -212,7 +212,7 @@ const clientWebviewConfig = {
 		 * spares parseWorker.js/.map, which clientWebviewWorkerConfig emits into this directory.
 		 */
 		clean: {
-			keep: /^parseWorker/,
+			keep: /^(parseWorker|audioWorklet)/,
 		},
 	},
 	resolve: {
@@ -317,4 +317,38 @@ const clientWebviewWorkerConfig = {
 	},
 };
 
-module.exports = [ clientExtensionConfig, agentAnalyserWorkerConfig, parseWorkerConfig, clientWebviewConfig, clientWebviewWorkerConfig ];
+/*
+ * The opt-in audio capture worklet, loaded by the webview through audioWorklet.addModule. It runs in
+ * the audio rendering thread, which has no `process` or DOM, so it takes no ProvidePlugin shim and
+ * stays one self-contained file; the webview's CSP allows exactly this file's URL in script-src.
+ */
+/** @type WebpackConfig */
+const clientWebviewAudioWorkletConfig = {
+	context: path.join(__dirname, 'client', 'webview'),
+	mode: process.env.NODE_ENV === 'production' ? 'production' : 'none',
+	target: 'webworker',
+	entry: {
+		'audioWorklet': './src/audioWorklet.ts',
+	},
+	output: {
+		filename: '[name].js',
+		path: path.join(__dirname, 'client', 'webview', 'dist'),
+		devtoolModuleFilenameTemplate: '../[resource-path]'
+	},
+	resolve: clientWebviewConfig.resolve,
+	module: clientWebviewConfig.module,
+	plugins: [
+		new webpack.optimize.LimitChunkCountPlugin({
+			maxChunks: 1
+		}),
+	],
+	performance: {
+		hints: false
+	},
+	devtool,
+	infrastructureLogging: {
+		level: "log",
+	},
+};
+
+module.exports = [ clientExtensionConfig, agentAnalyserWorkerConfig, parseWorkerConfig, clientWebviewConfig, clientWebviewWorkerConfig, clientWebviewAudioWorkletConfig ];

@@ -4,6 +4,15 @@ All notable changes to the "notethink" extension will be documented in this file
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.4.16] - 2026-10-30
+
+### Added
+
+- Opt-in audio capture: set **notethink.settings.audio.endpoint** (User settings only, so a workspace cannot redirect audio) and the viewer can record the microphone in 2 s chunks of 16 kHz mono PCM, which the extension sends to that endpoint. With the setting empty, the default, nothing is captured or sent. An optional bearer token is kept in secret storage through **NoteThink: Set Audio Endpoint Token**.
+- A recording control in the viewer's header bar: a "Record audio" toggle, a red dot while recording (still under reduced motion), and "Microphone unavailable: {name}" when the microphone is refused. Capture runs only while a dot is showing.
+- The control appears only where the viewer's frame can use the microphone. Desktop VS Code does not give webviews the microphone, so it shows no control there; the reason is written to the NoteThink output channel.
+- Releases are also published to Open VSX, for VSCodium and other compatible editors.
+
 ## [0.2.2] - 2026-05-16
 
 ### Changed

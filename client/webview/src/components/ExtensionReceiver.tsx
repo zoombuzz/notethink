@@ -6,6 +6,7 @@ import { usePersistedViewStates, useVscodeStatePersistence } from '../hooks/useP
 import { useSettingsCascade } from '../hooks/useSettingsCascade';
 import { useLinkInterceptor } from '../hooks/useLinkInterceptor';
 import { useConnectionTimeout } from '../hooks/useConnectionTimeout';
+import { useAudio } from '../hooks/useAudioCapture';
 import { getVscodeApi, migrateSavedState, postMessageToExtension, persistVscodeState } from '../lib/vscodeops';
 import type { UsePendingWorkApi } from '../notethink-views/src/hooks/usePendingWork';
 import type { UseJumpTargetsApi } from '../notethink-views/src/hooks/useJumpTargets';
@@ -30,6 +31,7 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         !!saved_state?.docs && Object.keys(saved_state.docs).length > 0,
     );
     const { settings_cascade, setSettingsCascade } = useSettingsCascade();
+    const audio_props = useAudio(postMessageToExtension);
     const {
         view_states,
         view_states_ref,
@@ -106,5 +108,6 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         excludeFilter={excludeFilter}
         settingsCascade={settings_cascade}
         fileDeclaredIntegration={file_declared_integration}
+        {...audio_props}
     />;
 }

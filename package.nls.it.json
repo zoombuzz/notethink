@@ -12,6 +12,7 @@
   "command.drillIn": "NoteThink: Entra nella nota",
   "command.drillOut": "NoteThink: Risali di un livello",
   "command.clearFocus": "NoteThink: Cancella selezione",
+  "command.setAudioEndpointToken": "NoteThink: Imposta il token dell'endpoint audio",
   "config.title": "NoteThink",
   "config.trace.description": "Traccia la comunicazione tra VS Code e l'estensione.",
   "config.settings.view.type.description": "Tipo di vista predefinito. L'impostazione utente si applica a ogni area di lavoro, salvo che venga sovrascritta localmente.",
@@ -63,5 +64,6 @@
   "config.settings.view.generic.openNewEditorIfNoneOpen.description": "Quando fai clic su una nota e nessun editor è aperto accanto alla vista NoteThink, apri la nota in un nuovo gruppo di editor. Quando disattivato, fare clic su una nota non apre mai un nuovo gruppo di editor.",
   "config.settings.files.includeFilter.description": "Glob dei file da includere in modalità cartella.",
   "config.settings.files.excludeFilter.description": "Glob dei file da escludere in modalità cartella.",
-  "config.settings.files.maxNotesPerFile.description": "Limite al numero di storie di primo livello prese da ciascun file sorgente nella fusione aggregata di cartella."
+  "config.settings.files.maxNotesPerFile.description": "Limite al numero di storie di primo livello prese da ciascun file sorgente nella fusione aggregata di cartella.",
+  "config.audio.endpoint.description": "URL di un endpoint di trascrizione che riceve l'audio del microfono registrato dal visualizzatore NoteThink. Lasciare vuoto per disattivare l'acquisizione audio. Deve usare https, oppure http solo per un indirizzo di loopback, e può essere impostato solo nelle impostazioni utente; un valore dell'area di lavoro viene ignorato. Il token bearer facoltativo si imposta con il comando NoteThink: Imposta il token dell'endpoint audio."
 }

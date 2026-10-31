@@ -339,6 +339,24 @@ export interface PendingChangeMessage {
 }
 
 /**
+ * AudioState is the window-wide audio capture state the extension pushes to every viewer.
+ * - available: an endpoint is configured and valid; false means no audio control renders at all
+ * - enabled: the user's remembered on or off choice
+ * - owner: this viewer is the one that captures, one per window
+ * - capturing: the owner reports its microphone is live
+ * - error_name: the last microphone failure, cleared on the next successful start
+ * - dropped_count: chunks dropped from the upload queue this session
+ */
+export interface AudioState {
+    available: boolean;
+    enabled: boolean;
+    owner: boolean;
+    capturing: boolean;
+    error_name?: string;
+    dropped_count: number;
+}
+
+/**
  * Extension -> webview progress ticks during folder discovery, bracketed by the pendingChange
  * folderDiscovery signal. 'walking' only ticks on the non-file: readDirectory walk, where findFiles
  * gives no incremental progress; 'loading' covers the per-file read that follows discovery on every

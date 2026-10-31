@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { initLogDir, writeToErrorLog, writeToLog } from './lib/errorops';
 import { applyBagDelta, CASCADE_KEY_DEFAULTS, editTarget, readBagCell } from './lib/settings';
+import { registerAudioEndpointTokenCommand } from './vscode/audioSettings';
+import { AudioCaptureCoordinator } from './vscode/AudioCaptureCoordinator';
 import { NotethinkEditorProvider } from './vscode/notethinkEditor';
 
 const PANEL_VIEWTYPE = 'notethink';
@@ -32,8 +34,12 @@ export function activate(context: vscode.ExtensionContext): void {
 	// the happy path logs nothing else at info or above, so this tells a quiet session from a broken build
 	const build_kind = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV) ? 'dev' : 'production';
 	writeToLog('activate', `NoteThink ${context.extension.packageJSON.version as string} activated (${build_kind} build)`);
+	// one coordinator per window: it owns the microphone, the upload session and the remembered on or off choice
+	const audio_coordinator = new AudioCaptureCoordinator({ secrets: context.secrets, global_state: context.globalState });
+	context.subscriptions.push({ dispose: () => audio_coordinator.dispose() });
+	audio_coordinator.init().catch((err: unknown) => writeToErrorLog('activate', 'audio coordinator init failed', err));
 	// register our custom editor for "Open With..." right-click
-	const provider = new NotethinkEditorProvider(context);
+	const provider = new NotethinkEditorProvider(context, audio_coordinator);
 	const provider_registration = vscode.window.registerCustomEditorProvider(NotethinkEditorProvider.viewType, provider);
 	context.subscriptions.push(provider_registration);
 	// register serializer to restore panels after window reload
@@ -86,6 +92,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		const current = (readBagCell('cards', 'allcards', 'showLineNumbers') ?? CASCADE_KEY_DEFAULTS.showLineNumbers) as boolean;
 		await applyBagDelta('cards', [{ node_id: 'allcards', key: 'showLineNumbers', value: !current }], editTarget());
 	}));
+	// the optional bearer token for the audio endpoint lives in secret storage, set only through this command
+	context.subscriptions.push(registerAudioEndpointTokenCommand(context.secrets));
 	// navigation commands
 	for (const direction of ['up', 'down', 'drillIn', 'drillOut', 'clearFocus'] as const) {
 		const command_map: Record<string, string> = {

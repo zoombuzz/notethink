@@ -125,6 +125,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
         view_state_ids,
         file_declared_integration: props.fileDeclaredIntegration,
         display_options: view_display_options,
+        audio_state: props.audioState,
         // --- note tree ---
         nested: {
             parent_context: merged_root,
@@ -139,6 +140,8 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
             deleteViewFromManagedState: () => {},
             revertAllViewsToDefaultState: () => {},
             onNavigationCommand: props.onNavigationCommand,
+            toggleAudio: props.toggleAudio,
+            reportAudioIndicatorPresence: props.reportAudioIndicatorPresence,
             postMessage: props.postMessage ? (message: unknown) => {
                 // click handlers attach docPath from note.origin; without it, the extension drops what it can't route
                 props.postMessage!(message);

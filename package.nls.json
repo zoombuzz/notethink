@@ -12,6 +12,7 @@
   "command.drillIn": "NoteThink: Drill Into Note",
   "command.drillOut": "NoteThink: Navigate Back Up",
   "command.clearFocus": "NoteThink: Clear Focus",
+  "command.setAudioEndpointToken": "NoteThink: Set Audio Endpoint Token",
   "config.title": "NoteThink",
   "config.trace.description": "Traces the communication between VS Code and the extension.",
   "config.settings.view.type.description": "Default view type. The user default applies in every workspace unless that workspace overrides it.",
@@ -63,5 +64,6 @@
   "config.settings.view.generic.openNewEditorIfNoneOpen.description": "When you click a note and no editor is open beside the NoteThink view, open the note in a new editor group. When off, clicking a note never spawns a new editor group.",
   "config.settings.files.includeFilter.description": "Glob of files to include in folder mode.",
   "config.settings.files.excludeFilter.description": "Glob of files to exclude in folder mode.",
-  "config.settings.files.maxNotesPerFile.description": "Cap on stories taken from each source file when merging the folder aggregate."
+  "config.settings.files.maxNotesPerFile.description": "Cap on stories taken from each source file when merging the folder aggregate.",
+  "config.audio.endpoint.description": "URL of a transcription endpoint that receives microphone audio recorded from the NoteThink viewer. Leave empty to switch audio capture off. It must use https, or http for a loopback address, and can be set only in your user settings; a workspace value is ignored. Set the optional bearer token with the NoteThink: Set Audio Endpoint Token command."
 }

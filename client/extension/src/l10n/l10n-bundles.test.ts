@@ -36,12 +36,16 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         'Position:',
         // "Name" is the German word; es/fr/it all differ
         'Name',
+        // "Token" is the German word for a credential token; fr uses "Jeton"
+        'Token',
     ],
     es: [
         // "Auto" is the accepted Spanish abbreviation of "automatico"; de and it use the full word
         'Auto ({0})',
         // "tokens" is the Spanish loanword its "{0} tokens ({1}d)" value already uses; de/fr/it all differ
         '{0} tokens',
+        // "Token" is the Spanish loanword for a credential token; fr uses "Jeton"
+        'Token',
     ],
     fr: [
         // "Collisions" is the French word; de/es/it all differ
@@ -55,7 +59,10 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         // "agent" is the French word too, pluralised with the same "(s)" suffix English uses; de/es/it all differ
         '{0} agent(s)',
     ],
-    it: [],
+    it: [
+        // "Token" is the Italian loanword for a credential token; fr uses "Jeton"
+        'Token',
+    ],
 };
 
 /*

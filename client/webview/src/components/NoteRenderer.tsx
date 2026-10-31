@@ -10,7 +10,7 @@ import { pickMostRecentlySentDoc } from "../lib/docops";
 import type { Nodes as MdastNodesType } from "mdast";
 import type { HashMapOf, Doc } from "../types/general";
 import type { TextSelection } from "../notethink-views/src/types/NoteProps";
-import type { SettingsCascadePayload, DiscoveryProgress } from "../notethink-views/src/types/Messages";
+import type { SettingsCascadePayload, DiscoveryProgress, AudioState } from "../notethink-views/src/types/Messages";
 import type { FileIntegrationDeclaration } from "../lib/docops";
 import type { ViewState } from './ExtensionReceiver';
 import NoteTreeComposer from './composers/NoteTreeComposer';
@@ -35,6 +35,7 @@ export function renderNodeUnified(node: MdastNodes): ReactElement {
  * Props plumbed from ExtensionReceiver into the rendered note/view tree.
  * - activeEditorDocPath: path of the doc whose editor is currently active (the last `selectionChanged` source); feeds the per-doc matcher in useViewContext so the caret-driven note focus works in folder mode where the rendered tree aggregates many files. Surfaces here in camelCase per the component-props naming rule; the composers translate to ViewProps.active_editor_doc_path at the data-shape boundary
  * - fileDeclaredIntegration: the opened file's declared integration intent (folder/current_file + scope), resolved at the App layer and threaded through so navigation handlers can reconcile auto congruence
+ * - audioState, toggleAudio, reportAudioIndicatorPresence: the window-wide audio state and the two handlers the toolbar's recording control calls, threaded through to every view
  */
 export interface NoteRendererProps {
     notes: HashMapOf<Doc>;
@@ -53,6 +54,9 @@ export interface NoteRendererProps {
     excludeFilter?: string;
     settingsCascade?: SettingsCascadePayload;
     fileDeclaredIntegration?: FileIntegrationDeclaration;
+    audioState?: AudioState;
+    toggleAudio?: (enabled: boolean) => void;
+    reportAudioIndicatorPresence?: (present: boolean) => void;
 }
 
 /**

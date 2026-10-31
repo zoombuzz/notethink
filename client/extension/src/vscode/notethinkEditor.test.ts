@@ -12,8 +12,10 @@ import * as vscode from 'vscode';
 import { createMockWebviewPanel, Position, RelativePattern, Selection, Uri } from '../__mocks__/vscode';
 import { NotethinkEditorProvider } from './notethinkEditor';
 import { PanelSession } from './PanelSession';
+import { AUDIO_CHUNK_BYTES, AudioCaptureCoordinator } from './AudioCaptureCoordinator';
 import { FLAT_SETTINGS, buildDeclaredSettingsContributions, flatSettingKeys } from '../lib/settings';
 import { DEFAULT_EXCLUDE_FILTER } from '../constants';
+import * as cryptoops from '../lib/cryptoops';
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -1139,11 +1141,21 @@ describe('NotethinkEditorProvider', () => {
 					if (u.path === paths[paths.length - 1]) { await held; }
 					return mockTextDocument(`# story in ${u.path}`, u.path);
 				});
+				// a load's last await hashes its text and the doc is stored right after, so a settled text hash marks a loaded doc
+				const hashed_texts = new Set<string>();
+				const original_hash = cryptoops.generateIdentifier;
+				const hash_spy = jest.spyOn(cryptoops, 'generateIdentifier').mockImplementation(async (message, algo) => {
+					const digest = await original_hash(message, algo);
+					hashed_texts.add(message);
+					return digest;
+				});
 				panelHelper.postedMessages.length = 0;
 				await panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace/notes' });
-				while ((vscode.workspace.openTextDocument as jest.Mock).mock.calls.length < count) { await flush(); }
-				// unheld loads still hash async with no completion signal, so drain generously; it costs only microseconds
-				for (let turn = 0; turn < 200; turn++) { await flush(); }
+				// the hashes run on the thread pool, so under load they can take many turns; wait on them rather than a fixed count
+				const unheld_texts = paths.slice(0, -1).map(p => `# story in ${p}`);
+				while (!unheld_texts.every(text => hashed_texts.has(text))) { await flush(); }
+				await flush();
+				hash_spy.mockRestore();
 				// the scenario needs the batch still queued, since a flush would post an update and leave nothing for the delete to test
 				expect(getUpdates(panelHelper.postedMessages)).toEqual([]);
 				const watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results.slice(-1)[0].value as MockFolderWatcher;
@@ -1776,6 +1788,23 @@ describe('NotethinkEditorProvider', () => {
 			const html = panelHelper.panel.webview.html as string;
 			expect(html).toContain('worker-src blob:');
 			expect(html).toContain(`connect-src ${panelHelper.panel.webview.cspSource}`);
+		});
+
+		it('serves exactly this CSP: nonce plus the audio worklet module in script-src, no other new source', () => {
+			const html = panelHelper.panel.webview.html as string;
+			const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];
+			const nonce = html.match(/nonce="([^"]+)"/)?.[1];
+			const csp_source = panelHelper.panel.webview.cspSource;
+			expect(csp).toBe(
+				`default-src 'none'; img-src ${csp_source} blob:; style-src ${csp_source} 'unsafe-inline'; `
+				+ `script-src 'nonce-${nonce}' file:///mock/extension/client/webview/dist/audioWorklet.js; `
+				+ `worker-src blob:; connect-src ${csp_source};`,
+			);
+		});
+
+		it('passes the audio worklet url on the chunk config for the webview capture module', () => {
+			const html = panelHelper.panel.webview.html as string;
+			expect(html).toContain('audio_worklet_url: "file:///mock/extension/client/webview/dist/audioWorklet.js"');
 		});
 
 		it('sets window.__notethinkChunkConfig so chunkLoading.ts can wire split chunks before any React.lazy import fires', () => {
@@ -2817,6 +2846,94 @@ describe('NotethinkEditorProvider', () => {
 			panelHelper.postedMessages.length = 0;
 			await panelHelper.simulateMessage({ type: 'requestInitialState' });
 			expect(findByType(panelHelper.postedMessages, 'activity')).toBeUndefined();
+		});
+	});
+
+	// ---- audio capture wiring -----------------------------------------------
+
+	describe('audio messages', () => {
+		const audio_endpoint = 'https://transcribe.example.com';
+		let coordinator: AudioCaptureCoordinator;
+		let fetch_fn: jest.Mock;
+
+		async function openAudioPanel(): Promise<ReturnType<typeof createMockWebviewPanel>> {
+			const doc = mockTextDocument(defaultDocText, defaultDocPath);
+			const audio_provider = new NotethinkEditorProvider(mockExtensionContext(), coordinator);
+			const audio_panel = createMockWebviewPanel();
+			await (audio_provider as unknown as { myWebviewPanel: (panel: unknown, doc: unknown) => Promise<void> }).myWebviewPanel(audio_panel.panel, doc);
+			return audio_panel;
+		}
+
+		function lastAudioState(helper: ReturnType<typeof createMockWebviewPanel>): Record<string, unknown> {
+			const states = helper.postedMessages.filter(m => (m as { type?: string }).type === 'audioState');
+			return (states[states.length - 1] as { state: Record<string, unknown> }).state;
+		}
+
+		function makeCoordinator(endpoint: string): void {
+			fetch_fn = jest.fn(async () => ({ ok: true, status: 200 }));
+			coordinator = new AudioCaptureCoordinator({
+				secrets: { get: async () => undefined } as unknown as vscode.SecretStorage,
+				global_state: { get: (_key: string, fallback: boolean) => fallback, update: jest.fn(async () => {}) } as unknown as vscode.Memento,
+				read_endpoint: () => endpoint,
+				watch: () => ({ dispose: jest.fn() } as unknown as vscode.Disposable),
+				fetch_fn,
+			});
+		}
+
+		afterEach(() => { coordinator.dispose(); });
+
+		it('requestInitialState sends the audio state, unavailable with an empty endpoint', async () => {
+			makeCoordinator('');
+			const helper = await openAudioPanel();
+			helper.postedMessages.length = 0;
+			await helper.simulateMessage({ type: 'requestInitialState' });
+			expect(lastAudioState(helper)).toMatchObject({ available: false, enabled: false, owner: true });
+		});
+
+		it('with no endpoint, a toggle and a chunk make no fetch and the state stays unavailable', async () => {
+			makeCoordinator('');
+			await coordinator.init();
+			const helper = await openAudioPanel();
+			await helper.simulateMessage({ type: 'audioToggle', enabled: true });
+			await helper.simulateMessage({ type: 'audioChunk', chunk_index: 0, started_at: 't', pcm: new Uint8Array(AUDIO_CHUNK_BYTES) });
+			expect(fetch_fn).not.toHaveBeenCalled();
+			expect(lastAudioState(helper)).toMatchObject({ available: false, enabled: false });
+		});
+
+		it('routes audioToggle, audioCaptureStatus and audioChunk to the coordinator and broadcasts to every panel', async () => {
+			makeCoordinator(audio_endpoint);
+			await coordinator.init();
+			const first = await openAudioPanel();
+			const second = await openAudioPanel();
+			await first.simulateMessage({ type: 'audioToggle', enabled: true });
+			expect(lastAudioState(second)).toMatchObject({ enabled: true, owner: false });
+			await first.simulateMessage({ type: 'audioCaptureStatus', capturing: true });
+			await first.simulateMessage({ type: 'audioChunk', chunk_index: 0, started_at: '2026-01-01T00:00:00.000Z', pcm: new Uint8Array(AUDIO_CHUNK_BYTES) });
+			await second.simulateMessage({ type: 'audioChunk', chunk_index: 0, started_at: '2026-01-01T00:00:00.000Z', pcm: new Uint8Array(AUDIO_CHUNK_BYTES) });
+			expect(fetch_fn).toHaveBeenCalledTimes(1);
+			await first.simulateMessage({ type: 'audioCaptureStatus', capturing: false, error_name: 'NotAllowedError' });
+			expect(lastAudioState(second)).toMatchObject({ error_name: 'NotAllowedError' });
+		});
+
+		it('disposing the owner panel hands ownership to the next panel', async () => {
+			makeCoordinator(audio_endpoint);
+			const first = await openAudioPanel();
+			const second = await openAudioPanel();
+			first.simulateDispose();
+			expect(lastAudioState(second)).toMatchObject({ owner: true });
+		});
+
+		it('routes audioFrameCheck to the coordinator', async () => {
+			makeCoordinator(audio_endpoint);
+			const handled: Array<Record<string, unknown>> = [];
+			const original_register = coordinator.register.bind(coordinator);
+			jest.spyOn(coordinator, 'register').mockImplementation((post) => {
+				const registration = original_register(post);
+				return { ...registration, handleFrameCheck: (message) => { handled.push(message); registration.handleFrameCheck(message); } };
+			});
+			const panel = await openAudioPanel();
+			await panel.simulateMessage({ type: 'audioFrameCheck', verdict: 'policy-refuses' });
+			expect(handled).toEqual([expect.objectContaining({ type: 'audioFrameCheck', verdict: 'policy-refuses' })]);
 		});
 	});
 });

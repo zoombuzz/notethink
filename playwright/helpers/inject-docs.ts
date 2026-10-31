@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Frame, Page } from '@playwright/test';
 import * as crypto from 'node:crypto';
 import { fixtureText } from './fixtures';
 import { parse } from './parse-markdown';
@@ -37,7 +37,7 @@ function readFixtureDoc(fixture_name: string, doc_path?: string, workspace_root_
     };
 }
 
-export async function injectDocsFromFixture(page: Page, fixture_name: string, doc_path?: string, workspace_root_or_options?: string | InjectOptions): Promise<{ id: string; path: string }> {
+export async function injectDocsFromFixture(page: Page | Frame, fixture_name: string, doc_path?: string, workspace_root_or_options?: string | InjectOptions): Promise<{ id: string; path: string }> {
     const { doc, mdast_json, workspace_root } = readFixtureDoc(fixture_name, doc_path, workspace_root_or_options);
     await page.evaluate(({ doc, mdast_json, ws_root }) => {
         window.dispatchEvent(new MessageEvent('message', {

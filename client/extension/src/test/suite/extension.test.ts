@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { AUDIO_ENDPOINT_SETTING_KEY } from '../../vscode/audioSettings';
 
 /**
  * Integration tests for the NoteThink VS Code web extension.
@@ -87,6 +88,8 @@ suite('Web Extension Test Suite', () => {
 			'notethink.drillIn',
 			'notethink.drillOut',
 			'notethink.clearFocus',
+			// audio
+			'notethink.setAudioEndpointToken',
 		];
 
 		suiteSetup(async () => {
@@ -365,11 +368,14 @@ suite('Web Extension Test Suite', () => {
 			assert.strictEqual(copy?.globalValue, undefined);
 		});
 
-		test('Every declared notethink.settings key can be written and read back at workspace scope', async () => {
+		test('Every declared notethink.settings key can be written and read back at workspace scope', async function () {
+			// every declared key is written, read back and cleared through the real configuration service, so the default is too short
+			this.timeout(15000);
 			const extension = vscode.extensions.getExtension(EXTENSION_ID);
 			assert.ok(extension);
 			const properties: Record<string, { type: string; enum?: string[] }> = extension.packageJSON.contributes.configuration[0].properties;
-			const declared = Object.entries(properties).filter(([full_key]) => full_key.startsWith('notethink.settings.'));
+			// the audio endpoint is application scoped, so a workspace write is refused by design
+			const declared = Object.entries(properties).filter(([full_key]) => full_key.startsWith('notethink.settings.') && full_key !== AUDIO_ENDPOINT_SETTING_KEY);
 			const sample = (schema: { type: string; enum?: string[] }): unknown => {
 				if (schema.enum) { return schema.enum[schema.enum.length - 1]; }
 				if (schema.type === 'boolean') { return true; }

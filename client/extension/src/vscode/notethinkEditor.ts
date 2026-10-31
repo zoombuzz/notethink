@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { getNonce } from '../lib/cryptoops';
+import { cspSourceForUrl } from '../lib/cspSourceForUrl';
 import { NOTETHINK_VIEW_TYPE } from '../constants';
 import { AgentAnalyser } from './AgentAnalyser';
+import type { AudioCaptureCoordinator } from './AudioCaptureCoordinator';
 import { PanelSession } from './PanelSession';
 import { ParsePool } from './ParsePool';
 
@@ -38,7 +40,11 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 		return provider_registration;
 	}
 
-	constructor(private readonly context: vscode.ExtensionContext) {
+	constructor(
+		private readonly context: vscode.ExtensionContext,
+		// one window-wide audio coordinator shared by every panel; absent in hosts that do not offer audio
+		private readonly audio_coordinator?: AudioCaptureCoordinator,
+	) {
 		this.activity_analyser = new AgentAnalyser(context);
 		this.parse_pool = new ParsePool(context);
 	}
@@ -72,6 +78,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			(panel) => { if (this.activePanel === panel) { this.activePanel = undefined; } },
 			this.activity_analyser,
 			this.parse_pool,
+			this.audio_coordinator,
 		);
 		await session.start();
 	}
@@ -101,13 +108,16 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 			this.context.extensionUri, client_dist_directory)).toString() + '/';
 		// dev cache-buster: a per-load query param forces a fresh fetch instead of a rebuilt bundle served stale by URL
 		const cache_bust = (typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV) ? `?v=${Date.now()}` : '';
+		// the CSP names the worklet file through cspSourceForUrl, because the raw webview host is not a valid CSP host
+		const audio_worklet_uri = webview.asWebviewUri(vscode.Uri.joinPath(
+			this.context.extensionUri, client_dist_directory, 'audioWorklet.js')).toString();
 		const nonce = getNonce();
 		return /* html */`
 			<!DOCTYPE html>
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; worker-src blob:; connect-src ${webview.cspSource};">
+				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${cspSourceForUrl(audio_worklet_uri)}; worker-src blob:; connect-src ${webview.cspSource};">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
 				<title>NoteThink</title>
 			</head>
@@ -116,7 +126,7 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 				<script nonce="${nonce}">
 					(function() {
 						// read by chunkLoading.ts to set webpack's runtime chunk base URL and nonce before a split chunk loads
-						window.__notethinkChunkConfig = { publicPath: ${JSON.stringify(chunk_public_path)}, nonce: ${JSON.stringify(nonce)} };
+						window.__notethinkChunkConfig = { publicPath: ${JSON.stringify(chunk_public_path)}, nonce: ${JSON.stringify(nonce)}, audio_worklet_url: ${JSON.stringify(audio_worklet_uri + cache_bust)} };
 						// Disable React 19's component Performance Track by removing performance.measure
 						// BEFORE the webview bundle loads. React's supportsUserTiming flag is evaluated
 						// once at module-load time via "typeof performance.measure === 'function'"; when

@@ -4,7 +4,7 @@
   "author": "NoteThink",
   "publisher": "NoteThink",
   "description": "%description%",
-  "version": "0.4.15",
+  "version": "0.4.16",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
   "homepage": "https://www.notethink.com",
@@ -99,6 +99,10 @@
       {
         "command": "notethink.clearFocus",
         "title": "%command.clearFocus%"
+      },
+      {
+        "command": "notethink.setAudioEndpointToken",
+        "title": "%command.setAudioEndpointToken%"
       }
     ],
     "menus": {
@@ -471,6 +475,12 @@
             "minimum": 1,
             "default": 10,
             "description": "%config.settings.files.maxNotesPerFile.description%"
+          },
+          "notethink.settings.audio.endpoint": {
+            "type": "string",
+            "scope": "application",
+            "default": "",
+            "description": "%config.audio.endpoint.description%"
           }
         }
       }
@@ -494,7 +504,8 @@
     "package": "webpack --mode production --devtool hidden-source-map",
     "postinstall": "cd client/extension && pnpm install && cd ../../ && cd client/webview && pnpm install && cd ../.. && cd client/webview/src/notethink-views && pnpm install && cd ../../../..",
     "package:vsix": "vsce package --no-dependencies",
-    "publish:marketplace": ": \"${TF_VAR_notethink_vsce_alex_publishonly_pat:?missing - provisioned via puppet-managed ~/.bash_envvars}\" && VSCE_PAT=\"$TF_VAR_notethink_vsce_alex_publishonly_pat\" vsce publish --no-dependencies",
+    "publish:marketplace": "dotenvx run --no-armor --quiet --ignore=MISSING_ENV_FILE -f .env.dev -- bash -c ': \"${VSCE_PAT:?missing - export it or set it in .env.dev}\" && vsce publish --no-dependencies'",
+    "publish:openvsx": "dotenvx run --no-armor --quiet --ignore=MISSING_ENV_FILE -f .env.dev -- bash -c ': \"${OVSX_PAT:?missing - export it or set it in .env.dev}\" && ovsx publish --no-dependencies'",
     "test-playwright-with-ui": "pnpm run build && playwright test --ui",
     "chrome": "pnpm run build && vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ./docstech"
   },
@@ -508,6 +519,7 @@
     "util": "^0.12.5"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "^2.38.2",
     "@eslint/js": "10.0.1",
     "@playwright/test": "^1.64.1",
     "@stylistic/eslint-plugin": "^5.10.0",
@@ -532,6 +544,7 @@
     "micromark-extension-gfm": "^3.0.0",
     "mocha": "^12.0.3",
     "npm-check-updates": "^23.1.1",
+    "ovsx": "^1.3.0",
     "path-browserify": "^1.0.1",
     "process": "^0.11.10",
     "sass": "^1.106.1",

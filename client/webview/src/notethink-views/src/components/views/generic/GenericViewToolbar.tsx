@@ -9,6 +9,7 @@ import type { StableIdCollision } from "../../../lib/noteops";
 import { enumerateGroupByCandidates, resolveGroupByAxisKey } from "../../../lib/groupbyops";
 import { registryWithUserTypes, resolveViewSetting } from "../../../lib/viewregistryops";
 import type { ActiveDrawer } from "./useToolbarDrawers";
+import AudioRecordingControl from "./AudioRecordingControl";
 import CollisionsDrawer from "../drawers/CollisionsDrawer";
 import FilesDrawer from "../drawers/FilesDrawer";
 import JumpDrawer from "../drawers/JumpDrawer";
@@ -147,6 +148,11 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         &#43;
                     </button>
                 )}
+                <AudioRecordingControl
+                    state={props.audio_state}
+                    onToggle={handlers.toggleAudio}
+                    onPresence={handlers.reportAudioIndicatorPresence}
+                />
                 <ToolbarTab
                     label={viewTypeLabel(viewTypeSelection, autoResolvedType, registry)}
                     testId="view-settings-button"

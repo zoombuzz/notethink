@@ -192,5 +192,11 @@
   "This vendor's transcript cannot be rendered as a chat.": "Das Transkript dieses Anbieters kann nicht als Chat dargestellt werden.",
   "No conversation messages found in this transcript.": "In diesem Transkript wurden keine Chat-Nachrichten gefunden.",
   "{0} tool calls": "{0} Werkzeugaufrufe",
-  "No result in view": "Kein Ergebnis in der Ansicht"
+  "No result in view": "Kein Ergebnis in der Ansicht",
+  "Recording audio": "Audioaufnahme läuft",
+  "Record audio": "Audio aufnehmen",
+  "Stop recording": "Aufnahme beenden",
+  "Microphone unavailable: {0}": "Mikrofon nicht verfügbar: {0}",
+  "Bearer token for the audio endpoint. Leave empty to remove the stored token.": "Bearer-Token für den Audio-Endpunkt. Leer lassen, um den gespeicherten Token zu entfernen.",
+  "Token": "Token"
 }

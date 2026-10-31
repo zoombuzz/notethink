@@ -192,5 +192,11 @@
   "This vendor's transcript cannot be rendered as a chat.": "This vendor's transcript cannot be rendered as a chat.",
   "No conversation messages found in this transcript.": "No conversation messages found in this transcript.",
   "{0} tool calls": "{0} tool calls",
-  "No result in view": "No result in view"
+  "No result in view": "No result in view",
+  "Recording audio": "Recording audio",
+  "Record audio": "Record audio",
+  "Stop recording": "Stop recording",
+  "Microphone unavailable: {0}": "Microphone unavailable: {0}",
+  "Bearer token for the audio endpoint. Leave empty to remove the stored token.": "Bearer token for the audio endpoint. Leave empty to remove the stored token.",
+  "Token": "Token"
 }

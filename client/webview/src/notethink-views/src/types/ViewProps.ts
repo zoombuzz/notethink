@@ -1,7 +1,7 @@
 import type {MouseEvent, MutableRefObject, ReactElement} from "react";
 import type {NoteProps, NoteDisplayOptions, NoteHandlers, TextSelection} from "../types/NoteProps";
 import type {ConcreteIntegrationMode} from "./IntegrationMode";
-import type {DiscoveryProgress} from "./Messages";
+import type {AudioState, DiscoveryProgress} from "./Messages";
 
 /**
  * ViewProps is the props shape every view consumes; one instance per rendered view (a kanban board, a document view, the synthetic folder root, etc.) built by the composers and threaded through GenericView.
@@ -9,6 +9,7 @@ import type {DiscoveryProgress} from "./Messages";
  * - file_declared_integration: the opened file's declared integration intent (from nt_integration_mode / nt_breadcrumb_last) resolved at the App layer; the congruence-seeking navigation handlers compare a gesture's resulting mode against this to decide whether to keep auto or pin a concrete mode
  * - discovery_scanning: folder mode only, true from the start of a folder discovery run until its first aggregate payload lands; distinct from the generic pending-work spinner, which also covers unrelated extension round-trips
  * - discovery_progress: folder mode only, the latest discoveryProgress tick for the run discovery_scanning brackets; undefined before the first tick lands or once the run has cleared
+ * - audio_state: the window-wide audio capture state the extension last pushed; undefined until the first push, which the toolbar treats as unavailable
  */
 export interface ViewProps {
     id: string;
@@ -22,6 +23,7 @@ export interface ViewProps {
     aggregate_total_discovered?: number;
     discovery_scanning?: boolean;
     discovery_progress?: DiscoveryProgress;
+    audio_state?: AudioState;
     note_count?: number;
     includeFilter?: string;
     excludeFilter?: string;
@@ -67,6 +69,8 @@ export interface ViewProps {
  * - setNoteExpanded: add or remove one note's stable_id from the view's view_expanded_ids, on the same canonical key setViewInteractionState writes to; manual expansion is view-managed state so it survives a seq reassignment, a remount into another kanban column, and a reload
  * - onNavigationCommand: navigation callback ref - GenericView registers handler, ExtensionReceiver invokes via ref
  * - revealNote: reveal a note's source range in the editor (jump to the story); resolves the source offset/doc_path from origin in folder mode and the in-tree position in current_file mode. used by the collisions drawer to jump to a colliding note so the user can rename it
+ * - toggleAudio: ask the extension to turn audio capture on or off for the whole window; the toolbar's toggle sends the opposite of what the indicator shows
+ * - reportAudioIndicatorPresence: called with true when a recording dot mounts and false when it unmounts; the webview app runs the microphone only while at least one dot is mounted
  */
 export interface ViewApi {
     setViewManagedState: (updates: Array<Record<string, unknown>>) => void;
@@ -84,4 +88,6 @@ export interface ViewApi {
     setViewInteractionState?: (focused_ids: string[], selected_ids: string[], view_caret?: number) => void;
     setNoteExpanded?: (stable_id: string, expanded: boolean) => void;
     onNavigationCommand?: MutableRefObject<((direction: string) => void) | undefined>;
+    toggleAudio?: (enabled: boolean) => void;
+    reportAudioIndicatorPresence?: (present: boolean) => void;
 }

@@ -23,6 +23,7 @@ import {
 import type { HashMapOf, Doc } from '../types/general';
 import { ActivityCommands } from './ActivityCommands';
 import type { AgentAnalyser } from './AgentAnalyser';
+import type { AudioCaptureCoordinator, AudioPanelRegistration } from './AudioCaptureCoordinator';
 import { isParseStaleError, type ParsePool } from './ParsePool';
 
 // change-debounce floor/cap: a doc scales its delay by its own last parse time, self-throttling large files
@@ -132,6 +133,8 @@ export class PanelSession {
 	private activity_demanded = false;
 	private readonly last_parse_duration_ms = new Map<string, number>();
 	private was_visible = true;
+	// this panel's seat in the window-wide audio coordinator; undefined when the host passed none
+	private audio_registration: AudioPanelRegistration | undefined;
 
 	constructor(
 		private readonly webviewPanel: vscode.WebviewPanel,
@@ -142,6 +145,7 @@ export class PanelSession {
 		private readonly onDispose: (panel: vscode.WebviewPanel) => void,
 		private readonly activity_analyser: AgentAnalyser,
 		private readonly parse_pool: ParsePool,
+		private readonly audio_coordinator?: AudioCaptureCoordinator,
 	) {
 		// getWorkspaceFolder handles symlinks for the breadcrumb, but may return undefined in a web host
 		const workspace_folder = (initialDocument ? vscode.workspace.getWorkspaceFolder(initialDocument.uri) : undefined)
@@ -431,10 +435,13 @@ export class PanelSession {
 			this.sendCurrentSelection();
 		});
 		const configSubscription = vscode.workspace.onDidChangeConfiguration(e => this.onDidChangeConfiguration(e));
+		this.audio_registration = this.audio_coordinator?.register(this.post_to_webview);
 		this.webviewPanel.webview.onDidReceiveMessage(e => this.handleMessage(e));
 		const selectionSubscription = vscode.window.onDidChangeTextEditorSelection(e => this.onDidChangeTextEditorSelection(e));
 		this.webviewPanel.onDidDispose(() => {
 			this.onDispose(this.webviewPanel);
+			this.audio_registration?.dispose();
+			this.audio_registration = undefined;
 			if (this.change_timer) { clearTimeout(this.change_timer); }
 			if (this.selection_timer) { clearTimeout(this.selection_timer); }
 			this.discardDiscoveryBatch();
@@ -546,6 +553,10 @@ export class PanelSession {
 				case 'openRelative': return this.handleOpenRelative(e);
 				case 'activityDemand': return this.handleActivityDemand();
 				case 'activityWithdraw': return this.handleActivityWithdraw();
+				case 'audioToggle': return this.audio_registration?.handleToggle(e);
+				case 'audioChunk': return this.audio_registration?.handleChunk(e);
+				case 'audioCaptureStatus': return this.audio_registration?.handleStatus(e);
+				case 'audioFrameCheck': return this.audio_registration?.handleFrameCheck(e);
 				case 'renderError': {
 					// rebuilds an Error from the payload so the client-error report keeps its stack
 					const render_error = new Error(e.message as string);
@@ -573,6 +584,7 @@ export class PanelSession {
 				this.sendCurrentSelection();
 			}
 			this.sendSettingsCascade();
+			this.audio_registration?.sendState();
 			if (this.activity_demanded) { this.activity_analyser.resendTo(this.post_to_webview); }
 			this.syncActiveFileWatcher();
 			await this.openFolderAtWorkspaceRootIfDocless();

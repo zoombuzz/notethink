@@ -12,6 +12,7 @@
   "command.drillIn": "NoteThink : Entrer dans la note",
   "command.drillOut": "NoteThink : Remonter d'un niveau",
   "command.clearFocus": "NoteThink : Effacer la sélection",
+  "command.setAudioEndpointToken": "NoteThink : Définir le jeton du point de terminaison audio",
   "config.title": "NoteThink",
   "config.trace.description": "Trace la communication entre VS Code et l'extension.",
   "config.settings.view.type.description": "Type de vue par défaut. Le paramètre utilisateur s'applique à chaque espace de travail à moins qu'il ne soit remplacé localement.",
@@ -63,5 +64,6 @@
   "config.settings.view.generic.openNewEditorIfNoneOpen.description": "Lorsque vous cliquez sur une note et qu'aucun éditeur n'est ouvert à côté de la vue NoteThink, ouvrir la note dans un nouveau groupe d'éditeurs. Lorsque désactivé, cliquer sur une note n'ouvre jamais de nouveau groupe d'éditeurs.",
   "config.settings.files.includeFilter.description": "Modèle de fichiers à inclure en mode dossier.",
   "config.settings.files.excludeFilter.description": "Modèle de fichiers à exclure en mode dossier.",
-  "config.settings.files.maxNotesPerFile.description": "Limite du nombre de notes de niveau supérieur prises dans chaque fichier source lors de la fusion de l'agrégat de dossier."
+  "config.settings.files.maxNotesPerFile.description": "Limite du nombre de notes de niveau supérieur prises dans chaque fichier source lors de la fusion de l'agrégat de dossier.",
+  "config.audio.endpoint.description": "URL d'un point de terminaison de transcription qui reçoit l'audio du microphone enregistré depuis la vue NoteThink. Laissez vide pour désactiver la capture audio. Elle doit utiliser https, ou http uniquement pour une adresse de bouclage, et ne peut être définie que dans les paramètres utilisateur ; une valeur de l'espace de travail est ignorée. Le jeton porteur facultatif se définit avec la commande NoteThink : Définir le jeton du point de terminaison audio."
 }

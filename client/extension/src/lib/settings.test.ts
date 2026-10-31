@@ -20,6 +20,7 @@ import {
     savedFlatDefaultOf,
     writeFlatSetting,
 } from './settings';
+import { AUDIO_ENDPOINT_SETTING_KEY } from '../vscode/audioSettings';
 
 const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', '..', '..', 'package.json');
 const PACKAGE_NLS_PATHS = ['', '.de', '.es', '.fr', '.it'].map(suffix => path.join(__dirname, '..', '..', '..', '..', `package.nls${suffix}.json`));
@@ -107,7 +108,7 @@ describe('buildDeclaredSettingsContributions - the single source of truth for pa
         const all_properties: Record<string, unknown> = Object.assign({}, ...manifest.contributes.configuration.map(section => section.properties));
         const declared_properties: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(all_properties)) {
-            if (key.startsWith('notethink.settings.')) { declared_properties[key] = value; }
+            if (key.startsWith('notethink.settings.') && key !== AUDIO_ENDPOINT_SETTING_KEY) { declared_properties[key] = value; }
         }
         expect(declared_properties).toEqual(buildDeclaredSettingsContributions());
     });

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoteThink E2E Frame Harness</title>
+    <style>
+        html, body, iframe { width: 100%; height: 100%; margin: 0; border: 0; }
+    </style>
+</head>
+<body>
+    <script>
+        /*
+         * Frames the viewer harness the way VS Code frames a webview: on another origin (127.0.0.1 against
+         * this page's localhost), so the frame's permissions policy follows the iframe's allow list alone.
+         * ?allow=<list> sets that list; without it the iframe has none, as in stock VS Code.
+         */
+        var params = new URLSearchParams(location.search);
+        var frame = document.createElement('iframe');
+        frame.id = 'viewer';
+        if (params.has('allow')) { frame.setAttribute('allow', params.get('allow')); }
+        frame.src = 'http://127.0.0.1:' + location.port + '/playwright/harness/index.html';
+        document.body.appendChild(frame);
+    </script>
+</body>
+</html>

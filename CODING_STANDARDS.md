@@ -324,7 +324,7 @@ Rebuild after every code change (`pnpm run build`, or `pnpm run check`) so the c
 
 ## Release & Publishing
 
-`sh/git/merge-main.sh` (staging -> main) is the production release: it fast-forwards `main`, pushes, then runs `vsce publish` to the VS Code Marketplace. The push to `main` also triggers CI to publish `@zoombuzz/notethink` to GitHub Packages and cut a GitHub Release with the `.vsix`. Three invariants must hold or the release breaks, and all break *after* the merge has already shipped to `main`, so each is a pre-merge checklist item.
+`sh/git/merge-main.sh` (staging -> main) is the production release: it fast-forwards `main`, pushes, then runs `vsce publish` to the VS Code Marketplace and `ovsx publish` to Open VSX. The two scripts, `publish:marketplace` and `publish:openvsx`, read their tokens only as `VSCE_PAT` and `OVSX_PAT`, from the environment or from an uncommitted `.env.dev` loaded through dotenvx (`.env.dev.example` is the template), and never from argv, so no committed file names where a token is kept. Each store publish is version-guarded: an "already published" failure is skipped, any other aborts. The push to `main` also triggers CI to publish `@zoombuzz/notethink` to GitHub Packages and cut a GitHub Release with the `.vsix`. Three invariants must hold or the release breaks, and all break *after* the merge has already shipped to `main`, so each is a pre-merge checklist item.
 
 ### `@types/vscode` must not exceed `engines.vscode`
 

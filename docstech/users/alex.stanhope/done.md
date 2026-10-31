@@ -7884,3 +7884,182 @@ Docs-only corrections where AGENTS.md and CODING_STANDARDS.md disagree with the 
 + [X] delete the invented commit-message examples from AGENTS.md, keeping the pointer to `git log --oneline`
 + [X] restate the mirrored-constants subset as only the include/exclude globs; `DEFAULT_COLUMN_ORDER` is webview-only
 + [X] lift the `@types/vscode` reject in `.ncurc.json` so each dependency wave takes the latest types and raises `engines.vscode` with them, as the CODING_STANDARDS.md wave rule says
+
+
+### Show the record button only where capture works [](?id=audio-capture-where-it-works)
+
+Pressing "Record audio" in desktop VS Code always ends in "Microphone unavailable: NotAllowedError", because the editor never lets a webview open the microphone. The control should appear only where recording is known to work, so nobody is offered a button that cannot succeed.
+
++ background
+  + measured in desktop VS Code 1.143.1: "Record audio" shows "Microphone unavailable: NotAllowedError" and no prompt; evidence under [[audio-capture-to-endpoint]]
+  + desktop VS Code's main process grants a `vscode-webview://` frame only `pointerLock`, `notifications` and clipboard permissions, never `media`, so no extension change makes desktop capture work
+  + in VS Code for the Web the browser decides: the page's `Permissions-Policy` and both webview iframe `allow` lists must grant `microphone`
+    + stock VS Code for the Web grants it in neither iframe (read from the VSCodium 1.135 web build), so most web hosts refuse too
+    + a host can grant it, and the hosted workbench NoteThink ships in is adding the grant in its own project
+  + the extension host can tell desktop from web through `vscode.env.uiKind`, but gating on it would keep the control hidden if a later desktop release grants webviews the microphone
+  + read from desktop VS Code 1.144.0: both webview iframes carry `allow="cross-origin-isolated; autoplay; local-network-access; clipboard-read; clipboard-write"`, and the main process sets a permission check handler as well as a request handler, both withholding `media` from webviews; the first shows in the frame's permissions policy, and the second as `navigator.permissions.query` reporting `denied` (both measured in the NoteThink webview)
+  + the audio state already carries `available`, and the control renders nothing when it is false (`AudioRecordingControl.tsx`, `lib/audiostateops.ts`)
+  + no PATTERNS.md entry for checking a browser capability before offering it; new pattern
++ decisions
+  + desktop is detected, not assumed: no check reads `vscode.env.uiKind`, and the same frame check runs everywhere, so desktop VS Code is refused by what its webview frames report and a release that grants the microphone shows the control unchanged
+  + each viewer checks its own frame, and shows the control only when all three hold
+    + the frame's permissions policy allows `microphone` (`document.permissionsPolicy`, or the older `document.featurePolicy`)
+    + `navigator.mediaDevices.getUserMedia` exists
+    + `navigator.permissions.query({ name: 'microphone' })` does not report `denied`
+  + a browser with no permissions-policy query (Firefox, Safari) counts as unknown, so the control stays hidden there
+    + this gives up capture on those browsers even on a host that grants it; widening it needs its own evidence
+  + the check never calls `getUserMedia`, so no prompt appears before the user presses the button
+  + capture runs behind the same check, so a frame that fails it never requests the microphone
+  + "Microphone unavailable: {0}" stays, for a refusal at the browser's own prompt
+  + each viewer reports its verdict to the extension, which writes each distinct one once to the NoteThink output channel, so a hidden control can be explained
++ [X] refuse desktop VS Code through the frame check rather than `vscode.env.uiKind`, and log each viewer's verdict, with Jest tests
+  + `checkMicrophoneFrame` returns a verdict (`allowed`, `no-policy-query`, `policy-refuses`, `no-getusermedia`, `permission-denied`); `useMicrophoneFrameCheck` posts it once as `audioFrameCheck`, and `AudioCaptureCoordinator.handleFrameCheck` logs each distinct verdict once per window
+  + `AudioCaptureCoordinator.test.ts` covers the logging and ignores malformed verdicts; `notethinkEditor.test.ts` covers the routing; `useAudioCapture.test.tsx` covers the single report
++ [X] add the frame check as a pure function in the webview, with Jest tests for each refusing case and the passing case
+  + `checkMicrophoneFrame` in `client/webview/src/lib/audioCapture.ts` takes an injected `MicrophoneFrameEnv`; `readMicrophoneFrameEnv` reads `document.permissionsPolicy`, then `document.featurePolicy`
+  + `audioCapture.test.ts`: passes on `prompt` and `granted`; refuses on `denied`, a policy that refuses or throws, no policy query, and no `getUserMedia`; a missing or failing permissions query does not refuse; every case asserts 0 `getUserMedia` calls
++ [X] render the control and run capture only when the extension reports available and the frame check passed
+  + `useAudio` runs the check once, the first time the extension reports available, and `applyFrameCheck` (`lib/audiostateops.ts`) reports unavailable until it passes; the toolbar and the capture gate both read that one state
+  + `useAudioCapture.test.tsx`: a refusing or still-running check leaves the state unavailable and builds 0 captures with a dot mounted; the check runs once across availability flips
++ [X] add a Playwright spec: a harness frame without `allow="microphone"` shows no control and one with it shows the toggle, or, if the harness cannot frame the viewer, assert at Jest level and say what was measured
+  + `playwright/specs/audio-control.spec.ts` frames the harness cross-origin through `playwright/harness/frame.html`, as VS Code frames a webview
+  + measured in Chromium: `featurePolicy.allowsFeature('microphone')` is false without the allow list and true with it; without it the frame shows 0 audio elements and makes 0 `getUserMedia` calls, with it the toggle shows, still with 0 calls, and a press posts `audioToggle` on
++ [X] verify in desktop VS Code 1.144.0 with an endpoint set that the header bar shows no audio control, and the NoteThink output channel logs `policy-refuses`
+  + measured in a fresh desktop VS Code 1.144.0 profile with the endpoint set and the working copy as the development extension, driven over the DevTools protocol: the header bar shows only the breadcrumb and view pickers, with 0 audio elements and 0 `getUserMedia` calls
+  + in the webview frame, `featurePolicy.allowsFeature('microphone')` is false and `navigator.permissions.query` reports `denied`; the NoteThink output channel logs "microphone frame check: policy-refuses, so the record control stays hidden"
++ [X] bump the patch version once with the other audio stories and add a CHANGELOG entry
+  + released as 0.4.16 (`package.json`), with the audio entries under 0.4.16 in `CHANGELOG.md`
++ manual: once a web host grants `microphone` in both webview iframe allow lists, check in Chrome that the toggle shows, the first press prompts, and allowing it shows the red dot
++ acceptance, fixed before the run
+  + desktop VS Code with a valid endpoint: 0 audio elements in the header bar and 0 `getUserMedia` calls
+  + a web frame whose policy refuses `microphone`: 0 audio elements and 0 `getUserMedia` calls
+  + a web frame that allows it: the toggle shows, and the first press prompts
++ blast radius
+  + users on desktop, or on a web host that refuses, lose a control that could never work
++ reversal
+  + revert the commit; nothing is stored
+
+
+### Capture microphone audio and stream it to a configured endpoint [](?id=audio-capture-to-endpoint)
+
+NoteThink can turn spoken input into text in a place the user chooses, but it has no way to hear the microphone. This adds an opt-in capture feature: the viewer records short audio chunks and sends them to a transcription endpoint the user configures. With no endpoint configured the feature does nothing.
+
++ background
+  + the extension is a web extension only (`package.json` has `browser` and no `main`), so the extension host cannot open a microphone; only the webview can
+  + the webview's content security policy is set in `client/extension/src/vscode/notethinkEditor.ts:110` (`default-src 'none'`, nonce-only scripts, `worker-src blob:`)
+  + webview messages are handled at `client/extension/src/vscode/PanelSession.ts:528` (`handleMessage`), with state pushed to the webview by `postMessage` calls such as the one at `PanelSession.ts:419`
+  + settings are declared in `package.json` under `contributes.configuration` and read through `client/extension/src/lib/settings.ts` (`FLAT_SETTINGS` at line 66)
+  + a webview may be refused the microphone by its host; the feature must then say so instead of failing silently
+    + VS Code 1.143.1's webview iframe `allow` list (`cross-origin-isolated; autoplay; local-network-access; clipboard-read; clipboard-write`) has no `microphone`, and Chromium refuses `getUserMedia` with `NotAllowedError` in a cross-origin iframe under that list
+    + so capture ships behind the frame check in [[audio-capture-where-it-works]], which hides the control wherever the frame refuses the microphone
+    + first run inside VS Code 1.143.1 showed "Microphone unavailable: AbortError", which came from the worklet CSP fault below, not the microphone; `getUserMedia` was never reached
+    + measured in VS Code 1.143.1 desktop once the worklet loaded: pressing "Record audio" shows "Microphone unavailable: NotAllowedError", with no permission prompt, on a machine whose microphone works in other apps
+    + read from VS Code 1.143.1's main process (`configureSession`): a request from a `vscode-webview://` frame may be granted only `pointerLock`, `notifications` and clipboard permissions; `media`, the permission behind `getUserMedia`, is granted only to the workbench itself
+    + so a webview is refused the microphone twice, by the iframe `allow` list and by the main-process permission handler, and no extension setting reaches either; capture in a desktop webview cannot work as designed
+  + no PATTERNS.md entry for media capture; new pattern
++ decisions
+  + capture runs in the webview with an `AudioWorklet`, delivering 16 kHz mono PCM16 chunks of 2 s (64000 bytes)
+  + the upload happens in the extension host, not the webview, so the webview needs no `connect-src` for the endpoint and a credential never enters webview code
+  + each chunk is sent as `PUT {endpoint}/{session_id}/{sequence}` with the header `X-Chunk-Started-At` (ISO time, client clock) and a body of raw PCM16LE
+  + a cheap energy gate drops chunks that stay silent after a 1 s hangover; sequence numbers keep increasing so a receiver sees the gap
+  + `notethink.settings.audio.endpoint` is a string, default empty; empty means the feature is unavailable and no control is shown
+  + the setting is declared with `scope: application`, so a workspace cannot set it and redirect audio from a repository's own settings
+  + an optional bearer credential is kept in the editor's secret storage and set by a command, never written to settings
+  + the endpoint must be `https:`, or `http:` only for a loopback host; URLs carrying credentials are refused
+  + capture starts only from an explicit user action, never on activation, and the on or off state is remembered per user
+    + every window session starts with recording off, even when the remembered choice is on; the remembered value is kept as a record
+    + an endpoint that is cleared or becomes invalid also turns recording off, so a restored endpoint waits for a click
+  + an endpoint carrying a query string or fragment is refused, because the chunk path is appended to it
+  + one capture runs per window: the first open viewer owns it and hands over when that viewer closes; with no viewer open, nothing is captured
+  + failed uploads queue at most 30 chunks (60 s), drop the oldest, and expose a dropped count; they retry with backoff capped at 30 s
+  + nothing is stored: audio is held in memory until sent
++ files and wiring
+  + `client/extension/src/lib/audioops.ts` (new): endpoint validation, chunk numbering, queue, retry; colocated `audioops.test.ts`
+  + `client/extension/src/vscode/PanelSession.ts:528`: handle `audioToggle` and `audioChunk`, post `audioState`
+  + `client/webview/src/lib/audioCapture.ts` and a worklet module (new): `getUserMedia`, resampling, gating, chunking
+  + `package.json` `contributes.configuration` and `commands`: the setting, the token command, and entries in `package.nls*.json`
+  + `client/extension/src/vscode/notethinkEditor.ts:110`: allow the worklet module's source in `script-src` and nothing else new
++ [X] add the setting with `scope: application` and the secret-storage token command
+  + `client/extension/src/vscode/audioSettings.ts` reads only the user value and registers `notethink.setAudioEndpointToken`; 18 Jest tests prove workspace and folder values are ignored and the endpoint stays out of the webview settings cascade
++ [X] write `audioops.ts` with endpoint validation, the queue and retry, and tests
+  + `client/extension/src/lib/audioops.ts`, 28 tests in `audioops.test.ts`: 90 s outage holds 30, drops 15, delivers 15 to 44 in order; 300 chunks with no gaps; host-to-stub median about 1 ms on a local stub
++ [X] write the webview capture module and worklet, with a Jest test using a mocked `MediaDevices`
+  + `client/webview/src/lib/audioCapture.ts`, worklet `client/webview/src/audioWorklet.ts` built to `dist/audioWorklet.js`, signal helpers in `lib/audiochunkops.ts`; 27 Jest tests
+  + gate: a 100 ms frame is active at RMS 0.01 (-40 dBFS) or above; a 2 s window is sent if it holds an active frame or starts within 1 s of the last one, and dropped windows still advance the index
+  + measured in Jest: 600 s of tone gives 300 chunks with no missing index, 600 s of silence gives 0, and main-thread cost per chunk is 0.03 ms mean, 0.18 ms p99, 7.7 ms max (one outlier)
++ [X] wire `audioToggle`, `audioChunk` and `audioState` through `PanelSession.ts`
+  + `client/extension/src/vscode/AudioCaptureCoordinator.ts`, one per window: the first open viewer owns capture and hands over on close, only the owner's chunks are queued, and each capture start or handover opens a new upload session; 20 Jest tests
+  + webview: `useAudioState` and `useAudioCapture` in `ExtensionReceiver` run the microphone only while `isAudioRecordingOn`, this viewer owns it and a recording dot is mounted; 19 Jest tests
++ [X] widen the CSP for the worklet module only, and keep a test that asserts the policy string
+  + `script-src` gains only the `dist/audioWorklet.js` webview URI; `notethinkEditor.test.ts` asserts the full policy string
+  + measured in VS Code 1.143.1: naming the worklet by its raw webview URL allowed nothing, because the host `file%2B.vscode-resource.vscode-cdn.net` is not a valid CSP host; Chromium drops the source as invalid and `addModule` rejects with `AbortError` before `getUserMedia` runs
+  + `lib/cspSourceForUrl.ts` now wildcards only the host's first label and keeps the exact file path (`https://*.vscode-resource.vscode-cdn.net/.../audioWorklet.js`); in Chromium that source loads the worklet, the raw URL and no entry both fail; 8 tests in `cspSourceForUrl.test.ts`
++ [X] report a refused or missing microphone as a visible state, with the error name, instead of a silent failure
+  + the owner's `error_name` (a `DOMException` name, `Unsupported` or `TrackEnded`) reaches every viewer, the toolbar shows "Microphone unavailable: {0}", and the error holds until the next successful start or toggle, so nothing retries in a loop
++ [X] add strings to `l10n/bundle.l10n*.json` and `package.nls*.json` for all five languages
+  + the setting description and command title in all five `package.nls*.json`, and six strings in all five `l10n/bundle.l10n*.json`; `l10n-bundles` Jest passes
++ [X] add a Playwright spec against a stub endpoint using Chromium's fake audio device flags, or, if the harness cannot pass them, assert at Jest level and say what was measured
+  + `playwright/specs/audio-capture.spec.ts` runs Chromium with `--use-fake-device-for-media-stream` and `--use-fake-ui-for-media-stream`; a press in a frame allowing `microphone` makes 1 `getUserMedia` call, then posts 64000 byte chunks indexed from 0 with no gap, 2000 ms apart, carrying signal; a stop posts `capturing: false` and no chunk follows
+  + the harness has no extension host, so the upload to a stub endpoint stays at Jest level: `audioops.test.ts` and `AudioCaptureCoordinator.test.ts`, measured as recorded under the `audioops.ts` task
++ [X] bump the patch version and add a CHANGELOG entry
+  + released as 0.4.16 (`package.json`), with the audio entries under 0.4.16 in `CHANGELOG.md`
++ acceptance, fixed before the run
+  + with default settings, 0 `getUserMedia` calls and 0 network requests are made, asserted in a test
+  + with a stub endpoint and a fake device, 600 s of tone yields 300 chunks with 0 missing sequence numbers
+  + 600 s of silence yields 0 chunk uploads after the 1 s hangover
+  + median time from chunk end to arrival at a local stub is 300 ms or less
+  + audio processing on the webview main thread totals 2 ms or less per chunk
+  + with the stub down for 90 s, the queue holds 30 chunks, reports a dropped count of 15, and delivers the held chunks in order on recovery
+  + a workspace `.vscode/settings.json` that sets the endpoint has no effect, asserted in a test
++ blast radius
+  + new settings, one command, new message types and a CSP change for the worklet; behaviour is unchanged when the endpoint is empty
+  + when enabled, audio leaves the machine for the configured endpoint only
++ reversal
+  + empty the endpoint to switch the feature off; remove the code in one revert since no stored data exists
+
+
+### Show a recording indicator in the header bar with an on and off control [](?id=audio-recording-indicator)
+
+Whenever NoteThink is capturing audio the user must be able to see it at a glance and stop it at once. This adds a small red recording dot and a toggle to the viewer's header bar, driven by the same state as the capture.
+
++ background
+  + depends on [[audio-capture-to-endpoint]] for the capture state and the `audioState` and `audioToggle` messages
+  + the header bar is `GenericViewToolbar` (`client/webview/src/notethink-views/src/components/views/generic/GenericViewToolbar.tsx:132`), which already hosts `ToolbarTab` buttons and takes `l10n.t` strings
+  + there may be several viewers open; each shows the shared state, and any of them can toggle it
+  + PATTERNS.md > "Accessible drag and resize affordances" is the nearest entry for keyboard and screen reader behaviour; no entry for a status indicator
++ decisions
+  + the dot is about 0.7rem, red, and pulses slowly (1.6 s ease) while capturing
+  + under `prefers-reduced-motion: reduce` the dot is still, not pulsing, and not hidden
+  + the dot has `role="status"` and the label "Recording audio"; its colour is never the only signal, because the toggle also changes its label and pressed state
+  + the toggle is a button with `aria-pressed`, reachable by keyboard
+  + the indicator reads the same flag the capture reads, so capture cannot run while the dot is absent
+  + if no header bar can render, capture stops, instead of recording unseen
+  + with no endpoint configured, neither dot nor toggle is rendered
+  + colours come from the theme with a red that holds contrast in light, dark and high contrast
++ [X] add the dot and toggle to `GenericViewToolbar.tsx`, styled beside the existing toolbar classes
+  + `AudioRecordingControl.tsx` beside the toolbar, driven by `isAudioRecordingOn` in `lib/audiostateops.ts`; the dot uses `--vscode-editorError-foreground`
+  + the `role="status"` region stays mounted while the feature is available and the dot and "Recording audio" appear inside it, so a screen reader announces the start
++ [X] render nothing when the extension reports the feature unavailable
+  + `AudioRecordingControl.test.tsx` and `GenericViewAudio.test.tsx` assert 0 elements with no state or `available: false`
++ [X] add the reduced-motion rule and a Jest test that the animation is `none` under it
+  + the test compiles the SCSS with `sass` and asserts `animation: none` on the dot inside `prefers-reduced-motion: reduce`; the computed style is left to the Playwright spec
++ [X] add strings for all five languages
+  + four strings in `l10n/bundle.l10n*.json`, de, es, fr and it translated; `l10n-bundles` Jest passes
++ [X] show the whole error name in the header bar; in VS Code the text was cut to "Microphone unavailable: NotAllo...", with the full text only in the hover title
+  + the cause was a `max-width: 16em` on `.audioError`: in the harness the box was 208px and the text 239px; with the cap removed the breadcrumb gives way first and the ellipsis is left for a row too narrow for the control and tabs together
+  + `audio-control.spec.ts` asserts the full "Microphone unavailable: NotAllowedError" with no overflow at 1280px and 600px; it failed before the fix
++ [X] add a Playwright spec: toggle on shows the dot, toggle off removes it, reduced motion is still
+  + `playwright/specs/audio-indicator.spec.ts`: the dot appears and disappears under 100 ms of the state changing, the toggle works by Enter and Space, the status region reads "Recording audio", and under reduced motion the dot's `animation-name` is `none` at full opacity and size
+  + contrast measured in the browser against the default themes' header backgrounds: 4.61:1 dark, 4.74:1 light, 8.55:1 high contrast dark, 6.61:1 high contrast light
++ [X] bump the patch version and add a CHANGELOG entry
+  + released as 0.4.16 (`package.json`), with the audio entries under 0.4.16 in `CHANGELOG.md`
++ acceptance, fixed before the run
+  + the dot appears within 100 ms of the state becoming capturing and disappears within 100 ms of stopping
+  + with `reducedMotion: 'reduce'` emulated, the computed `animation-name` is `none`
+  + contrast of the dot against the header background is 3:1 or better in light, dark and high contrast themes
+  + the toggle works from the keyboard alone, and a screen reader announces "Recording audio" on start
+  + with the feature unavailable, the toolbar renders 0 extra elements
++ blast radius
+  + one more element in a toolbar shown in every viewer; layout is checked at narrow widths
++ reversal
+  + revert the commit; no stored state

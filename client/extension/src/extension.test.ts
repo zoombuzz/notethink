@@ -23,6 +23,8 @@ function mockExtensionContext(): vscode.ExtensionContext {
 		extensionUri: Uri.file('/mock/extension'),
 		logUri: Uri.file('/mock/logs'),
 		subscriptions: [],
+		secrets: { get: jest.fn(async () => undefined), store: jest.fn(), delete: jest.fn(), onDidChange: jest.fn(() => ({ dispose: jest.fn() })) },
+		globalState: { get: jest.fn((_key: string, fallback?: unknown) => fallback), update: jest.fn(async () => {}) },
 		extension: { packageJSON: { version: '0.0.0-test' } },
 	} as unknown as vscode.ExtensionContext;
 }

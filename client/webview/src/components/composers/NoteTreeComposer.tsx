@@ -74,6 +74,7 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
         view_state_ids,
         file_declared_integration: props.fileDeclaredIntegration,
         display_options: view_display_options,
+        audio_state: props.audioState,
         // --- note tree ---
         nested: {
             parent_context: root_note,
@@ -88,6 +89,8 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
             deleteViewFromManagedState: () => {},
             revertAllViewsToDefaultState: () => {},
             onNavigationCommand: props.onNavigationCommand,
+            toggleAudio: props.toggleAudio,
+            reportAudioIndicatorPresence: props.reportAudioIndicatorPresence,
             postMessage: props.postMessage ? (message: unknown) => {
                 if (message && typeof message === 'object' && 'type' in message) {
                     const m = message as Record<string, unknown>;

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# merge staging -> main (production deployment) and release to the VS Code Marketplace.
+# merge staging -> main (production deployment) and release to the VS Code Marketplace and Open VSX.
 # a merge to main IS the production release, so it also runs the credentialed
-# `vsce publish`. the publish is version-guarded: if this version is already on the
-# marketplace (e.g. a no-op re-merge) it is skipped rather than hard-failing the
+# `vsce publish` and `ovsx publish`. each publish is version-guarded: if this version is already
+# on that store (e.g. a no-op re-merge) it is skipped rather than hard-failing the
 # merge; any other publish failure aborts loudly.
 #
 # main MUST stay a fast-forward of staging - the ref update below fast-forwards main to staging in
@@ -24,7 +24,7 @@ git -C "$REPO_DIR" fetch --all
 # lets git overwrite or delete working-tree files that are gitignored but still tracked on the target.
 # fetch . source:target fast-forwards the local target ref in place and exits nonzero if it is not a
 # fast-forward (the same guard as merge --ff-only); the working tree never leaves the source branch,
-# so the marketplace publish below runs from that same fast-forwarded content.
+# so the store publishes below run from that same fast-forwarded content.
 git -C "$REPO_DIR" fetch . "$SOURCE_ENV:$TARGET_ENV"
 git -C "$REPO_DIR" push origin "$TARGET_ENV"
 
@@ -40,6 +40,21 @@ else
 		echo "marketplace: $PKG_VERSION already published, skipping (no-op merge)"
 	else
 		echo "marketplace: publish FAILED for $EXTENSION_ID@$PKG_VERSION" >&2
+		exit 1
+	fi
+fi
+
+# release the same state to Open VSX (VSCodium, Cursor, Gitpod)
+echo "openvsx: releasing $EXTENSION_ID@$PKG_VERSION"
+if PUBLISH_LOG="$(pnpm -C "$REPO_DIR" run publish:openvsx 2>&1)"; then
+	echo "$PUBLISH_LOG"
+	echo "openvsx: published $EXTENSION_ID@$PKG_VERSION"
+else
+	echo "$PUBLISH_LOG"
+	if printf '%s' "$PUBLISH_LOG" | grep -qiE 'already (exists|published)'; then
+		echo "openvsx: $PKG_VERSION already published, skipping (no-op merge)"
+	else
+		echo "openvsx: publish FAILED for $EXTENSION_ID@$PKG_VERSION" >&2
 		exit 1
 	fi
 fi

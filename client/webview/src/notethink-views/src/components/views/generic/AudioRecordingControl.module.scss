@@ -1,0 +1,107 @@
+/*
+ * The header bar's audio control: a status region holding the recording dot and any microphone error,
+ * then the on and off toggle. Sits in the view toolbar row (ViewRenderer.module.scss .viewToolbar) between
+ * the breadcrumb and the drawer tabs.
+ *
+ * Colours come from the theme. The dot uses --vscode-editorError-foreground, the editor's own red: in
+ * VS Code's default themes it is #f14c4c (dark), #e51400 (light), #f48771 (high contrast dark) and
+ * #b5200d (high contrast light), which against those themes' header backgrounds (#1f1f1f, #ffffff, #000000,
+ * #ffffff) measure 4.61:1, 4.74:1, 8.55:1 and 6.61:1, all above the 3:1 a non-text mark needs. The fallback
+ * #e51400 is for a host that defines no such variable. The error text uses --vscode-errorForeground, the token
+ * themes tune for text. audio-indicator.spec.ts measures each of the four in the browser.
+ *
+ * Narrow widths: the control never grows past its content. The error text, the only long part, has no
+ * width cap, so the whole error name shows whenever the row has room; the breadcrumb gives up its room
+ * first, and only a row too narrow for the control and the tabs together cuts the text with an ellipsis.
+ */
+
+$dot_size: 0.7rem;
+
+.audioControl {
+  flex: 0 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: 0.4em;
+}
+
+.audioStatus {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.audioDot {
+  flex: none;
+  width: $dot_size;
+  height: $dot_size;
+  border-radius: 50%;
+  background: var(--vscode-editorError-foreground, #e51400);
+  animation: audioDotPulse 1.6s ease infinite;
+}
+
+@keyframes audioDotPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+// still, not hidden: the dot keeps its full colour and size and only the pulse stops
+@media (prefers-reduced-motion: reduce) {
+  .audioDot {
+    animation: none;
+  }
+}
+
+// visually hidden, still read by a screen reader
+.audioScreenReaderOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.audioError {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vscode-errorForeground, inherit);
+}
+
+.audioToggle {
+  flex: none;
+  align-self: stretch;
+  padding: 0 0.5em;
+  border: none;
+  background: none;
+  color: var(--vscode-titleBar-activeForeground, var(--vscode-foreground, inherit));
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--vscode-menubar-selectionBackground, var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2)));
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #0078d4);
+    outline-offset: -1px;
+  }
+}

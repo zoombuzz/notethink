@@ -4,6 +4,12 @@ All notable changes to the "notethink" extension will be documented in this file
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.4.17] - 2026-10-31
+
+### Fixed
+
+- The published package no longer includes local `.env` files; the release stops if one would be packaged.
+
 ## [0.4.16] - 2026-10-30
 
 ### Added

@@ -6,6 +6,8 @@ node_modules/**
 **/node_modules/**
 client/extension/dist/test/**
 .gitignore
+# local env files carry release credentials and must never ship in the package
+.env*
 vsc-extension-quickstart.md
 webpack.config.js
 esbuild.js

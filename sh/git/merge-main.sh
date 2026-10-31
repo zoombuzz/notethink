@@ -19,6 +19,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/../.."
 EXTENSION_ID="NoteThink.notethink"
 
+# refuse to release before main moves if the package would carry a local env file, since those hold the store tokens
+PACKAGE_FILES="$(pnpm -C "$REPO_DIR" exec vsce ls --no-dependencies)"
+if grep -qE '(^|/)\.env' <<<"$PACKAGE_FILES"; then
+	echo "release: the package would include a .env file; exclude it in .vscodeignore before releasing" >&2
+	exit 1
+fi
+
 git -C "$REPO_DIR" fetch --all
 # advance the target branch to the source and push WITHOUT checking out the target. checking it out
 # lets git overwrite or delete working-tree files that are gitignored but still tracked on the target.

@@ -1,27 +1,27 @@
 # Jest Test Results
-# Version: 0.4.16
-# Date: 2026-10-30T20:25:00Z
+# Version: 0.4.17
+# Date: 2026-10-31T11:45:00Z
 # Command: pnpm run test-jest
 # Exit status: 0
-# Tree: HEAD b9fd1bf plus the working tree (34 tracked changes, 29 untracked files)
+# Tree: HEAD 41c0198 plus 5 tracked changes, 0 untracked
 # ---
 $ bash scripts/run-checked.sh test-jest 'bash scripts/test-jest.sh'
 $ jest --config jest.config.cjs
-audioops median enqueue-to-arrival ms: 0.71
+audioops median enqueue-to-arrival ms: 0.69
 
 [1mTest Suites: [22m[1m[32m39 passed[39m[22m, 39 total
 [1mTests:       [22m[1m[32m950 passed[39m[22m, 950 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        3.685 s
+[1mTime:[22m        3.631 s
 [2mRan all test suites[22m[2m.[22m
 
 $ jest --config jest.config.cjs
-audio main-thread cost per chunk over 2000 after 100 warm-up: mean 0.0371 ms, p99 0.1160 ms, max 19.1261 ms
+audio main-thread cost per chunk over 2000 after 100 warm-up: mean 0.0325 ms, p99 0.0840 ms, max 13.0669 ms
 
 [1mTest Suites: [22m[1m[32m19 passed[39m[22m, 19 total
 [1mTests:       [22m[1m[32m256 passed[39m[22m, 256 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        10.742 s
+[1mTime:[22m        10.095 s
 [2mRan all test suites[22m[2m.[22m
 
 $ jest --config jest.config.cjs
@@ -29,18 +29,17 @@ $ jest --config jest.config.cjs
 [1mTest Suites: [22m[1m[32m95 passed[39m[22m, 95 total
 [1mTests:       [22m[1m[32m2177 passed[39m[22m, 2177 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        3.31 s
+[1mTime:[22m        3.126 s
 [2mRan all test suites[22m[2m.[22m
 
 
 [1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
 [1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │    39 │ [32m   950[0m │ [2m     0[0m │ 3.685 s │
-│ webview          │    19 │ [32m   256[0m │ [2m     0[0m │ 10.742 s │
-│ notethink-views  │    95 │ [32m  2177[0m │ [2m     0[0m │  3.31 s │
+│ extension        │    39 │ [32m   950[0m │ [2m     0[0m │ 3.631 s │
+│ webview          │    19 │ [32m   256[0m │ [2m     0[0m │ 10.095 s │
+│ notethink-views  │    95 │ [32m  2177[0m │ [2m     0[0m │ 3.126 s │
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
 [1m│ TOTAL            │   153 │[0m [32m  3383[0m [1m│[0m [2m     0[0m [1m│         │[0m
 [1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m
-green-stamp: tree changed during the run, no stamp recorded for test-jest
 EXIT=0

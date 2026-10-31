@@ -324,7 +324,7 @@ Rebuild after every code change (`pnpm run build`, or `pnpm run check`) so the c
 
 ## Release & Publishing
 
-`sh/git/merge-main.sh` (staging -> main) is the production release: it fast-forwards `main`, pushes, then runs `vsce publish` to the VS Code Marketplace and `ovsx publish` to Open VSX. The two scripts, `publish:marketplace` and `publish:openvsx`, read their tokens only as `VSCE_PAT` and `OVSX_PAT`, from the environment or from an uncommitted `.env.dev` loaded through dotenvx (`.env.dev.example` is the template), and never from argv, so no committed file names where a token is kept. Each store publish is version-guarded: an "already published" failure is skipped, any other aborts. The push to `main` also triggers CI to publish `@zoombuzz/notethink` to GitHub Packages and cut a GitHub Release with the `.vsix`. Three invariants must hold or the release breaks, and all break *after* the merge has already shipped to `main`, so each is a pre-merge checklist item.
+`sh/git/merge-main.sh` (staging -> main) is the production release: it fast-forwards `main`, pushes, then runs `vsce publish` to the VS Code Marketplace and `ovsx publish` to Open VSX. The two scripts, `publish:marketplace` and `publish:openvsx`, read their tokens only as `VSCE_PAT` and `OVSX_PAT`, from the environment or from an uncommitted `.env.dev` loaded through dotenvx (`.env.dev.example` is the template), and never from argv, so no committed file names where a token is kept. Each store publish is version-guarded: an "already published" failure is skipped, any other aborts. The push to `main` also triggers CI to publish `@zoombuzz/notethink` to GitHub Packages and cut a GitHub Release with the `.vsix`. The invariants below must hold. The first three break the release only *after* the merge has already shipped to `main`, so each is a pre-merge checklist item.
 
 ### `@types/vscode` must not exceed `engines.vscode`
 
@@ -344,3 +344,7 @@ CI runs `pnpm install` with `CI=true`, which pnpm treats as `--frozen-lockfile`:
 ### CI skips Playwright browser downloads
 
 `release.yml` and `publish.yml` set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`. CI only lints, builds, packages and publishes, but `@playwright/browser-chromium` (pulled in transitively by `@vscode/test-web`) otherwise downloads Chrome during `pnpm install` and hangs until the job timeout cancels the run. Do not remove the env var; if a CI job ever needs browsers, run `playwright install` as an explicit step instead.
+
+### The package never carries a local env file
+
+`vsce` and `ovsx` package every file in the working tree that `.vscodeignore` does not exclude, untracked files included, so an uncommitted `.env.dev` would ship inside the public `.vsix` while git, and every exposure check that reads git, stays clean. `.vscodeignore` excludes `.env*`, and `merge-main.sh` lists the package with `vsce ls` before it moves `main`, stopping if any `.env` file is in it. A new untracked file that holds local configuration is excluded in `.vscodeignore` in the same change, and confirmed absent with `pnpm exec vsce ls --no-dependencies`.

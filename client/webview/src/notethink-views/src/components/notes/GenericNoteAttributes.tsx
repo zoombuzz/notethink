@@ -1,6 +1,7 @@
 import React, { type MouseEvent } from "react";
 import { isInternalAttribute } from "../../lib/renderops";
 import { HIDDEN_ATTRIBUTES } from "../../lib/linetagops";
+import { progressLinetagText } from "../../lib/progressops";
 import type { LineTag, NoteProps } from "../../types/NoteProps";
 import view_specialised_styles from "../../components/ViewRenderer.module.scss";
 
@@ -24,7 +25,7 @@ export default function GenericNoteAttributes(props: NoteProps): React.ReactElem
                 let attrib_value;
                 switch (attrib_key) {
                     case 'progress' :
-                        attrib_value = (linetags?.progress_max.value_numeric && linetag.value_numeric ? (Math.round(linetag.value_numeric * 100 / linetags?.progress_max.value_numeric)) : linetag.value) + linetags?.progress_unit.value;
+                        attrib_value = progressLinetagText(linetags);
                         break;
                     default :
                         // but default to just show value

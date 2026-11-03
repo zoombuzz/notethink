@@ -4,14 +4,18 @@ import {
     ACTIVITY_CAPABILITY_SUPPORTED,
     ACTIVITY_STATES,
     ACTIVITY_STATE_UNKNOWN,
+    ACTIVITY_VENDOR_DISPLAY,
     type ActivityCapabilities,
     type ActivityChangedFile,
+    type ActivityChildSession,
     type ActivityCommit,
     type ActivityRejectCode,
     type ActivitySession,
     type ActivityState,
+    type ActivityStoryProgress,
     type ActivityStoryUsage,
     type ActivityTree,
+    type ActivityVendorDisplay,
     type ActivityUsage,
 } from "../types/AgentActivity";
 import { hueForProjectName } from "./originops";
@@ -145,11 +149,14 @@ export interface ActivityTreeState {
  * read across the three vendors, and every open repository's working tree. An empty `sessions` array
  * while `analyser.state` is `live` is a meaningful answer rather than a missing one - it says no
  * agent is working anywhere this analyser can see.
+ * - progress: the coordinators' per-story percentages for the open repositories; empty when none is
+ *   recorded or the host cannot read them
  */
 export interface ActivitySnapshot {
     analyser: ActivityAnalyserState;
     sessions: ActivitySessionState[];
     trees: ActivityTreeState[];
+    progress: ActivityStoryProgress[];
 }
 
 /** the snapshot a board holds before the host has said anything at all */
@@ -157,6 +164,7 @@ export const EMPTY_ACTIVITY_SNAPSHOT: ActivitySnapshot = {
     analyser: { state: 'scanning', refusals: [] },
     sessions: [],
     trees: [],
+    progress: [],
 };
 
 /**
@@ -221,6 +229,7 @@ export function parseActivityMessage(message: unknown): ActivitySnapshot | undef
         analyser: payload.analyser ?? EMPTY_ACTIVITY_SNAPSHOT.analyser,
         sessions: Array.isArray(payload.sessions) ? payload.sessions : [],
         trees: Array.isArray(payload.trees) ? payload.trees : [],
+        progress: Array.isArray(payload.progress) ? payload.progress : [],
     };
 }
 
@@ -373,9 +382,57 @@ export function sessionForUnboundKey(snapshot: ActivitySnapshot | undefined, key
     return snapshot.sessions.find(state => unboundSessionKey(state) === key);
 }
 
-/** the headline a virtual note for an unbound session carries: the vendor and the project it is working in, never a story it was not bound to */
+/** the characters of a session id a headline falls back to when nothing names the session */
+const SHORT_SESSION_ID_CHARS = 8;
+
+/** the name a session is drawn under: the vendor's own name for it, else the registry's agent name, else a short session id */
+export function sessionDisplayName(session: ActivitySession): string {
+    const own = session.session_name?.trim();
+    if (own) { return own; }
+    const registry = session.registry_name?.trim();
+    if (registry) { return registry; }
+    return session.session_id.slice(0, SHORT_SESSION_ID_CHARS);
+}
+
+// finished subagents drawn without a click; older ones wait behind a count
+export const AGENT_CHILDREN_VISIBLE_FINISHED = 3;
+
+/**
+ * One session's subagents split for drawing: every running one and the latest finished ones stay
+ * visible, the earlier finished ones are `collapsed`. Both keep the host's oldest-first order.
+ */
+export function splitChildrenForDisplay(children: ReadonlyArray<ActivityChildSession> | undefined, visible_finished: number = AGENT_CHILDREN_VISIBLE_FINISHED): { visible: ActivityChildSession[]; collapsed: ActivityChildSession[] } {
+    const all = children ?? [];
+    const finished = all.filter(child => childStateOf(child) === 'ended');
+    const hidden = new Set(finished.slice(0, Math.max(0, finished.length - visible_finished)));
+    return { visible: all.filter(child => !hidden.has(child)), collapsed: all.filter(child => hidden.has(child)) };
+}
+
+/** A subagent's state, with an unrecognised value coerced to `unknown` like a session's. */
+export function childStateOf(child: ActivityChildSession): ActivityState {
+    return (ACTIVITY_STATES as ReadonlyArray<string>).includes(child.state) ? child.state : ACTIVITY_STATE_UNKNOWN;
+}
+
+/** how long a subagent has run: first record to now while it runs, first record to last once it has ended; empty when the start does not parse */
+export function formatChildClock(child: ActivityChildSession, now_ms: number): string {
+    const from_ms = new Date(child.started_at).getTime();
+    if (Number.isNaN(from_ms)) { return ''; }
+    if (childStateOf(child) !== 'ended') { return formatDurationClockMs(now_ms - from_ms); }
+    return formatDurationClock(child.started_at, child.updated_at);
+}
+
+/** a subagent's name: the title its parent gave it, else its kind, else its short id */
+export function childDisplayName(child: ActivityChildSession): string {
+    const title = child.title?.trim();
+    if (title) { return title; }
+    const kind = child.agent_type?.trim();
+    if (kind) { return kind; }
+    return child.child_id.slice(0, SHORT_SESSION_ID_CHARS);
+}
+
+/** the headline a virtual note for an unbound session carries: the vendor monogram and the session's name, never a story it was not bound to */
 export function unboundSessionHeadline(session: ActivitySession): string {
-    return session.project ? `${session.vendor} in ${session.project}` : session.vendor;
+    return `${vendorMonogram(session.vendor)} ${sessionDisplayName(session)}`;
 }
 
 /**
@@ -409,13 +466,21 @@ export function viewedActivityScope(snapshot: ActivitySnapshot | undefined, note
     return { root_paths, notes_carry_relative_path: note_paths.length > 0 };
 }
 
+/**
+ * True unless the session has ended: working, waiting and idle are live, and `unknown` (a vendor that
+ * cannot report liveness) counts as live so a running agent of such a vendor stays visible
+ */
+export function isSessionLive(state: ActivitySessionState): boolean {
+    return state.session.state !== 'ended';
+}
+
 /** true when an unbound session's own repository is one the view's documents resolved to, root-less sessions included */
 function isSessionInViewScope(state: ActivitySessionState, scope: ActivityViewScope): boolean {
     return scope.root_paths.has(state.root_path);
 }
 
 /**
- * The virtual notes this snapshot calls for: one per session whose own write calls bound it to no
+ * The virtual notes this snapshot calls for: one per live session (never an ended one) whose own write calls bound it to no
  * story AND whose repository is one of `scope`'s, so an unbound agent is drawn beside its own
  * repository's documents rather than beside every repository the workspace happens to hold. A session
  * admitted here takes its repository's `root_relative` as its virtual note's `relative_path`, but only
@@ -423,7 +488,7 @@ function isSessionInViewScope(state: ActivitySessionState, scope: ActivityViewSc
  * `root_relative` is non-empty (a repository that IS the workspace folder has none to give).
  */
 export function virtualNotesForActivity(snapshot: ActivitySnapshot | undefined, scope: ActivityViewScope): NoteProps[] {
-    return unboundSessions(snapshot).filter(state => isSessionInViewScope(state, scope)).map(state => {
+    return unboundSessions(snapshot).filter(state => isSessionLive(state) && isSessionInViewScope(state, scope)).map(state => {
         const root_relative = scope.notes_carry_relative_path ? normaliseActivityPath(treeForRoot(snapshot, state.root_path)?.root_relative) : '';
         return makeVirtualNote({
             namespace: AGENT_VIRTUAL_NAMESPACE,
@@ -437,16 +502,33 @@ export function virtualNotesForActivity(snapshot: ActivitySnapshot | undefined, 
     });
 }
 
+/** the display entry for a vendor in the shared table, undefined for a vendor the table does not list */
+function vendorDisplay(vendor: string): ActivityVendorDisplay | undefined {
+    return Object.hasOwn(ACTIVITY_VENDOR_DISPLAY, vendor) ? ACTIVITY_VENDOR_DISPLAY[vendor] : undefined;
+}
+
 /**
- * The two-character monogram a vendor is drawn as. Vendor is an open string, so this derives from the
- * slug rather than from a table: the initials of a hyphenated slug's first two segments, else the
- * slug's first two characters. A vendor nobody has heard of gets a monogram rather than being dropped.
+ * The two-character monogram a vendor is drawn as: the table's, else derived from the slug. Vendor is
+ * an open string, so a vendor nobody has heard of gets the initials of a hyphenated slug's first two
+ * segments, or the slug's first two characters, rather than being dropped.
  */
 export function vendorMonogram(vendor: string): string {
+    const listed = vendorDisplay(vendor);
+    if (listed) { return listed.monogram; }
     const segments = vendor.split(/[-_ ]+/).filter(segment => segment.length > 0);
     if (segments.length === 0) { return '??'; }
     if (segments.length === 1) { return segments[0].slice(0, 2).toUpperCase(); }
     return (segments[0][0] + segments[1][0]).toUpperCase();
+}
+
+/** a vendor's full name from the shared table, else its slug */
+export function vendorLabel(vendor: string): string {
+    return vendorDisplay(vendor)?.label ?? vendor;
+}
+
+/** a vendor's colour expression from the shared table, undefined for a vendor it does not list so the card keeps its default text colour */
+export function vendorColour(vendor: string): string | undefined {
+    return vendorDisplay(vendor)?.colour;
 }
 
 /** a model id as an agent row draws it beside the vendor monogram: `claude-opus-5-5` reads `opus-5-5`, and any other id is left whole */

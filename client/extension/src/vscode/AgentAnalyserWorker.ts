@@ -5,7 +5,7 @@ import { AGENT_TRANSCRIPT_MAX_BYTES, capabilitiesForVendor, type AgentReadRefusa
 import { buildClaudeCodeResult, readClaudeCodeSession, type ClaudeTranscriptRecord } from '../lib/vendors/claudecodeops';
 import { buildCodexResult, readCodexSession, type CodexLine } from '../lib/vendors/codexops';
 import { buildGrokResult, readGrokSession, type GrokLine } from '../lib/vendors/grokops';
-import { ACTIVITY_STATE_UNKNOWN, type ActivityCapabilities, type ActivityEventBody, type ActivityQuestion, type ActivityState, type ActivityUsage } from '../types/AgentActivity';
+import { ACTIVITY_STATE_UNKNOWN, type ActivityCapabilities, type ActivityChildSession, type ActivityEventBody, type ActivityQuestion, type ActivityState, type ActivityUsage } from '../types/AgentActivity';
 
 /**
  * The nested worker: decoding, parsing and pricing run here, off the extension host's own thread,
@@ -172,11 +172,16 @@ export interface AgentAnalyserResolvedCall {
  *   to whichever story a turn near a call's own timestamp bound to; host/worker-only, never carried
  *   onto ActivitySession
  * - active_ms: passed through from the reader's own `AgentSessionResult.active_ms` unchanged
+ * - children: the session's subagents with their own calls priced, `children_omitted` the finished ones
+ *   the reader's cap left out
+ * - session_name: the vendor's own name for a live session, set by the host from the vendor's live
+ *   session file and never by the worker
  */
 export interface AgentAnalyserWorkerSessionOutput {
     session_id: string;
     vendor: string;
     cwd: string;
+    session_name?: string;
     state: ActivityState;
     started_at: string;
     updated_at: string;
@@ -187,6 +192,8 @@ export interface AgentAnalyserWorkerSessionOutput {
     active_ms?: number;
     usage: ActivityUsage;
     priced_calls: AgentPricedUsageEntry[];
+    children?: ActivityChildSession[];
+    children_omitted?: number;
     capabilities: ActivityCapabilities;
     calls: AgentAnalyserResolvedCall[];
     refusal?: AgentSessionResult['refusal'];
@@ -377,7 +384,8 @@ function appendFileLines(session_id: string, path_: string, new_lines: unknown[]
  * either way, since nothing new arrived.
  */
 function updateLineCacheForFile(job: AgentAnalyserWorkerJob, file: AgentAnalyserRawFile): void {
-    if (!job.cacheable || file.mode === 'none') { return; }
+    // a subagent's launch record is one small JSON document read whole each time, never line-parsed or tail-resumed
+    if (!job.cacheable || file.mode === 'none' || file.path.endsWith('.meta.json')) { return; }
     const text = decodeFile(file).text;
     const source_bytes = file.bytes.byteLength;
     if (file.mode === 'whole') { setFileLines(job.session_id, file.path, parseJsonlLenient(text), source_bytes); return; }
@@ -469,6 +477,8 @@ function buildOutputFrom(job: AgentAnalyserWorkerJob, result: AgentSessionResult
         active_ms: result.active_ms,
         usage: priceCalls(result.calls),
         priced_calls: pricePerCallBounded(result.calls, AGENT_PRICED_USAGE_LIST_MAX),
+        children: result.children?.map(({ calls, ...child }): ActivityChildSession => ({ ...child, usage: priceCalls(calls) })),
+        children_omitted: result.children_omitted,
         capabilities: capabilitiesForVendor(job.vendor),
         calls: resolveCalls(result),
         refusal: result.refusal,

@@ -6,7 +6,7 @@ import { AGENT_VIRTUAL_NAMESPACE, unboundSessionKey, type ActivityAnalyserState,
 import { resetActivitySnapshot, setActivitySnapshot } from '../../lib/activityhooks';
 import { makeVirtualNote } from '../../lib/virtualnoteops';
 import type { ActivitySession, ActivityTree } from '../../types/AgentActivity';
-import type { NoteProps } from '../../types/NoteProps';
+import type { LineTag, NoteProps } from '../../types/NoteProps';
 
 const ROOT_PATH = '/mnt/workspace/in_development/notethink';
 const ROOT_RELATIVE = 'notethink';
@@ -44,6 +44,7 @@ function seed(overrides: Partial<ActivitySnapshot> & { analyser?: Partial<Activi
         analyser: makeAnalyserState(analyser),
         sessions: [],
         trees: [],
+        progress: [],
         ...rest,
     };
     setActivitySnapshot(snapshot);
@@ -153,7 +154,7 @@ describe('AgentNote', () => {
         render(<AgentNote {...makeStoryNote()} />);
         const live = screen.getByTestId('agent-live');
         expect(live).toHaveAttribute('data-fact', 'unsupported');
-        expect(live).toHaveTextContent('claude-code cannot report what it is running');
+        expect(live).toHaveTextContent('Claude Code cannot report what it is running');
         expect(screen.getByTestId('agent-state')).toHaveTextContent('State not reported');
     });
 
@@ -594,20 +595,56 @@ describe('AgentNote says plainly what it does not know', () => {
     });
 });
 
+describe('AgentNote linetags', () => {
+
+    const tag = (key: string, value: string): LineTag => ({ key, value, key_offset: 0, value_offset: 0, linktext_offset: 0, note_seq: 3 });
+
+    it('lists a story\'s visible linetags under its headline, as the ordinary card does', () => {
+        seed({ sessions: [makeSessionState(makeSession())] });
+        const linetags = { id: tag('id', 'agent-activity-card'), status: tag('status', 'doing'), time_estimated: tag('time_estimated', '90') };
+        render(<AgentNote {...makeStoryNote({ linetags })} />);
+        const items = screen.getAllByRole('listitem', { name: /status|time_estimated/ });
+        expect(items).toHaveLength(2);
+        expect(screen.getByRole('listitem', { name: 'status' })).toHaveTextContent('Status:doing');
+        expect(screen.queryByRole('listitem', { name: 'id' })).not.toBeInTheDocument();
+    });
+
+    it('draws no linetag row for a story whose only tag is its hidden id, nor for a story with none', () => {
+        seed({ sessions: [makeSessionState(makeSession())] });
+        const { container, rerender } = render(<AgentNote {...makeStoryNote()} />);
+        expect(container.querySelector('ul[role="list"]')).not.toBeInTheDocument();
+        rerender(<AgentNote {...makeStoryNote({ linetags: undefined })} />);
+        expect(container.querySelector('ul[role="list"]')).not.toBeInTheDocument();
+    });
+
+    it('draws no linetag row on a virtual note', () => {
+        const unbound = makeSessionState(makeSession({ session_id: 'claude-no-story', story_binding: 'none', stories: undefined, story_usage: undefined }));
+        seed({ sessions: [unbound] });
+        const virtual = {
+            ...makeVirtualNote({ namespace: AGENT_VIRTUAL_NAMESPACE, key: unboundSessionKey(unbound), headline: 'CC coord-demo' }),
+            seq: 9,
+            display_options: { id: 'v1-n9' },
+        };
+        const { container } = render(<AgentNote {...virtual} />);
+        expect(container.querySelector('ul[role="list"]')).not.toBeInTheDocument();
+    });
+});
+
 describe('AgentNote on a virtual note', () => {
 
     it('draws the one session it was minted for, and never a story it did not declare', () => {
         const unbound = makeSessionState(makeSession({ session_id: 'claude-no-story', story_binding: 'none', stories: undefined, story_usage: undefined }));
         seed({ sessions: [makeSessionState(makeSession()), unbound] });
         const virtual = {
-            ...makeVirtualNote({ namespace: AGENT_VIRTUAL_NAMESPACE, key: unboundSessionKey(unbound), headline: 'claude-code in notethink' }),
+            ...makeVirtualNote({ namespace: AGENT_VIRTUAL_NAMESPACE, key: unboundSessionKey(unbound), headline: 'CC coord-demo' }),
             seq: 9,
             display_options: { id: 'v1-n9' },
         };
         const { container } = render(<AgentNote {...virtual} />);
         expect(container.querySelector('[data-virtual-note="true"]')).toBeInTheDocument();
         expect(container.querySelector('[data-session-count="1"]')).toBeInTheDocument();
-        expect(screen.getByText('claude-code in notethink')).toBeInTheDocument();
+        expect(screen.getByText('CC coord-demo')).toBeInTheDocument();
+        expect((container.querySelector('[data-virtual-note="true"]') as HTMLElement).style.getPropertyValue('--nt-agent-vendor-colour')).toContain('--vscode-charts-purple');
         expect(screen.queryByTestId('agent-banner-notice')).not.toBeInTheDocument();
     });
 });

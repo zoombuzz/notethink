@@ -213,9 +213,9 @@ const CLAUDE_PID_PATH = `${CLAUDE_SESSIONS_DIR}/${CLAUDE_PID_FILE_NAME}`;
  * status): omitted means the session is not live at all, which is also how it vanishes independently
  * of the transcript, for the live-overlay tests below.
  */
-function mockClaudeCodeSession(content: string | undefined, mtime: number, live?: { status: 'busy' | 'idle' | 'waiting' }): void {
+function mockClaudeCodeSession(content: string | undefined, mtime: number, live?: { status: 'busy' | 'idle' | 'waiting'; name?: unknown }): void {
 	const bytes = content !== undefined ? new TextEncoder().encode(content) : undefined;
-	const pid_bytes = live ? new TextEncoder().encode(JSON.stringify({ sessionId: CLAUDE_SESSION_ID, cwd: CLAUDE_SESSION_CWD, status: live.status })) : undefined;
+	const pid_bytes = live ? new TextEncoder().encode(JSON.stringify({ sessionId: CLAUDE_SESSION_ID, cwd: CLAUDE_SESSION_CWD, status: live.status, name: live.name })) : undefined;
 	(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
 		if (uri.path === CLAUDE_PROJECTS_DIR) { return content !== undefined ? [[CLAUDE_PROJECT_DIR, vscode.FileType.Directory]] : []; }
 		if (uri.path === CLAUDE_PROJECT_PATH) { return content !== undefined ? [[`${CLAUDE_SESSION_ID}.jsonl`, vscode.FileType.File]] : []; }
@@ -256,6 +256,12 @@ function sessionModelFrom(posted: Array<Record<string, unknown>>, session_id: st
 	const last = posted[posted.length - 1];
 	const sessions = (last.activity as { sessions: Array<{ session: { session_id: string; model?: string } }> }).sessions;
 	return sessions.find(s => s.session.session_id === session_id)?.session.model;
+}
+
+function sessionNameFrom(posted: Array<Record<string, unknown>>, session_id: string): string | undefined {
+	const last = posted[posted.length - 1];
+	const sessions = (last.activity as { sessions: Array<{ session: { session_id: string; session_name?: string } }> }).sessions;
+	return sessions.find(s => s.session.session_id === session_id)?.session.session_name;
 }
 
 function sessionStateFrom(posted: Array<Record<string, unknown>>, session_id: string): string | undefined {
@@ -902,6 +908,26 @@ describe('AgentAnalyser lifecycle', () => {
 			await settle();
 			expect(transcriptReadCount()).toBe(0);
 			expect(sessionStateFrom(posted, CLAUDE_SESSION_ID)).toBe('ended');
+		});
+
+		it('reads the live file\'s session name, picks up a rename with zero transcript bytes read, and ignores a non-string name', async () => {
+			const mtime = Date.now();
+			mockClaudeCodeSession(claudeTranscriptLine('Edit'), mtime, { status: 'busy', name: 'coord-demo' });
+			const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+			const posted: Array<Record<string, unknown>> = [];
+			analyser.demand(msg => posted.push(msg));
+			await settle();
+			expect(sessionNameFrom(posted, CLAUDE_SESSION_ID)).toBe('coord-demo');
+			(vscode.workspace.fs.readFile as jest.Mock).mockClear();
+			mockClaudeCodeSession(claudeTranscriptLine('Edit'), mtime, { status: 'busy', name: 'coord-renamed' });
+			await jest.advanceTimersByTimeAsync(15_000);
+			await settle();
+			expect(transcriptReadCount()).toBe(0);
+			expect(sessionNameFrom(posted, CLAUDE_SESSION_ID)).toBe('coord-renamed');
+			mockClaudeCodeSession(claudeTranscriptLine('Edit'), mtime, { status: 'busy', name: 42 });
+			await jest.advanceTimersByTimeAsync(15_000);
+			await settle();
+			expect(sessionNameFrom(posted, CLAUDE_SESSION_ID)).toBeUndefined();
 		});
 
 		it('a busy -> idle status flip updates state with zero transcript bytes read', async () => {
@@ -1681,6 +1707,8 @@ describe('AgentAnalyser remote extra file reads', () => {
 			type: 'assistant', timestamp: '2026-09-22T11:00:00Z', cwd: REMOTE_WORKSPACE_PATH,
 			message: { id: 'm1', role: 'assistant', model: 'claude-sonnet-5', content: [{ type: 'text', text: 'hi' }], usage: { input_tokens: 3, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } },
 		}));
+		const meta_uri = Uri.joinPath(subagents_dir, 'agent-1.meta.json');
+		const meta_bytes = new TextEncoder().encode(JSON.stringify({ description: 'Map view code', agentType: 'Explore', finished: true }));
 		const subagent_bytes = new TextEncoder().encode(JSON.stringify({
 			type: 'assistant', timestamp: '2026-09-22T11:00:01Z',
 			message: { id: 'sub1', role: 'assistant', model: 'claude-sonnet-5', content: [], usage: { input_tokens: 40, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } },
@@ -1689,17 +1717,19 @@ describe('AgentAnalyser remote extra file reads', () => {
 			if (uri.toString() === projects_dir.toString()) { return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 }; }
 			if (uri.toString() === transcript_uri.toString()) { return { type: vscode.FileType.File, ctime: 0, mtime: Date.now(), size: transcript_bytes.byteLength }; }
 			if (uri.toString() === subagent_uri.toString()) { return { type: vscode.FileType.File, ctime: 0, mtime: Date.now(), size: subagent_bytes.byteLength }; }
+			if (uri.toString() === meta_uri.toString()) { return { type: vscode.FileType.File, ctime: 0, mtime: Date.now(), size: meta_bytes.byteLength }; }
 			throw new Error('not found');
 		});
 		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
 			if (uri.toString() === projects_dir.toString()) { return [['my-project', vscode.FileType.Directory]]; }
 			if (uri.toString() === project_dir.toString()) { return [['session-1.jsonl', vscode.FileType.File]]; }
-			if (uri.toString() === subagents_dir.toString()) { return [['agent-1.jsonl', vscode.FileType.File]]; }
+			if (uri.toString() === subagents_dir.toString()) { return [['agent-1.jsonl', vscode.FileType.File], ['agent-1.meta.json', vscode.FileType.File]]; }
 			return [];
 		});
 		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
 			if (uri.toString() === transcript_uri.toString()) { return transcript_bytes; }
 			if (uri.toString() === subagent_uri.toString()) { return subagent_bytes; }
+			if (uri.toString() === meta_uri.toString()) { return meta_bytes; }
 			throw new Error('not found');
 		});
 		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
@@ -1708,6 +1738,11 @@ describe('AgentAnalyser remote extra file reads', () => {
 		await settle();
 		// the main transcript's own 3 input tokens plus the subagent's 40, only combined once the subagent file is actually read
 		expect(sessionUsageInputTokensFrom(posted, 'session-1')).toBe(43);
+		// the subagent also arrives as a child record with its own title and tokens, without changing the parent's total
+		const last = posted[posted.length - 1];
+		const sessions = (last.activity as { sessions: Array<{ session: { session_id: string; children?: Array<{ child_id: string; title?: string; agent_type?: string; state: string; usage: { input_tokens: number } }> } }> }).sessions;
+		const children = sessions.find(entry => entry.session.session_id === 'session-1')?.session.children;
+		expect(children).toEqual([expect.objectContaining({ child_id: '1', title: 'Map view code', agent_type: 'Explore', state: 'ended', usage: expect.objectContaining({ input_tokens: 40 }) })]);
 	});
 });
 
@@ -2588,5 +2623,158 @@ describe('AgentAnalyser discovery concurrency', () => {
 		} finally {
 			setFileStatMaxEntriesForTest(undefined);
 		}
+	});
+});
+
+describe('AgentAnalyser story progress', () => {
+	const REPO_ROOT = '/ws';
+	const PROGRESS_PATH = '/home/test/.local/share/thinkersync/coordinator/ws/progress.json';
+
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace.fs.stat as jest.Mock).mockRejectedValue(new Error('not found'));
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(REPO_ROOT), name: 'ws', index: 0 }];
+	});
+
+	afterEach(() => {
+		jest.useRealTimers();
+		(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
+		(vscode.commands.executeCommand as jest.Mock).mockReset();
+	});
+
+	async function settle(): Promise<void> {
+		for (let i = 0; i < 5; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	function wireProgressFile(text: string | undefined): void {
+		wireGitCommands({ [REPO_ROOT]: { workingTreeChanges: [], HEAD: { name: 'staging', commit: 'a'.repeat(40) } } });
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === PROGRESS_PATH && text !== undefined) { return new TextEncoder().encode(text); }
+			throw new Error('not found');
+		});
+	}
+
+	function progressFrom(posted: Array<Record<string, unknown>>): unknown {
+		return (posted[posted.length - 1].activity as { progress: unknown }).progress;
+	}
+
+	it('posts the coordinator entries of an open repository', async () => {
+		wireProgressFile(JSON.stringify({ 'story-a': { pct: 40, at: '2026-11-03T10:00:00Z', by: 'agent', note: 'halfway' } }));
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(progressFrom(posted)).toEqual([{ root_relative: '', story_id: 'story-a', pct: 40, at: '2026-11-03T10:00:00Z', by: 'agent', note: 'halfway' }]);
+	});
+
+	it.each([
+		['a missing file', undefined],
+		['a malformed file', '{"story-a": '],
+	])('posts no entries and no error for %s', async (_label, text) => {
+		wireProgressFile(text);
+		const error_spy = jest.spyOn(errorops, 'writeToErrorLog');
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(progressFrom(posted)).toEqual([]);
+		expect(error_spy).not.toHaveBeenCalled();
+	});
+
+	it('reads nothing for a repository outside the workspace folders', async () => {
+		wireGitCommands({ '/elsewhere/other': { workingTreeChanges: [], HEAD: { name: 'staging', commit: 'a'.repeat(40) } } });
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('not found'));
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		const progress_reads = (vscode.workspace.fs.readFile as jest.Mock).mock.calls.filter(call => (call[0] as vscode.Uri).path.endsWith('progress.json'));
+		expect(progress_reads).toHaveLength(0);
+		expect(progressFrom(posted)).toEqual([]);
+	});
+});
+
+describe('AgentAnalyser agent registry', () => {
+	const REPO_ROOT = '/ws';
+	const REGISTRY_DIR = '/home/test/.local/share/thinkersync/registry';
+
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
+		(vscode.workspace.fs.stat as jest.Mock).mockRejectedValue(new Error('not found'));
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(REPO_ROOT), name: 'ws', index: 0 }];
+	});
+
+	afterEach(() => {
+		jest.useRealTimers();
+		(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
+		(vscode.commands.executeCommand as jest.Mock).mockReset();
+	});
+
+	async function settle(): Promise<void> {
+		for (let i = 0; i < 5; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	// agents maps an agent directory to the text of its agent.json, or undefined for a directory with no readable file
+	function wireRegistry(agents: Record<string, string | Uint8Array | undefined> | undefined): void {
+		wireGitCommands({ [REPO_ROOT]: { workingTreeChanges: [], HEAD: { name: 'staging', commit: 'a'.repeat(40) } } });
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === REGISTRY_DIR && agents !== undefined) { return Object.keys(agents).map(name => [name, vscode.FileType.Directory]); }
+			return [];
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const match = new RegExp(`^${REGISTRY_DIR}/([^/]+)/agent\\.json$`).exec(uri.path);
+			const content = match && agents ? agents[match[1]] : undefined;
+			if (content === undefined) { throw new Error('not found'); }
+			return typeof content === 'string' ? new TextEncoder().encode(content) : content;
+		});
+	}
+
+	function sessionsOf(posted: Array<Record<string, unknown>>): Array<{ root_path?: string; session: Record<string, unknown> }> {
+		return (posted[posted.length - 1].activity as { sessions: Array<{ root_path?: string; session: Record<string, unknown> }> }).sessions;
+	}
+
+	async function scan(): Promise<Array<{ root_path?: string; session: Record<string, unknown> }>> {
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		return sessionsOf(posted);
+	}
+
+	it('posts a registry-only row for an agent whose repository is in the workspace, with nothing about its mailbox or pane', async () => {
+		wireRegistry({ 'agy-helper': JSON.stringify({ agent: 'agy-helper', vendor: 'agy', repo: '/ws', state: 'idle', story: 'story-a', mailbox: '/secret/mailbox', pane: '%3', binary_version: '1.2.3', updated_at: '2026-11-03T10:00:00Z' }) });
+		const sessions = await scan();
+		expect(sessions).toHaveLength(1);
+		expect(sessions[0].root_path).toBe(REPO_ROOT);
+		expect(sessions[0].session).toMatchObject({ vendor: 'agy', registry_name: 'agy-helper', registry_only: true, state: 'idle', registry_story: 'story-a' });
+		const wire = JSON.stringify(sessions);
+		for (const leaked of ['/secret/mailbox', '%3', '1.2.3']) { expect(wire).not.toContain(leaked); }
+	});
+
+	it('skips an agent whose repository is outside every workspace folder', async () => {
+		wireRegistry({ 'coord-elsewhere': JSON.stringify({ agent: 'coord-elsewhere', vendor: 'claude', repo: '/elsewhere/other', state: 'working' }) });
+		expect(await scan()).toEqual([]);
+	});
+
+	it.each([
+		['a missing registry', undefined],
+		['a malformed file', { broken: '{"repo": ' }],
+		['an oversize file', { huge: new Uint8Array(70 * 1024) }],
+		['a directory with no agent.json', { empty: undefined }],
+		['an entry with no repository', { norepo: '{"agent":"x"}' }],
+	])('shows nothing and logs no error for %s', async (_label, agents) => {
+		wireRegistry(agents as Record<string, string | Uint8Array | undefined> | undefined);
+		const error_spy = jest.spyOn(errorops, 'writeToErrorLog');
+		expect(await scan()).toEqual([]);
+		expect(error_spy).not.toHaveBeenCalled();
+	});
+
+	it('carries an unknown state through as an unknown row', async () => {
+		wireRegistry({ odd: JSON.stringify({ agent: 'odd', vendor: 'claude', repo: '/ws', state: 'hibernating', updated_at: '2026-11-03T10:00:00Z' }) });
+		const sessions = await scan();
+		expect(sessions[0].session).toMatchObject({ vendor: 'claude-code', registry_only: true, state: 'unknown' });
 	});
 });

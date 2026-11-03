@@ -2,6 +2,7 @@ import type {
     ActivityChangedFile,
     ActivityRejectCode,
     ActivitySession,
+    ActivityStoryProgress,
     ActivityTree,
 } from '../types/AgentActivity';
 import type { HashMapOf } from '../types/general';
@@ -89,11 +90,14 @@ export interface ActivityAnalyserState {
  * read across the three vendors, and every repository's working tree. An empty `sessions` array
  * while `state` is `live` is a meaningful answer, not a missing one: it says no agent is working
  * anywhere this analyser can see.
+ * - progress: the coordinators' per-story percentages for the repositories in the open folder; empty
+ *   when none is recorded or this host cannot read them, which is not an error
  */
 export interface ActivitySnapshot {
     analyser: ActivityAnalyserState;
     sessions: ActivitySessionState[];
     trees: ActivityTreeState[];
+    progress: ActivityStoryProgress[];
 }
 
 export function emptyAnalyserState(state: AgentAnalyserState, reason?: string, reason_code?: AgentAnalyserUnavailableReasonCode): ActivityAnalyserState {
@@ -101,7 +105,7 @@ export function emptyAnalyserState(state: AgentAnalyserState, reason?: string, r
 }
 
 export function emptyActivitySnapshot(state: AgentAnalyserState = 'scanning', reason?: string, reason_code?: AgentAnalyserUnavailableReasonCode): ActivitySnapshot {
-    return { analyser: emptyAnalyserState(state, reason, reason_code), sessions: [], trees: [] };
+    return { analyser: emptyAnalyserState(state, reason, reason_code), sessions: [], trees: [], progress: [] };
 }
 
 /** every session id the analyser declared it could not fully read, deduped and sorted for a stable snapshot */
@@ -140,10 +144,12 @@ export function buildActivitySnapshot(
     state: ActivityAnalyserState,
     sessions: HashMapOf<ActivitySessionState>,
     trees: HashMapOf<ActivityTreeState>,
+    progress: ReadonlyArray<ActivityStoryProgress> = [],
 ): ActivitySnapshot {
     return {
         analyser: state,
         sessions: Object.values(sessions).sort((a, b) => a.session.session_id < b.session.session_id ? -1 : a.session.session_id > b.session.session_id ? 1 : 0),
         trees: Object.values(trees).sort((a, b) => a.root_path < b.root_path ? -1 : a.root_path > b.root_path ? 1 : 0),
+        progress: [...progress],
     };
 }

@@ -115,10 +115,32 @@ export interface AgentReadRefusal {
 }
 
 /**
+ * One subagent a reader found under a session, before its calls are priced.
+ * - title, agent_type, model: from the subagent's own launch record where it has one, each absent
+ *   when the record does not say
+ * - calls: this subagent's own calls, which the parent's `calls` also hold
+ */
+export interface AgentChildResult {
+    child_id: string;
+    title?: string;
+    agent_type?: string;
+    model?: string;
+    state: ActivityState;
+    started_at: string;
+    updated_at: string;
+    ended_at?: string;
+    active_ms?: number;
+    current?: ActivityEventBody;
+    calls: AgentApiCall[];
+}
+
+/**
  * What one vendor reader made of one session: the session facts a card draws, and the raw material
  * two later passes turn into cost and story/file attribution.
  * - model: the model id in effect on this session's most recent record; undefined when nothing the
  *   reader saw named one
+ * - children: the subagents the reader found, already capped to every running one plus the latest
+ *   `ACTIVITY_CHILDREN_MAX_FINISHED` finished; `children_omitted` counts the finished ones left out
  * - active_ms: the sum of the gaps between consecutive events in this session, leaving out any gap
  *   over `AGENT_ACTIVE_IDLE_GAP_MS` entirely (`agentclockops.ts`'s `activeMsFromTimestamps`), over
  *   the whole transcript regardless of window, same as `started_at`/`updated_at`; absent on a refusal,
@@ -137,6 +159,8 @@ export interface AgentSessionResult {
     active_ms?: number;
     calls: AgentApiCall[];
     tool_invocations: AgentToolInvocation[];
+    children?: AgentChildResult[];
+    children_omitted?: number;
     refusal?: AgentReadRefusal;
 }
 

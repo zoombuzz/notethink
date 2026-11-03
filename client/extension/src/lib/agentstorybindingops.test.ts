@@ -1,4 +1,4 @@
-import { bindSessionToStory, storiesForWriteCall, type StoryBindingWriteCall, type StoryDocument } from './agentstorybindingops';
+import { bindSessionToStory, findStoryInDocs, storiesForWriteCall, type StoryBindingWriteCall, type StoryDocument } from './agentstorybindingops';
 
 const TODO_PATH = 'docstech/users/alex/todo.md';
 const DONE_PATH = 'docstech/users/alex/done.md';
@@ -309,5 +309,28 @@ describe('bindSessionToStory mirrors the webview slug derivation', () => {
         const text = `# Todo\n\n\n${heading}\n\n+ [ ] a task\n`;
         const calls = [call(TODO_PATH, { edits: [edit('a task')] })];
         expect(bindSessionToStory(calls, [{ doc_path: TODO_PATH, text }])).toEqual([{ doc_path: TODO_PATH, id: expected_id }]);
+    });
+});
+
+describe('findStoryInDocs', () => {
+    const docs: StoryDocument[] = [
+        { doc_path: DONE_PATH, text: '# Done\n\n\n### First story [](?id=first-story)\n' },
+        { doc_path: TODO_PATH, text: TODO_TEXT },
+        { doc_path: `other/${TODO_PATH}`, text: '# Todo\n\n\n### Second story [](?id=second-story&status=testing)\n' },
+    ];
+
+    it('finds a story and its own status, preferring todo.md over done.md', () => {
+        expect(findStoryInDocs(docs, 'first-story', '')).toEqual({ story: { doc_path: TODO_PATH, id: 'first-story' }, status: 'code-review' });
+        expect(findStoryInDocs(docs, 'second-story', '')?.story.doc_path).toBe(TODO_PATH);
+    });
+
+    it('searches only the boards under the repository directory', () => {
+        expect(findStoryInDocs(docs, 'second-story', 'other')).toEqual({ story: { doc_path: `other/${TODO_PATH}`, id: 'second-story' }, status: 'testing' });
+        expect(findStoryInDocs(docs, 'third-story', 'other')).toBeUndefined();
+    });
+
+    it('reports a story with no status linetag and one that is not on any board', () => {
+        expect(findStoryInDocs(docs, 'third-story', '')).toEqual({ story: { doc_path: TODO_PATH, id: 'third-story' }, status: undefined });
+        expect(findStoryInDocs(docs, 'no-such-story', '')).toBeUndefined();
     });
 });

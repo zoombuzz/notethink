@@ -13,16 +13,18 @@ import {
     type AgentAnalyserUnavailableReasonCode,
 } from '../lib/agentanalyserops';
 import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
+import { REGISTRY_FILE_MAX_BYTES, REGISTRY_MAX_AGENTS, overlayRegistry, parseRegistryEntry, registryEntrySegments, REGISTRY_DIR_SEGMENTS, type ResolvedRegistryAgent } from '../lib/agentregistryops';
+import { PROGRESS_FILE_MAX_BYTES, THINKERSYNC_HOME_SEGMENTS, parseProgressFile, progressFileSegments, progressForRepository, progressProjectName } from '../lib/progressfileops';
 import { attributeCommitsToSessions, attributeFilesToSessions, type AgentCommitCall, type AgentWriteCall } from '../lib/agentgitattributionops';
 import { lineDiffFromBytes, type LineDiffCounts } from '../lib/agentlinediffops';
 import type { AgentPricedUsageEntry } from '../lib/agentpricingops';
 import { readLineDiffSides, readRepositoryTree, resolveGitApi, type GitApi, type GitRepository } from './agentgitops';
 import type { GitReflogCommit } from '../lib/agentgitreflogops';
-import { isBoardPath, siblingBoardPath, storiesForWriteCall, type StoryBindingWriteCall, type StoryDocument } from '../lib/agentstorybindingops';
+import { findStoryInDocs, isBoardPath, siblingBoardPath, storiesForWriteCall, type StoryBindingWriteCall, type StoryDocument } from '../lib/agentstorybindingops';
 import { sliceTail, type TailBookmark } from '../lib/agenttailparseops';
 import type { AgentAnalyserRawFile, AgentAnalyserResolvedCall, AgentAnalyserWorkerJob, AgentAnalyserWorkerRequest, AgentAnalyserWorkerResponse, AgentAnalyserWorkerSessionOutput, AgentLineDiffJob, AgentVendorId } from './AgentAnalyserWorker';
 import { AgentAnalyserWorkerPool, defaultAgentAnalyserPoolSize } from './AgentAnalyserWorkerPool';
-import { addActivityUsage, emptyActivityUsage, type ActivityChangedFile, type ActivitySession, type ActivityState, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
+import { addActivityUsage, emptyActivityUsage, type ActivityChangedFile, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
 import type { HashMapOf } from '../types/general';
 
 // only sessions with activity inside this window count toward what a story's card draws
@@ -80,6 +82,7 @@ type PostFn = (message: Record<string, unknown>) => void;
  * workspace folder's own URI (`resolveVendorHome`) instead.
  */
 interface ResolvedAgentVendorHome {
+    home: vscode.Uri;
     claudeCode: vscode.Uri;
     codex: vscode.Uri;
     grok: vscode.Uri;
@@ -145,11 +148,13 @@ interface DiscoveryCandidate {
  * for each session whose files match the last scan's stat, the cached output reused with no read.
  * - stat_ms: wall-clock time in stat-only work; reading now happens per batch, timed in runScanOnce
  * - live_status: each live session's vendor-reported state, by session id; only Claude Code writes one
+ * - live_names: each live session's vendor-given name, by session id; only Claude Code writes one
  */
 interface DiscoveryResult {
     candidates: DiscoveryCandidate[];
     reused: AgentAnalyserWorkerSessionOutput[];
     live_status?: Map<string, ActivityState>;
+    live_names?: Map<string, string>;
     stat_ms?: number;
 }
 
@@ -198,6 +203,7 @@ interface ScanPhaseTotals {
 interface LiveOverlay {
     live: boolean;
     status?: ActivityState;
+    name?: string;
 }
 
 // Claude Code's pid-file `status` values mapped to card states; an unmapped value keeps the transcript's reading
@@ -327,6 +333,7 @@ export class AgentAnalyser {
     private state: ActivityAnalyserState = emptyAnalyserState('scanning');
     private sessions: HashMapOf<ActivitySessionState> = {};
     private trees: HashMapOf<ActivityTreeState> = {};
+    private progress: ActivityStoryProgress[] = [];
     private last_posted: string | undefined;
 
     constructor(
@@ -447,7 +454,7 @@ export class AgentAnalyser {
             const local = this.context.logUri ? agentVendorHomeFrom(this.context.logUri.path) : undefined;
             if (!local) { return undefined; }
             return {
-                home: { claudeCode: vscode.Uri.file(local.claudeCode), codex: vscode.Uri.file(local.codex), grok: vscode.Uri.file(local.grok) },
+                home: { home: vscode.Uri.file(home_path ?? ''), claudeCode: vscode.Uri.file(local.claudeCode), codex: vscode.Uri.file(local.codex), grok: vscode.Uri.file(local.grok) },
                 description: `local, ${home_path ?? '(unresolved)'}`,
             };
         }
@@ -457,7 +464,7 @@ export class AgentAnalyser {
         const home = ancestor ?? (await this.findRemoteAgentHomeInConventionalRoots(folder.uri)).home;
         if (!home) { return undefined; }
         return {
-            home: { claudeCode: vscode.Uri.joinPath(home, '.claude'), codex: vscode.Uri.joinPath(home, '.codex'), grok: vscode.Uri.joinPath(home, '.grok') },
+            home: { home, claudeCode: vscode.Uri.joinPath(home, '.claude'), codex: vscode.Uri.joinPath(home, '.codex'), grok: vscode.Uri.joinPath(home, '.grok') },
             description: `remote, scheme ${home.scheme}, authority ${home.authority || '(none)'}, ${home.path}`,
         };
     }
@@ -707,11 +714,13 @@ export class AgentAnalyser {
         const window_start_ms = now_ms - AGENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
         const previous_sessions = this.sessions;
         // discovery (stat-only), story documents and git trees are independent, so they run together ahead of the first batch
-        const [{ candidates: discovered, reused, live_status, stat_ms }, { value: story_docs, ms: story_docs_ms }, { value: reads, ms: git_trees_ms }] = await Promise.all([
+        const [{ candidates: discovered, reused, live_status, live_names, stat_ms }, { value: story_docs, ms: story_docs_ms }, { value: reads, ms: git_trees_ms }] = await Promise.all([
             this.discoverJobs(now_ms, window_start_ms),
             timed(() => this.readStoryDocuments()),
             timed(() => this.readRepositoryTrees(now_ms)),
         ]);
+        const progress = await this.readProgress(vendor_home, reads);
+        const registry_agents = await this.readRegistry(vendor_home, reads);
         // newest first: Codex's own discovery walks date directories oldest-first, so this sort establishes real recency
         const candidates = [...discovered].sort((a, b) => b.identity[0].mtime - a.identity[0].mtime);
         // a scan with nothing to read still makes one round trip (carrying pending evictions), so a worker failure is still caught
@@ -752,7 +761,7 @@ export class AgentAnalyser {
             // the worker's byte cap can evict a cached session; dropping the bookmark here avoids targeting a gone cache
             for (const session_id of response.evicted_session_ids ?? []) { this.evictTailStateFor(session_id); }
             // caching skips re-reading the transcript, so a fresh output takes the vendor's status here too, as discovery did
-            const fresh = response.sessions.map(output => (output.state === 'ended' ? output : this.overlayLiveState(output, { live: true, status: live_status?.get(output.session_id) })));
+            const fresh = response.sessions.map(output => (output.state === 'ended' ? output : this.overlayLiveState(output, { live: true, status: live_status?.get(output.session_id), name: live_names?.get(output.session_id) })));
             sessions_seen_this_scan.push(...fresh);
             refusals.push(...this.refusalsFrom(fresh));
             // a reused session needs no round trip, so it rides the FIRST batch's post; session_fold_cache makes folding it cheap too
@@ -765,8 +774,9 @@ export class AgentAnalyser {
             phases.fold_ms += Date.now() - fold_started_ms;
             // an earlier batch of a later scan is never shown alone once a scan has ever completed; the first scan is the exception
             if (is_last_batch || !this.has_shown_live) {
-                this.sessions = sessions_acc;
+                this.sessions = this.withRegistry(sessions_acc, registry_agents, progress, story_docs, now_ms);
                 this.trees = trees_this_batch;
+                this.progress = progress;
                 this.state = emptyAnalyserState(is_last_batch ? 'live' : 'scanning');
                 this.state.refusals = refusals;
                 const post_started_ms = Date.now();
@@ -1010,12 +1020,14 @@ export class AgentAnalyser {
     private overlayLiveState(output: AgentAnalyserWorkerSessionOutput, overlay: LiveOverlay): AgentAnalyserWorkerSessionOutput {
         if (!overlay.live) {
             if (output.state === 'ended') { return output; }
-            return { ...output, state: 'ended', ended_at: output.ended_at ?? output.updated_at, current: undefined, question: undefined };
+            const children = output.children?.map(child => child.state === 'ended' ? child : { ...child, state: 'ended' as const, ended_at: child.updated_at, current: undefined });
+            return { ...output, state: 'ended', ended_at: output.ended_at ?? output.updated_at, current: undefined, question: undefined, children };
         }
+        const named = overlay.name !== undefined && output.session_name !== overlay.name ? { ...output, session_name: overlay.name } : output;
         const state = overlay.status;
-        if (state === undefined || output.state === state) { return output; }
+        if (state === undefined || named.state === state) { return named; }
         // going idle clears the last pending tool call; working or waiting keep the transcript's own, unable to fabricate one
-        return { ...output, state, current: state === 'idle' ? undefined : output.current };
+        return { ...named, state, current: state === 'idle' ? undefined : named.current };
     }
 
     // one line per session that appeared, bound to a story, or changed state, never one per transcript append
@@ -1264,9 +1276,12 @@ export class AgentAnalyser {
             session_id: output.session_id,
             vendor: output.vendor,
             project: path.posix.basename(output.cwd) || output.cwd,
+            session_name: output.session_name,
             story_binding: stories.length > 0 ? 'bound' : 'none',
             stories: stories.length > 0 ? stories : undefined,
             story_usage: this.splitUsageByTurn(output.priced_calls, edit_events, stories),
+            children: output.children,
+            children_omitted: output.children_omitted,
             started_at: output.started_at,
             updated_at: output.updated_at,
             ended_at: output.ended_at,
@@ -1291,9 +1306,12 @@ export class AgentAnalyser {
             session_id: output.session_id,
             vendor: output.vendor,
             project: path.posix.basename(output.cwd) || output.cwd,
+            session_name: output.session_name,
             story_binding: cached.stories.length > 0 ? 'bound' : 'none',
             stories: cached.stories.length > 0 ? cached.stories : undefined,
             story_usage: cached.story_usage,
+            children: output.children,
+            children_omitted: output.children_omitted,
             started_at: output.started_at,
             updated_at: output.updated_at,
             ended_at: output.ended_at,
@@ -1568,6 +1586,60 @@ export class AgentAnalyser {
         return docs;
     }
 
+    // the folded sessions with the registry laid over them, a registered agent's story looked up on the boards read this scan
+    private withRegistry(sessions: HashMapOf<ActivitySessionState>, agents: ResolvedRegistryAgent[], progress: ActivityStoryProgress[], story_docs: StoryDocument[], now_ms: number): HashMapOf<ActivitySessionState> {
+        return overlayRegistry(sessions, agents, {
+            now_ms,
+            progress,
+            findStory: (repo_relative, story_id) => findStoryInDocs(story_docs, story_id, repo_relative),
+        });
+    }
+
+    /**
+     * Each open repository's coordinator progress entries, read-only, through the same home the agent
+     * sessions resolve to (so over Remote-SSH it is the remote's file). A repository outside the
+     * workspace folders is skipped; a missing, unreadable or malformed file is silent, since most
+     * repositories have no coordinator.
+     */
+    private async readProgress(vendor_home: ResolvedAgentVendorHome, reads: HashMapOf<RepositoryRead>): Promise<ActivityStoryProgress[]> {
+        const found: ActivityStoryProgress[] = [];
+        for (const [root_path, read] of Object.entries(reads)) {
+            if (this.workspaceRelative(root_path) === undefined) { continue; }
+            const project = progressProjectName(root_path);
+            if (!project) { continue; }
+            const file_uri = vscode.Uri.joinPath(vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS, ...progressFileSegments(project));
+            const bytes = await this.readBytes(file_uri);
+            if (!bytes || bytes.length > PROGRESS_FILE_MAX_BYTES) { continue; }
+            found.push(...progressForRepository(parseProgressFile(new TextDecoder().decode(bytes)), read.root_relative));
+        }
+        return found;
+    }
+
+    /**
+     * The registry entries whose repository sits inside a workspace folder, read-only, through the same
+     * home the agent sessions resolve to (so over Remote-SSH it is the remote's registry). A missing
+     * registry, and any unreadable, oversize or malformed entry, is silent: most machines have none.
+     * Each entry is filed under the git root holding its repository where one is open, so a registered
+     * agent sits beside the same repository's vendor sessions.
+     */
+    private async readRegistry(vendor_home: ResolvedAgentVendorHome, reads: HashMapOf<RepositoryRead>): Promise<ResolvedRegistryAgent[]> {
+        const found: ResolvedRegistryAgent[] = [];
+        let listing: [string, vscode.FileType][];
+        try { listing = await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS, ...REGISTRY_DIR_SEGMENTS)); }
+        catch { return found; }
+        const agent_dirs = listing.filter(([, type]) => type !== vscode.FileType.File).map(([name]) => name).sort().slice(0, REGISTRY_MAX_AGENTS);
+        for (const agent_dir of agent_dirs) {
+            const bytes = await this.readBytes(vscode.Uri.joinPath(vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS, ...registryEntrySegments(agent_dir)));
+            if (!bytes || bytes.length > REGISTRY_FILE_MAX_BYTES) { continue; }
+            const entry = parseRegistryEntry(new TextDecoder().decode(bytes), agent_dir);
+            if (!entry) { continue; }
+            const repo_relative = this.workspaceRelative(entry.repo);
+            if (repo_relative === undefined) { continue; }
+            found.push({ ...entry, root_path: this.repositoryRootFor(entry.repo, reads) ?? entry.repo, repo_relative });
+        }
+        return found;
+    }
+
     private async readRepositoryTrees(now_ms: number): Promise<HashMapOf<RepositoryRead>> {
         const reads: HashMapOf<RepositoryRead> = {};
         this.git_api = this.git_api ?? await resolveGitApi();
@@ -1610,6 +1682,7 @@ export class AgentAnalyser {
             candidates: [...claude.candidates, ...codex.candidates, ...grok.candidates],
             reused: [...claude.reused, ...codex.reused, ...grok.reused],
             live_status: claude.live_status,
+            live_names: claude.live_names,
             // three vendors run in parallel, so discovery time is bounded by the slowest, not their sum
             stat_ms: Math.max(claude.stat_ms ?? 0, codex.stat_ms ?? 0, grok.stat_ms ?? 0),
         };
@@ -1746,7 +1819,7 @@ export class AgentAnalyser {
             const vendor_live = live.has(session_id);
             if (this.sessionUnchanged(session_id, identity)) {
                 this.reconcileCacheability(session_id, vendor_live, identity, now_ms);
-                reused.push(this.overlayLiveState(this.file_cache.get(session_id)!.output, { live: vendor_live, status: live.get(session_id)?.status }));
+                reused.push(this.overlayLiveState(this.file_cache.get(session_id)!.output, { live: vendor_live, status: live.get(session_id)?.status, name: live.get(session_id)?.name }));
                 return;
             }
             const claude_candidate: ClaudeCodeCandidate = { session_id, dir_name, transcript_uri, transcript_identity, extra_identity, identity, vendor_live };
@@ -1757,11 +1830,15 @@ export class AgentAnalyser {
         for (const [session_id, entry] of live) {
             if (entry.status !== undefined) { live_status.set(session_id, entry.status); }
         }
-        return { candidates, reused, live_status, stat_ms };
+        const live_names = new Map<string, string>();
+        for (const [session_id, entry] of live) {
+            if (entry.name !== undefined) { live_names.set(session_id, entry.name); }
+        }
+        return { candidates, reused, live_status, live_names, stat_ms };
     }
 
     // one changed session's read-and-build step; undefined when the transcript can't be read (a race with its writer)
-    private async readClaudeCodeCandidate(candidate: ClaudeCodeCandidate, live: Map<string, { cwd: string; status?: ActivityState }>, now_ms: number, window_start_ms: number): Promise<{ job: DiscoveredJob; bytes_read: number } | undefined> {
+    private async readClaudeCodeCandidate(candidate: ClaudeCodeCandidate, live: Map<string, { cwd: string; status?: ActivityState; name?: string }>, now_ms: number, window_start_ms: number): Promise<{ job: DiscoveredJob; bytes_read: number } | undefined> {
         const bytes = await this.readBytes(candidate.transcript_uri);
         if (bytes === undefined) { this.warnUnreadable(candidate.transcript_uri); return undefined; }
         const cwd = live.get(candidate.session_id)?.cwd ?? this.guessCwd(bytes) ?? candidate.dir_name;
@@ -1773,8 +1850,8 @@ export class AgentAnalyser {
     }
 
     // `status` is the pid file's own field mapped by CLAUDE_PID_STATUS_STATES, undefined for an unrecognised value
-    private async claudeLiveSessions(home: vscode.Uri): Promise<Map<string, { cwd: string; status?: ActivityState }>> {
-        const map = new Map<string, { cwd: string; status?: ActivityState }>();
+    private async claudeLiveSessions(home: vscode.Uri): Promise<Map<string, { cwd: string; status?: ActivityState; name?: string }>> {
+        const map = new Map<string, { cwd: string; status?: ActivityState; name?: string }>();
         const sessions_uri = vscode.Uri.joinPath(home, 'sessions');
         let entries: Array<[string, vscode.FileType]>;
         try { entries = await vscode.workspace.fs.readDirectory(sessions_uri); }
@@ -1785,10 +1862,11 @@ export class AgentAnalyser {
             const bytes = await this.readBytes(vscode.Uri.joinPath(sessions_uri, file_name));
             if (!bytes) { continue; }
             try {
-                const parsed = JSON.parse(this.peekText(bytes, bytes.length)) as { sessionId?: string; cwd?: string; status?: string };
+                const parsed = JSON.parse(this.peekText(bytes, bytes.length)) as { sessionId?: string; cwd?: string; status?: string; name?: unknown };
                 if (parsed.sessionId && parsed.cwd) {
                     const status = parsed.status !== undefined && Object.hasOwn(CLAUDE_PID_STATUS_STATES, parsed.status) ? CLAUDE_PID_STATUS_STATES[parsed.status] : undefined;
-                    map.set(parsed.sessionId, { cwd: parsed.cwd, status });
+                    const name = typeof parsed.name === 'string' && parsed.name.trim().length > 0 ? parsed.name.trim() : undefined;
+                    map.set(parsed.sessionId, { cwd: parsed.cwd, status, name });
                 }
             } catch { /* a session file written mid-update is skipped this scan and re-read next time */ }
         }
@@ -1808,10 +1886,13 @@ export class AgentAnalyser {
         catch { return []; }
         const identity: AgentFileIdentity[] = [];
         for (const [file_name, type] of entries) {
-            if (type !== vscode.FileType.File || !file_name.endsWith('.jsonl')) { continue; }
+            const is_transcript = file_name.endsWith('.jsonl');
+            const is_meta = file_name.endsWith('.meta.json');
+            if (type !== vscode.FileType.File || (!is_transcript && !is_meta)) { continue; }
             const uri = vscode.Uri.joinPath(subagents_uri, file_name);
             const stat = await this.statFile(uri);
-            if (stat !== undefined) { identity.push({ path: uri.path, uri_string: uri.toString(), ...stat, appendable: true }); }
+            // a meta file is rewritten whole (its `finished` flag flips), so it is never tail-resumed
+            if (stat !== undefined) { identity.push({ path: uri.path, uri_string: uri.toString(), ...stat, appendable: is_transcript }); }
         }
         return identity;
     }
@@ -1960,7 +2041,7 @@ export class AgentAnalyser {
     // --- posting ---
 
     private currentMessage(): Record<string, unknown> {
-        const snapshot = buildActivitySnapshot(this.state, this.sessions, this.trees);
+        const snapshot = buildActivitySnapshot(this.state, this.sessions, this.trees, this.progress);
         return { type: 'activity', activity: snapshot };
     }
 

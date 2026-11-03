@@ -24,6 +24,25 @@ export const ACTIVITY_VENDOR_CODEX = 'codex';
 export const ACTIVITY_VENDOR_GROK = 'grok';
 export const ACTIVITY_KNOWN_VENDORS = [ACTIVITY_VENDOR_CLAUDE_CODE, ACTIVITY_VENDOR_CODEX, ACTIVITY_VENDOR_GROK] as const;
 
+/**
+ * ActivityVendorDisplay is how one vendor is drawn wherever a session is named.
+ * - monogram: the two-character mark a card, a session row and a band draw
+ * - label: the vendor's full name, as the chat panel titles it
+ * - colour: a CSS colour expression from the editor's chart palette, with a literal fallback, so it follows the light and dark theme
+ */
+export interface ActivityVendorDisplay {
+    monogram: string;
+    label: string;
+    colour: string;
+}
+
+// the one vendor display table; a vendor missing from it still draws, from its slug
+export const ACTIVITY_VENDOR_DISPLAY: Readonly<Record<string, ActivityVendorDisplay>> = {
+    [ACTIVITY_VENDOR_CLAUDE_CODE]: { monogram: 'CC', label: 'Claude Code', colour: 'var(--vscode-charts-purple, #b180d7)' },
+    [ACTIVITY_VENDOR_CODEX]: { monogram: 'CO', label: 'Codex', colour: 'var(--vscode-charts-blue, #3794ff)' },
+    [ACTIVITY_VENDOR_GROK]: { monogram: 'GR', label: 'Grok', colour: 'var(--vscode-charts-yellow, #d7ba7d)' },
+};
+
 // event kinds a reader renders; `kind` is open, so an unlisted kind is carried and ignored rather than rejected
 export const ACTIVITY_EVENT_KINDS = ['tool_call', 'tool_result', 'message', 'question', 'answer', 'notice'] as const;
 
@@ -145,12 +164,49 @@ export function addActivityUsage(a: ActivityUsage, b: ActivityUsage): ActivityUs
     };
 }
 
+// a session keeps every running child and only this many finished ones, the most recent, so the snapshot stays bounded
+export const ACTIVITY_CHILDREN_MAX_FINISHED = 6;
+
+/**
+ * ActivityChildSession is one subagent a session launched, drawn as an indented row under its parent.
+ * Every field but its id and times is optional, because a vendor's own record of a subagent varies.
+ * - child_id: the subagent's own id, unique within its parent
+ * - title: the short description the parent gave the subagent, which usually names the work
+ * - agent_type: the kind of subagent the parent launched, such as `Explore`
+ * - model: the model id seen on the subagent's own latest record, else the one its launch record named
+ * - state: `working` while it runs and `ended` once finished; never `waiting`, which a subagent cannot report
+ * - usage: the subagent's own tokens and estimated cost, which the parent's `usage` already includes
+ */
+export interface ActivityChildSession {
+    child_id: string;
+    title?: string;
+    agent_type?: string;
+    model?: string;
+    state: ActivityState;
+    started_at: string;
+    updated_at: string;
+    ended_at?: string;
+    active_ms?: number;
+    current?: ActivityEventBody;
+    usage: ActivityUsage;
+}
+
 /**
  * ActivitySession is one live or recent agent session: its binding, its state, and the live line a
  * card draws.
  * - vendor: an open string, one of ACTIVITY_KNOWN_VENDORS or a vendor a reader does not know
  * - project: the cwd's directory name, which drives the card's project colour on a virtual note, not
  *   the join to a story
+ * - session_name: the name the vendor itself gives the session (Claude Code's own `name` in its live
+ *   session file), undefined when the vendor names none or the session is not live
+ * - registry_name: the agent's name from the agent registry, the fallback when the vendor names
+ *   none; set when a registry entry joins this session, and the name of a registry-only row
+ * - registry_only: true for a row built from a registry entry alone, because no vendor session
+ *   NoteThink can read matches it; it has no transcript to open, no usage and no live line
+ * - registry_stale: true when the registry still says `working` but nothing since its last update
+ *   shows work, so a row reads stale rather than working
+ * - registry_story: the story id the registry entry names, shown on a registry-only row; a joined
+ *   or registry-only session also takes it as its story binding when that story is in flight
  * - state: owns the card's colour; `question` present means `waiting`, and the two are not allowed
  *   to disagree; `waiting` may stand alone, as Claude Code's own session status reports it with no
  *   question text
@@ -171,12 +227,21 @@ export function addActivityUsage(a: ActivityUsage, b: ActivityUsage): ActivityUs
  *   minutes entirely, over the session's whole lifetime regardless of window; undefined on a
  *   refusal, since no record was read to measure gaps between. The agent card's clock setting reads
  *   this for its "active" mode; `started_at`/`updated_at` alone drive the other two modes
+ * - children: the subagents this session launched, oldest first, capped at every running one plus
+ *   the latest ACTIVITY_CHILDREN_MAX_FINISHED finished ones; absent for a vendor with no subagents
+ * - children_omitted: how many finished subagents the cap left out, absent when none; the parent's
+ *   `usage` and `active_ms` still include them
  */
 export interface ActivitySession {
     // --- identity and binding ---
     session_id: string;
     vendor: string;
     project: string;
+    session_name?: string;
+    registry_name?: string;
+    registry_only?: boolean;
+    registry_stale?: boolean;
+    registry_story?: string;
     story_binding: ActivityStoryBinding;
     stories?: ActivityStoryRef[];
     story_usage?: ActivityStoryUsage[];
@@ -193,6 +258,9 @@ export interface ActivitySession {
     model?: string;
     // --- cost ---
     usage: ActivityUsage;
+    // --- subagents ---
+    children?: ActivityChildSession[];
+    children_omitted?: number;
 }
 
 /**
@@ -241,6 +309,25 @@ export interface ActivityTree {
     head_commit: string;
     uncommitted: ActivityChangedFile[];
     committed: ActivityCommit[];
+}
+
+/**
+ * ActivityStoryProgress is one story's rough percentage as a coordinator recorded it, read from the
+ * coordinator's own progress file and carried so a card can draw a pie and time its column.
+ * - root_relative: workspace-relative posix path of the repository the entry belongs to, empty when the repository IS a workspace folder; the story's document path is matched against it
+ * - story_id: the story's `id=` linetag slug, which is the join key within that repository
+ * - pct: whole percent, 0 to 100
+ * - at: ISO 8601 UTC of when the entry was written
+ * - by: who wrote it, `agent` or `coordinator`, carried as the writer spelled it
+ * - note: a short free-text remark the writer attached
+ */
+export interface ActivityStoryProgress {
+    root_relative: string;
+    story_id: string;
+    pct: number;
+    at: string;
+    by: string;
+    note?: string;
 }
 
 // why a session's own files could not be read; a caller asserts and branches on the code and logs the reason

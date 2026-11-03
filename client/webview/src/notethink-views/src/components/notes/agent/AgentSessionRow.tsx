@@ -1,7 +1,8 @@
 import React from "react";
 import * as l10n from "@vscode/l10n";
-import { ACTIVITY_ARG_MAX_CHARS } from "../../../types/AgentActivity";
-import { AGENT_CLOCK_MODE_DEFAULT, agentClockTooltip, factStateFor, formatActivityUsage, formatAgentClock, sessionStateOf, sessionUsageForStory, shortModelId, truncateActivityArg, vendorMonogram, type ActivityRefusal, type AgentClockMode, type ActivitySessionState, type ActivityStoryKey } from "../../../lib/agentactivityops";
+import { ACTIVITY_ARG_MAX_CHARS, type ActivitySession } from "../../../types/AgentActivity";
+import { AGENT_CLOCK_MODE_DEFAULT, agentClockTooltip, factStateFor, formatActivityUsage, formatAgentClock, sessionDisplayName, sessionStateOf, sessionUsageForStory, shortModelId, truncateActivityArg, vendorLabel, vendorMonogram, type ActivityRefusal, type AgentClockMode, type ActivitySessionState, type ActivityStoryKey } from "../../../lib/agentactivityops";
+import AgentChildRows from "./AgentChildRows";
 import { agentStateLabel } from "./agentStateLabel";
 import { useAgentClockNow } from "./useAgentClockNow";
 import styles from "../AgentNote.module.scss";
@@ -14,6 +15,9 @@ import styles from "../AgentNote.module.scss";
  * (monogram, model, state and clock; then the live line; then the counter), and on one line where the
  * card is wide enough. Every cell stays on one line and truncates, carrying its whole text as a hover
  * title, because a cell broken inside a word cannot be read at all.
+ *
+ * A session that launched subagents draws them as a tree under this row (`AgentChildRows`); the row's
+ * own name sits beside its monogram and model when the vendor or the registry gave the session one.
  *
  * The counter is this session's share of this story, the same figure the story's own total sums, so
  * the row never outweighs the card it is drawn on; it leaves the window to that total. The clock beside
@@ -63,10 +67,14 @@ function openRefusalLabel(reason: string, vendor: string): string {
 /** the live line's text, and which of the three honest answers it is */
 function liveLine(state: ActivitySessionState): { text: string; fact: string } {
     const session = state.session;
+    if (session.registry_only) {
+        const story = session.registry_story?.trim();
+        return { fact: 'registry', text: story ? l10n.t('Registered, on {0}', story) : l10n.t('Registered agent') };
+    }
     const current = session.current;
     const fact = factStateFor(session, 'live_tool_call', current !== undefined);
     if (fact === 'unsupported') {
-        return { fact, text: l10n.t('{0} cannot report what it is running', session.vendor) };
+        return { fact, text: l10n.t('{0} cannot report what it is running', vendorLabel(session.vendor)) };
     }
     if (fact === 'quiet' || !current) {
         return { fact, text: l10n.t('Nothing running') };
@@ -78,33 +86,47 @@ function liveLine(state: ActivitySessionState): { text: string; fact: string } {
     return { fact, text: arg || current.kind };
 }
 
+/** the state word a row draws: a registry entry that says working with nothing to show for it reads `Stale`, never `Working` */
+function rowStateLabel(session: ActivitySession): string {
+    return session.registry_stale ? l10n.t('Stale') : agentStateLabel(sessionStateOf(session));
+}
+
 function AgentSessionRow(props: AgentSessionRowProps): React.ReactElement {
     const session = props.state.session;
+    const registry_only = session.registry_only === true;
     const clock_mode = props.clockMode ?? AGENT_CLOCK_MODE_DEFAULT;
     const now_ms = useAgentClockNow(clock_mode === 'sinceStart');
     const live = liveLine(props.state);
-    const usage = formatActivityUsage(sessionUsageForStory(props.state, props.storyKey));
+    // a registry-only row has no transcript to price, and the empty cell keeps the row's grid columns
+    const usage = registry_only ? '' : formatActivityUsage(sessionUsageForStory(props.state, props.storyKey));
+    // a name is drawn only when the vendor or the registry gave one; the short id fallback would only add noise to every row
+    const named = (session.session_name?.trim() || session.registry_name?.trim()) ? sessionDisplayName(session) : undefined;
     return (
-        <li className={styles.agentRow} data-state={sessionStateOf(session)} data-testid="agent-row">
+        <li className={styles.agentRow} data-state={sessionStateOf(session)} data-registry-only={registry_only ? 'true' : undefined} data-stale={session.registry_stale ? 'true' : undefined} data-testid="agent-row">
             <button
                 type="button"
                 className={styles.agentRowButton}
                 data-testid="agent-row-button"
-                title={l10n.t('Open this session in VS Code')}
+                title={registry_only ? l10n.t('Known from the agent registry only, so there is no session to open') : l10n.t('Open this session in VS Code')}
+                disabled={registry_only}
                 onClick={(event) => { event.stopPropagation(); props.onOpen(session.vendor, session.session_id); }}
             >
                 <span className={styles.agentRail} aria-hidden={true} />
                 <span className={styles.agentIdent}>
                     <span className={styles.agentMonogram} data-testid="agent-monogram" title={session.vendor}>{vendorMonogram(session.vendor)}</span>
+                    {named !== undefined && <span className={styles.agentName} data-testid="agent-name" title={named}>{named}</span>}
                     <span className={styles.agentModel} data-testid="agent-model" title={session.model}>{shortModelId(session.model)}</span>
                 </span>
                 <span className={styles.agentStatus}>
-                    <span className={styles.agentState} data-testid="agent-state">{agentStateLabel(sessionStateOf(session))}</span>
+                    <span className={styles.agentState} data-testid="agent-state">{rowStateLabel(session)}</span>
                     <span className={styles.agentClock} data-testid="agent-clock" title={agentClockTooltip(session, clock_mode, new Date(now_ms).toISOString())}>{formatAgentClock(session, clock_mode, now_ms)}</span>
                 </span>
                 <span className={styles.agentLive} data-testid="agent-live" data-fact={live.fact} title={live.text}>{live.text}</span>
                 <span className={styles.agentUsage} data-testid="agent-usage" title={usage}>{usage}</span>
             </button>
+            {session.children !== undefined && session.children.length > 0 && (
+                <AgentChildRows vendor={session.vendor} items={session.children} omitted={session.children_omitted} />
+            )}
             {(props.refusals.length > 0 || props.openRefusal !== undefined) && (
                 <ul className={styles.agentRowRefusals} data-testid="agent-row-refusals">
                     {props.refusals.map(refusal => (

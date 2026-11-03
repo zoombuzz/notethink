@@ -1,5 +1,6 @@
 import {
     ACTIVITY_ARG_MAX_CHARS,
+    ACTIVITY_CHILDREN_MAX_FINISHED,
     type ActivityEventBody,
     type ActivityState,
 } from '../../types/AgentActivity';
@@ -8,6 +9,7 @@ import {
     AGENT_EDIT_SNIPPET_MAX_CHARS,
     AGENT_TRANSCRIPT_MAX_BYTES,
     type AgentApiCall,
+    type AgentChildResult,
     type AgentReadRefusal,
     type AgentSessionInput,
     type AgentSessionResult,
@@ -30,6 +32,21 @@ import {
 
 // Claude Code's built-in tools that write a file, keyed by their exact tool_use name
 const CLAUDE_FILE_WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+// an unfinished subagent with no record newer than this reads as ended, since a crashed one never writes `finished`
+const CLAUDE_CHILD_STALE_MS = 10 * 60 * 1000;
+const CLAUDE_CHILD_META_SUFFIX = '.meta.json';
+const CLAUDE_CHILD_TRANSCRIPT_SUFFIX = '.jsonl';
+const CLAUDE_CHILD_ID_PREFIX = 'agent-';
+
+/** one subagent's launch record (`agent-<id>.meta.json`), every field optional since the shape varies by release */
+interface ClaudeChildMeta {
+    description?: unknown;
+    agentType?: unknown;
+    pickedEffortModel?: unknown;
+    model?: unknown;
+    finished?: unknown;
+}
 
 /** one block inside a transcript message's `content` array, read defensively since the exact shape varies by SDK version */
 interface ClaudeContentBlock {
@@ -102,13 +119,14 @@ export function parseClaudeCodeTranscript(text: string): { records: ClaudeTransc
  */
 export function buildClaudeCodeResult(input: AgentSessionInput, records: ClaudeTranscriptRecord[], extra_records: ClaudeTranscriptRecord[][]): AgentSessionResult {
     const calls = extractCalls(records, input.window_start_ms, input.now_ms);
-    for (const extra of extra_records) { calls.push(...extractCalls(extra, input.window_start_ms, input.now_ms)); }
+    const subagents = splitSubagentFiles(input, extra_records);
+    for (const extra of subagents.transcripts) { calls.push(...extractCalls(extra.records, input.window_start_ms, input.now_ms)); }
     const in_window = recordsWithTimestampInWindow(records, input.window_start_ms, input.now_ms);
     const current = currentFromRecords(in_window);
     const state = deriveState(input.vendor_live, current);
     const { started_at, updated_at } = sessionSpan(records, input.now_ms);
     // active time counts gaps across the main transcript and every subagent transcript together, regardless of window
-    const all_timestamps = [...records, ...extra_records.flat()].map((record) => record.timestamp);
+    const all_timestamps = [...records, ...subagents.transcripts.flatMap(extra => extra.records)].map((record) => record.timestamp);
     return {
         session_id: input.session_id,
         cwd: input.cwd,
@@ -121,7 +139,93 @@ export function buildClaudeCodeResult(input: AgentSessionInput, records: ClaudeT
         active_ms: activeMsFromTimestamps(all_timestamps),
         calls,
         tool_invocations: buildToolInvocations(in_window),
+        ...capChildren(buildChildren(input, subagents)),
     };
+}
+
+/** one subagent transcript's records and, when its `.meta.json` was handed in too, that file's text */
+interface SubagentFiles {
+    path?: string;
+    records: ClaudeTranscriptRecord[];
+    meta_text?: string;
+}
+
+/**
+ * Separates the extra files into subagent transcripts and their meta files. `extra_records` runs
+ * index for index with `input.extra_files`; a meta file's own line-parsed records are ignored, its
+ * text is read directly. A transcript with no path (a caller that handed records only) still merges
+ * into the parent's totals, it just cannot be named as a child.
+ */
+function splitSubagentFiles(input: AgentSessionInput, extra_records: ClaudeTranscriptRecord[][]): { transcripts: SubagentFiles[] } {
+    const meta_by_stem = new Map<string, string>();
+    input.extra_files.forEach((file) => {
+        if (file.path.endsWith(CLAUDE_CHILD_META_SUFFIX)) { meta_by_stem.set(file.path.slice(0, -CLAUDE_CHILD_META_SUFFIX.length), file.text); }
+    });
+    const transcripts: SubagentFiles[] = [];
+    extra_records.forEach((records, index) => {
+        const path = input.extra_files[index]?.path;
+        if (path !== undefined && path.endsWith(CLAUDE_CHILD_META_SUFFIX)) { return; }
+        const stem = path !== undefined && path.endsWith(CLAUDE_CHILD_TRANSCRIPT_SUFFIX) ? path.slice(0, -CLAUDE_CHILD_TRANSCRIPT_SUFFIX.length) : undefined;
+        transcripts.push({ path, records, meta_text: stem !== undefined ? meta_by_stem.get(stem) : undefined });
+    });
+    return { transcripts };
+}
+
+function parseChildMeta(text: string | undefined): ClaudeChildMeta {
+    if (text === undefined || text.trim().length === 0) { return {}; }
+    try {
+        const parsed: unknown = JSON.parse(text);
+        return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as ClaudeChildMeta : {};
+    } catch { return {}; }
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+/** the id in `.../agent-<id>.jsonl`, or the whole file name stem when it does not carry the usual prefix */
+function childIdFromPath(path: string): string {
+    const stem = path.slice(path.lastIndexOf('/') + 1, -CLAUDE_CHILD_TRANSCRIPT_SUFFIX.length);
+    return stem.startsWith(CLAUDE_CHILD_ID_PREFIX) ? stem.slice(CLAUDE_CHILD_ID_PREFIX.length) : stem;
+}
+
+/** one child per subagent transcript that has a path and at least one parseable record; unfinished and fresh reads as working, everything else as ended */
+function buildChildren(input: AgentSessionInput, subagents: { transcripts: SubagentFiles[] }): AgentChildResult[] {
+    const children: AgentChildResult[] = [];
+    for (const file of subagents.transcripts) {
+        if (file.path === undefined || !file.path.endsWith(CLAUDE_CHILD_TRANSCRIPT_SUFFIX) || file.records.length === 0) { continue; }
+        const meta = parseChildMeta(file.meta_text);
+        const { started_at, updated_at } = sessionSpan(file.records, input.now_ms);
+        const finished = meta.finished === true;
+        const fresh = input.now_ms - (parseTimestampMs(updated_at) ?? 0) <= CLAUDE_CHILD_STALE_MS;
+        const running = !finished && fresh && input.vendor_live === true;
+        const in_window = recordsWithTimestampInWindow(file.records, input.window_start_ms, input.now_ms);
+        children.push({
+            child_id: childIdFromPath(file.path),
+            title: nonEmptyString(meta.description),
+            agent_type: nonEmptyString(meta.agentType),
+            model: lastModelInRecords(file.records) ?? nonEmptyString(meta.pickedEffortModel) ?? nonEmptyString(meta.model),
+            state: running ? 'working' : 'ended',
+            started_at,
+            updated_at,
+            ended_at: running ? undefined : updated_at,
+            active_ms: activeMsFromTimestamps(file.records.map((record) => record.timestamp)),
+            current: running ? currentFromRecords(in_window) : undefined,
+            calls: extractCalls(file.records, input.window_start_ms, input.now_ms),
+        });
+    }
+    return children;
+}
+
+/** keeps every running child and the latest finished ones, oldest first, and counts what it dropped; the parent's totals are untouched */
+function capChildren(children: AgentChildResult[]): { children?: AgentChildResult[]; children_omitted?: number } {
+    if (children.length === 0) { return {}; }
+    const finished = children.filter(child => child.state === 'ended').sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    const kept_finished = new Set(finished.slice(0, ACTIVITY_CHILDREN_MAX_FINISHED));
+    const kept = children.filter(child => child.state !== 'ended' || kept_finished.has(child))
+        .sort((a, b) => a.started_at.localeCompare(b.started_at));
+    const omitted = children.length - kept.length;
+    return { children: kept, children_omitted: omitted > 0 ? omitted : undefined };
 }
 
 /** reads one Claude Code session's transcript and subagent transcripts into the shared vendor-reader shape */

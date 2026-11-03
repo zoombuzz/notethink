@@ -1,0 +1,27 @@
+# Prod-ready Results
+# Version: 0.4.19
+# Date: 2026-11-03T17:50:00Z
+# Tree: HEAD d8a2d7d plus the six-story batch (36 tracked files changed, 15 untracked), uncommitted
+# Stories: quiet-idle-agents, agent-session-card-title, agent-card-linetags, story-progress-pie, agent-session-tree, agent-registry-source: doing -> code-review; every other story not touched (outside stories=)
+# Ship verdict: Ready to ship: /push-prod will move each of the six stories to done.md (move rehearsed, exit 0)
+# ---
+Repository visibility | public | measured by public_repo_scan.py visibility | fresh
+Story-state intake | 6 at doing, all tasks ticked | fresh
+Build | ok, run by test-playwright:run (webpack) | fresh
+Lint | pass, 0 errors, 0 warnings | fresh
+Project guards | none for this project | n/a
+Dependency audit | no known vulnerabilities (pnpm audit --prod --audit-level=high) | fresh
+CODING_STANDARDS | mechanical checks and one inline pass clean after fixes | fresh
+Exposure | public: scan clean after 1 fix; judgement pass clean | fresh
+Fleet fix check | not a fleet fix (extension and webview code in a single-product repo) | n/a
+Jest | 3510/3510 passed (41 + 19 + 99 suites) | fresh
+Playwright | 300/300 passed, 0 skipped, 0 flaky | fresh
+Todo/Done | format ok, all tasks ticked | fresh
+Story-state advance | six stories doing -> code-review, move_story.py --dry-run exit 0 for each | fresh
+Version bump | 0.4.19 (HEAD 0.4.18) | ok
+# --- Fixed during review ---
+Exposure: removed a hostname from the agent-registry-source linetag in todo.md (docstech/users/alex.stanhope/todo.md).
+Lint: runScanOnce was 82 lines against the 80 limit; the registry overlay call moved into a withRegistry helper (client/extension/src/vscode/AgentAnalyser.ts).
+Playwright: six specs (pending-work-spinner x5, folder-scan-loading-state x1) failed because the story pie's activity demand held the agent-scan toolbar spinner on any board with an in-flight story. The pie now asks for activity without holding the spinner (client/webview/src/notethink-views/src/lib/activityhooks.ts, StoryProgressPie.tsx), with a Jest test in activityhooks.test.ts.
+# --- Open ---
+none

@@ -133,6 +133,18 @@ describe('useAgentScanPending', () => {
         scan.unmount();
     });
 
+    it('does not hold the scan key for a story pie, which asks for activity without waiting on it', () => {
+        const api = pendingApi();
+        const post = jest.fn();
+        const scan = renderHook(() => useAgentScanPending(api));
+        const pie = renderHook(() => useAgentActivityDemand(post, false));
+        expect(post).toHaveBeenCalledWith({ type: ACTIVITY_DEMAND_MESSAGE_TYPE });
+        expect(readActivityDemanded()).toBe(true);
+        expect(api.markPending).not.toHaveBeenCalled();
+        pie.unmount();
+        scan.unmount();
+    });
+
     it('releases the key when the last agent card goes, even with a scanning snapshot left behind', () => {
         const api = pendingApi();
         const scan = renderHook(() => useAgentScanPending(api));

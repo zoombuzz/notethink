@@ -134,26 +134,37 @@ export function useActivityUnavailable(): ActivityUnavailable | undefined {
  */
 let demand_count = 0;
 
-/** whether any mounted agent card in this panel has asked the host for activity */
+// the part of the demand from agent cards, which wait on the first scan; a pie never waits on it
+let card_demand_count = 0;
+
+/** whether any mounted agent card or story pie in this panel has asked the host for activity */
 export function readActivityDemanded(): boolean {
     return demand_count > 0;
 }
 
-/** post the panel's demand for agent activity on mount, and withdraw it on unmount, ref-counted across every mounted agent card so the host hears about it exactly once each way */
-export function useAgentActivityDemand(post_message: ((message: Record<string, unknown>) => void) | undefined): void {
+/** whether any mounted agent card in this panel is waiting on the host's activity, which a story pie never does */
+export function readAgentCardDemanded(): boolean {
+    return card_demand_count > 0;
+}
+
+/**
+ * Post the panel's demand for agent activity on mount, and withdraw it on unmount, ref-counted across
+ * every mounted consumer so the host hears about it exactly once each way. An agent card holds the
+ * toolbar spinner while the first scan runs; a story pie (`holds_scan_spinner` false) falls back to
+ * its other sources meanwhile, so it asks for the data without holding the spinner.
+ */
+export function useAgentActivityDemand(post_message: ((message: Record<string, unknown>) => void) | undefined, holds_scan_spinner = true): void {
     useEffect(() => {
         if (!post_message) { return; }
         demand_count++;
-        if (demand_count === 1) {
-            post_message({ type: ACTIVITY_DEMAND_MESSAGE_TYPE });
-            publish();
-        }
+        if (holds_scan_spinner) { card_demand_count++; }
+        if (demand_count === 1) { post_message({ type: ACTIVITY_DEMAND_MESSAGE_TYPE }); }
+        if (demand_count === 1 || (holds_scan_spinner && card_demand_count === 1)) { publish(); }
         return () => {
             demand_count = Math.max(0, demand_count - 1);
-            if (demand_count === 0) {
-                post_message({ type: ACTIVITY_WITHDRAW_MESSAGE_TYPE });
-                publish();
-            }
+            if (holds_scan_spinner) { card_demand_count = Math.max(0, card_demand_count - 1); }
+            if (demand_count === 0) { post_message({ type: ACTIVITY_WITHDRAW_MESSAGE_TYPE }); }
+            if (demand_count === 0 || (holds_scan_spinner && card_demand_count === 0)) { publish(); }
         };
         // deliberately empty: must run exactly once per mount, or every re-render would double-count the demand
     }, []);
@@ -168,7 +179,7 @@ export function useAgentActivityDemand(post_message: ((message: Record<string, u
  */
 export function useAgentScanPending(api: Pick<UsePendingWorkApi, 'markPending' | 'clearPending'>): void {
     const snapshot = useAgentActivity();
-    const demanded = useSyncExternalStore(subscribeToActivity, readActivityDemanded, readActivityDemanded);
+    const demanded = useSyncExternalStore(subscribeToActivity, readAgentCardDemanded, readAgentCardDemanded);
     const is_pending = isAgentScanPending(demanded, snapshot);
     const { markPending, clearPending } = api;
     useEffect(() => {

@@ -22,8 +22,15 @@
   display: flex;
   flex-direction: column;
 
+  // an unbound session's card names the session in its vendor's colour, set by the card as a custom property, so a story's own headline never takes one
+  &[data-virtual-note="true"] [role="rowheader"] {
+    color: var(--nt-agent-vendor-colour, inherit);
+    font-weight: 600;
+  }
+
   // the shared .note list rule (ViewRenderer.module.scss) puts a disc and a top margin on every list in a card, and the group an indent; these lists are rosters, not prose
   .agentRows,
+  .agentChildren,
   .questionBands,
   .fileRows {
     --nt-card-list-padding: 0;
@@ -34,6 +41,11 @@
     > li {
       list-style-type: none;
     }
+  }
+
+  // placed after the shared reset above so the indent survives it
+  .agentChildren {
+    margin-left: 14px;
   }
 }
 
@@ -112,7 +124,8 @@
  * `overflow-wrap: anywhere` is turned off here: that rule lets a grid track shrink to the width of one
  * character, which is how a model id came to be drawn two letters to a line.
  */
-.agentRowButton {
+// the grid a session row and a subagent row share, so a child's cells line up with its parent's
+@mixin agent-row-grid {
   display: grid;
   grid-template-columns: 3px minmax(0, 1fr) auto;
   grid-template-areas:
@@ -124,6 +137,10 @@
   width: 100%;
   overflow-wrap: normal;
   padding: 3px 6px;
+}
+
+.agentRowButton {
+  @include agent-row-grid;
   border: 0;
   border-radius: 3px;
   background: transparent;
@@ -141,6 +158,15 @@
     outline-offset: -1px;
   }
 
+  // a registry-only row has no session to open, so it is not drawn as a control
+  &:disabled {
+    cursor: default;
+
+    &:hover {
+      background: transparent;
+    }
+  }
+
   // every text cell holds one line and truncates; its whole text is the cell's hover title
   > span:not(.agentRail),
   .agentIdent > span,
@@ -153,11 +179,62 @@
 }
 
 @container (min-width: 440px) {
-  .agentRowButton {
+  .agentRowButton,
+  .agentChild {
     grid-template-columns: 3px auto minmax(0, 1fr) auto auto;
     grid-template-areas: "rail ident live status usage";
     row-gap: 0;
   }
+}
+
+// subagents hang off their session's row: indented so the child rail sits inside the parent's, and a finished one dims
+.agentChild {
+  @include agent-row-grid;
+  --nt-agent-state-colour: var(--nt-agent-unknown);
+
+  &[data-state="working"] { --nt-agent-state-colour: var(--nt-agent-working); }
+  &[data-state="waiting"] { --nt-agent-state-colour: var(--nt-agent-waiting); }
+  &[data-state="idle"] { --nt-agent-state-colour: var(--nt-agent-idle); }
+  &[data-state="ended"] {
+    --nt-agent-state-colour: var(--nt-agent-ended);
+    opacity: 0.6;
+  }
+
+  > span:not(.agentRail),
+  .agentIdent > span,
+  .agentStatus > span {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+.agentChildToggleItem {
+  padding: 1px 6px;
+}
+
+.agentChildToggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-textLink-foreground, #3794ff);
+  font: inherit;
+  font-size: 0.8em;
+  cursor: pointer;
+
+  &:hover { text-decoration: underline; }
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 1px;
+  }
+}
+
+.agentChildNote {
+  padding: 1px 6px;
+  font-size: 0.8em;
+  opacity: 0.6;
 }
 
 .agentRail {
@@ -207,6 +284,13 @@
   opacity: 0.75;
 }
 
+.agentName {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
 .agentModel {
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 0.8em;
@@ -216,6 +300,12 @@
 .agentState {
   font-size: 0.85em;
   opacity: 0.85;
+
+  // a registry entry that says working with nothing to show for it
+  .agentRow[data-stale="true"] & {
+    font-style: italic;
+    opacity: 0.6;
+  }
 }
 
 .agentLive {

@@ -101,6 +101,7 @@ interface DocHeading {
     id: string;
     line_index: number;
     id_authored: boolean;
+    status?: string;
 }
 
 /**
@@ -124,8 +125,9 @@ function headingsInLines(lines: ReadonlyArray<string>): DocHeading[] {
         if (!match) { continue; }
         const linetag_match = TRAILING_LINETAG.exec(match[1]);
         if (!linetag_match && OPEN_LINETAG.test(match[1])) { continue; }
-        const id_value = linetag_match ? parseLinetag(linetag_match[1]).id : undefined;
-        headings.push({ id: storyStableIdSlug(lines[i], id_value, i + 1), line_index: i, id_authored: id_value !== undefined });
+        const linetags = linetag_match ? parseLinetag(linetag_match[1]) : {};
+        const id_value = linetags.id;
+        headings.push({ id: storyStableIdSlug(lines[i], id_value, i + 1), line_index: i, id_authored: id_value !== undefined, status: linetags.status || undefined });
     }
     return headings;
 }
@@ -358,4 +360,22 @@ export function bindSessionToStory(write_calls: ReadonlyArray<StoryBindingWriteC
         }
     }
     return [...bound.values()];
+}
+
+/**
+ * Where a story sits on the boards under one workspace-relative directory: the document holding the
+ * heading with this stable id and that heading's own `status` linetag, undefined when no board there
+ * has the story. A `todo.md` wins over a `done.md` holding the same id, since a story in both is the
+ * one still in flight.
+ * - doc_prefix: the workspace-relative directory to search under, empty for the workspace folder itself
+ */
+export function findStoryInDocs(story_docs: ReadonlyArray<StoryDocument>, story_id: string, doc_prefix: string): { story: ActivityStoryRef; status?: string } | undefined {
+    const base = doc_prefix ? `${doc_prefix}/` : '';
+    const ordered = [...story_docs].sort((a, b) => Number(b.doc_path.endsWith('todo.md')) - Number(a.doc_path.endsWith('todo.md')));
+    for (const doc of ordered) {
+        if (!doc.doc_path.startsWith(base)) { continue; }
+        const heading = docIndex(doc).headings.find(candidate => candidate.id === story_id);
+        if (heading) { return { story: { doc_path: doc.doc_path, id: story_id }, status: heading.status }; }
+    }
+    return undefined;
 }

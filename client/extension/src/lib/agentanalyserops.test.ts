@@ -32,7 +32,7 @@ function makeTree(): ActivityTree {
 
 describe('emptyActivitySnapshot', () => {
     it('defaults to scanning with no sessions or trees', () => {
-        expect(emptyActivitySnapshot()).toEqual({ analyser: { state: 'scanning', reason: undefined, refusals: [] }, sessions: [], trees: [] });
+        expect(emptyActivitySnapshot()).toEqual({ analyser: { state: 'scanning', reason: undefined, refusals: [] }, sessions: [], trees: [], progress: [] });
     });
 
     it('carries a reason through to unavailable and failed states', () => {
@@ -120,5 +120,11 @@ describe('buildActivitySnapshot', () => {
         expect(snapshot.sessions.map(s => s.session.session_id)).toEqual(['a', 'b']);
         expect(snapshot.trees.map(t => t.root_path)).toEqual(['/repo-a', '/repo-z']);
         expect(snapshot.analyser.state).toBe('live');
+        expect(snapshot.progress).toEqual([]);
+    });
+
+    it('carries the progress entries it is given', () => {
+        const entry = { root_relative: '', story_id: 'story-a', pct: 40, at: '2026-11-03T10:00:00Z', by: 'agent' };
+        expect(buildActivitySnapshot(emptyAnalyserState('live'), {}, {}, [entry]).progress).toEqual([entry]);
     });
 });

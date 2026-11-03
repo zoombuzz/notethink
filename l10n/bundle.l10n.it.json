@@ -198,5 +198,14 @@
   "Stop recording": "Interrompi registrazione",
   "Microphone unavailable: {0}": "Microfono non disponibile: {0}",
   "Bearer token for the audio endpoint. Leave empty to remove the stored token.": "Token Bearer per l'endpoint audio. Lasciare vuoto per rimuovere il token memorizzato.",
-  "Token": "Token"
+  "Token": "Token",
+  "{0}% complete": "{0}% completato",
+  "{0}% complete ({1})": "{0}% completato ({1})",
+  "coordinator estimate": "stima del coordinatore",
+  "progress tag": "tag di avanzamento",
+  "{0} of {1} tasks ticked": "{0} attività su {1} spuntate",
+  "Registered, on {0}": "Registrato, su {0}",
+  "Registered agent": "Agente registrato",
+  "Stale": "Obsoleto",
+  "Known from the agent registry only, so there is no session to open": "Noto solo dal registro degli agenti, quindi non c'è alcuna sessione da aprire"
 }

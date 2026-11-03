@@ -4,6 +4,27 @@ All notable changes to the "notethink" extension will be documented in this file
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.4.19] - 2026-11-03
+
+### Added
+
+- A story at `doing`, `code-review` or `testing`, or with an agent working on it, shows a small pie beside its headline in the card, sticky and agent card types, labelled "n% complete". The figure is a coordinator's estimate where one is recorded, else the story's `progress` linetag, else its ticked task boxes; hovering names the source, and the pie sweeps to a new value unless reduced motion is on.
+
+- A Claude Code session that launched subagents shows them as a tree in the agent card: each subagent is indented under its session on its own rail, with its model, state, run time, title and tokens, finished ones dim and the earlier ones fold behind a count. The session's row also shows its name.
+
+- An agent registered in the thinkersync agent registry now shows on the board, whatever its vendor. A working coordinator appears on its story's card before it has written anything, an agent NoteThink has no reader for draws as a row with its name, vendor mark, state and story, and a `working` entry that nothing backs up reads Stale. NoteThink only reads the registry, and only for repositories in the open folder.
+
+### Changed
+
+- A coordinator's progress entry for a story counts as its latest activity when a board orders its groups newest first.
+- The agent card lists a story's linetags, such as its status and time tags, under the headline, as the ordinary card does.
+- An agent card for a session on no story is headed by the vendor's mark and the session's name, such as `CC my-session`, in the vendor's colour, instead of the vendor slug and project.
+
+### Fixed
+
+- A `progress` linetag with no `progress_max` or `progress_unit` beside it no longer breaks the card that shows it.
+- An idle agent no longer moves its project's column on a board grouped by project, and an agent session that has ended no longer draws a card.
+
 ## [0.4.17] - 2026-10-31
 
 ### Fixed

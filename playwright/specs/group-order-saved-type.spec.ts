@@ -81,6 +81,43 @@ async function dispatchSharedSessionActivity(page: Page, last_at: { alpha: strin
     }, activity);
 }
 
+/**
+ * Post an activity snapshot with one bound session per project and one unbound session working in beta's
+ * own repository, in the given state with the given transcript time, so the unbound session's card is drawn in beta
+ */
+async function dispatchWithUnboundSession(page: Page, unbound: { state: string; updated_at: string }): Promise<void> {
+    const capabilities = { live_tool_call: 'supported', question: 'unsupported', file_attribution: 'supported' };
+    const usage = { input_tokens: 100, output_tokens: 50, cache_read_tokens: 0, cache_write_tokens: 0, is_estimate: true };
+    const bound = (id: string, doc_path: string, story_id: string, updated: string): Record<string, unknown> => ({
+        root_path: '/workspace',
+        session: {
+            session_id: id, vendor: 'claude-code', project: 'notethink',
+            started_at: updated, updated_at: updated, state: 'working',
+            story_binding: 'bound', stories: [{ doc_path, id: story_id }],
+            capabilities, usage,
+        },
+    });
+    const activity = {
+        analyser: { state: 'live', refusals: [] },
+        sessions: [
+            bound('alpha-session', 'alpha/todo.md', 'alpha-one', '2026-10-10T00:00:00Z'),
+            bound('beta-session', 'beta/todo.md', 'beta-one', '2026-10-01T00:00:00Z'),
+            {
+                root_path: '/workspace/beta',
+                session: {
+                    session_id: 'beta-coordinator', vendor: 'claude-code', project: 'notethink', session_name: 'coord-demo',
+                    started_at: '2026-09-01T00:00:00Z', updated_at: unbound.updated_at, state: unbound.state,
+                    story_binding: 'none', capabilities, usage,
+                },
+            },
+        ],
+        trees: [{ root_path: '/workspace/beta', root_relative: 'beta', tree: { generated_at: unbound.updated_at, branch: 'staging', head_commit: 'a'.repeat(40), uncommitted: [], committed: [] } }],
+    };
+    await page.evaluate((payload) => {
+        window.dispatchEvent(new MessageEvent('message', { data: { type: 'activity', activity: payload } }));
+    }, activity);
+}
+
 test.describe('Group order on a saved view type', () => {
 
     test.beforeEach(async ({ page }) => {
@@ -166,6 +203,37 @@ test.describe('Group order on a saved view type', () => {
             },
             root: { viewType: SAVED_TYPE_ID },
         }, { allcards: { cardType: 'agent' } });
+        await expect.poll(async () => groupValues(page)).toEqual(['beta', 'alpha']);
+    });
+
+    /*
+     * An idle coordinator adds transcript records on every wake, so its session's updated_at keeps
+     * advancing while nothing in its project changes. That must never move the project's column.
+     */
+    test('a newer transcript record on an idle unbound session leaves the column order unchanged, and an ended one draws no card', async ({ page }) => {
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'settings-drawer-board.md', doc_path: '/workspace/alpha/todo.md', relative_path: 'alpha/todo.md' },
+            { fixture: 'settings-board-b.md', doc_path: '/workspace/beta/todo.md', relative_path: 'beta/todo.md' },
+        ], { workspace_root: '/workspace' });
+        await selectFolderMode(page);
+        await page.waitForSelector('[data-folder-mode="true"]');
+        await seedViewsBag(page, {
+            kanban: { groupOrder: 'newestLast', defaultCardType: 'agent' },
+            [SAVED_TYPE_ID]: { parent: 'kanban', label: 'Next up by project', groupBy: 'nt_first_level_folder' },
+            root: { viewType: SAVED_TYPE_ID },
+        });
+        const virtual_card = page.locator('[data-flip-column-id="beta"]').getByText('CC coord-demo');
+        // beta's only timed story is older than alpha's, so beta sorts first
+        await dispatchWithUnboundSession(page, { state: 'idle', updated_at: '2026-10-02T00:00:00Z' });
+        await expect(virtual_card).toHaveCount(1);
+        await expect.poll(async () => groupValues(page)).toEqual(['beta', 'alpha']);
+        // the idle session wakes and writes a record far newer than any story: beta must not jump to the newest end
+        await dispatchWithUnboundSession(page, { state: 'idle', updated_at: '2026-10-30T00:00:00Z' });
+        await expect(virtual_card).toHaveCount(1);
+        await expect.poll(async () => groupValues(page)).toEqual(['beta', 'alpha']);
+        // once the session has ended its card is gone
+        await dispatchWithUnboundSession(page, { state: 'ended', updated_at: '2026-10-30T00:00:00Z' });
+        await expect(virtual_card).toHaveCount(0);
         await expect.poll(async () => groupValues(page)).toEqual(['beta', 'alpha']);
     });
 });

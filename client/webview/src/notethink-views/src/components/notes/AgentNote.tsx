@@ -1,11 +1,13 @@
 import React, { useCallback, useMemo } from "react";
 import { AGENT_CARD_TYPE } from "./cardregistryops";
 import { useActivityUnavailable, useAgentActivityDemand } from "../../lib/activityhooks";
-import { ACTIVITY_OPEN_CHAT_MESSAGE_TYPE, ACTIVITY_OPEN_DIFF_MESSAGE_TYPE, type ActivityBand } from "../../lib/agentactivityops";
+import { ACTIVITY_OPEN_CHAT_MESSAGE_TYPE, ACTIVITY_OPEN_DIFF_MESSAGE_TYPE, vendorColour, type ActivityBand } from "../../lib/agentactivityops";
+import { HIDDEN_ATTRIBUTES } from "../../lib/linetagops";
 import { isNoteManuallyExpanded } from "../../lib/noteops";
 import { buildNoteStyles } from "../../lib/noteui";
-import { getStandardNoteDataProps, renderMarkdownNoteHeadline } from "../../lib/renderops";
+import { getStandardNoteDataProps, isInternalAttribute, renderMarkdownNoteHeadline } from "../../lib/renderops";
 import type { NoteProps } from "../../types/NoteProps";
+import GenericNoteAttributes from "./GenericNoteAttributes";
 import MarkdownNoteHeadline from "./markdown/MarkdownNoteHeadline";
 import AgentActivityBanner from "./agent/AgentActivityBanner";
 import AgentFileBands from "./agent/AgentFileBands";
@@ -81,6 +83,11 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
         headline: memoized_headline,
         ...note_props,
     };
+    // a virtual note stands for one session, so its headline takes that vendor's colour
+    const vendor_colour = model.is_virtual && model.sessions[0] ? vendorColour(model.sessions[0].session.vendor) : undefined;
+    const root_style = { ...(provided?.draggableProps?.style as React.CSSProperties | undefined), ...(vendor_colour ? { '--nt-agent-vendor-colour': vendor_colour } as React.CSSProperties : {}) };
+    // the ordinary card's linetag row, drawn only when a tag is visible, so an id-only story gains no empty gap
+    const has_visible_linetags = note.type !== 'root' && Object.keys(note.linetags ?? {}).some(key => !HIDDEN_ATTRIBUTES.includes(key) && !isInternalAttribute(key));
     return (
         <div className={buildNoteStyles(note, [agent_styles.agentNote, ...(note.display_options?.additional_classes ?? [])]).join(' ')}
              id={note.display_options?.id}
@@ -96,9 +103,10 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
              {...provided?.dragHandleProps}
              ref={provided?.innerRef}
              role={'row'} aria-current={note.focused} aria-selected={note.selected}
-             style={provided?.draggableProps?.style as React.CSSProperties}
+             style={root_style}
         >
             <MarkdownNoteHeadline note={note} />
+            {has_visible_linetags && <GenericNoteAttributes {...note} />}
             <div className={`${view_specific_styles.body} ${agent_styles.agentBody}`}>
                 <AgentMetaRow model={model} />
                 <AgentUsageSummary sessions={model.sessions} storyKey={model.story_key} scanning={scanning} />

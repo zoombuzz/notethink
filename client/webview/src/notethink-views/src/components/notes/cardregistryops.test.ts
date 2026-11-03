@@ -403,8 +403,8 @@ describe('cardregistryops', () => {
             };
         }
 
-        function snapshotOf(sessions: ActivitySnapshot['sessions']): ActivitySnapshot {
-            return { analyser: { state: 'live', refusals: [] }, sessions, trees: [] };
+        function snapshotOf(sessions: ActivitySnapshot['sessions'], progress: ActivitySnapshot['progress'] = []): ActivitySnapshot {
+            return { analyser: { state: 'live', refusals: [] }, sessions, trees: [], progress };
         }
 
         function makeStoryNote(id: string, file_mtime?: number): NoteProps {
@@ -487,12 +487,33 @@ describe('cardregistryops', () => {
             expect(timestamp_of(makeStoryNote('solo', Date.parse('2026-10-05T00:00:00Z')))).toBeUndefined();
         });
 
-        it("the agent card type counts a virtual note's own unbound session, not any story binding", () => {
+        it("the agent card type gives a virtual note of an unbound session no time, whatever its updated_at", () => {
             const snapshot = snapshotOf([
                 { root_path: ROOT_PATH, session: makeSession('agent-1', { updated_at: '2026-10-09T00:00:00Z' }) },
             ]);
             const timestamp_of = noteOrderTimestampFn(AGENT_CARD_TYPE, { snapshot });
-            expect(timestamp_of(makeVirtualAgentNote('agent-1'))).toBe(Date.parse('2026-10-09T00:00:00Z'));
+            expect(timestamp_of(makeVirtualAgentNote('agent-1'))).toBeUndefined();
+        });
+
+        it("a progress entry times its story's column on the agent card type, and the later of it and an agent write wins", () => {
+            const entry = { root_relative: '', story_id: 'solo', pct: 40, at: '2026-10-07T00:00:00Z', by: 'coordinator' };
+            const timestamp_of = noteOrderTimestampFn(AGENT_CARD_TYPE, { snapshot: snapshotOf([], [entry]) });
+            expect(timestamp_of(makeStoryNote('solo'))).toBe(Date.parse('2026-10-07T00:00:00Z'));
+            const written = snapshotOf([
+                { root_path: ROOT_PATH, session: makeSession('s1', { story_binding: 'bound', stories: [{ doc_path: 'todo.md', id: 'solo' }], updated_at: '2026-10-09T00:00:00Z' }) },
+            ], [entry]);
+            expect(noteOrderTimestampFn(AGENT_CARD_TYPE, { snapshot: written })(makeStoryNote('solo'))).toBe(Date.parse('2026-10-09T00:00:00Z'));
+        });
+
+        it("a progress entry times its story's column on the file-changed card types too, when it is later than the file", () => {
+            const entry = { root_relative: '', story_id: 'solo', pct: 40, at: '2026-10-07T00:00:00Z', by: 'coordinator' };
+            const snapshot = snapshotOf([], [entry]);
+            const older_file = Date.parse('2026-10-05T00:00:00Z');
+            const newer_file = Date.parse('2026-10-09T00:00:00Z');
+            expect(noteOrderTimestampFn(DEFAULT_CARD_TYPE, { snapshot })(makeStoryNote('solo', older_file))).toBe(Date.parse('2026-10-07T00:00:00Z'));
+            expect(noteOrderTimestampFn('sticky', { snapshot })(makeStoryNote('solo', newer_file))).toBe(newer_file);
+            expect(noteOrderTimestampFn(DEFAULT_CARD_TYPE, { snapshot })(makeStoryNote('solo'))).toBe(Date.parse('2026-10-07T00:00:00Z'));
+            expect(noteOrderTimestampFn(DEFAULT_CARD_TYPE, { snapshot })(makeStoryNote('other', older_file))).toBe(older_file);
         });
 
         it("the agent card type joins a single-file story to its session through the fallback doc path, not an origin it does not carry", () => {

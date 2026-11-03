@@ -25,7 +25,7 @@ Then open any `.md` file, right-click it and choose **Open With... -> NoteThink*
 - **Document view**: the same file read top to bottom, nested and structured
 - **Folder mode**: aggregate every markdown file in a folder into one board
 - **Live Updates**: edit the file in the normal text editor and the view updates in place, debounced
-- **Agent activity**: see which AI coding agents (Claude Code, Codex, Grok) are working on which story, live, on desktop - including a remote window, where it reads the sessions on the host serving the workspace
+- **Agent activity**: see which AI coding agents (Claude Code, Codex, Grok, and any other vendor registered with thinkersync) are working on which story, live, on desktop - including a remote window, where it reads the sessions on the host serving the workspace
 - **Linetags**: plain markdown links carry status, epic, and other attributes invisibly - see [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
 - **GFM + Frontmatter**: tables, strikethrough, task lists, footnotes, YAML/TOML frontmatter
 - **Writes back two things, precisely**: a card drag and a checkbox click, and nothing else - see [Known Limitations](#known-limitations)
@@ -229,8 +229,67 @@ session that edited no story is drawn on a card of its own rather than guessed o
 beside documents from the same git repository as the session, so a workspace holding several
 repositories does not draw every repository's agents on every board.
 
+That card is headed by the vendor's mark and the session's name, such as `CC my-session`, in the vendor's
+colour: the name Claude Code gives a live session, else a short session id. Codex and Grok record no
+session name, so their cards show the short id.
+
+A Claude Code session that launched subagents, such as a coordinator running several tasks at once, draws
+them as a tree under its own row. The session's row names the session beside its mark and model and
+shows what it is doing now, such as the shell command it is running. Each subagent sits indented under
+it on its own rail, coloured by that subagent's state, with its mark, model, state, how long it has run,
+its title (the description its parent gave it, which usually names the work) and the tokens it has used.
+A finished subagent dims, and finished ones past the latest three fold behind a count you can click, or
+reach from the keyboard, to expand. A card keeps every running subagent and the latest six finished
+ones, and the session's own totals still include them all. Codex and Grok record no subagents, so their
+rows stay flat.
+
+### The agent registry
+
+Agents of any vendor can also be read from the thinkersync agent registry: one `registry/<agent>/agent.json`
+per agent under `~/.local/share/thinkersync/`, naming the agent, its vendor, its repository, its state and
+the story it is on. NoteThink reads those files, read-only, on the same machine the agent sessions are read
+from, for agents whose repository sits inside the open folder. It never writes to the registry or to an
+agent's mailbox and changes nothing about how an agent runs. A missing, oversize or malformed file is
+simply ignored, and this too is local files only, with no network endpoint. It shows only the agent's
+name, vendor, state and story, never its mailbox, terminal pane or program version.
+
+- **A registered agent that also has a session NoteThink can read** (matched by its session id or any
+  earlier one) keeps that session's own state and takes the registry's agent name, such as `coord-demo`,
+  when the vendor named the session nothing.
+- **A registered agent with no readable session**, such as one from a vendor NoteThink has no reader for,
+  draws as a flat row with its name, vendor mark, state and story. It has no transcript to open. An idle
+  one sits on a card of its own, as an unbound session does; a `stopped` one is not drawn. A state the
+  registry names that NoteThink does not know is drawn as "State not reported" rather than dropped.
+- **A working agent is placed on its story** before it has written anything, so a coordinator shows on its
+  story's card from the moment it starts. The registry's `state` is only a hint, because it changes only
+  when the agent changes state or restarts, so the story must be at `doing`, `code-review` or `testing` on
+  the board for the agent to be placed on it.
+- **A `working` entry that nothing backs up reads "Stale"**: its last update is more than two hours old, and
+  neither the story's progress entry nor the agent's own transcript shows any work since.
+
 Clicking an agent on a card opens that session in VS Code: in Claude Code's own chat panel, or, for a
 vendor with no such panel, as the session's transcript in an editor.
+
+## Story progress pie
+
+A story at `doing`, `code-review` or `testing`, or with an agent working on it, shows a small pie beside
+its headline in every card type (the card, the sticky and the agent card). The pie is labelled "n% complete",
+and hovering it names where the figure came from. It sweeps to a new value when the figure changes, and
+holds still if your system asks for reduced motion. The first of these that has a figure is used:
+
+1. **A coordinator's estimate.** An agent coordinator can keep a rough percentage per story in
+   `progress.json`, in `coordinator/<project>/` under `~/.local/share/thinkersync/`, where `<project>` is
+   the repository's folder name. Each entry is keyed by the story's `id` and carries `pct`, `at` (when it
+   was written), `by` and an optional `note`. NoteThink reads that file, read-only, for each git repository
+   in the open folder, on the same machine the agent sessions are read from (the remote host, in a remote
+   window), and only while a panel is drawing a pie or an agent card. A missing or unreadable file is simply
+   ignored. A new estimate reaches the board within about fifteen seconds. The entry's time also counts as
+   the story's latest activity when a board orders its groups newest first. NoteThink looks only in the
+   default `~/.local/share/thinkersync/`, so a coordinator that keeps its files elsewhere is not read.
+2. **The story's own `progress` linetag**, such as `[](?progress=35&progress_max=100&progress_unit=%25)`.
+   Without a `progress_max`, a `progress` between 0 and 100 is the percentage itself.
+3. **The ticked task boxes**: the `[X]` boxes over all the `[ ]` and `[X]` boxes in the story, at any depth.
+   A story with no boxes shows no pie.
 
 ## Known Limitations
 

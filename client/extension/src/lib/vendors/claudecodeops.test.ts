@@ -333,4 +333,77 @@ describe('readClaudeCodeSession', () => {
             expect(result.active_ms).toBe(0);
         });
     });
+
+    describe('subagent children', () => {
+        const MAIN = '{"type":"user","timestamp":"2026-09-22T10:00:00.000Z","message":{"role":"user","content":"go"}}';
+        function subLine(id: string, at: string, model: string, input_tokens: number, tool?: string): string {
+            const content = tool === undefined ? [{ type: 'text', text: 'done' }] : [{ type: 'tool_use', id: `tu_${id}`, name: 'Bash', input: { command: tool } }];
+            return JSON.stringify({ type: 'assistant', timestamp: at, message: { id, model, role: 'assistant', content, usage: { input_tokens, output_tokens: 1 } } });
+        }
+        const running_path = '/s/subagents/agent-run1.jsonl';
+        const finished_path = '/s/subagents/agent-fin1.jsonl';
+
+        it('keeps each subagent as a child with its title, type, model, tokens and live line, and leaves the parent totals unchanged', () => {
+            const result = readClaudeCodeSession(makeInput(MAIN, { extra_files: [
+                { path: running_path, text: subLine('a1', '2026-09-22T10:50:00.000Z', 'claude-haiku-5', 30, 'pnpm test') },
+                { path: '/s/subagents/agent-run1.meta.json', text: JSON.stringify({ description: 'Map view code', agentType: 'Explore', pickedEffortModel: 'claude-opus-5-5' }) },
+                { path: finished_path, text: subLine('b1', '2026-09-22T10:10:00.000Z', 'claude-sonnet-5', 10) },
+                { path: '/s/subagents/agent-fin1.meta.json', text: JSON.stringify({ description: 'Write tests', finished: true }) },
+            ] }));
+            expect(result.calls.map(call => call.input_tokens).sort()).toEqual([10, 30]);
+            expect(result.children).toHaveLength(2);
+            const [finished, running] = result.children!;
+            expect(finished).toEqual(expect.objectContaining({ child_id: 'fin1', title: 'Write tests', model: 'claude-sonnet-5', state: 'ended' }));
+            expect(finished.calls[0].input_tokens).toBe(10);
+            expect(running).toEqual(expect.objectContaining({
+                child_id: 'run1', title: 'Map view code', agent_type: 'Explore', state: 'working',
+                current: expect.objectContaining({ tool: 'Bash', arg: 'pnpm test' }),
+            }));
+            // the model seen in its own records wins over the meta field
+            expect(running.model).toBe('claude-haiku-5');
+        });
+
+        it('falls back to the meta model and reads a child with no meta file, an unreadable one or an unknown field', () => {
+            const text = JSON.stringify({ type: 'user', timestamp: '2026-09-22T10:50:00.000Z', message: { role: 'user', content: 'x' } });
+            const result = readClaudeCodeSession(makeInput(MAIN, { extra_files: [
+                { path: running_path, text },
+                { path: '/s/subagents/agent-run1.meta.json', text: '{"pickedEffortModel":"claude-opus-5-5","surprise":1}' },
+                { path: finished_path, text },
+                { path: '/s/subagents/agent-fin1.meta.json', text: 'not json' },
+            ] }));
+            const by_id = new Map(result.children!.map(child => [child.child_id, child]));
+            expect(by_id.get('run1')?.model).toBe('claude-opus-5-5');
+            expect(by_id.get('run1')?.title).toBeUndefined();
+            expect(by_id.get('fin1')?.state).toBe('working');
+        });
+
+        it('reads an unfinished child as ended once the parent is not live or the child has gone stale', () => {
+            const stale = subLine('a1', '2026-09-22T10:00:00.000Z', 'claude-haiku-5', 1);
+            const files = [{ path: running_path, text: stale }];
+            expect(readClaudeCodeSession(makeInput(MAIN, { extra_files: files })).children![0].state).toBe('ended');
+            const fresh = [{ path: running_path, text: subLine('a1', '2026-09-22T10:59:00.000Z', 'claude-haiku-5', 1) }];
+            expect(readClaudeCodeSession(makeInput(MAIN, { extra_files: fresh, vendor_live: false })).children![0].state).toBe('ended');
+        });
+
+        it('caps finished children to the latest few, keeps every running one and counts the rest', () => {
+            const extra_files = [];
+            for (let n = 0; n < 9; n++) {
+                extra_files.push({ path: `/s/subagents/agent-f${n}.jsonl`, text: subLine(`m${n}`, `2026-09-22T10:0${n}:00.000Z`, 'claude-haiku-5', 1) });
+                extra_files.push({ path: `/s/subagents/agent-f${n}.meta.json`, text: '{"finished":true}' });
+            }
+            extra_files.push({ path: running_path, text: subLine('r', '2026-09-22T10:59:00.000Z', 'claude-haiku-5', 1) });
+            const result = readClaudeCodeSession(makeInput(MAIN, { extra_files }));
+            expect(result.children).toHaveLength(7);
+            expect(result.children_omitted).toBe(3);
+            expect(result.children!.some(child => child.child_id === 'run1')).toBe(true);
+            expect(result.children!.some(child => child.child_id === 'f0')).toBe(false);
+            expect(result.calls).toHaveLength(10);
+        });
+
+        it('reports no children for a session without subagents', () => {
+            const result = readClaudeCodeSession(makeInput(MAIN));
+            expect(result.children).toBeUndefined();
+            expect(result.children_omitted).toBeUndefined();
+        });
+    });
 });

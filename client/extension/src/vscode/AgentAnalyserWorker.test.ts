@@ -80,6 +80,27 @@ describe('handleAgentAnalyserRequest', () => {
         expect(response.sessions[0].usage.input_tokens).toBe(7);
     });
 
+    it('prices each subagent into its own child usage on both the whole and the resumed path, leaving the parent total unchanged', () => {
+        const sub_line = JSON.stringify({
+            type: 'assistant', timestamp: '2026-09-22T11:00:00Z',
+            message: { id: 'sub1', role: 'assistant', model: 'claude-sonnet-5', content: [], usage: { input_tokens: 7, output_tokens: 2 } },
+        });
+        const sub = fileOf(sub_line, '/t/subagents/agent-1.jsonl');
+        const meta = fileOf('{\n  "description": "Map view code",\n  "finished": true\n}', '/t/subagents/agent-1.meta.json');
+        const whole = handleAgentAnalyserRequest({ request_id: 'w', jobs: [baseJob({ session_id: 'kids', extra_files: [sub, meta] })] }).sessions[0];
+        expect(whole.usage.input_tokens).toBe(7);
+        expect(whole.children).toHaveLength(1);
+        expect(whole.children![0]).toEqual(expect.objectContaining({ child_id: '1', title: 'Map view code', state: 'ended' }));
+        expect(whole.children![0].usage.input_tokens).toBe(7);
+        const resumed = handleAgentAnalyserRequest({ request_id: 'r', jobs: [baseJob({
+            session_id: 'kids', transcript: { ...fileOf(''), mode: 'none' },
+            extra_files: [{ ...sub, bytes: new ArrayBuffer(0), mode: 'none' }, meta],
+        })] }).sessions[0];
+        expect(resumed.usage.input_tokens).toBe(7);
+        expect(resumed.children![0].title).toBe('Map view code');
+        expect(resumed.children![0].usage.input_tokens).toBe(7);
+    });
+
     it('handles a mixed batch of all three vendors in one request without one job affecting another', () => {
         const jobs: AgentAnalyserWorkerJob[] = [
             baseJob({ vendor: 'claude-code', session_id: 'c1' }),

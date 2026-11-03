@@ -3,6 +3,10 @@ import {
     ACTIVITY_UNAVAILABLE_MESSAGE_TYPE,
     ACTIVITY_USAGE_WINDOW_DAYS,
     activityUsageWindow,
+    childDisplayName,
+    childStateOf,
+    formatChildClock,
+    splitChildrenForDisplay,
     attributedCommits,
     attributedFiles,
     earliestCountedActivity,
@@ -28,9 +32,14 @@ import {
     treeForRoot,
     truncateActivityArg,
     unattributedFiles,
+    unboundSessionHeadline,
     unboundSessionKey,
+    isSessionLive,
     unboundSessions,
+    vendorColour,
+    vendorLabel,
     vendorMonogram,
+    sessionDisplayName,
     viewedActivityScope,
     virtualNotesForActivity,
     type ActivitySessionState,
@@ -39,7 +48,7 @@ import {
     type ActivityViewScope,
 } from './agentactivityops';
 import { isVirtualNote, virtualNoteKeyOf } from './virtualnoteops';
-import type { ActivitySession, ActivityTree } from '../types/AgentActivity';
+import type { ActivityChildSession, ActivitySession, ActivityState, ActivityTree } from '../types/AgentActivity';
 import type { NoteProps } from '../types/NoteProps';
 
 const ROOT_PATH = '/mnt/workspace/in_development/notethink';
@@ -123,6 +132,7 @@ describe('the activity message', () => {
             analyser: { state: 'scanning', refusals: [] },
             sessions: [],
             trees: [],
+            progress: [],
         });
     });
 
@@ -281,6 +291,17 @@ describe('an agent whose own write calls bound it to no story', () => {
         expect(virtualNoteKeyOf(virtual[0], 'agent')).toBe(`${ROOT_PATH.replace(/^\//, '')}/claude-no-story`);
     });
 
+    it('draws a card only while live: ended is hidden, and unknown (no liveness reporting) stays visible', () => {
+        const states = ['working', 'waiting', 'idle', 'ended', 'unknown'] as const;
+        const snapshot = fixtureSnapshot({
+            sessions: states.map(state => ({ root_path: ROOT_PATH, session: makeSession(`s-${state}`, { state }) })),
+        });
+        expect(unboundSessions(snapshot)).toHaveLength(5);
+        const keys = virtualNotesForActivity(snapshot, scopeAdmitting([ROOT_PATH])).map(note => virtualNoteKeyOf(note, 'agent'));
+        expect(keys).toEqual(['working', 'waiting', 'idle', 'unknown'].map(state => `${ROOT_PATH.replace(/^\//, '')}/s-${state}`));
+        expect(isSessionLive({ root_path: ROOT_PATH, session: makeSession('x', { state: 'ended' }) })).toBe(false);
+    });
+
     it('is keyed per repository, so two repositories running the same session id draw two cards', () => {
         const snapshot = fixtureSnapshot();
         const unbound = unboundSessions(snapshot)[0];
@@ -292,10 +313,35 @@ describe('an agent whose own write calls bound it to no story', () => {
         expect(sessionForUnboundKey(both, 'nothing/at-all')).toBeUndefined();
     });
 
-    it('is headlined by its vendor and project, never by a story it did not declare', () => {
-        const virtual = virtualNotesForActivity(fixtureSnapshot(), scopeAdmitting([ROOT_PATH]));
-        expect(virtual[0].headline_raw).toBe('claude-code in notethink');
+    it('is headlined by its vendor monogram and session name, never by a story it did not declare', () => {
+        const snapshot = fixtureSnapshot();
+        const named = { ...snapshot, sessions: snapshot.sessions.map(state => (state.session.story_binding === 'none' ? { ...state, session: { ...state.session, session_name: 'coord-demo' } } : state)) };
+        const virtual = virtualNotesForActivity(named, scopeAdmitting([ROOT_PATH]));
+        expect(virtual[0].headline_raw).toBe('CC coord-demo');
         expect(virtual[0].origin?.project_hue).toEqual(expect.any(Number));
+    });
+
+    it('mints a card for a live registry-only agent under its name, and none for a stopped one', () => {
+        const registry_only = (id: string, state: ActivityState): ActivitySessionState => ({ root_path: ROOT_PATH, session: makeSession(id, { vendor: 'agy', registry_name: id, registry_only: true, state }) });
+        const snapshot = fixtureSnapshot({ sessions: [registry_only('agy-idle', 'idle'), registry_only('agy-stopped', 'ended')] });
+        const virtual = virtualNotesForActivity(snapshot, scopeAdmitting([ROOT_PATH]));
+        expect(virtual.map(note => note.headline_raw)).toEqual(['AG agy-idle']);
+    });
+
+    it('names a session by its own name, else the registry name, else a short session id', () => {
+        const base = makeSession('abcdef0123456789');
+        expect(sessionDisplayName({ ...base, session_name: 'own', registry_name: 'registry' })).toBe('own');
+        expect(sessionDisplayName({ ...base, session_name: '  ', registry_name: 'registry' })).toBe('registry');
+        expect(sessionDisplayName(base)).toBe('abcdef01');
+        expect(unboundSessionHeadline({ ...base, vendor: 'codex' })).toBe('CO abcdef01');
+    });
+
+    it('draws a vendor from the one display table, and an unknown vendor from its slug', () => {
+        expect(vendorLabel('claude-code')).toBe('Claude Code');
+        expect(vendorLabel('some_new_vendor')).toBe('some_new_vendor');
+        expect(vendorColour('grok')).toContain('--vscode-charts-');
+        expect(vendorColour('some_new_vendor')).toBeUndefined();
+        expect(vendorLabel('constructor')).toBe('constructor');
     });
 });
 
@@ -621,5 +667,38 @@ describe('the token and cost counter', () => {
         expect(sessionUsageForStory(sessions[0], story_a).input_tokens).toBe(40);
         expect(sessionUsageForStory(sessions[0], undefined).input_tokens).toBe(100);
         expect(sessionUsageForStory(sessions[0], { doc_path: TODO_PATH, id: 'story-c' }).input_tokens).toBe(100);
+    });
+});
+
+describe('subagent children', () => {
+    const USAGE = { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_write_tokens: 0, is_estimate: true };
+    function child(id: string, state: 'working' | 'ended', started_at = '2026-09-22T10:00:00Z', updated_at = '2026-09-22T10:07:00Z'): ActivityChildSession {
+        return { child_id: id, state, started_at, updated_at, usage: USAGE };
+    }
+
+    it('keeps every running child and the latest three finished ones visible, collapsing the earlier finished ones', () => {
+        const children = [child('f1', 'ended'), child('f2', 'ended'), child('r1', 'working'), child('f3', 'ended'), child('f4', 'ended'), child('f5', 'ended')];
+        const { visible, collapsed } = splitChildrenForDisplay(children);
+        expect(collapsed.map(entry => entry.child_id)).toEqual(['f1', 'f2']);
+        expect(visible.map(entry => entry.child_id)).toEqual(['r1', 'f3', 'f4', 'f5']);
+    });
+
+    it('collapses nothing for few or no children', () => {
+        expect(splitChildrenForDisplay(undefined)).toEqual({ visible: [], collapsed: [] });
+        expect(splitChildrenForDisplay([child('f1', 'ended')]).collapsed).toEqual([]);
+    });
+
+    it('clocks a running child against now and a finished one by its own span', () => {
+        const now_ms = Date.parse('2026-09-22T10:30:00Z');
+        expect(formatChildClock(child('r', 'working'), now_ms)).toBe('30m');
+        expect(formatChildClock(child('f', 'ended'), now_ms)).toBe('7m');
+        expect(formatChildClock(child('x', 'working', 'not a date'), now_ms)).toBe('');
+    });
+
+    it('names a child by title, then kind, then short id, and coerces an unrecognised state', () => {
+        expect(childDisplayName({ ...child('abcdefghijkl', 'working'), title: ' Map view code ', agent_type: 'Explore' })).toBe('Map view code');
+        expect(childDisplayName({ ...child('abcdefghijkl', 'working'), agent_type: 'Explore' })).toBe('Explore');
+        expect(childDisplayName(child('abcdefghijkl', 'working'))).toBe('abcdefgh');
+        expect(childStateOf({ ...child('a', 'working'), state: 'bogus' as never })).toBe('unknown');
     });
 });

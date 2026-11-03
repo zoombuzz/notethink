@@ -139,12 +139,24 @@ test.describe('Agent card', () => {
         await expect(undeclarable.getByTestId('agent-banner-notice')).toContainText('No agent activity in 30 days');
     });
 
+    test('lists a story\'s linetags under its headline on the card, and none on a card with no visible tag', async ({ page }) => {
+        await agentBoard(page);
+        const bound = cardFor(page, 'Agent activity card');
+        await expect(bound.getByRole('listitem', { name: 'status' })).toContainText('doing');
+        await expect(bound.getByRole('listitem', { name: 'id' })).toHaveCount(0);
+        await expect(cardFor(page, 'Story nobody can declare').locator('li[aria-label]')).toHaveCount(0);
+        const virtual = page.locator('[data-card-type="agent"][data-virtual-note="true"]');
+        await expect(virtual.locator('li[aria-label="status"]')).toHaveCount(0);
+    });
+
     test('draws an agent that declared no story on a card of its own, among the stories and on none of them', async ({ page }) => {
         await agentBoard(page);
         const virtual = page.locator('[data-card-type="agent"][data-virtual-note="true"]');
         await expect(virtual).toHaveCount(1);
-        await expect(virtual).toContainText('claude-code in notethink');
+        await expect(virtual).toContainText('CC coord-demo');
         await expect(virtual.getByTestId('agent-row')).toHaveCount(1);
+        // the headline takes the vendor's colour, which a story's own headline never does
+        await expect(virtual).toHaveAttribute('style', /--nt-agent-vendor-colour: var\(--vscode-charts-purple/);
         // no story's card drew it
         for (const headline of ['Agent activity card', 'Kanban card ratio height', 'Remove blank lines between statements']) {
             await expect(cardFor(page, headline)).toHaveAttribute('data-virtual-note', 'false');
@@ -165,7 +177,7 @@ test.describe('Agent card', () => {
         ]);
         const virtual = page.locator('[data-card-type="agent"][data-virtual-note="true"]');
         await expect(virtual).toHaveCount(1, { timeout: 5000 });
-        await expect(virtual).toContainText('claude-code in notethink');
+        await expect(virtual).toContainText('CC coord-demo');
     });
 
     test('shows a pending question as a band, and draws no band for a vendor that cannot report one', async ({ page }) => {

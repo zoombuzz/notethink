@@ -1,6 +1,159 @@
 # Todo [](?nt_view=kanban)
 
 
+### Idle agents stop reordering columns [](?id=quiet-idle-agents&status=code-review)
+
+On a board grouped by project with agent cards, a project where nothing is happening keeps moving to the newest end, and one live coordinator can show as several cards.
+
++ background
+  + measured: a card for a session bound to no story is timed by `session.updated_at` (`cardregistryops.ts` `agentOrderTimestamp`), the latest record in its transcript
+  + measured: an idle coordinator wakes every 30 minutes to re-arm its watcher, adding transcript records, while its registry entry, mailbox, run directory and board stay unchanged
+  + measured: `unboundSessions()` (`agentactivityops.ts`) keeps every unbound session from the 30-day window, ended ones included
+  + so one repo shows a card per old session beside its one live agent
+  + no PATTERNS.md entry for activity-based ordering; new
++ approach
+  + a session bound to no story gives its column no ordering time
+  + a column is timed by its stories: `storyLastActiveMs`, the bound story's `last_at`
+  + a card for an unbound session is minted only while that session is live (working, waiting or idle), never once it has ended
+  + a session bound to a story shows inside that story's card, never as a separate card; keep this covered
++ decision: a session in state `unknown` (a vendor that cannot report liveness) counts as live, so a running codex or grok agent stays visible
++ decision 2026-11-03: ended sessions with no story are hidden completely, with no per-column ended count
++ [X] stop `agentOrderTimestamp` timing a virtual note from its session's `updated_at`
++ [X] admit only live sessions in `virtualNotesForActivity`
++ [X] update `cardregistryops.test.ts`, `agentactivityops.test.ts` and `grouporderops.test.ts` for both changes
++ [X] update `group-order-saved-type.spec.ts`, whose session `updated_at` ordering test asserts the old contract
+  + its ordering tests use sessions bound to stories, which still order by `last_at` or `updated_at`, so they hold unchanged
++ [X] add a spec where a newer record on an idle unbound session leaves the column order unchanged
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
+### Session cards show the agent and session name [](?id=agent-session-card-title&status=code-review)
+
+A card for an agent with no story reads `claude-code in notegit`: the vendor slug, and the project the column already names. It should name the session instead, such as `CC coord-notegit`.
+
++ background
+  + measured: the headline is `unboundSessionHeadline` (`agentactivityops.ts`), built as `${vendor} in ${project}`
+  + measured: Claude Code's live session files, read by `claudeLiveSessions` (`AgentAnalyser.ts`), carry a `name` field that nothing reads
+  + measured: `vendorMonogram` derives the monogram from the slug; the only display names are `CHAT_VENDOR_LABELS` (`ChatTranscriptView.ts`)
+  + measured: `agent-card.spec.ts` and `AgentNote.test.tsx` assert the slug headline
++ approach
+  + headline: the vendor monogram, then the session name, such as `CC coord-thinkersync`, with no project
+  + name order: the vendor's own session name, then the registry agent name from [[agent-registry-source]], then a short session id
+  + the headline takes a vendor colour token, so it reads differently from a story title
+  + one vendor display table (slug, monogram, label, colour token) in one module
+  + cards, session rows and the chat panel all read it, so CC means the same everywhere
+  + an unknown vendor still gets a derived monogram and its slug as label
++ decision 2026-11-03: session cards read `CC <session name>`, such as `CC coord-<project>` where that is the session's name
++ [X] read the session name from Claude Code's live session file into `ActivitySession`, in both type mirrors
++ [X] read a session name for Codex and Grok where their files carry one
+  + measured: neither reader parses a name (`codexops.ts` skips `session_meta`; `grokops.ts` reads only `events.jsonl` and `usage.json`), so those cards fall back to the short session id
++ [X] add the vendor display table and point `vendorMonogram`, the session rows and the chat panel labels at it
++ [X] build the virtual note headline from the monogram and session name, in the vendor colour
++ [X] update the jest and Playwright assertions on the old headline and cover the name fallback order
++ [X] note the session name in the Agent activity section of `README.md`
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
+### Agent cards show the story's linetags [](?id=agent-card-linetags&status=code-review)
+
+The ordinary card lists a story's linetags, such as `status=doing` and the time tags. The agent card shows only the headline, so a board of agent cards hides which stories are in the batch.
+
++ background
+  + measured: `MarkdownNote.tsx` appends `GenericNoteAttributes` when a note has linetags
+  + measured: `AgentNote.tsx` renders `MarkdownNoteHeadline` and never `GenericNoteAttributes`
++ approach
+  + render `GenericNoteAttributes` under the headline in `AgentNote`, under the same condition as `MarkdownNote`
+  + a virtual note has no linetags and renders none
++ [X] render the linetag row on the agent card
++ [X] cover it in `AgentNote.test.tsx`
++ [X] add an `agent-card.spec.ts` case where a story's `status=doing` shows on its agent card
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
+### Progress pie on stories in flight [](?id=story-progress-pie&status=code-review)
+
+A story being worked on shows no sign of how far along it is. Each story in flight gets a small pie, so over time the board shows pies filling and stories leaving.
+
++ background
+  + measured: a coordinator keeps a rough percentage per story in `progress.json` in its thinkersync run directory, `coordinator/<project>/`
+  + measured: its shape is `{ "<story id>": { "pct", "at", "by", "note"? } }`
+  + measured: it is written when a story is dispatched and at each task tick, and an entry is pruned once its story leaves doing, code-review or testing
+  + measured: coordinators write no percentage into the story; the story carries its ticked tasks and its `status` linetag
+  + measured: `GenericNoteAttributes.tsx` renders a `progress` linetag as text only
+  + inferred: it reads `progress_max.value_numeric` and `progress_unit.value` unguarded, so a `progress` tag without those siblings throws
+  + no PATTERNS.md entry for a progress indicator; new
++ approach
+  + percentage source, first found wins: the coordinator's progress entry for the story's id, then the story's own `progress` linetag, then ticked over total task boxes in the story
+  + shown on a story at `status` doing, code-review or testing, or with a live agent bound, in every card type
+  + a small pie beside the headline, labelled "<n>% complete", whose tooltip names the source
+  + it animates between values and stays still under `prefers-reduced-motion`
+  + a progress entry's `at` times its story's column, as an agent write does ([[quiet-idle-agents]])
+  + the extension reads progress files read-only, through the same remote-aware home lookup as agent sessions, only for repos in the open folder
++ decision 2026-11-03: the percentage source order above
++ [X] add a progress file reader in the extension, with jest tests over its parse and repo filter
++ [X] carry each story's percentage, source and time to the webview in the activity snapshot
++ [X] add a pure ticked-over-total function for a story's task boxes, with jest tests
++ [X] guard the `progress` linetag's sibling reads and cover a tag without them
++ [X] add the pie component and render it in the card, sticky and agent card types
++ [X] time a story's column from its progress entry
++ [X] add a Playwright spec: a story's pie shows its percentage, changes on a new snapshot, and falls back to its task count
++ [X] describe the pie and its sources in `README.md`
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
+### Agent tree inside the story card [](?id=agent-session-tree&status=code-review)
+
+A story card lists one flat row per session. A coordinator's work runs in subagents, which are merged into the parent's totals and never shown, so the card cannot say what is running.
+
++ background
+  + measured: subagent transcripts under `<session>/subagents/` are merged into the parent's calls and active time (`claudecodeops.ts`, `AgentAnalyser.ts`)
+  + measured: each `agent-<id>.jsonl` has an `agent-<id>.meta.json` beside it holding `description` (its title), `agentType`, a model field and a `finished` flag
+  + measured: `AgentSessionRow` draws the rail, monogram, model, state, clock, live line and usage, with no indent
+  + the registry entry from [[agent-registry-source]] names the main agent and its story
++ approach
+  + the analyser keeps each subagent as a child record of its session: title, type, model, start and end, active time, tokens, live line
+  + the parent's usage and time still include its children
+  + main row: monogram, model, session name, state, and the live line (current command or prompt)
+  + child rows sit indented under the main row, on the same rail, with their title, model, run time and tokens
+  + finished children dim, and past a few they collapse behind a count
+  + a vendor without subagents, or an agent known only from the registry, renders as a flat row with what it has
++ [X] keep subagents as child records in `ActivitySession`, in both type mirrors, reading each meta file
++ [X] cover the child records in the analyser and worker jest tests, keeping the parent totals unchanged
++ [X] render the tree in the agent card: main row, indented child rows, dimmed and collapsed finished children
++ [X] extend `inject-activity.ts` and add a Playwright spec for a session with a running and a finished subagent
++ [X] describe the tree in the Agent activity section of `README.md`
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
+### Read the agent registry into agent activity [](?id=agent-registry-source&status=code-review)
+
+Agent activity knows only what Claude Code, Codex and Grok session files say. The thinkersync registry names every agent of any vendor with its state and story, so a coordinator can be named and placed on its story, and an agent with no session reader can still show.
+
++ background
+  + measured: each agent has one `registry/<agent>/agent.json` in the thinkersync state directory
+  + measured: its fields are agent, agent_kind, vendor, repo, machine, state, story, session_id, previous_session_ids, binary_version, updated_at
+  + measured: a non-Claude vendor already registers there, and NoteThink reads none of its sessions
+  + measured: `updated_at` changes only on a state change or a restart, so `state` is a hint and not a heartbeat
+  + measured: one entry read working hours after its work ended; another read idle while its agent ran a story
+  + [[coordinator-views]] plans the registry reader and the agent list in the folder and project views
++ approach
+  + read-only: NoteThink never writes the registry and changes nothing about how a coordinator runs
+  + read the entries whose `repo` sits inside the open folder, through the same remote-aware home lookup as vendor sessions
+  + join an entry to a vendor session by `session_id` or `previous_session_ids`; the entry supplies the session name and story
+  + bind a `working` entry to its `story` id when that story is at doing, code-review or testing on the board
+  + so a coordinator shows in its story's tree before its first write
+  + an entry with no vendor session shows as a registry-only row: name, vendor monogram, state, story
+  + every live registered agent shows: in its story's tree when working, as its project's session card when not
+  + a `working` entry hours old with no progress or transcript activity shows as stale, not working
++ decision 2026-11-03: read the registry to build the agent tree and the agent list; [[coordinator-views]] keeps its own tasks
++ [X] add a registry reader in the extension: parse, repo filter, join to sessions, with jest tests
++ [X] bind working entries to their stories and cover the board-status cross-check
++ [X] render registry-only rows and the stale state
++ [X] add a Playwright spec with a registry-only agent and a working coordinator bound before its first write
++ [X] add the registry source and the read-only rule to the Agent activity section of `README.md`
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
 ### Coordinators beside boards in folder and project views [](?id=coordinator-views)
 
 The `agent` card shows which sessions are editing a story, but not the long-lived coordinator that owns a repo's board. With many repos open under one folder, the operator cannot see which repos have a coordinator, what state each is in, or message one without leaving the board.
@@ -20,7 +173,7 @@ The `agent` card shows which sessions are editing a story, but not the long-live
   + the `[](?coord=<host>)` target marker renders as a line on the board that can be dragged
   + dragging the line moves the marker between story headings; a keyboard path does the same (PATTERNS.md > Accessible drag and resize affordances)
   + open convoys and their operator steps show on the story they belong to
-  + over Remote-SSH the extension host runs on the remote machine, so it reads that machine's registry directly
+  + over Remote-SSH the web-worker extension host runs locally but reads the remote machine's files through the workspace file system, so it reads that machine's registry
   + desktop only, like the `agent` card, because a browser host has no file access
 + [ ] add a registry reader that lists `agent.json` entries and filters by repo path inside the open folder
 + [ ] add a list of registered agents with their state to the folder view and the project view

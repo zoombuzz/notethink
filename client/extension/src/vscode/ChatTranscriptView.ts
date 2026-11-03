@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ACTIVITY_VENDOR_CLAUDE_CODE, ACTIVITY_VENDOR_CODEX, ACTIVITY_VENDOR_GROK } from '../types/AgentActivity';
+import { ACTIVITY_VENDOR_DISPLAY } from '../types/AgentActivity';
 import {
     chatTitle,
     chatVendorSupported,
@@ -12,11 +12,6 @@ import { getNonce } from '../lib/cryptoops';
 import { writeToErrorLog } from '../lib/errorops';
 
 const CHAT_VIEW_TYPE = 'notethink.agentChat';
-const CHAT_VENDOR_LABELS: Record<string, string> = {
-    [ACTIVITY_VENDOR_CLAUDE_CODE]: 'Claude Code',
-    [ACTIVITY_VENDOR_CODEX]: 'Codex',
-    [ACTIVITY_VENDOR_GROK]: 'Grok',
-};
 
 interface OpenChat {
     panel: vscode.WebviewPanel;
@@ -78,7 +73,7 @@ export class ChatTranscriptViews {
         chat.panel.webview.html = renderChatHtml({
             nonce: getNonce(),
             title,
-            vendor_label: CHAT_VENDOR_LABELS[chat.vendor] ?? chat.vendor,
+            vendor_label: (Object.hasOwn(ACTIVITY_VENDOR_DISPLAY, chat.vendor) ? ACTIVITY_VENDOR_DISPLAY[chat.vendor].label : chat.vendor),
             messages,
             supported: chatVendorSupported(chat.vendor),
             labels: chatLabels(),

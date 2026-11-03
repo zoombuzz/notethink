@@ -28,6 +28,8 @@ interface ActivityRefusalSpec {
  * - state: defaults to 'live'; 'scanning' posts a growing snapshot, as an interim batch looks
  * - sessions: session ids to keep; defaults to every session this helper declares
  * - extra_uncommitted: extra unattributed changed files, to fill a card's uncommitted band
+ * - finished_children: how many finished subagents the `claude-coordinator` session carries beside its running one
+ * - progress: coordinator percentages by story id, each stamped as written by the coordinator at the given time
  */
 interface InjectActivityOptions {
     root_relative?: string;
@@ -37,6 +39,8 @@ interface InjectActivityOptions {
     refusals?: ActivityRefusalSpec[];
     sessions?: string[];
     extra_uncommitted?: number;
+    finished_children?: number;
+    progress?: Array<{ story_id: string; pct: number; at?: string; note?: string }>;
 }
 
 /** one bound session's `stories`/`story_usage` pair for a single story, the common case every fixture session below has */
@@ -81,9 +85,40 @@ function grokQuestion(story_doc_path: string): Record<string, unknown> {
     };
 }
 
+const CHILD_USAGE = { input_tokens: 2400, output_tokens: 300, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: 0.02, is_estimate: true };
+
+/**
+ * A coordinator carrying subagents, bound to the story the agent card spec draws: one running
+ * subagent started long ago (so its run time reads in minutes whenever the spec runs) plus a number
+ * of finished ones, each a few minutes long, oldest first as the analyser lists them.
+ */
+function claudeCoordinator(story_doc_path: string, finished_children = 1): Record<string, unknown> {
+    const finished = Array.from({ length: finished_children }, (_, i) => ({
+        child_id: `fin${i + 1}`, title: `Finished task ${i + 1}`, agent_type: 'general-purpose', model: 'claude-sonnet-5', state: 'ended',
+        started_at: `2026-09-18T08:${String(10 + i * 5).padStart(2, '0')}:00Z`, updated_at: `2026-09-18T08:${String(14 + i * 5).padStart(2, '0')}:00Z`, active_ms: 4 * 60 * 1000,
+        usage: CHILD_USAGE,
+    }));
+    const running = {
+        child_id: 'run1', title: 'Map view code', agent_type: 'Explore', model: 'claude-haiku-5', state: 'working',
+        started_at: '2026-09-18T09:10:00Z', updated_at: '2026-09-18T09:14:00Z',
+        current: { at: '2026-09-18T09:14:00Z', kind: 'tool_call', tool: 'Grep', arg: 'agentRail' },
+        usage: CHILD_USAGE,
+    };
+    return {
+        session_id: 'claude-coordinator', vendor: 'claude-code', project: 'notethink', session_name: 'coord-notethink',
+        started_at: '2026-09-18T08:00:00Z', updated_at: '2026-09-18T09:14:30Z', state: 'working',
+        story_binding: 'bound', ...boundToOneStory(story_doc_path, 'agent-activity-card'),
+        capabilities: CLAUDE_CAPABILITIES,
+        current: { at: '2026-09-18T09:14:30Z', kind: 'tool_call', tool: 'Bash', arg: 'pnpm run test-jest' },
+        model: 'claude-opus-5',
+        children: [...finished, running],
+        usage: USAGE,
+    };
+}
+
 function claudeNoStory(): Record<string, unknown> {
     return {
-        session_id: 'claude-no-story', vendor: 'claude-code', project: 'notethink',
+        session_id: 'claude-no-story', vendor: 'claude-code', project: 'notethink', session_name: 'coord-demo',
         started_at: '2026-09-18T09:06:40Z', updated_at: '2026-09-18T09:13:55Z', state: 'working',
         story_binding: 'none',
         capabilities: CLAUDE_CAPABILITIES,
@@ -102,7 +137,39 @@ function codexNoQuestion(story_doc_path: string): Record<string, unknown> {
     };
 }
 
-const SESSION_BUILDERS: Record<string, (story_doc_path: string) => Record<string, unknown>> = {
+const REGISTRY_USAGE = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, is_estimate: true };
+
+/**
+ * A registry-only row as the analyser builds one from an entry no vendor session joins: the agent's
+ * name, its vendor and state, no capabilities, no usage, and a story binding only where the story
+ * was in flight on the board.
+ */
+function registryOnly(session_id: string, overrides: Record<string, unknown>): Record<string, unknown> {
+    return {
+        session_id, vendor: 'agy', project: 'notethink', registry_only: true,
+        started_at: '2026-09-18T09:00:00Z', updated_at: '2026-09-18T09:00:00Z', state: 'idle',
+        story_binding: 'none', capabilities: {}, usage: REGISTRY_USAGE,
+        ...overrides,
+    };
+}
+
+/** a coordinator bound to its story from the registry alone, before it has written a line: no transcript, so no live line, model or usage */
+function registryCoordinator(story_doc_path: string): Record<string, unknown> {
+    return registryOnly('registry:coord-demo:notethink', {
+        vendor: 'claude-code', registry_name: 'coord-demo', state: 'working', registry_story: 'agent-activity-card',
+        story_binding: 'bound', stories: [{ doc_path: story_doc_path, id: 'agent-activity-card' }], story_usage: [{ story: { doc_path: story_doc_path, id: 'agent-activity-card' }, usage: REGISTRY_USAGE }],
+    });
+}
+
+// sessions only a spec naming them draws, so the default fixture's per-card row counts stay as the older specs assert
+const OPT_IN_SESSIONS = new Set(['claude-coordinator', 'registry-coordinator', 'registry-agy', 'registry-stale', 'registry-stopped']);
+
+const SESSION_BUILDERS: Record<string, (story_doc_path: string, options: InjectActivityOptions) => Record<string, unknown>> = {
+    'claude-coordinator': (story_doc_path, options) => claudeCoordinator(story_doc_path, options.finished_children),
+    'registry-coordinator': story_doc_path => registryCoordinator(story_doc_path),
+    'registry-agy': () => registryOnly('registry:agy-helper:notethink', { registry_name: 'agy-helper', state: 'idle', registry_story: 'kanban-card-ratio-height' }),
+    'registry-stale': () => registryOnly('registry:agy-stale:notethink', { registry_name: 'agy-stale', state: 'idle', registry_stale: true, registry_story: 'code-layout-blank-lines' }),
+    'registry-stopped': () => registryOnly('registry:agy-stopped:notethink', { registry_name: 'agy-stopped', state: 'ended' }),
     'claude-bound-busy': claudeBoundBusy,
     'grok-bound-idle': grokBoundIdle,
     'grok-question': grokQuestion,
@@ -136,15 +203,16 @@ export function activityFixtureSnapshot(options: InjectActivityOptions = {}): Re
     const root_relative = options.root_relative ?? DEFAULT_ROOT_RELATIVE;
     const root_path = options.root_path ?? DEFAULT_ROOT_PATH;
     const story_doc_path = root_relative ? `${root_relative}/${TODO_PATH}` : TODO_PATH;
-    const ids = options.sessions ?? Object.keys(SESSION_BUILDERS);
+    const ids = options.sessions ?? Object.keys(SESSION_BUILDERS).filter(id => !OPT_IN_SESSIONS.has(id));
     const sessions = ids.map(id => ({
         root_path,
-        session: SESSION_BUILDERS[id](story_doc_path),
+        session: SESSION_BUILDERS[id](story_doc_path, options),
     }));
     return {
         analyser: { state: options.state ?? (options.live === false ? 'unavailable' : 'live'), refusals: options.refusals ?? [] },
         sessions,
         trees: [{ root_path, root_relative, tree: activityTree(options.extra_uncommitted) }],
+        progress: (options.progress ?? []).map(entry => ({ root_relative, at: '2026-09-18T09:00:00Z', by: 'coordinator', ...entry })),
     };
 }
 

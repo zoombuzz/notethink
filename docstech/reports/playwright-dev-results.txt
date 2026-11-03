@@ -1,8 +1,9 @@
 # Playwright Test Results
-# Version: 0.4.17
-# Date: 2026-10-31T15:12:00Z
+# Version: 0.4.19
+# Date: 2026-11-03T17:46:59Z
 # Command: pnpm run test-playwright
 # ---
+$ bash scripts/run-checked.sh test-playwright 'pnpm run test-playwright:run'
 $ pnpm run build && playwright test
 $ SELFINSPECT_ENV=dev webpack
     [webpack-cli] Compiler starting... 
@@ -23,70 +24,71 @@ $ SELFINSPECT_ENV=dev webpack
     [webpack-cli] Compiler finished
     [webpack-cli] Compiler finished
     [webpack-cli] Compiler finished
-asset extension.js 1.2 MiB [emitted] [big] (name: extension) 1 related asset
-asset test/suite/index.js 698 KiB [emitted] [big] (name: test/suite/index) 1 related asset
+asset extension.js 1.23 MiB [compared for emit] [big] (name: extension) 1 related asset
+asset test/suite/index.js 698 KiB [compared for emit] [big] (name: test/suite/index) 1 related asset
 orphan modules 6.33 KiB [orphan] 25 modules
 runtime modules 2.16 KiB 10 modules
-modules by path ./ 1010 KiB
+modules by path ./ 1.01 MiB
   modules by path ./node_modules/.pnpm/ 506 KiB 127 modules
-  modules by path ./src/ 503 KiB
-    modules by path ./src/lib/ 197 KiB 26 modules
-    modules by path ./src/vscode/*.ts 266 KiB 11 modules
+  modules by path ./src/ 529 KiB
+    modules by path ./src/lib/ 217 KiB 28 modules
+    modules by path ./src/vscode/*.ts 271 KiB 11 modules
     modules by path ./src/test/suite/ 27.6 KiB 5 modules
     modules by path ./src/*.ts 8.82 KiB
       ./src/extension.ts 6.8 KiB [built] [code generated]
       ./src/constants.ts 2.02 KiB [built] [code generated]
-    ./src/types/AgentActivity.ts 3.76 KiB [built] [code generated]
+    ./src/types/AgentActivity.ts 4.39 KiB [built] [code generated]
 modules by path ../../node_modules/.pnpm/ 668 KiB 82 modules
 external "vscode" 42 bytes [built] [code generated]
-webpack 5.112.0 compiled successfully in 9346 ms
+webpack 5.112.0 compiled successfully in 2166 ms
 
-asset agentAnalyserWorker.js 133 KiB [compared for emit] (name: agentAnalyserWorker) 1 related asset
+asset agentAnalyserWorker.js 139 KiB [compared for emit] (name: agentAnalyserWorker) 1 related asset
 runtime modules 883 bytes 4 modules
-modules by path ./src/ 101 KiB
-  modules by path ./src/lib/ 78.5 KiB
-    modules by path ./src/lib/vendors/*.ts 51 KiB
+modules by path ./src/ 106 KiB
+  modules by path ./src/lib/ 83.3 KiB
+    modules by path ./src/lib/vendors/*.ts 55.8 KiB
       ./src/lib/vendors/agentvendorops.ts 2.55 KiB [built] [code generated]
-      ./src/lib/vendors/claudecodeops.ts 20.7 KiB [built] [code generated]
+      ./src/lib/vendors/claudecodeops.ts 25.5 KiB [built] [code generated]
       + 3 modules
     modules by path ./src/lib/*.ts 27.5 KiB
       ./src/lib/agentlinediffops.ts 7.35 KiB [built] [code generated]
       ./src/lib/agentpricingops.ts 20.2 KiB [built] [code generated]
-  ./src/vscode/AgentAnalyserWorker.ts 18.3 KiB [built] [code generated]
-  ./src/types/AgentActivity.ts 3.76 KiB [built] [code generated]
+  ./src/vscode/AgentAnalyserWorker.ts 18.6 KiB [built] [code generated]
+  ./src/types/AgentActivity.ts 4.39 KiB [built] [code generated]
 modules by path ../../node_modules/.pnpm/ 21.1 KiB
   ../../node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-brows...(truncated) 15.8 KiB [built] [code generated]
   ../../node_modules/.pnpm/process@0.11.10/node_modules/process/browser.js 5.29 KiB [built] [code generated]
-webpack 5.112.0 compiled successfully in 4340 ms
+webpack 5.112.0 compiled successfully in 1085 ms
 
-asset parseWorker.js 590 KiB [emitted] [big] (name: parseWorker) 1 related asset
+asset parseWorker.js 590 KiB [compared for emit] [big] (name: parseWorker) 1 related asset
 orphan modules 6.33 KiB [orphan] 25 modules
 runtime modules 614 bytes 3 modules
 modules by path ./node_modules/.pnpm/ 506 KiB 127 modules
 modules by path ./src/ 1.08 KiB
   ./src/vscode/ParseWorker.ts 506 bytes [built] [code generated]
   ./src/lib/parseops.ts 599 bytes [built] [code generated]
-webpack 5.112.0 compiled successfully in 8708 ms
+webpack 5.112.0 compiled successfully in 2054 ms
 
-assets by status 8.54 MiB [compared for emit]
-  assets by path *.js 8.52 MiB 65 assets
-  assets by path *.png 14.7 KiB 2 assets
-  + 4 assets
-asset index.js 3.07 MiB [emitted] [big] (name: index) 1 related asset
-asset 3.js 2.42 MiB [emitted] [big] (id hint: vendors) 1 related asset
-asset 8.js 137 KiB [emitted] 1 related asset
-asset 7.js 84.7 KiB [emitted] 1 related asset
-asset 4.js 31.9 KiB [emitted] 1 related asset
-asset 6.js 21.9 KiB [emitted] 1 related asset
-asset 5.js 21.8 KiB [emitted] 1 related asset
-asset 2.js 16.2 KiB [emitted] 1 related asset
-asset 9.js 2.79 KiB [emitted] 1 related asset
-asset 1.js 2.53 KiB [emitted] 1 related asset
+assets by status 14.4 MiB [emitted]
+  assets by chunk 10.9 MiB (id hint: vendors)
+    assets by status 8.42 MiB [big]
+      asset 3.js 2.42 MiB [emitted] [big] (id hint: vendors) 1 related asset
+      asset 53.js 1.63 MiB [emitted] [compared for emit] [big] (id hint: vendors) 1 related asset
+      + 7 assets
+    + 32 assets
+  + 34 assets
+assets by path *.png 14.7 KiB
+  asset logo512.png 9.44 KiB [compared for emit] [from: public/logo512.png] [copied]
+  asset logo192.png 5.22 KiB [compared for emit] [from: public/logo192.png] [copied]
+asset favicon.ico 3.78 KiB [compared for emit] [from: public/favicon.ico] [copied]
+asset index.html 1.68 KiB [compared for emit] [from: public/index.html] [copied]
+asset manifest.json 492 bytes [compared for emit] [from: public/manifest.json] [copied]
+asset robots.txt 67 bytes [compared for emit] [from: public/robots.txt] [copied]
 orphan modules 55.8 KiB [orphan] 57 modules
 runtime modules 6.89 KiB 11 modules
 modules by path ./src/notethink-views/node_modules/.pnpm/ 10.2 MiB 1256 modules
 modules by path ./node_modules/.pnpm/ 1.27 MiB 210 modules
-modules by path ./src/notethink-views/src/ 959 KiB 150 modules
+modules by path ./src/notethink-views/src/ 991 KiB 155 modules
 modules by path ./src/hooks/*.ts 53.1 KiB 9 modules
 modules by path ./src/lib/*.ts 34.8 KiB 8 modules
 modules by path ./src/components/ 23.3 KiB 5 modules
@@ -96,308 +98,326 @@ modules by path ./src/*.css 3.79 KiB
   ./src/index.css 1.83 KiB [built] [code generated]
   ./node_modules/.pnpm/css-loader@7.1.5_webpack@5.112.0_postcss@8.5.31_uglify-js@3.19.3_/node_modules/css-loader/dist/cjs.js??ruleSet[1].rules[2].use[1]!./src/index.css 1.96 KiB [built] [code generated]
 ./src/index.tsx 967 bytes [built] [code generated]
-webpack 5.112.0 compiled successfully in 14380 ms
+webpack 5.112.0 compiled successfully in 2655 ms
 
-asset parseWorker.js 590 KiB [emitted] [big] (name: parseWorker) 1 related asset
+asset parseWorker.js 590 KiB [compared for emit] [big] (name: parseWorker) 1 related asset
 orphan modules 6.33 KiB [orphan] 25 modules
 runtime modules 614 bytes 3 modules
 modules by path ./node_modules/.pnpm/ 506 KiB 127 modules
 modules by path ./src/ 1.17 KiB
   ./src/parseWorker.ts 515 bytes [built] [code generated]
   ./src/lib/parseops.ts 687 bytes [built] [code generated]
-webpack 5.112.0 compiled successfully in 9239 ms
+webpack 5.112.0 compiled successfully in 2144 ms
 
 asset audioWorklet.js 10.9 KiB [compared for emit] (name: audioWorklet) 1 related asset
 runtime modules 614 bytes 3 modules
 cacheable modules 7.2 KiB
   ./src/audioWorklet.ts 900 bytes [built] [code generated]
   ./src/lib/audiochunkops.ts 6.32 KiB [built] [code generated]
-webpack 5.112.0 compiled successfully in 1610 ms
+webpack 5.112.0 compiled successfully in 414 ms
 
-Running 283 tests using 8 workers
+Running 300 tests using 10 workers
 
-  ✓    7 [chromium] › playwright/specs/agent-card.spec.ts:154:9 › Agent card › draws an unbound session only beside its own repository, never beside a document outside it (1.7s)
-  ✓    6 [chromium] › playwright/specs/agent-card.spec.ts:142:9 › Agent card › draws an agent that declared no story on a card of its own, among the stories and on none of them (2.4s)
-  ✓    3 [chromium] › playwright/specs/agent-card.spec.ts:171:9 › Agent card › shows a pending question as a band, and draws no band for a vendor that cannot report one (2.8s)
-  ✓    4 [chromium] › playwright/specs/agent-card.spec.ts:110:9 › Agent card › draws each agent that declared a story on that story, and never guesses one onto a card (3.0s)
-  ✓    1 [chromium] › playwright/specs/agent-card.spec.ts:219:9 › Agent card › dims the token and cost total and hides the uncommitted band while scanning, then shows both once the scan is live (3.0s)
-  ✓    8 [chromium] › playwright/specs/agent-card.spec.ts:235:9 › Agent card › never dims the total or hides the uncommitted band on a rescan, once the card has already shown a completed one (2.6s)
-  ✓    5 [chromium] › playwright/specs/agent-card.spec.ts:200:9 › Agent card › lists changed files in the uncommitted band and leaves the branch's commits off the card, marking a file no write call accounts for as unattributed (3.4s)
-  ✓    2 [chromium] › playwright/specs/agent-card.spec.ts:184:9 › Agent card › draws no state rail on the card, so hovering a card changes nothing about its edge (4.5s)
-  ✓   15 [chromium] › playwright/specs/agent-card.spec.ts:366:9 › Agent card › says the analyser found nothing, so an empty board never reads as idle agents (1.9s)
-  ✓   10 [chromium] › playwright/specs/agent-card.spec.ts:273:9 › Agent card › opens an agent row and a file row from the keyboard alone (2.6s)
-  ✓    9 [chromium] › playwright/specs/agent-card.spec.ts:256:9 › Agent card › unfolds the capped uncommitted band from "and N more" and folds it back from "Show less" (3.1s)
-  ✓   13 [chromium] › playwright/specs/agent-card.spec.ts:342:9 › Agent card › draws an agent row on one line where the card is wide enough, as it is in the document view (2.3s)
-  ✓   14 [chromium] › playwright/specs/agent-card.spec.ts:355:9 › Agent card › never posts an edit naming the virtual sentinel, whatever the card is made to do (3.3s)
-  ✓   12 [chromium] › playwright/specs/agent-card.spec.ts:317:9 › Agent card › stacks an agent row in a narrow kanban group with every cell on one line, and the live line wide enough to read (3.6s)
-  ✓   16 [chromium] › playwright/specs/agent-card.spec.ts:379:9 › Agent card › says the analyser cannot read local files here, rather than showing an idle board (2.0s)
-  ✓   17 [chromium] › playwright/specs/agent-card.spec.ts:392:9 › Agent card › draws a refused session file, and an unreadable session, before any empty state (1.8s)
-  ✓   18 [chromium] › playwright/specs/agent-card.spec.ts:409:9 › Agent card › opens a file row as a diff, echoing back the root and path the host published (2.1s)
-  ✓   20 [chromium] › playwright/specs/agent-card.spec.ts:423:9 › Agent card › takes the host answer over its own reading once an attempt has been refused (2.1s)
-  ✓   19 [chromium] › playwright/specs/agent-card.spec.ts:435:9 › Agent card › opens a session in VS Code rather than on the card, and says under its row when the host could not (2.3s)
-  ✓   11 [chromium] › playwright/specs/agent-card.spec.ts:289:9 › Agent card › draws in the document, line and kanban views, not only the one it was first tried in (5.2s)
-  ✓   21 [chromium] › playwright/specs/agent-card.spec.ts:447:9 › Agent card › resolves a declared path against where the repository was found, and joins nothing when it does not match (2.1s)
-  ✓   23 [chromium] › playwright/specs/agent-card.spec.ts:469:9 › Agent card › switches the clock mode from the card settings drawer, and the row redraws by it (2.5s)
-  ✓   22 [chromium] › playwright/specs/agent-card.spec.ts:459:9 › Agent card › picking the agent card from the card tab repaints a document view, not only a group (2.9s)
-  ✓   26 [chromium] › playwright/specs/audio-control.spec.ts:11:9 › Audio control appears only where the frame can capture › a frame without allow="microphone" shows no audio control and never calls getUserMedia (1.9s)
-  ✓   28 [chromium] › playwright/specs/audio-control.spec.ts:35:9 › Audio control appears only where the frame can capture › the extension reporting the feature unavailable hides the control even in an allowing frame (1.6s)
-  ✓   27 [chromium] › playwright/specs/audio-control.spec.ts:23:9 › Audio control appears only where the frame can capture › a frame with allow="microphone" shows the toggle without calling getUserMedia, and a press asks to start (2.1s)
-  ✓   25 [chromium] › playwright/specs/agent-card.spec.ts:506:9 › Agent card › holds the toolbar spinner from picking the agent card until the analyser finishes its first scan (2.7s)
-  ✓   29 [chromium] › playwright/specs/audio-control.spec.ts:46:13 › Audio control error text › shows the whole error name in the header bar, not cut off, at 1280px (1.8s)
-  ✓   24 [chromium] › playwright/specs/agent-card.spec.ts:490:9 › Agent card › switches the clock mode on a kanban board, not only in the document view (3.5s)
-  ✓   30 [chromium] › playwright/specs/audio-control.spec.ts:46:13 › Audio control error text › shows the whole error name in the header bar, not cut off, at 600px (1.9s)
-  ✓   32 [chromium] › playwright/specs/audio-indicator.spec.ts:60:9 › Recording indicator › the toggle works from the keyboard, and the status region announces "Recording audio" (2.0s)
-  ✓   31 [chromium] › playwright/specs/audio-indicator.spec.ts:40:9 › Recording indicator › pressing the toggle on shows the dot within 100 ms, and pressing it off removes it within 100 ms (2.2s)
-  ✓   33 [chromium] › playwright/specs/audio-indicator.spec.ts:80:9 › Recording indicator › the dot pulses normally and is still, not hidden, under reduced motion (2.3s)
-  ✓   35 [chromium] › playwright/specs/audio-indicator.spec.ts:102:13 › Recording indicator › the dot holds at least 3:1 contrast against the header bar in the high contrast dark theme (1.7s)
-  ✓   34 [chromium] › playwright/specs/audio-indicator.spec.ts:102:13 › Recording indicator › the dot holds at least 3:1 contrast against the header bar in the dark theme (2.3s)
-  ✓   36 [chromium] › playwright/specs/audio-indicator.spec.ts:102:13 › Recording indicator › the dot holds at least 3:1 contrast against the header bar in the light theme (2.1s)
-  ✓   37 [chromium] › playwright/specs/audio-indicator.spec.ts:102:13 › Recording indicator › the dot holds at least 3:1 contrast against the header bar in the high contrast light theme (1.9s)
-  ✓   38 [chromium] › playwright/specs/auto-integration.spec.ts:60:9 › Auto integration mode (H1 linetags) › cold-opens a folder-declaring file straight into the scoped Auto (Folder) board (2.3s)
-  ✓   41 [chromium] › playwright/specs/auto-integration.spec.ts:114:9 › Auto integration mode (H1 linetags) › Auto (Current file) + a folder breadcrumb click pins concrete Folder (1.7s)
-  ✓   39 [chromium] › playwright/specs/auto-integration.spec.ts:75:9 › Auto integration mode (H1 linetags) › navigating to another folder in Auto (Folder) stays Auto (Folder) (2.2s)
-  ✓   45 [chromium] › playwright/specs/auto-integration.spec.ts:200:9 › Auto integration mode (reactive editor follow) › switching the active editor to a plain file OUTSIDE the scope drops the folder board to the document render (1.3s)
-  ✓   44 [chromium] › playwright/specs/auto-integration.spec.ts:170:9 › Auto integration mode (H1 linetags) › a file with an unmatched nt_breadcrumb_last opens normally with no error (1.6s)
-  ✓   43 [chromium] › playwright/specs/auto-integration.spec.ts:152:9 › Auto integration mode (H1 linetags) › re-selecting Auto after pinning concrete restores the file-declared folder scope (2.3s)
-  ✓   42 [chromium] › playwright/specs/auto-integration.spec.ts:130:9 › Auto integration mode (H1 linetags) › a folder-declaring file pinned to current_file jumps to Auto (Folder) on a breadcrumb click (2.6s)
-  ✓   40 [chromium] › playwright/specs/auto-integration.spec.ts:90:9 › Auto integration mode (H1 linetags) › a navigated Auto (Folder) position survives a reload (3.2s)
-  ✓   47 [chromium] › playwright/specs/auto-integration.spec.ts:231:9 › Auto integration mode (reactive editor follow) › a live linetag edit adding a folder declaration flips the active file to the folder board (1.1s)
-  ✓   46 [chromium] › playwright/specs/auto-integration.spec.ts:215:9 › Auto integration mode (reactive editor follow) › revealing a member file INSIDE the scope keeps the folder board (card-click gate) (2.4s)
-  ✓   49 [chromium] › playwright/specs/breadcrumb-jump.spec.ts:77:9 › Terminal breadcrumb leaf jump drawer › current-file mode: leaf click lists sibling files; clicking one posts openFile (1.9s)
-  ✓   48 [chromium] › playwright/specs/breadcrumb-jump.spec.ts:34:9 › Terminal breadcrumb leaf jump drawer › folder mode: leaf click opens the drawer and lists child subfolders; clicking one descends (2.4s)
-  ✓   53 [chromium] › playwright/specs/breadcrumb.spec.ts:70:9 › Breadcrumb workspace root stripping › relative_path data-path attributes use full absolute paths for folder loading (1.8s)
-  ✓   51 [chromium] › playwright/specs/breadcrumb.spec.ts:15:9 › Breadcrumb workspace root stripping › shows full path when no workspace_root is provided (2.3s)
-  ✓   52 [chromium] › playwright/specs/breadcrumb.spec.ts:30:9 › Breadcrumb workspace root stripping › keeps the opened workspace folder as the first breadcrumb segment (2.3s)
-  ✓   55 [chromium] › playwright/specs/breadcrumb.spec.ts:87:9 › Breadcrumb workspace root stripping › breadcrumb with workspace root shows the opened folder as the first segment (1.5s)
-  ✓   54 [chromium] › playwright/specs/breadcrumb.spec.ts:46:9 › Breadcrumb workspace root stripping › uses relative_path for breadcrumb (symlink-safe), keeping the opened folder as root (2.4s)
-  ✓   50 [chromium] › playwright/specs/breadcrumb-jump.spec.ts:112:9 › Terminal breadcrumb leaf jump drawer › empty-state row when the folder has no jump targets (3.4s)
-  ✓   57 [chromium] › playwright/specs/breadcrumb.spec.ts:146:9 › Toolbar row geometry › a tab reaches the toolbar bottom edge, and the drawers stick at exactly that height (2.0s)
-  ✓   56 [chromium] › playwright/specs/breadcrumb.spec.ts:125:9 › Toolbar row geometry › the row keeps its height when the breadcrumb has no ancestors above the leaf (2.3s)
-  ✓   59 [chromium] › playwright/specs/card-settings-tab.spec.ts:70:9 › Card settings tab › the card tab owns the card-drawn settings and the view tab no longer shows them (2.1s)
-  ✓   60 [chromium] › playwright/specs/card-settings-tab.spec.ts:88:9 › Card settings tab › a card setting diverges and the card tab counts it independently of the view tab (2.5s)
-  ✓   58 [chromium] › playwright/specs/card-settings-tab.spec.ts:48:9 › Card settings tab › switching the card type to Sticky collapses the notes to the compact card (3.4s)
-  ✓   61 [chromium] › playwright/specs/card-settings-tab.spec.ts:112:9 › Card settings tab › a setting held by one card type reaches only notes rendered as that type, never a sibling's (3.5s)
-  ✓   64 [chromium] › playwright/specs/card-type.spec.ts:27:9 › Card type axis › an H1 nt_card=sticky on every file resolves the card type to sticky and draws compact cards (2.8s)
-  ✓   62 [chromium] › playwright/specs/card-task-framing.spec.ts:69:9 › Clipped card frames the first incomplete task › frames the first incomplete task, not the top of the story (4.0s)
-  ✓   66 [chromium] › playwright/specs/card-type.spec.ts:54:9 › Card type axis › the compact card keeps the headline it replaces the body of (3.0s)
-  ✓   68 [chromium] › playwright/specs/card-type.spec.ts:72:9 › Card type axis › a tie in the nt_card vote falls back to the full card (1.8s)
-  ✓   63 [chromium] › playwright/specs/card-task-framing.spec.ts:73:9 › Clipped card frames the first incomplete task › survives an unrelated file in the folder changing (4.6s)
-  ✓   65 [chromium] › playwright/specs/card-type.spec.ts:42:9 › Card type axis › pinning the view type leaves the voted card type alone (3.9s)
-  ✓   67 [chromium] › playwright/specs/card-type.spec.ts:64:9 › Card type axis › the card axis resolves independently of the view axis (3.2s)
-  ✓   70 [chromium] › playwright/specs/checkbox-toggle.spec.ts:18:9 › Checkbox toggle › clicking a + bullet task checkbox posts editText with a docPath (2.2s)
-  ✓   69 [chromium] › playwright/specs/card-type.spec.ts:79:9 › Card type axis › files that declare no nt_card render the full card, unchanged (2.7s)
-  ✓   75 [chromium] › playwright/specs/click-interaction.spec.ts:95:9 › Click Interaction › captured messages include docId and docPath (2.1s)
-  ✓   76 [chromium] › playwright/specs/collision-detection.spec.ts:14:9 › Duplicate stable_id collision detection › no Warnings tab when every headline resolves to a unique stable_id (1.5s)
-  ✓   73 [chromium] › playwright/specs/click-interaction.spec.ts:29:9 › Click Interaction › clicking a note sets aria-current (focused) attribute (2.4s)
-  ✓   71 [chromium] › playwright/specs/checkbox-toggle.spec.ts:41:9 › Checkbox toggle › clicking an already-checked task posts editText that clears the state char (3.1s)
-  ✓   72 [chromium] › playwright/specs/click-interaction.spec.ts:13:9 › Click Interaction › clicking a note headline sends revealRange message (3.1s)
-  ✓   77 [chromium] › playwright/specs/collision-detection.spec.ts:24:9 › Duplicate stable_id collision detection › within-file duplicate headlines raise the Warnings tab; the drawer lists the group (2.4s)
-  ✓   74 [chromium] › playwright/specs/click-interaction.spec.ts:52:9 › Click Interaction › second click on focused note selects it without blanking the view (3.7s)
-  ✓   78 [chromium] › playwright/specs/collision-detection.spec.ts:43:9 › Duplicate stable_id collision detection › cross-file collisions in folder mode list both origins in the drawer (3.0s)
-  ✓   82 [chromium] › playwright/specs/docless-open.spec.ts:51:9 › Docless open (no .md file active) › a malformed seed is ignored rather than half-applying a scope (2.1s)
-  ✓   83 [chromium] › playwright/specs/document-view.spec.ts:12:9 › Document View › renders document container after injecting basic.md (1.9s)
-  ✓   80 [chromium] › playwright/specs/docless-open.spec.ts:23:9 › Docless open (no .md file active) › a host-seeded folder scope renders the folder board rooted at the workspace root (2.7s)
-  ✓   79 [chromium] › playwright/specs/collision-detection.spec.ts:63:9 › Duplicate stable_id collision detection › clicking a colliding title posts a revealRange so the editor jumps to that story (3.2s)
-  ✓   81 [chromium] › playwright/specs/docless-open.spec.ts:37:9 › Docless open (no .md file active) › the seeded board scopes to the workspace root, so every project merges in (3.0s)
-  ✓   84 [chromium] › playwright/specs/document-view.spec.ts:19:9 › Document View › renders note headlines with correct text (2.9s)
-  ✓   86 [chromium] › playwright/specs/document-view.spec.ts:41:9 › Document View › renders body paragraphs (2.3s)
-  ✓   85 [chromium] › playwright/specs/document-view.spec.ts:32:9 › Document View › renders notes with data-seq attributes (2.8s)
-  ✓   87 [chromium] › playwright/specs/drawer-overlay.spec.ts:60:13 › Drawer overlay › opening the settings drawer leaves the first note's bounding box unchanged (3.5s)
-  ✓   89 [chromium] › playwright/specs/drawer-overlay.spec.ts:60:13 › Drawer overlay › opening the cards drawer leaves the first note's bounding box unchanged (3.3s)
-  ✓   90 [chromium] › playwright/specs/drawer-overlay.spec.ts:60:13 › Drawer overlay › opening the jump drawer leaves the first note's bounding box unchanged (3.0s)
-  ✓   88 [chromium] › playwright/specs/drawer-overlay.spec.ts:74:13 › Drawer overlay › closing the settings drawer does not move the view (4.0s)
-  ✓   91 [chromium] › playwright/specs/drawer-overlay.spec.ts:74:13 › Drawer overlay › closing the cards drawer does not move the view (4.0s)
-  ✓   93 [chromium] › playwright/specs/drawer-overlay.spec.ts:90:9 › Drawer overlay › a note selected low enough to be covered stays fully visible below the settings drawer once it opens (3.1s)
-  ✓   94 [chromium] › playwright/specs/drawer-overlay.spec.ts:113:9 › Drawer overlay › closing the settings drawer after a re-frame does not move the view further (3.2s)
-  ✓   95 [chromium] › playwright/specs/drawer-overlay.spec.ts:130:9 › Drawer overlay › with every drawer closed, none shows text or a close button, and the board sits reachable underneath (2.3s)
-  ✓   92 [chromium] › playwright/specs/drawer-overlay.spec.ts:74:13 › Drawer overlay › closing the jump drawer does not move the view (4.3s)
-  ✓   97 [chromium] › playwright/specs/drawer-overlay.spec.ts:147:13 › Drawer overlay › with the cards drawer open, it is the only one visible (2.5s)
-  ✓   96 [chromium] › playwright/specs/drawer-overlay.spec.ts:147:13 › Drawer overlay › with the settings drawer open, it is the only one visible (3.0s)
-  ✓  101 [chromium] › playwright/specs/empty-stories-note.spec.ts:44:9 › Empty-stories note (folder mode, zero stories) › the note's link opens the Files drawer, which shows the point-at-your-stories instructions (1.9s)
-  ✓  100 [chromium] › playwright/specs/empty-stories-note.spec.ts:22:9 › Empty-stories note (folder mode, zero stories) › shows the default status columns plus the empty-stories note when the aggregate has no stories (2.2s)
-  ✓  104 [chromium] › playwright/specs/error-boundary.spec.ts:48:9 › Error Boundary › shows fallback when malformed MDAST causes render error (1.0s)
-  ✓  102 [chromium] › playwright/specs/empty-stories-note.spec.ts:63:9 › Empty-stories note (folder mode, zero stories) › the note waits for the first aggregate, then names the include pattern when it matched no file at all (1.5s)
-  ✓   98 [chromium] › playwright/specs/drawer-overlay.spec.ts:147:13 › Drawer overlay › with the jump drawer open, it is the only one visible (3.2s)
-  ✓   99 [chromium] › playwright/specs/drill-expand-persists.spec.ts:50:9 › Manual expand survives an edit to an earlier sibling › growing an earlier sibling keeps the expanded descendant expanded (3.1s)
-  ✓  103 [chromium] › playwright/specs/empty-stories-note.spec.ts:81:9 › Empty-stories note (folder mode, zero stories) › the note does not appear once the folder has stories, nor do the drawer instructions (1.8s)
-  ✓  105 [chromium] › playwright/specs/error-boundary.spec.ts:56:9 › Error Boundary › fallback displays friendly message and error details (1.4s)
-  ✓  107 [chromium] › playwright/specs/error-boundary.spec.ts:90:9 › Error Boundary › NoteRenderer container remains in the DOM despite error (1.3s)
-  ✓  106 [chromium] › playwright/specs/error-boundary.spec.ts:80:9 › Error Boundary › fallback includes a Try Again button (1.6s)
-  ✓  112 [chromium] › playwright/specs/folder-click-focus.spec.ts:79:9 › Current_file click-focus regression › current_file mode click + simulated selectionChanged still focuses the clicked note (1.6s)
-  ✓  108 [chromium] › playwright/specs/folder-click-focus.spec.ts:28:9 › Folder-mode click-focus and click-select (homogenisation) › clicking a card in folder mode lights the focused outline immediately (no editor round-trip) (2.9s)
-  ✓  110 [chromium] › playwright/specs/folder-click-focus.spec.ts:48:9 › Folder-mode click-focus and click-select (homogenisation) › clicking a card from file A then a card from file B moves focus to the latter (2.9s)
-  ✓  109 [chromium] › playwright/specs/folder-click-focus.spec.ts:38:9 › Folder-mode click-focus and click-select (homogenisation) › second click on a focused card promotes to selected (solid outline + selection state) (3.2s)
-  ✓  111 [chromium] › playwright/specs/folder-click-focus.spec.ts:62:9 › Folder-mode click-focus and click-select (homogenisation) › editor caret moving into a story in file B highlights the matching card in folder mode (no view click) (3.0s)
-  ✓  119 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:54:9 › Folder scan loading state › hides the loading note and breadcrumb count as soon as a doc streams in, before discovery settles (1.6s)
-  ✓  113 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:80:9 › Folder-mode kanban drag and drop › cross-column drag in folder mode targets only the source file (4.6s)
-  ✓  118 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:21:9 › Folder scan loading state › shows the loading note in place of the board and a scanning count in the breadcrumb while discovery is open, then the cards once it settles (2.2s)
-  ✓  120 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:73:9 › Folder scan loading state › keeps the loading note up while a streamed-in doc holds notes only in a hidden group (2.1s)
-  ✓  116 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:272:9 › Folder-mode kanban drag and drop › single-file kanban drag still emits the legacy single-doc shape (regression guard) (4.5s)
-  ✓  121 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:99:9 › Folder scan loading state › shows a centred loading note before any message has been sent, with no board or toolbar yet (2.0s)
-  ✓  122 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:120:9 › Folder scan loading state › keeps the header spinner up and shows live progress in the breadcrumb count while discovery is held open with a doc streamed in (2.0s)
-  ✓  117 [chromium] › playwright/specs/folder-reload-persistence.spec.ts:27:9 › Folder-mode board survives a reload › reload restores folder columns without an error, and the persisted state carries no doc bodies (4.8s)
-  ✓  115 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:233:9 › Folder-mode kanban drag and drop › a drop survives an authoritative echo delayed to 200-file scale - no snap-back (6.4s)
-  ✓  123 [chromium] › playwright/specs/folder-view.spec.ts:15:9 › Aggregate (Folder) view › folder mode shows a single NoteRenderer with folder flag and single toolbar (2.6s)
-  ✓  114 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:135:9 › Folder-mode kanban drag and drop › multi-file column interleave: a drag into an all-unweighted column mints no weight, and an unrelated parse update preserves interleaved order (6.9s)
-  ✓  124 [chromium] › playwright/specs/folder-view.spec.ts:35:9 › Aggregate (Folder) view › origin pills appear on each merged story showing the project first letter (2.9s)
-  ✓  126 [chromium] › playwright/specs/folder-view.spec.ts:90:9 › Aggregate (Folder) view › breadcrumb segment click in folder mode sends setIntegration (1.9s)
-  ✓  125 [chromium] › playwright/specs/folder-view.spec.ts:54:9 › Aggregate (Folder) view › click on an origin pill descends the folder root to the project subfolder AND opens the clicked story in the editor (2.2s)
-  ✓  127 [chromium] › playwright/specs/folder-view.spec.ts:118:9 › Aggregate (Folder) view › breadcrumb shows the merged "(X in Y files)" count only in folder mode (2.3s)
-  ✓  128 [chromium] › playwright/specs/folder-view.spec.ts:136:9 › Aggregate (Folder) view › clicking the breadcrumb count opens the Files drawer; editing the include glob re-filters the list (3.2s)
-  ✓  132 [chromium] › playwright/specs/folder-wire-payload-diet.spec.ts:40:9 › Folder wire-payload diet: text-only docs still work end to end › a text-only folder doc still renders its stories with origin pills (2.7s)
-  ✓  131 [chromium] › playwright/specs/folder-view.spec.ts:220:9 › Aggregate (Folder) view › switching folder mode to Kanban shows stories grouped by status linetag with origin pills (3.2s)
-  ✓  129 [chromium] › playwright/specs/folder-view.spec.ts:166:9 › Aggregate (Folder) view › clicking a file in the Files drawer switches to current_file mode for that file and closes the drawer (3.6s)
-  ✓  135 [chromium] › playwright/specs/frontmatter-document-strip.spec.ts:15:9 › Document-level front-matter strip › non-namespaced front-matter key renders a document-level pill in single-file mode, suppressed in folder mode (2.6s)
-  ✓  130 [chromium] › playwright/specs/folder-view.spec.ts:191:9 › Aggregate (Folder) view › outside-click dismisses the toolbar drawer; clicks inside or on the trigger do not double-toggle (4.2s)
-  ✓  133 [chromium] › playwright/specs/folder-wire-payload-diet.spec.ts:57:9 › Folder wire-payload diet: text-only docs still work end to end › a text-only folder doc still reveals to the editor on an origin-pill click (3.5s)
-  ✓  139 [chromium] › playwright/specs/header-spacing.spec.ts:11:9 › Header bar breathing room and root label suppression › does not render a literal "Root" headline for the synthetic root container (2.0s)
-  ✓  134 [chromium] › playwright/specs/folder-wire-payload-diet.spec.ts:77:9 › Folder wire-payload diet: text-only docs still work end to end › a text-only folder doc still supports kanban drag write-back, targeting only the source file (4.8s)
-  ✓  136 [chromium] › playwright/specs/group-order-saved-type.spec.ts:91:9 › Group order on a saved view type › a saved type holding its own group display still takes Kanban's newestLast order, once activity arrives (4.3s)
-  ✓  140 [chromium] › playwright/specs/header-spacing.spec.ts:22:9 › Header bar breathing room and root label suppression › top note rect does not overlap the sticky toolbar beyond the outline-offset clearance (3.2s)
-  ✓  138 [chromium] › playwright/specs/group-order-saved-type.spec.ts:147:9 › Group order on a saved view type › with the agent card pinned in the cards bag and activity already present, the saved type still orders newest last (4.1s)
-  ✓  137 [chromium] › playwright/specs/group-order-saved-type.spec.ts:129:9 › Group order on a saved view type › one session bound to a story in each project orders the projects by each story's own last write, not by the shared session end (4.6s)
-  ✓  141 [chromium] › playwright/specs/integration-flip.spec.ts:17:9 › Integration flip (folder ↔ current-file) › folder → current_file flips the selector value and drops the folder breadcrumb file-count in one render (4.3s)
-  ✓  142 [chromium] › playwright/specs/integration-flip.spec.ts:34:9 › Integration flip (folder ↔ current-file) › round-trip folder → current_file → folder → current_file leaves no stale toolbar state (4.2s)
-  ✓  143 [chromium] › playwright/specs/kanban-animation.spec.ts:100:9 › Kanban Passive Transition Animations › cross-column passive move animates and lands correctly (3.8s)
-  ✓  144 [chromium] › playwright/specs/kanban-animation.spec.ts:129:9 › Kanban Passive Transition Animations › in-column passive reorder animates and swaps card order (4.0s)
-  ✓  145 [chromium] › playwright/specs/kanban-animation.spec.ts:171:9 › Kanban Passive Transition Animations › new column appears before its inbound card animates (3.5s)
-  ✓  146 [chromium] › playwright/specs/kanban-animation.spec.ts:205:9 › Kanban Passive Transition Animations › user drag is not double-animated by the FLIP layer (3.6s)
-  ✓  148 [chromium] › playwright/specs/kanban-animation.spec.ts:272:9 › Kanban Passive Transition Animations › prefers-reduced-motion skips animation but lands correctly (3.6s)
-  ✓  147 [chromium] › playwright/specs/kanban-animation.spec.ts:233:9 › Kanban Passive Transition Animations › rapid burst of passive updates settles clean and correct (4.1s)
-  ✓  149 [chromium] › playwright/specs/kanban-animation.spec.ts:303:9 › Kanban Passive Transition Animations › animateTransitions=false disables the FLIP layer (3.2s)
-  ✓  150 [chromium] › playwright/specs/kanban-animation.spec.ts:342:9 › Kanban Passive Transition Animations › a passive cardCount group reorder animates the groups and rides the cards that did not themselves move (4.1s)
-  ✓  152 [chromium] › playwright/specs/kanban-animation.spec.ts:415:9 › Kanban Passive Transition Animations › animateTransitions=false disables group animation too, and the order still lands correctly (4.0s)
-  ✓  151 [chromium] › playwright/specs/kanban-animation.spec.ts:386:9 › Kanban Passive Transition Animations › dragging a group chip (custom order) in the settings drawer animates the board behind it (4.8s)
-  ✓  153 [chromium] › playwright/specs/kanban-animation.spec.ts:439:9 › Kanban Passive Transition Animations › prefers-reduced-motion skips group animation too, and the order still lands correctly (3.7s)
-  ✓  156 [chromium] › playwright/specs/kanban-card-ratio.spec.ts:113:9 › Kanban card ratio › the probe reads the same cards whether the live board is clipped or not (3.4s)
-  ✓  157 [chromium] › playwright/specs/kanban-column-width.spec.ts:75:9 › Kanban column width › the ratio moves the card height and leaves the group width alone (3.5s)
-  ✓  155 [chromium] › playwright/specs/kanban-card-ratio.spec.ts:90:9 › Kanban card ratio › a clipped card stands at the target ratio, and a short one is left short (4.3s)
-  ✓  158 [chromium] › playwright/specs/kanban-column-width.spec.ts:97:9 › Kanban column width › a board that opens stacked measures the same cards as one that opens side by side (3.3s)
-  ✓  154 [chromium] › playwright/specs/kanban-autoscroll-direction.spec.ts:56:9 › Kanban drag auto-scroll follows the drag direction › holding a drag near the far edge auto-scrolls the board toward the drag, and the drop does not scroll it back (5.1s)
-  ✓  159 [chromium] › playwright/specs/kanban-column-width.spec.ts:110:9 › Kanban column width › a stacked board that flips to columns lays its groups out at the breadth setting (2.9s)
-  ✓  160 [chromium] › playwright/specs/kanban-column-width.spec.ts:130:9 › Kanban column width › a wider board reveals more groups at the same width, rather than widening the ones on screen (3.7s)
-  ✓  161 [chromium] › playwright/specs/kanban-column-width.spec.ts:146:9 › Kanban column width › flipping to rows stacks the groups at least the board width, ignoring the column width (3.3s)
-  ✓  162 [chromium] › playwright/specs/kanban-column-width.spec.ts:165:9 › Kanban column width › flipping to rows runs the cards along each group, not down it (3.1s)
-  ✓  163 [chromium] › playwright/specs/kanban-column-width.spec.ts:188:9 › Kanban column width › stacked, the group name sits beside the cards rather than above them (3.1s)
-  ✓  164 [chromium] › playwright/specs/kanban-column-width.spec.ts:208:9 › Kanban column width › stacked, no card spills its content outside its own box (3.3s)
-  ✓  165 [chromium] › playwright/specs/kanban-column-width.spec.ts:225:9 › Kanban column width › stacked, every card in a group is drawn the same height and a wordy one is wider instead (3.9s)
-  ✓  166 [chromium] › playwright/specs/kanban-drag-clone-isolation.spec.ts:69:9 › Kanban drag clone isolation - card look survives, no transformed ancestor › a paused pointer-drag clone keeps its card border and has no transformed ancestor (4.0s)
-  ✓  172 [chromium] › playwright/specs/kanban-drag-roundtrip.spec.ts:76:9 › Kanban drag round-trip - own echo never re-animates the dropped card › positive control: a genuine passive update (no preceding drag) still animates (2.9s)
-  ✓  168 [chromium] › playwright/specs/kanban-drag-cursor-tracking.spec.ts:33:9 › Kanban drag cursor tracking - the clone follows the pointer › the drag clone centre stays under the pointer across a stepped move (4.2s)
-  ✓  169 [chromium] › playwright/specs/kanban-drag-passive-midflight.spec.ts:66:9 › Kanban drag survives a passive mid-flight update - no abort, no fling › a passive board update mid-drag neither aborts the drag nor flings the clone, and the drop still lands (4.6s)
-  ✓  173 [chromium] › playwright/specs/kanban-drag.spec.ts:47:9 › Kanban Drag and Drop › dragging a card between columns sends editText with status change (3.4s)
-  ✓  171 [chromium] › playwright/specs/kanban-drag-roundtrip.spec.ts:69:9 › Kanban drag round-trip - own echo never re-animates the dropped card › echo arriving immediately (adversarial race) does not re-animate (5.1s)
-  ✓  170 [chromium] › playwright/specs/kanban-drag-roundtrip.spec.ts:61:9 › Kanban drag round-trip - own echo never re-animates the dropped card › echo arriving AFTER the drag tail (realistic round-trip) does not re-animate (5.3s)
-  ✓  174 [chromium] › playwright/specs/kanban-drag.spec.ts:79:9 › Kanban Drag and Drop › dragging a card to untagged column sends editText that removes status tag (3.6s)
-  ✓  176 [chromium] › playwright/specs/kanban-drag.spec.ts:134:9 › Kanban Drag and Drop › card appears in destination column after extension sends updated doc (3.6s)
-  ✓  175 [chromium] › playwright/specs/kanban-drag.spec.ts:106:9 › Kanban Drag and Drop › view does not blank after drag completes (3.9s)
-  ✓  177 [chromium] › playwright/specs/kanban-group-breadth.spec.ts:81:9 › Kanban group breadth › at the default breadth a board shows 3 whole groups at 760px and all 7 at 1590px (3.5s)
-  ✓  181 [chromium] › playwright/specs/kanban-group-fill.spec.ts:29:9 › Kanban groups fill the view › a short board's groups (and the separators between them) reach the bottom of the view (3.0s)
-  ✓  178 [chromium] › playwright/specs/kanban-group-breadth.spec.ts:96:9 › Kanban group breadth › dragging one boundary resizes every group, and the drawer's text box shows the width during the drag (3.9s)
-  ✓  180 [chromium] › playwright/specs/kanban-group-breadth.spec.ts:136:9 › Kanban group breadth › typing a width into the drawer resizes the groups, and stacked the same box reads Row height (4.0s)
-  ✓  167 [chromium] › playwright/specs/kanban-drag-collapse.spec.ts:166:9 › kanban drag collapse repro › ORGANIC: two drag->undo cycles, then measure a lift (11.1s)
-  ✓  179 [chromium] › playwright/specs/kanban-group-breadth.spec.ts:121:9 › Kanban group breadth › releasing a drag posts one updateSetting for lineBreadth (4.5s)
-  ✓  184 [chromium] › playwright/specs/kanban-group-fill.spec.ts:104:9 › Kanban groups fill the view › groups still window and fit correctly with the stretch applied: an empty board and the empty-stories overlay are unaffected (2.7s)
-  ✓  182 [chromium] › playwright/specs/kanban-group-fill.spec.ts:50:9 › Kanban groups fill the view › each group repeats its header at its far end, below its cards (3.3s)
-  ✓  183 [chromium] › playwright/specs/kanban-group-fill.spec.ts:76:9 › Kanban groups fill the view › stacked as rows, each group repeats its header at its right-hand end, after its cards (3.2s)
-  ✓  186 [chromium] › playwright/specs/kanban-parity-editor-vs-none.spec.ts:103:9 › Kanban click parity: editor-closed vs editor-open (single-caret ownership) › editor-open: an echoed selectionChanged reaches the same highlight then select (3.0s)
-  ✓  185 [chromium] › playwright/specs/kanban-parity-editor-vs-none.spec.ts:95:9 › Kanban click parity: editor-closed vs editor-open (single-caret ownership) › editor-closed: first click highlights the story, second click selects it (virtual caret) (3.5s)
-  ✓  191 [chromium] › playwright/specs/kanban-single-file-descent.spec.ts:28:9 › Single-file kanban story descent › ### stories render as cards in their status columns, not the ## epics (2.9s)
-  ✓  192 [chromium] › playwright/specs/kanban-single-file-descent.spec.ts:42:9 › Single-file kanban story descent › each story card shows its epic chip and no project pill (2.8s)
-  ✓  193 [chromium] › playwright/specs/kanban-single-file-descent.spec.ts:54:9 › Single-file kanban story descent › a nested file with NO nt_view renders as a document and keeps its ## epic headings (descent is kanban-only) (1.9s)
-  ✓  194 [chromium] › playwright/specs/kanban-view.spec.ts:28:9 › Kanban View › renders kanban columns via auto view detecting ng_view linetag (2.6s)
-  ✓  189 [chromium] › playwright/specs/kanban-pointer-drag.spec.ts:55:9 › Kanban Pointer Drag and Drop › pointer drag leaves no card stuck under a transform and the board stays interactive (5.4s)
-  ✓  188 [chromium] › playwright/specs/kanban-pointer-drag.spec.ts:30:9 › Kanban Pointer Drag and Drop › pointer-dragging a card to another column sends editText and lands the card (5.8s)
-  ✓  187 [chromium] › playwright/specs/kanban-parity-editor-vs-none.spec.ts:110:9 › Kanban click parity: editor-closed vs editor-open (single-caret ownership) › parity: editor-closed and editor-open highlight and select the identical story (6.2s)
-  ✓  190 [chromium] › playwright/specs/kanban-pointer-roundtrip-payload.spec.ts:50:9 › Kanban pointer drag round-trip - payload, hold, and no fling on echo › a pointer drop posts a status+docPath editText, holds the card, and does not fling it on its own echo (5.4s)
-  ✓  195 [chromium] › playwright/specs/kanban-view.spec.ts:44:9 › Kanban View › places tasks in correct columns (2.5s)
-  ✓  196 [chromium] › playwright/specs/kanban-view.spec.ts:61:9 › Kanban View › places untagged tasks in untagged column (3.2s)
-  ✓  197 [chromium] › playwright/specs/kanban-view.spec.ts:75:9 › Kanban View › long unbreakable headline tokens wrap inside the card and do not punch past its right edge (3.6s)
-  ✓  200 [chromium] › playwright/specs/kanban-virtualized-agent-growth.spec.ts:205:9 › Kanban virtualized group: a note reordered onto an already-cached index › a swap that moves a tall card onto a short cached slot and a short card onto a tall one produces neither an overlap nor a stale gap (3.6s)
-  ✓  202 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:119:9 › Kanban virtualized columns › a long group windows its cards: far fewer are mounted than the corpus it holds (3.1s)
-  ✓  201 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:101:9 › Kanban virtualized columns › every group stays mounted while the board scrolls horizontally (3.6s)
-  ✓  203 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:130:9 › Kanban virtualized columns › scrolling the page streams a previously-unmounted card in (3.3s)
-  ✓  204 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:139:9 › Kanban virtualized columns › no group grows its own vertical scrollbar - the page is the only vertical scroller (2.9s)
-  ✓  198 [chromium] › playwright/specs/kanban-virtualized-agent-growth.spec.ts:80:9 › Kanban virtualized group: a card growing after mount › a card that grows after its row is measured pushes the following row down, with no overlap (5.8s)
-  ✓  199 [chromium] › playwright/specs/kanban-virtualized-agent-growth.spec.ts:142:9 › Kanban virtualized group: many cards growing in one commit › several cards growing at once from one activity snapshot never overlap the rows below them (5.5s)
-  ✓  212 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:319:13 › Kanban virtualized columns › a windowed group's "agent" card looks identical to a non-windowed group's (2.2s)
-  ✓  209 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:276:9 › Kanban virtualized columns › keyboard-focusing a note outside a virtualized group's window mounts it and frames its ring fully visible (3.3s)
-  ✓  210 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:319:13 › Kanban virtualized columns › a windowed group's "card" card looks identical to a non-windowed group's (3.1s)
-  ✓  206 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:199:9 › Kanban virtualized columns › keyboard-dragging a card OUT of a genuinely virtualized group completes the drop (4.0s)
-  ✓  211 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:319:13 › Kanban virtualized columns › a windowed group's "sticky" card looks identical to a non-windowed group's (2.6s)
-  ✓  205 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:169:9 › Kanban virtualized columns › pointer-dragging a card that starts off-screen (scrolled into view) to another column completes the drop (5.8s)
-  ✓  207 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:224:9 › Kanban virtualized columns › keyboard-dragging a card INTO a genuinely virtualized group completes the drop (4.4s)
-  ✓  208 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:253:9 › Kanban virtualized columns › pointer-dragging a card into a genuinely virtualized group completes the drop (5.3s)
-  ✓  213 [chromium] › playwright/specs/keyboard-navigation.spec.ts:14:9 › Keyboard Navigation › clicking different notes produces revealRange messages (2.9s)
-  ✓  217 [chromium] › playwright/specs/line-view-grouping.spec.ts:50:9 › Line view grouping and drag › groups by first level folder by default; groups match the project folders and cards do not drag (2.6s)
-  ✓  214 [chromium] › playwright/specs/keyboard-navigation.spec.ts:38:9 › Keyboard Navigation › selection feedback updates focused note styling (2.8s)
-  ✓  218 [chromium] › playwright/specs/line-view-grouping.spec.ts:59:9 › Line view grouping and drag › changing the group-by re-derives the groups (folder -> authored assignee, which is draggable) (2.7s)
-  ✓  220 [chromium] › playwright/specs/list-bullets.spec.ts:11:9 › List bullets › non-checkbox parent listItem keeps its bullet even when nested children are checkboxes (1.7s)
-  ✓  215 [chromium] › playwright/specs/keyboard-navigation.spec.ts:60:9 › Keyboard Navigation › drillIn on nested doc changes parent context (3.9s)
-  ✓  216 [chromium] › playwright/specs/keyboard-navigation.spec.ts:90:9 › Keyboard Navigation › drillOut returns to parent context (4.2s)
-  ✓  224 [chromium] › playwright/specs/manual-check-coverage.spec.ts:153:9 › manual check: the card type follows a mixed folder › an even split is a tie and falls back to the view default rather than picking a side (1.7s)
-  ✓  223 [chromium] › playwright/specs/manual-check-coverage.spec.ts:139:9 › manual check: the card type follows a mixed folder › the tab reads Auto with the majority-voted card, not the view default (2.3s)
-  ✓  219 [chromium] › playwright/specs/line-view-grouping.spec.ts:77:9 › Line view grouping and drag › dragging a card between attribute groups rewrites that attribute in the file (inverse projection end-to-end) (4.7s)
-  ✓  222 [chromium] › playwright/specs/manual-check-coverage.spec.ts:99:9 › manual check: the drawer columns stay aligned when squeezed › every row shares one name column and one control column at 480px (2.4s)
-  ✓  226 [chromium] › playwright/specs/manual-check-coverage.spec.ts:195:9 › manual check: the M marker takes the modified-file colour › the marker and its label read from the gitDecoration modified token (2.8s)
-  ✓  225 [chromium] › playwright/specs/manual-check-coverage.spec.ts:165:9 › manual check: the card type follows a mixed folder › pinning Sticky draws every note compact, and Auto recovers the voted answer (3.9s)
-  ✓  227 [chromium] › playwright/specs/manual-expand-persists.spec.ts:46:9 › Manual expand survives content edits › a ticked checkbox does not collapse the expanded card (2.8s)
-  ✓  231 [chromium] › playwright/specs/mermaid-lazy-chunk.spec.ts:34:9 › mermaid lazy chunk › does not fetch the mermaid chunk when a document has no diagram (1.8s)
-  ✓  221 [chromium] › playwright/specs/manual-check-coverage.spec.ts:55:9 › manual check: settings survive a reload › every control the drawer changes lands at the workspace scope and is read back on a fresh mount (5.9s)
-  ✓  230 [chromium] › playwright/specs/manual-expand-persists.spec.ts:107:9 › Manual expand survives content edits › "Show less" collapses the card (4.0s)
-  ✓  233 [chromium] › playwright/specs/pending-work-spinner.spec.ts:80:9 › Pending-work spinner › a fast settings toggle (resolves under 150 ms) shows no visible spinner (2.4s)
-  ✓  234 [chromium] › playwright/specs/pending-work-spinner.spec.ts:97:9 › Pending-work spinner › a slow folder-discovery (pendingChange on) shows the toolbar spinner; clearing it hides the spinner after min-visibility (2.6s)
-  ✓  235 [chromium] › playwright/specs/pending-work-spinner.spec.ts:114:9 › Pending-work spinner › integration-mode flip (folder ↔ current_file) does not flash the spinner (2.6s)
-  ✓  232 [chromium] › playwright/specs/mermaid-lazy-chunk.spec.ts:44:9 › mermaid lazy chunk › fetches the mermaid chunk and renders a diagram when a document has one (3.5s)
-  ✓  229 [chromium] › playwright/specs/manual-expand-persists.spec.ts:84:9 › Manual expand survives content edits › an expanded card is still expanded after a reload (5.7s)
-  ✓  236 [chromium] › playwright/specs/pending-work-spinner.spec.ts:126:9 › Pending-work spinner › with the Files drawer open during an apply, only the breadcrumb spinner shows (no redundant in-drawer spinner) (2.4s)
-  ✓  228 [chromium] › playwright/specs/manual-expand-persists.spec.ts:57:9 › Manual expand survives content edits › dragging the expanded card to another column lands it still expanded (6.7s)
-  ✓  240 [chromium] › playwright/specs/settings-toggle.spec.ts:68:9 › Settings Toggle › toggling line numbers writes the setting and renders the gutter (2.4s)
-  ✓  239 [chromium] › playwright/specs/pending-work-spinner.spec.ts:211:9 › Folder-load coalescing › the discovery spinner clears with the docs it covered, not a frame ahead of them (2.6s)
-  ✓  237 [chromium] › playwright/specs/pending-work-spinner.spec.ts:146:9 › Pending-work spinner › prefers-reduced-motion: spinner SVG is in the DOM but the rotation keyframe is not animating (3.3s)
-  ✓  238 [chromium] › playwright/specs/pending-work-spinner.spec.ts:190:9 › Folder-load coalescing › a streamed load fills the board wave by wave and commits far fewer times than it receives messages (3.3s)
-  ✓  242 [chromium] › playwright/specs/settings-toggle.spec.ts:119:9 › Settings Toggle › a settings change writes config only, never a per-view state message (2.2s)
-  ✓  241 [chromium] › playwright/specs/settings-toggle.spec.ts:95:9 › Settings Toggle › a setting the drawer changes reaches the cascade and survives a view type switch (3.4s)
-  ✓  243 [chromium] › playwright/specs/settings-toggle.spec.ts:138:9 › Settings Toggle › make user default promotes the workspace value into the user layer (2.8s)
-  ✓  244 [chromium] › playwright/specs/settings-toggle.spec.ts:167:9 › Settings Toggle › reset to user default drops the workspace layer and the checkbox follows (2.8s)
-  ✓  245 [chromium] › playwright/specs/settings-toggle.spec.ts:185:9 › Settings Toggle › the open drawer tab shows an up chevron while every closed tab shows down (2.3s)
-  ✓  247 [chromium] › playwright/specs/sticky-card.spec.ts:109:9 › Sticky card › the theme class VS Code stamps on the body pales the paper and lightens the project pill (2.2s)
-  ✓  246 [chromium] › playwright/specs/sticky-card.spec.ts:86:9 › Sticky card › a sticky in a project takes its hue, and the group gives up its card surface to the paper (2.8s)
-  ✓  248 [chromium] › playwright/specs/sticky-card.spec.ts:123:9 › Sticky card › a focused sticky draws its ring on the uncropped card (2.3s)
-  ✓  250 [chromium] › playwright/specs/sticky-card.spec.ts:175:9 › Default card type as a Kanban view setting › the setting follows the other Kanban rows as a dropdown showing Card (2.2s)
-  ✓  249 [chromium] › playwright/specs/sticky-card.spec.ts:134:9 › Sticky card › stickies draw in the document and line views as well as kanban (3.1s)
-  ✓  251 [chromium] › playwright/specs/sticky-card.spec.ts:191:9 › Default card type as a Kanban view setting › choosing Sticky makes Auto draw yellow stickies, and the card tab says so (2.4s)
-  ✓  254 [chromium] › playwright/specs/user-view-type-update.spec.ts:151:9 › Custom view type update › choosing the inherited option on the type clears its own groupBy, so it inherits from kanban again (2.3s)
-  ✓  253 [chromium] › playwright/specs/user-view-type-update.spec.ts:125:9 › Custom view type update › changing Group by on a type that holds it moves the groups and writes into the type (2.9s)
-  ✓  252 [chromium] › playwright/specs/sticky-card.spec.ts:206:9 › Default card type as a Kanban view setting › a card type pinned on the card tab still wins over the view default (3.2s)
-  ✓  255 [chromium] › playwright/specs/user-view-type-update.spec.ts:197:9 › Custom view type update › a kanban-homed row the type does not hold still writes into the type, never flat (2.5s)
-  ✓  258 [chromium] › playwright/specs/view-settings-drawer.spec.ts:174:9 › View settings drawer › a setting kanban holds itself moves into kanban's band, ahead of line's, with hollow I and VS pills (1.8s)
-  ✓  259 [chromium] › playwright/specs/view-settings-drawer.spec.ts:197:9 › View settings drawer › on a narrow drawer the names wrap and no control overruns the owner pill beside it (2.1s)
-  ✓  256 [chromium] › playwright/specs/user-view-type-update.spec.ts:170:9 › Custom view type update › a Global row still writes flat from a saved type, and a type minted from the selected node starts empty (3.3s)
-  ✓  257 [chromium] › playwright/specs/view-settings-drawer.spec.ts:130:9 › View settings drawer › changing Group by from kanban writes Kanban's own cell in the views bag, leaving grouped's own cell alone (2.8s)
-  ✓  260 [chromium] › playwright/specs/view-settings-drawer.spec.ts:217:9 › View settings drawer › on a very narrow drawer the view tree stacks above the rows and every control keeps its value visible (1.7s)
-  ✓  264 [chromium] › playwright/specs/view-settings-drawer.spec.ts:317:9 › View settings drawer › unchecking a group chip hides that group from the board and records shown: false (2.1s)
-  ✓  263 [chromium] › playwright/specs/view-settings-drawer.spec.ts:291:9 › View settings drawer › a group chip reorders from the keyboard too, since the chips carry no nudge buttons (2.5s)
-  ✓  261 [chromium] › playwright/specs/view-settings-drawer.spec.ts:243:9 › View settings drawer › choosing another view type in the tree keeps the settings drawer open (3.0s)
-  ✓  266 [chromium] › playwright/specs/view-settings-drawer.spec.ts:377:9 › View settings drawer › toggling a Global setting from kanban still writes flat, since it belongs to no view type (2.0s)
-  ✓  268 [chromium] › playwright/specs/view-settings-drawer.spec.ts:424:9 › View settings drawer › saving the defaults also clears M for a per-view cell held by a built-in descendant (2.1s)
-  ✓  267 [chromium] › playwright/specs/view-settings-drawer.spec.ts:394:9 › View settings drawer › saving the defaults drives the diverged count to zero and clears every M (2.1s)
-  ✓  265 [chromium] › playwright/specs/view-settings-drawer.spec.ts:342:9 › View settings drawer › grouping a kanban board by first level folder lists the folder groups in Group display, and hiding one removes it from the board (3.0s)
-  ✓  262 [chromium] › playwright/specs/view-settings-drawer.spec.ts:263:9 › View settings drawer › dragging a group chip from kanban writes the new order into kanban's own cell in the views bag (4.0s)
-  ✓  270 [chromium] › playwright/specs/view-settings-drawer.spec.ts:490:9 › View settings drawer › there is no Update control anywhere - Save as new view type is the only way to mint one (1.5s)
-  ✓  271 [chromium] › playwright/specs/view-settings-drawer.spec.ts:503:9 › View settings drawer › a workspace that already diverges at a flat home shows the inherited pill and M on open, with nothing touched (2.0s)
-  ✓  269 [chromium] › playwright/specs/view-settings-drawer.spec.ts:451:9 › View settings drawer › saving a new view type mints an empty bag parented on kanban, inheriting its value rather than copying it (2.5s)
-  ✓  276 [chromium] › playwright/specs/view-specific-settings.spec.ts:87:9 › Per-view settings (orientation) › an Orientation edit on Kanban writes Kanban's own value and leaves Line's own cell alone (1.7s)
-  ✓  277 [chromium] › playwright/specs/view-specific-settings.spec.ts:115:9 › Per-view settings (orientation) › an edit at Line reaches a Kanban that sets none of its own (2.0s)
-  ✓  274 [chromium] › playwright/specs/view-settings-drawer.spec.ts:567:9 › View settings drawer › with the default card type, newestLast orders a project board by the files' own mtimes (2.8s)
-  ✓  273 [chromium] › playwright/specs/view-settings-drawer.spec.ts:546:9 › View settings drawer › with the agent card type, newestFirst puts the most recently active project first (3.0s)
-  ✓  278 [chromium] › playwright/specs/view-specific-settings.spec.ts:135:9 › Per-view settings (orientation) › choosing the inherited option on Kanban clears its own value, so it inherits from Line again (1.6s)
-  ✓  272 [chromium] › playwright/specs/view-settings-drawer.spec.ts:520:9 › View settings drawer › with the agent card type, newestLast orders a project board by its latest activity, and new activity moves a group last (3.8s)
-  ✓  280 [chromium] › playwright/specs/view-switching.spec.ts:12:9 › View Switching › defaults to auto view which resolves to document for plain markdown (1.4s)
-  ✓  279 [chromium] › playwright/specs/view-specific-settings.spec.ts:160:9 › Per-view settings (orientation) › an Orientation edit on a saved type selected leaves Kanban and Line unchanged (2.2s)
-  ✓  275 [chromium] › playwright/specs/view-settings-drawer.spec.ts:591:9 › View settings drawer › dragging a group chip while an automatic order is selected switches the select to Custom, seeded from the order on screen (3.8s)
-  ✓  282 [chromium] › playwright/specs/view-switching.spec.ts:22:9 › View Switching › switches to kanban view and back to document (1.9s)
-  ✓  281 [chromium] › playwright/specs/view-switching.spec.ts:39:9 › View Switching › switches to auto view (2.4s)
-  ✓  283 [chromium] › playwright/specs/audio-capture.spec.ts:41:9 › Audio capture from a fake microphone › pressing record captures 2 s PCM chunks in order, and stopping ends capture with no further chunks (11.2s)
+  ✓    1 [chromium] › playwright/specs/agent-card.spec.ts:166:9 › Agent card › draws an unbound session only beside its own repository, never beside a document outside it (572ms)
+  ✓    6 [chromium] › playwright/specs/agent-card.spec.ts:142:9 › Agent card › lists a story's linetags under its headline on the card, and none on a card with no visible tag (1.1s)
+  ✓    5 [chromium] › playwright/specs/agent-card.spec.ts:183:9 › Agent card › shows a pending question as a band, and draws no band for a vendor that cannot report one (1.1s)
+  ✓    2 [chromium] › playwright/specs/agent-card.spec.ts:152:9 › Agent card › draws an agent that declared no story on a card of its own, among the stories and on none of them (1.1s)
+  ✓    8 [chromium] › playwright/specs/agent-card.spec.ts:231:9 › Agent card › dims the token and cost total and hides the uncommitted band while scanning, then shows both once the scan is live (1.1s)
+  ✓    9 [chromium] › playwright/specs/agent-card.spec.ts:212:9 › Agent card › lists changed files in the uncommitted band and leaves the branch's commits off the card, marking a file no write call accounts for as unattributed (1.1s)
+  ✓   10 [chromium] › playwright/specs/agent-card.spec.ts:247:9 › Agent card › never dims the total or hides the uncommitted band on a rescan, once the card has already shown a completed one (1.1s)
+  ✓    3 [chromium] › playwright/specs/agent-card.spec.ts:110:9 › Agent card › draws each agent that declared a story on that story, and never guesses one onto a card (1.2s)
+  ✓    7 [chromium] › playwright/specs/agent-card.spec.ts:268:9 › Agent card › unfolds the capped uncommitted band from "and N more" and folds it back from "Show less" (1.2s)
+  ✓    4 [chromium] › playwright/specs/agent-card.spec.ts:196:9 › Agent card › draws no state rail on the card, so hovering a card changes nothing about its edge (1.6s)
+  ✓   11 [chromium] › playwright/specs/agent-card.spec.ts:285:9 › Agent card › opens an agent row and a file row from the keyboard alone (1.0s)
+  ✓   17 [chromium] › playwright/specs/agent-card.spec.ts:391:9 › Agent card › says the analyser cannot read local files here, rather than showing an idle board (1.0s)
+  ✓   14 [chromium] › playwright/specs/agent-card.spec.ts:354:9 › Agent card › draws an agent row on one line where the card is wide enough, as it is in the document view (1.1s)
+  ✓   16 [chromium] › playwright/specs/agent-card.spec.ts:378:9 › Agent card › says the analyser found nothing, so an empty board never reads as idle agents (1.0s)
+  ✓   18 [chromium] › playwright/specs/agent-card.spec.ts:404:9 › Agent card › draws a refused session file, and an unreadable session, before any empty state (1.0s)
+  ✓   19 [chromium] › playwright/specs/agent-card.spec.ts:421:9 › Agent card › opens a file row as a diff, echoing back the root and path the host published (1.0s)
+  ✓   20 [chromium] › playwright/specs/agent-card.spec.ts:435:9 › Agent card › takes the host answer over its own reading once an attempt has been refused (1.0s)
+  ✓   21 [chromium] › playwright/specs/agent-card.spec.ts:447:9 › Agent card › opens a session in VS Code rather than on the card, and says under its row when the host could not (1.0s)
+  ✓   15 [chromium] › playwright/specs/agent-card.spec.ts:367:9 › Agent card › never posts an edit naming the virtual sentinel, whatever the card is made to do (1.8s)
+  ✓   13 [chromium] › playwright/specs/agent-card.spec.ts:329:9 › Agent card › stacks an agent row in a narrow kanban group with every cell on one line, and the live line wide enough to read (2.0s)
+  ✓   22 [chromium] › playwright/specs/agent-card.spec.ts:459:9 › Agent card › resolves a declared path against where the repository was found, and joins nothing when it does not match (1.0s)
+  ✓   24 [chromium] › playwright/specs/agent-card.spec.ts:481:9 › Agent card › switches the clock mode from the card settings drawer, and the row redraws by it (1.1s)
+  ✓   27 [chromium] › playwright/specs/agent-registry.spec.ts:47:9 › Agents known from the registry › draws a registry-only agent of an unread vendor as its own card with a name, monogram, state and story (1.0s)
+  ✓   28 [chromium] › playwright/specs/agent-registry.spec.ts:62:9 › Agents known from the registry › places a working coordinator on its story's card before it has written anything (1.0s)
+  ✓   12 [chromium] › playwright/specs/agent-card.spec.ts:301:9 › Agent card › draws in the document, line and kanban views, not only the one it was first tried in (2.8s)
+  ✓   29 [chromium] › playwright/specs/agent-registry.spec.ts:75:9 › Agents known from the registry › reads a stale working entry as Stale, and draws no card for a stopped agent (1.0s)
+  ✓   23 [chromium] › playwright/specs/agent-card.spec.ts:471:9 › Agent card › picking the agent card from the card tab repaints a document view, not only a group (1.8s)
+  ✓   26 [chromium] › playwright/specs/agent-card.spec.ts:518:9 › Agent card › holds the toolbar spinner from picking the agent card until the analyser finishes its first scan (1.9s)
+  ✓   25 [chromium] › playwright/specs/agent-card.spec.ts:502:9 › Agent card › switches the clock mode on a kanban board, not only in the document view (2.0s)
+  ✓   30 [chromium] › playwright/specs/agent-registry.spec.ts:85:9 › Agents known from the registry › keeps a registry-only row on one line at the narrow and the wide layout (1.0s)
+  ✓   31 [chromium] › playwright/specs/agent-session-tree.spec.ts:45:9 › Agent tree in the story card › names the coordinator beside its monogram and model, and draws a running and a finished subagent indented under it (1.1s)
+  ✓   32 [chromium] › playwright/specs/agent-session-tree.spec.ts:71:9 › Agent tree in the story card › indents the child rail inside its parent's, colours it by the child's own state, and dims a finished child (1.1s)
+  ✓   33 [chromium] › playwright/specs/agent-session-tree.spec.ts:87:9 › Agent tree in the story card › folds finished subagents past the latest three behind a keyboard-operable count and expands them (1.0s)
+  ✓   35 [chromium] › playwright/specs/agent-session-tree.spec.ts:132:9 › Agent tree in the story card › draws a session without subagents as a flat row, and one without a name with no name cell (1.0s)
+  ✓   36 [chromium] › playwright/specs/audio-control.spec.ts:11:9 › Audio control appears only where the frame can capture › a frame without allow="microphone" shows no audio control and never calls getUserMedia (992ms)
+  ✓   37 [chromium] › playwright/specs/audio-control.spec.ts:23:9 › Audio control appears only where the frame can capture › a frame with allow="microphone" shows the toggle without calling getUserMedia, and a press asks to start (1.0s)
+  ✓   38 [chromium] › playwright/specs/audio-control.spec.ts:35:9 › Audio control appears only where the frame can capture › the extension reporting the feature unavailable hides the control even in an allowing frame (1.0s)
+  ✓   39 [chromium] › playwright/specs/audio-control.spec.ts:46:13 › Audio control error text › shows the whole error name in the header bar, not cut off, at 1280px (992ms)
+  ✓   40 [chromium] › playwright/specs/audio-control.spec.ts:46:13 › Audio control error text › shows the whole error name in the header bar, not cut off, at 600px (991ms)
+  ✓   41 [chromium] › playwright/specs/audio-indicator.spec.ts:40:9 › Recording indicator › pressing the toggle on shows the dot within 100 ms, and pressing it off removes it within 100 ms (1.1s)
+  ✓   42 [chromium] › playwright/specs/audio-indicator.spec.ts:60:9 › Recording indicator › the toggle works from the keyboard, and the status region announces "Recording audio" (1.0s)
+  ✓   34 [chromium] › playwright/specs/agent-session-tree.spec.ts:102:9 › Agent tree in the story card › keeps every cell of the session row and of a child row on one line at the narrow and the wide layout (2.0s)
+  ✓   43 [chromium] › playwright/specs/audio-indicator.spec.ts:80:9 › Recording indicator › the dot pulses normally and is still, not hidden, under reduced motion (1.0s)
+  ✓   44 [chromium] › playwright/specs/audio-indicator.spec.ts:102:13 › Recording indicator › the dot holds at least 3:1 contrast against the header bar in the dark theme (980ms)
+  ✓   45 [chromium] › playwright/specs/audio-indicator.spec.ts:102:13 › Recording indicator › the dot holds at least 3:1 contrast against the header bar in the light theme (989ms)
+  ✓   46 [chromium] › playwright/specs/audio-indicator.spec.ts:102:13 › Recording indicator › the dot holds at least 3:1 contrast against the header bar in the high contrast dark theme (996ms)
+  ✓   47 [chromium] › playwright/specs/audio-indicator.spec.ts:102:13 › Recording indicator › the dot holds at least 3:1 contrast against the header bar in the high contrast light theme (993ms)
+  ✓   48 [chromium] › playwright/specs/auto-integration.spec.ts:60:9 › Auto integration mode (H1 linetags) › cold-opens a folder-declaring file straight into the scoped Auto (Folder) board (964ms)
+  ✓   55 [chromium] › playwright/specs/auto-integration.spec.ts:200:9 › Auto integration mode (reactive editor follow) › switching the active editor to a plain file OUTSIDE the scope drops the folder board to the document render (209ms)
+  ✓   49 [chromium] › playwright/specs/auto-integration.spec.ts:75:9 › Auto integration mode (H1 linetags) › navigating to another folder in Auto (Folder) stays Auto (Folder) (996ms)
+  ✓   57 [chromium] › playwright/specs/auto-integration.spec.ts:231:9 › Auto integration mode (reactive editor follow) › a live linetag edit adding a folder declaration flips the active file to the folder board (194ms)
+  ✓   51 [chromium] › playwright/specs/auto-integration.spec.ts:114:9 › Auto integration mode (H1 linetags) › Auto (Current file) + a folder breadcrumb click pins concrete Folder (990ms)
+  ✓   53 [chromium] › playwright/specs/auto-integration.spec.ts:152:9 › Auto integration mode (H1 linetags) › re-selecting Auto after pinning concrete restores the file-declared folder scope (1.0s)
+  ✓   52 [chromium] › playwright/specs/auto-integration.spec.ts:130:9 › Auto integration mode (H1 linetags) › a folder-declaring file pinned to current_file jumps to Auto (Folder) on a breadcrumb click (1.0s)
+  ✓   56 [chromium] › playwright/specs/auto-integration.spec.ts:215:9 › Auto integration mode (reactive editor follow) › revealing a member file INSIDE the scope keeps the folder board (card-click gate) (700ms)
+  ✓   54 [chromium] › playwright/specs/auto-integration.spec.ts:170:9 › Auto integration mode (H1 linetags) › a file with an unmatched nt_breadcrumb_last opens normally with no error (944ms)
+  ✓   58 [chromium] › playwright/specs/breadcrumb-jump.spec.ts:34:9 › Terminal breadcrumb leaf jump drawer › folder mode: leaf click opens the drawer and lists child subfolders; clicking one descends (1.1s)
+  ✓   59 [chromium] › playwright/specs/breadcrumb-jump.spec.ts:77:9 › Terminal breadcrumb leaf jump drawer › current-file mode: leaf click lists sibling files; clicking one posts openFile (1.0s)
+  ✓   60 [chromium] › playwright/specs/breadcrumb-jump.spec.ts:112:9 › Terminal breadcrumb leaf jump drawer › empty-state row when the folder has no jump targets (1.0s)
+  ✓   61 [chromium] › playwright/specs/breadcrumb.spec.ts:15:9 › Breadcrumb workspace root stripping › shows full path when no workspace_root is provided (956ms)
+  ✓   50 [chromium] › playwright/specs/auto-integration.spec.ts:90:9 › Auto integration mode (H1 linetags) › a navigated Auto (Folder) position survives a reload (1.9s)
+  ✓   62 [chromium] › playwright/specs/breadcrumb.spec.ts:30:9 › Breadcrumb workspace root stripping › keeps the opened workspace folder as the first breadcrumb segment (957ms)
+  ✓   67 [chromium] › playwright/specs/breadcrumb.spec.ts:146:9 › Toolbar row geometry › a tab reaches the toolbar bottom edge, and the drawers stick at exactly that height (225ms)
+  ✓   64 [chromium] › playwright/specs/breadcrumb.spec.ts:70:9 › Breadcrumb workspace root stripping › relative_path data-path attributes use full absolute paths for folder loading (940ms)
+  ✓   63 [chromium] › playwright/specs/breadcrumb.spec.ts:46:9 › Breadcrumb workspace root stripping › uses relative_path for breadcrumb (symlink-safe), keeping the opened folder as root (956ms)
+  ✓   65 [chromium] › playwright/specs/breadcrumb.spec.ts:87:9 › Breadcrumb workspace root stripping › breadcrumb with workspace root shows the opened folder as the first segment (951ms)
+  ✓   66 [chromium] › playwright/specs/breadcrumb.spec.ts:125:9 › Toolbar row geometry › the row keeps its height when the breadcrumb has no ancestors above the leaf (994ms)
+  ✓   69 [chromium] › playwright/specs/card-settings-tab.spec.ts:70:9 › Card settings tab › the card tab owns the card-drawn settings and the view tab no longer shows them (1.0s)
+  ✓   70 [chromium] › playwright/specs/card-settings-tab.spec.ts:88:9 › Card settings tab › a card setting diverges and the card tab counts it independently of the view tab (1.1s)
+  ✓   68 [chromium] › playwright/specs/card-settings-tab.spec.ts:48:9 › Card settings tab › switching the card type to Sticky collapses the notes to the compact card (1.9s)
+  ✓   72 [chromium] › playwright/specs/card-task-framing.spec.ts:69:9 › Clipped card frames the first incomplete task › frames the first incomplete task, not the top of the story (1.8s)
+  ✓   78 [chromium] › playwright/specs/card-type.spec.ts:72:9 › Card type axis › a tie in the nt_card vote falls back to the full card (966ms)
+  ✓   73 [chromium] › playwright/specs/card-task-framing.spec.ts:73:9 › Clipped card frames the first incomplete task › survives an unrelated file in the folder changing (1.8s)
+  ✓   79 [chromium] › playwright/specs/card-type.spec.ts:79:9 › Card type axis › files that declare no nt_card render the full card, unchanged (983ms)
+  ✓   71 [chromium] › playwright/specs/card-settings-tab.spec.ts:112:9 › Card settings tab › a setting held by one card type reaches only notes rendered as that type, never a sibling's (2.0s)
+  ✓   74 [chromium] › playwright/specs/card-type.spec.ts:27:9 › Card type axis › an H1 nt_card=sticky on every file resolves the card type to sticky and draws compact cards (1.8s)
+  ✓   76 [chromium] › playwright/specs/card-type.spec.ts:54:9 › Card type axis › the compact card keeps the headline it replaces the body of (1.8s)
+  ✓   86 [chromium] › playwright/specs/collision-detection.spec.ts:14:9 › Duplicate stable_id collision detection › no Warnings tab when every headline resolves to a unique stable_id (179ms)
+  ✓   77 [chromium] › playwright/specs/card-type.spec.ts:64:9 › Card type axis › the card axis resolves independently of the view axis (1.8s)
+  ✓   75 [chromium] › playwright/specs/card-type.spec.ts:42:9 › Card type axis › pinning the view type leaves the voted card type alone (2.6s)
+  ✓   81 [chromium] › playwright/specs/checkbox-toggle.spec.ts:41:9 › Checkbox toggle › clicking an already-checked task posts editText that clears the state char (1.2s)
+  ✓   80 [chromium] › playwright/specs/checkbox-toggle.spec.ts:18:9 › Checkbox toggle › clicking a + bullet task checkbox posts editText with a docPath (1.2s)
+  ✓   82 [chromium] › playwright/specs/click-interaction.spec.ts:13:9 › Click Interaction › clicking a note headline sends revealRange message (1.2s)
+  ✓   87 [chromium] › playwright/specs/collision-detection.spec.ts:24:9 › Duplicate stable_id collision detection › within-file duplicate headlines raise the Warnings tab; the drawer lists the group (963ms)
+  ✓   85 [chromium] › playwright/specs/click-interaction.spec.ts:95:9 › Click Interaction › captured messages include docId and docPath (1.2s)
+  ✓   90 [chromium] › playwright/specs/docless-open.spec.ts:23:9 › Docless open (no .md file active) › a host-seeded folder scope renders the folder board rooted at the workspace root (201ms)
+  ✓   92 [chromium] › playwright/specs/docless-open.spec.ts:51:9 › Docless open (no .md file active) › a malformed seed is ignored rather than half-applying a scope (179ms)
+  ✓   91 [chromium] › playwright/specs/docless-open.spec.ts:37:9 › Docless open (no .md file active) › the seeded board scopes to the workspace root, so every project merges in (206ms)
+  ✓   88 [chromium] › playwright/specs/collision-detection.spec.ts:43:9 › Duplicate stable_id collision detection › cross-file collisions in folder mode list both origins in the drawer (1.0s)
+  ✓   89 [chromium] › playwright/specs/collision-detection.spec.ts:63:9 › Duplicate stable_id collision detection › clicking a colliding title posts a revealRange so the editor jumps to that story (1.1s)
+  ✓   83 [chromium] › playwright/specs/click-interaction.spec.ts:29:9 › Click Interaction › clicking a note sets aria-current (focused) attribute (1.5s)
+  ✓   93 [chromium] › playwright/specs/document-view.spec.ts:12:9 › Document View › renders document container after injecting basic.md (939ms)
+  ✓   84 [chromium] › playwright/specs/click-interaction.spec.ts:52:9 › Click Interaction › second click on focused note selects it without blanking the view (2.0s)
+  ✓   95 [chromium] › playwright/specs/document-view.spec.ts:32:9 › Document View › renders notes with data-seq attributes (932ms)
+  ✓   94 [chromium] › playwright/specs/document-view.spec.ts:19:9 › Document View › renders note headlines with correct text (947ms)
+  ✓   96 [chromium] › playwright/specs/document-view.spec.ts:41:9 › Document View › renders body paragraphs (946ms)
+  ✓   97 [chromium] › playwright/specs/drawer-overlay.spec.ts:60:13 › Drawer overlay › opening the settings drawer leaves the first note's bounding box unchanged (1.5s)
+  ✓   99 [chromium] › playwright/specs/drawer-overlay.spec.ts:60:13 › Drawer overlay › opening the cards drawer leaves the first note's bounding box unchanged (1.5s)
+  ✓  101 [chromium] › playwright/specs/drawer-overlay.spec.ts:60:13 › Drawer overlay › opening the jump drawer leaves the first note's bounding box unchanged (1.5s)
+  ✓  105 [chromium] › playwright/specs/drawer-overlay.spec.ts:130:9 › Drawer overlay › with every drawer closed, none shows text or a close button, and the board sits reachable underneath (959ms)
+  ✓   98 [chromium] › playwright/specs/drawer-overlay.spec.ts:74:13 › Drawer overlay › closing the settings drawer does not move the view (2.0s)
+  ✓  100 [chromium] › playwright/specs/drawer-overlay.spec.ts:74:13 › Drawer overlay › closing the cards drawer does not move the view (2.0s)
+  ✓  103 [chromium] › playwright/specs/drawer-overlay.spec.ts:90:9 › Drawer overlay › a note selected low enough to be covered stays fully visible below the settings drawer once it opens (1.5s)
+  ✓  106 [chromium] › playwright/specs/drawer-overlay.spec.ts:147:13 › Drawer overlay › with the settings drawer open, it is the only one visible (1.5s)
+  ✓  114 [chromium] › playwright/specs/error-boundary.spec.ts:48:9 › Error Boundary › shows fallback when malformed MDAST causes render error (177ms)
+  ✓  102 [chromium] › playwright/specs/drawer-overlay.spec.ts:74:13 › Drawer overlay › closing the jump drawer does not move the view (2.0s)
+  ✓  115 [chromium] › playwright/specs/error-boundary.spec.ts:56:9 › Error Boundary › fallback displays friendly message and error details (164ms)
+  ✓  109 [chromium] › playwright/specs/drill-expand-persists.spec.ts:50:9 › Manual expand survives an edit to an earlier sibling › growing an earlier sibling keeps the expanded descendant expanded (1.1s)
+  ✓  110 [chromium] › playwright/specs/empty-stories-note.spec.ts:22:9 › Empty-stories note (folder mode, zero stories) › shows the default status columns plus the empty-stories note when the aggregate has no stories (967ms)
+  ✓  117 [chromium] › playwright/specs/error-boundary.spec.ts:90:9 › Error Boundary › NoteRenderer container remains in the DOM despite error (153ms)
+  ✓  116 [chromium] › playwright/specs/error-boundary.spec.ts:80:9 › Error Boundary › fallback includes a Try Again button (157ms)
+  ✓  104 [chromium] › playwright/specs/drawer-overlay.spec.ts:113:9 › Drawer overlay › closing the settings drawer after a re-frame does not move the view further (2.0s)
+  ✓  107 [chromium] › playwright/specs/drawer-overlay.spec.ts:147:13 › Drawer overlay › with the cards drawer open, it is the only one visible (1.5s)
+  ✓  111 [chromium] › playwright/specs/empty-stories-note.spec.ts:44:9 › Empty-stories note (folder mode, zero stories) › the note's link opens the Files drawer, which shows the point-at-your-stories instructions (999ms)
+  ✓  108 [chromium] › playwright/specs/drawer-overlay.spec.ts:147:13 › Drawer overlay › with the jump drawer open, it is the only one visible (1.5s)
+  ✓  112 [chromium] › playwright/specs/empty-stories-note.spec.ts:63:9 › Empty-stories note (folder mode, zero stories) › the note waits for the first aggregate, then names the include pattern when it matched no file at all (950ms)
+  ✓  113 [chromium] › playwright/specs/empty-stories-note.spec.ts:81:9 › Empty-stories note (folder mode, zero stories) › the note does not appear once the folder has stories, nor do the drawer instructions (985ms)
+  ✓  122 [chromium] › playwright/specs/folder-click-focus.spec.ts:79:9 › Current_file click-focus regression › current_file mode click + simulated selectionChanged still focuses the clicked note (941ms)
+  ✓  128 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:21:9 › Folder scan loading state › shows the loading note in place of the board and a scanning count in the breadcrumb while discovery is open, then the cards once it settles (237ms)
+  ✓  129 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:54:9 › Folder scan loading state › hides the loading note and breadcrumb count as soon as a doc streams in, before discovery settles (374ms)
+  ✓  118 [chromium] › playwright/specs/folder-click-focus.spec.ts:28:9 › Folder-mode click-focus and click-select (homogenisation) › clicking a card in folder mode lights the focused outline immediately (no editor round-trip) (1.8s)
+  ✓  119 [chromium] › playwright/specs/folder-click-focus.spec.ts:38:9 › Folder-mode click-focus and click-select (homogenisation) › second click on a focused card promotes to selected (solid outline + selection state) (1.8s)
+  ✓  121 [chromium] › playwright/specs/folder-click-focus.spec.ts:62:9 › Folder-mode click-focus and click-select (homogenisation) › editor caret moving into a story in file B highlights the matching card in folder mode (no view click) (1.8s)
+  ✓  120 [chromium] › playwright/specs/folder-click-focus.spec.ts:48:9 › Folder-mode click-focus and click-select (homogenisation) › clicking a card from file A then a card from file B moves focus to the latter (1.8s)
+  ✓  131 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:99:9 › Folder scan loading state › shows a centred loading note before any message has been sent, with no board or toolbar yet (221ms)
+  ✓  130 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:73:9 › Folder scan loading state › keeps the loading note up while a streamed-in doc holds notes only in a hidden group (964ms)
+  ✓  133 [chromium] › playwright/specs/folder-view.spec.ts:15:9 › Aggregate (Folder) view › folder mode shows a single NoteRenderer with folder flag and single toolbar (993ms)
+  ✓  134 [chromium] › playwright/specs/folder-view.spec.ts:35:9 › Aggregate (Folder) view › origin pills appear on each merged story showing the project first letter (984ms)
+  ✓  135 [chromium] › playwright/specs/folder-view.spec.ts:54:9 › Aggregate (Folder) view › click on an origin pill descends the folder root to the project subfolder AND opens the clicked story in the editor (1.0s)
+  ✓  132 [chromium] › playwright/specs/folder-scan-loading-state.spec.ts:120:9 › Folder scan loading state › keeps the header spinner up and shows live progress in the breadcrumb count while discovery is held open with a doc streamed in (1.2s)
+  ✓  123 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:80:9 › Folder-mode kanban drag and drop › cross-column drag in folder mode targets only the source file (3.0s)
+  ✓  126 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:272:9 › Folder-mode kanban drag and drop › single-file kanban drag still emits the legacy single-doc shape (regression guard) (3.0s)
+  ✓  136 [chromium] › playwright/specs/folder-view.spec.ts:90:9 › Aggregate (Folder) view › breadcrumb segment click in folder mode sends setIntegration (1.0s)
+  ✓  127 [chromium] › playwright/specs/folder-reload-persistence.spec.ts:27:9 › Folder-mode board survives a reload › reload restores folder columns without an error, and the persisted state carries no doc bodies (3.3s)
+  ✓  137 [chromium] › playwright/specs/folder-view.spec.ts:118:9 › Aggregate (Folder) view › breadcrumb shows the merged "(X in Y files)" count only in folder mode (974ms)
+  ✓  139 [chromium] › playwright/specs/folder-view.spec.ts:166:9 › Aggregate (Folder) view › clicking a file in the Files drawer switches to current_file mode for that file and closes the drawer (1.1s)
+  ✓  140 [chromium] › playwright/specs/folder-view.spec.ts:191:9 › Aggregate (Folder) view › outside-click dismisses the toolbar drawer; clicks inside or on the trigger do not double-toggle (1.1s)
+  ✓  138 [chromium] › playwright/specs/folder-view.spec.ts:136:9 › Aggregate (Folder) view › clicking the breadcrumb count opens the Files drawer; editing the include glob re-filters the list (1.3s)
+  ✓  142 [chromium] › playwright/specs/folder-wire-payload-diet.spec.ts:40:9 › Folder wire-payload diet: text-only docs still work end to end › a text-only folder doc still renders its stories with origin pills (981ms)
+  ✓  143 [chromium] › playwright/specs/folder-wire-payload-diet.spec.ts:57:9 › Folder wire-payload diet: text-only docs still work end to end › a text-only folder doc still reveals to the editor on an origin-pill click (1.0s)
+  ✓  145 [chromium] › playwright/specs/frontmatter-document-strip.spec.ts:15:9 › Document-level front-matter strip › non-namespaced front-matter key renders a document-level pill in single-file mode, suppressed in folder mode (987ms)
+  ✓  141 [chromium] › playwright/specs/folder-view.spec.ts:220:9 › Aggregate (Folder) view › switching folder mode to Kanban shows stories grouped by status linetag with origin pills (1.8s)
+  ✓  125 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:233:9 › Folder-mode kanban drag and drop › a drop survives an authoritative echo delayed to 200-file scale - no snap-back (5.0s)
+  ✓  124 [chromium] › playwright/specs/folder-kanban-drag.spec.ts:135:9 › Folder-mode kanban drag and drop › multi-file column interleave: a drag into an all-unweighted column mints no weight, and an unrelated parse update preserves interleaved order (5.2s)
+  ✓  150 [chromium] › playwright/specs/header-spacing.spec.ts:11:9 › Header bar breathing room and root label suppression › does not render a literal "Root" headline for the synthetic root container (951ms)
+  ✓  151 [chromium] › playwright/specs/header-spacing.spec.ts:22:9 › Header bar breathing room and root label suppression › top note rect does not overlap the sticky toolbar beyond the outline-offset clearance (944ms)
+  ✓  146 [chromium] › playwright/specs/group-order-saved-type.spec.ts:128:9 › Group order on a saved view type › a saved type holding its own group display still takes Kanban's newestLast order, once activity arrives (1.8s)
+  ✓  152 [chromium] › playwright/specs/integration-flip.spec.ts:17:9 › Integration flip (folder ↔ current-file) › folder → current_file flips the selector value and drops the folder breadcrumb file-count in one render (1.0s)
+  ✓  148 [chromium] › playwright/specs/group-order-saved-type.spec.ts:184:9 › Group order on a saved view type › with the agent card pinned in the cards bag and activity already present, the saved type still orders newest last (1.9s)
+  ✓  147 [chromium] › playwright/specs/group-order-saved-type.spec.ts:166:9 › Group order on a saved view type › one session bound to a story in each project orders the projects by each story's own last write, not by the shared session end (2.1s)
+  ✓  153 [chromium] › playwright/specs/integration-flip.spec.ts:34:9 › Integration flip (folder ↔ current-file) › round-trip folder → current_file → folder → current_file leaves no stale toolbar state (1.1s)
+  ✓  144 [chromium] › playwright/specs/folder-wire-payload-diet.spec.ts:77:9 › Folder wire-payload diet: text-only docs still work end to end › a text-only folder doc still supports kanban drag write-back, targeting only the source file (3.0s)
+  ✓  149 [chromium] › playwright/specs/group-order-saved-type.spec.ts:213:9 › Group order on a saved view type › a newer transcript record on an idle unbound session leaves the column order unchanged, and an ended one draws no card (2.6s)
+  ✓  154 [chromium] › playwright/specs/kanban-animation.spec.ts:100:9 › Kanban Passive Transition Animations › cross-column passive move animates and lands correctly (2.0s)
+  ✓  155 [chromium] › playwright/specs/kanban-animation.spec.ts:129:9 › Kanban Passive Transition Animations › in-column passive reorder animates and swaps card order (2.0s)
+  ✓  156 [chromium] › playwright/specs/kanban-animation.spec.ts:171:9 › Kanban Passive Transition Animations › new column appears before its inbound card animates (1.9s)
+  ✓  159 [chromium] › playwright/specs/kanban-animation.spec.ts:272:9 › Kanban Passive Transition Animations › prefers-reduced-motion skips animation but lands correctly (2.0s)
+  ✓  157 [chromium] › playwright/specs/kanban-animation.spec.ts:205:9 › Kanban Passive Transition Animations › user drag is not double-animated by the FLIP layer (2.6s)
+  ✓  158 [chromium] › playwright/specs/kanban-animation.spec.ts:233:9 › Kanban Passive Transition Animations › rapid burst of passive updates settles clean and correct (2.6s)
+  ✓  160 [chromium] › playwright/specs/kanban-animation.spec.ts:303:9 › Kanban Passive Transition Animations › animateTransitions=false disables the FLIP layer (2.5s)
+  ✓  161 [chromium] › playwright/specs/kanban-animation.spec.ts:342:9 › Kanban Passive Transition Animations › a passive cardCount group reorder animates the groups and rides the cards that did not themselves move (2.5s)
+  ✓  166 [chromium] › playwright/specs/kanban-card-ratio.spec.ts:90:9 › Kanban card ratio › a clipped card stands at the target ratio, and a short one is left short (1.8s)
+  ✓  162 [chromium] › playwright/specs/kanban-animation.spec.ts:386:9 › Kanban Passive Transition Animations › dragging a group chip (custom order) in the settings drawer animates the board behind it (3.0s)
+  ✓  164 [chromium] › playwright/specs/kanban-animation.spec.ts:439:9 › Kanban Passive Transition Animations › prefers-reduced-motion skips group animation too, and the order still lands correctly (2.5s)
+  ✓  167 [chromium] › playwright/specs/kanban-card-ratio.spec.ts:113:9 › Kanban card ratio › the probe reads the same cards whether the live board is clipped or not (1.8s)
+  ✓  163 [chromium] › playwright/specs/kanban-animation.spec.ts:415:9 › Kanban Passive Transition Animations › animateTransitions=false disables group animation too, and the order still lands correctly (3.0s)
+  ✓  165 [chromium] › playwright/specs/kanban-autoscroll-direction.spec.ts:56:9 › Kanban drag auto-scroll follows the drag direction › holding a drag near the far edge auto-scrolls the board toward the drag, and the drop does not scroll it back (2.5s)
+  ✓  168 [chromium] › playwright/specs/kanban-column-width.spec.ts:75:9 › Kanban column width › the ratio moves the card height and leaves the group width alone (1.8s)
+  ✓  169 [chromium] › playwright/specs/kanban-column-width.spec.ts:97:9 › Kanban column width › a board that opens stacked measures the same cards as one that opens side by side (1.8s)
+  ✓  171 [chromium] › playwright/specs/kanban-column-width.spec.ts:130:9 › Kanban column width › a wider board reveals more groups at the same width, rather than widening the ones on screen (1.7s)
+  ✓  170 [chromium] › playwright/specs/kanban-column-width.spec.ts:110:9 › Kanban column width › a stacked board that flips to columns lays its groups out at the breadth setting (1.9s)
+  ✓  172 [chromium] › playwright/specs/kanban-column-width.spec.ts:146:9 › Kanban column width › flipping to rows stacks the groups at least the board width, ignoring the column width (1.8s)
+  ✓  173 [chromium] › playwright/specs/kanban-column-width.spec.ts:165:9 › Kanban column width › flipping to rows runs the cards along each group, not down it (1.8s)
+  ✓  174 [chromium] › playwright/specs/kanban-column-width.spec.ts:188:9 › Kanban column width › stacked, the group name sits beside the cards rather than above them (1.8s)
+  ✓  175 [chromium] › playwright/specs/kanban-column-width.spec.ts:208:9 › Kanban column width › stacked, no card spills its content outside its own box (1.8s)
+  ✓  176 [chromium] › playwright/specs/kanban-column-width.spec.ts:225:9 › Kanban column width › stacked, every card in a group is drawn the same height and a wordy one is wider instead (1.8s)
+  ✓  177 [chromium] › playwright/specs/kanban-drag-clone-isolation.spec.ts:69:9 › Kanban drag clone isolation - card look survives, no transformed ancestor › a paused pointer-drag clone keeps its card border and has no transformed ancestor (2.1s)
+  ✓  179 [chromium] › playwright/specs/kanban-drag-cursor-tracking.spec.ts:33:9 › Kanban drag cursor tracking - the clone follows the pointer › the drag clone centre stays under the pointer across a stepped move (2.2s)
+  ✓  180 [chromium] › playwright/specs/kanban-drag-passive-midflight.spec.ts:66:9 › Kanban drag survives a passive mid-flight update - no abort, no fling › a passive board update mid-drag neither aborts the drag nor flings the clone, and the drop still lands (2.6s)
+  ✓  183 [chromium] › playwright/specs/kanban-drag-roundtrip.spec.ts:76:9 › Kanban drag round-trip - own echo never re-animates the dropped card › positive control: a genuine passive update (no preceding drag) still animates (2.0s)
+  ✓  184 [chromium] › playwright/specs/kanban-drag.spec.ts:47:9 › Kanban Drag and Drop › dragging a card between columns sends editText with status change (2.2s)
+  ✓  185 [chromium] › playwright/specs/kanban-drag.spec.ts:79:9 › Kanban Drag and Drop › dragging a card to untagged column sends editText that removes status tag (2.2s)
+  ✓  181 [chromium] › playwright/specs/kanban-drag-roundtrip.spec.ts:61:9 › Kanban drag round-trip - own echo never re-animates the dropped card › echo arriving AFTER the drag tail (realistic round-trip) does not re-animate (3.5s)
+  ✓  186 [chromium] › playwright/specs/kanban-drag.spec.ts:106:9 › Kanban Drag and Drop › view does not blank after drag completes (2.5s)
+  ✓  188 [chromium] › playwright/specs/kanban-group-breadth.spec.ts:81:9 › Kanban group breadth › at the default breadth a board shows 3 whole groups at 760px and all 7 at 1590px (1.8s)
+  ✓  187 [chromium] › playwright/specs/kanban-drag.spec.ts:134:9 › Kanban Drag and Drop › card appears in destination column after extension sends updated doc (2.3s)
+  ✓  182 [chromium] › playwright/specs/kanban-drag-roundtrip.spec.ts:69:9 › Kanban drag round-trip - own echo never re-animates the dropped card › echo arriving immediately (adversarial race) does not re-animate (3.1s)
+  ✓  189 [chromium] › playwright/specs/kanban-group-breadth.spec.ts:96:9 › Kanban group breadth › dragging one boundary resizes every group, and the drawer's text box shows the width during the drag (1.9s)
+  ✓  190 [chromium] › playwright/specs/kanban-group-breadth.spec.ts:121:9 › Kanban group breadth › releasing a drag posts one updateSetting for lineBreadth (2.0s)
+  ✓  192 [chromium] › playwright/specs/kanban-group-fill.spec.ts:29:9 › Kanban groups fill the view › a short board's groups (and the separators between them) reach the bottom of the view (1.7s)
+  ✓  191 [chromium] › playwright/specs/kanban-group-breadth.spec.ts:136:9 › Kanban group breadth › typing a width into the drawer resizes the groups, and stacked the same box reads Row height (1.9s)
+  ✓  193 [chromium] › playwright/specs/kanban-group-fill.spec.ts:50:9 › Kanban groups fill the view › each group repeats its header at its far end, below its cards (1.7s)
+  ✓  194 [chromium] › playwright/specs/kanban-group-fill.spec.ts:76:9 › Kanban groups fill the view › stacked as rows, each group repeats its header at its right-hand end, after its cards (1.8s)
+  ✓  195 [chromium] › playwright/specs/kanban-group-fill.spec.ts:104:9 › Kanban groups fill the view › groups still window and fit correctly with the stretch applied: an empty board and the empty-stories overlay are unaffected (1.7s)
+  ✓  196 [chromium] › playwright/specs/kanban-parity-editor-vs-none.spec.ts:95:9 › Kanban click parity: editor-closed vs editor-open (single-caret ownership) › editor-closed: first click highlights the story, second click selects it (virtual caret) (1.8s)
+  ✓  197 [chromium] › playwright/specs/kanban-parity-editor-vs-none.spec.ts:103:9 › Kanban click parity: editor-closed vs editor-open (single-caret ownership) › editor-open: an echoed selectionChanged reaches the same highlight then select (1.8s)
+  ✓  204 [chromium] › playwright/specs/kanban-single-file-descent.spec.ts:54:9 › Single-file kanban story descent › a nested file with NO nt_view renders as a document and keeps its ## epic headings (descent is kanban-only) (943ms)
+  ✓  202 [chromium] › playwright/specs/kanban-single-file-descent.spec.ts:28:9 › Single-file kanban story descent › ### stories render as cards in their status columns, not the ## epics (1.8s)
+  ✓  205 [chromium] › playwright/specs/kanban-view.spec.ts:28:9 › Kanban View › renders kanban columns via auto view detecting ng_view linetag (1.4s)
+  ✓  206 [chromium] › playwright/specs/kanban-view.spec.ts:44:9 › Kanban View › places tasks in correct columns (1.4s)
+  ✓  178 [chromium] › playwright/specs/kanban-drag-collapse.spec.ts:166:9 › kanban drag collapse repro › ORGANIC: two drag->undo cycles, then measure a lift (7.4s)
+  ✓  203 [chromium] › playwright/specs/kanban-single-file-descent.spec.ts:42:9 › Single-file kanban story descent › each story card shows its epic chip and no project pill (1.7s)
+  ✓  207 [chromium] › playwright/specs/kanban-view.spec.ts:61:9 › Kanban View › places untagged tasks in untagged column (1.4s)
+  ✓  199 [chromium] › playwright/specs/kanban-pointer-drag.spec.ts:30:9 › Kanban Pointer Drag and Drop › pointer-dragging a card to another column sends editText and lands the card (3.2s)
+  ✓  198 [chromium] › playwright/specs/kanban-parity-editor-vs-none.spec.ts:110:9 › Kanban click parity: editor-closed vs editor-open (single-caret ownership) › parity: editor-closed and editor-open highlight and select the identical story (3.6s)
+  ✓  208 [chromium] › playwright/specs/kanban-view.spec.ts:75:9 › Kanban View › long unbreakable headline tokens wrap inside the card and do not punch past its right edge (1.7s)
+  ✓  201 [chromium] › playwright/specs/kanban-pointer-roundtrip-payload.spec.ts:50:9 › Kanban pointer drag round-trip - payload, hold, and no fling on echo › a pointer drop posts a status+docPath editText, holds the card, and does not fling it on its own echo (3.7s)
+  ✓  200 [chromium] › playwright/specs/kanban-pointer-drag.spec.ts:55:9 › Kanban Pointer Drag and Drop › pointer drag leaves no card stuck under a transform and the board stays interactive (3.9s)
+  ✓  212 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:101:9 › Kanban virtualized columns › every group stays mounted while the board scrolls horizontally (1.8s)
+  ✓  209 [chromium] › playwright/specs/kanban-virtualized-agent-growth.spec.ts:80:9 › Kanban virtualized group: a card growing after mount › a card that grows after its row is measured pushes the following row down, with no overlap (1.9s)
+  ✓  211 [chromium] › playwright/specs/kanban-virtualized-agent-growth.spec.ts:205:9 › Kanban virtualized group: a note reordered onto an already-cached index › a swap that moves a tall card onto a short cached slot and a short card onto a tall one produces neither an overlap nor a stale gap (2.0s)
+  ✓  210 [chromium] › playwright/specs/kanban-virtualized-agent-growth.spec.ts:142:9 › Kanban virtualized group: many cards growing in one commit › several cards growing at once from one activity snapshot never overlap the rows below them (2.2s)
+  ✓  213 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:119:9 › Kanban virtualized columns › a long group windows its cards: far fewer are mounted than the corpus it holds (1.8s)
+  ✓  215 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:139:9 › Kanban virtualized columns › no group grows its own vertical scrollbar - the page is the only vertical scroller (1.7s)
+  ✓  214 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:130:9 › Kanban virtualized columns › scrolling the page streams a previously-unmounted card in (1.9s)
+  ✓  220 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:276:9 › Kanban virtualized columns › keyboard-focusing a note outside a virtualized group's window mounts it and frames its ring fully visible (1.8s)
+  ✓  221 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:319:13 › Kanban virtualized columns › a windowed group's "card" card looks identical to a non-windowed group's (1.7s)
+  ✓  222 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:319:13 › Kanban virtualized columns › a windowed group's "sticky" card looks identical to a non-windowed group's (1.8s)
+  ✓  223 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:319:13 › Kanban virtualized columns › a windowed group's "agent" card looks identical to a non-windowed group's (1.7s)
+  ✓  224 [chromium] › playwright/specs/keyboard-navigation.spec.ts:14:9 › Keyboard Navigation › clicking different notes produces revealRange messages (1.9s)
+  ✓  217 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:199:9 › Kanban virtualized columns › keyboard-dragging a card OUT of a genuinely virtualized group completes the drop (3.1s)
+  ✓  218 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:224:9 › Kanban virtualized columns › keyboard-dragging a card INTO a genuinely virtualized group completes the drop (3.1s)
+  ✓  225 [chromium] › playwright/specs/keyboard-navigation.spec.ts:38:9 › Keyboard Navigation › selection feedback updates focused note styling (2.2s)
+  ✓  219 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:253:9 › Kanban virtualized columns › pointer-dragging a card into a genuinely virtualized group completes the drop (3.2s)
+  ✓  228 [chromium] › playwright/specs/line-view-grouping.spec.ts:50:9 › Line view grouping and drag › groups by first level folder by default; groups match the project folders and cards do not drag (1.8s)
+  ✓  216 [chromium] › playwright/specs/kanban-virtualized-columns.spec.ts:169:9 › Kanban virtualized columns › pointer-dragging a card that starts off-screen (scrolled into view) to another column completes the drop (4.2s)
+  ✓  231 [chromium] › playwright/specs/list-bullets.spec.ts:11:9 › List bullets › non-checkbox parent listItem keeps its bullet even when nested children are checkboxes (1.0s)
+  ✓  229 [chromium] › playwright/specs/line-view-grouping.spec.ts:59:9 › Line view grouping and drag › changing the group-by re-derives the groups (folder -> authored assignee, which is draggable) (1.8s)
+  ✓  226 [chromium] › playwright/specs/keyboard-navigation.spec.ts:60:9 › Keyboard Navigation › drillIn on nested doc changes parent context (2.8s)
+  ✓  235 [chromium] › playwright/specs/manual-check-coverage.spec.ts:153:9 › manual check: the card type follows a mixed folder › an even split is a tie and falls back to the view default rather than picking a side (973ms)
+  ✓  233 [chromium] › playwright/specs/manual-check-coverage.spec.ts:99:9 › manual check: the drawer columns stay aligned when squeezed › every row shares one name column and one control column at 480px (1.8s)
+  ✓  234 [chromium] › playwright/specs/manual-check-coverage.spec.ts:139:9 › manual check: the card type follows a mixed folder › the tab reads Auto with the majority-voted card, not the view default (1.7s)
+  ✓  227 [chromium] › playwright/specs/keyboard-navigation.spec.ts:90:9 › Keyboard Navigation › drillOut returns to parent context (3.3s)
+  ✓  237 [chromium] › playwright/specs/manual-check-coverage.spec.ts:195:9 › manual check: the M marker takes the modified-file colour › the marker and its label read from the gitDecoration modified token (1.8s)
+  ✓  242 [chromium] › playwright/specs/mermaid-lazy-chunk.spec.ts:34:9 › mermaid lazy chunk › does not fetch the mermaid chunk when a document has no diagram (929ms)
+  ✓  236 [chromium] › playwright/specs/manual-check-coverage.spec.ts:165:9 › manual check: the card type follows a mixed folder › pinning Sticky draws every note compact, and Auto recovers the voted answer (2.0s)
+  ✓  238 [chromium] › playwright/specs/manual-expand-persists.spec.ts:46:9 › Manual expand survives content edits › a ticked checkbox does not collapse the expanded card (1.8s)
+  ✓  243 [chromium] › playwright/specs/mermaid-lazy-chunk.spec.ts:44:9 › mermaid lazy chunk › fetches the mermaid chunk and renders a diagram when a document has one (951ms)
+  ✓  230 [chromium] › playwright/specs/line-view-grouping.spec.ts:77:9 › Line view grouping and drag › dragging a card between attribute groups rewrites that attribute in the file (inverse projection end-to-end) (3.3s)
+  ✓  232 [chromium] › playwright/specs/manual-check-coverage.spec.ts:55:9 › manual check: settings survive a reload › every control the drawer changes lands at the workspace scope and is read back on a fresh mount (3.5s)
+  ✓  248 [chromium] › playwright/specs/pending-work-spinner.spec.ts:146:9 › Pending-work spinner › prefers-reduced-motion: spinner SVG is in the DOM but the rotation keyframe is not animating (513ms)
+  ✓  241 [chromium] › playwright/specs/manual-expand-persists.spec.ts:107:9 › Manual expand survives content edits › "Show less" collapses the card (1.8s)
+  ✓  244 [chromium] › playwright/specs/pending-work-spinner.spec.ts:80:9 › Pending-work spinner › a fast settings toggle (resolves under 150 ms) shows no visible spinner (1.3s)
+  ✓  249 [chromium] › playwright/specs/pending-work-spinner.spec.ts:190:9 › Folder-load coalescing › a streamed load fills the board wave by wave and commits far fewer times than it receives messages (1.1s)
+  ✓  246 [chromium] › playwright/specs/pending-work-spinner.spec.ts:114:9 › Pending-work spinner › integration-mode flip (folder ↔ current_file) does not flash the spinner (1.3s)
+  ✓  245 [chromium] › playwright/specs/pending-work-spinner.spec.ts:97:9 › Pending-work spinner › a slow folder-discovery (pendingChange on) shows the toolbar spinner; clearing it hides the spinner after min-visibility (1.5s)
+  ✓  247 [chromium] › playwright/specs/pending-work-spinner.spec.ts:126:9 › Pending-work spinner › with the Files drawer open during an apply, only the breadcrumb spinner shows (no redundant in-drawer spinner) (1.5s)
+  ✓  251 [chromium] › playwright/specs/settings-toggle.spec.ts:68:9 › Settings Toggle › toggling line numbers writes the setting and renders the gutter (1.2s)
+  ✓  250 [chromium] › playwright/specs/pending-work-spinner.spec.ts:211:9 › Folder-load coalescing › the discovery spinner clears with the docs it covered, not a frame ahead of them (1.5s)
+  ✓  253 [chromium] › playwright/specs/settings-toggle.spec.ts:119:9 › Settings Toggle › a settings change writes config only, never a per-view state message (1.0s)
+  ✓  252 [chromium] › playwright/specs/settings-toggle.spec.ts:95:9 › Settings Toggle › a setting the drawer changes reaches the cascade and survives a view type switch (1.5s)
+  ✓  240 [chromium] › playwright/specs/manual-expand-persists.spec.ts:84:9 › Manual expand survives content edits › an expanded card is still expanded after a reload (3.5s)
+  ✓  254 [chromium] › playwright/specs/settings-toggle.spec.ts:138:9 › Settings Toggle › make user default promotes the workspace value into the user layer (1.1s)
+  ✓  255 [chromium] › playwright/specs/settings-toggle.spec.ts:167:9 › Settings Toggle › reset to user default drops the workspace layer and the checkbox follows (1.1s)
+  ✓  256 [chromium] › playwright/specs/settings-toggle.spec.ts:185:9 › Settings Toggle › the open drawer tab shows an up chevron while every closed tab shows down (1.0s)
+  ✓  239 [chromium] › playwright/specs/manual-expand-persists.spec.ts:57:9 › Manual expand survives content edits › dragging the expanded card to another column lands it still expanded (4.6s)
+  ✓  257 [chromium] › playwright/specs/sticky-card.spec.ts:86:9 › Sticky card › a sticky in a project takes its hue, and the group gives up its card surface to the paper (1.8s)
+  ✓  264 [chromium] › playwright/specs/story-progress-pie.spec.ts:49:9 › Story progress pie › shows the coordinator percentage beside the headline, and moves when a new snapshot arrives (1.0s)
+  ✓  265 [chromium] › playwright/specs/story-progress-pie.spec.ts:62:9 › Story progress pie › falls back to the ticked task count when the coordinator has no entry for the story (989ms)
+  ✓  258 [chromium] › playwright/specs/sticky-card.spec.ts:109:9 › Sticky card › the theme class VS Code stamps on the body pales the paper and lightens the project pill (1.8s)
+  ✓  259 [chromium] › playwright/specs/sticky-card.spec.ts:123:9 › Sticky card › a focused sticky draws its ring on the uncropped card (1.8s)
+  ✓  261 [chromium] › playwright/specs/sticky-card.spec.ts:175:9 › Default card type as a Kanban view setting › the setting follows the other Kanban rows as a dropdown showing Card (1.8s)
+  ✓  266 [chromium] › playwright/specs/story-progress-pie.spec.ts:71:9 › Story progress pie › draws on no story that is not in flight (974ms)
+  ✓  267 [chromium] › playwright/specs/story-progress-pie.spec.ts:79:13 › Story progress pie › draws the pie on the card card (988ms)
+  ✓  263 [chromium] › playwright/specs/sticky-card.spec.ts:206:9 › Default card type as a Kanban view setting › a card type pinned on the card tab still wins over the view default (2.0s)
+  ✓  268 [chromium] › playwright/specs/story-progress-pie.spec.ts:79:13 › Story progress pie › draws the pie on the sticky card (989ms)
+  ✓  269 [chromium] › playwright/specs/story-progress-pie.spec.ts:79:13 › Story progress pie › draws the pie on the agent card (996ms)
+  ✓  260 [chromium] › playwright/specs/sticky-card.spec.ts:134:9 › Sticky card › stickies draw in the document and line views as well as kanban (2.6s)
+  ✓  262 [chromium] › playwright/specs/sticky-card.spec.ts:191:9 › Default card type as a Kanban view setting › choosing Sticky makes Auto draw yellow stickies, and the card tab says so (2.6s)
+  ✓  275 [chromium] › playwright/specs/view-settings-drawer.spec.ts:174:9 › View settings drawer › a setting kanban holds itself moves into kanban's band, ahead of line's, with hollow I and VS pills (1.0s)
+  ✓  276 [chromium] › playwright/specs/view-settings-drawer.spec.ts:197:9 › View settings drawer › on a narrow drawer the names wrap and no control overruns the owner pill beside it (1.0s)
+  ✓  270 [chromium] › playwright/specs/user-view-type-update.spec.ts:125:9 › Custom view type update › changing Group by on a type that holds it moves the groups and writes into the type (1.9s)
+  ✓  277 [chromium] › playwright/specs/view-settings-drawer.spec.ts:217:9 › View settings drawer › on a very narrow drawer the view tree stacks above the rows and every control keeps its value visible (1.0s)
+  ✓  271 [chromium] › playwright/specs/user-view-type-update.spec.ts:151:9 › Custom view type update › choosing the inherited option on the type clears its own groupBy, so it inherits from kanban again (2.0s)
+  ✓  273 [chromium] › playwright/specs/user-view-type-update.spec.ts:197:9 › Custom view type update › a kanban-homed row the type does not hold still writes into the type, never flat (1.9s)
+  ✓  274 [chromium] › playwright/specs/view-settings-drawer.spec.ts:130:9 › View settings drawer › changing Group by from kanban writes Kanban's own cell in the views bag, leaving grouped's own cell alone (1.9s)
+  ✓  272 [chromium] › playwright/specs/user-view-type-update.spec.ts:170:9 › Custom view type update › a Global row still writes flat from a saved type, and a type minted from the selected node starts empty (2.2s)
+  ✓  280 [chromium] › playwright/specs/view-settings-drawer.spec.ts:291:9 › View settings drawer › a group chip reorders from the keyboard too, since the chips carry no nudge buttons (1.1s)
+  ✓  283 [chromium] › playwright/specs/view-settings-drawer.spec.ts:377:9 › View settings drawer › toggling a Global setting from kanban still writes flat, since it belongs to no view type (1.1s)
+  ✓  281 [chromium] › playwright/specs/view-settings-drawer.spec.ts:317:9 › View settings drawer › unchecking a group chip hides that group from the board and records shown: false (1.5s)
+  ✓  284 [chromium] › playwright/specs/view-settings-drawer.spec.ts:394:9 › View settings drawer › saving the defaults drives the diverged count to zero and clears every M (1.2s)
+  ✓  285 [chromium] › playwright/specs/view-settings-drawer.spec.ts:424:9 › View settings drawer › saving the defaults also clears M for a per-view cell held by a built-in descendant (1.2s)
+  ✓  287 [chromium] › playwright/specs/view-settings-drawer.spec.ts:490:9 › View settings drawer › there is no Update control anywhere - Save as new view type is the only way to mint one (1.0s)
+  ✓  279 [chromium] › playwright/specs/view-settings-drawer.spec.ts:263:9 › View settings drawer › dragging a group chip from kanban writes the new order into kanban's own cell in the views bag (2.4s)
+  ✓  278 [chromium] › playwright/specs/view-settings-drawer.spec.ts:243:9 › View settings drawer › choosing another view type in the tree keeps the settings drawer open (2.6s)
+  ✓  288 [chromium] › playwright/specs/view-settings-drawer.spec.ts:503:9 › View settings drawer › a workspace that already diverges at a flat home shows the inherited pill and M on open, with nothing touched (1.0s)
+  ✓  282 [chromium] › playwright/specs/view-settings-drawer.spec.ts:342:9 › View settings drawer › grouping a kanban board by first level folder lists the folder groups in Group display, and hiding one removes it from the board (2.1s)
+  ✓  286 [chromium] › playwright/specs/view-settings-drawer.spec.ts:451:9 › View settings drawer › saving a new view type mints an empty bag parented on kanban, inheriting its value rather than copying it (1.6s)
+  ✓  293 [chromium] › playwright/specs/view-specific-settings.spec.ts:87:9 › Per-view settings (orientation) › an Orientation edit on Kanban writes Kanban's own value and leaves Line's own cell alone (1.0s)
+  ✓  294 [chromium] › playwright/specs/view-specific-settings.spec.ts:115:9 › Per-view settings (orientation) › an edit at Line reaches a Kanban that sets none of its own (1.0s)
+  ✓  295 [chromium] › playwright/specs/view-specific-settings.spec.ts:135:9 › Per-view settings (orientation) › choosing the inherited option on Kanban clears its own value, so it inherits from Line again (1.0s)
+  ✓  297 [chromium] › playwright/specs/view-switching.spec.ts:12:9 › View Switching › defaults to auto view which resolves to document for plain markdown (951ms)
+  ✓  289 [chromium] › playwright/specs/view-settings-drawer.spec.ts:520:9 › View settings drawer › with the agent card type, newestLast orders a project board by its latest activity, and new activity moves a group last (2.3s)
+  ✓  291 [chromium] › playwright/specs/view-settings-drawer.spec.ts:567:9 › View settings drawer › with the default card type, newestLast orders a project board by the files' own mtimes (2.0s)
+  ✓  290 [chromium] › playwright/specs/view-settings-drawer.spec.ts:546:9 › View settings drawer › with the agent card type, newestFirst puts the most recently active project first (2.2s)
+  ✓  296 [chromium] › playwright/specs/view-specific-settings.spec.ts:160:9 › Per-view settings (orientation) › an Orientation edit on a saved type selected leaves Kanban and Line unchanged (1.8s)
+  ✓  298 [chromium] › playwright/specs/view-switching.spec.ts:22:9 › View Switching › switches to kanban view and back to document (1.7s)
+  ✓  292 [chromium] › playwright/specs/view-settings-drawer.spec.ts:591:9 › View settings drawer › dragging a group chip while an automatic order is selected switches the select to Custom, seeded from the order on screen (2.5s)
+  ✓  299 [chromium] › playwright/specs/view-switching.spec.ts:39:9 › View Switching › switches to auto view (1.7s)
+  ✓  300 [chromium] › playwright/specs/audio-capture.spec.ts:41:9 › Audio capture from a fake microphone › pressing record captures 2 s PCM chunks in order, and stopping ends capture with no further chunks (11.1s)
 
-  283 passed (2.1m)
+  300 passed (59.5s)
+exit 0

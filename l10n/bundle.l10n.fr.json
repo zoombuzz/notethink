@@ -198,5 +198,14 @@
   "Stop recording": "Arrêter l'enregistrement",
   "Microphone unavailable: {0}": "Microphone indisponible : {0}",
   "Bearer token for the audio endpoint. Leave empty to remove the stored token.": "Jeton Bearer pour le point de terminaison audio. Laissez vide pour supprimer le jeton enregistré.",
-  "Token": "Jeton"
+  "Token": "Jeton",
+  "{0}% complete": "{0} % terminé",
+  "{0}% complete ({1})": "{0} % terminé ({1})",
+  "coordinator estimate": "estimation du coordinateur",
+  "progress tag": "balise de progression",
+  "{0} of {1} tasks ticked": "{0} tâches cochées sur {1}",
+  "Registered, on {0}": "Enregistré, sur {0}",
+  "Registered agent": "Agent enregistré",
+  "Stale": "Périmé",
+  "Known from the agent registry only, so there is no session to open": "Connu uniquement par le registre des agents, donc aucune session à ouvrir"
 }

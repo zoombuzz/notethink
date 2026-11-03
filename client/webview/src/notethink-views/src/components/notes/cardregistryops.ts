@@ -12,8 +12,9 @@ import {
     type ResolvedTreeRow,
     type ViewOverridesMap,
 } from "../../lib/viewregistryops";
-import { AGENT_VIRTUAL_NAMESPACE, sessionForUnboundKey, sessionsForStory, storyKeyForNote, storyLastActiveMs, type ActivitySnapshot } from "../../lib/agentactivityops";
-import { isVirtualNote, virtualNoteKeyOf } from "../../lib/virtualnoteops";
+import { sessionsForStory, storyKeyForNote, storyLastActiveMs, type ActivitySnapshot } from "../../lib/agentactivityops";
+import { progressEntryForStory } from "../../lib/progressops";
+import { isVirtualNote } from "../../lib/virtualnoteops";
 import type { ResolvedSettingsCascade, SettingsCascadeKey, UserViewType } from "../../types/Messages";
 import type { NoteProps } from "../../types/NoteProps";
 
@@ -350,29 +351,40 @@ export type OrderTimestampFn = (note: NoteProps, ctx: OrderTimestampContext) => 
 /**
  * The agent card's ordering timestamp: when an agent last wrote to this card, i.e. the latest
  * write to its own story among the sessions bound to it (a session's `updated_at` where it carries no
- * per-story time), or, for a virtual unbound-agent note, its own session's `updated_at`. This is the one place a card's agent activity is read for ordering, so a board and its
+ * per-story time) or a coordinator last recorded its progress, whichever is later, and never a virtual unbound-agent note, which has no story and so gives its column no time (an idle
+ * agent's transcript grows on every wake, which would otherwise move its column). This is the one place a card's agent activity is read for ordering, so a board and its
  * settings drawer read it alike.
  */
 function agentOrderTimestamp(note: NoteProps, ctx: OrderTimestampContext): number | undefined {
-    const own_session = isVirtualNote(note) ? sessionForUnboundKey(ctx.snapshot, virtualNoteKeyOf(note, AGENT_VIRTUAL_NAMESPACE)) : undefined;
-    const story_key = own_session ? undefined : storyKeyForNote(note, ctx.fallback_doc_path);
-    const sessions = own_session ? [own_session] : sessionsForStory(ctx.snapshot, story_key);
-    let latest: number | undefined;
-    for (const state of sessions) {
-        const ms = story_key ? storyLastActiveMs(state, story_key) : Date.parse(state.session.updated_at);
+    if (isVirtualNote(note)) { return undefined; }
+    const story_key = storyKeyForNote(note, ctx.fallback_doc_path);
+    let latest = progressOrderTimestamp(note, ctx);
+    for (const state of sessionsForStory(ctx.snapshot, story_key)) {
+        const ms = story_key ? storyLastActiveMs(state, story_key) : undefined;
         if (ms === undefined || Number.isNaN(ms)) { continue; }
         if (latest === undefined || ms > latest) { latest = ms; }
     }
     return latest;
 }
 
-/** every other card type's ordering timestamp: when the card's data last changed, the mtime of the file holding its story; a note with none has no timestamp */
-function fileChangedOrderTimestamp(note: NoteProps): number | undefined {
-    return note.origin?.file_mtime;
+/** when a coordinator last recorded this story's progress, which times its column as an agent write does; undefined with no entry */
+function progressOrderTimestamp(note: NoteProps, ctx: OrderTimestampContext): number | undefined {
+    if (isVirtualNote(note)) { return undefined; }
+    const entry = progressEntryForStory(ctx.snapshot, storyKeyForNote(note, ctx.fallback_doc_path));
+    const ms = entry ? Date.parse(entry.at) : undefined;
+    return ms === undefined || Number.isNaN(ms) ? undefined : ms;
+}
+
+/** every other card type's ordering timestamp: when the card's data last changed, the mtime of the file holding its story, or a later progress entry for it; a note with neither has no timestamp */
+function fileChangedOrderTimestamp(note: NoteProps, ctx: OrderTimestampContext): number | undefined {
+    const progress_ms = progressOrderTimestamp(note, ctx);
+    const file_ms = note.origin?.file_mtime;
+    if (progress_ms === undefined) { return file_ms; }
+    return file_ms === undefined ? progress_ms : Math.max(file_ms, progress_ms);
 }
 
 // one stable reference so two lookups for the same fallback type are `===`, not two freshly built closures
-const FALLBACK_ORDER_TIMESTAMP_FN: OrderTimestampFn = note => fileChangedOrderTimestamp(note);
+const FALLBACK_ORDER_TIMESTAMP_FN: OrderTimestampFn = (note, ctx) => fileChangedOrderTimestamp(note, ctx);
 
 // one entry per card type with its own ordering attribute; every other type falls back to file-changed
 const ORDER_TIMESTAMP_FNS: Partial<Record<string, OrderTimestampFn>> = {

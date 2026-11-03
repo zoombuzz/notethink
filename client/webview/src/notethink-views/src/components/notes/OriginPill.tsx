@@ -1,5 +1,6 @@
-import React, { useEffect, useState, type MouseEvent } from "react";
-import { detectVscodeTheme, hueForOrigin, pillColourForHue, projectAbbreviation, projectNameFromRelativePath } from "../../lib/originops";
+import React, { type MouseEvent } from "react";
+import { useVscodeTheme } from "../../lib/themehooks";
+import { hueForOrigin, pillColourForHue, projectAbbreviation, projectNameFromRelativePath } from "../../lib/originops";
 import type { NoteOrigin } from "../../types/NoteProps";
 import styles from "./OriginPill.module.scss";
 
@@ -28,17 +29,8 @@ interface OriginPillProps {
  * and unit-tested without mounting a renderer.
  */
 export default function OriginPill({ origin, onClick, epicOnly }: OriginPillProps): React.ReactElement {
-    // re-render on theme change so colour swatches stay readable when the user toggles VS Code theme
-    const [theme, setTheme] = useState<'dark' | 'light'>(detectVscodeTheme);
-    useEffect(() => {
-        if (typeof document === 'undefined' || !document.body) { return; }
-        const observer = new MutationObserver(() => {
-            setTheme(detectVscodeTheme());
-        });
-        // VS Code swaps the theme class on <body> when the user changes theme, with no reload
-        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-        return () => observer.disconnect();
-    }, []);
+    // re-renders on theme change so colour swatches stay readable when the user toggles VS Code theme
+    const theme = useVscodeTheme();
     const project_name = projectNameFromRelativePath(origin.relative_path);
     // folder mode stamps project_label globally; single-file origins fall back to the name's first two characters
     const label = origin.project_label ?? projectAbbreviation(project_name);

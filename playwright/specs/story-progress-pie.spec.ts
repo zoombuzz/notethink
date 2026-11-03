@@ -88,4 +88,23 @@ test.describe('Story progress pie', () => {
             }
         });
     }
+
+    for (const card_type of ['card', 'sticky', 'agent']) {
+        test(`on the ${card_type} card the pie is the pill's colour, size and line`, async ({ page }) => {
+            await pinCardType(page, card_type);
+            await folderBoard(page);
+            await injectActivity(page, { sessions: [], progress: [{ story_id: 'agent-activity-card', pct: 100 }] });
+            const row = page.locator('[role="rowheader"]').filter({ hasText: 'Agent activity card' }).first();
+            const pie = row.getByTestId('story-progress-pie');
+            const pill = row.getByTestId('origin-project-pill');
+            await expect(pie).toHaveAttribute('data-pill-matched', 'true');
+            const pill_colour = await pill.evaluate(el => getComputedStyle(el).backgroundColor);
+            const wedge_colour = await pie.locator('circle').nth(1).evaluate(el => getComputedStyle(el).stroke);
+            expect(wedge_colour).toBe(pill_colour);
+            const pie_box = (await pie.boundingBox())!;
+            const pill_box = (await pill.boundingBox())!;
+            expect(Math.abs((pie_box.y + pie_box.height / 2) - (pill_box.y + pill_box.height / 2))).toBeLessThanOrEqual(1);
+            expect(Math.abs(pie_box.height - pill_box.height)).toBeLessThanOrEqual(1);
+        });
+    }
 });

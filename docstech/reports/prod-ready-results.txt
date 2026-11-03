@@ -1,23 +1,23 @@
 # Prod-ready Results
-# Version: 0.4.20
-# Date: 2026-11-03T18:30:00Z
-# Tree: HEAD 2178fce plus the working-tree changes (agent tree, quieter row header, newest-end transcript read)
-# Stories: agent-tree-vscode doing -> code-review; agent-row-header-quiet doing -> code-review; transcript-tail-over-bound doing -> code-review
-# Ship verdict: Ready for review: three stories advanced to code-review, all checks green
+# Version: 0.4.21
+# Date: 2026-11-03T19:50:00Z
+# Tree: HEAD 8042cc4 plus working tree (themehooks.ts new; OriginPill, StoryProgressPie, its scss and test, story-progress-pie spec, package.json, CHANGELOG, todo.md)
+# Stories: pie-matches-pill doing -> code-review; all others not touched (outside stories=)
+# Ship verdict: Ready to ship: /push-prod will move "Progress pie matches the project pill" to done.md
 # ---
-Build | pass | webpack compiled | fresh
-Lint | pass | exit 0 | fresh
-Project guards | none for this project | - | skipped (no guard)
+Build | pass | pnpm run build exit 0 | fresh
+Lint | pass | lint script exit 0 | fresh
+Project guards | n/a | none for this project | skipped (none)
 Dependency audit | pass | no known vulnerabilities | fresh
-CODING_STANDARDS | pass | mechanical checks and inline pass | fresh
+CODING_STANDARDS | pass | mechanical greps and inline pass clean | fresh
 Exposure | pass | public scan clean, judgement pass clean | fresh
-Fleet fix check | not a fleet fix | notethink webview and extension only | fresh
-Jest | pass | 3533/3533 (159 files) | fresh
-Playwright | pass | 304/304, 0 skipped | fresh
-Story-state advance | 3 stories doing -> code-review | move rehearsed, exit 0 | fresh
-Version bump | 0.4.20 | above HEAD 0.4.19 | fresh
+Fleet fix check | no shared-surface hit | skipped (no shared-surface file touched)
+Jest | pass | 3537/3537 (1031 + 256 + 2250; 159 suites) | fresh
+Playwright | pass | 307/307, 0 skipped, 0 flaky | fresh
+Todo/Done | pass | format intact, coord marker removed | fresh
+Story-state advance | doing -> code-review, move rehearsed (dry-run exit 0) | fresh
+Version bump | 0.4.21 above HEAD 0.4.20 | fresh
 # --- Fixed during review ---
-Comments: one doc comment line in AgentAnalyserWorker.ts rewrapped
-Board: coordinator target marker removed from the third story's linetag
+Removed the coord target marker from the pie-matches-pill heading. No standards findings.
 # --- Open ---
-none
+Dark and light theme luminance contrast of the wedge against the grey track is below 1.5:1 for roughly half of hues (computed, not browser-measured); see the hand-back note.

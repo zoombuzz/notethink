@@ -16,6 +16,13 @@
   margin: 0.15em 0 0 0.6em;
   vertical-align: middle;
 
+  // beside a project pill the pie is the pill's height, on the pill's line, so the two read as a pair of dots
+  &[data-pill-matched="true"] {
+    width: 1.2em;
+    height: 1.2em;
+    margin-top: 0;
+  }
+
   svg {
     display: block;
     width: 100%;

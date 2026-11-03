@@ -12,6 +12,7 @@ import { ACTIVITY_DEMAND_MESSAGE_TYPE } from '../../lib/agentactivityops';
 import { convertMdastToNoteHierarchy } from '../../lib/convertMdastToNoteHierarchy';
 import { flattenAllNotes } from '../../lib/noteops';
 import type { ActivitySnapshot } from '../../lib/agentactivityops';
+import { hueForOrigin, pillColourForHue } from '../../lib/originops';
 import type { NoteProps } from '../../types/NoteProps';
 
 const DOC = 'docstech/todo.md';
@@ -108,5 +109,44 @@ describe('the pie in every card type', () => {
         const pie = await screen.findByTestId('story-progress-pie');
         expect(pie).toHaveAttribute('data-pct', '55');
         expect(container.querySelector('[role="rowheader"]')).toContainElement(pie);
+    });
+});
+
+describe('the pie takes the project pill colour', () => {
+    beforeEach(() => { resetStore(); act(() => { setActivitySnapshot(snapshotWith(55)); }); });
+    afterEach(() => { resetStore(); document.body.className = ''; resetStore(); });
+
+    it('fills the wedge in the pill colour for the dark theme', () => {
+        const note = storyFrom(DOING_WITH_TASKS);
+        render(<StoryProgressPie note={note} />);
+        const pie = screen.getByTestId('story-progress-pie');
+        expect(pie.style.getPropertyValue('--nt-pie-colour')).toBe(pillColourForHue(hueForOrigin(note.origin!), 'dark'));
+        expect(pie).toHaveAttribute('data-pill-matched', 'true');
+    });
+
+    it('follows the light theme, as the pill does', () => {
+        document.body.className = 'vscode-light';
+        const note = storyFrom(DOING_WITH_TASKS);
+        render(<StoryProgressPie note={note} />);
+        expect(screen.getByTestId('story-progress-pie').style.getPropertyValue('--nt-pie-colour')).toBe(pillColourForHue(hueForOrigin(note.origin!), 'light'));
+    });
+
+    it('matches the colour the pill itself draws', () => {
+        const { container } = render(<React.Suspense fallback={null}><MarkdownNote {...storyFrom(DOING_WITH_TASKS)} /></React.Suspense>);
+        const pill = container.querySelector('[data-testid="origin-project-pill"]') as HTMLElement;
+        const pie = screen.getByTestId('story-progress-pie');
+        // jsdom normalises a colour assigned to a real property, so the pie's variable is run through one for comparison
+        const probe = document.createElement('span');
+        probe.style.backgroundColor = pie.style.getPropertyValue('--nt-pie-colour');
+        expect(probe.style.backgroundColor).not.toBe('');
+        expect(probe.style.backgroundColor).toBe(pill.style.backgroundColor);
+    });
+
+    it('keeps the default colour, and the grey remainder, where there is no pill', () => {
+        render(<StoryProgressPie note={{ ...storyFrom(DOING_WITH_TASKS), origin: undefined }} />);
+        const pie = screen.getByTestId('story-progress-pie');
+        expect(pie.style.getPropertyValue('--nt-pie-colour')).toBe('');
+        expect(pie).not.toHaveAttribute('data-pill-matched');
+        expect(pie.querySelector('circle')?.getAttribute('class')).toMatch(/track/);
     });
 });

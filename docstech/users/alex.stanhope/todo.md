@@ -1,6 +1,28 @@
 # Todo [](?nt_view=kanban)
 
 
+### Progress pie matches the project pill [](?id=pie-matches-pill&status=code-review)
+
+The progress pie from [[story-progress-pie]] fills in a fixed green and sits apart from the project pill. Drawn in the pill's colour and on the pill's line, the two read as a matched pair of dots at the top of each card.
+
++ background
+  + measured: `OriginPill.tsx` colours the pill with `pillColourForHue(hueForOrigin(origin), theme)` (`originops.ts`), the hue the sticky card shares
+  + measured: `MarkdownNoteHeadline.tsx` renders both the pill and `StoryProgressPie`
+  + measured: the pie's filled wedge uses `--vscode-charts-green`; its unfilled part is grey
++ approach
+  + the filled wedge takes the same colour as the card's project pill, through the same hue and theme helpers
+  + the unfilled part stays grey, so the pie fills with the pill's colour as tasks complete
+  + the pie sits on the pill's horizontal line, centred on the same axis and at the same size, so the two read as a pair of dots
+  + a card with no pill keeps the pie in its current place and colour
++ decision 2026-11-03: the pie's completed share is drawn in the project pill's colour, and the pie lines up with the pill at the top of the card
++ open question: the coloured wedge has weak luminance contrast against the grey remainder for about half of project hues (computed: 1.05:1 to 2.7:1 in dark, 1.0:1 to 2.05:1 in light, below 1.5:1 for 184 of 360 hues dark and 205 light); it still reads by hue. Keep it, or give the grey remainder a theme-aware lightness, or outline the pie? Recommendation: a thin outline in the editor's muted foreground, which keeps both colours as asked and gives the disc a clear edge.
++ [X] colour the pie's filled wedge from the card's pill colour, keeping the grey remainder
++ [X] align the pie with the pill on one line at the same size, in the card, sticky and agent card types
++ [X] cover the colour and the no-pill fallback in `StoryProgressPie.test.tsx`
++ [X] assert the pie's colour matches the pill and their vertical centres align in `story-progress-pie.spec.ts`
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
 ### Agent tree behaves like a VS Code tree [](?id=agent-tree-vscode&status=code-review)
 
 The agent card's rows read as a flat list with a "Show N earlier finished subagents" link. A reader expects a tree like VS Code's own: each agent expands to show what runs inside it, and finished subagents stay out of the way until asked for.
@@ -68,6 +90,7 @@ A transcript over the size bound is refused whole, so its session draws a "could
   + the same rule covers every vendor whose transcript can pass the bound
   + the tail cache and resumed reads keep working for a tail-read transcript
 + decision 2026-11-03: over the bound, analyse the newest part of the transcript up to the bound instead of refusing it
++ open question: the crop keeps whole lines only, so one giant line straddling the window start leaves far less than the bound (measured: a 77.5 MB transcript kept 30 KB, a 113.7 MB one kept 32 MB). Keep it as designed, or skip a giant line and keep filling the bound from the lines before it? Recommendation: keep it, since such transcripts are usually old and outside the 30-day window.
 + [X] read the newest bound's worth of an oversized transcript from its first complete line
   + the worker crops a whole job (`cropToNewestBytes`) and trims a resumed one to the bound; the vendor readers no longer judge size, and `too_large` is gone from the refusal codes
 + [X] mark tail-read sessions and say so beside their usage and time

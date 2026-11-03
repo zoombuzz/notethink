@@ -4,6 +4,12 @@ All notable changes to the "notethink" extension will be documented in this file
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.4.21] - 2026-11-03
+
+### Changed
+
+- A story's progress pie fills in the colour of the card's project pill and sits on the pill's line at the pill's height, so the two read as a matched pair of dots at the top of each card. The unfilled part stays grey, and a card with no project pill keeps the green pie as before.
+
 ## [0.4.20] - 2026-11-03
 
 ### Changed

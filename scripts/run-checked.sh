@@ -11,7 +11,7 @@ command="$2"
 green_stamp="${HOME}/.claude/skills/scripts/green-stamp.sh"
 
 if [ -f "${green_stamp}" ]; then
-  exec bash "${green_stamp}" run . "${check}" "${command}"
+  exec bash "${green_stamp}" run . "${check}" "${command}" "${@:3}"
 fi
 
-exec bash -c "${command}"
+exec bash -c "${command} \"\$@\"" "${check}" "${@:3}"

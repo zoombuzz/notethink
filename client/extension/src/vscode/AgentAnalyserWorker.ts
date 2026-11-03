@@ -1,6 +1,7 @@
 import * as path from 'path';
 import { lineDiffFromBytes, type LineDiffCounts } from '../lib/agentlinediffops';
 import { priceCalls, pricePerCallBounded, type AgentPricedUsageEntry } from '../lib/agentpricingops';
+import { cropToNewestBytes } from '../lib/agenttailparseops';
 import { AGENT_TRANSCRIPT_MAX_BYTES, capabilitiesForVendor, type AgentReadRefusal, type AgentSessionInput, type AgentSessionResult, type AgentSourceFile, type AgentToolInvocationEdit } from '../lib/vendors/agentvendorops';
 import { buildClaudeCodeResult, readClaudeCodeSession, type ClaudeTranscriptRecord } from '../lib/vendors/claudecodeops';
 import { buildCodexResult, readCodexSession, type CodexLine } from '../lib/vendors/codexops';
@@ -39,19 +40,18 @@ import { ACTIVITY_STATE_UNKNOWN, type ActivityCapabilities, type ActivityChildSe
  * and the session's result is built from the combined array by the same `buildXResult` a whole read
  * uses internally - one code path building a result from lines, whichever way they were assembled.
  *
- * The transcript's own `AGENT_TRANSCRIPT_MAX_BYTES` bound is judged once, by `transcriptSizeRefusal`,
- * before either path runs: a 'whole' job's own bytes, or a 'tail'/'none' job's cached source bytes plus
- * whatever it adds, against the same limit a vendor's own `readXSession` enforces on a whole read. A job
- * over the bound is refused right there - never cached, never built - so the same transcript gets the
- * same `too_large` verdict whether this is its first scan or its hundredth, instead of the vendor
- * reader's own check (which only a 'whole' job ever reaches) being the only place it was ever applied.
+ * A transcript past `AGENT_TRANSCRIPT_MAX_BYTES` is read from its newest end, never refused: a 'whole'
+ * job's bytes are cropped by `cropToNewestBytes` (the last bound's worth, from the first complete line)
+ * before anything decodes them, and a resumed job whose cached lines plus its new ones pass the bound
+ * drops its oldest lines until it fits again (`trimTranscriptToBound`). Either way the session's output
+ * carries `tail_read`, so its usage and times are known to cover the newest part only. The bound is
+ * therefore judged here and nowhere in a vendor's own reader.
  *
  * Memory is bounded in both directions the host cannot see into: `evict_session_ids` on the request is
  * the host telling the worker a session no longer qualifies (or has dropped out of the window
  * entirely), and `evicted_session_ids` on the response is this worker telling the host the reverse -
- * which sessions this worker itself dropped, whether the byte cap forced them out or a transcript grew
- * past its own size bound, so the host never believes a bookmark is resumable when the cache behind it
- * is gone. Host and worker are provably in sync because eviction is never assumed silently by either
+ * which sessions this worker itself dropped because the byte cap forced them out, so the host never
+ * believes a bookmark is resumable when the cache behind it is gone. Host and worker are provably in sync because eviction is never assumed silently by either
  * side: it is always a fact stated on the wire.
  *
  * `handleAgentAnalyserRequest` is the whole of the worker's logic and is exported specifically so it
@@ -174,6 +174,7 @@ export interface AgentAnalyserResolvedCall {
  * - active_ms: passed through from the reader's own `AgentSessionResult.active_ms` unchanged
  * - children: the session's subagents with their own calls priced, `children_omitted` the finished ones
  *   the reader's cap left out
+ * - tail_read: true when the transcript was over the size bound and only its newest part was analysed
  * - session_name: the vendor's own name for a live session, set by the host from the vendor's live
  *   session file and never by the worker
  */
@@ -197,13 +198,13 @@ export interface AgentAnalyserWorkerSessionOutput {
     capabilities: ActivityCapabilities;
     calls: AgentAnalyserResolvedCall[];
     refusal?: AgentSessionResult['refusal'];
+    tail_read?: boolean;
 }
 
 /**
  * The worker's answer to one request.
- * - evicted_session_ids: sessions this worker dropped its own cache for while handling this request,
- *   whether the byte cap (AGENT_TAIL_CACHE_MAX_BYTES) forced them out or a transcript grew past
- *   AGENT_TRANSCRIPT_MAX_BYTES and was refused; the host must drop its own tail bookmark for each one,
+ * - evicted_session_ids: sessions this worker dropped its own cache for while handling this request
+ *   because the byte cap (AGENT_TAIL_CACHE_MAX_BYTES) forced them out; the host must drop its own tail bookmark for each one,
  *   since resuming against it next time would build from a cache that no longer exists
  * - line_diff_results: one entry per `line_diff_jobs` entry; absent (not empty) when the request
  *   carried none
@@ -291,7 +292,7 @@ export function tailCacheStatsForTest(): { sessions: number; total_source_bytes:
 
 let transcript_max_bytes_override: number | undefined;
 /**
- * Test-only: overrides AGENT_TRANSCRIPT_MAX_BYTES so transcriptSizeRefusal can be exercised
+ * Test-only: overrides AGENT_TRANSCRIPT_MAX_BYTES so the crop and trim can be exercised
  * without a 64 MB fixture; undefined restores the real limit. Never called from production code.
  */
 export function setTranscriptMaxBytesForTest(bytes: number | undefined): void { transcript_max_bytes_override = bytes; }
@@ -304,6 +305,11 @@ function transcriptMaxBytes(): number { return transcript_max_bytes_override ?? 
  * - file_source_bytes: path -> the UTF-8 byte length of the text currently backing `files.get(path)`,
  *   so this session's own share of the byte cap can be measured and freed exactly, without re-encoding
  *   every cached line back to text just to size it
+ * - file_line_bytes: path -> the source bytes each cached line accounts for (its own text, its newline
+ *   and any blank or unparseable lines just before it), parallel to `files.get(path)`, so the oldest
+ *   lines can be dropped to hold a transcript at the size bound
+ * - cropped_paths: the files whose oldest part is not in the cache, because it was cropped at the
+ *   size bound on a whole read or trimmed to it on a resumed one
  * - last_touched: a monotonic counter (not wall-clock time, which two touches in the same test or the
  *   same millisecond could tie) bumped whenever any of this session's files is seeded or appended to;
  *   the byte cap's own eviction order is least-recently-touched first, not least-recently-created
@@ -311,6 +317,8 @@ function transcriptMaxBytes(): number { return transcript_max_bytes_override ?? 
 interface SessionLineCache {
     files: Map<string, unknown[]>;
     file_source_bytes: Map<string, number>;
+    file_line_bytes: Map<string, number[]>;
+    cropped_paths: Set<string>;
     last_touched: number;
 }
 
@@ -320,7 +328,7 @@ let touch_sequence = 0;
 
 function sessionCacheEntry(session_id: string): SessionLineCache {
     let entry = session_line_cache.get(session_id);
-    if (!entry) { entry = { files: new Map(), file_source_bytes: new Map(), last_touched: touch_sequence }; session_line_cache.set(session_id, entry); }
+    if (!entry) { entry = { files: new Map(), file_source_bytes: new Map(), file_line_bytes: new Map(), cropped_paths: new Set(), last_touched: touch_sequence }; session_line_cache.set(session_id, entry); }
     return entry;
 }
 
@@ -336,45 +344,89 @@ function dropSessionCache(session_id: string): void {
     session_line_cache.delete(session_id);
 }
 
+// UTF-8 byte length of a string without encoding it, counting a surrogate pair as its four bytes
+function utf8Length(text: string): number {
+    let bytes = 0;
+    for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i);
+        if (code < 0x80) { bytes += 1; }
+        else if (code < 0x800) { bytes += 2; }
+        else if (code >= 0xd800 && code <= 0xdbff) { bytes += 4; i++; }
+        else { bytes += 3; }
+    }
+    return bytes;
+}
+
 /**
  * Parses one file's text into lines with no whole-file refusal checking at all: used only for a
  * 'tail' continuation, where the file has already passed those checks on an earlier 'whole' read (the
  * only way a 'tail' bookmark can exist), and for a 'none' file, where it is never called. A line that
  * fails to parse is dropped for that line only, the same tolerance every vendor's own parser already
  * applies to a torn trailing line - though AgentAnalyser.ts's own line-boundary rounding means a
- * 'tail' slice should never actually contain one.
+ * 'tail' slice should never actually contain one. Each kept line also reports the source bytes it
+ * accounts for, so a transcript can later be trimmed to the size bound.
  */
-function parseJsonlLenient(text: string): unknown[] {
+function parseJsonlLenient(text: string): { lines: unknown[]; line_bytes: number[] } {
     const lines: unknown[] = [];
+    const line_bytes: number[] = [];
+    let pending_bytes = 0;
     for (const raw of text.split('\n')) {
+        pending_bytes += utf8Length(raw) + 1;
         const trimmed = raw.trim();
         if (trimmed.length === 0) { continue; }
-        try { lines.push(JSON.parse(trimmed)); } catch { /* dropped for this line only */ }
+        try { lines.push(JSON.parse(trimmed)); line_bytes.push(pending_bytes); pending_bytes = 0; } catch { /* dropped for this line only */ }
     }
-    return lines;
+    if (pending_bytes > 0 && line_bytes.length > 0) { line_bytes[line_bytes.length - 1] += pending_bytes; }
+    return { lines, line_bytes };
 }
 
 /**
  * Sets one file's cached lines outright (a 'whole' read), adjusting the byte total by the
  * difference rather than the new total, so reseeding an already-cached file never double-counts.
  */
-function setFileLines(session_id: string, path_: string, lines: unknown[], source_bytes: number): void {
+function setFileLines(session_id: string, path_: string, parsed: { lines: unknown[]; line_bytes: number[] }, source_bytes: number, cropped: boolean): void {
     const entry = sessionCacheEntry(session_id);
     const previous_bytes = entry.file_source_bytes.get(path_) ?? 0;
-    entry.files.set(path_, lines);
+    entry.files.set(path_, parsed.lines);
+    entry.file_line_bytes.set(path_, parsed.line_bytes);
     entry.file_source_bytes.set(path_, source_bytes);
+    if (cropped) { entry.cropped_paths.add(path_); } else { entry.cropped_paths.delete(path_); }
     entry.last_touched = ++touch_sequence;
     total_cached_bytes += source_bytes - previous_bytes;
 }
 
 // appends to one file's cached lines (a 'tail' read)
-function appendFileLines(session_id: string, path_: string, new_lines: unknown[], added_source_bytes: number): void {
+function appendFileLines(session_id: string, path_: string, parsed: { lines: unknown[]; line_bytes: number[] }, added_source_bytes: number): void {
     const entry = sessionCacheEntry(session_id);
     const existing = entry.files.get(path_);
-    entry.files.set(path_, existing && existing.length > 0 ? [...existing, ...new_lines] : new_lines);
+    const existing_bytes = entry.file_line_bytes.get(path_);
+    entry.files.set(path_, existing && existing.length > 0 ? [...existing, ...parsed.lines] : parsed.lines);
+    entry.file_line_bytes.set(path_, existing_bytes && existing_bytes.length > 0 ? [...existing_bytes, ...parsed.line_bytes] : parsed.line_bytes);
     entry.file_source_bytes.set(path_, (entry.file_source_bytes.get(path_) ?? 0) + added_source_bytes);
     entry.last_touched = ++touch_sequence;
     total_cached_bytes += added_source_bytes;
+}
+
+/**
+ * Holds a resumed transcript's cached lines at the size bound by dropping its oldest lines, and marks
+ * the file cropped when it had to: the same newest-end rule a whole read applies, kept incrementally.
+ */
+function trimTranscriptToBound(session_id: string, path_: string): void {
+    const entry = session_line_cache.get(session_id);
+    const lines = entry?.files.get(path_);
+    const line_bytes = entry?.file_line_bytes.get(path_);
+    if (!entry || !lines || !line_bytes) { return; }
+    const max_bytes = transcriptMaxBytes();
+    const source_bytes = entry.file_source_bytes.get(path_) ?? 0;
+    if (source_bytes <= max_bytes) { return; }
+    let drop_count = 0;
+    let dropped_bytes = 0;
+    while (drop_count < line_bytes.length && source_bytes - dropped_bytes > max_bytes) { dropped_bytes += line_bytes[drop_count++]; }
+    entry.files.set(path_, lines.slice(drop_count));
+    entry.file_line_bytes.set(path_, line_bytes.slice(drop_count));
+    entry.file_source_bytes.set(path_, source_bytes - dropped_bytes);
+    entry.cropped_paths.add(path_);
+    total_cached_bytes -= dropped_bytes;
 }
 
 /**
@@ -383,41 +435,18 @@ function appendFileLines(session_id: string, path_: string, new_lines: unknown[]
  * built and thrown away, never retained past this request. A 'none' file's cache is untouched
  * either way, since nothing new arrived.
  */
-function updateLineCacheForFile(job: AgentAnalyserWorkerJob, file: AgentAnalyserRawFile): void {
+function updateLineCacheForFile(job: AgentAnalyserWorkerJob, file: AgentAnalyserRawFile, cropped = false): void {
     // a subagent's launch record is one small JSON document read whole each time, never line-parsed or tail-resumed
     if (!job.cacheable || file.mode === 'none' || file.path.endsWith('.meta.json')) { return; }
     const text = decodeFile(file).text;
     const source_bytes = file.bytes.byteLength;
-    if (file.mode === 'whole') { setFileLines(job.session_id, file.path, parseJsonlLenient(text), source_bytes); return; }
+    if (file.mode === 'whole') { setFileLines(job.session_id, file.path, parseJsonlLenient(text), source_bytes, cropped); return; }
     appendFileLines(job.session_id, file.path, parseJsonlLenient(text), source_bytes);
+    if (file.path === job.transcript.path) { trimTranscriptToBound(job.session_id, file.path); }
 }
 
 function linesFor(session_id: string, path_: string): unknown[] {
     return session_line_cache.get(session_id)?.files.get(path_) ?? [];
-}
-
-// UTF-8 byte length of the source text already cached for a session's file, 0 if never cached
-function existingSourceBytes(session_id: string, path_: string): number {
-    return session_line_cache.get(session_id)?.file_source_bytes.get(path_) ?? 0;
-}
-
-/**
- * The single place `AGENT_TRANSCRIPT_MAX_BYTES` is judged against a job's transcript, whichever mode it
- * arrives in: a 'whole' job's own bytes stand alone (a fresh total), while a 'tail'/'none' job's bytes
- * are added to whatever this worker already has cached for that same path (a 'none' job adds zero,
- * simply re-checking the cached total). This is what makes a growing transcript refused the scan it
- * crosses the bound, not only the scan that first read it whole - and, since a non-cacheable job is
- * always 'whole' (`AgentAnalyser.ts`'s `resolveSessionTailPlan`) and therefore already goes through a
- * vendor's own `readXSession` check in `runJobWhole`, this only needs to run for a cacheable job.
- */
-function transcriptSizeRefusal(job: AgentAnalyserWorkerJob): AgentReadRefusal | undefined {
-    if (!job.cacheable) { return undefined; }
-    const max_bytes = transcriptMaxBytes();
-    const byte_length = job.transcript.mode === 'whole'
-        ? job.transcript.bytes.byteLength
-        : existingSourceBytes(job.session_id, job.transcript.path) + job.transcript.bytes.byteLength;
-    if (byte_length <= max_bytes) { return undefined; }
-    return { code: 'too_large', reason: `transcript is ${byte_length} bytes, over the ${max_bytes} byte limit` };
 }
 
 /**
@@ -462,7 +491,7 @@ const VENDOR_RESULT_BUILDERS: Record<AgentVendorId, (input: AgentSessionInput, r
     grok: (input, records) => buildGrokResult(input, records as GrokLine[]),
 };
 
-function buildOutputFrom(job: AgentAnalyserWorkerJob, result: AgentSessionResult): AgentAnalyserWorkerSessionOutput {
+function buildOutputFrom(job: AgentAnalyserWorkerJob, result: AgentSessionResult, tail_read: boolean): AgentAnalyserWorkerSessionOutput {
     return {
         session_id: result.session_id,
         vendor: job.vendor,
@@ -482,11 +511,12 @@ function buildOutputFrom(job: AgentAnalyserWorkerJob, result: AgentSessionResult
         capabilities: capabilitiesForVendor(job.vendor),
         calls: resolveCalls(result),
         refusal: result.refusal,
+        tail_read: tail_read ? true : undefined,
     };
 }
 
 // a 'whole' job: every file's full current content, through the vendor's own refusal-checked readXSession
-function runJobWhole(job: AgentAnalyserWorkerJob): AgentAnalyserWorkerSessionOutput {
+function runJobWhole(job: AgentAnalyserWorkerJob, cropped: boolean): AgentAnalyserWorkerSessionOutput {
     const reader = VENDOR_READERS[job.vendor];
     const input: AgentSessionInput = {
         session_id: job.session_id,
@@ -498,7 +528,7 @@ function runJobWhole(job: AgentAnalyserWorkerJob): AgentAnalyserWorkerSessionOut
         extra_files: job.extra_files.map(decodeFile),
     };
     const result = reader(input);
-    return buildOutputFrom(job, result);
+    return buildOutputFrom(job, result, cropped);
 }
 
 /**
@@ -511,7 +541,7 @@ function runJobWhole(job: AgentAnalyserWorkerJob): AgentAnalyserWorkerSessionOut
  * `extra_records` (`buildGrokResult`'s own `usage.json` lookup): a resumed job would otherwise silently
  * lose it, since `VENDOR_RESULT_BUILDERS` never sees that file at all for Grok.
  */
-function runJobIncremental(job: AgentAnalyserWorkerJob): AgentAnalyserWorkerSessionOutput {
+function runJobIncremental(job: AgentAnalyserWorkerJob, cropped: boolean): AgentAnalyserWorkerSessionOutput {
     const input: AgentSessionInput = {
         session_id: job.session_id,
         cwd: job.cwd,
@@ -525,24 +555,22 @@ function runJobIncremental(job: AgentAnalyserWorkerJob): AgentAnalyserWorkerSess
     const records = linesFor(job.session_id, job.transcript.path);
     const extra_records = job.extra_files.map(file => linesFor(job.session_id, file.path));
     const result = VENDOR_RESULT_BUILDERS[job.vendor](input, records, extra_records);
-    return buildOutputFrom(job, result);
+    return buildOutputFrom(job, result, cropped);
 }
 
 /**
- * Oversize is checked, and the session dropped, before the cache or a reader sees this job's
- * bytes: transcriptSizeRefusal treats whole/tail/none jobs alike, so a transcript over
- * AGENT_TRANSCRIPT_MAX_BYTES stays refused and uncached on every scan, not just its first.
+ * A 'whole' job's transcript is cropped to the newest bound's worth before the cache or a reader sees
+ * it; a resumed job is trimmed to the bound as it is cached. The session's `tail_read` is true when
+ * either happened, now or on an earlier scan whose cache this job resumes.
  */
-function runJob(job: AgentAnalyserWorkerJob, oversized_session_ids: Set<string>): AgentAnalyserWorkerSessionOutput {
-    const size_refusal = transcriptSizeRefusal(job);
-    if (size_refusal) {
-        dropSessionCache(job.session_id);
-        oversized_session_ids.add(job.session_id);
-        return refusalOutputFor(job, size_refusal);
-    }
-    updateLineCacheForFile(job, job.transcript);
+function runJob(job: AgentAnalyserWorkerJob): AgentAnalyserWorkerSessionOutput {
+    const whole = job.transcript.mode === 'whole';
+    const crop = whole ? cropToNewestBytes(new Uint8Array(job.transcript.bytes), transcriptMaxBytes()) : undefined;
+    const cropped_job = crop?.cropped ? { ...job, transcript: { ...job.transcript, bytes: crop.bytes.slice().buffer as ArrayBuffer } } : job;
+    updateLineCacheForFile(cropped_job, cropped_job.transcript, crop?.cropped);
     for (const extra of job.extra_files) { updateLineCacheForFile(job, extra); }
-    return job.transcript.mode === 'whole' ? runJobWhole(job) : runJobIncremental(job);
+    const cropped = whole ? crop!.cropped : (session_line_cache.get(job.session_id)?.cropped_paths.has(job.transcript.path) ?? false);
+    return whole ? runJobWhole(cropped_job, cropped) : runJobIncremental(job, cropped);
 }
 
 /**
@@ -551,8 +579,8 @@ function runJob(job: AgentAnalyserWorkerJob, oversized_session_ids: Set<string>)
  * resolveCalls, or a reader bug) - one that would otherwise fail the whole batch and leave every
  * other session in it unreported too.
  */
-function runJobIsolated(job: AgentAnalyserWorkerJob, oversized_session_ids: Set<string>): AgentAnalyserWorkerSessionOutput {
-    try { return runJob(job, oversized_session_ids); }
+function runJobIsolated(job: AgentAnalyserWorkerJob): AgentAnalyserWorkerSessionOutput {
+    try { return runJob(job); }
     catch (err) { return refusalOutputFor(job, { code: 'unreadable', reason: err instanceof Error ? err.message : String(err) }); }
 }
 
@@ -570,18 +598,14 @@ function runLineDiffJobIsolated(job: AgentLineDiffJob): AgentLineDiffResult {
 /**
  * The whole of the worker's job: evict what the host has dropped, read every job handed to it and
  * price what it found (never throwing a bad job out of the batch), then enforce the cache's own byte
- * cap and report anything IT had to evict - the byte cap's own evictions plus every session
- * `transcriptSizeRefusal` refused this request - so the host's next request never assumes a bookmark
- * this worker no longer backs, whether the worker dropped it for space or because the transcript itself
- * grew past its own bound. `line_diff_jobs`, when present, are computed the same pass, unrelated to
+ * cap and report anything IT had to evict, so the host's next request never assumes a bookmark this
+ * worker no longer backs. `line_diff_jobs`, when present, are computed the same pass, unrelated to
  * the session jobs above.
  */
 export function handleAgentAnalyserRequest(request: AgentAnalyserWorkerRequest): AgentAnalyserWorkerResponse {
     for (const session_id of request.evict_session_ids ?? []) { dropSessionCache(session_id); }
-    const oversized_session_ids = new Set<string>();
-    const sessions = request.jobs.map(job => runJobIsolated(job, oversized_session_ids));
-    const cap_evicted = enforceCacheByteCap(request.pool_size);
-    const evicted_session_ids = [...new Set([...oversized_session_ids, ...cap_evicted])];
+    const sessions = request.jobs.map(runJobIsolated);
+    const evicted_session_ids = enforceCacheByteCap(request.pool_size);
     const line_diff_results = request.line_diff_jobs?.map(runLineDiffJobIsolated);
     return {
         request_id: request.request_id,

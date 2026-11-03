@@ -1,4 +1,5 @@
 import React from "react";
+import * as l10n from "@vscode/l10n";
 import AgentSessionRow from "./AgentSessionRow";
 import type { ActivityRefusal, ActivitySessionState, ActivityStoryKey, ActivityUnavailable, AgentClockMode } from "../../../lib/agentactivityops";
 import styles from "../AgentNote.module.scss";
@@ -22,7 +23,7 @@ function AgentSessionRows(props: AgentSessionRowsProps): React.ReactElement | nu
     if (props.sessions.length === 0) { return null; }
     const chat_refusal = props.unavailable?.request === 'chat' ? props.unavailable : undefined;
     return (
-        <ul className={styles.agentRows} data-testid="agent-rows">
+        <ul className={styles.agentRows} role="tree" aria-label={l10n.t('Agents')} data-testid="agent-rows">
             {props.sessions.map(state => (
                 <AgentSessionRow
                     key={state.session.session_id}

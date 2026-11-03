@@ -11,3 +11,8 @@ export function agentStateLabel(state: ActivityState): string {
         default: return l10n.t('State not reported');
     }
 }
+
+/** whether a row draws the state word: a working or waiting agent shows it by the rail colour and the story's headline, so the word is only read aloud */
+export function agentStateDrawn(state: ActivityState): boolean {
+    return state !== 'working' && state !== 'waiting';
+}

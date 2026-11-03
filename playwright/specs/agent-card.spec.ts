@@ -60,10 +60,10 @@ async function pinAgentCard(page: Page): Promise<void> {
 }
 
 /** the board every spec below starts from: the agent card pinned, the folder view, and the fixture snapshot */
-async function agentBoard(page: Page): Promise<void> {
+async function agentBoard(page: Page, activity_options: Parameters<typeof injectActivity>[1] = {}): Promise<void> {
     await pinAgentCard(page);
     await folderBoard(page);
-    await injectActivity(page);
+    await injectActivity(page, activity_options);
     await expect(page.locator('[data-card-type="agent"]').first()).toBeVisible({ timeout: 5000 });
 }
 
@@ -73,7 +73,7 @@ function cardFor(page: Page, headline: string): Locator {
 }
 
 // the text cells of an agent row, each of which must hold one line whatever width the card is given
-const AGENT_ROW_CELLS = ['agent-monogram', 'agent-model', 'agent-state', 'agent-clock', 'agent-live', 'agent-usage'];
+const AGENT_ROW_CELLS = ['agent-monogram', 'agent-model', 'agent-clock', 'agent-live', 'agent-usage'];
 
 type RowCell = { testid: string; top: number; height: number; width: number; font_size: number };
 
@@ -120,13 +120,15 @@ test.describe('Agent card', () => {
         await expect(bound.getByTestId('agent-monogram')).toHaveText('CC');
         await expect(bound.getByTestId('agent-model')).toHaveText('sonnet-5');
         await expect(bound.getByTestId('agent-model')).toHaveAttribute('title', 'claude-sonnet-5');
-        await expect(bound.getByTestId('agent-state')).toHaveText('Working');
+        // a working agent draws no state word, the rail colour and the headline say it; the word stays for screen readers
+        await expect(bound.getByTestId('agent-state')).toHaveCount(0);
+        await expect(bound.getByTestId('agent-state-quiet')).toHaveText('Working');
         await expect(bound.getByTestId('agent-live')).toContainText('Edit client/extension/src/types/AgentActivity.ts');
         await expect(bound.getByTestId('agent-row')).toHaveAttribute('data-state', 'working');
 
         // each of the other bound sessions declared its own story, and lands only there
         await expect(cardFor(page, 'Kanban card ratio height').getByTestId('agent-state')).toHaveText('Idle');
-        await expect(cardFor(page, 'User view type update').getByTestId('agent-state')).toHaveText('Waiting on you');
+        await expect(cardFor(page, 'User view type update').getByTestId('agent-state-quiet')).toHaveText('Waiting on you');
         // a story in another repository, which no session touched, says nothing has worked on it rather than borrowing an agent
         const other_repo = cardFor(page, 'Workbench boot order');
         const other_repo_notice = other_repo.getByTestId('agent-banner-notice');
@@ -161,6 +163,16 @@ test.describe('Agent card', () => {
         for (const headline of ['Agent activity card', 'Kanban card ratio height', 'Remove blank lines between statements']) {
             await expect(cardFor(page, headline)).toHaveAttribute('data-virtual-note', 'false');
         }
+    });
+
+    test('says beside a session\'s clock that its usage and time cover only the newest part of an oversized transcript', async ({ page }) => {
+        await agentBoard(page, { tail_read_sessions: ['claude-no-story'] });
+        const virtual = page.locator('[data-card-type="agent"][data-virtual-note="true"]');
+        const note = virtual.getByTestId('agent-tail-read');
+        await expect(note).toHaveText('newest part only');
+        await expect(note).toHaveAttribute('title', /over the size limit/);
+        // only the marked session carries the note
+        await expect(page.getByTestId('agent-tail-read')).toHaveCount(1);
     });
 
     test('draws an unbound session only beside its own repository, never beside a document outside it', async ({ page }) => {
@@ -205,7 +217,7 @@ test.describe('Agent card', () => {
         await card.getByTestId('agent-usage-summary').hover();
         expect(await card.evaluate(el => getComputedStyle(el).boxShadow)).not.toContain('inset');
         // the per-agent rail stays, coloured by that agent's own state
-        const rail_colour = await card.getByTestId('agent-row').first().evaluate(li => getComputedStyle(li.querySelector('button > span') as Element).backgroundColor);
+        const rail_colour = await card.getByTestId('agent-row').first().evaluate(li => getComputedStyle(li.querySelector('[data-testid="agent-row-rail"]') as Element).backgroundColor);
         expect(rail_colour).not.toBe('rgba(0, 0, 0, 0)');
     });
 
@@ -336,7 +348,7 @@ test.describe('Agent card', () => {
         await page.setViewportSize({ width: 600, height: 900 });
         const card = cardFor(page, 'Agent activity card');
         const rows = card.getByTestId('agent-rows');
-        // the layout switches on the roster's own width, so the group must be narrower than the one-line threshold
+        // the layout reads the roster's own width, so the group must be narrower than the wide card
         await expect.poll(async () => (await rows.boundingBox())!.width).toBeLessThan(440);
         const cells = await rowCells(card.getByTestId('agent-row-button').first());
         for (const cell of cells) {
@@ -351,7 +363,7 @@ test.describe('Agent card', () => {
         expect(await rows.evaluate(ul => getComputedStyle(ul).paddingLeft)).toBe('0px');
     });
 
-    test('draws an agent row on one line where the card is wide enough, as it is in the document view', async ({ page }) => {
+    test('draws a wide agent row as a quiet header over the live line, the same two lines as a narrow one', async ({ page }) => {
         await agentBoard(page);
         await expect(page.locator('[data-auto-selected-viewtype="document"]')).toHaveCount(1);
         const card = cardFor(page, 'Agent activity card');
@@ -360,9 +372,15 @@ test.describe('Agent card', () => {
         const model_top = cellOf(cells, 'agent-model').top;
         for (const cell of cells) {
             expect(cell.height, `${cell.testid} wrapped onto a second line`).toBeLessThanOrEqual(cell.font_size * 1.6);
+        }
+        for (const testid of ['agent-monogram', 'agent-clock']) {
             // baseline alignment across two font sizes shifts a box's top by a few pixels, never by a line
-            expect(Math.abs(cell.top - model_top), `${cell.testid} is not on the model's line`).toBeLessThan(cell.font_size * 0.8);
-        }    });
+            expect(Math.abs(cellOf(cells, testid).top - model_top), `${testid} is not on the header line`).toBeLessThan(cellOf(cells, testid).font_size * 0.8);
+        }
+        const live = cellOf(cells, 'agent-live');
+        expect(live.top, 'the live line sits under the header').toBeGreaterThan(model_top + 8);
+        expect(Math.abs(cellOf(cells, 'agent-usage').top - live.top)).toBeLessThan(live.font_size * 0.8);
+    });
 
     test('never posts an edit naming the virtual sentinel, whatever the card is made to do', async ({ page }) => {
         await agentBoard(page);

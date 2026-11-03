@@ -207,6 +207,8 @@ export interface ActivityChildSession {
  *   shows work, so a row reads stale rather than working
  * - registry_story: the story id the registry entry names, shown on a registry-only row; a joined
  *   or registry-only session also takes it as its story binding when that story is in flight
+ * - tail_read: true when the transcript was over the size bound, so this session's usage, active time
+ *   and start cover only its newest part; absent otherwise
  * - state: owns the card's colour; `question` present means `waiting`, and the two are not allowed
  *   to disagree; `waiting` may stand alone, as Claude Code's own session status reports it with no
  *   question text
@@ -250,6 +252,7 @@ export interface ActivitySession {
     updated_at: string;
     ended_at?: string;
     active_ms?: number;
+    tail_read?: boolean;
     // --- what it is doing ---
     state: ActivityState;
     capabilities: ActivityCapabilities;
@@ -331,7 +334,7 @@ export interface ActivityStoryProgress {
 }
 
 // why a session's own files could not be read; a caller asserts and branches on the code and logs the reason
-export const ACTIVITY_REJECT_CODES = ['too_large', 'unreadable', 'unsupported_version', 'invalid_shape'] as const;
+export const ACTIVITY_REJECT_CODES = ['unreadable', 'unsupported_version', 'invalid_shape'] as const;
 export type ActivityRejectCode = typeof ACTIVITY_REJECT_CODES[number];
 
 /**

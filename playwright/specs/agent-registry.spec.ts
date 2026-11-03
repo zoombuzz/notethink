@@ -66,7 +66,8 @@ test.describe('Agents known from the registry', () => {
         await expect(row).toHaveCount(1);
         await expect(row.getByTestId('agent-name')).toHaveText('coord-demo');
         await expect(row.getByTestId('agent-monogram')).toHaveText('CC');
-        await expect(row.getByTestId('agent-state')).toHaveText('Working');
+        await expect(row.getByTestId('agent-state')).toHaveCount(0);
+        await expect(row.getByTestId('agent-state-quiet')).toHaveText('Working');
         await expect(row).toHaveAttribute('data-state', 'working');
         // it is bound to the story, so no card of its own is minted for it
         await expect(page.locator('[data-card-type="agent"][data-virtual-note="true"]')).toHaveCount(0);

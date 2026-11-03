@@ -207,5 +207,7 @@
   "Registered, on {0}": "Registered, on {0}",
   "Registered agent": "Registered agent",
   "Stale": "Stale",
-  "Known from the agent registry only, so there is no session to open": "Known from the agent registry only, so there is no session to open"
+  "Known from the agent registry only, so there is no session to open": "Known from the agent registry only, so there is no session to open",
+  "This transcript is over the size limit, so its usage and time cover only its newest part": "This transcript is over the size limit, so its usage and time cover only its newest part",
+  "newest part only": "newest part only"
 }

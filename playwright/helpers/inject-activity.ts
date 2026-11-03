@@ -27,6 +27,7 @@ interface ActivityRefusalSpec {
  * - root_relative: relative to the workspace folder; '' when the repository IS the workspace folder
  * - state: defaults to 'live'; 'scanning' posts a growing snapshot, as an interim batch looks
  * - sessions: session ids to keep; defaults to every session this helper declares
+ * - tail_read_sessions: ids of sessions to mark `tail_read`, as the analyser does for a transcript over its size bound
  * - extra_uncommitted: extra unattributed changed files, to fill a card's uncommitted band
  * - finished_children: how many finished subagents the `claude-coordinator` session carries beside its running one
  * - progress: coordinator percentages by story id, each stamped as written by the coordinator at the given time
@@ -38,6 +39,7 @@ interface InjectActivityOptions {
     state?: 'scanning' | 'live' | 'unavailable';
     refusals?: ActivityRefusalSpec[];
     sessions?: string[];
+    tail_read_sessions?: string[];
     extra_uncommitted?: number;
     finished_children?: number;
     progress?: Array<{ story_id: string; pct: number; at?: string; note?: string }>;
@@ -100,8 +102,8 @@ function claudeCoordinator(story_doc_path: string, finished_children = 1): Recor
     }));
     const running = {
         child_id: 'run1', title: 'Map view code', agent_type: 'Explore', model: 'claude-haiku-5', state: 'working',
-        started_at: '2026-09-18T09:10:00Z', updated_at: '2026-09-18T09:14:00Z',
-        current: { at: '2026-09-18T09:14:00Z', kind: 'tool_call', tool: 'Grep', arg: 'agentRail' },
+        started_at: new Date(Date.now() - 4 * 60 * 1000).toISOString(), updated_at: new Date().toISOString(),
+        current: { at: new Date().toISOString(), kind: 'tool_call', tool: 'Grep', arg: 'agentRail' },
         usage: CHILD_USAGE,
     };
     return {
@@ -206,7 +208,7 @@ export function activityFixtureSnapshot(options: InjectActivityOptions = {}): Re
     const ids = options.sessions ?? Object.keys(SESSION_BUILDERS).filter(id => !OPT_IN_SESSIONS.has(id));
     const sessions = ids.map(id => ({
         root_path,
-        session: SESSION_BUILDERS[id](story_doc_path, options),
+        session: { ...SESSION_BUILDERS[id](story_doc_path, options), ...(options.tail_read_sessions?.includes(id) ? { tail_read: true } : {}) },
     }));
     return {
         analyser: { state: options.state ?? (options.live === false ? 'unavailable' : 'live'), refusals: options.refusals ?? [] },

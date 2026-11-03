@@ -22,7 +22,7 @@ import {
  * answered from the other two, which is why they are three separate fields rather than one blob.
  */
 
-// a transcript over this many UTF-8 bytes is refused as too_large rather than parsed partway into a truncated line
+// a transcript over this many bytes is read from its newest end, starting at the first complete line within the bound
 export const AGENT_TRANSCRIPT_MAX_BYTES = 64 * 1024 * 1024;
 // bounds the edit snippet on AgentToolInvocation, which locates the changed board section and never crosses to the webview
 export const AGENT_EDIT_SNIPPET_MAX_CHARS = 4000;
@@ -106,7 +106,7 @@ export interface AgentToolInvocation {
     whole_file?: boolean;
 }
 
-export const AGENT_REFUSAL_CODES = ['too_large', 'unreadable', 'unsupported_version', 'invalid_shape'] as const;
+export const AGENT_REFUSAL_CODES = ['unreadable', 'unsupported_version', 'invalid_shape'] as const;
 export type AgentRefusalCode = typeof AGENT_REFUSAL_CODES[number];
 
 export interface AgentReadRefusal {

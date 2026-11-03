@@ -1,7 +1,6 @@
 import { activeMsFromTimestamps } from './agentclockops';
 import {
     AGENT_EDIT_SNIPPET_MAX_CHARS,
-    AGENT_TRANSCRIPT_MAX_BYTES,
     type AgentApiCall,
     type AgentReadRefusal,
     type AgentSessionInput,
@@ -309,17 +308,13 @@ function walkCodexLines(lines: CodexLine[], window_start_ms: number, now_ms: num
 }
 
 /**
- * Parses a rollout's text and checks it against the two whole-file refusal conditions (too_large,
- * invalid_shape). Exported so `AgentAnalyserWorker.ts` can run it once against a session's current
+ * Parses a rollout's text and checks it against the whole-file refusal condition (invalid_shape).
+ * Exported so `AgentAnalyserWorker.ts` can run it once against a session's current
  * full bytes (first sight, a shrunk or rewritten file, or a session re-read after a worker restart)
  * and reuse the very same `lines` both to build the session's result and to seed the incremental
  * cache, rather than parsing the same text twice.
  */
 export function parseCodexTranscript(text: string): { lines: CodexLine[]; refusal?: AgentReadRefusal } {
-    const byte_length = new TextEncoder().encode(text).length;
-    if (byte_length > AGENT_TRANSCRIPT_MAX_BYTES) {
-        return { lines: [], refusal: { code: 'too_large', reason: `transcript is ${byte_length} bytes, over the ${AGENT_TRANSCRIPT_MAX_BYTES} byte limit` } };
-    }
     const parsed = parseCodexLines(text);
     if (!parsed) {
         return { lines: [], refusal: { code: 'invalid_shape', reason: 'transcript has no parseable JSONL lines' } };

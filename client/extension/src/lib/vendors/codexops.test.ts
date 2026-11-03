@@ -1,4 +1,4 @@
-import { AGENT_TRANSCRIPT_MAX_BYTES, type AgentSessionInput } from './agentvendorops';
+import { type AgentSessionInput } from './agentvendorops';
 import { buildCodexResult, parseCodexTranscript, readCodexSession } from './codexops';
 
 const SESSION_META_LINE = '{"timestamp":"2026-09-04T08:32:12.047Z","ordinal":0,"type":"session_meta","payload":{"session_id":"01a06b8a-856f-79d0-833c-064a25c90c9e","id":"01a06b8a-856f-79d0-833c-064a25c90c9e","timestamp":"2026-09-04T08:30:35.375Z","cwd":"/mnt/secure/home/alex/git/github.com/active_development","originator":"codex-tui","cli_version":"0.153.2","source":"cli","thread_source":"user","model_provider":"openai","base_instructions":{"text":"you are a helpful coding agent"}}}';
@@ -181,12 +181,6 @@ describe('readCodexSession', () => {
         const text = 'not json\nstill not json';
         const result = readCodexSession(baseInput(text));
         expect(result.refusal?.code).toBe('invalid_shape');
-    });
-
-    it('refuses too_large when the transcript exceeds the byte limit', () => {
-        const huge_text = `${SESSION_META_LINE}\n${'x'.repeat(AGENT_TRANSCRIPT_MAX_BYTES + 1)}`;
-        const result = readCodexSession(baseInput(huge_text));
-        expect(result.refusal?.code).toBe('too_large');
     });
 
     it('marks a git commit shell call as is_commit in tool_invocations', () => {

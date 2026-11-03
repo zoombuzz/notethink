@@ -271,75 +271,122 @@ describe('a pooled worker retains only its own share of the byte cap', () => {
     });
 });
 
-describe('the transcript size cap applies the same way whole or tailed', () => {
-    // each claudeLine is exactly 267 bytes with its trailing newline (measured, per the byte-cap describe block above)
+describe('a transcript over the size bound is read from its newest end', () => {
+    // four same-width claude lines, so every line is the same byte length and the bound can be set in whole lines
+    const lines = [1000, 2000, 3000, 4000].map((tokens, index) => claudeLine(`m${index + 1}`, tokens));
+    const line_bytes = new TextEncoder().encode(`${lines[0]}\n`).length;
     beforeEach(() => { resetTailCacheForTest(); });
     afterEach(() => { setTranscriptMaxBytesForTest(undefined); });
 
-    it('refuses a whole job whose transcript is over the cap, and never caches it', () => {
-        setTranscriptMaxBytesForTest(300);
-        const session_id = 'oversize-whole';
-        const job = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n${claudeLine('m2', 1)}\n`) });
-        const response = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] });
-        expect(response.sessions[0].refusal?.code).toBe('too_large');
-        expect(response.evicted_session_ids).toEqual([session_id]);
+    it('crops a whole job to the newest lines that fit, starting at a complete line, and marks the session tail-read', () => {
+        setTranscriptMaxBytesForTest(line_bytes * 2 + 10);
+        const job = baseJob({ session_id: 'crop-whole', transcript: fileOf(`${lines.join('\n')}\n`) });
+        const session = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] }).sessions[0];
+        expect(session.refusal).toBeUndefined();
+        expect(session.tail_read).toBe(true);
+        expect(session.usage.input_tokens).toBe(3000 + 4000);
+        expect(tailCacheStatsForTest().total_source_bytes).toBeLessThanOrEqual(line_bytes * 2 + 10);
+    });
+
+    it('starts at the first full line even when the bound lands in the middle of a line', () => {
+        setTranscriptMaxBytesForTest(line_bytes * 2 + Math.floor(line_bytes / 2));
+        const job = baseJob({ session_id: 'crop-mid-line', transcript: fileOf(`${lines.join('\n')}\n`) });
+        const session = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] }).sessions[0];
+        expect(session.usage.input_tokens).toBe(3000 + 4000);
+    });
+
+    it('leaves a transcript within the bound whole and unmarked', () => {
+        setTranscriptMaxBytesForTest(line_bytes * 4);
+        const job = baseJob({ session_id: 'within', transcript: fileOf(`${lines.join('\n')}\n`) });
+        const session = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] }).sessions[0];
+        expect(session.tail_read).toBeUndefined();
+        expect(session.usage.input_tokens).toBe(10000);
+    });
+
+    it('crops a non-cacheable job the same way, retaining nothing', () => {
+        setTranscriptMaxBytesForTest(line_bytes * 2 + 10);
+        const job = baseJob({ session_id: 'crop-noncacheable', cacheable: false, transcript: fileOf(`${lines.join('\n')}\n`) });
+        const session = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] }).sessions[0];
+        expect(session.tail_read).toBe(true);
+        expect(session.usage.input_tokens).toBe(7000);
         expect(tailCacheStatsForTest()).toEqual({ sessions: 0, total_source_bytes: 0 });
     });
 
-    it('refuses the same transcript again on its next whole scan, not only its first', () => {
-        setTranscriptMaxBytesForTest(300);
-        const session_id = 'oversize-repeat';
-        const job = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n${claudeLine('m2', 1)}\n`) });
-        handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] });
-        const second = handleAgentAnalyserRequest({ request_id: 'b', jobs: [job] });
-        expect(second.sessions[0].refusal?.code).toBe('too_large');
-        expect(tailCacheStatsForTest()).toEqual({ sessions: 0, total_source_bytes: 0 });
+    it('reads nothing from a transcript whose newest bound holds no complete line, rather than parsing a partial one', () => {
+        setTranscriptMaxBytesForTest(50);
+        const job = baseJob({ session_id: 'one-long-line', transcript: fileOf(`${lines[0]}\n`) });
+        const session = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] }).sessions[0];
+        expect(session.tail_read).toBe(true);
+        expect(session.usage.input_tokens).toBe(0);
     });
 
-    it('refuses a tail job the scan its cumulative bytes cross the cap, dropping its cache and its bookmark eligibility', () => {
-        setTranscriptMaxBytesForTest(300);
-        const session_id = 'crosses-cap';
-        // one line (267 bytes) fits the cap and caches normally
-        const whole_job = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m1', 100)}\n`) });
-        const first = handleAgentAnalyserRequest({ request_id: 'a', jobs: [whole_job] });
-        expect(first.sessions[0].refusal).toBeUndefined();
-        expect(tailCacheStatsForTest().sessions).toBe(1);
+    it('resumes a cropped session: a tail job drops the oldest cached lines to stay within the bound and keeps the mark', () => {
+        setTranscriptMaxBytesForTest(line_bytes * 2 + 10);
+        const session_id = 'crop-resume';
+        handleAgentAnalyserRequest({ request_id: 'a', jobs: [baseJob({ session_id, transcript: fileOf(`${lines.slice(0, 3).join('\n')}\n`) })] });
+        const grown = claudeLine('m4', 4000);
+        const tail_job = baseJob({ session_id, transcript: fileOf(`${grown}\n`, '/t.jsonl', 'tail') });
+        const resumed = handleAgentAnalyserRequest({ request_id: 'b', jobs: [tail_job] });
+        expect(resumed.evicted_session_ids).toBeUndefined();
+        expect(resumed.sessions[0].tail_read).toBe(true);
+        expect(resumed.sessions[0].usage.input_tokens).toBe(3000 + 4000);
+        expect(tailCacheStatsForTest().total_source_bytes).toBeLessThanOrEqual(line_bytes * 2 + 10);
 
-        // a second line appended by tail pushes the cumulative total (534 bytes) over the 300 byte cap
-        const tail_job = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m2', 1)}\n`, '/t.jsonl', 'tail') });
+        // a 'none' job reuses the cached, still-cropped lines and keeps the mark
+        const none_job = baseJob({ session_id, transcript: fileOf('', '/t.jsonl', 'none') });
+        const unchanged = handleAgentAnalyserRequest({ request_id: 'c', jobs: [none_job] }).sessions[0];
+        expect(unchanged.tail_read).toBe(true);
+        expect(unchanged.usage.input_tokens).toBe(7000);
+    });
+
+    it('marks a session tail-read once a resumed transcript first outgrows the bound, and not before', () => {
+        setTranscriptMaxBytesForTest(line_bytes * 2 + 10);
+        const session_id = 'crosses-bound';
+        const first = handleAgentAnalyserRequest({ request_id: 'a', jobs: [baseJob({ session_id, transcript: fileOf(`${lines[0]}\n${lines[1]}\n`) })] });
+        expect(first.sessions[0].tail_read).toBeUndefined();
+        const tail_job = baseJob({ session_id, transcript: fileOf(`${lines[2]}\n`, '/t.jsonl', 'tail') });
         const second = handleAgentAnalyserRequest({ request_id: 'b', jobs: [tail_job] });
-        expect(second.sessions[0].refusal?.code).toBe('too_large');
-        expect(second.evicted_session_ids).toEqual([session_id]);
-        expect(tailCacheStatsForTest()).toEqual({ sessions: 0, total_source_bytes: 0 });
-
-        // nothing survived the refusal: a further tail job combines from nothing, like a session never cached at all
-        const later_tail = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m3', 5)}\n`, '/t.jsonl', 'tail') });
-        const third = handleAgentAnalyserRequest({ request_id: 'c', jobs: [later_tail] });
-        expect(third.sessions[0].usage.input_tokens).toBe(5);
+        expect(second.sessions[0].tail_read).toBe(true);
+        expect(second.sessions[0].usage.input_tokens).toBe(2000 + 3000);
     });
 
-    it('a session refused for size parses whole again, cleanly, once the cap no longer applies to it', () => {
-        setTranscriptMaxBytesForTest(300);
-        const session_id = 'shrinks-under-cap';
-        const oversize_job = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m1', 1)}\n${claudeLine('m2', 1)}\n`) });
-        const refused = handleAgentAnalyserRequest({ request_id: 'a', jobs: [oversize_job] });
-        expect(refused.sessions[0].refusal?.code).toBe('too_large');
-
-        // once the cap lifts, a fresh whole job for the session builds and caches normally, with nothing left from the refusal
-        setTranscriptMaxBytesForTest(undefined);
-        const small_job = baseJob({ session_id, cacheable: true, transcript: fileOf(`${claudeLine('m3', 9)}\n`) });
-        const recovered = handleAgentAnalyserRequest({ request_id: 'b', jobs: [small_job] });
-        expect(recovered.sessions[0].refusal).toBeUndefined();
-        expect(recovered.sessions[0].usage.input_tokens).toBe(9);
+    it('a transcript that shrinks back within the bound reads whole again, unmarked', () => {
+        setTranscriptMaxBytesForTest(line_bytes * 2 + 10);
+        const session_id = 'shrinks';
+        handleAgentAnalyserRequest({ request_id: 'a', jobs: [baseJob({ session_id, transcript: fileOf(`${lines.join('\n')}\n`) })] });
+        const rewritten = handleAgentAnalyserRequest({ request_id: 'b', jobs: [baseJob({ session_id, transcript: fileOf(`${lines[0]}\n`) })] });
+        expect(rewritten.sessions[0].tail_read).toBeUndefined();
+        expect(rewritten.sessions[0].usage.input_tokens).toBe(1000);
     });
 
-    it('does not check a non-cacheable job, which is always whole anyway and already goes through the reader\'s own check', () => {
-        setTranscriptMaxBytesForTest(300);
-        const session_id = 'noncacheable-oversize';
-        const job = baseJob({ session_id, cacheable: false, transcript: fileOf(`${claudeLine('m1', 1)}\n${claudeLine('m2', 1)}\n`) });
-        const response = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] });
-        // 534 bytes exceeds the test's 300 byte override but stays under the real limit the vendor reader checks, so it accepts
-        expect(response.sessions[0].refusal).toBeUndefined();
+    it('an oversized transcript that is not live reads as ended, so it draws no card', () => {
+        setTranscriptMaxBytesForTest(line_bytes * 2 + 10);
+        const job = baseJob({ session_id: 'oversized-ended', vendor_live: false, transcript: fileOf(`${lines.join('\n')}\n`) });
+        const session = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] }).sessions[0];
+        expect(session.tail_read).toBe(true);
+        expect(session.state).toBe('ended');
+    });
+
+    it('applies to a codex rollout, from the first complete line inside the bound', () => {
+        const meta = '{"timestamp":"2026-09-22T10:00:00.000Z","ordinal":0,"type":"session_meta","payload":{"session_id":"c1","id":"c1","timestamp":"2026-09-22T10:00:00.000Z","cwd":"/repo"}}';
+        const messages = [1, 2, 3].map(n => JSON.stringify({ timestamp: `2026-09-22T10:0${n}:00.000Z`, ordinal: n, type: 'response_item', payload: { type: 'message', role: 'assistant', text: `message ${n}` } }));
+        const text = `${[meta, ...messages].join('\n')}\n`;
+        setTranscriptMaxBytesForTest(new TextEncoder().encode(`${messages[1]}\n${messages[2]}\n`).length + 5);
+        const job = baseJob({ vendor: 'codex', session_id: 'codex-big', vendor_live: false, transcript: fileOf(text) });
+        const session = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] }).sessions[0];
+        expect(session.refusal).toBeUndefined();
+        expect(session.tail_read).toBe(true);
+        expect(session.started_at).toBe('2026-09-22T10:02:00.000Z');
+    });
+
+    it('applies to a grok event log, from the first complete line inside the bound', () => {
+        const events = [1, 2, 3].map(n => JSON.stringify({ type: 'tool_call', tool_name: 'bash', timestamp: `2026-09-22T10:0${n}:00.000Z`, duration_ms: 5, outcome: 'ok' }));
+        const text = `${events.join('\n')}\n`;
+        setTranscriptMaxBytesForTest(new TextEncoder().encode(`${events[1]}\n${events[2]}\n`).length + 5);
+        const job = baseJob({ vendor: 'grok', session_id: 'grok-big', vendor_live: false, transcript: fileOf(text, '/events.jsonl') });
+        const session = handleAgentAnalyserRequest({ request_id: 'a', jobs: [job] }).sessions[0];
+        expect(session.refusal).toBeUndefined();
+        expect(session.tail_read).toBe(true);
     });
 });
 

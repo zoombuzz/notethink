@@ -1,4 +1,4 @@
-import { AGENT_TRANSCRIPT_MAX_BYTES, type AgentSessionInput } from './agentvendorops';
+import { type AgentSessionInput } from './agentvendorops';
 import { buildClaudeCodeResult, parseClaudeCodeTranscript, readClaudeCodeSession } from './claudecodeops';
 
 // a fixed window shared by most fixtures below, so each test only has to place its own timestamps relative to it
@@ -140,16 +140,6 @@ describe('readClaudeCodeSession', () => {
 
         expect(result.refusal).toEqual({ code: 'invalid_shape', reason: 'no line in the transcript parsed as JSON' });
         expect(result.calls).toEqual([]);
-    });
-
-    it('refuses too_large when the transcript exceeds the byte bound', () => {
-        const padding = 'x'.repeat(AGENT_TRANSCRIPT_MAX_BYTES + 1000);
-        const text = `{"type":"user","timestamp":"2026-09-22T10:00:00.000Z","message":{"role":"user","content":"${padding}"}}`;
-        const result = readClaudeCodeSession(makeInput(text));
-
-        expect(result.refusal?.code).toBe('too_large');
-        expect(result.session_id).toBe('sess-1');
-        expect(result.cwd).toBe('/repo');
     });
 
     it('records a git commit bash call as a commit tool invocation', () => {

@@ -270,6 +270,12 @@ function sessionStateFrom(posted: Array<Record<string, unknown>>, session_id: st
 	return sessions.find(s => s.session.session_id === session_id)?.session.state;
 }
 
+function sessionFieldFrom(posted: Array<Record<string, unknown>>, session_id: string, field: string): unknown {
+	const last = posted[posted.length - 1];
+	const sessions = (last.activity as { sessions: Array<{ session: Record<string, unknown> & { session_id: string } }> }).sessions;
+	return sessions.find(s => s.session.session_id === session_id)?.session[field];
+}
+
 function refusalCodeFor(posted: Array<Record<string, unknown>>, session_id: string): string | undefined {
 	const last = posted[posted.length - 1];
 	const refusals = (last.activity as { analyser: { refusals: Array<{ session_id?: string; code: string }> } }).analyser.refusals;
@@ -784,48 +790,48 @@ describe('AgentAnalyser lifecycle', () => {
 			expect(sessionIdsFrom(posted)).toEqual([CLAUDE_SESSION_ID]);
 		});
 
-		it('a transcript over AGENT_TRANSCRIPT_MAX_BYTES stays refused as it grows, never flickering to a built session on a later tail scan', async () => {
-			// well under a single transcript line's own size, so the very first scan already refuses it
-			setTranscriptMaxBytesForTest(50);
+		it('a transcript over the size bound is analysed from its newest end, marked tail-read, and resumes as a tail as it grows', async () => {
+			const line = claudeTranscriptLine('Edit');
+			const line_bytes = new TextEncoder().encode(`${line}\n`).length;
+			setTranscriptMaxBytesForTest(line_bytes * 2 + 10);
 			try {
 				const base_mtime = Date.now();
-				const first_line = claudeTranscriptLine('Edit');
-				mockClaudeCodeSession(`${first_line}\n`, base_mtime);
+				mockClaudeCodeSession(`${line}\n${line}\n${line}\n`, base_mtime, { status: 'busy' });
 				const recording = recordingWorkerFactory();
 				const analyser = new AgentAnalyser(mockContext(), recording.worker);
 				const posted: Array<Record<string, unknown>> = [];
 				analyser.demand(msg => posted.push(msg));
 				await settle();
 				expect(recording.requests[0].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)?.transcript.mode).toBe('whole');
-				expect(refusalCodeFor(posted, CLAUDE_SESSION_ID)).toBe('too_large');
+				expect(refusalCodeFor(posted, CLAUDE_SESSION_ID)).toBeUndefined();
+				expect(sessionFieldFrom(posted, CLAUDE_SESSION_ID, 'tail_read')).toBe(true);
+				expect(sessionFieldFrom(posted, CLAUDE_SESSION_ID, 'state')).toBe('working');
 
-				// the file grows further; the refusal already dropped this session's cache, so this scan sends it whole again
-				const second_line = claudeTranscriptLine('Write');
-				mockClaudeCodeSession(`${first_line}\n${second_line}\n`, base_mtime + 1000);
+				// the file grows: the host sends only the appended line, and the worker trims its cache to the bound
+				mockClaudeCodeSession(`${line}\n${line}\n${line}\n${line}\n`, base_mtime + 1000, { status: 'busy' });
 				await jest.advanceTimersByTimeAsync(15_000);
 				await settle();
 				const second_job = recording.requests[recording.requests.length - 1].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)!;
-				expect(second_job.transcript.mode).toBe('whole');
-				expect(refusalCodeFor(posted, CLAUDE_SESSION_ID)).toBe('too_large');
-
-				// the cap lifts and the file changes again; the earlier refusal left nothing poisoned, so this scan builds whole
-				setTranscriptMaxBytesForTest(undefined);
-				const third_line = claudeTranscriptLine('Edit');
-				mockClaudeCodeSession(`${first_line}\n${second_line}\n${third_line}\n`, base_mtime + 2000);
-				await jest.advanceTimersByTimeAsync(15_000);
-				await settle();
-				const third_job = recording.requests[recording.requests.length - 1].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)!;
-				expect(third_job.transcript.mode).toBe('whole');
+				expect(second_job.transcript.mode).toBe('tail');
+				expect(new TextDecoder().decode(second_job.transcript.bytes)).toBe(`${line}\n`);
 				expect(refusalCodeFor(posted, CLAUDE_SESSION_ID)).toBeUndefined();
-				expect(sessionIdsFrom(posted)).toEqual([CLAUDE_SESSION_ID]);
+				expect(sessionFieldFrom(posted, CLAUDE_SESSION_ID, 'tail_read')).toBe(true);
+			} finally {
+				setTranscriptMaxBytesForTest(undefined);
+			}
+		});
 
-				// the session is genuinely cached again now: the next change resumes as a real tail
-				const fourth_line = claudeTranscriptLine('Write');
-				mockClaudeCodeSession(`${first_line}\n${second_line}\n${third_line}\n${fourth_line}\n`, base_mtime + 3000);
-				await jest.advanceTimersByTimeAsync(15_000);
+		it('an oversized transcript with no live session record reads as ended, taking its liveness like any other session', async () => {
+			const line = claudeTranscriptLine('Edit');
+			setTranscriptMaxBytesForTest(new TextEncoder().encode(`${line}\n`).length + 10);
+			try {
+				mockClaudeCodeSession(`${line}\n${line}\n${line}\n`, Date.now());
+				const analyser = new AgentAnalyser(mockContext(), recordingWorkerFactory().worker);
+				const posted: Array<Record<string, unknown>> = [];
+				analyser.demand(msg => posted.push(msg));
 				await settle();
-				const later_job = recording.requests[recording.requests.length - 1].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)!;
-				expect(later_job.transcript.mode).toBe('tail');
+				expect(sessionFieldFrom(posted, CLAUDE_SESSION_ID, 'tail_read')).toBe(true);
+				expect(sessionFieldFrom(posted, CLAUDE_SESSION_ID, 'state')).toBe('ended');
 			} finally {
 				setTranscriptMaxBytesForTest(undefined);
 			}

@@ -217,7 +217,7 @@ NoteThink to find. The files read, when present:
   (each session's tool and permission timeline) and the matching `usage.json` where one exists
 
 Transcripts from the last 30 days are read; a vendor with none of the files above present is simply
-never read from. The card also reads the working tree of every git repository open in the workspace,
+never read from. A transcript larger than 64 MB is read from its newest end, the last 64 MB starting at a whole line, and its row says "newest part only" beside its clock, since its usage and time then cover only that part. The card also reads the working tree of every git repository open in the workspace,
 through VS Code's built-in git extension, to show uncommitted files with their added and removed
 line counts. It also reads the commits each session made, though the card does not draw them.
 
@@ -234,14 +234,18 @@ colour: the name Claude Code gives a live session, else a short session id. Code
 session name, so their cards show the short id.
 
 A Claude Code session that launched subagents, such as a coordinator running several tasks at once, draws
-them as a tree under its own row. The session's row names the session beside its mark and model and
-shows what it is doing now, such as the shell command it is running. Each subagent sits indented under
-it on its own rail, coloured by that subagent's state, with its mark, model, state, how long it has run,
-its title (the description its parent gave it, which usually names the work) and the tokens it has used.
-A finished subagent dims, and finished ones past the latest three fold behind a count you can click, or
-reach from the keyboard, to expand. A card keeps every running subagent and the latest six finished
-ones, and the session's own totals still include them all. Codex and Grok record no subagents, so their
-rows stay flat.
+them as a tree, laid out like a VS Code tree. The session's row names the session beside its mark and
+model and shows what it is doing now, such as the shell command it is running; clicking that row opens
+the session. A chevron beside it expands and collapses the subagents, and the Right and Left arrow keys
+do the same. The row is expanded while the agent is working or waiting and collapsed otherwise, and a
+choice you make is kept as the card updates. The agent's state-coloured rail runs down the whole
+expanded group, so its subagents sit visibly inside it. Each running subagent sits indented under it on
+its own rail, coloured by that subagent's state, with its mark, model, state, how long it has run, its
+title (the description its parent gave it, which usually names the work) and the tokens it has used.
+Finished subagents stay out of the way behind one "Show N finished subagents" item that you can click,
+or reach from the keyboard, to show them dimmed. A card keeps every running subagent and the latest six
+finished ones, and the session's own totals still include them all. Codex and Grok record no subagents,
+so their rows stay flat.
 
 ### The agent registry
 

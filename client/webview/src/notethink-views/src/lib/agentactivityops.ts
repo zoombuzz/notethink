@@ -394,18 +394,20 @@ export function sessionDisplayName(session: ActivitySession): string {
     return session.session_id.slice(0, SHORT_SESSION_ID_CHARS);
 }
 
-// finished subagents drawn without a click; older ones wait behind a count
-export const AGENT_CHILDREN_VISIBLE_FINISHED = 3;
-
 /**
- * One session's subagents split for drawing: every running one and the latest finished ones stay
- * visible, the earlier finished ones are `collapsed`. Both keep the host's oldest-first order.
+ * One session's subagents split for the tree: the ones still running (working, waiting or idle, in the
+ * host's oldest-first order) are drawn inside the expanded session, and the `finished` ones wait behind
+ * one "Show N finished subagents" item.
  */
-export function splitChildrenForDisplay(children: ReadonlyArray<ActivityChildSession> | undefined, visible_finished: number = AGENT_CHILDREN_VISIBLE_FINISHED): { visible: ActivityChildSession[]; collapsed: ActivityChildSession[] } {
+export function splitChildrenForDisplay(children: ReadonlyArray<ActivityChildSession> | undefined): { running: ActivityChildSession[]; finished: ActivityChildSession[] } {
     const all = children ?? [];
-    const finished = all.filter(child => childStateOf(child) === 'ended');
-    const hidden = new Set(finished.slice(0, Math.max(0, finished.length - visible_finished)));
-    return { visible: all.filter(child => !hidden.has(child)), collapsed: all.filter(child => hidden.has(child)) };
+    return { running: all.filter(child => childStateOf(child) !== 'ended'), finished: all.filter(child => childStateOf(child) === 'ended') };
+}
+
+/** whether a session's subagents show before the reader chooses: only while the session is working or waiting */
+export function sessionExpandedByDefault(session: ActivitySession): boolean {
+    const state = sessionStateOf(session);
+    return state === 'working' || state === 'waiting';
 }
 
 /** A subagent's state, with an unrecognised value coerced to `unknown` like a session's. */

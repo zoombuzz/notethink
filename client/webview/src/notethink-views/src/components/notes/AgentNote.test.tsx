@@ -89,7 +89,8 @@ describe('AgentNote', () => {
         const rows = screen.getAllByTestId('agent-row');
         expect(rows).toHaveLength(1);
         expect(within(rows[0]).getByTestId('agent-monogram')).toHaveTextContent('CC');
-        expect(within(rows[0]).getByTestId('agent-state')).toHaveTextContent('Working');
+        expect(within(rows[0]).getByTestId('agent-state-quiet')).toHaveTextContent('Working');
+        expect(within(rows[0]).queryByTestId('agent-state')).toBeNull();
         expect(within(rows[0]).getByTestId('agent-live')).toHaveTextContent('Edit client/extension/src/types/AgentActivity.ts');
         expect(rows[0]).toHaveAttribute('data-state', 'working');
     });
@@ -236,7 +237,7 @@ describe('AgentNote', () => {
     it('draws a refusal naming a session on that session own row', () => {
         seed({
             sessions: [makeSessionState(makeSession())],
-            analyser: { refusals: [{ file: 'claude-code transcript for claude-b', code: 'too_large', reason: 'over the byte bound', session_id: 'claude-bound-busy' }] },
+            analyser: { refusals: [{ file: 'claude-code transcript for claude-b', code: 'unreadable', reason: 'file unreadable', session_id: 'claude-bound-busy' }] },
         });
         render(<AgentNote {...makeStoryNote()} />);
         expect(screen.getByTestId('agent-row-refusals')).toHaveTextContent('could not be read');

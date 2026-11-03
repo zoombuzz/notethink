@@ -8,9 +8,10 @@ const NOTEGIT_TODO = 'notegit/docstech/users/alex.stanhope/todo.md';
 
 /*
  * The agent tree inside the story card, driven in the browser against the real bundle and a synthetic
- * snapshot. Jest proves how children are split and drawn; what only a browser shows is the indent
- * under the session's own row, the rail colours, the dimming, and that every cell of a child row
- * holds one line at both the narrow and the wide row layout.
+ * snapshot. Jest proves how children are split and drawn; what only a browser shows is the rail running
+ * down the whole expanded group, the indent under the session's own row, the rail colours, the dimming,
+ * the arrow keys, and that every cell of a child row holds one line at both the narrow and the wide
+ * row layout.
  */
 
 async function harness(page: Page): Promise<void> {
@@ -45,13 +46,14 @@ test.describe('Agent tree in the story card', () => {
     test('names the coordinator beside its monogram and model, and draws a running and a finished subagent indented under it', async ({ page }) => {
         const card = await treeBoard(page, 1);
         const main = card.getByTestId('agent-row');
+        await card.getByTestId('agent-children-toggle').click();
         await expect(main.getByTestId('agent-name')).toHaveText('coord-notethink');
         await expect(main.getByTestId('agent-model')).toHaveAttribute('title', 'claude-opus-5');
         await expect(main.getByTestId('agent-live')).toHaveText('Bash pnpm run test-jest');
         const children = card.getByTestId('agent-child-row');
         await expect(children).toHaveCount(2);
-        const finished = children.nth(0);
-        const running = children.nth(1);
+        const running = children.nth(0);
+        const finished = children.nth(1);
         await expect(finished).toHaveAttribute('data-state', 'ended');
         await expect(finished.getByTestId('agent-child-title')).toHaveText('Finished task 1');
         await expect(finished.getByTestId('agent-child-model')).toHaveAttribute('title', 'claude-sonnet-5');
@@ -62,57 +64,99 @@ test.describe('Agent tree in the story card', () => {
         await expect(running.getByTestId('agent-child-title')).toHaveText('Map view code');
         await expect(running.getByTestId('agent-child-title')).toHaveAttribute('title', /Grep agentRail/);
         await expect(running.getByTestId('agent-child-model')).toHaveAttribute('title', 'claude-haiku-5');
-        await expect(running.getByTestId('agent-child-state')).toHaveText('Working');
-        // a running child's clock counts from its start up to now, so it reads in days for a fixture dated in the past
-        await expect(running.getByTestId('agent-child-clock')).toHaveText(/^\d+[mhd]/);
-        await expect(card.getByTestId('agent-children-toggle')).toHaveCount(0);
+        await expect(running.getByTestId('agent-child-state')).toHaveCount(0);
+        await expect(running.getByTestId('agent-child-state-quiet')).toHaveText('Working');
+        await expect(finished.getByTestId('agent-child-state')).toHaveText('Ended');
+        // a running child's clock counts from its start up to now, and the fixture starts it four minutes before now
+        await expect(running.getByTestId('agent-child-clock')).toHaveText(/^[3-6]m/);
+        await expect(card.getByTestId('agent-children-toggle')).toHaveText('Hide 1 finished subagents');
     });
 
-    test('indents the child rail inside its parent\'s, colours it by the child\'s own state, and dims a finished child', async ({ page }) => {
+    test('runs the agent\'s rail down its whole expanded group, indents the child rails inside it, and dims a finished child', async ({ page }) => {
         const card = await treeBoard(page, 1);
-        const main_rail = await card.getByTestId('agent-row-button').locator('> span').first().boundingBox();
+        await card.getByTestId('agent-children-toggle').click();
+        const row = card.getByTestId('agent-row');
+        const main_rail = (await card.getByTestId('agent-row-rail').boundingBox())!;
+        const row_box = (await row.boundingBox())!;
         const children = card.getByTestId('agent-child-row');
-        const rail_of = (row: Locator): Locator => row.locator('> span').first();
-        const finished_rail = await rail_of(children.nth(0)).boundingBox();
-        expect(finished_rail!.x - main_rail!.x).toBeGreaterThanOrEqual(10);
-        const colour_of = (row: Locator): Promise<string> => rail_of(row).evaluate(el => getComputedStyle(el).backgroundColor);
-        const running_colour = await colour_of(children.nth(1));
-        expect(running_colour).not.toBe('rgba(0, 0, 0, 0)');
-        expect(await colour_of(children.nth(0))).not.toBe(running_colour);
-        expect(Number(await children.nth(0).evaluate(el => getComputedStyle(el).opacity))).toBeLessThan(1);
-        expect(Number(await children.nth(1).evaluate(el => getComputedStyle(el).opacity))).toBe(1);
+        const last_child = (await children.nth(1).boundingBox())!;
+        expect(main_rail.y + main_rail.height).toBeGreaterThanOrEqual(last_child.y + last_child.height - 6);
+        expect(main_rail.height).toBeGreaterThan(row_box.height - 8);
+        const rail_of = (item: Locator): Locator => item.locator('> span').first();
+        const child_rail = (await rail_of(children.nth(1)).boundingBox())!;
+        expect(child_rail.x - main_rail.x).toBeGreaterThanOrEqual(10);
+        const colour_of = (item: Locator): Promise<string> => rail_of(item).evaluate(el => getComputedStyle(el).backgroundColor);
+        const parent_colour = await card.getByTestId('agent-row-rail').evaluate(el => getComputedStyle(el).backgroundColor);
+        expect(parent_colour).not.toBe('rgba(0, 0, 0, 0)');
+        expect(await colour_of(children.nth(0))).toBe(parent_colour);
+        expect(await colour_of(children.nth(1))).not.toBe(parent_colour);
+        expect(Number(await children.nth(1).evaluate(el => getComputedStyle(el).opacity))).toBeLessThan(1);
+        expect(Number(await children.nth(0).evaluate(el => getComputedStyle(el).opacity))).toBe(1);
         expect(await card.getByTestId('agent-children').evaluate(ul => getComputedStyle(ul).listStyleType)).toBe('none');
     });
 
-    test('folds finished subagents past the latest three behind a keyboard-operable count and expands them', async ({ page }) => {
+    test('hides every finished subagent behind one keyboard-operable item, even past the latest three', async ({ page }) => {
         const card = await treeBoard(page, 6);
-        await expect(card.getByTestId('agent-child-row')).toHaveCount(4);
+        await expect(card.getByTestId('agent-child-row')).toHaveCount(1);
         const toggle = card.getByTestId('agent-children-toggle');
-        await expect(toggle).toHaveText('Show 3 earlier finished subagents');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(toggle).toHaveText('Show 6 finished subagents');
+        const item = toggle.locator('xpath=ancestor::*[@role="treeitem"][1]');
+        await expect(item).toHaveAttribute('aria-expanded', 'false');
         await toggle.focus();
         await page.keyboard.press('Enter');
         await expect(card.getByTestId('agent-child-row')).toHaveCount(7);
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await expect(card.getByTestId('agent-child-title').first()).toHaveText('Finished task 1');
+        await expect(item).toHaveAttribute('aria-expanded', 'true');
+        await page.keyboard.press('ArrowLeft');
+        await expect(card.getByTestId('agent-child-row')).toHaveCount(1);
+        await page.keyboard.press('ArrowRight');
+        await expect(card.getByTestId('agent-child-row')).toHaveCount(7);
         await page.keyboard.press('Space');
-        await expect(card.getByTestId('agent-child-row')).toHaveCount(4);
+        await expect(card.getByTestId('agent-child-row')).toHaveCount(1);
+    });
+
+    test('expands and collapses the agent from its chevron and the arrow keys, naming the chevron apart from the open action', async ({ page }) => {
+        const card = await treeBoard(page, 1);
+        const row = card.getByTestId('agent-row');
+        await expect(row).toHaveAttribute('role', 'treeitem');
+        await expect(row).toHaveAttribute('aria-expanded', 'true');
+        await expect(card.getByTestId('agent-rows')).toHaveAttribute('role', 'tree');
+        await expect(card.getByTestId('agent-row-toggle')).toHaveAccessibleName('Collapse the subagents of coord-notethink');
+        await expect(card.getByTestId('agent-row-button')).not.toHaveAccessibleName(/Collapse|Expand/);
+        await card.getByTestId('agent-row-toggle').click();
+        await expect(row).toHaveAttribute('aria-expanded', 'false');
+        await expect(card.getByTestId('agent-children')).toHaveCount(0);
+        await card.getByTestId('agent-row-button').focus();
+        await page.keyboard.press('ArrowRight');
+        await expect(row).toHaveAttribute('aria-expanded', 'true');
+        await expect(card.getByTestId('agent-child-row')).toHaveCount(1);
+        await page.keyboard.press('ArrowLeft');
+        await expect(row).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    test('keeps a chosen collapse when the snapshot is republished', async ({ page }) => {
+        const card = await treeBoard(page, 1);
+        await card.getByTestId('agent-row-toggle').click();
+        await expect(card.getByTestId('agent-row')).toHaveAttribute('aria-expanded', 'false');
+        await injectActivity(page, { sessions: ['claude-coordinator'], finished_children: 2 });
+        await expect(card.getByTestId('agent-row')).toHaveAttribute('aria-expanded', 'false');
+        await expect(card.getByTestId('agent-children')).toHaveCount(0);
     });
 
     test('keeps every cell of the session row and of a child row on one line at the narrow and the wide layout', async ({ page }) => {
         const card = await treeBoard(page, 1);
+        await card.getByTestId('agent-children-toggle').click();
         const rows = card.getByTestId('agent-rows');
         const cells_of = (row: Locator, testids: string[]): Promise<Array<{ testid: string; height: number; font_size: number }>> => row.evaluate((el, ids) => ids.map(testid => {
             const cell = el.querySelector(`[data-testid="${testid}"]`) as HTMLElement;
             return { testid, height: cell.getBoundingClientRect().height, font_size: parseFloat(getComputedStyle(cell).fontSize) };
         }), testids);
-        const main_cells = ['agent-monogram', 'agent-name', 'agent-model', 'agent-state', 'agent-clock', 'agent-live', 'agent-usage'];
-        const child_cells = ['agent-child-monogram', 'agent-child-model', 'agent-child-state', 'agent-child-clock', 'agent-child-title', 'agent-child-usage'];
+        const main_cells = ['agent-monogram', 'agent-name', 'agent-model', 'agent-clock', 'agent-live', 'agent-usage'];
+        const child_cells = ['agent-child-monogram', 'agent-child-model', 'agent-child-clock', 'agent-child-title', 'agent-child-usage'];
         async function expectOneLine(): Promise<void> {
             for (const cell of await cells_of(card.getByTestId('agent-row-button'), main_cells)) {
                 expect(cell.height, `${cell.testid} wrapped`).toBeLessThanOrEqual(cell.font_size * 1.6);
             }
-            for (const cell of await cells_of(card.getByTestId('agent-child-row').nth(1), child_cells)) {
+            for (const cell of await cells_of(card.getByTestId('agent-child-row').nth(0), child_cells)) {
                 expect(cell.height, `${cell.testid} wrapped`).toBeLessThanOrEqual(cell.font_size * 1.6);
             }
         }
@@ -125,8 +169,29 @@ test.describe('Agent tree in the story card', () => {
         await page.setViewportSize({ width: 600, height: 900 });
         await expect.poll(async () => (await card.getByTestId('agent-rows').boundingBox())!.width).toBeLessThan(440);
         await expectOneLine();
-        const child_title = await card.getByTestId('agent-child-row').nth(1).getByTestId('agent-child-title').boundingBox();
+        const child_title = await card.getByTestId('agent-child-row').nth(0).getByTestId('agent-child-title').boundingBox();
         expect(child_title!.width).toBeGreaterThan(80);
+    });
+
+    test('drops the model first, then the clock, from a header with no room, and keeps the name', async ({ page }) => {
+        const card = await treeBoard(page, 1);
+        const rows = card.getByTestId('agent-rows');
+        const header = card.getByTestId('agent-row-button').first().locator('xpath=./*[1]');
+        const clippedBelow = async (testid: string): Promise<boolean> => {
+            const head = (await header.boundingBox())!;
+            const cell = (await card.getByTestId(testid).first().boundingBox())!;
+            return cell.y >= head.y + head.height - 1;
+        };
+        await rows.evaluate(el => { (el as HTMLElement).style.width = '440px'; });
+        expect(await clippedBelow('agent-model')).toBe(false);
+        expect(await clippedBelow('agent-clock')).toBe(false);
+        await rows.evaluate(el => { (el as HTMLElement).style.width = '190px'; });
+        expect(await clippedBelow('agent-model'), 'the model is the first to go').toBe(true);
+        expect(await clippedBelow('agent-clock')).toBe(false);
+        await rows.evaluate(el => { (el as HTMLElement).style.width = '140px'; });
+        expect(await clippedBelow('agent-clock'), 'then the clock').toBe(true);
+        expect(await clippedBelow('agent-name'), 'the name stays').toBe(false);
+        expect(await clippedBelow('agent-monogram')).toBe(false);
     });
 
     test('draws a session without subagents as a flat row, and one without a name with no name cell', async ({ page }) => {

@@ -4,6 +4,14 @@ All notable changes to the "notethink" extension will be documented in this file
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.4.20] - 2026-11-03
+
+### Changed
+
+- The agent card's subagents read as a VS Code tree: each agent with subagents has a chevron to expand and collapse them, is expanded while it is working or waiting, and its state-coloured rail runs down the whole group. Every finished subagent sits behind one "Show N finished subagents" item. The rows carry the tree roles and answer Right and Left, and a collapse or expand you chose is kept as the card updates.
+- An agent row's header is quieter: the session's name, then the clock, then the model, with the live line (the current command or prompt) on its own line under it. A working or waiting agent no longer repeats "Working" or "Waiting on you" (the rail colour and the story's headline say it, and screen readers still read it), every other state keeps its label, and on a narrow card the model drops out first, then the clock, while the name stays.
+- A session transcript over 64 MB is now read from its newest end instead of being refused as too large: the last 64 MB, from a whole line, is analysed, and its row says "newest part only" beside the clock because its usage and time cover only that part. A long-finished oversized session reads as ended like any other, so it no longer keeps a card of its own.
+
 ## [0.4.19] - 2026-11-03
 
 ### Added

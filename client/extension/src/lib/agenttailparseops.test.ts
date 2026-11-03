@@ -1,4 +1,4 @@
-import { sliceTail, type TailBookmark } from './agenttailparseops';
+import { cropToNewestBytes, sliceTail, type TailBookmark } from './agenttailparseops';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -85,5 +85,35 @@ describe('sliceTail', () => {
         const grown = enc.encode('{"a":1}\n{"a":2}\n');
         const result = sliceTail(undefined, grown);
         expect(result.mode).toBe('whole');
+    });
+});
+
+describe('cropToNewestBytes', () => {
+    it('returns a buffer within the bound unchanged', () => {
+        const bytes = enc.encode('{"a":1}\n');
+        expect(cropToNewestBytes(bytes, 100)).toEqual({ bytes, cropped: false });
+    });
+
+    it('keeps the newest lines, starting just after the first newline inside the bound', () => {
+        const text = '{"a":1}\n{"a":2}\n{"a":3}\n';
+        const result = cropToNewestBytes(enc.encode(text), 19);
+        expect(result.cropped).toBe(true);
+        expect(dec.decode(result.bytes)).toBe('{"a":2}\n{"a":3}\n');
+    });
+
+    it('keeps a line that starts exactly at the bound, never skipping a whole line', () => {
+        const text = '{"a":1}\n{"a":2}\n';
+        expect(dec.decode(cropToNewestBytes(enc.encode(text), 8).bytes)).toBe('{"a":2}\n');
+    });
+
+    it('drops a partial first line, never handing a torn line to the parser', () => {
+        const text = '{"a":1}\n{"a":2}\n';
+        expect(dec.decode(cropToNewestBytes(enc.encode(text), 12).bytes)).toBe('{"a":2}\n');
+    });
+
+    it('is empty when no newline falls inside the bound', () => {
+        const result = cropToNewestBytes(enc.encode('{"long":"line"}\n'), 5);
+        expect(result.cropped).toBe(true);
+        expect(result.bytes.length).toBe(0);
     });
 });

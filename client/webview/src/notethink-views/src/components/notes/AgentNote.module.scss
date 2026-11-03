@@ -43,9 +43,9 @@
     }
   }
 
-  // placed after the shared reset above so the indent survives it
+  // placed after the shared reset above so the indent survives it: the group sits under its parent's label, to the right of the twisty
   .agentChildren {
-    margin-left: 14px;
+    margin-left: 22px;
   }
 }
 
@@ -103,6 +103,18 @@
   // the rail's colour, resolved once per row from the state the card publishes
   --nt-agent-state-colour: var(--nt-agent-unknown);
 
+  // the rail is the item's indent guide, so it runs the height of the whole item: its own row and, when expanded, its subagents
+  position: relative;
+  padding-left: 7px;
+
+  > .agentRail {
+    position: absolute;
+    left: 0;
+    top: 3px;
+    bottom: 3px;
+    width: 3px;
+  }
+
   &[data-state="working"] { --nt-agent-state-colour: var(--nt-agent-working); }
   &[data-state="waiting"] { --nt-agent-state-colour: var(--nt-agent-waiting); }
   &[data-state="idle"] { --nt-agent-state-colour: var(--nt-agent-idle); }
@@ -118,29 +130,85 @@
 }
 
 /*
- * A narrow card stacks each row onto three lines beside one rail: who (monogram and model) with how
- * (state and clock) at the right, then the live line, then the counter. A card wide enough puts all of
- * it on one line. Every cell has a zero minimum width and truncates, and the card body's
+ * A row is two lines beside one rail, whatever the card's width: a quiet header (monogram and name,
+ * then the clock, then the model), and under it the live line with the counter at its right. The
+ * header never wraps visibly: its parts wrap onto a second, clipped line when they do not fit, so the
+ * model drops out first, then the clock, and the name stays. A card too narrow for the counter beside
+ * the live line gives it a line of its own. Every cell has a zero minimum width and truncates, and the card body's
  * `overflow-wrap: anywhere` is turned off here: that rule lets a grid track shrink to the width of one
  * character, which is how a model id came to be drawn two letters to a line.
  */
 // the grid a session row and a subagent row share, so a child's cells line up with its parent's
-@mixin agent-row-grid {
+@mixin agent-row-grid($rail: 3px) {
   display: grid;
-  grid-template-columns: 3px minmax(0, 1fr) auto;
-  grid-template-areas:
-    "rail ident status"
-    "rail live live"
-    "rail usage usage";
+  grid-template-columns: $rail minmax(0, 1fr) auto;
+  grid-template-areas: "rail header usage";
   align-items: baseline;
   gap: 1px 6px;
+  box-sizing: border-box;
   width: 100%;
   overflow-wrap: normal;
   padding: 3px 6px;
 }
 
+// the session's header: the twisty beside the label that opens the session
+.agentRowHeader {
+  display: flex;
+  align-items: flex-start;
+}
+
+.agentTwisty {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+button.agentTwisty {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: -1px;
+  }
+}
+
+.agentChevron {
+  flex: none;
+  opacity: 0.8;
+  transition: transform 0.1s ease;
+}
+
+.agentChevronOpen {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agentChevron { transition: none; }
+}
+
 .agentRowButton {
-  @include agent-row-grid;
+  @include agent-row-grid(0px);
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "header header"
+    "live usage";
   border: 0;
   border-radius: 3px;
   background: transparent;
@@ -168,9 +236,9 @@
   }
 
   // every text cell holds one line and truncates; its whole text is the cell's hover title
-  > span:not(.agentRail),
-  .agentIdent > span,
-  .agentStatus > span {
+  > span:not(.agentRail):not(.agentHeader),
+  .agentHeader > span,
+  .agentIdent > span {
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
@@ -178,16 +246,7 @@
   }
 }
 
-@container (min-width: 440px) {
-  .agentRowButton,
-  .agentChild {
-    grid-template-columns: 3px auto minmax(0, 1fr) auto auto;
-    grid-template-areas: "rail ident live status usage";
-    row-gap: 0;
-  }
-}
-
-// subagents hang off their session's row: indented so the child rail sits inside the parent's, and a finished one dims
+// subagents hang off their session's row, inside its group, each on its own state rail; a finished one dims
 .agentChild {
   @include agent-row-grid;
   --nt-agent-state-colour: var(--nt-agent-unknown);
@@ -200,9 +259,9 @@
     opacity: 0.6;
   }
 
-  > span:not(.agentRail),
-  .agentIdent > span,
-  .agentStatus > span {
+  > span:not(.agentRail):not(.agentHeader),
+  .agentHeader > span,
+  .agentIdent > span {
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
@@ -210,12 +269,30 @@
   }
 }
 
+// a card too narrow for the counter beside the live line gives the live line the width and drops the counter to a line of its own
+@container (max-width: 359px) {
+  .agentRowButton {
+    grid-template-areas:
+      "header header"
+      "live live"
+      "usage usage";
+  }
+
+  .agentChild {
+    grid-template-areas:
+      "rail header header"
+      "rail usage usage";
+  }
+}
+
 .agentChildToggleItem {
-  padding: 1px 6px;
+  padding: 1px 0;
 }
 
 .agentChildToggle {
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px 0 0;
   border: 0;
   background: transparent;
   color: var(--vscode-textLink-foreground, #3794ff);
@@ -245,25 +322,49 @@
   background: var(--nt-agent-state-colour);
 }
 
-.agentIdent,
-.agentStatus {
+/*
+ * The header holds one line and clips the rest. Its parts are in priority order (identity, any state
+ * word, the clock, the model) and wrap when they do not fit, so what no longer fits drops off the end
+ * of the line and out of sight: the model first, then the clock. The row gap is taller than the header,
+ * so a wrapped part sits wholly below the clip.
+ */
+.agentHeader {
+  grid-area: header;
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
-}
-
-.agentIdent {
-  grid-area: ident;
-}
-
-// state and clock keep their width and give way only to the model beside them, which truncates first
-.agentStatus {
-  grid-area: status;
-  justify-self: end;
+  gap: 2em 6px;
+  height: 1.5em;
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1.3;
 
   > span {
     flex: none;
   }
+
+  > .agentIdent {
+    flex: 0 1 auto;
+    max-width: 100%;
+  }
+}
+
+.agentIdent {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+// the state word, read by a screen reader and not drawn, for a state the rail colour and the story's headline already show
+.agentStateQuiet {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 // a contract file the host refused that belongs to this session, drawn where a reader is looking at that session
@@ -323,6 +424,12 @@
 .agentClock {
   font-variant-numeric: tabular-nums;
   font-size: 0.8em;
+  opacity: 0.6;
+}
+
+.agentTailRead {
+  font-size: 0.8em;
+  font-style: italic;
   opacity: 0.6;
 }
 

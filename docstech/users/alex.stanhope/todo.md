@@ -1,6 +1,83 @@
 # Todo [](?nt_view=kanban)
 
 
+### Agent tree behaves like a VS Code tree [](?id=agent-tree-vscode&status=code-review)
+
+The agent card's rows read as a flat list with a "Show N earlier finished subagents" link. A reader expects a tree like VS Code's own: each agent expands to show what runs inside it, and finished subagents stay out of the way until asked for.
+
++ background
+  + measured: `AgentChildRows.tsx` shows running subagents plus the latest three finished, folding earlier ones behind "Show N earlier finished subagents"
+  + measured: a main row's rail covers that row only; each subagent row has its own indented rail
+  + VS Code trees draw a chevron on each expandable item and an indent guide down each expanded group
+  + no PATTERNS.md entry for a nested tree inside a card; follow VS Code's own tree
++ approach
+  + every agent row with subagents is a tree item with a chevron
+  + it is expanded by default while the agent is working or waiting, and collapsed otherwise
+  + an expanded agent's rail runs the full height of its group, as VS Code's indent guide does, coloured by its state
+  + so its subagents sit visibly inside it
+  + every finished subagent is hidden behind one "Show N finished subagents" item; none show by default
+  + anything nested deeper follows the same expand and collapse model
+  + keyboard and screen readers get the tree pattern: `tree` and `treeitem` roles, `aria-expanded`, Right and Left arrows to expand and collapse
+  + an expand or collapse the reader chose survives snapshot updates for that session
++ decision 2026-11-03: the agent rows look and behave as close to a VS Code tree as they can, with the state-coloured rail serving as the group's indent guide
++ [X] make each agent row with subagents an expandable tree item, expanded by default while working or waiting
++ [X] draw the agent's rail down its whole expanded group as the indent guide
++ [X] hide every finished subagent behind one "Show N finished subagents" item
++ [X] add the tree roles, `aria-expanded` and arrow-key handling
++ [X] keep each session's chosen expansion across snapshot updates
++ [X] cover expansion defaults, the finished item and the keys in jest
++ [X] update `agent-session-tree.spec.ts` for the tree, the guide and the keyboard path
++ [X] describe the tree in the Agent activity section of `README.md`
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
+### Quieter agent row header [](?id=agent-row-header-quiet&status=code-review)
+
+An agent row's header carries the monogram, session name, model, state label and clock. On a narrow card that is too much to read at a glance.
+
++ background
+  + measured: `AgentSessionRow.tsx` prints a state label from `agentStateLabel`, such as "Working" or "Waiting on you"
+  + the story's own headline already says when an agent is waiting on the reader, and the rail colour shows the state
+  + the model is the least useful field on the row
++ approach
+  + drop the "Working" and "Waiting on you" labels from agent rows; keep the label for any other state
+  + header order: monogram, session name, clock, then model
+  + the live line (current command or prompt) stays on its own line under the header
+  + when the header runs out of room the model hides first, then the clock; the session name stays
+  + done in CSS, such as a container query or flex order, with no measuring in script
++ decision 2026-11-03: running rows do not repeat "Working" or "Waiting on you", and the model gives way to everything else
++ [X] drop the working and waiting labels from agent rows and their subagent rows
++ [X] reorder the header and hide the model, then the clock, when space runs out
++ [X] update the jest tests on the state labels
++ [X] update the narrow and wide layout cases in `agent-card.spec.ts` and `agent-session-tree.spec.ts`
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
+### Oversized transcripts are read from their newest end [](?id=transcript-tail-over-bound&status=code-review)
+
+A transcript over the size bound is refused whole, so its session draws a "could not be read" card with no activity, even though its newest part is what the board needs.
+
++ background
+  + measured: `transcriptSizeRefusal` (`AgentAnalyserWorker.ts`) refuses any transcript over `AGENT_TRANSCRIPT_MAX_BYTES` (64 MiB, `agentvendorops.ts`) as `too_large`
+  + measured: a 78.5 MB transcript, last written 16 days earlier and no longer live, draws a card carrying that refusal
+  + inferred: a refused session carries state `unknown`, which [[quiet-idle-agents]] counts as live, so a long-ended session keeps its card
++ approach
+  + read the newest 64 MiB of an oversized transcript, from the first complete line, and analyse it as the session
+  + mark such a session as read from its tail, so its usage and time say they cover the newest part only
+  + an oversized session takes its liveness from the vendor's live session record like any other, so an ended one draws no card
+  + the same rule covers every vendor whose transcript can pass the bound
+  + the tail cache and resumed reads keep working for a tail-read transcript
++ decision 2026-11-03: over the bound, analyse the newest part of the transcript up to the bound instead of refusing it
++ [X] read the newest bound's worth of an oversized transcript from its first complete line
+  + the worker crops a whole job (`cropToNewestBytes`) and trims a resumed one to the bound; the vendor readers no longer judge size, and `too_large` is gone from the refusal codes
++ [X] mark tail-read sessions and say so beside their usage and time
++ [X] give a tail-read session its liveness from the live session record
++ [X] keep the tail cache and resume path correct for tail-read transcripts
++ [X] replace the `too_large` jest cases with tail-read cases, including an ended oversized session that draws no card
++ [X] add a Playwright case for a tail-read session's note
++ [X] bump the patch version, once for the batch: skip it if the version is already above the last commit's
+
+
 ### Idle agents stop reordering columns [](?id=quiet-idle-agents&status=code-review)
 
 On a board grouped by project with agent cards, a project where nothing is happening keeps moving to the newest end, and one live coordinator can show as several cards.
@@ -104,6 +181,8 @@ A story being worked on shows no sign of how far along it is. Each story in flig
 ### Agent tree inside the story card [](?id=agent-session-tree&status=code-review)
 
 A story card lists one flat row per session. A coordinator's work runs in subagents, which are merged into the parent's totals and never shown, so the card cannot say what is running.
+
++ decision 2026-11-03: design revised in review; the rows become a VS Code style tree in [[agent-tree-vscode]] and the header is quietened in [[agent-row-header-quiet]]
 
 + background
   + measured: subagent transcripts under `<session>/subagents/` are merged into the parent's calls and active time (`claudecodeops.ts`, `AgentAnalyser.ts`)

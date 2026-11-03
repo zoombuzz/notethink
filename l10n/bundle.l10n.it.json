@@ -207,5 +207,7 @@
   "Registered, on {0}": "Registrato, su {0}",
   "Registered agent": "Agente registrato",
   "Stale": "Obsoleto",
-  "Known from the agent registry only, so there is no session to open": "Noto solo dal registro degli agenti, quindi non c'è alcuna sessione da aprire"
+  "Known from the agent registry only, so there is no session to open": "Noto solo dal registro degli agenti, quindi non c'è alcuna sessione da aprire",
+  "This transcript is over the size limit, so its usage and time cover only its newest part": "Questa trascrizione supera il limite di dimensione, quindi utilizzo e tempo coprono solo la sua parte più recente",
+  "newest part only": "solo la parte più recente"
 }

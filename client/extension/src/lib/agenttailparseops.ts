@@ -85,3 +85,18 @@ export function sliceTail(prev: TailBookmark | undefined, bytes: Uint8Array): Ta
     const offset = prev.offset + boundary;
     return { mode: 'tail', slice, next: { offset, hash: hashWindow(bytes, offset) } };
 }
+
+/**
+ * Crops an over-bound transcript to its newest end: the last `max_bytes` bytes, starting just after
+ * the first newline inside that window so no partial line is parsed. A buffer within the bound comes
+ * back unchanged. When the window holds no newline at all (one line longer than the bound) the crop
+ * is empty, since nothing complete fits.
+ */
+export function cropToNewestBytes(bytes: Uint8Array, max_bytes: number): { bytes: Uint8Array; cropped: boolean } {
+    if (bytes.length <= max_bytes) { return { bytes, cropped: false }; }
+    const window_start = bytes.length - max_bytes;
+    for (let i = window_start - 1; i < bytes.length; i++) {
+        if (i >= 0 && bytes[i] === 0x0a) { return { bytes: bytes.subarray(i + 1), cropped: true }; }
+    }
+    return { bytes: new Uint8Array(0), cropped: true };
+}

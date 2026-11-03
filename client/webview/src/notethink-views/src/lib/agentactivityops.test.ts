@@ -7,6 +7,7 @@ import {
     childStateOf,
     formatChildClock,
     splitChildrenForDisplay,
+    sessionExpandedByDefault,
     attributedCommits,
     attributedFiles,
     earliestCountedActivity,
@@ -289,6 +290,13 @@ describe('an agent whose own write calls bound it to no story', () => {
         expect(virtual).toHaveLength(1);
         expect(isVirtualNote(virtual[0])).toBe(true);
         expect(virtualNoteKeyOf(virtual[0], 'agent')).toBe(`${ROOT_PATH.replace(/^\//, '')}/claude-no-story`);
+    });
+
+    it('hides an ended session whose transcript was read from its tail, like any other ended session', () => {
+        const snapshot = fixtureSnapshot({
+            sessions: [{ root_path: ROOT_PATH, session: makeSession('s-tail-ended', { state: 'ended', tail_read: true }) }],
+        });
+        expect(virtualNotesForActivity(snapshot, scopeAdmitting([ROOT_PATH]))).toHaveLength(0);
     });
 
     it('draws a card only while live: ended is hidden, and unknown (no liveness reporting) stays visible', () => {
@@ -676,16 +684,24 @@ describe('subagent children', () => {
         return { child_id: id, state, started_at, updated_at, usage: USAGE };
     }
 
-    it('keeps every running child and the latest three finished ones visible, collapsing the earlier finished ones', () => {
-        const children = [child('f1', 'ended'), child('f2', 'ended'), child('r1', 'working'), child('f3', 'ended'), child('f4', 'ended'), child('f5', 'ended')];
-        const { visible, collapsed } = splitChildrenForDisplay(children);
-        expect(collapsed.map(entry => entry.child_id)).toEqual(['f1', 'f2']);
-        expect(visible.map(entry => entry.child_id)).toEqual(['r1', 'f3', 'f4', 'f5']);
+    it('splits the running children from every finished one, each keeping the host order', () => {
+        const children = [child('f1', 'ended'), child('f2', 'ended'), child('r1', 'working'), child('w1', 'waiting'), child('f3', 'ended')];
+        const { running, finished } = splitChildrenForDisplay(children);
+        expect(running.map(entry => entry.child_id)).toEqual(['r1', 'w1']);
+        expect(finished.map(entry => entry.child_id)).toEqual(['f1', 'f2', 'f3']);
     });
 
-    it('collapses nothing for few or no children', () => {
-        expect(splitChildrenForDisplay(undefined)).toEqual({ visible: [], collapsed: [] });
-        expect(splitChildrenForDisplay([child('f1', 'ended')]).collapsed).toEqual([]);
+    it('splits nothing for no children', () => {
+        expect(splitChildrenForDisplay(undefined)).toEqual({ running: [], finished: [] });
+    });
+
+    it('expands a session by default only while it is working or waiting', () => {
+        const session = (state: string): ActivitySession => ({ state } as ActivitySession);
+        expect(sessionExpandedByDefault(session('working'))).toBe(true);
+        expect(sessionExpandedByDefault(session('waiting'))).toBe(true);
+        expect(sessionExpandedByDefault(session('idle'))).toBe(false);
+        expect(sessionExpandedByDefault(session('ended'))).toBe(false);
+        expect(sessionExpandedByDefault(session('bogus'))).toBe(false);
     });
 
     it('clocks a running child against now and a finished one by its own span', () => {

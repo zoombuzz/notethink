@@ -58,7 +58,7 @@ describe('unreadableSessionIds', () => {
     });
 
     it('ignores a refusal naming no session', () => {
-        const refusals: ActivityRefusal[] = [{ file: 'a', code: 'too_large', reason: 'r' }];
+        const refusals: ActivityRefusal[] = [{ file: 'a', code: 'unreadable', reason: 'r' }];
         expect(unreadableSessionIds(refusals)).toEqual([]);
     });
 });

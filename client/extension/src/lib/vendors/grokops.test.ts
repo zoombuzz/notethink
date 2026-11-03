@@ -1,5 +1,5 @@
 import { buildGrokResult, parseGrokTranscript, readGrokSession } from './grokops';
-import { AGENT_TRANSCRIPT_MAX_BYTES, type AgentSessionInput } from './agentvendorops';
+import { type AgentSessionInput } from './agentvendorops';
 
 const WINDOW_START_MS = Date.parse('2026-09-05T00:00:00.000Z');
 const NOW_MS = Date.parse('2026-09-07T23:59:59.000Z');
@@ -142,11 +142,6 @@ describe('readGrokSession', () => {
     it('refuses a transcript where every line is invalid JSON', () => {
         const result = readGrokSession(buildInput({ transcript: { path: 'x', text: 'not json\nalso not json' } }));
         expect(result.refusal?.code).toBe('invalid_shape');
-    });
-
-    it('refuses a transcript over the byte limit', () => {
-        const result = readGrokSession(buildInput({ transcript: { path: 'x', text: 'a'.repeat(AGENT_TRANSCRIPT_MAX_BYTES + 1) } }));
-        expect(result.refusal?.code).toBe('too_large');
     });
 
     it('reports ended when vendor_live is false', () => {

@@ -1,6 +1,64 @@
 # Todo [](?nt_view=kanban)
 
 
+### Coordinators beside boards in folder and project views [](?id=coordinator-views)
+
+The `agent` card shows which sessions are editing a story, but not the long-lived coordinator that owns a repo's board. With many repos open under one folder, the operator cannot see which repos have a coordinator, what state each is in, or message one without leaving the board.
+
++ background
+  + a coordinator is the long-lived agent session that owns one repo's board and working tree on one machine
+  + each coordinator registers itself on its machine with one `agent.json` (repo path, machine, agent kind, mailbox, state, binary version, open convoys)
+  + the registry, the mailbox and the envelope are public interfaces defined by thinkersync, a separate open-source project whose stories live in its own repo
+  + this story extends the Agent activity section of `README.md`, which reads vendor session files; the registry is a second, separate source
+  + order: this follows the coordinator rollout, which creates the registry entries and mailboxes this story reads
++ approach
+  + folder view: NoteThink open on a folder lists every registered agent whose repo path is inside that folder, beside that repo's board
+  + project view: NoteThink open on one repo lists the one agent whose repo path is that repo
+  + show only: NoteThink never starts, stops or restarts an agent, and a repo with no registered agent shows none
+  + each agent row shows its state, current story, binary version and open convoys, read from the registry
+  + sending writes an envelope into the agent's mailbox on the same machine, from the board or from a card
+  + the `[](?coord=<host>)` target marker renders as a line on the board that can be dragged
+  + dragging the line moves the marker between story headings; a keyboard path does the same (PATTERNS.md > Accessible drag and resize affordances)
+  + open convoys and their operator steps show on the story they belong to
+  + over Remote-SSH the extension host runs on the remote machine, so it reads that machine's registry directly
+  + desktop only, like the `agent` card, because a browser host has no file access
++ [ ] add a registry reader that lists `agent.json` entries and filters by repo path inside the open folder
++ [ ] add a list of registered agents with their state to the folder view and the project view
++ [ ] add a "send to agent" action on the board and on a card that writes an envelope to the agent's mailbox
++ [ ] render the `[](?coord=<host>)` marker as a draggable line, rewriting the linetag on drop
++ [ ] add a keyboard path that moves the target line without dragging
++ [ ] show open convoys and operator steps on their stories
++ [ ] cover the registry filter, the envelope write and the marker move with Jest tests
++ [ ] cover the folder view, the project view and the draggable line with Playwright tests
++ [ ] extend the Agent activity section of `README.md` with the registry source and the show-only rule
++ [ ] bump the patch version
+
+
+### Send envelopes between machines through a sync service [](?id=coordinator-sync-client)
+
+Story [[coordinator-views]] reaches agents on the same machine only. An agent on another machine is out of reach unless the operator opens a second window there. This story adds delivery between machines, through a sync service chosen in a setting.
+
++ background
+  + the sync client and the per-instance process belong to thinkersync, a separate open-source project; this story only uses them
+  + dependency: delivery between machines cannot be built until thinkersync's client library exists, so this story waits on it
+  + an instance is one NoteThink instance: a VS Code window on a folder, or the browser workbench
+  + each instance runs its own thinkersync client and process, and stays independent of other instances on the same machine
++ approach
+  + a VS Code setting names the sync service, defaulting to notethink.com
+  + the extension starts and stops one client process per instance, and the views from [[coordinator-views]] list agents from other machines the same way as local ones
+  + an envelope for an agent on another machine goes through the chosen service; one for a local agent still goes straight to its mailbox
+  + the view shows whether the chosen service reports that it holds nothing for this instance
+  + a service that is unreachable leaves local sending working and says so beside the remote agents
++ [ ] add the sync service setting with notethink.com as its default, and document it in `README.md`
++ [ ] start and stop one thinkersync client process per instance
++ [ ] route envelopes for agents on other machines through the chosen service
++ [ ] show remote agents beside local ones, marked by machine
++ [ ] show whether the service holds nothing for this instance
++ [ ] state the network use in the Agent activity section of `README.md`, which today says NoteThink reads no network endpoint for agent activity
++ [ ] cover the setting, the process lifecycle and the routing choice with Jest tests
++ [ ] bump the patch version
+
+
 ### Docs match the tree: shared constants list [](?id=docs-match-tree&status=code-review)
 
 `CODING_STANDARDS.md` lists the constants shared between the extension and webview bundles; `DEFAULT_GROUP_DISPLAY` is exported from both and was missing.

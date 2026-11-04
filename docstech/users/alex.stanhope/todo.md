@@ -1,6 +1,22 @@
 # Todo [](?nt_view=kanban)
 
 
+### README prose on one line per paragraph [](?status=code-review&id=readme-reflow)
+
+Most of `README.md` writes each paragraph and list item as one line that the editor soft-wraps, but the Agent activity, agent registry and progress pie sections, and a few intro lines, are hard-wrapped at about 100 characters. One transcripts paragraph now mixes both. Rejoin the hard-wrapped prose so the whole file reads one way.
+
++ background
+  + measured: about 66 hard-wrapped lines, most of them in Agent activity, The agent registry and Story progress pie; Features, Setup, Testing, Known Limitations and Contributing are already one line per paragraph or bullet
++ approach
+  + reflow only: join each hard-wrapped paragraph, list item and its continuation lines into one line, with no change of wording
+  + leave code fences, tables, headings and deliberate line breaks as they are
+  + the rendered markdown must be identical before and after
++ decision 2026-11-04: markdown prose in this repo is written one line per paragraph or list item, never hard-wrapped
++ [X] rejoin every hard-wrapped paragraph and list item in `README.md` into one line
++ [X] show the rendered output is unchanged and the only differences are line breaks turned into spaces
++ rejoined 67 hard-wrapped lines in `README.md` (intro, Opening a file, Agent activity, The agent registry, Story progress pie); the file is identical once whitespace is collapsed and parses to the same markdown tree
+
+
 ### Progress pie matches the project pill [](?id=pie-matches-pill&status=code-review)
 
 The progress pie from [[story-progress-pie]] fills in a fixed green and sits apart from the project pill. Drawn in the pill's colour and on the pill's line, the two read as a matched pair of dots at the top of each card.

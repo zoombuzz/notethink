@@ -1,23 +1,26 @@
 # Prod-ready Results
 # Version: 0.4.21
-# Date: 2026-11-03T19:50:00Z
-# Tree: HEAD 8042cc4 plus working tree (themehooks.ts new; OriginPill, StoryProgressPie, its scss and test, story-progress-pie spec, package.json, CHANGELOG, todo.md)
-# Stories: pie-matches-pill doing -> code-review; all others not touched (outside stories=)
-# Ship verdict: Ready to ship: /push-prod will move "Progress pie matches the project pill" to done.md
+# Date: 2026-11-04T00:00:00Z
+# Tree: HEAD 893c81d + README.md, docstech/users/alex.stanhope/todo.md, docstech/reports/jest-results.txt
+# Stories: readme-reflow doing -> code-review
+# Ship verdict: Ready to ship: /push-prod will move "README prose on one line per paragraph" to done.md
 # ---
-Build | pass | pnpm run build exit 0 | fresh
-Lint | pass | lint script exit 0 | fresh
-Project guards | n/a | none for this project | skipped (none)
-Dependency audit | pass | no known vulnerabilities | fresh
-CODING_STANDARDS | pass | mechanical greps and inline pass clean | fresh
-Exposure | pass | public scan clean, judgement pass clean | fresh
-Fleet fix check | no shared-surface hit | skipped (no shared-surface file touched)
-Jest | pass | 3537/3537 (1031 + 256 + 2250; 159 suites) | fresh
-Playwright | pass | 307/307, 0 skipped, 0 flaky | fresh
-Todo/Done | pass | format intact, coord marker removed | fresh
-Story-state advance | doing -> code-review, move rehearsed (dry-run exit 0) | fresh
-Version bump | 0.4.21 above HEAD 0.4.20 | fresh
+Overseer inbox | skipped | no overseer review (ABSENT) | skipped
+Story-state intake | ok | 1 at doing | fresh
+Story reconciliation | ok | all tasks already ticked | fresh
+Build | skipped | docs-only diff | skipped (docs-only diff)
+Lint | pass | 0 fail | fresh
+Project guards | skipped | covered by lint and Jest | skipped
+Dependency audit | skipped | not run, docs-only diff | skipped
+CODING_STANDARDS | pass | mechanical and inline pass clean (wording unchanged, line breaks only) | fresh
+Exposure | pass | public: 1 finding rejected (README.md:200 ~/.claude/ is product behaviour, unchanged line); coord marker with host alias removed from todo.md | fresh
+Fleet fix check | pass | not a fleet fix (docs only) | fresh
+Jest | pass | 3537/3537 (159 files) | fresh (stamp was stale; tests_read_changed_docs forced a run)
+Playwright | skipped | docs-only diff | skipped (docs-only diff)
+Todo/Done | pass | format ok, move rehearsed exit 0 | fresh
+Story-state advance | pass | doing -> code-review, move rehearsed | fresh
+Version bump | skipped | docs-only, rendered README identical | skipped
 # --- Fixed during review ---
-Removed the coord target marker from the pie-matches-pill heading. No standards findings.
+Exposure: coord=<host> marker removed from the story linetag via coord-lib untarget.
 # --- Open ---
-Dark and light theme luminance contrast of the wedge against the grey track is below 1.5:1 for roughly half of hues (computed, not browser-measured); see the hand-back note.
+none

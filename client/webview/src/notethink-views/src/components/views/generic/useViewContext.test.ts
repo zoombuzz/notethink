@@ -402,6 +402,25 @@ describe('useViewContext', () => {
         });
     });
 
+    describe('clearing with no editor caret', () => {
+        const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });
+        const child = makeNote({ seq: 1, level: 1, stable_id: 'child', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
+
+        it('focuses the caret note while view_caret is set, and no note once a clear has removed it', () => {
+            const before = renderHook(() => useViewContext(makeViewProps({
+                notes: [root, child],
+                display_options: { view_focused_ids: [], view_selected_ids: [], view_caret: 25 },
+            })));
+            expect(before.result.current.deepest.note?.stable_id).toBe('child');
+            const after = renderHook(() => useViewContext(makeViewProps({
+                notes: [root, child],
+                display_options: { view_focused_ids: [], view_selected_ids: [], view_caret: undefined },
+            })));
+            expect(after.result.current.display_options.selected_seqs ?? []).toEqual([]);
+            expect(after.result.current.deepest.note?.stable_id).not.toBe('child');
+        });
+    });
+
     describe('editor drag-select preserved (head != anchor yields a multi-note range)', () => {
         it('folder mode: a range spanning two same-doc notes selects both via origin source positions', () => {
             const origin_a: NoteOrigin = { doc_id: 'a', doc_path: '/repo/a.md', source_position: { start: { offset: 10, line: 2 }, end: { offset: 30, line: 3 }, end_body: { offset: 50, line: 4 } } };

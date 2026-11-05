@@ -1,6 +1,41 @@
 # Todo [](?nt_view=kanban)
 
 
+### Clicking the board background clears focus [](?id=clear-focus-clears-virtual-caret&status=code-review)
+
+A card stays focused (dashed ring) after a click on the board background whenever no text editor holds a caret in its file, which is the usual case for the folder board. The card can also appear focused on panel restore with no click at all.
+
++ cause, from reading the code: getClearHandler (useViewHandlers.ts) calls writeViewInteractionState with empty focused and selected ids but no view_caret, and writeViewInteractionState only stamps view_caret when one is passed (viewstateops.ts), so the virtual caret from the last card click survives the clear
++ with no editor caret the extension sends selection null (PanelSession sendCurrentSelection), so resolveFocusedNote (noteops.ts) skips the editor match and the now-empty view_focused_ids, then falls back to findDeepestNote on the surviving view_caret and re-focuses a card in the same render
++ inferred, not confirmed: view_caret is persisted with the view state and restored at startup, so a single offset resolved against a multi-file aggregate tree lands on a story the user never clicked (seen on the first story of one project in the folder board)
++ [X] Make the background-click clear also remove view_caret, adding an explicit way to unset it, since writeViewInteractionState can only replace it today
++ [X] Correct the getClearHandler Jest assertion in useViewHandlers.test.ts, which currently expects the clear to leave view_caret in place
++ [X] Add a useViewContext test: no editor selection plus a view_caret set, then a clear, leaves no focused note
++ [X] Add a Playwright spec on the folder board: click a card, click the background, assert no card is focused, then reload and assert it stays cleared
++ [X] Confirm whether view_caret survives a panel restore, and make sure a restored panel opens with no stale focus
+  + measured: it survived, since the whole view-state map is persisted and `migrateSavedState` kept `view_caret`; it now drops it on restore (`vscodeops.ts`), covered by a Jest case and a Playwright spec that reads the persisted state back after a reload
+  + view_focused_ids still restore, so a card the user last clicked reopens focused; only the offset-resolved focus is gone
++ open question: only clicks on the board container (LineView inner div) clear focus, so clicks on the toolbar row do nothing; decide whether they should
++ open question: with an editor open, the clear reveals deepest_note end + 1, which lands in the next story and focuses it instead of clearing
+  + evidence (inferred from the code, not measured with a live editor): this fix leaves it unchanged, since the revealRange the clear posts still moves the editor caret into the next story
+
+
+### Pie outline in the pill colour [](?id=pie-outline-pill&status=code-review)
+
+The muted-foreground outline from [[pie-outline]] does not read well on the cards. Before removing the outline, try drawing it in the project pill's colour instead.
+
++ background
+  + `StoryProgressPie` strokes its outline circle in `--vscode-descriptionForeground`; the wedge already uses `--nt-pie-colour`, the pill's colour
++ approach
+  + stroke the outline in the same colour as the pill (and the wedge), so the disc's edge matches the pill beside it
+  + outline width, radius, the pie's outer size and its alignment stay as they are
+  + a card with no pill keeps its outline in the wedge's fallback colour
++ [X] stroke the progress pie's outline in the pill colour
++ [X] update the outline assertions in `StoryProgressPie.test.tsx` and `story-progress-pie.spec.ts`
++ [X] bump the patch version
++ open question: keep the pill-coloured outline, or remove the outline altogether, once the operator has looked at it
+
+
 ### Outline the progress pie [](?id=pie-outline&status=code-review)
 
 The progress pie fills in the project pill's colour over a grey remainder (story `pie-matches-pill` in `done.md`). For about half of project hues the two colours are too close in lightness, so the disc has no clear edge.

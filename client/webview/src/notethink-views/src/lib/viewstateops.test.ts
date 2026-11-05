@@ -136,6 +136,17 @@ describe('resolveViewStateId', () => {
 });
 
 describe('writeViewInteractionState', () => {
+    it('writes an explicit undefined view_caret only when asked to clear it', () => {
+        const props = makeProps({ id: 'view-cf' });
+        const { handlers, set_view_managed_state } = makeHandlers();
+        writeViewInteractionState(props, handlers, [], [], undefined, true);
+        const cleared = set_view_managed_state.mock.calls[0][0][0].display_options;
+        expect(cleared).toHaveProperty('view_caret', undefined);
+        writeViewInteractionState(props, handlers, [], []);
+        const plain = set_view_managed_state.mock.calls[1][0][0].display_options;
+        expect(plain).not.toHaveProperty('view_caret');
+    });
+
     it('dispatches to the view id in current_file mode with both id lists', () => {
         const props = makeProps({ id: 'view-cf' });
         const { handlers, set_view_managed_state } = makeHandlers();

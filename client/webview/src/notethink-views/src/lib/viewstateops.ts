@@ -168,7 +168,8 @@ export function resolveViewStateId(props: ViewProps): string {
 
 /**
  * Writes focused/selected ids as stable_ids, so a drag-reorder that reassigns seqs doesn't move the
- * highlight. The caller computes the focused chain.
+ * highlight. The caller computes the focused chain. `clear_view_caret` removes the virtual caret
+ * (a background-click clear), which omitting `view_caret` alone cannot do.
  */
 export function writeViewInteractionState(
     props: ViewProps,
@@ -176,6 +177,7 @@ export function writeViewInteractionState(
     focused_ids: string[],
     selected_ids: string[],
     view_caret?: number,
+    clear_view_caret = false,
 ): void {
     const display_options: NoteDisplayOptions = {
         view_focused_ids: focused_ids,
@@ -184,6 +186,9 @@ export function writeViewInteractionState(
     // only stamp the virtual caret when the caller supplies one, so callers that only move focus do not clobber it
     if (view_caret !== undefined) {
         display_options.view_caret = view_caret;
+    } else if (clear_view_caret) {
+        // an explicit undefined overwrites the merged value, which is how a clear removes the caret
+        display_options.view_caret = undefined;
     }
     handlers.setViewManagedState([{
         id: resolveViewStateId(props),

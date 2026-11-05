@@ -1,4 +1,6 @@
 import React from 'react';
+import fs from 'fs';
+import path from 'path';
 import { act, render, screen } from '@testing-library/react';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
@@ -163,6 +165,13 @@ describe('the pie outline', () => {
         expect(outline.getAttribute('class')).toMatch(/outline/);
         const reach = Number(outline.getAttribute('r')) + Number(outline.getAttribute('stroke-width')) / 2;
         expect(reach).toBe(Number(track.getAttribute('r')));
+    });
+
+    it('strokes the outline in the wedge colour variable, so the pill colour or its fallback applies', () => {
+        const scss = fs.readFileSync(path.join(__dirname, 'StoryProgressPie.module.scss'), 'utf8');
+        const outline_rule = scss.slice(scss.indexOf('.outline {'));
+        expect(outline_rule).toMatch(/stroke:\s*var\(--nt-pie-colour\)/);
+        expect(outline_rule).not.toMatch(/descriptionForeground/);
     });
 
     it('draws the outline with and without a project pill', () => {

@@ -154,8 +154,8 @@ export function useViewHandlers(
         getClearHandler: (focused_notes: Array<NoteProps> | undefined) => {
             return ((event: MouseEvent<HTMLElement>) => {
                 if (event.stopPropagation) { event.stopPropagation(); }
-                // clears view-driven seqs first, since useViewContext's view-driven-wins policy would otherwise override this
-                writeViewInteractionState(props, handlers, [], []);
+                // clears the view-driven ids and the virtual caret first, or useViewContext would re-focus from either
+                writeViewInteractionState(props, handlers, [], [], undefined, true);
                 if (!focused_notes?.length) { return; }
                 const deepest_note = focused_notes[focused_notes.length - 1];
                 if (deepest_note.seq === 0) { return; }

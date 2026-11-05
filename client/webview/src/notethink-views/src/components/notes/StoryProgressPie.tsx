@@ -30,8 +30,8 @@ interface PieProps {
  *
  * Where the headline also draws a project pill, the filled wedge takes the pill's colour (the same hue
  * and theme helpers) and the pie lines up with the pill; the unfilled part stays grey, and a card with
- * no pill keeps the chart green. A thin outline in the editor's muted foreground rings the disc so its
- * edge reads whatever the two fills' lightness.
+ * no pill keeps the chart green. A thin outline in the same colour as the wedge rings the disc, so its
+ * edge matches the pill beside it.
  */
 export default function StoryProgressPie(props: PieProps): ReactElement | null {
     const { note } = props;

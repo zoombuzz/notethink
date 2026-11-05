@@ -278,8 +278,10 @@ describe('useViewHandlers getClearHandler', () => {
         expect(set_view_managed_state).toHaveBeenCalledWith([{
             id: props.id,
             type: props.type,
-            display_options: { view_focused_ids: [], view_selected_ids: [] },
+            display_options: { view_focused_ids: [], view_selected_ids: [], view_caret: undefined },
         }]);
+        const written = set_view_managed_state.mock.calls[0][0][0].display_options;
+        expect('view_caret' in written).toBe(true);
     });
 
     it('still posts a revealRange past the focused note end so the editor caret leaves the note', () => {

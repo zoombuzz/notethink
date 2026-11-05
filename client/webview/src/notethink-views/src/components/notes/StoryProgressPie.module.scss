@@ -41,10 +41,10 @@
     stroke: var(--nt-pie-colour);
   }
 
-  // drawn last and inside the disc's radius, so it rings the pie without changing its outer size
+  // drawn last, in the wedge's colour and inside the disc's radius, so it rings the pie without changing its outer size
   .outline {
     fill: none;
-    stroke: var(--vscode-descriptionForeground, rgba(204, 204, 204, 0.7));
+    stroke: var(--nt-pie-colour);
   }
 }
 

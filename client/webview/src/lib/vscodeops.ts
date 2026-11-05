@@ -45,6 +45,8 @@ export function toPersistedDocs(docs: HashMapOf<Doc>): HashMapOf<PersistedDocMet
  * - legacy aggregate_* display_options fields → includeFilter / excludeFilter / maxNotesPerFile
  * - display_options.parent_context_seq dropped for parent_context_id, since seq is a per-render
  *   value now and a persisted one would outlive the parse that produced it
+ * - display_options.view_caret dropped, since an offset resolved against a different tree than the
+ *   one it was recorded in focuses a note the user never clicked
  *
  * Returns the same `s` reference (mutated in place); unchanged when there are no viewStates to migrate.
  */
@@ -79,6 +81,10 @@ export function migrateSavedState(s: VSCodeState | undefined): VSCodeState | und
         // a stale persisted seq would win the scope ternary in useViewContext and pin drill-out to a permanent no-op
         if ('parent_context_seq' in dopts) {
             delete dopts.parent_context_seq;
+        }
+        // a restored panel opens with no virtual caret, so no card appears focused without a click
+        if ('view_caret' in dopts) {
+            delete dopts.view_caret;
         }
     }
     return s;

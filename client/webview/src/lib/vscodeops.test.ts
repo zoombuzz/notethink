@@ -191,6 +191,17 @@ describe('vscodeops', () => {
             expect(result?.viewStates?.['v1'].display_options?.integration_mode).toBe('current_file');
         });
 
+        it('drops a persisted view_caret so a restored panel opens with no virtual-caret focus, keeping the other ids', () => {
+            const input: VSCodeState = {
+                viewStates: {
+                    '__folder__': { display_options: { view_caret: 1234, view_focused_ids: ['a'], integration_mode: 'folder' } },
+                },
+            };
+            const result = migrateSavedState(input);
+            expect(result?.viewStates?.['__folder__'].display_options).not.toHaveProperty('view_caret');
+            expect(result?.viewStates?.['__folder__'].display_options?.view_focused_ids).toEqual(['a']);
+        });
+
         it('leaves parent_context_id intact', () => {
             const input: VSCodeState = {
                 viewStates: {

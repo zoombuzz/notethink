@@ -77,4 +77,17 @@ test.describe('Clicking the board background clears focus', () => {
         });
         expect(restored_caret.some((caret) => typeof caret === 'number')).toBe(false);
     });
+
+    test('a click on empty toolbar space clears focus, and a click on a toolbar control does not', async ({ page }) => {
+        await setupFolderKanban(page);
+        const card_b1 = page.locator('[role="row"][data-seq]:not([data-seq="0"])').filter({ hasText: 'Beta Task One' }).first();
+        await card_b1.locator('[role="rowheader"]').first().click({ force: true });
+        await expect(card_b1).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
+
+        await page.locator('[data-testid="view-settings-button"]').first().click();
+        await expect(card_b1).toHaveAttribute('aria-current', 'true');
+
+        await page.locator('[data-testid="view-toolbar"]').first().click({ position: { x: 1, y: 1 } });
+        await expect(page.locator('[role="row"][aria-current="true"]')).toHaveCount(0);
+    });
 });

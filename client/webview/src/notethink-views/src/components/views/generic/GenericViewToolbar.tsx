@@ -23,6 +23,9 @@ import master_view_styles from "../../ViewRenderer.module.scss";
 // the + trigger is hidden pending its return as a menu item; typed boolean so the wiring below stays live code
 const SHOW_INSERT_BUTTON: boolean = false;
 
+// anything a click lands on inside the toolbar that keeps its own action rather than clearing focus
+const TOOLBAR_CONTROL_SELECTOR = 'button, a, input, select, textarea, label, [role="button"], [role="menuitem"], [role="tab"], [role="combobox"]';
+
 // one frozen empty list, so a cascade with no saved types hands the drawer one stable identity
 const EMPTY_USER_TYPES: UserViewType[] = [];
 
@@ -130,9 +133,15 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
     const group_by_candidate_keys = enumerateGroupByCandidates(props.notes).filter(c => c.kind === 'categorical').map(c => c.key);
     // the "Auto (...)" label names the axis the board groups by; a kanban chain's selection is never auto here
     const group_by_resolved_key = resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, group_by_selection);
+    // a click on toolbar space that is not a control clears focus, through the board background's clear path
+    const clear_handler = handlers.getClearHandler?.(displayOptions.focused_notes);
+    const handleToolbarClick = (event: React.MouseEvent<HTMLElement>): void => {
+        if ((event.target as HTMLElement).closest(TOOLBAR_CONTROL_SELECTOR)) { return; }
+        clear_handler?.(event);
+    };
     return (
         <>
-            <div className={master_view_styles.viewToolbar} data-testid="view-toolbar">
+            <div className={master_view_styles.viewToolbar} data-testid="view-toolbar" onClick={handleToolbarClick}>
                 <div className={master_view_styles.viewToolbarBreadcrumb}>
                     {breadcrumbTrail}
                 </div>

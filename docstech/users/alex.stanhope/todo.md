@@ -1,6 +1,19 @@
 # Todo [](?nt_view=kanban)
 
 
+### Toolbar clicks clear focus [](?id=toolbar-click-clears-focus&status=code-review)
+
+Only a click on the board container (the LineView inner div) clears focus today, so a click on the toolbar row above the board leaves the focused card ringed. Decision: a click on the toolbar clears focus too, the same as a click on the board background.
+
++ [X] Clear focus (focused ids, selected ids and view_caret, through the same clear path as the board background) on a click anywhere in the toolbar row that is not a control
++ [X] Keep a click on a toolbar control (a dropdown, button or menu) to its own action; it does not clear focus where the action uses the focused note, and the story records which controls those are
+  + a click whose target is inside a button, link, input, select, textarea, label or a button/menuitem/tab/combobox role keeps its own action and does not clear; that covers the breadcrumb segments, the view and card settings tabs and the recording control, none of which acts on the focused note, so none needs it kept
+  + implemented in `GenericViewToolbar.tsx`; the toolbar is one component for every view type, so all views get it
++ [X] Apply it in every view that has the toolbar, not only the folder board
++ [X] Add a Jest test for the toolbar clear and a Playwright spec: focus a card, click empty toolbar space, assert no card is focused
++ [X] Close the toolbar open question on [[clear-focus-clears-virtual-caret]] with this decision
+
+
 ### Clicking the board background clears focus [](?id=clear-focus-clears-virtual-caret&status=code-review)
 
 A card stays focused (dashed ring) after a click on the board background whenever no text editor holds a caret in its file, which is the usual case for the folder board. The card can also appear focused on panel restore with no click at all.
@@ -15,7 +28,7 @@ A card stays focused (dashed ring) after a click on the board background wheneve
 + [X] Confirm whether view_caret survives a panel restore, and make sure a restored panel opens with no stale focus
   + measured: it survived, since the whole view-state map is persisted and `migrateSavedState` kept `view_caret`; it now drops it on restore (`vscodeops.ts`), covered by a Jest case and a Playwright spec that reads the persisted state back after a reload
   + view_focused_ids still restore, so a card the user last clicked reopens focused; only the offset-resolved focus is gone
-+ open question: only clicks on the board container (LineView inner div) clear focus, so clicks on the toolbar row do nothing; decide whether they should
++ decision 2026-11-05: a click on empty toolbar space clears focus too, built as [[toolbar-click-clears-focus]]
 + open question: with an editor open, the clear reveals deepest_note end + 1, which lands in the next story and focuses it instead of clearing
   + evidence (inferred from the code, not measured with a live editor): this fix leaves it unchanged, since the revealRange the clear posts still moves the editor caret into the next story
 

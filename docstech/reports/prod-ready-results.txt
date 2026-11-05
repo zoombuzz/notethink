@@ -1,26 +1,25 @@
 # Prod-ready Results
-# Version: 0.4.23
-# Date: 2026-11-05T13:05:00Z
-# Tree: HEAD f31f840 + vscodeops, StoryProgressPie scss, tsx and tests, useViewHandlers, viewstateops and their tests, useViewContext test, story-progress-pie spec, clear-focus-background spec, package.json, docstech/users/alex.stanhope/todo.md, docstech/reports
-# Stories: pie-outline-pill doing -> code-review; clear-focus-clears-virtual-caret doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move "Pie outline in the pill colour" and "Clicking the board background clears focus" to done.md
+# Version: 0.4.24
+# Date: 2026-11-05T13:30:00Z
+# Tree: HEAD 5929591 plus GenericView.test.tsx, GenericViewToolbar.tsx, todo.md, package.json, clear-focus-background.spec.ts and the two test reports
+# Stories: toolbar-click-clears-focus doing -> code-review; clear-focus-clears-virtual-caret left at code-review (board edit only)
+# Ship verdict: Ready to ship: /push-prod will move "Toolbar clicks clear focus" to done.md
 # ---
-Overseer inbox | skipped | no overseer review (ABSENT) | skipped
-Story-state intake | ok | 2 at doing | fresh
-Story reconciliation | ok | all tasks already ticked | fresh
-Build | pass | webpack compiled | fresh
-Lint | pass | 0 fail | fresh
-Project guards | skipped | none for this project | skipped
-Dependency audit | pass | no known vulnerabilities | fresh
-CODING_STANDARDS | pass | mechanical greps and inline pass clean | fresh
-Exposure | pass | one finding fixed (host alias in a linetag removed) | fresh
-Fleet fix check | pass | no shared-surface or new-dependency-class hit | fresh
-Jest | pass | 3546/3546 (159 files) | fresh
-Playwright | pass | 309/309, 0 skipped | fresh
-Story-state advance | ok | doing -> code-review for both, moves rehearsed | fresh
-Version bump | ok | 0.4.23 | fresh
+Story-state intake | ok | 1 doing, 1 code-review | fresh
+Story reconciliation | ok | all tasks ticked | fresh
+Build | n/a | webpack runs inside the Playwright script | skipped
+Lint | pass | exit 0 | fresh
+Project guards | none for this project | | skipped
+Dependency audit | not run | | skipped (extension; no gating change)
+CODING_STANDARDS | clean | mechanical checks and inline pass | fresh
+Exposure | clean | public scan clean; coord host marker removed from linetag | fresh
+Fleet fix check | not a fleet fix | notethink-only webview component | fresh
+Jest | pass | 3547/3547 (159 files) | fresh
+Playwright | pass | 310/310, 0 skipped | reused (green at 2026-11-05T13:18:26Z, app tree unchanged)
+Todo/Done | ok | format intact | fresh
+Story-state advance | doing -> code-review | move rehearsed, exit 0 | fresh
+Version bump | 0.4.24 | | fresh
 # --- Fixed during review ---
-Exposure: removed the coord host marker from the pie-outline-pill linetag.
-Comments: shortened one over-long scss comment on the outline rule.
+Linetag: removed the coord host marker from the story linetag.
 # --- Open ---
 none

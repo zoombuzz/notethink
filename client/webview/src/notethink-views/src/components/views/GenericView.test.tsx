@@ -785,6 +785,33 @@ describe('GenericView click state machine', () => {
         });
     });
 
+    it('a click on empty toolbar space clears focused ids, selected ids and the virtual caret, but a click on a control does not', async () => {
+        const set_managed = jest.fn();
+        render(
+            <Suspense fallback={<div>loading</div>}>
+                <GenericView {...makeViewProps({
+                    type: 'document',
+                    notes: [makeNote({ seq: 0, level: 1 })],
+                    handlers: {
+                        setViewManagedState: set_managed,
+                        deleteViewFromManagedState: jest.fn(),
+                        revertAllViewsToDefaultState: jest.fn(),
+                        postMessage: jest.fn(),
+                    },
+                })} />
+            </Suspense>
+        );
+        await waitFor(() => expect(screen.getByTestId('view-toolbar')).toBeInTheDocument());
+        set_managed.mockClear();
+        fireEvent.click(screen.getByTestId('view-settings-button'));
+        const cleared = (call: unknown[]): boolean => JSON.stringify(call).includes('view_focused_ids');
+        expect(set_managed.mock.calls.some(cleared)).toBe(false);
+        fireEvent.click(screen.getByTestId('view-toolbar'));
+        expect(set_managed).toHaveBeenCalledWith([expect.objectContaining({
+            display_options: expect.objectContaining({ view_focused_ids: [], view_selected_ids: [], view_caret: undefined }),
+        })]);
+    });
+
     it('stopPropagation is called on click events', async () => {
         const post_message = jest.fn();
         const root = makeNote({ seq: 0, level: 1 });

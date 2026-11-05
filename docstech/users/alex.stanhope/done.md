@@ -8095,7 +8095,7 @@ The progress pie from [[story-progress-pie]] fills in a fixed green and sits apa
   + the pie sits on the pill's horizontal line, centred on the same axis and at the same size, so the two read as a pair of dots
   + a card with no pill keeps the pie in its current place and colour
 + decision 2026-11-03: the pie's completed share is drawn in the project pill's colour, and the pie lines up with the pill at the top of the card
-+ open question: the coloured wedge has weak luminance contrast against the grey remainder for about half of project hues (computed: 1.05:1 to 2.7:1 in dark, 1.0:1 to 2.05:1 in light, below 1.5:1 for 184 of 360 hues dark and 205 light); it still reads by hue. Keep it, or give the grey remainder a theme-aware lightness, or outline the pie? Recommendation: a thin outline in the editor's muted foreground, which keeps both colours as asked and gives the disc a clear edge.
++ decision 2026-11-05: the coloured wedge has weak luminance contrast against the grey remainder for about half of project hues (computed: 1.05:1 to 2.7:1 in dark, 1.0:1 to 2.05:1 in light, below 1.5:1 for 184 of 360 hues dark and 205 light), so the pie gets a thin outline in the editor's muted foreground, keeping both colours; built in story `pie-outline`
 + [X] colour the pie's filled wedge from the card's pill colour, keeping the grey remainder
 + [X] align the pie with the pill on one line at the same size, in the card, sticky and agent card types
 + [X] cover the colour and the no-pill fallback in `StoryProgressPie.test.tsx`
@@ -8170,7 +8170,7 @@ A transcript over the size bound is refused whole, so its session draws a "could
   + the same rule covers every vendor whose transcript can pass the bound
   + the tail cache and resumed reads keep working for a tail-read transcript
 + decision 2026-11-03: over the bound, analyse the newest part of the transcript up to the bound instead of refusing it
-+ open question: the crop keeps whole lines only, so one giant line straddling the window start leaves far less than the bound (measured: a 77.5 MB transcript kept 30 KB, a 113.7 MB one kept 32 MB). Keep it as designed, or skip a giant line and keep filling the bound from the lines before it? Recommendation: keep it, since such transcripts are usually old and outside the 30-day window.
++ decision 2026-11-05: the crop keeps whole lines only, as designed, even though one giant line straddling the window start leaves far less than the bound (measured: a 77.5 MB transcript kept 30 KB, a 113.7 MB one kept 32 MB), because such transcripts are usually old and outside the 30-day window
 + [X] read the newest bound's worth of an oversized transcript from its first complete line
   + the worker crops a whole job (`cropToNewestBytes`) and trims a resumed one to the bound; the vendor readers no longer judge size, and `too_large` is gone from the refusal codes
 + [X] mark tail-read sessions and say so beside their usage and time

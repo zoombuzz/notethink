@@ -105,6 +105,23 @@ test.describe('Story progress pie', () => {
             const pill_box = (await pill.boundingBox())!;
             expect(Math.abs((pie_box.y + pie_box.height / 2) - (pill_box.y + pill_box.height / 2))).toBeLessThanOrEqual(1);
             expect(Math.abs(pie_box.height - pill_box.height)).toBeLessThanOrEqual(1);
+            // the outline is the muted foreground, stroked inside the disc so the outer box does not grow
+            const outline = pie.locator('circle').nth(2);
+            const outline_stroke = await outline.evaluate(el => getComputedStyle(el).stroke);
+            const muted_probe = await pie.evaluate(el => {
+                const probe = document.createElement('span');
+                probe.style.color = 'var(--vscode-descriptionForeground, rgba(204, 204, 204, 0.7))';
+                el.appendChild(probe);
+                const colour = getComputedStyle(probe).color;
+                probe.remove();
+                return colour;
+            });
+            expect(outline_stroke).toBe(muted_probe);
+            expect(outline_stroke).not.toBe(wedge_colour);
+            const outline_box = (await outline.boundingBox())!;
+            expect(outline_box.width).toBeLessThanOrEqual(pie_box.width + 0.5);
+            expect(outline_box.height).toBeLessThanOrEqual(pie_box.height + 0.5);
+            expect(Math.abs(pie_box.width - pie_box.height)).toBeLessThanOrEqual(1);
         });
     }
 });

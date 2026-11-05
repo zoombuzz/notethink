@@ -11,6 +11,10 @@ import pie_styles from "./StoryProgressPie.module.scss";
 const PIE_RADIUS = 5;
 const PIE_CIRCUMFERENCE = 2 * Math.PI * PIE_RADIUS;
 
+// the outline is stroked inside the disc's radius of 10, so it never changes the pie's outer box
+const OUTLINE_WIDTH = 1;
+const OUTLINE_RADIUS = 10 - OUTLINE_WIDTH / 2;
+
 interface PieProps {
     note: NoteProps;
 }
@@ -26,7 +30,8 @@ interface PieProps {
  *
  * Where the headline also draws a project pill, the filled wedge takes the pill's colour (the same hue
  * and theme helpers) and the pie lines up with the pill; the unfilled part stays grey, and a card with
- * no pill keeps the chart green.
+ * no pill keeps the chart green. A thin outline in the editor's muted foreground rings the disc so its
+ * edge reads whatever the two fills' lightness.
  */
 export default function StoryProgressPie(props: PieProps): ReactElement | null {
     const { note } = props;
@@ -64,6 +69,7 @@ function PassivePie(props: PieProps): ReactElement | null {
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
                 <circle className={pie_styles.track} cx="10" cy="10" r="10" />
                 <circle className={pie_styles.wedge} cx="10" cy="10" r={PIE_RADIUS} strokeWidth={PIE_RADIUS * 2} style={{ strokeDasharray: wedge }} />
+                <circle className={pie_styles.outline} cx="10" cy="10" r={OUTLINE_RADIUS} strokeWidth={OUTLINE_WIDTH} />
             </svg>
         </span>
     );

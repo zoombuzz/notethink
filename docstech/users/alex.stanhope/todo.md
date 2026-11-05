@@ -1,6 +1,27 @@
 # Todo [](?nt_view=kanban)
 
 
+### Outline the progress pie [](?id=pie-outline&status=code-review)
+
+The progress pie fills in the project pill's colour over a grey remainder (story `pie-matches-pill` in `done.md`). For about half of project hues the two colours are too close in lightness, so the disc has no clear edge.
+
++ background
+  + measured in `pie-matches-pill`: wedge against remainder contrast runs 1.05:1 to 2.7:1 in dark themes and 1.0:1 to 2.05:1 in light, below 1.5:1 for 184 of 360 hues dark and 205 light
+  + `StoryProgressPie` colours the wedge from the card's pill colour and leaves the remainder grey
++ approach
+  + draw a thin outline round the pie in the editor's muted foreground colour, the theme token the webview already uses for muted text
+  + both fill colours stay as they are
+  + the outline follows the theme, so it reads in light, dark and high-contrast themes
+  + the pie keeps its outer size and stays centred on the pill's line
++ decision 2026-11-05: outline the pie in the muted foreground, rather than change the remainder's lightness or leave it as it is
++ [X] draw a thin outline in the editor's muted foreground round the progress pie
++ [X] keep the pie's outer size and its alignment with the pill unchanged
+  + the outline circle is stroked inside the disc's radius (r 9.5, width 1 within r 10), so the svg box is unchanged
++ [X] cover the outline in `StoryProgressPie.test.tsx`
++ [X] assert the outline and the unchanged alignment in `story-progress-pie.spec.ts`
++ [X] bump the patch version
+
+
 ### Coordinators beside boards in folder and project views [](?id=coordinator-views)
 
 The `agent` card shows which sessions are editing a story, but not the long-lived coordinator that owns a repo's board. With many repos open under one folder, the operator cannot see which repos have a coordinator, what state each is in, or message one without leaving the board.

@@ -40,6 +40,12 @@
     fill: none;
     stroke: var(--nt-pie-colour);
   }
+
+  // drawn last and inside the disc's radius, so it rings the pie without changing its outer size
+  .outline {
+    fill: none;
+    stroke: var(--vscode-descriptionForeground, rgba(204, 204, 204, 0.7));
+  }
 }
 
 // a change of value sweeps the wedge to its new length; with a reduced-motion preference it jumps instead

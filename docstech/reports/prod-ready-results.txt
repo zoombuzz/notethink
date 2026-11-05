@@ -1,26 +1,25 @@
 # Prod-ready Results
-# Version: 0.4.21
-# Date: 2026-11-04T00:00:00Z
-# Tree: HEAD 893c81d + README.md, docstech/users/alex.stanhope/todo.md, docstech/reports/jest-results.txt
-# Stories: readme-reflow doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move "README prose on one line per paragraph" to done.md
+# Version: 0.4.22
+# Date: 2026-11-05T08:31:00Z
+# Tree: HEAD f5fdf0e + StoryProgressPie tsx, scss, test, playwright spec, package.json, docstech/users/alex.stanhope/todo.md and done.md, docstech/reports
+# Stories: pie-outline doing -> code-review
+# Ship verdict: Ready to ship: /push-prod will move "Outline the progress pie" to done.md
 # ---
 Overseer inbox | skipped | no overseer review (ABSENT) | skipped
 Story-state intake | ok | 1 at doing | fresh
 Story reconciliation | ok | all tasks already ticked | fresh
-Build | skipped | docs-only diff | skipped (docs-only diff)
+Build | pass | webpack compiled | fresh
 Lint | pass | 0 fail | fresh
-Project guards | skipped | covered by lint and Jest | skipped
-Dependency audit | skipped | not run, docs-only diff | skipped
-CODING_STANDARDS | pass | mechanical and inline pass clean (wording unchanged, line breaks only) | fresh
-Exposure | pass | public: 1 finding rejected (README.md:200 ~/.claude/ is product behaviour, unchanged line); coord marker with host alias removed from todo.md | fresh
-Fleet fix check | pass | not a fleet fix (docs only) | fresh
-Jest | pass | 3537/3537 (159 files) | fresh (stamp was stale; tests_read_changed_docs forced a run)
-Playwright | skipped | docs-only diff | skipped (docs-only diff)
-Todo/Done | pass | format ok, move rehearsed exit 0 | fresh
-Story-state advance | pass | doing -> code-review, move rehearsed | fresh
-Version bump | skipped | docs-only, rendered README identical | skipped
+Project guards | skipped | none for this project | skipped
+Dependency audit | skipped | not run | skipped
+CODING_STANDARDS | pass | mechanical greps and inline pass clean | fresh
+Exposure | pass | one finding fixed (host alias in a linetag removed) | fresh
+Fleet fix check | pass | no shared-surface hit | fresh
+Jest | pass | 3542/3542 | fresh
+Playwright | pass | 307/307 | fresh
+Story-state advance | ok | doing -> code-review, move rehearsed | fresh
+Version bump | ok | 0.4.22 | fresh
 # --- Fixed during review ---
-Exposure: coord=<host> marker removed from the story linetag via coord-lib untarget.
+Exposure: removed the coord host marker from the pie-outline linetag.
 # --- Open ---
 none

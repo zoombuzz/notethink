@@ -150,3 +150,33 @@ describe('the pie takes the project pill colour', () => {
         expect(pie.querySelector('circle')?.getAttribute('class')).toMatch(/track/);
     });
 });
+
+describe('the pie outline', () => {
+    beforeEach(() => { resetStore(); act(() => { setActivitySnapshot(snapshotWith(55)); }); });
+    afterEach(() => { resetStore(); });
+
+    it('rings the disc with a thin outline stroked inside its radius, drawn after the wedge', () => {
+        render(<StoryProgressPie note={storyFrom(DOING_WITH_TASKS)} />);
+        const circles = Array.from(screen.getByTestId('story-progress-pie').querySelectorAll('circle'));
+        expect(circles).toHaveLength(3);
+        const [track, , outline] = circles;
+        expect(outline.getAttribute('class')).toMatch(/outline/);
+        const reach = Number(outline.getAttribute('r')) + Number(outline.getAttribute('stroke-width')) / 2;
+        expect(reach).toBe(Number(track.getAttribute('r')));
+    });
+
+    it('draws the outline with and without a project pill', () => {
+        render(<StoryProgressPie note={{ ...storyFrom(DOING_WITH_TASKS), origin: undefined }} />);
+        expect(screen.getByTestId('story-progress-pie').querySelector('circle[class*="outline"]')).not.toBeNull();
+    });
+
+    it.each([
+        ['card', (note: NoteProps) => <MarkdownNote {...note} />],
+        ['sticky', (note: NoteProps) => <StickyNote {...note} />],
+        ['agent', (note: NoteProps) => <AgentNote {...note} />],
+    ])('the %s card pie carries the outline', async (_label, renderCard) => {
+        render(<React.Suspense fallback={null}>{renderCard(storyFrom(DOING_WITH_TASKS))}</React.Suspense>);
+        const pie = await screen.findByTestId('story-progress-pie');
+        expect(pie.querySelector('circle[class*="outline"]')).not.toBeNull();
+    });
+});

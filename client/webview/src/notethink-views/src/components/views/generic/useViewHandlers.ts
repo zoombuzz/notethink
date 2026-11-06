@@ -4,7 +4,7 @@ import type { MouseEvent } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { calculateTextChangesForCheckbox, focusedChainIdsFor, resolveCaretPosition } from "../../../lib/noteops";
 import { isAlreadyFocusedClick } from "../../../lib/noteui";
-import { FOLDER_VIEW_STATE_ID, nextExpandedIds, reconcileAutoIntegrationMode, writeViewExpandedIds, writeViewInteractionState } from "../../../lib/viewstateops";
+import { FOLDER_VIEW_STATE_ID, captureEditorHold, nextExpandedIds, reconcileAutoIntegrationMode, writeViewExpandedIds, writeViewInteractionState, type EditorHold } from "../../../lib/viewstateops";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { ClickPositionInfo, NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
@@ -38,6 +38,7 @@ export interface ViewHandlers {
 export function useViewHandlers(
     props: ViewProps,
     selection_ref: React.MutableRefObject<ViewProps['selection']>,
+    editor_hold_ref?: React.MutableRefObject<EditorHold | undefined>,
 ): ViewHandlers {
     const { markPending } = usePendingWorkContext();
     // set up view-level default handlers, overridden by props
@@ -60,6 +61,8 @@ export function useViewHandlers(
         },
 
         setViewInteractionState: (focused_ids: string[], selected_ids: string[], view_caret?: number) => {
+            // a deliberate focus move (keyboard navigation) ends any clear hold
+            if (editor_hold_ref) { editor_hold_ref.current = undefined; }
             writeViewInteractionState(props, handlers, focused_ids, selected_ids, view_caret);
         },
 
@@ -97,6 +100,8 @@ export function useViewHandlers(
                     debug('checkbox click handler failed: %O', err);
                 }
             } else {
+                // a click that focuses a note ends any clear hold
+                if (editor_hold_ref) { editor_hold_ref.current = undefined; }
                 // click note to reveal in editor; read selection from ref to avoid stale closure when memo prevents re-render
                 const caret_pos = resolveCaretPosition(click_profile, note);
                 const current_head = selection_ref.current?.main.head;
@@ -151,20 +156,15 @@ export function useViewHandlers(
             if (event.stopPropagation) { event.stopPropagation(); }
         },
 
-        getClearHandler: (focused_notes: Array<NoteProps> | undefined) => {
+        getClearHandler: () => {
             return ((event: MouseEvent<HTMLElement>) => {
                 if (event.stopPropagation) { event.stopPropagation(); }
+                // the editor caret stays put; the hold keeps it from re-focusing the story it sits in until it moves
+                if (editor_hold_ref) {
+                    editor_hold_ref.current = captureEditorHold(selection_ref.current, props.active_editor_doc_path, props.doc_text);
+                }
                 // clears the view-driven ids and the virtual caret first, or useViewContext would re-focus from either
                 writeViewInteractionState(props, handlers, [], [], undefined, true);
-                if (!focused_notes?.length) { return; }
-                const deepest_note = focused_notes[focused_notes.length - 1];
-                if (deepest_note.seq === 0) { return; }
-                const deepest_note_end = deepest_note.position.end_body?.offset || deepest_note.position.end.offset;
-                props.handlers?.postMessage?.({
-                    type: 'revealRange',
-                    from: deepest_note_end + 1,
-                    docPath: deepest_note.origin?.doc_path,
-                });
             });
         },
 

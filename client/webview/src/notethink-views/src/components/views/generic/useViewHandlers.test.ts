@@ -4,6 +4,7 @@ import { FOLDER_VIEW_STATE_ID } from '../../../lib/mergeAggregateRoot';
 import { INTEGRATION_MODE_FOLDER, INTEGRATION_MODE_CURRENT_FILE } from '../../../types/IntegrationMode';
 import type { MouseEvent as ReactMouseEvent, MutableRefObject } from 'react';
 import type { ClickPositionInfo, NoteProps, TextSelection } from '../../../types/NoteProps';
+import type { EditorHold } from '../../../lib/viewstateops';
 import type { ViewProps } from '../../../types/ViewProps';
 
 function makeNote(overrides: Partial<NoteProps> = {}): NoteProps {
@@ -284,12 +285,11 @@ describe('useViewHandlers getClearHandler', () => {
         expect('view_caret' in written).toBe(true);
     });
 
-    it('still posts a revealRange past the focused note end so the editor caret leaves the note', () => {
-        const set_view_managed_state = jest.fn();
+    it('does not post a revealRange, so the editor caret stays where it is', () => {
         const post_message = jest.fn();
         const props = makeProps({
             handlers: {
-                setViewManagedState: set_view_managed_state,
+                setViewManagedState: jest.fn(),
                 deleteViewFromManagedState: jest.fn(),
                 revertAllViewsToDefaultState: jest.fn(),
                 postMessage: post_message,
@@ -299,7 +299,29 @@ describe('useViewHandlers getClearHandler', () => {
         const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
         const clear_handler = result.current.handlers.getClearHandler!([focused_note]);
         clear_handler(mockClickEvent());
-        expect(post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'revealRange', from: 51 }));
+        expect(post_message).not.toHaveBeenCalled();
+    });
+
+    it('records the editor selection, doc path and doc text as the hold', () => {
+        const props = makeProps({ active_editor_doc_path: '/a.md', doc_text: 'text' });
+        const hold_ref = { current: undefined } as MutableRefObject<EditorHold | undefined>;
+        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef({ main: { head: 12, anchor: 12 } }), hold_ref));
+        result.current.handlers.getClearHandler!([])(mockClickEvent());
+        expect(hold_ref.current).toEqual({ head: 12, anchor: 12, doc_path: '/a.md', doc_text: 'text' });
+    });
+
+    it('records no hold when no editor selection is live', () => {
+        const hold_ref = { current: undefined } as MutableRefObject<EditorHold | undefined>;
+        const { result } = renderHook(() => useViewHandlers(makeProps(), makeSelectionRef(undefined), hold_ref));
+        result.current.handlers.getClearHandler!([])(mockClickEvent());
+        expect(hold_ref.current).toBeUndefined();
+    });
+
+    it('releases the hold when keyboard navigation writes interaction state', () => {
+        const hold_ref = { current: { head: 1, anchor: 1, doc_path: undefined, doc_text: undefined } } as MutableRefObject<EditorHold | undefined>;
+        const { result } = renderHook(() => useViewHandlers(makeProps(), makeSelectionRef(undefined), hold_ref));
+        result.current.handlers.setViewInteractionState!(['a'], []);
+        expect(hold_ref.current).toBeUndefined();
     });
 });
 

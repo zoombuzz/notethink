@@ -1,5 +1,5 @@
 import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../types/IntegrationMode";
-import type { NoteDisplayOptions } from "../types/NoteProps";
+import type { NoteDisplayOptions, TextSelection } from "../types/NoteProps";
 import type { ViewApi, ViewProps } from "../types/ViewProps";
 
 /**
@@ -195,6 +195,42 @@ export function writeViewInteractionState(
         type: props.type,
         display_options,
     }]);
+}
+
+/**
+ * The editor state a background clear happened at, held in a ref and never persisted. While the live
+ * editor state still equals it, the editor-derived caret match is suppressed, so the clear is not
+ * undone by the editor caret that is still sitting inside a story.
+ * - head, anchor: the editor selection at the clear
+ * - doc_path: the active editor doc at the clear
+ * - doc_text: the doc text at the clear, so an edit releases the hold even when the caret offsets match
+ */
+export interface EditorHold {
+    head: number;
+    anchor: number;
+    doc_path: string | undefined;
+    doc_text: string | undefined;
+}
+
+/**
+ * Captures the editor state to hold a clear against, or undefined when no editor selection is live
+ * (the board owns the caret, and the clear already leaves no focused card).
+ */
+export function captureEditorHold(selection: TextSelection | undefined, doc_path: string | undefined, doc_text: string | undefined): EditorHold | undefined {
+    if (!selection) { return undefined; }
+    return { head: selection.main.head, anchor: selection.main.anchor, doc_path, doc_text };
+}
+
+/**
+ * Whether the hold still applies: the same selection in the same doc with the same text. A resent
+ * identical selection keeps it; a moved caret, another doc or an edit releases it.
+ */
+export function editorHoldApplies(hold: EditorHold | undefined, selection: TextSelection | undefined, doc_path: string | undefined, doc_text: string | undefined): boolean {
+    if (!hold || !selection) { return false; }
+    return hold.head === selection.main.head
+        && hold.anchor === selection.main.anchor
+        && hold.doc_path === doc_path
+        && hold.doc_text === doc_text;
 }
 
 /**

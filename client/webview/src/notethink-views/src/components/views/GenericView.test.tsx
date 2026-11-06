@@ -751,7 +751,7 @@ describe('GenericView click state machine', () => {
         expect(post_message).not.toHaveBeenCalled();
     });
 
-    it('getClearHandler sends revealRange past the focused note end', async () => {
+    it('getClearHandler leaves the editor caret alone and posts no revealRange', async () => {
         const post_message = jest.fn();
         const root = makeNote({ seq: 0, level: 1 });
         const child = makeNote({
@@ -779,10 +779,7 @@ describe('GenericView click state machine', () => {
         const clear_handler = handlers.getClearHandler!([child]);
         clear_handler(mockClickEvent());
 
-        expect(post_message).toHaveBeenCalledWith({
-            type: 'revealRange',
-            from: 51,
-        });
+        expect(post_message).not.toHaveBeenCalled();
     });
 
     it('a click on empty toolbar space clears focused ids, selected ids and the virtual caret, but a click on a control does not', async () => {
@@ -1071,7 +1068,7 @@ describe('GenericView navigation callback', () => {
         });
     });
 
-    it('clearFocus sends revealRange past focused note', async () => {
+    it('clearFocus leaves the editor caret alone', async () => {
         const post_message = jest.fn();
         const nav_ref = createRef<((direction: string) => void) | undefined>() as React.MutableRefObject<((direction: string) => void) | undefined>;
         nav_ref.current = undefined;
@@ -1102,10 +1099,7 @@ describe('GenericView navigation callback', () => {
 
         nav_ref.current!('clearFocus');
 
-        expect(post_message).toHaveBeenCalledWith({
-            type: 'revealRange',
-            from: 51,
-        });
+        expect(post_message).not.toHaveBeenCalled();
     });
 
     describe('settings drawer', () => {

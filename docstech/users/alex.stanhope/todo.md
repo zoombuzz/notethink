@@ -1,6 +1,43 @@
 # Todo [](?nt_view=kanban)
 
 
+### Clear focus with an editor open [](?id=clear-focus-editor-hold&status=code-review)
+
+With a text editor open on the file, a click on the board background (or empty toolbar space) does not clear focus: the next story lights up instead. The clear moves the editor caret to the focused story's end + 1, which is the start of the next story, and with an editor open the editor caret always decides the focused card.
+
++ background
+  + `getClearHandler` (`useViewHandlers.ts`) clears the view-driven ids and view_caret, then posts `revealRange` at `deepest_note_end + 1`
+  + `useViewContext.ts` derives `editor_derived_match` from `props.selection`, and `resolveFocusedNote` (`noteops.ts`) returns it ahead of everything else, so any caret inside a story focuses that story
+  + read in `PanelSession.ts`: `sendCurrentSelection` runs after every debounced document change, file-watcher reload, visible-editor change and initial-state request, so the webview sees the same selection more than once with no caret move
++ decision 2026-11-06 (operator): hold the clear until the editor caret moves, rather than parking the caret above the first story
+  + parking the caret scrolls the editor to the top and loses the user's place, has no spot to go in a file that starts with a story, and needs a folder-board lookup fix
+  + the hold leaves the editor alone and behaves the same for every file layout and both board modes
++ builds on: the clear path in `getClearHandler` and the editor-derived match in `useViewContext.ts`; extend them, no second focus path
++ approach
+  + the clear stops posting `revealRange`; the editor caret stays where it is
+  + the clear records the editor selection it happened at (active doc path, head and anchor) in webview state that is not persisted with the panel
+  + while the incoming editor selection still equals that record, `editor_derived_match` is suppressed, so no card is focused
+  + a resent identical selection keeps the hold; any different selection, a different active doc, or an edit releases it and focus follows the editor again
+  + with no editor open nothing changes: the clear already leaves no focused card
++ [X] Drop the `revealRange` post from the background clear, which the toolbar clear shares
+  + `getClearHandler` in `useViewHandlers.ts` posts nothing; Jest asserts no post
++ [X] Record the selection at the moment of the clear and suppress the editor-derived match while it is unchanged
+  + `editor_hold_ref` in `useViewContext.ts` is set by the clear, and `editor_derived_match` and the range selection are skipped while it applies
++ [X] Release the hold on a different selection, a different active doc or an edit, and keep it across a resent identical selection
+  + `editorHoldApplies` in `viewstateops.ts` compares head, anchor, doc path and doc text; a focus click or keyboard move also drops it
++ [X] Keep the hold out of the persisted view state, so a restored panel follows the editor caret
+  + the hold is a ref, never written to view state, so `migrateSavedState` and the persisted shape are untouched
++ [X] Update the `getClearHandler` Jest assertions that expect the `revealRange` post
+  + `useViewHandlers.test.ts` and `GenericView.test.tsx` now assert no `revealRange`
++ [X] Add Jest cases for the hold, its survival across a resent selection and each release
+  + `useViewContext.test.ts` 'clear hold with an editor open' and `viewstateops.test.ts` 'editor hold'
++ [X] Add a Playwright spec with an editor caret in a story: click the background, assert no card is focused, move the caret, assert focus returns
+  + `clear-focus-background.spec.ts` last test
++ [X] Bump the patch version
+  + 0.4.26
++ new pattern: a view-side clear that suppresses an editor-driven state until the editor next moves
+
+
 ### Antigravity monogram on the agent activity card [](?id=activity-vendor-antigravity&status=code-review)
 
 Give Antigravity CLI an explicit vendor entry with monogram AG, so the agent activity card shows the same two-letter codes as other tools that label agents (CC, CO, GR, AG). Today an unlisted slug falls back through `vendorMonogram`, which would draw antigravity as AN.

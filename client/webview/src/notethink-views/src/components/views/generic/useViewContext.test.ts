@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react';
-import { useViewContext } from './useViewContext';
-import type { NoteProps, NoteOrigin } from '../../../types/NoteProps';
+import { useViewContext, type ViewContext } from './useViewContext';
+import { captureEditorHold } from '../../../lib/viewstateops';
+import type { NoteProps, NoteOrigin, TextSelection } from '../../../types/NoteProps';
 import type { ViewProps } from '../../../types/ViewProps';
 
 // minimal NoteProps factory mirroring the structural fields useViewContext reads
@@ -418,6 +419,76 @@ describe('useViewContext', () => {
             })));
             expect(after.result.current.display_options.selected_seqs ?? []).toEqual([]);
             expect(after.result.current.deepest.note?.stable_id).not.toBe('child');
+        });
+    });
+
+    describe('clear hold with an editor open', () => {
+        const root = makeNote({ seq: 0, level: 0, stable_id: 'root', position: { start: { offset: 0, line: 1 }, end: { offset: 200, line: 10 } } });
+        const story = makeNote({ seq: 1, level: 1, stable_id: 'story', position: { start: { offset: 10, line: 1 }, end: { offset: 30, line: 1 }, end_body: { offset: 50, line: 2 } } });
+        const notes = [root, story];
+        const at = (head: number, anchor = head): TextSelection => ({ main: { head, anchor } });
+        const hold_at = (head: number): ReturnType<typeof captureEditorHold> => captureEditorHold(at(head), '/a.md', 'text');
+
+        function renderHeld(initial: Partial<ViewProps>): ReturnType<typeof renderHook<ViewContext, Partial<ViewProps>>> {
+            return renderHook((p: Partial<ViewProps>) => useViewContext(makeViewProps({ notes, active_editor_doc_path: '/a.md', doc_text: 'text', ...p })), { initialProps: initial });
+        }
+
+        it('follows the editor caret when no hold is set', () => {
+            const { result } = renderHeld({ selection: at(25) });
+            expect(result.current.deepest.note?.stable_id).toBe('story');
+        });
+
+        it('focuses no card while the held editor selection is unchanged', () => {
+            const { result, rerender } = renderHeld({ selection: at(25) });
+            result.current.editor_hold_ref.current = hold_at(25);
+            rerender({ selection: at(25) });
+            expect(result.current.deepest.note?.stable_id).not.toBe('story');
+            expect(result.current.editor_hold_ref.current).toBeDefined();
+        });
+
+        it('keeps the hold across a resent identical selection object', () => {
+            const { result, rerender } = renderHeld({ selection: at(25) });
+            result.current.editor_hold_ref.current = hold_at(25);
+            rerender({ selection: at(25) });
+            rerender({ selection: at(25) });
+            expect(result.current.deepest.note?.stable_id).not.toBe('story');
+        });
+
+        it('releases the hold when the caret moves, and focus follows the editor again', () => {
+            const { result, rerender } = renderHeld({ selection: at(25) });
+            result.current.editor_hold_ref.current = hold_at(25);
+            rerender({ selection: at(26) });
+            expect(result.current.deepest.note?.stable_id).toBe('story');
+            expect(result.current.editor_hold_ref.current).toBeUndefined();
+        });
+
+        it('releases the hold when the anchor moves (a range is started)', () => {
+            const { result, rerender } = renderHeld({ selection: at(25) });
+            result.current.editor_hold_ref.current = hold_at(25);
+            rerender({ selection: at(25, 12) });
+            expect(result.current.editor_hold_ref.current).toBeUndefined();
+        });
+
+        it('releases the hold on a different active doc', () => {
+            const { result, rerender } = renderHeld({ selection: at(25) });
+            result.current.editor_hold_ref.current = hold_at(25);
+            rerender({ selection: at(25), active_editor_doc_path: '/b.md' });
+            expect(result.current.editor_hold_ref.current).toBeUndefined();
+        });
+
+        it('releases the hold on an edit that leaves the selection offsets unchanged', () => {
+            const { result, rerender } = renderHeld({ selection: at(25) });
+            result.current.editor_hold_ref.current = hold_at(25);
+            rerender({ selection: at(25), doc_text: 'text edited' });
+            expect(result.current.deepest.note?.stable_id).toBe('story');
+            expect(result.current.editor_hold_ref.current).toBeUndefined();
+        });
+
+        it('suppresses the editor range selection too while held', () => {
+            const { result, rerender } = renderHeld({ selection: at(25, 12) });
+            result.current.editor_hold_ref.current = captureEditorHold(at(25, 12), '/a.md', 'text');
+            rerender({ selection: at(25, 12) });
+            expect(result.current.display_options.selected_seqs).toEqual([]);
         });
     });
 

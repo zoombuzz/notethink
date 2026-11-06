@@ -1,6 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import { injectMultipleDocsFromFixtures, selectFolderMode } from '../helpers/inject-multi-docs';
 import { sendCommand } from '../helpers/send-command';
+import { clearCapturedMessages, findRevealMessage, getCapturedMessages } from '../helpers/capture-messages';
+import { simulateSelectionChanged } from '../helpers/simulate-selection';
 
 const WORKSPACE_ROOT = '/mnt/workspace/in_development';
 const PATH_A = `${WORKSPACE_ROOT}/alpha/docstech/board.md`;
@@ -89,5 +91,32 @@ test.describe('Clicking the board background clears focus', () => {
 
         await page.locator('[data-testid="view-toolbar"]').first().click({ position: { x: 1, y: 1 } });
         await expect(page.locator('[role="row"][aria-current="true"]')).toHaveCount(0);
+    });
+
+    test('with an editor caret inside a story, a background click leaves no focused card until the caret moves', async ({ page }) => {
+        await setupFolderKanban(page);
+        const card_b1 = page.locator('[role="row"][data-seq]:not([data-seq="0"])').filter({ hasText: 'Beta Task One' }).first();
+        await clearCapturedMessages(page);
+        await card_b1.locator('[role="rowheader"]').first().click({ force: true });
+        const reveal = await findRevealMessage(page);
+        expect(reveal?.docPath).toBeTruthy();
+        // the extension answers the reveal with the editor caret in the story
+        await simulateSelectionChanged(page, reveal!.docPath!, reveal!.from!);
+        await expect(card_b1).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
+
+        await clearCapturedMessages(page);
+        await page.locator('#v__folder__-inner').click({ position: { x: 2, y: 2 } });
+        await expect(page.locator('[role="row"][aria-current="true"]')).toHaveCount(0);
+        // the editor caret is left where it is, so the clear posts no reveal
+        expect((await getCapturedMessages(page)).filter((message) => message.type === 'revealRange')).toHaveLength(0);
+
+        // the extension resends the same selection on many events; the hold survives it
+        await simulateSelectionChanged(page, reveal!.docPath!, reveal!.from!);
+        await page.waitForTimeout(300);
+        await expect(page.locator('[role="row"][aria-current="true"]')).toHaveCount(0);
+
+        // a caret move inside the story releases the hold and focus follows the editor again
+        await simulateSelectionChanged(page, reveal!.docPath!, reveal!.from! + 1);
+        await expect(card_b1).toHaveAttribute('aria-current', 'true', { timeout: 3000 });
     });
 });

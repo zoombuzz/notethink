@@ -92,7 +92,7 @@ export function useGenericView(raw_props: ViewProps): GenericViewModel {
     const props = useAdmittedViewProps(raw_props);
     const view_context = useViewContext(props);
     const { display_options, parent_context, parent_context_seq, notes_within_parent_context } = view_context;
-    const { handlers, handle_folder_click, handle_apply_filters, handle_jump_request, handle_file_jump } = useViewHandlers(props, view_context.selection_ref);
+    const { handlers, handle_folder_click, handle_apply_filters, handle_jump_request, handle_file_jump } = useViewHandlers(props, view_context.selection_ref, view_context.editor_hold_ref);
     const drawers = useToolbarDrawers(props.id);
     const jump = useJumpDrawer(props, drawers.toggle_jump, handle_jump_request);
     // collisions are mode-independent: props.notes is the merged set in folder mode, the flat list in current_file mode

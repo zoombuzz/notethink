@@ -3,6 +3,8 @@ import {
     MAX_EXPANDED_IDS,
     anyViewInFolderMode,
     buildIntegrationDispatch,
+    captureEditorHold,
+    editorHoldApplies,
     nextExpandedIds,
     reconcileAutoIntegrationMode,
     resolveIntegrationMode,
@@ -13,6 +15,7 @@ import {
     type ViewStateLike,
 } from './viewstateops';
 import { INTEGRATION_MODE_AUTO, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from '../types/IntegrationMode';
+import type { TextSelection } from '../types/NoteProps';
 import type { ViewApi, ViewProps } from '../types/ViewProps';
 
 function makeProps(overrides: Partial<ViewProps> = {}): ViewProps {
@@ -375,5 +378,32 @@ describe('buildIntegrationDispatch', () => {
             view_state_ids: [],
         });
         expect(message).toBeUndefined();
+    });
+});
+
+describe('editor hold', () => {
+    const at = (head: number, anchor = head): TextSelection => ({ main: { head, anchor } });
+
+    it('captures nothing without an editor selection', () => {
+        expect(captureEditorHold(undefined, '/a.md', 'x')).toBeUndefined();
+    });
+
+    it('captures head, anchor, doc path and text', () => {
+        expect(captureEditorHold(at(5, 2), '/a.md', 'x')).toEqual({ head: 5, anchor: 2, doc_path: '/a.md', doc_text: 'x' });
+    });
+
+    it('applies to an identical selection, doc and text', () => {
+        const hold = captureEditorHold(at(5), '/a.md', 'x');
+        expect(editorHoldApplies(hold, at(5), '/a.md', 'x')).toBe(true);
+    });
+
+    it('does not apply once the head, anchor, doc or text differ, or with nothing held', () => {
+        const hold = captureEditorHold(at(5), '/a.md', 'x');
+        expect(editorHoldApplies(hold, at(6), '/a.md', 'x')).toBe(false);
+        expect(editorHoldApplies(hold, at(5, 1), '/a.md', 'x')).toBe(false);
+        expect(editorHoldApplies(hold, at(5), '/b.md', 'x')).toBe(false);
+        expect(editorHoldApplies(hold, at(5), '/a.md', 'y')).toBe(false);
+        expect(editorHoldApplies(hold, undefined, '/a.md', 'x')).toBe(false);
+        expect(editorHoldApplies(undefined, at(5), '/a.md', 'x')).toBe(false);
     });
 });

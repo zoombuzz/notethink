@@ -8371,8 +8371,10 @@ A card stays focused (dashed ring) after a click on the board background wheneve
   + measured: it survived, since the whole view-state map is persisted and `migrateSavedState` kept `view_caret`; it now drops it on restore (`vscodeops.ts`), covered by a Jest case and a Playwright spec that reads the persisted state back after a reload
   + view_focused_ids still restore, so a card the user last clicked reopens focused; only the offset-resolved focus is gone
 + decision 2026-11-05: a click on empty toolbar space clears focus too, built as [[toolbar-click-clears-focus]]
-+ open question: with an editor open, the clear reveals deepest_note end + 1, which lands in the next story and focuses it instead of clearing
-  + evidence (inferred from the code, not measured with a live editor): this fix leaves it unchanged, since the revealRange the clear posts still moves the editor caret into the next story
++ decision 2026-11-06: view_focused_ids keep restoring with the panel, so a card last clicked reopens focused; this is intended
++ decision 2026-11-06: the story stands as shipped; with an editor open the clear still reveals deepest_note end + 1 and focuses the next story, because an editor caret anywhere in the file sits inside some story
+  + evidence (inferred from the code, not measured with a live editor): the revealRange the clear posts moves the editor caret into the next story
+  + a consistent clear with an editor open is the story "Clear focus with an editor open" (`clear-focus-editor-hold`), which holds the clear until the editor caret moves
 
 
 ### Pie outline in the pill colour [](?id=pie-outline-pill)
@@ -8388,7 +8390,7 @@ The muted-foreground outline from [[pie-outline]] does not read well on the card
 + [X] stroke the progress pie's outline in the pill colour
 + [X] update the outline assertions in `StoryProgressPie.test.tsx` and `story-progress-pie.spec.ts`
 + [X] bump the patch version
-+ open question: keep the pill-coloured outline, or remove the outline altogether, once the operator has looked at it
++ decision 2026-11-06: the pill-coloured outline stays exactly as shipped; it is not removed
 
 
 ### Outline the progress pie [](?id=pie-outline)

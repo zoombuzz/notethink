@@ -12,6 +12,7 @@ import {
     resolveParentContextNote,
 } from "../../../lib/noteops";
 import { findFileH1 } from "../../../lib/mergeAggregateRoot";
+import { editorHoldApplies, type EditorHold } from "../../../lib/viewstateops";
 import { isGroupedViewType, registryWithUserTypes } from "../../../lib/viewregistryops";
 import { INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { NoteProps, NoteDisplayOptions } from "../../../types/NoteProps";
@@ -49,6 +50,7 @@ export interface ViewContext {
     parent_context_seq: number;
     notes_within_parent_context: Array<NoteProps>;
     deepest: ViewDisplayDeepestProps;
+    editor_hold_ref: React.MutableRefObject<EditorHold | undefined>;
 }
 
 /**
@@ -81,6 +83,12 @@ export function useViewContext(props: ViewProps): ViewContext {
     // avoids a stale closure in the click handler when MarkdownNote's memo skips a selection-only re-render
     const selection_ref = useRef(props.selection);
     selection_ref.current = props.selection;
+    // set by the clear gesture, and dropped here once the editor moves on: web view state only, never persisted
+    const editor_hold_ref = useRef<EditorHold | undefined>(undefined);
+    if (editor_hold_ref.current && !editorHoldApplies(editor_hold_ref.current, props.selection, props.active_editor_doc_path, props.doc_text)) {
+        editor_hold_ref.current = undefined;
+    }
+    const editor_held = editor_hold_ref.current !== undefined;
     // last-resort defaults before the first settingsCascade lands; ancestor views override in tree order
     const settings = useStableSettings({
         showLineNumbers: false,
@@ -132,7 +140,7 @@ export function useViewContext(props: ViewProps): ViewContext {
     };
     // editor-derived caret match: folder mode needs the per-doc matcher; single-file offsets are already coherent
     const editor_derived_match: NoteProps | undefined = useMemo(() => {
-        if (props.selection === undefined) { return undefined; }
+        if (props.selection === undefined || editor_held) { return undefined; }
         const caret_pos = props.selection?.main.head;
         if (caret_pos === undefined) { return undefined; }
         // works since caret_pos is already in the source file's offset space folder mode stamps via mergeAggregateRoot
@@ -151,6 +159,7 @@ export function useViewContext(props: ViewProps): ViewContext {
         props.notes,
         props.selection,
         props.active_editor_doc_path,
+        editor_held,
     ]);
     // view-driven ids from the click dispatcher fill in only when the editor-derived match has no opinion
     const view_focused_ids = display_options.view_focused_ids;
@@ -175,7 +184,7 @@ export function useViewContext(props: ViewProps): ViewContext {
     // editor-derived range selection wins; view_selected_ids is the immediate-feedback fallback
     display_options.selected_notes = useMemo(() => {
         const selection = props.selection;
-        if (selection) {
+        if (selection && !editor_held) {
             const { head, anchor } = selection.main;
             if (head !== undefined && anchor !== undefined && head !== anchor) {
                 if (props.active_editor_doc_path) {
@@ -193,6 +202,7 @@ export function useViewContext(props: ViewProps): ViewContext {
         props.notes,
         props.selection,
         props.active_editor_doc_path,
+        editor_held,
     ]);
     display_options.selected_seqs = display_options.selected_notes?.map((note: NoteProps) => note.seq) || [];
     return {
@@ -202,5 +212,6 @@ export function useViewContext(props: ViewProps): ViewContext {
         parent_context_seq,
         notes_within_parent_context,
         deepest,
+        editor_hold_ref,
     };
 }

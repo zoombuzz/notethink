@@ -1,6 +1,39 @@
 # Todo [](?nt_view=kanban)
 
 
+### Chief-of-staff workflow pack [](?id=chief-of-staff-pack)
+
+Someone running coding agents against stories in a `todo.md` has no ready-made way to ask an agent "what should be worked on next?" or "what do I need to do right now to keep the agents busy?", or to watch that work on a board. This story ships a workflow pack in `workflows/chief-of-staff/`: two agent skills, the story rules they rely on, and a board that opens in NoteThink, where each step links to the markdown that drives it.
+
++ approach
+  + layout: `todo.md` (the board, `# Todo [](?nt_view=kanban)`), `AGENTS.md`, `CLAUDE.md`, `README.md`, `skills/what-next/SKILL.md`, `skills/me-now/SKILL.md`, and a script that moves a finished story to `done.md`
+  + `AGENTS.md` holds the content, so every agent reads it; `CLAUDE.md` holds only `@AGENTS.md`
+  + board stories: install the skills, run `/what-next`, run `/me-now`, let the agent keep the board; each links to the file it describes, so a click opens that markdown in the viewer
+  + the skills are written for any repo: they find `todo.md` and `done.md` relative to the workspace, and name no user, path or project outside the pack
+  + the board opens signed out in a browser through notethink.com's app route for public GitHub files, which needs [[single-file-kanban-auto-view]] fixed and notethink.com's default view set to auto
++ what `AGENTS.md` > How stories work carries, the subset of the rules these skills depend on
+  + encoding: `###` stories under `# Todo` or `# Done`, a `[](?status=...&id=...)` heading linetag, `+ [ ]` and `+ [X]` tasks, exactly two blank lines around each story
+  + priority is position: the top story is next, and a new story goes in at the top
+  + states: untagged, `doing`, `code-review`, `testing`, done; set `doing` on starting, and tick each task the moment it is done
+  + an advance is a claim: the work exists, every box is ticked with evidence, and nobody narrows a story to pass
+  + the move to `done.md`: append at the end, strip `status=`, keep the other keys, refuse while any box is open
+  + `[](?work=manual)` marks only what no agent can do, and `+ manual:` lines are checks, not tasks
+  + content shape, decision lines, phases as separate stories, and `[[slug]]` references to a pinned `id=`
+  + left out: rules that only make sense with tooling the pack does not ship, such as a coordinator, a review bus, multi-repo runs, time-taken tags, and machine or server setup
++ sanitise: everything in the pack is published, so it is checked before it is committed
+  + a Jest scan over `workflows/` catches absolute home paths, emails, IP addresses and host:port pairs, analytics ids, secret-shaped strings, links that leave the pack, and em or en dash glyphs
+  + the scan takes an optional terms file from outside the repo, for names that must not appear but cannot be listed publicly, and reports matches masked
+  + quotes and process narrative are still a judgement, per `AGENTS.md` > This repository is public
++ [ ] write `AGENTS.md` with the How stories work section, and a `CLAUDE.md` holding only `@AGENTS.md`
++ [ ] write `what-next` and `me-now` as repo-local skills that point only at files in the pack
++ [ ] add the move-to-done script with Jest tests for the append, the `status=` strip, the open-box refusal and a dry run
++ [ ] write the board `todo.md` and `README.md`, each story linking to its file
++ [ ] add the sanitise scan as a Jest test over `workflows/`, with a test proving each pattern is caught and the terms file is masked
++ [ ] confirm in VS Code that each board link opens its markdown in the viewer
++ [ ] once pushed, open the board signed out through notethink.com's app route and confirm columns render and links open, in the same run
++ [ ] bump the patch version
+
+
 ### Evaluate AgentChevron as a duplicate expand control [](?id=agent-chevron-duplicate-eval)
 
 Question: is `AgentChevron` (`client/webview/src/notethink-views/src/components/notes/agent/AgentChevron.tsx`) a duplicate of another expand or collapse control that is worth refactoring, to reduce technical debt and make the code more readable?

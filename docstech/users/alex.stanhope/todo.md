@@ -1,6 +1,45 @@
 # Todo [](?nt_view=kanban)
 
 
+### Upgrade NPM packages for notethink (wave 1 minor/patch, 2026-11-06) [](?id=notethink-upgrade-20261106&status=code-review)
+
+Wanted: the 2026-11-06 fleet dependency wave for notethink: every minor/patch update, pnpm `packageManager` to 12.18.0 (published 2026-11-05 00:56 UTC, past the 24h cooldown), a full lockfile regeneration and the pin revisit below, with a pins snapshot, a patch version bump and a drafted commit message.
+
++ package: `.`
++ scan (read-only, 2026-11-06, before the cooldown filter): `@playwright/test` 1.65.0, `@types/vscode` 1.138.0 to 1.145.0 (exact), `@vscode/vsce` 4.1.0, `eslint` 10.13.0 to 10.14.0, `sass` 1.108.0, `sass-loader` 17.1.0, `webpack-cli` 7.3.1, `@typescript-eslint/eslint-plugin`, `@typescript-eslint/parser` and `typescript-eslint` 8.72.1, `webpack` 5.112.2
++ reject list in force (`.ncurc.json`): none
++ pins to revisit
+  + `@types/vscode` 1.138.0 exact - transient - trial it: check the bundled editor version first; take 1.145.0 (raising `engines.vscode` with it) only if the bundled editor is at or above the new types, otherwise hold the exact pin and add a reject so ncu stops offering it
+  + `eslint` - notethink takes each new eslint release first as the canary; take 10.14.0, never pin it back
+  + `@eslint/js` 10.0.1 and `copy-webpack-plugin` 14.0.0 exact pins are unrecorded - classify and record them
+  + `typescript` ^6.0.3 held below 7 - structural - ts-jest 29.4.15 peers `<7` and typescript-eslint 8.72.1 peers `<6.1.0` (both re-checked with `npm view` on 2026-11-06) - clears when both admit TS7
++ The sub-packages `client/extension`, `client/webview` and `client/webview/src/notethink-views` declare `pnpm@12.8.1` and have no `check-updates`; they are outside this wave, so note them in the hand-back rather than changing them.
++ tasks
+  + [X] run npm-check-updates with `--target minor -u --cwd <pkg> --configFilePath <pkg> --cooldown 24h`, then diff `package.json` to confirm every reject held
+    + no reject list; `sass` held at ^1.107.1 by the cooldown (1.108.0 is inside the 24h window), everything else on offer was taken
+  + [X] revisit the prior pins above and record each outcome
+    + `@types/vscode` 1.138.0 to 1.145.0 with `engines.vscode` raised to ^1.145.0 in the root and `client/extension/package.json`: the web test host downloads the current insiders build on each run, so it is at or above the types, and `vsce package --no-dependencies` packages cleanly
+  + [X] `pnpm install`, then regenerate the lockfile (delete both `pnpm-lock.yaml` and `node_modules/.pnpm/lock.yaml`, one install, non-empty lockfile diff, `install --frozen-lockfile --ignore-scripts` passes, `packageManagerDependencies` survived at 12.18.0)
+    + root lockfile diff 621 insertions, 719 deletions; manifest unchanged by the regeneration; the only deprecation warning is the transitive `glob@10.5.0`
+  + [X] verify lint passes
+    + eslint, tsc and the 21 node-test checks pass
+  + [X] verify jest tests pass
+    + 3562 passed (1031 extension, 257 webview, 2274 notethink-views)
+  + [X] rebuild the extension and webview bundles (`client/extension/dist`, `client/webview/dist`) as the last task, because notegit's `copy-extensions` copies them and its upgrade runs after this one
+    + `pnpm run build` compiled both bundles successfully on webpack 5.112.2
+  + [X] bump the patch version (unless already bumped in the tree), append the pins snapshot and draft the commit message
+    + 0.4.26 to 0.4.27
+
+Pins in effect after this wave (snapshot):
+- `typescript` ^6.0.3 - structural - ts-jest 29.4.15 peers `<7` and typescript-eslint 8.72.1 peers `<6.1.0`; clears when both admit TS7 and the major is approved
+- `sass` ^1.107.1 - transient - 1.108.0 is inside the 24h cooldown; clears on the next sweep
+- `eslint` 10.14.0 exact - not a hold - notethink takes each eslint release first as the fleet canary and is never pinned back
+- `@eslint/js` 10.0.1 exact - not a hold - the latest published release; eslint itself moves on a faster cadence
+- `copy-webpack-plugin` 14.0.0 exact - not a hold - unreleased beyond 14.0.0 at the time of the wave; ncu offered nothing newer
+- `@types/vscode` 1.145.0 exact - paired with `engines.vscode` ^1.145.0, which rise together every wave
+Unpinned this wave: `@types/vscode` (1.138.0 hold cleared). packageManager raised 12.15.0 to 12.18.0 (root only; the three client sub-packages stay on 12.8.1, outside this wave).
+
+
 ### Chief-of-staff workflow pack [](?id=chief-of-staff-pack)
 
 Someone running coding agents against stories in a `todo.md` has no ready-made way to ask an agent "what should be worked on next?" or "what do I need to do right now to keep the agents busy?", or to watch that work on a board. This story ships a workflow pack in `workflows/chief-of-staff/`: two agent skills, the story rules they rely on, and a board that opens in NoteThink, where each step links to the markdown that drives it.

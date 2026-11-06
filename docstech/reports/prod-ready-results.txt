@@ -1,24 +1,22 @@
 # Prod-ready Results
-# Version: 0.4.26
-# Date: 2026-11-06T18:50:00Z
-# Tree: HEAD a9fb9cb; changed: docstech/users/alex.stanhope/todo.md, docstech/reports/prod-ready-results.txt
-# Stories: duplicate-eval-agent-chevron doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move "Write a story evaluating a possible duplicate chevron" to done.md
+# Version: 0.4.27
+# Date: 2026-11-06
+# Tree: staging HEAD e9ea78a plus package.json, client/extension/package.json, pnpm-lock.yaml, todo.md, reports
+# Stories: notethink-upgrade-20261106 doing -> code-review
+# Ship verdict: Ready to ship, /push-prod will move the upgrade story to done.md
 # ---
-Story-state intake | ok | 1 at doing | fresh
-Story reconciliation | ok | all tasks already ticked | fresh
-Build | skipped | board-only diff | skipped
-Lint | ok | reused (green at 2026-11-06T18:48:00Z, tree unchanged) | reused
-Project guards | skipped | board-only diff | skipped
-Dependency audit | skipped | board-only diff | skipped
-CODING_STANDARDS | ok | standards-review-assess 100% on all four dimensions, dash glyph grep clean | fresh
-Exposure | ok | 1 finding rejected (see below) | fresh
-Fleet fix check | skipped | board-only diff | skipped
-Jest | skipped | board-only diff (story agent ran 3562 passed, 0 failed) | skipped
-Playwright | skipped | board-only diff | skipped
-Story-state advance | ok | doing -> code-review, move rehearsed (exit 0) | fresh
-Version bump | skipped | board-only diff | skipped
+Story intake and reconciliation | ok | all tasks ticked | fresh
+Build | ok | pnpm run build inside test-playwright | fresh
+Lint | ok | eslint, tsc, 21 node-test checks | fresh
+Project guards | not applicable | covered by lint and Jest | -
+Dependency audit | ok | no known vulnerabilities | fresh
+CODING_STANDARDS | ok | no code changed, dash grep clean | fresh
+Exposure | ok | one hostname in a linetag removed, rescan clean | fresh
+Fleet fix check | ok | version-only dependency bump, not a fleet fix | fresh
+Jest | ok | 3562/3562 (1031 extension, 257 webview, 2274 views) | fresh
+Playwright | ok | 311/311 | fresh
+Version bump | ok | 0.4.27 | -
 # --- Fixed during review ---
-none
+Exposure: removed an ssh host name from the story linetag in todo.md
 # --- Open ---
-Exposure finding rejected: the coord= marker names a coordinator host; it is a transient working-copy marker the coordinator removes before commit.
+none

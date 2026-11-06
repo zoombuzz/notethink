@@ -346,6 +346,8 @@ describe('an agent whose own write calls bound it to no story', () => {
 
     it('draws a vendor from the one display table, and an unknown vendor from its slug', () => {
         expect(vendorLabel('claude-code')).toBe('Claude Code');
+        expect(vendorLabel('antigravity')).toBe('Antigravity');
+        expect(vendorColour('antigravity')).toContain('--vscode-charts-green');
         expect(vendorLabel('some_new_vendor')).toBe('some_new_vendor');
         expect(vendorColour('grok')).toContain('--vscode-charts-');
         expect(vendorColour('some_new_vendor')).toBeUndefined();
@@ -452,6 +454,7 @@ describe('drawing a vendor and its arguments', () => {
         expect(vendorMonogram('claude-code')).toBe('CC');
         expect(vendorMonogram('codex')).toBe('CO');
         expect(vendorMonogram('grok')).toBe('GR');
+        expect(vendorMonogram('antigravity')).toBe('AG');
         expect(vendorMonogram('some_new_vendor')).toBe('SN');
         expect(vendorMonogram('')).toBe('??');
     });

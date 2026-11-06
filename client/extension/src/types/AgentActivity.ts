@@ -18,10 +18,11 @@ export const ACTIVITY_STATES = ['working', 'waiting', 'idle', 'ended', 'unknown'
 export type ActivityState = typeof ACTIVITY_STATES[number];
 export const ACTIVITY_STATE_UNKNOWN: ActivityState = 'unknown';
 
-// vendor is open so an unrecognised one draws a generic monogram instead of being dropped; these three are read today
+// vendor is open so an unknown one draws a generic monogram; the known list is the vendors read (antigravity: drawn only)
 export const ACTIVITY_VENDOR_CLAUDE_CODE = 'claude-code';
 export const ACTIVITY_VENDOR_CODEX = 'codex';
 export const ACTIVITY_VENDOR_GROK = 'grok';
+export const ACTIVITY_VENDOR_ANTIGRAVITY = 'antigravity';
 export const ACTIVITY_KNOWN_VENDORS = [ACTIVITY_VENDOR_CLAUDE_CODE, ACTIVITY_VENDOR_CODEX, ACTIVITY_VENDOR_GROK] as const;
 
 /**
@@ -41,6 +42,7 @@ export const ACTIVITY_VENDOR_DISPLAY: Readonly<Record<string, ActivityVendorDisp
     [ACTIVITY_VENDOR_CLAUDE_CODE]: { monogram: 'CC', label: 'Claude Code', colour: 'var(--vscode-charts-purple, #b180d7)' },
     [ACTIVITY_VENDOR_CODEX]: { monogram: 'CO', label: 'Codex', colour: 'var(--vscode-charts-blue, #3794ff)' },
     [ACTIVITY_VENDOR_GROK]: { monogram: 'GR', label: 'Grok', colour: 'var(--vscode-charts-yellow, #d7ba7d)' },
+    [ACTIVITY_VENDOR_ANTIGRAVITY]: { monogram: 'AG', label: 'Antigravity', colour: 'var(--vscode-charts-green, #89d185)' },
 };
 
 // event kinds a reader renders; `kind` is open, so an unlisted kind is carried and ignored rather than rejected

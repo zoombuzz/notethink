@@ -1,6 +1,21 @@
 # Todo [](?nt_view=kanban)
 
 
+### Antigravity monogram on the agent activity card [](?id=activity-vendor-antigravity&status=code-review)
+
+Give Antigravity CLI an explicit vendor entry with monogram AG, so the agent activity card shows the same two-letter codes as other tools that label agents (CC, CO, GR, AG). Today an unlisted slug falls back through `vendorMonogram`, which would draw antigravity as AN.
+
++ [X] Add an `ACTIVITY_VENDOR_ANTIGRAVITY` slug (`antigravity`) and an `ACTIVITY_VENDOR_DISPLAY` entry: monogram AG, label Antigravity, a `vscode-charts` colour not already taken (purple, blue and yellow are in use)
+  + colour is `--vscode-charts-green` (fallback #89d185), types/AgentActivity.ts
++ [X] Add it to `ACTIVITY_KNOWN_VENDORS` only if that list means displayable rather than detected, and record which it means
+  + it means detected: its comment says the vendors read today and nothing else references it, so antigravity is left out
++ [X] Make the change in both mirrored files, `client/webview/src/notethink-views/src/types/AgentActivity.ts` and `client/extension/src/types/AgentActivity.ts`, keeping them byte-identical apart from the header cross-reference
+  + diff of the two files shows only the header cross-reference line
++ [X] Cover the new entry in the Jest tests for the display table or `vendorMonogram`
+  + agentactivityops.test.ts: vendorMonogram, vendorLabel and vendorColour cases for antigravity
++ scope: display entry only; the analyser does not read Antigravity session files, and this story does not add that
+
+
 ### Coordinators beside boards in folder and project views [](?id=coordinator-views)
 
 The `agent` card shows which sessions are editing a story, but not the long-lived coordinator that owns a repo's board. With many repos open under one folder, the operator cannot see which repos have a coordinator, what state each is in, or message one without leaving the board.

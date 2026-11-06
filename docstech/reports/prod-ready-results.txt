@@ -1,25 +1,23 @@
 # Prod-ready Results
-# Version: 0.4.24
-# Date: 2026-11-05T13:30:00Z
-# Tree: HEAD 5929591 plus GenericView.test.tsx, GenericViewToolbar.tsx, todo.md, package.json, clear-focus-background.spec.ts and the two test reports
-# Stories: toolbar-click-clears-focus doing -> code-review; clear-focus-clears-virtual-caret left at code-review (board edit only)
-# Ship verdict: Ready to ship: /push-prod will move "Toolbar clicks clear focus" to done.md
+# Version: 0.4.25
+# Date: 2026-11-06
+# Tree: HEAD 0779502 plus AgentActivity.ts (extension and webview), agentactivityops.test.ts, package.json, todo.md and reports
+# Stories: activity-vendor-antigravity doing -> code-review
+# Ship verdict: Ready to ship, /push-prod will move the Antigravity monogram story to done.md
 # ---
-Story-state intake | ok | 1 doing, 1 code-review | fresh
-Story reconciliation | ok | all tasks ticked | fresh
-Build | n/a | webpack runs inside the Playwright script | skipped
-Lint | pass | exit 0 | fresh
-Project guards | none for this project | | skipped
-Dependency audit | not run | | skipped (extension; no gating change)
-CODING_STANDARDS | clean | mechanical checks and inline pass | fresh
-Exposure | clean | public scan clean; coord host marker removed from linetag | fresh
-Fleet fix check | not a fleet fix | notethink-only webview component | fresh
-Jest | pass | 3547/3547 (159 files) | fresh
-Playwright | pass | 310/310, 0 skipped | reused (green at 2026-11-05T13:18:26Z, app tree unchanged)
-Todo/Done | ok | format intact | fresh
-Story-state advance | doing -> code-review | move rehearsed, exit 0 | fresh
-Version bump | 0.4.24 | | fresh
+Build | pass | webpack build | fresh
+Lint | pass | | fresh
+Project guards | none for this project | |
+Dependency audit | pass | no high or critical | fresh
+CODING_STANDARDS | pass | mechanical checks and inline pass clean | fresh
+Exposure | pass | public repo scan clean after fix | fresh
+Fleet fix check | not a fleet fix | display-only change | fresh
+Jest | pass | 3547/3547, 159 suites | fresh
+Playwright | pass | 310/310 | fresh
+Story-state advance | doing -> code-review, move rehearsed | |
+Version bump | 0.4.25 | |
 # --- Fixed during review ---
-Linetag: removed the coord host marker from the story linetag.
+Board: evidence child bullets re-indented from 4 to 2 spaces.
+Exposure: removed a machine hostname from the story linetag.
 # --- Open ---
 none

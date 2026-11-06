@@ -8341,3 +8341,72 @@ Agent activity knows only what Claude Code, Codex and Grok session files say. Th
 `CODING_STANDARDS.md` lists the constants shared between the extension and webview bundles; `DEFAULT_GROUP_DISPLAY` is exported from both and was missing.
 
 + [X] add `DEFAULT_GROUP_DISPLAY` to the shared subset in `CODING_STANDARDS.md` and point at the grep that lists the one-sided constants
+
+
+### Toolbar clicks clear focus [](?id=toolbar-click-clears-focus)
+
+Only a click on the board container (the LineView inner div) clears focus today, so a click on the toolbar row above the board leaves the focused card ringed. Decision: a click on the toolbar clears focus too, the same as a click on the board background.
+
++ [X] Clear focus (focused ids, selected ids and view_caret, through the same clear path as the board background) on a click anywhere in the toolbar row that is not a control
++ [X] Keep a click on a toolbar control (a dropdown, button or menu) to its own action; it does not clear focus where the action uses the focused note, and the story records which controls those are
+  + a click whose target is inside a button, link, input, select, textarea, label or a button/menuitem/tab/combobox role keeps its own action and does not clear; that covers the breadcrumb segments, the view and card settings tabs and the recording control, none of which acts on the focused note, so none needs it kept
+  + implemented in `GenericViewToolbar.tsx`; the toolbar is one component for every view type, so all views get it
++ [X] Apply it in every view that has the toolbar, not only the folder board
++ [X] Add a Jest test for the toolbar clear and a Playwright spec: focus a card, click empty toolbar space, assert no card is focused
++ [X] Close the toolbar open question on [[clear-focus-clears-virtual-caret]] with this decision
+
+
+### Clicking the board background clears focus [](?id=clear-focus-clears-virtual-caret)
+
+A card stays focused (dashed ring) after a click on the board background whenever no text editor holds a caret in its file, which is the usual case for the folder board. The card can also appear focused on panel restore with no click at all.
+
++ cause, from reading the code: getClearHandler (useViewHandlers.ts) calls writeViewInteractionState with empty focused and selected ids but no view_caret, and writeViewInteractionState only stamps view_caret when one is passed (viewstateops.ts), so the virtual caret from the last card click survives the clear
++ with no editor caret the extension sends selection null (PanelSession sendCurrentSelection), so resolveFocusedNote (noteops.ts) skips the editor match and the now-empty view_focused_ids, then falls back to findDeepestNote on the surviving view_caret and re-focuses a card in the same render
++ inferred, not confirmed: view_caret is persisted with the view state and restored at startup, so a single offset resolved against a multi-file aggregate tree lands on a story the user never clicked (seen on the first story of one project in the folder board)
++ [X] Make the background-click clear also remove view_caret, adding an explicit way to unset it, since writeViewInteractionState can only replace it today
++ [X] Correct the getClearHandler Jest assertion in useViewHandlers.test.ts, which currently expects the clear to leave view_caret in place
++ [X] Add a useViewContext test: no editor selection plus a view_caret set, then a clear, leaves no focused note
++ [X] Add a Playwright spec on the folder board: click a card, click the background, assert no card is focused, then reload and assert it stays cleared
++ [X] Confirm whether view_caret survives a panel restore, and make sure a restored panel opens with no stale focus
+  + measured: it survived, since the whole view-state map is persisted and `migrateSavedState` kept `view_caret`; it now drops it on restore (`vscodeops.ts`), covered by a Jest case and a Playwright spec that reads the persisted state back after a reload
+  + view_focused_ids still restore, so a card the user last clicked reopens focused; only the offset-resolved focus is gone
++ decision 2026-11-05: a click on empty toolbar space clears focus too, built as [[toolbar-click-clears-focus]]
++ open question: with an editor open, the clear reveals deepest_note end + 1, which lands in the next story and focuses it instead of clearing
+  + evidence (inferred from the code, not measured with a live editor): this fix leaves it unchanged, since the revealRange the clear posts still moves the editor caret into the next story
+
+
+### Pie outline in the pill colour [](?id=pie-outline-pill)
+
+The muted-foreground outline from [[pie-outline]] does not read well on the cards. Before removing the outline, try drawing it in the project pill's colour instead.
+
++ background
+  + `StoryProgressPie` strokes its outline circle in `--vscode-descriptionForeground`; the wedge already uses `--nt-pie-colour`, the pill's colour
++ approach
+  + stroke the outline in the same colour as the pill (and the wedge), so the disc's edge matches the pill beside it
+  + outline width, radius, the pie's outer size and its alignment stay as they are
+  + a card with no pill keeps its outline in the wedge's fallback colour
++ [X] stroke the progress pie's outline in the pill colour
++ [X] update the outline assertions in `StoryProgressPie.test.tsx` and `story-progress-pie.spec.ts`
++ [X] bump the patch version
++ open question: keep the pill-coloured outline, or remove the outline altogether, once the operator has looked at it
+
+
+### Outline the progress pie [](?id=pie-outline)
+
+The progress pie fills in the project pill's colour over a grey remainder (story `pie-matches-pill` in `done.md`). For about half of project hues the two colours are too close in lightness, so the disc has no clear edge.
+
++ background
+  + measured in `pie-matches-pill`: wedge against remainder contrast runs 1.05:1 to 2.7:1 in dark themes and 1.0:1 to 2.05:1 in light, below 1.5:1 for 184 of 360 hues dark and 205 light
+  + `StoryProgressPie` colours the wedge from the card's pill colour and leaves the remainder grey
++ approach
+  + draw a thin outline round the pie in the editor's muted foreground colour, the theme token the webview already uses for muted text
+  + both fill colours stay as they are
+  + the outline follows the theme, so it reads in light, dark and high-contrast themes
+  + the pie keeps its outer size and stays centred on the pill's line
++ decision 2026-11-05: outline the pie in the muted foreground, rather than change the remainder's lightness or leave it as it is
++ [X] draw a thin outline in the editor's muted foreground round the progress pie
++ [X] keep the pie's outer size and its alignment with the pill unchanged
+  + the outline circle is stroked inside the disc's radius (r 9.5, width 1 within r 10), so the svg box is unchanged
++ [X] cover the outline in `StoryProgressPie.test.tsx`
++ [X] assert the outline and the unchanged alignment in `story-progress-pie.spec.ts`
++ [X] bump the patch version

@@ -1,6 +1,31 @@
 # Todo [](?nt_view=kanban)
 
 
+### Evaluate AgentChevron as a duplicate expand control [](?id=agent-chevron-duplicate-eval)
+
+Question: is `AgentChevron` (`client/webview/src/notethink-views/src/components/notes/agent/AgentChevron.tsx`) a duplicate of another expand or collapse control that is worth refactoring, to reduce technical debt and make the code more readable?
+
++ known: 8042cc4 (agent tree) added `AgentChevron.tsx`
++ suspected: other expand or collapse controls in the webview may already do the same job under another name; nothing has searched for them yet
++ [ ] Search the webview for existing chevron, caret, disclosure or expand controls and compare each with `AgentChevron` (`git log` on each)
++ [ ] Record a verdict with `file:line` evidence: a duplicate worth refactoring, or different enough to keep, and why
++ [ ] If it is worth refactoring, file the refactor as its own story at the top of this board, with a `builds on` line naming the component to keep
+
+
+### Write a story evaluating a possible duplicate chevron [](?id=duplicate-eval-agent-chevron&status=code-review)
+
+Wanted: to know whether `AgentChevron` is a good example of duplicated functionality that should be refactored, to reduce technical debt and make the code more readable. A read-only sweep for duplicated entities across the codebase (2026-11-06) classed it as unclear, worth a second look.
+
++ known: 8042cc4 (agent tree) added `client/webview/src/notethink-views/src/components/notes/agent/AgentChevron.tsx`
++ suspected: other expand or collapse controls in the webview may already do the same job under another name; the sweep did not search for them
++ decision 2026-11-06 (operator): write a story that evaluates this; this story only files it
++ [X] write the evaluation story at the top of this board, following `standards/STORY_STANDARDS.md`, with tasks to:
+    + filed as [[agent-chevron-duplicate-eval]]
+    + search the webview for existing chevron, caret, disclosure or expand controls and compare each with `AgentChevron` (`git log` on each)
+    + record a verdict with `file:line` evidence: a duplicate worth refactoring, or different enough to keep, and why
+    + if it is worth refactoring, file the refactor as its own story at the top of this board, with a `builds on` line naming the component to keep
+
+
 ### Clear focus with an editor open [](?id=clear-focus-editor-hold&status=code-review)
 
 With a text editor open on the file, a click on the board background (or empty toolbar space) does not clear focus: the next story lights up instead. The clear moves the editor caret to the focused story's end + 1, which is the start of the next story, and with an editor open the editor caret always decides the focused card.

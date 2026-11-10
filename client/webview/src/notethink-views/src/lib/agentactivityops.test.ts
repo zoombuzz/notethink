@@ -1,8 +1,6 @@
 import {
     ACTIVITY_MESSAGE_TYPE,
     ACTIVITY_UNAVAILABLE_MESSAGE_TYPE,
-    ACTIVITY_USAGE_WINDOW_DAYS,
-    activityUsageWindow,
     childDisplayName,
     childStateOf,
     formatChildClock,
@@ -10,12 +8,13 @@ import {
     sessionExpandedByDefault,
     attributedCommits,
     attributedFiles,
-    earliestCountedActivity,
     unattributedCommits,
     agentClockModeLabel,
     agentClockTooltip,
     factStateFor,
     formatActivityUsage,
+    formatStatusTokens,
+    formatStatusUsage,
     formatAgentClock,
     formatDurationClock,
     isAgentScanPending,
@@ -555,52 +554,39 @@ describe('the agent card clock, by mode', () => {
     });
 });
 
-describe('the span a usage counter states', () => {
-    const now = Date.parse('2026-09-23T12:00:00Z');
+describe('the status line token formatter', () => {
 
-    it('rounds up to whole days from the earliest counted activity, so the span always contains it', () => {
-        expect(activityUsageWindow('2026-09-21T13:00:00Z', now)).toEqual({ unit: 'd', count: 2 });
-        expect(activityUsageWindow('2026-09-21T11:00:00Z', now)).toEqual({ unit: 'd', count: 3 });
+    it('reads a count under a thousand as bare tokens', () => {
+        expect(formatStatusTokens(0)).toBe('0t');
+        expect(formatStatusTokens(999)).toBe('999t');
     });
 
-    it('states hours under a day, and at least one', () => {
-        expect(activityUsageWindow('2026-09-23T06:30:00Z', now)).toEqual({ unit: 'h', count: 6 });
-        expect(activityUsageWindow('2026-09-23T11:59:00Z', now)).toEqual({ unit: 'h', count: 1 });
+    it('reads K with one decimal below 10 and none from 10 up, dropping a trailing .0', () => {
+        expect(formatStatusTokens(1000)).toBe('1Kt');
+        expect(formatStatusTokens(1500)).toBe('1.5Kt');
+        expect(formatStatusTokens(9949)).toBe('9.9Kt');
+        expect(formatStatusTokens(32_000)).toBe('32Kt');
+        expect(formatStatusTokens(32_700)).toBe('33Kt');
     });
 
-    it('never states more than the analyser window, and falls back to it for an unknown start', () => {
-        expect(activityUsageWindow('2026-06-01T00:00:00Z', now)).toEqual({ unit: 'd', count: ACTIVITY_USAGE_WINDOW_DAYS });
-        expect(activityUsageWindow(undefined, now)).toEqual({ unit: 'd', count: ACTIVITY_USAGE_WINDOW_DAYS });
-        expect(activityUsageWindow('not a date', now)).toEqual({ unit: 'd', count: ACTIVITY_USAGE_WINDOW_DAYS });
+    it('reads M and G the same way, and rolls a count that rounds to 1000 of a unit into the next', () => {
+        expect(formatStatusTokens(8_203_112)).toBe('8.2Mt');
+        expect(formatStatusTokens(10_000_000)).toBe('10Mt');
+        expect(formatStatusTokens(999_999)).toBe('1Mt');
+        expect(formatStatusTokens(1_100_000_000)).toBe('1.1Gt');
+        expect(formatStatusTokens(2_500_000_000_000)).toBe('2500Gt');
     });
 
-    it('takes a story card from its sessions earliest first_at for that story, ignoring their other stories', () => {
-        const story_a = { doc_path: 'todo.md', id: 'story-a' };
-        const story_b = { doc_path: 'todo.md', id: 'story-b' };
-        const usage = { input_tokens: 1, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, is_estimate: true };
-        const sessions: ActivitySessionState[] = [
-            { root_path: '/a', session: makeSession('s1', { story_usage: [{ story: story_a, usage, first_at: '2026-09-22T10:00:00Z' }, { story: story_b, usage, first_at: '2026-09-01T00:00:00Z' }] }) },
-            { root_path: '/a', session: makeSession('s2', { story_usage: [{ story: story_a, usage, first_at: '2026-09-21T10:00:00Z' }] }) },
-        ];
-        expect(earliestCountedActivity(sessions, story_a)).toBe('2026-09-21T10:00:00Z');
-    });
-
-    it('takes a virtual note from its session start, and says nothing when no session carries a start', () => {
-        const sessions: ActivitySessionState[] = [{ root_path: '/a', session: makeSession('s1', { started_at: '2026-09-20T00:00:00Z' }) }];
-        expect(earliestCountedActivity(sessions)).toBe('2026-09-20T00:00:00Z');
-        expect(earliestCountedActivity([], { doc_path: 'todo.md', id: 'story-a' })).toBeUndefined();
+    it('joins the tokens to an approximate cost, and shows tokens alone when unpriced', () => {
+        const priced = { input_tokens: 8_000_000, output_tokens: 203_112, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: 12.4, is_estimate: false };
+        expect(formatStatusUsage(priced)).toBe('8.2Mt, ~$12.40');
+        expect(formatStatusUsage({ ...priced, cost_usd: undefined })).toBe('8.2Mt');
     });
 });
 
 describe('the token and cost counter', () => {
 
-    it('states the window it is given on the token total, adding input, output and both cache fields', () => {
-        const usage = { input_tokens: 100, output_tokens: 20, cache_read_tokens: 5, cache_write_tokens: 3, is_estimate: true };
-        expect(formatActivityUsage(usage, { unit: 'd', count: 30 })).toBe('128 tokens (30d)');
-        expect(formatActivityUsage(usage, { unit: 'h', count: 5 })).toBe('128 tokens (5h)');
-    });
-
-    it('leaves the window off when given none, for a row sitting under a total that already states it', () => {
+    it('adds input, output and both cache fields into one token total with the estimated cost', () => {
         const usage = { input_tokens: 100, output_tokens: 20, cache_read_tokens: 5, cache_write_tokens: 3, cost_usd: 0.5, is_estimate: true };
         expect(formatActivityUsage(usage)).toBe('128 tokens ~$0.50');
     });

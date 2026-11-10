@@ -29,6 +29,7 @@ interface ActivityRefusalSpec {
  * - sessions: session ids to keep; defaults to every session this helper declares
  * - tail_read_sessions: ids of sessions to mark `tail_read`, as the analyser does for a transcript over its size bound
  * - extra_uncommitted: extra unattributed changed files, to fill a card's uncommitted band
+ * - pending_commits: the branch's ahead-of-upstream count, 2 by default; 'none' leaves it off, as a branch with no upstream does
  * - finished_children: how many finished subagents the `claude-coordinator` session carries beside its running one
  * - progress: coordinator percentages by story id, each stamped as written by the coordinator at the given time
  */
@@ -41,6 +42,7 @@ interface InjectActivityOptions {
     sessions?: string[];
     tail_read_sessions?: string[];
     extra_uncommitted?: number;
+    pending_commits?: number | 'none';
     finished_children?: number;
     progress?: Array<{ story_id: string; pct: number; at?: string; note?: string }>;
 }
@@ -180,7 +182,7 @@ const SESSION_BUILDERS: Record<string, (story_doc_path: string, options: InjectA
 };
 
 /** the tree one repository's working tree carries, keyed to the same session ids the sessions above declare */
-function activityTree(extra_uncommitted = 0): Record<string, unknown> {
+function activityTree(extra_uncommitted = 0, pending_commits: number | 'none' = 2): Record<string, unknown> {
     const extra = Array.from({ length: extra_uncommitted }, (_, i) => ({ path: `docs/extra-${i + 1}.md`, change: 'modified' }));
     return {
         generated_at: '2026-09-18T09:14:02Z',
@@ -197,6 +199,7 @@ function activityTree(extra_uncommitted = 0): Record<string, unknown> {
             { sha: 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4', subject: 'wire the sticky note group', session_id: 'grok-bound-idle' },
             { sha: 'b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5', subject: 'rename axisops', session_id: 'grok-bound-idle' },
         ],
+        ...(pending_commits === 'none' ? {} : { pending_commits }),
     };
 }
 
@@ -213,7 +216,7 @@ export function activityFixtureSnapshot(options: InjectActivityOptions = {}): Re
     return {
         analyser: { state: options.state ?? (options.live === false ? 'unavailable' : 'live'), refusals: options.refusals ?? [] },
         sessions,
-        trees: [{ root_path, root_relative, tree: activityTree(options.extra_uncommitted) }],
+        trees: [{ root_path, root_relative, tree: activityTree(options.extra_uncommitted, options.pending_commits) }],
         progress: (options.progress ?? []).map(entry => ({ root_relative, at: '2026-09-18T09:00:00Z', by: 'coordinator', ...entry })),
     };
 }

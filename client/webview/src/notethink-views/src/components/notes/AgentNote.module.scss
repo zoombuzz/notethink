@@ -1,6 +1,6 @@
 /*
- * The agent card: the story's headline, then a meta row, a usage summary, an activity banner, one row
- * per agent, any question band and the two file bands.
+ * The agent card: the story's headline, then a status line (state, agent count and usage), an activity
+ * banner, one row per agent, any question band, the uncommitted files summary and the pending commits row.
  *
  * Colour is rationed deliberately. The state rail on an agent row is the only saturated mark on the
  * card, because state is the one thing worth acting on; the vendor is monochrome monospace type, and
@@ -62,6 +62,9 @@
   align-items: center;
   gap: 7px;
   font-size: 0.85em;
+  // the status line never wraps: a narrow card clips the end of it rather than growing a second line
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .stateChip {
@@ -97,6 +100,11 @@
 
 .agentCount {
   opacity: 0.7;
+
+  // a scan still in flight has not counted every session yet, so the total is provisional until it finishes
+  &[data-scanning="true"] {
+    opacity: 0.4;
+  }
 }
 
 .agentRow {
@@ -476,27 +484,10 @@ button.agentTwisty {
   margin: 0;
 }
 
-.usageSummary {
-  margin: 0;
-  font-size: 0.85em;
-  color: var(--vscode-descriptionForeground, rgba(204, 204, 204, 0.7));
-
-  // a scan still in flight has not counted every session yet, so the total is provisional until it finishes
-  &[data-scanning="true"] {
-    opacity: 0.55;
-  }
-}
-
 .fileBands {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.fileBandHeader {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
 }
 
 .fileBandTitle {
@@ -508,22 +499,38 @@ button.agentTwisty {
   opacity: 0.6;
 }
 
-.fileBandMore {
+// the one-line summary that unfolds the file list: a native button stripped to look like the rest of the line
+.fileBandSummary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
   margin: 0;
-  padding: 2px 6px;
-  font-size: 0.8em;
-  opacity: 0.6;
-}
-
-// the "and N more" / "Show less" control: a native button stripped to the default card's read-more link look
-.fileBandToggle {
-  display: block;
-  margin: 0;
-  padding: 2px 6px;
+  padding: 0;
   border: 0;
   background: none;
+  color: inherit;
   font: inherit;
+  font-size: 0.85em;
   text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 1px;
+  }
+}
+
+// grey with nothing pending, and the "Waiting on you" colour with something
+.pendingCommits {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--nt-agent-idle);
+
+  &[data-pending="true"] {
+    color: var(--nt-agent-waiting);
+  }
 }
 
 .fileBandEmpty {

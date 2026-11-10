@@ -64,6 +64,8 @@ export interface AgentCommitEntry {
  * - story_key: the pair this card joins on, undefined when the note carries no document path to join on
  * - root_path: the repository every row's request is echoed back to the host with, absent when this note sits in none the analyser has read a tree for
  * - winning_state: the most urgent state among `sessions`, undefined on a card drawing none; the meta-row chip is coloured and labelled by it
+ * - has_git_tree: the analyser has read a working tree for this note's repository, so the pending commits row has something to state
+ * - pending_commits: local commits not yet pushed, the branch's ahead count; undefined when the branch has no upstream, or when `has_git_tree` is false
  * - has_completed_scan: true once a 'live' snapshot has ever landed; distinguishes an empty first
  *   scan from a later rescan that must not blank an already-populated card
  */
@@ -80,6 +82,8 @@ export interface AgentNoteModel {
     winning_state: ActivityState | undefined;
     uncommitted: AgentFileEntry[];
     committed: AgentCommitEntry[];
+    has_git_tree: boolean;
+    pending_commits: number | undefined;
 }
 
 /** the sessions one note draws: the single minted-for session on a virtual note, else every agent whose own write calls bound it to this story */
@@ -141,6 +145,8 @@ export function useAgentNoteModel(note: NoteProps): AgentNoteModel {
             winning_state: winningStateFor(sessions),
             uncommitted: uncommittedEntriesFor(tree, sessions),
             committed: committedEntriesFor(tree, sessions),
+            has_git_tree: tree !== undefined,
+            pending_commits: tree?.tree.pending_commits,
         };
     }, [snapshot, note, fallback_doc_path, has_completed_scan]);
 }

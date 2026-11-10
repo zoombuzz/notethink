@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Uri } from '../__mocks__/vscode';
-import { GIT_API_REPOSITORIES_COMMAND, GIT_API_REPOSITORY_STATE_COMMAND, lineDiffForFile, readRepositoryTree, resolveGitApi, type GitRepository } from './agentgitops';
+import { GIT_API_REPOSITORIES_COMMAND, GIT_API_REPOSITORY_STATE_COMMAND, lineDiffForFile, pendingCommitsOf, readRepositoryTree, resolveGitApi, type GitRepository } from './agentgitops';
 
 const ROOT_PATH = '/ws/notethink';
 
@@ -56,6 +56,28 @@ describe('resolveGitApi', () => {
 describe('readRepositoryTree', () => {
     beforeEach(() => {
         (vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no reflog'));
+    });
+
+    it('reads the pending commit count as the branch ahead count when it has an upstream', async () => {
+        const repository = makeRepository({ HEAD: { name: 'staging', commit: 'a'.repeat(40), upstream: { remote: 'origin', name: 'staging' }, ahead: 2 } });
+        const { tree } = await readRepositoryTree(repository, Date.parse('2026-09-22T00:00:00Z'));
+        expect(tree.pending_commits).toBe(2);
+    });
+
+    it('reads zero pending commits when the branch is level with its upstream', async () => {
+        const repository = makeRepository({ HEAD: { name: 'staging', commit: 'a'.repeat(40), upstream: { remote: 'origin', name: 'staging' }, ahead: 0 } });
+        const { tree } = await readRepositoryTree(repository, Date.parse('2026-09-22T00:00:00Z'));
+        expect(tree.pending_commits).toBe(0);
+    });
+
+    it('leaves the pending commit count undefined when the branch has no upstream', async () => {
+        const { tree } = await readRepositoryTree(makeRepository(), Date.parse('2026-09-22T00:00:00Z'));
+        expect(tree.pending_commits).toBeUndefined();
+    });
+
+    it('pendingCommitsOf treats an upstream with no ahead figure as level, and no head as no upstream', () => {
+        expect(pendingCommitsOf({ upstream: { remote: 'origin', name: 'x' } })).toBe(0);
+        expect(pendingCommitsOf(undefined)).toBeUndefined();
     });
 
     it('maps INDEX_ADDED and UNTRACKED to added, INDEX_DELETED and DELETED to deleted, INDEX_RENAMED to renamed, and everything else to modified', async () => {

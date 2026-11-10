@@ -105,32 +105,22 @@ describe('AgentNote', () => {
         expect(screen.getByTestId('agent-model')).toHaveTextContent('');
     });
 
-    it('draws a token and cost counter on the story and on each agent row, stating the figure is estimated', () => {
+    it('folds the token and cost counter into the status line, and draws one on each agent row, stating the figure is approximate', () => {
         seed({ sessions: [makeSessionState(makeSession())] });
         render(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-usage-summary')).toHaveTextContent('~$0.12');
+        expect(screen.getByTestId('agent-count')).toHaveTextContent('1 agent, 1.5Kt, ~$0.12');
+        expect(screen.queryByTestId('agent-usage-summary')).not.toBeInTheDocument();
         expect(screen.getByTestId('agent-usage')).toHaveTextContent('~$0.12');
     });
 
-    it('counts on each row only its session share of this story, the figure the story total sums, and leaves the window to that total', () => {
+    it('counts on each row only its session share of this story, the figure the status line sums', () => {
         seed({ sessions: [makeSessionState(makeSession({
             usage: { input_tokens: 400_000_000, output_tokens: 44_100_000, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: 291.49, is_estimate: true },
         }))] });
         render(<AgentNote {...makeStoryNote()} />);
         const row_usage = screen.getByTestId('agent-usage');
         expect(row_usage).toHaveTextContent('1.5k tokens ~$0.12');
-        expect(row_usage).not.toHaveTextContent('(30d)');
-        expect(screen.getByTestId('agent-usage-summary')).toHaveTextContent('1.5k tokens (30d) ~$0.12');
-    });
-
-    it('states the story counter span from its earliest counted activity, not the whole 30 day window', () => {
-        const story = { doc_path: TODO_PATH, id: 'agent-activity-card' };
-        const two_days_ago = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
-        seed({ sessions: [makeSessionState(makeSession({
-            story_usage: [{ story, first_at: two_days_ago, usage: { input_tokens: 1200, output_tokens: 340, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: 0.12, is_estimate: true } }],
-        }))] });
-        render(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-usage-summary')).toHaveTextContent('1.5k tokens (2d) ~$0.12');
+        expect(screen.getByTestId('agent-count')).toHaveTextContent('1 agent, 1.5Kt, ~$0.12');
     });
 
     it('draws no band for a vendor that cannot report a question, leaving the row to state the agent', () => {
@@ -208,7 +198,7 @@ describe('AgentNote', () => {
         expect(container.querySelector('[data-winning-state="waiting"]')).toBeInTheDocument();
         expect(screen.getByTestId('agent-state-chip')).toHaveAttribute('data-state', 'waiting');
         expect(screen.getByTestId('agent-state-chip')).toHaveTextContent('Waiting on you');
-        expect(screen.getByTestId('agent-count')).toHaveTextContent('2 agent(s)');
+        expect(screen.getByTestId('agent-count')).toHaveTextContent(/^2 agents, /);
     });
 
     it('draws no meta row on a card with no sessions', () => {
@@ -261,6 +251,11 @@ describe('AgentNote file and commit bands', () => {
         ],
     };
 
+    /** the files row is collapsed by default, so a test reading the rows opens it first */
+    function expandFiles(): void {
+        fireEvent.click(screen.getByTestId('agent-file-band-toggle-uncommitted'));
+    }
+
     function seedTree(postMessage?: jest.Mock): jest.Mock {
         const post = postMessage ?? jest.fn();
         seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree }] });
@@ -270,6 +265,7 @@ describe('AgentNote file and commit bands', () => {
 
     it('lists an attributed uncommitted file under its vendor and an unattributed one as unattributed', () => {
         seedTree();
+        expandFiles();
         const rows = screen.getAllByTestId('agent-file-row');
         expect(rows).toHaveLength(2);
         expect(rows[0]).toHaveAttribute('data-attributed', 'true');
@@ -289,6 +285,7 @@ describe('AgentNote file and commit bands', () => {
         };
         seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: diff_tree }] });
         render(<AgentNote {...makeStoryNote()} />);
+        expandFiles();
         const rows = screen.getAllByTestId('agent-file-row');
         expect(within(rows[0]).getByTestId('agent-file-line-diff')).toHaveTextContent('+12 -0');
         expect(within(rows[1]).getByTestId('agent-file-line-diff')).toHaveTextContent('+3 -1');
@@ -306,6 +303,7 @@ describe('AgentNote file and commit bands', () => {
         };
         seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: kinds_tree }] });
         render(<AgentNote {...makeStoryNote()} />);
+        expandFiles();
         const marks = screen.getAllByTestId('agent-file-change');
         expect(marks[0]).toHaveTextContent(/^M$/);
         expect(marks[0]).toHaveAttribute('title', 'modified');
@@ -337,30 +335,27 @@ describe('AgentNote file and commit bands', () => {
         expect(rows[1]).toHaveAttribute('data-attributed', 'false');
     });
 
-    it('heads the uncommitted band with its count, capping the rows shown and naming how many more there are', () => {
-        const busy_tree: ActivityTree = {
-            ...tree,
-            uncommitted: [
-                { path: 'a.ts', change: 'modified' },
-                { path: 'b.ts', change: 'modified' },
-                { path: 'c.ts', change: 'modified' },
-                { path: 'd.ts', change: 'modified' },
-                { path: 'e.ts', change: 'modified' },
-            ],
-        };
+    const five_files: ActivityTree['uncommitted'] = ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts'].map(path => ({ path, change: 'modified' as const }));
+
+    it('folds the uncommitted files into one collapsed summary row with the file count and the summed line counts', () => {
+        const busy_tree: ActivityTree = { ...tree, uncommitted: five_files.map((file, index) => ({ ...file, added: 24, removed: index })) };
         seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: busy_tree }] });
         render(<AgentNote {...makeStoryNote()} />);
-        const band = screen.getByTestId('agent-file-band-uncommitted');
-        expect(band).toHaveTextContent('5 uncommitted');
-        expect(within(band).getAllByTestId('agent-file-row')).toHaveLength(3);
-        expect(within(band).getByTestId('agent-file-band-more-uncommitted')).toHaveTextContent('and 2 more');
+        const toggle = screen.getByTestId('agent-file-band-toggle-uncommitted');
+        expect(toggle).toHaveTextContent('5 uncommitted files +120 -10');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryAllByTestId('agent-file-row')).toHaveLength(0);
+        expect(screen.queryByTestId('agent-file-band-more-uncommitted')).not.toBeInTheDocument();
     });
 
-    it('unfolds the capped band from "and N more" and folds it back from "Show less", on the view\'s own expansion list', () => {
-        const busy_tree: ActivityTree = {
-            ...tree,
-            uncommitted: ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts'].map(path => ({ path, change: 'modified' as const })),
-        };
+    it('reads a single file in the singular', () => {
+        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: [five_files[0]] } }] });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-file-band-toggle-uncommitted')).toHaveTextContent('1 uncommitted file');
+    });
+
+    it('unfolds the whole file list, with no three row cap, and folds it back, on the view\'s own expansion list', () => {
+        const busy_tree: ActivityTree = { ...tree, uncommitted: five_files };
         seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: busy_tree }] });
         // stand-in for a real view: owns view_expanded_ids and supplies the handler the card dispatches through
         function Harness(): React.ReactElement {
@@ -372,37 +367,75 @@ describe('AgentNote file and commit bands', () => {
             return <AgentNote {...note} display_options={{ ...note.display_options, view_expanded_ids: expanded_ids }} handlers={{ setNoteExpanded }} />;
         }
         render(<Harness />);
-        const band = screen.getByTestId('agent-file-band-uncommitted');
-        expect(within(band).getAllByTestId('agent-file-row')).toHaveLength(3);
-        expect(within(band).queryByTestId('agent-file-band-less-uncommitted')).not.toBeInTheDocument();
-        fireEvent.click(within(band).getByTestId('agent-file-band-more-uncommitted'));
-        expect(within(band).getAllByTestId('agent-file-row')).toHaveLength(5);
-        expect(within(band).queryByTestId('agent-file-band-more-uncommitted')).not.toBeInTheDocument();
-        fireEvent.click(within(band).getByTestId('agent-file-band-less-uncommitted'));
-        expect(within(band).getAllByTestId('agent-file-row')).toHaveLength(3);
-        expect(within(band).getByTestId('agent-file-band-more-uncommitted')).toHaveTextContent('and 2 more');
+        const toggle = screen.getByTestId('agent-file-band-toggle-uncommitted');
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByTestId('agent-file-row')).toHaveLength(5);
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryAllByTestId('agent-file-row')).toHaveLength(0);
     });
 
-    it('leaves "and N more" as a plain count when no view owns expansion for the card', () => {
-        const busy_tree: ActivityTree = {
-            ...tree,
-            uncommitted: ['a.ts', 'b.ts', 'c.ts', 'd.ts'].map(path => ({ path, change: 'modified' as const })),
-        };
-        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: busy_tree }] });
+    it('unfolds on its own state when no view owns expansion for the card', () => {
+        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: five_files } }] });
         render(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-file-band-more-uncommitted').tagName).toBe('P');
+        expandFiles();
+        expect(screen.getAllByTestId('agent-file-row')).toHaveLength(5);
     });
 
-    it('says the uncommitted band is empty in one line rather than leaving it off the card, even with commits on the branch', () => {
+    it('says in the hover text how many files the line counts cover when some carry none', () => {
+        const partial: ActivityTree = { ...tree, uncommitted: [{ ...five_files[0], added: 1, removed: 0 }, five_files[1]] };
+        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: partial }] });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-file-band-toggle-uncommitted')).toHaveAttribute('title', 'Line counts cover 1 of 2 files');
+    });
+
+    it('gives the summary no hover text when every file carries line counts', () => {
+        const full: ActivityTree = { ...tree, uncommitted: [{ ...five_files[0], added: 1, removed: 0 }] };
+        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: full }] });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-file-band-toggle-uncommitted')).not.toHaveAttribute('title');
+    });
+
+    it('says there are no uncommitted files in one line that does not unfold, even with commits on the branch', () => {
         seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: [] } }] });
         render(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-file-bands-empty')).toHaveTextContent('Nothing uncommitted');
+        expect(screen.getByTestId('agent-file-bands-empty')).toHaveTextContent('No uncommitted files');
         expect(screen.queryByTestId('agent-file-band-uncommitted')).not.toBeInTheDocument();
         expect(screen.queryByTestId('agent-commit-band')).not.toBeInTheDocument();
     });
 
+    it('draws the pending commits row under the files row, grey with none and in the waiting colour with some', () => {
+        const draw = (pending: number | undefined): void => {
+            resetActivitySnapshot();
+            seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, pending_commits: pending } }] });
+        };
+        draw(2);
+        const { rerender } = render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-pending-commits')).toHaveTextContent('2 pending commits');
+        expect(screen.getByTestId('agent-pending-commits')).toHaveAttribute('data-pending', 'true');
+        act(() => draw(1));
+        rerender(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-pending-commits')).toHaveTextContent(/^1 pending commit$/);
+        act(() => draw(0));
+        rerender(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-pending-commits')).toHaveTextContent('No pending commits');
+        expect(screen.getByTestId('agent-pending-commits')).toHaveAttribute('data-pending', 'false');
+        act(() => draw(undefined));
+        rerender(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-pending-commits')).toHaveTextContent('No upstream');
+        expect(screen.getByTestId('agent-pending-commits')).toHaveAttribute('data-pending', 'false');
+    });
+
+    it('draws the pending commits row even when nothing is uncommitted', () => {
+        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: [], pending_commits: 3 } }] });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-pending-commits')).toHaveTextContent('3 pending commits');
+    });
+
     it('opens an uncommitted file as a diff from a real control, echoing back the root and path the host published', () => {
         const post = seedTree();
+        expandFiles();
         const button = screen.getAllByTestId('agent-file-row-button')[0];
         expect(button.tagName).toBe('BUTTON');
         expect(button).toBeEnabled();
@@ -417,6 +450,7 @@ describe('AgentNote file and commit bands', () => {
 
     it('replaces its own reading with the host answer once a diff attempt has been refused', () => {
         seedTree();
+        expandFiles();
         act(() => {
             window.dispatchEvent(new MessageEvent('message', {
                 data: { type: 'activityUnavailable', request: 'diff', reason: 'not_listed', path: 'client/extension/src/types/AgentActivity.ts' },
@@ -440,10 +474,10 @@ describe('AgentNote while a scan is in progress', () => {
     it('dims the token and cost total while scanning, and draws it plainly once the scan is live', () => {
         seed({ analyser: { state: 'scanning' }, sessions: [makeSessionState(makeSession())] });
         const { rerender } = render(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-usage-summary')).toHaveAttribute('data-scanning', 'true');
+        expect(screen.getByTestId('agent-count')).toHaveAttribute('data-scanning', 'true');
         act(() => { resetActivitySnapshot(); seed({ sessions: [makeSessionState(makeSession())] }); });
         rerender(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
+        expect(screen.getByTestId('agent-count')).not.toHaveAttribute('data-scanning');
     });
 
     it('keeps drawing session rows and a pending question while scanning, since neither needs the whole scan to be safe', () => {
@@ -472,7 +506,7 @@ describe('AgentNote while a scan is in progress', () => {
             seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: scanning_tree }] });
         });
         rerender(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-file-band-uncommitted')).toHaveTextContent('1 uncommitted');
+        expect(screen.getByTestId('agent-file-band-uncommitted')).toHaveTextContent('1 uncommitted file');
     });
 
     // webview backstop: AgentAnalyser.ts enforces this host-side, in case 'scanning' arrives after 'live'
@@ -482,8 +516,8 @@ describe('AgentNote while a scan is in progress', () => {
             trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: scanning_tree }],
         });
         const { rerender } = render(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
-        expect(screen.getByTestId('agent-file-band-uncommitted')).toHaveTextContent('1 uncommitted');
+        expect(screen.getByTestId('agent-count')).not.toHaveAttribute('data-scanning');
+        expect(screen.getByTestId('agent-file-band-uncommitted')).toHaveTextContent('1 uncommitted file');
         expect(screen.queryByTestId('agent-banner-notice')).not.toBeInTheDocument();
 
         // has_completed_scan is latched, so a later 'scanning' snapshot shouldn't regress anything
@@ -495,8 +529,8 @@ describe('AgentNote while a scan is in progress', () => {
             });
         });
         rerender(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-usage-summary')).not.toHaveAttribute('data-scanning');
-        expect(screen.getByTestId('agent-file-band-uncommitted')).toHaveTextContent('1 uncommitted');
+        expect(screen.getByTestId('agent-count')).not.toHaveAttribute('data-scanning');
+        expect(screen.getByTestId('agent-file-band-uncommitted')).toHaveTextContent('1 uncommitted file');
         expect(screen.queryByTestId('agent-banner-notice')).not.toBeInTheDocument();
     });
 });

@@ -56,8 +56,9 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         'Auto ({0})',
         // "Session" is the French word (a common loanword); de/es/it all differ
         'Session',
-        // "agent" is the French word too, pluralised with the same "(s)" suffix English uses; de/es/it all differ
-        '{0} agent(s)',
+        // "agent" is the French word too, and "agents" its plural; de/es/it all differ
+        '1 agent',
+        '{0} agents',
     ],
     it: [
         // "Token" is the Italian loanword for a credential token; fr uses "Jeton"

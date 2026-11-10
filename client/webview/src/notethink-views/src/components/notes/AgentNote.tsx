@@ -14,7 +14,6 @@ import AgentFileBands from "./agent/AgentFileBands";
 import AgentMetaRow from "./agent/AgentMetaRow";
 import AgentQuestionBand from "./agent/AgentQuestionBand";
 import AgentSessionRows from "./agent/AgentSessionRows";
-import AgentUsageSummary from "./agent/AgentUsageSummary";
 import { useAgentNoteModel } from "./agent/useAgentNoteModel";
 import agent_styles from "./AgentNote.module.scss";
 import view_specific_styles from "../ViewRenderer.module.scss";
@@ -108,8 +107,7 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
             <MarkdownNoteHeadline note={note} />
             {has_visible_linetags && <GenericNoteAttributes {...note} />}
             <div className={`${view_specific_styles.body} ${agent_styles.agentBody}`}>
-                <AgentMetaRow model={model} />
-                <AgentUsageSummary sessions={model.sessions} storyKey={model.story_key} scanning={scanning} />
+                <AgentMetaRow model={model} scanning={scanning} />
                 <AgentActivityBanner model={model} />
                 <AgentSessionRows
                     sessions={model.sessions}

@@ -38,9 +38,21 @@ interface GitCommandChange {
     status: string;
 }
 
+/**
+ * GitHead is the git extension's `Branch` as `git.api.getRepositoryState` returns it.
+ * - upstream: present only when the branch tracks a remote branch
+ * - ahead: commits on the branch not on its upstream; the extension leaves it undefined when there is no upstream
+ */
+export interface GitHead {
+    name?: string;
+    commit?: string;
+    upstream?: { remote: string; name: string };
+    ahead?: number;
+}
+
 /** GitCommandState is the part of `git.api.getRepositoryState`'s answer this file reads */
 interface GitCommandState {
-    HEAD?: { name?: string; commit?: string };
+    HEAD?: GitHead;
     workingTreeChanges?: GitCommandChange[];
     indexChanges?: GitCommandChange[];
 }
@@ -55,7 +67,7 @@ export interface GitChange {
 export interface GitRepositoryState {
     workingTreeChanges: GitChange[];
     indexChanges: GitChange[];
-    HEAD?: { name?: string; commit?: string };
+    HEAD?: GitHead;
 }
 
 /** GitRepository is one repository's root and a state snapshot taken this scan */
@@ -130,6 +142,12 @@ function uncommittedFrom(state: GitRepositoryState, root_path: string): Activity
     }));
 }
 
+/** the branch's ahead-of-upstream count; undefined with no upstream, since nothing can be pending against none */
+export function pendingCommitsOf(head: GitHead | undefined): number | undefined {
+    if (!head?.upstream) { return undefined; }
+    return head.ahead ?? 0;
+}
+
 function relativeToRoot(root_path: string, absolute_path: string): string {
     return absolute_path.startsWith(`${root_path}/`) ? absolute_path.slice(root_path.length + 1) : absolute_path;
 }
@@ -159,6 +177,7 @@ export async function readRepositoryTree(repository: GitRepository, generated_at
             head_commit: repository.state.HEAD?.commit ?? '',
             uncommitted: uncommittedFrom(repository.state, root_path),
             committed: reflog.map(commit => ({ sha: commit.sha, subject: commit.subject })),
+            pending_commits: pendingCommitsOf(repository.state.HEAD),
         },
     };
 }

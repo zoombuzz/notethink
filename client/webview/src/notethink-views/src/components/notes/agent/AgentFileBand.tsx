@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import * as l10n from "@vscode/l10n";
 import { vendorMonogram, type ActivityBand, type ActivityUnavailable } from "../../../lib/agentactivityops";
 import type { AgentFileEntry } from "./useAgentNoteModel";
+import AgentChevron from "./AgentChevron";
 import styles from "../AgentNote.module.scss";
-import view_specific_styles from "../../ViewRenderer.module.scss";
 
 /**
  * The uncommitted band of the working tree: files changed and not yet committed, each openable as a
@@ -20,23 +20,23 @@ import view_specific_styles from "../../ViewRenderer.module.scss";
  * because nothing places it on one; crediting it to whichever agent happened to be running is the
  * failure this feature exists to prevent.
  *
- * A band longer than `maxRows` folds its tail into one "and N more" line. With `onToggleExpanded` that
- * line is a control that unfolds every row and is replaced by "Show less", the same expand and collapse
- * the default card's "Show more" bar offers; without it the line only counts what is folded.
- * - maxRows: rows beyond this many fold into the "and N more" line rather than growing the card without bound; undefined shows every row
- * - totalLineDiff: the header's own +added -removed, summed only across entries the analyser actually diffed; absent when none of this band's entries carry a line diff
- * - expanded: every row is drawn despite `maxRows`
- * - onToggleExpanded: asks the owner to expand or collapse the band; undefined leaves the fold uncontrollable
+ * The band is one summary row, collapsed by default, that unfolds to every file when clicked. The row is
+ * a native button with an `AgentChevron` and `aria-expanded`, the same disclosure the subagent toggle
+ * uses. With `onToggleExpanded` the open state is the owner's, so it survives a re-render; without it
+ * the band keeps its own.
+ * - totalLineDiff: the summary's own +added -removed, summed only across entries the analyser actually diffed; absent when none of this band's entries carry a line diff
+ * - coverageTitle: the summary's hover text, set when some entries carry no line counts so the total is not read as complete
+ * - expanded: every row is drawn
+ * - onToggleExpanded: asks the owner to expand or collapse the band; undefined leaves the band to its own state
  */
 export interface AgentFileBandProps {
     title: string;
     band: ActivityBand;
     entries: ReadonlyArray<AgentFileEntry>;
-    emptyLabel: string;
     unavailable: ActivityUnavailable | undefined;
     onOpenDiff: (path: string, band: ActivityBand) => void;
-    maxRows?: number;
     totalLineDiff?: { added: number; removed: number };
+    coverageTitle?: string;
     expanded?: boolean;
     onToggleExpanded?: (expanded: boolean) => void;
 }
@@ -81,69 +81,55 @@ function LineDiffCounts(props: { added: number | undefined; removed: number | un
 }
 
 function AgentFileBand(props: AgentFileBandProps): React.ReactElement {
-    const foldable = props.maxRows !== undefined && props.entries.length > props.maxRows;
-    const expanded = foldable && props.onToggleExpanded !== undefined && props.expanded === true;
-    const shown = foldable && !expanded ? props.entries.slice(0, props.maxRows) : props.entries;
-    const hidden = props.entries.length - shown.length;
+    const [own_expanded, setOwnExpanded] = useState(false);
     const toggle = props.onToggleExpanded;
+    const expanded = toggle ? props.expanded === true : own_expanded;
+    const flip = (): void => { if (toggle) { toggle(!expanded); } else { setOwnExpanded(!expanded); } };
     return (
         <section className={styles.fileBand} data-band={props.band} data-testid={`agent-file-band-${props.band}`}>
-            <div className={styles.fileBandHeader}>
-                <h4 className={styles.fileBandTitle}>{props.title}</h4>
+            <button
+                type="button"
+                className={styles.fileBandSummary}
+                data-testid={`agent-file-band-toggle-${props.band}`}
+                aria-expanded={expanded}
+                title={props.coverageTitle}
+                onClick={(event) => { event.stopPropagation(); flip(); }}
+            >
+                <AgentChevron open={expanded} />
+                <span>{props.title}</span>
+                {' '}
                 {props.totalLineDiff && <LineDiffCounts added={props.totalLineDiff.added} removed={props.totalLineDiff.removed} testid={`agent-file-band-line-diff-${props.band}`} />}
-            </div>
-            {props.entries.length === 0 && (
-                <p className={styles.fileBandEmpty} data-testid={`agent-file-band-empty-${props.band}`}>{props.emptyLabel}</p>
-            )}
-            <ul className={styles.fileRows}>
-                {shown.map(entry => {
-                    const refused = props.unavailable?.request === 'diff' && props.unavailable.path === entry.file.path;
-                    return (
-                        <li key={entry.file.path} className={styles.fileRow} data-testid="agent-file-row" data-attributed={entry.session !== undefined}>
-                            <button
-                                type="button"
-                                className={styles.fileRowButton}
-                                data-testid="agent-file-row-button"
-                                title={l10n.t('Open this file as a diff')}
-                                onClick={(event) => { event.stopPropagation(); props.onOpenDiff(entry.file.path, props.band); }}
-                            >
-                                <span className={styles.fileAttribution} data-testid="agent-file-attribution">
-                                    {entry.session ? vendorMonogram(entry.session.session.vendor) : l10n.t('unattributed')}
-                                </span>
-                                <span className={styles.filePath}>{entry.file.path}</span>
-                                <LineDiffCounts added={entry.file.added} removed={entry.file.removed} testid="agent-file-line-diff" />
-                                <span className={styles.fileChange} data-testid="agent-file-change" title={changeLabel(entry.file.change)}>{changeMark(entry.file.change)}</span>
-                            </button>
-                            {entry.file.previous_path && (
-                                <p className={styles.fileDetailLine}>{l10n.t('Renamed from {0}', entry.file.previous_path)}</p>
-                            )}
-                            {refused && (
-                                <p className={styles.fileDetailLine} data-testid="agent-file-no-diff">{refusalLabel(props.unavailable!.reason)}</p>
-                            )}
-                        </li>
-                    );
-                })}
-            </ul>
-            {hidden > 0 && !toggle && (
-                <p className={styles.fileBandMore} data-testid={`agent-file-band-more-${props.band}`}>{l10n.t('and {0} more', String(hidden))}</p>
-            )}
-            {hidden > 0 && toggle && (
-                <button
-                    type="button"
-                    className={`${styles.fileBandToggle} ${view_specific_styles.readMoreToggle}`}
-                    data-testid={`agent-file-band-more-${props.band}`}
-                    aria-expanded={false}
-                    onClick={(event) => { event.stopPropagation(); toggle(true); }}
-                >{l10n.t('and {0} more', String(hidden))}</button>
-            )}
-            {expanded && toggle && (
-                <button
-                    type="button"
-                    className={`${styles.fileBandToggle} ${view_specific_styles.readMoreToggle}`}
-                    data-testid={`agent-file-band-less-${props.band}`}
-                    aria-expanded={true}
-                    onClick={(event) => { event.stopPropagation(); toggle(false); }}
-                >{l10n.t('Show less')}</button>
+            </button>
+            {expanded && (
+                <ul className={styles.fileRows}>
+                    {props.entries.map(entry => {
+                        const refused = props.unavailable?.request === 'diff' && props.unavailable.path === entry.file.path;
+                        return (
+                            <li key={entry.file.path} className={styles.fileRow} data-testid="agent-file-row" data-attributed={entry.session !== undefined}>
+                                <button
+                                    type="button"
+                                    className={styles.fileRowButton}
+                                    data-testid="agent-file-row-button"
+                                    title={l10n.t('Open this file as a diff')}
+                                    onClick={(event) => { event.stopPropagation(); props.onOpenDiff(entry.file.path, props.band); }}
+                                >
+                                    <span className={styles.fileAttribution} data-testid="agent-file-attribution">
+                                        {entry.session ? vendorMonogram(entry.session.session.vendor) : l10n.t('unattributed')}
+                                    </span>
+                                    <span className={styles.filePath}>{entry.file.path}</span>
+                                    <LineDiffCounts added={entry.file.added} removed={entry.file.removed} testid="agent-file-line-diff" />
+                                    <span className={styles.fileChange} data-testid="agent-file-change" title={changeLabel(entry.file.change)}>{changeMark(entry.file.change)}</span>
+                                </button>
+                                {entry.file.previous_path && (
+                                    <p className={styles.fileDetailLine}>{l10n.t('Renamed from {0}', entry.file.previous_path)}</p>
+                                )}
+                                {refused && (
+                                    <p className={styles.fileDetailLine} data-testid="agent-file-no-diff">{refusalLabel(props.unavailable!.reason)}</p>
+                                )}
+                            </li>
+                        );
+                    })}
+                </ul>
             )}
         </section>
     );

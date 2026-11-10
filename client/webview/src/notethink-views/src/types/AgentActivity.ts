@@ -307,6 +307,7 @@ export interface ActivityCommit {
  * - uncommitted: changed in the working tree and not yet committed, credited to a session only by
  *   that session's own write calls
  * - committed: commits on this branch, credited to a session only by that session's own commit calls
+ * - pending_commits: local commits not yet pushed, the branch's ahead count against its upstream; undefined when the branch has no upstream
  */
 export interface ActivityTree {
     generated_at: string;
@@ -314,6 +315,7 @@ export interface ActivityTree {
     head_commit: string;
     uncommitted: ActivityChangedFile[];
     committed: ActivityCommit[];
+    pending_commits?: number;
 }
 
 /**

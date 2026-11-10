@@ -66,9 +66,6 @@ export const AGENT_CLOCK_MODE_DEFAULT: AgentClockMode = 'active';
 
 const MINUTES_PER_HOUR = 60;
 const HOURS_PER_DAY = 24;
-const MS_PER_HOUR = 60 * 60 * 1000;
-// the analyser's usage window, the longest span a counter can state; it mirrors the extension host's AGENT_WINDOW_DAYS
-export const ACTIVITY_USAGE_WINDOW_DAYS = 30;
 // an elapsed clock reads in hours and minutes up to two days, then in whole days, since "448h 56m" needs working out
 const CLOCK_HOURS_BEFORE_DAYS = 48;
 // the one model-id prefix repeating the vendor monogram beside it; "grok-" stays since a bare version isn't a model
@@ -603,6 +600,9 @@ export function truncateActivityArg(arg: string | undefined, limit: number): str
     return arg.length <= limit ? arg : `${arg.slice(0, limit - 1)}…`;
 }
 
+/** the token and cost fields of an `ActivityUsage`, which is all a usage line reads */
+export type ActivityUsageFigures = { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost_usd?: number; is_estimate: boolean };
+
 /** an integer token count as a compact display string; the counter states an order of magnitude, not an exact figure a reader would ever need to reconcile against a bill */
 export function formatActivityTokens(tokens: number): string {
     if (tokens >= 1_000_000) { return `${(tokens / 1_000_000).toFixed(1)}M`; }
@@ -611,59 +611,44 @@ export function formatActivityTokens(tokens: number): string {
 }
 
 /**
- * ActivityUsageWindow is the span a usage figure covers, as a count of whole days or, under a day,
- * whole hours, each rounded up so the span always contains the activity it counts.
- */
-export interface ActivityUsageWindow {
-    unit: 'd' | 'h';
-    count: number;
-}
-
-/**
- * The span a counter covers: from the earliest activity it counts to now, capped at the analyser's
- * window, so a story two days old reads "2d" rather than claiming thirty days of history. An unknown
- * or unparseable start reads as the whole window, the one span the figure is sure to fit in.
- */
-export function activityUsageWindow(since: string | undefined, now: number = Date.now()): ActivityUsageWindow {
-    const whole: ActivityUsageWindow = { unit: 'd', count: ACTIVITY_USAGE_WINDOW_DAYS };
-    const since_ms = since === undefined ? NaN : new Date(since).getTime();
-    if (Number.isNaN(since_ms)) { return whole; }
-    const hours = Math.max(1, Math.ceil((now - since_ms) / MS_PER_HOUR));
-    if (hours < HOURS_PER_DAY) { return { unit: 'h', count: hours }; }
-    return { unit: 'd', count: Math.min(ACTIVITY_USAGE_WINDOW_DAYS, Math.ceil(hours / HOURS_PER_DAY)) };
-}
-
-/**
- * The earliest activity a card's counter counts: on a story, the earliest priced call any of its
- * sessions credited to that story; on a virtual note, its one session's start. Undefined when no
- * session says, which `activityUsageWindow` reads as the whole window.
- */
-export function earliestCountedActivity(sessions: ReadonlyArray<ActivitySessionState>, story_key?: ActivityStoryKey): string | undefined {
-    const starts = sessions.map(state => {
-        if (!story_key) { return state.session.started_at; }
-        return storyUsageEntryFor(state, story_key)?.first_at;
-    }).filter((at): at is string => at !== undefined && !Number.isNaN(new Date(at).getTime()));
-    if (starts.length === 0) { return undefined; }
-    return starts.reduce((first, at) => (new Date(at).getTime() < new Date(first).getTime() ? at : first));
-}
-
-/**
  * A session's or a story's usage as one display line: total tokens and, where priced, an estimated
  * cost, labelled as an estimate unless the vendor supplied its own authoritative figure. An unpriced
  * usage still shows its tokens, never a dollar figure borrowed from another model.
- *
- * `window` states the span the figure covers, on the story's own counter; an agent row omits it,
- * since it sits under that counter where the span is already stated once.
  */
-export function formatActivityUsage(usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost_usd?: number; is_estimate: boolean }, window?: ActivityUsageWindow): string {
+export function formatActivityUsage(usage: ActivityUsageFigures): string {
     const total = usage.input_tokens + usage.output_tokens + usage.cache_read_tokens + usage.cache_write_tokens;
-    const count = formatActivityTokens(total);
-    const tokens = window === undefined
-        ? l10n.t('{0} tokens', count)
-        : window.unit === 'h' ? l10n.t('{0} tokens ({1}h)', count, window.count) : l10n.t('{0} tokens ({1}d)', count, window.count);
+    const tokens = l10n.t('{0} tokens', formatActivityTokens(total));
     if (usage.cost_usd === undefined) { return tokens; }
     const cost = usage.is_estimate ? l10n.t('~${0}', usage.cost_usd.toFixed(2)) : l10n.t('${0}', usage.cost_usd.toFixed(2));
     return `${tokens} ${cost}`;
+}
+
+/**
+ * A token count in the status line's compact unit: `999t`, `32Kt`, `8.2Mt`, `1.1Gt`. One decimal
+ * below 10 of a unit, none at 10 or above, with a trailing `.0` dropped; a count that rounds up to
+ * 1000 of a unit reads in the next unit up. A numeric-unit convention, not prose, so it is not run
+ * through `l10n.t`.
+ */
+export function formatStatusTokens(tokens: number): string {
+    const suffixes = ['K', 'M', 'G'];
+    if (tokens < 1000) { return `${Math.max(0, Math.round(tokens))}t`; }
+    let unit = 0;
+    let value = tokens / 1000;
+    while (unit < suffixes.length - 1 && Math.round(value) >= 1000) { value /= 1000; unit++; }
+    const text = value < 10 ? String(Math.round(value * 10) / 10) : String(Math.round(value));
+    return `${text}${suffixes[unit]}t`;
+}
+
+/**
+ * The status line's usage figures, `8.2Mt, ~$12.40`: the combined tokens and, where every session is
+ * priced, the cost, always marked approximate with `~$` since a price is an estimate. An unpriced
+ * total shows its tokens alone.
+ */
+export function formatStatusUsage(usage: ActivityUsageFigures): string {
+    const total = usage.input_tokens + usage.output_tokens + usage.cache_read_tokens + usage.cache_write_tokens;
+    const tokens = formatStatusTokens(total);
+    if (usage.cost_usd === undefined) { return tokens; }
+    return `${tokens}, ${l10n.t('~${0}', usage.cost_usd.toFixed(2))}`;
 }
 
 /**
@@ -673,7 +658,7 @@ export function formatActivityUsage(usage: { input_tokens: number; output_tokens
  * without one (a virtual note's own unbound session, or a caller not yet passing it), each session
  * contributes its whole `usage`.
  */
-export function totalActivityUsage(sessions: ReadonlyArray<ActivitySessionState>, story_key?: ActivityStoryKey): { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost_usd?: number; is_estimate: boolean } {
+export function totalActivityUsage(sessions: ReadonlyArray<ActivitySessionState>, story_key?: ActivityStoryKey): ActivityUsageFigures {
     let input_tokens = 0, output_tokens = 0, cache_read_tokens = 0, cache_write_tokens = 0;
     let cost_usd: number | undefined;
     let is_estimate = false;

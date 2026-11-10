@@ -1,6 +1,55 @@
 # Todo [](?nt_view=kanban)
 
 
+### Compact agent card: usage in status line, folded files [](?id=agent-card-compact&status=code-review)
+
+The agent card spends space on things the operator does not read. The usage summary (tokens, time window, cost) takes its own line under the status line, and the uncommitted files list shows three rows plus "and N more" at the bottom. The operator wants the card denser: usage folded into the status line, the file list collapsed behind a one-line summary, and a new line showing how many commits are waiting.
+
++ builds on: the agent card in `client/webview/src/notethink-views/src/components/notes/AgentNote.tsx:43` and its parts in `agent/`
+  + status line: `agent/AgentMetaRow.tsx:27` renders `{0} agent(s)` as `styles.agentCount`
+  + usage line: `agent/AgentUsageSummary.tsx:26` renders `formatActivityUsage` from `lib/agentactivityops.ts`, e.g. `8203112 tokens (2d) ~$12.40`
+  + files: `agent/AgentFileBands.tsx:13` folds at `UNCOMMITTED_ROW_LIMIT = 3`, with the "and N more" and "Show less" buttons in `agent/AgentFileBand.tsx:128`
+  + expand control: reuse `AgentChevron` with `aria-expanded`, as the subagent toggle in `agent/AgentChildRows.tsx:80` does; no new disclosure component
+  + colours: `--nt-agent-waiting` (the "Waiting on you" orange) and `--nt-agent-idle` (muted grey) in `AgentNote.module.scss:15`
++ no PATTERNS.md entry covers card density or disclosure rows; this is a new pattern, noted when the story lands
++ decision 2026-11-10 (operator): drop the usage line and put tokens and cost on the status line, e.g. `1 agent, 8.2Mt, ~$12.40`
+  + drop the `(s)`: one session reads `1 agent`, more read `3 agents`, using a plural-aware l10n string
+  + tokens use a `t` suffix with K, M or G: `32Kt`, `8.2Mt`, `1.1Gt`; one decimal below 10 of a unit, none at 10 or above
+  + cost is approximate, so always prefixed `~$`
+  + the time window is not carried over; the card stops showing it
+  + the status line never wraps: `white-space: nowrap` and `overflow: hidden` on the row, no ellipsis
++ decision 2026-11-10 (operator): the uncommitted files become one expandable row, collapsed by default
+  + the row reads `5 uncommitted files +120 -34`, with the green and red counts styled as `LineDiffCounts` already does
+  + expanding shows the whole file list, with no three-row fold and no "and N more" button
+  + with nothing uncommitted the row reads `No uncommitted files`, not expandable
++ decision 2026-11-10 (operator): a pending commits row sits under the files row
+  + grey (`--nt-agent-idle`) when there are none: `No pending commits`
+  + yellow (`--nt-agent-waiting`, matching "Waiting on you") when there are some: `2 pending commits`
++ decision for the operator, recommendation: "pending" means local commits not yet pushed, the count the branch is ahead of its upstream
+  + with no upstream branch the row reads `No upstream` in grey
+  + verified: no ahead or unpushed count exists today; `ActivityTree` (`types/AgentActivity.ts:311`) has `committed` from the reflog (`agentgitops.ts:152`), which is not an ahead count
+  + suspected, not verified: the git extension state behind `git.api.getRepositoryState` (`agentgitops.ts:26`) carries `HEAD.ahead`; confirm before relying on it
++ known gap: line counts stop after `AGENT_LINE_DIFF_MAX_FILES_PER_REPO = 20` files (`AgentAnalyser.ts:58`), so the summary total can undercount
+  + when any file lacks counts, the row title (hover text) says how many files the counts cover
++ [X] add a token formatter giving `32Kt`, `8.2Mt`, `1.1Gt` in `lib/agentactivityops.ts`, with Jest cases at each unit boundary
++ [X] rewrite the `AgentMetaRow` count as plural-aware `1 agent` / `3 agents`, followed by `, <tokens>, ~$<cost>`
++ [X] make the status row `nowrap` with hidden overflow, so a narrow card clips the end of the line
++ [X] remove `AgentUsageSummary` from the card and delete the component and its test if nothing else uses it
++ [X] replace the three-row fold in `AgentFileBands` with one collapsed summary row that expands to the full list via `AgentChevron`
+  + keep the expansion in the card-level `setNoteExpanded` state the current "and N more" uses, so it survives a re-render
++ [X] show partial-count coverage in the files row hover text when any file has no counts
++ [X] add a `pending_commits` count (or `undefined` with no upstream) to `ActivityTree` in both mirrored type files, `client/extension/src/types/AgentActivity.ts` and the webview copy
++ [X] read the ahead-of-upstream count in `client/extension/src/vscode/agentgitops.ts`, with Jest cases for ahead, level and no upstream
++ [X] render the pending commits row under the files row, grey at zero or no upstream and `--nt-agent-waiting` above zero
++ [X] add Jest coverage for `AgentMetaRow` and `AgentFileBands`, which have no direct tests today
++ [X] update `playwright/specs/agent-card.spec.ts` for the usage line gone, the collapsed files row, its expansion, and both pending commit colours
++ [X] update `README.md` > Agent activity if it describes the usage line or the file fold
++ [X] bump the patch version
++ manual: judge the new card density on a busy story in the kanban view, at a narrow column width
++ note: ahead count verified in the git extension's `git.api.getRepositoryState` handler, which spreads `HEAD` (a `Branch`) so `HEAD.ahead` and `HEAD.upstream` are present, and `ahead` is only set when an upstream exists; `pendingCommitsOf` in `agentgitops.ts` reads `HEAD.upstream` then `HEAD.ahead`
++ note: new pattern for card density: a one-line collapsed summary row opened by `AgentChevron` with `aria-expanded`, state kept in the card-level `setNoteExpanded` list (`AgentFileBand.tsx`), and a single status line carrying counts (`AgentMetaRow.tsx`)
+
+
 ### Chief-of-staff workflow pack [](?id=chief-of-staff-pack)
 
 Someone running coding agents against stories in a `todo.md` has no ready-made way to ask an agent "what should be worked on next?" or "what do I need to do right now to keep the agents busy?", or to watch that work on a board. This story ships a workflow pack in `workflows/chief-of-staff/`: two agent skills, the story rules they rely on, and a board that opens in NoteThink, where each step links to the markdown that drives it.
@@ -240,3 +289,58 @@ Two views visible at once, such as a document pane beside a kanban pane. The vie
 + [ ] persist the split ratio and each pane's view id across reload
 + [ ] add jest: each pane resolves its own view state; closing a pane removes exactly its entry
 + [ ] add playwright: open a second pane, resize, reload, both panes and the ratio survive
+
+
+### Share parse-worker scheduling and recovery [](?id=shared-parse-worker-scheduling)
+
++ goal: keep current-file and folder parsing responsive when a parse worker fails.
++ problem: two parse schedulers maintain the same mechanics with different failure handling.
++ builds on: `client/extension/src/vscode/ParsePool.ts:61` and its existing crash-recovery behavior.
++ builds on: the folder parsing adapter in `client/webview/src/hooks/useWorkerParsedDocs.ts:105`.
++ background
+  + measured: both pools implement lazy slots, FIFO jobs, pump/free-slot/spawn/dispatch and inline spawn fallback.
+  + measured: both size the pool to half the reported cores, capped at four.
+  + measured: `client/extension/src/vscode/notethinkEditor.ts:49` constructs the extension pool.
+  + measured: `client/extension/src/vscode/PanelSession.ts:198` uses it for document parsing.
+  + measured: `client/webview/src/hooks/useWorkerParsedDocs.ts:278` submits folder documents to the webview pool.
+  + measured: `client/webview/src/hooks/useVscodeMessages.ts:473` consumes the resulting parsed documents.
+  + measured: `ParsePool.ts:80` bounds its queue; `:103` supersedes stale requests; `:156` wires worker errors.
+  + measured: `ParsePool.ts:173` resolves a crashed worker's current job inline and replaces the worker.
+  + measured: `useWorkerParsedDocs.ts:200` registers only a message listener before posting at `:218`.
+  + inferred: a webview worker error without a response leaves that job's promise unresolved.
+    + Its pending key clears only when the promise resolves at `useWorkerParsedDocs.ts:279`.
+    + This is a source-level settlement gap, not a reproduced production failure.
+  + measured: the extension tsconfig restricts its root to `src`; the webview uses a separate build graph.
+  + measured: `CODING_STANDARDS.md` deliberately mirrors a few defaults across the two bundles.
+  + inferred: a runtime-neutral scheduling core can share lifecycle policy while retaining both execution sites.
++ approach
+  + This is a new pattern for shared parse scheduling; no existing scheduler abstraction covers both callers.
+  + Extract the existing extension pool's mechanics into one environment-neutral source built into both bundles.
+  + Inject worker construction, protocol encoding, inline parsing and logging instead of importing VS Code or DOM APIs.
+  + Keep webview blob preparation, content cache and parse probes in the existing webview adapter.
+  + Keep extension URI construction and keyed stale-request handling in its adapter.
+  + Keep the sticky-session `AgentAnalyserWorkerPool` separate; its cache affinity and batching differ.
++ [ ] isolate the shared parse scheduling core from the existing pool implementation.
+  + Adjust build inclusion only where required; keep two bundles and introduce no external package or worker service.
+  + Preserve the documented mirrored-default exception instead of sweeping constants into the new core.
++ [ ] route both current-file and folder parsing through the shared lifecycle mechanics.
+  + Settle in-flight work on worker error with the existing inline fallback behavior.
+  + Drain queued work after spawn failure; prevent later jobs from being stranded.
+  + Bound queued work and settle superseded or evicted jobs explicitly.
+  + Preserve response identity/hash checks and ignore stale results.
+  + Dispose workers at the owning runtime's existing lifecycle boundary.
++ [ ] exercise shared scheduler behavior with controlled worker doubles.
+  + Cover success, concurrent work, spawn failure, worker crash, stale response, queue overflow and disposal.
+  + Use `client/extension/src/vscode/ParsePool.test.ts:79`, `:139` and `:169` as existing behavioral references.
+  + Assert every submitted promise settles and a later job still completes after a crash.
++ [ ] add a worker-path webview regression for crash recovery and pending-key release.
+  + `client/webview/src/hooks/useWorkerParsedDocs.test.ts:6` currently runs all cases through inline fallback.
+  + Preserve hash-based caching and released-document memory behavior from the existing hook tests.
++ [ ] verify both bundles load real workers and preserve current-file/folder rendering.
+  + Use the existing parse-mode probe in `scripts/perf/page-agent.js:169` to distinguish workers from fallback.
+  + Do not claim a speedup; this change shares policy and closes a settlement gap.
++ acceptance criteria
+  + One scheduling implementation owns worker slot lifecycle and crash settlement for both parse adapters.
+  + A crashed folder parser leaves no permanently pending document and later work continues.
+  + Extension supersession and folder cache/release behavior remain intact.
+  + Existing parse behavior and rendered document content are unchanged.

@@ -1,23 +1,24 @@
 # Prod-ready Results
-# Version: 0.4.28
-# Date: 2026-11-10T11:15:00Z
-# Tree: HEAD c443289 plus the agent-card-compact working tree (28 changed paths, 3 new files, 2 deleted)
-# Stories: agent-card-compact doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move "Compact agent card: usage in status line, folded files" to done.md
+# Version: 0.4.33
+# Date: 2026-11-11T19:40:00Z
+# Tree: HEAD 3cf7274 plus the uncommitted batch (42 modified paths, 10 new files)
+# Stories: shared-parse-worker-scheduling, agent-card-quiet-line, agent-card-pending-detail, agent-scan-per-card, single-file-kanban-auto-view: each doing -> code-review
+# Ship verdict: Ready to ship: /push-prod will move the five batch stories to done.md
 # ---
-Build | pass | build-and-rollup exit 0 | fresh
-Lint | pass | clean | reused (green at 2026-11-10T10:55:47Z)
-Project guards | none for this project | - | skipped (no guard script)
+Build | pass | webpack build exit 0 | fresh
+Lint | pass | 0 errors, 1 warning (max-lines-per-function on runScanOnce) | fresh
+Project guards | skipped | none for this project |
 Dependency audit | pass | no known vulnerabilities | fresh
-CODING_STANDARDS | pass | mechanical greps clean, inline pass clean | fresh
-Exposure | pass | public repo, scan and reading clean | fresh
-Fleet fix check | pass | no hit | fresh
-Jest | pass | 3575/3575 (160 files) | fresh
-Playwright | pass | 313/313 | reused (green at 2026-11-10T10:55:16Z)
-Todo/Done | pass | format intact, all tasks ticked | fresh
-Story-state advance | pass | doing -> code-review, move rehearsed | fresh
-Version bump | pass | 0.4.28 | fresh
+CODING_STANDARDS | pass | mechanical greps and inline pass clean | fresh
+Exposure | pass | public repo: scan and reading clean, rejected findings with reasons below | fresh
+Fleet fix check | not a fleet fix | notethink-only extension code |
+Jest | pass | 3677/3677, 165 files | fresh
+Mocha | pass | 40 passes, 0 failures | fresh
+Playwright | pass | 321/321 | fresh
+Story-state advance | 5 stories doing -> code-review, move rehearsed | fresh
+Version bump | 0.4.33 |
 # --- Fixed during review ---
-none
+Safety: looseObjectReader refuses any sha that is not 40 lowercase hex digits, before building a path (agentgitops.ts), with a Jest case.
+Rejected exposure findings: a product fixture string for the vendor projects folder in agentscancacheops.test.ts (public by design, the product reads that folder); the coordinator target marker in the board is removed by the coordinator before the commit.
 # --- Open ---
 none

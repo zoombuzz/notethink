@@ -47,19 +47,19 @@ describe('AgentMetaRow', () => {
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('reads one session as "1 agent" with its tokens and approximate cost', () => {
+    it('reads one session as "1 ag" with its tokens and approximate cost', () => {
         render(<AgentMetaRow model={makeModel([makeSession('s1', 12.4, 8_203_112)])} />);
-        expect(screen.getByTestId('agent-count')).toHaveTextContent(/^1 agent, 8\.2Mt, ~\$12\.40$/);
+        expect(screen.getByTestId('agent-count')).toHaveTextContent(/^1 ag, 8\.2Mt, ~\$12\.40$/);
     });
 
-    it('reads several sessions as "N agents" and sums their usage', () => {
+    it('reads several sessions as "N ag" and sums their usage', () => {
         render(<AgentMetaRow model={makeModel([makeSession('s1', 1, 20_000), makeSession('s2', 2, 12_000), makeSession('s3', 3, 0)])} />);
-        expect(screen.getByTestId('agent-count')).toHaveTextContent(/^3 agents, 32Kt, ~\$6\.00$/);
+        expect(screen.getByTestId('agent-count')).toHaveTextContent(/^3 ag, 32Kt, ~\$6\.00$/);
     });
 
     it('shows tokens alone when a session is unpriced, rather than a partial dollar figure', () => {
         render(<AgentMetaRow model={makeModel([makeSession('s1', 1, 1_100_000_000), makeSession('s2', undefined, 0)])} />);
-        expect(screen.getByTestId('agent-count')).toHaveTextContent(/^2 agents, 1\.1Gt$/);
+        expect(screen.getByTestId('agent-count')).toHaveTextContent(/^2 ag, 1\.1Gt$/);
     });
 
     it('marks the figures busy while a scan is counting, and plainly once it is done', () => {

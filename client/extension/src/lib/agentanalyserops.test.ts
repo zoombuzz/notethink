@@ -3,6 +3,8 @@ import {
     buildActivitySnapshot,
     emptyActivitySnapshot,
     emptyAnalyserState,
+    rootsWithNothingLeftToRead,
+    scopeMayBelongTo,
     treeForWorkspacePath,
     unattributedFiles,
     unreadableSessionIds,
@@ -126,5 +128,43 @@ describe('buildActivitySnapshot', () => {
     it('carries the progress entries it is given', () => {
         const entry = { root_relative: '', story_id: 'story-a', pct: 40, at: '2026-11-03T10:00:00Z', by: 'agent' };
         expect(buildActivitySnapshot(emptyAnalyserState('live'), {}, {}, [entry]).progress).toEqual([entry]);
+    });
+});
+
+describe('scopeMayBelongTo', () => {
+    it('matches a Claude Code folder naming the root, a folder inside it, or a symlinked alias of it', () => {
+        expect(scopeMayBelongTo({ claude_dir: '-home-dev-work-app' }, '/home/dev/work/app')).toBe(true);
+        expect(scopeMayBelongTo({ claude_dir: '-home-dev-work-app-nested' }, '/home/dev/work/app')).toBe(true);
+        expect(scopeMayBelongTo({ claude_dir: '-mnt-data-work-app' }, '/home/dev/work/app')).toBe(true);
+    });
+
+    it('matches a folder above the root, since a session launched there can write into it, but not a sibling', () => {
+        expect(scopeMayBelongTo({ claude_dir: '-home-dev-work' }, '/home/dev/work/app')).toBe(true);
+        expect(scopeMayBelongTo({ claude_dir: '-home-dev-other-thing' }, '/home/dev/work/app')).toBe(false);
+        expect(scopeMayBelongTo({ claude_dir: '-home-dev-wor' }, '/home/dev/work/app')).toBe(false);
+    });
+
+    it('matches a Grok cwd by path, inside, equal or above the root', () => {
+        expect(scopeMayBelongTo({ cwd: '/ws/app' }, '/ws/app')).toBe(true);
+        expect(scopeMayBelongTo({ cwd: '/ws/app/sub' }, '/ws/app')).toBe(true);
+        expect(scopeMayBelongTo({ cwd: '/ws' }, '/ws/app')).toBe(true);
+        expect(scopeMayBelongTo({ cwd: '/elsewhere' }, '/ws/app')).toBe(false);
+    });
+
+    it('lets a session of unknown scope belong anywhere', () => {
+        expect(scopeMayBelongTo(undefined, '/ws/app')).toBe(true);
+    });
+});
+
+describe('rootsWithNothingLeftToRead', () => {
+    it('lists every root when nothing remains', () => {
+        expect(rootsWithNothingLeftToRead(['/b', '/a'], [])).toEqual(['/a', '/b']);
+    });
+
+    it('holds back a root only while a remaining session could belong to it', () => {
+        const remaining = [{ claude_dir: '-other-place' }];
+        expect(rootsWithNothingLeftToRead(['/ws/app', '/ws/lib'], remaining)).toEqual(['/ws/app', '/ws/lib']);
+        expect(rootsWithNothingLeftToRead(['/ws/app', '/ws/lib'], [{ claude_dir: '-ws-app' }])).toEqual(['/ws/lib']);
+        expect(rootsWithNothingLeftToRead(['/ws/app', '/ws/lib'], [undefined])).toEqual([]);
     });
 });

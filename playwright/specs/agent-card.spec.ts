@@ -287,6 +287,49 @@ test.describe('Agent card', () => {
         await expect(bound.getByTestId('agent-banner-notice')).toHaveCount(0);
     });
 
+    test('draws no scanning notice on a card already drawing sessions, and puts the first scan\'s progress on one with none', async ({ page }) => {
+        await pinAgentCard(page);
+        await folderBoard(page);
+        await injectActivity(page, { state: 'scanning', scan_progress: { sessions_read: 212, sessions_found: 624 } });
+        const bound = cardFor(page, 'Agent activity card');
+        await expect(bound.getByTestId('agent-row')).toHaveCount(1);
+        await expect(bound.getByTestId('agent-banner-notice')).toHaveCount(0);
+        // the count stays dimmed, since its figures are still a growing subset
+        await expect(bound.getByTestId('agent-count')).toHaveAttribute('data-scanning', 'true');
+        const empty = cardFor(page, 'Story nobody can declare');
+        await expect(empty.getByTestId('agent-banner-notice')).toContainText('Scanning agent activity, 212 of 624 sessions');
+    });
+
+    test('says a card has no agent activity once its own repository is read, while the first scan is still running', async ({ page }) => {
+        await pinAgentCard(page);
+        await folderBoard(page);
+        await injectActivity(page, { state: 'scanning', scan_progress: { sessions_read: 212, sessions_found: 624 }, repository_done: true });
+        const empty = cardFor(page, 'Story nobody can declare');
+        await expect(empty.getByTestId('agent-banner-notice')).toContainText('No agent activity in 30 days');
+        // a card on a board whose repository the host has read nothing for stays on the progress notice
+        await expect(cardFor(page, 'Workbench boot order').getByTestId('agent-banner-notice')).toContainText('Scanning agent activity, 212 of 624 sessions');
+        // the dimmed count lifts on the finished card
+        await expect(cardFor(page, 'Agent activity card').getByTestId('agent-count')).not.toHaveAttribute('data-scanning');
+    });
+
+    test('redraws every session at once, with no scanning notice, when the card type is switched away past the stop grace and back', async ({ page }) => {
+        await agentBoard(page);
+        const bound = cardFor(page, 'Agent activity card');
+        await expect(bound.getByTestId('agent-row')).toHaveCount(1);
+        await openCardSettings(page);
+        await page.getByTestId('card-radio-auto').click();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('[data-card-type="agent"]')).toHaveCount(0);
+        // the host stops its analyser a few seconds after the last agent card goes
+        await page.waitForTimeout(5500);
+        await openCardSettings(page);
+        await page.getByTestId('card-radio-agent').click();
+        await page.keyboard.press('Escape');
+        await expect(bound.getByTestId('agent-row')).toHaveCount(1);
+        await expect(bound.getByTestId('agent-count')).not.toHaveAttribute('data-scanning');
+        await expect(page.getByTestId('agent-banner-notice').filter({ hasText: 'Scanning' })).toHaveCount(0);
+    });
+
     test('unfolds every uncommitted file from the summary row, with no three row cap, and folds it back', async ({ page }) => {
         await pinAgentCard(page);
         await folderBoard(page);
@@ -307,29 +350,107 @@ test.describe('Agent card', () => {
     test('draws the status line on one line with the usage folded in, and no separate usage line', async ({ page }) => {
         await agentBoard(page);
         const bound = cardFor(page, 'Agent activity card');
-        await expect(bound.getByTestId('agent-count')).toHaveText(/^1 agent, \S+t, ~\$\d/);
+        await expect(bound.getByTestId('agent-count')).toHaveText(/^1 ag, \S+t, ~\$\d/);
         await expect(bound.getByTestId('agent-usage-summary')).toHaveCount(0);
         const meta = bound.getByTestId('agent-meta-row');
         expect(await meta.evaluate(el => getComputedStyle(el).whiteSpace)).toBe('nowrap');
         expect(await meta.evaluate(el => getComputedStyle(el).overflow)).toBe('hidden');
     });
 
-    test('draws the pending commits row under the files row, in the waiting colour when there are some and grey when none or no upstream', async ({ page }) => {
+    test('draws the pending commits row under the files row, in the waiting colour when there are some and the files row grey when none or no upstream', async ({ page }) => {
         await pinAgentCard(page);
         await folderBoard(page);
         const bound = cardFor(page, 'Agent activity card');
         const pending = bound.getByTestId('agent-pending-commits');
-        const colourOf = async (): Promise<string> => pending.evaluate(el => getComputedStyle(el).color);
+        const toneOf = async (row: Locator): Promise<string> => row.evaluate(el => `${getComputedStyle(el).color}|${getComputedStyle(el).opacity}`);
         await injectActivity(page, { pending_commits: 2 });
-        await expect(pending).toHaveText('2 pending commits');
-        const waiting = await colourOf();
+        await expect(pending).toHaveText(/^2 pending commits/);
+        const waiting = await toneOf(pending);
+        await injectActivity(page, { no_uncommitted: true, pending_commits: 3 });
+        const files_row = bound.getByTestId('agent-file-bands-empty');
+        await expect(files_row).toHaveText('No uncommitted files');
+        const grey = await toneOf(files_row);
+        expect(grey).not.toBe(waiting);
         await injectActivity(page, { pending_commits: 0 });
         await expect(pending).toHaveText('No pending commits');
-        const grey = await colourOf();
-        expect(grey).not.toBe(waiting);
+        expect(await toneOf(pending)).toBe(grey);
         await injectActivity(page, { pending_commits: 'none' });
         await expect(pending).toHaveText('No upstream');
-        expect(await colourOf()).toBe(grey);
+        expect(await toneOf(pending)).toBe(grey);
+    });
+
+    test('unfolds the pending commits row to each commit\'s short hash and file count, with line totals on the collapsed summary', async ({ page }) => {
+        await pinAgentCard(page);
+        await folderBoard(page);
+        const bound = cardFor(page, 'Agent activity card');
+        const toggle = bound.getByTestId('agent-pending-commits-toggle');
+        await injectActivity(page, { pending_commits: 2 });
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(toggle).toHaveText(/^2 pending commits\s+\+120\s+-34$/);
+        await expect(bound.getByTestId('agent-pending-commit-row')).toHaveCount(0);
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        const rows = bound.getByTestId('agent-pending-commit-row');
+        await expect(rows).toHaveCount(2);
+        await expect(rows.nth(0)).toHaveText(/^abc1234\s*3 files$/);
+        await expect(rows.nth(1)).toHaveText(/^def5678\s*1 file$/);
+        await expect(bound.getByTestId('agent-pending-commits-bound')).toHaveCount(0);
+        await toggle.click();
+        await expect(rows).toHaveCount(0);
+    });
+
+    test('opens the pending commits row and the files row independently of each other', async ({ page }) => {
+        await pinAgentCard(page);
+        await folderBoard(page);
+        const bound = cardFor(page, 'Agent activity card');
+        const pending = bound.getByTestId('agent-pending-commits-toggle');
+        const files = bound.getByTestId('agent-file-band-toggle-uncommitted').first();
+        await injectActivity(page, { pending_commits: 2 });
+        await expect(files).toHaveAttribute('aria-expanded', 'false');
+        await pending.click();
+        await expect(pending).toHaveAttribute('aria-expanded', 'true');
+        await expect(files).toHaveAttribute('aria-expanded', 'false');
+        await expect(bound.getByTestId('agent-file-row')).toHaveCount(0);
+        await pending.click();
+        await files.click();
+        await expect(files).toHaveAttribute('aria-expanded', 'true');
+        await expect(pending).toHaveAttribute('aria-expanded', 'false');
+        await expect(bound.getByTestId('agent-pending-commit-row')).toHaveCount(0);
+    });
+
+    test('says the pending commit list is bounded when the branch is further ahead than it lists, and does not unfold with no detail', async ({ page }) => {
+        await pinAgentCard(page);
+        await folderBoard(page);
+        const bound = cardFor(page, 'Agent activity card');
+        await injectActivity(page, { pending_commits: 35 });
+        await bound.getByTestId('agent-pending-commits-toggle').click();
+        await expect(bound.getByTestId('agent-pending-commits-bound')).toHaveText('Showing the latest 2 of 35 pending commits');
+        await injectActivity(page, { pending_commits: 3, pending_detail: 'none' });
+        await expect(bound.getByTestId('agent-pending-commits')).toHaveText('3 pending commits');
+        await expect(bound.getByTestId('agent-pending-commits-toggle')).toHaveCount(0);
+        await injectActivity(page, { pending_commits: 0 });
+        await expect(bound.getByTestId('agent-pending-commits-toggle')).toHaveCount(0);
+    });
+
+    test('folds a clean, pushed card to one grey line, and splits the pending row back out once a commit is waiting', async ({ page }) => {
+        await pinAgentCard(page);
+        await folderBoard(page);
+        const bound = cardFor(page, 'Agent activity card');
+        const line = bound.getByTestId('agent-file-bands-empty');
+        await injectActivity(page, { no_uncommitted: true, pending_commits: 0 });
+        await expect(line).toHaveText('No uncommitted files or pending commits');
+        await expect(bound.getByTestId('agent-pending-commits')).toHaveCount(0);
+        const grey = await line.evaluate(el => `${getComputedStyle(el).color}|${getComputedStyle(el).opacity}`);
+        await injectActivity(page, { no_uncommitted: true, pending_commits: 'none' });
+        await expect(line).toHaveText('No uncommitted files, no upstream');
+        await expect(bound.getByTestId('agent-pending-commits')).toHaveCount(0);
+        await injectActivity(page, { no_uncommitted: true, pending_commits: 1 });
+        await expect(line).toHaveText('No uncommitted files');
+        await expect(bound.getByTestId('agent-pending-commits')).toHaveText(/^1 pending commit/);
+        expect(await line.evaluate(el => `${getComputedStyle(el).color}|${getComputedStyle(el).opacity}`)).toBe(grey);
+        await injectActivity(page, { pending_commits: 0 });
+        await expect(bound.getByTestId('agent-file-band-toggle-uncommitted')).toBeVisible();
+        await expect(bound.getByTestId('agent-pending-commits')).toHaveText('No pending commits');
     });
 
     test('opens an agent row and a file row from the keyboard alone', async ({ page }) => {

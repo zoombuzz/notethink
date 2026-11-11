@@ -2936,4 +2936,16 @@ describe('NotethinkEditorProvider', () => {
 			expect(handled).toEqual([expect.objectContaining({ type: 'audioFrameCheck', verdict: 'policy-refuses' })]);
 		});
 	});
+
+	describe('parse pool lifecycle', () => {
+		it('disposes the shared parse pool when the extension context subscriptions are disposed', () => {
+			const context = mockExtensionContext();
+			const local_provider = new NotethinkEditorProvider(context);
+			const pool = (local_provider as unknown as { parse_pool: { dispose: () => void } }).parse_pool;
+			const dispose_spy = jest.spyOn(pool, 'dispose');
+			expect(dispose_spy).not.toHaveBeenCalled();
+			context.subscriptions.forEach((subscription) => subscription.dispose());
+			expect(dispose_spy).toHaveBeenCalledTimes(1);
+		});
+	});
 });

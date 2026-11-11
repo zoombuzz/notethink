@@ -8,7 +8,7 @@ import styles from "../AgentNote.module.scss";
 /**
  * The status line: a state chip naming the card's winning state (the most urgent state among its
  * sessions, `useAgentNoteModel`'s `winning_state`), then how many agents are on the card and their
- * combined usage, as `1 agent, 8.2Mt, ~$12.40`. The line never wraps: a narrow card clips its end.
+ * combined usage, as `1 ag, 8.2Mt, ~$12.40`. The line never wraps: a narrow card clips its end.
  * Drawn only when the card has at least one session; a story with none says so in the banner's one
  * muted line instead.
  *
@@ -35,7 +35,7 @@ function AgentMetaRow(props: AgentMetaRowProps): React.ReactElement | null {
                   data-scanning={props.scanning ? 'true' : undefined}
                   aria-busy={props.scanning ? 'true' : undefined}
                   title={l10n.t('Tokens and estimated cost over the last 30 days of agent activity on this story')}>
-                {`${model.sessions.length === 1 ? l10n.t('1 agent') : l10n.t('{0} agents', String(model.sessions.length))}, ${formatStatusUsage(usage)}`}
+                {`${l10n.t('{0} ag', String(model.sessions.length))}, ${formatStatusUsage(usage)}`}
             </span>
         </div>
     );

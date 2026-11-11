@@ -23,20 +23,57 @@ function makeModel(overrides: Partial<AgentNoteModel> = {}): AgentNoteModel {
         committed: [],
         has_git_tree: true,
         pending_commits: undefined,
+        pending_detail: undefined,
         ...overrides,
     };
 }
 
-function draw(model: AgentNoteModel, extra: { expanded?: boolean; onToggleExpanded?: (expanded: boolean) => void } = {}): void {
+function draw(model: AgentNoteModel, extra: { expanded?: boolean; onToggleExpanded?: (expanded: boolean) => void; pendingExpanded?: boolean; onTogglePendingExpanded?: (expanded: boolean) => void } = {}): void {
     render(<AgentFileBands model={model} unavailable={undefined} onOpenDiff={jest.fn()} {...extra} />);
 }
 
 describe('AgentFileBands', () => {
 
-    it('reads nothing uncommitted as one line that does not expand', () => {
-        draw(makeModel());
-        expect(screen.getByTestId('agent-file-bands-empty')).toHaveTextContent('No uncommitted files');
+    it('reads nothing uncommitted and nothing pending as one line that does not expand', () => {
+        draw(makeModel({ pending_commits: 0 }));
+        expect(screen.getByTestId('agent-file-bands-empty')).toHaveTextContent(/^No uncommitted files or pending commits$/);
+        expect(screen.queryByTestId('agent-pending-commits')).not.toBeInTheDocument();
         expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('folds nothing uncommitted and no upstream into one line', () => {
+        draw(makeModel({ pending_commits: undefined }));
+        expect(screen.getByTestId('agent-file-bands-empty')).toHaveTextContent(/^No uncommitted files, no upstream$/);
+        expect(screen.queryByTestId('agent-pending-commits')).not.toBeInTheDocument();
+    });
+
+    it('keeps two rows when nothing is uncommitted but commits are pending', () => {
+        draw(makeModel({ pending_commits: 3 }));
+        expect(screen.getByTestId('agent-file-bands-empty')).toHaveTextContent(/^No uncommitted files$/);
+        expect(screen.getByTestId('agent-pending-commits')).toHaveTextContent('3 pending commits');
+    });
+
+    it('keeps two rows when files are uncommitted, whatever the pending state', () => {
+        for (const count of [undefined, 0]) {
+            const { unmount } = render(<AgentFileBands model={makeModel({ uncommitted: makeEntries(1), pending_commits: count })} unavailable={undefined} onOpenDiff={jest.fn()} />);
+            expect(screen.getByTestId('agent-file-band-toggle-uncommitted')).toBeInTheDocument();
+            expect(screen.getByTestId('agent-pending-commits')).toBeInTheDocument();
+            unmount();
+        }
+    });
+
+    it('keeps the no-working-tree card to the plain empty line with no pending row', () => {
+        draw(makeModel({ has_git_tree: false }));
+        expect(screen.getByTestId('agent-file-bands-empty')).toHaveTextContent(/^No uncommitted files$/);
+    });
+
+    it('shares one grey between the quiet line and the pending row, and keeps the waiting colour apart', () => {
+        draw(makeModel({ uncommitted: makeEntries(1), pending_commits: 0 }));
+        const grey_class = screen.getByTestId('agent-pending-commits').className;
+        draw(makeModel({ uncommitted: makeEntries(1), pending_commits: undefined }));
+        expect(screen.getAllByTestId('agent-pending-commits')[1].className).toBe(grey_class);
+        draw(makeModel({ uncommitted: makeEntries(1), pending_commits: 2 }));
+        expect(screen.getAllByTestId('agent-pending-commits')[2].className).not.toBe(grey_class);
     });
 
     it('collapses uncommitted files into a count with their summed line counts, and no rows', () => {
@@ -83,12 +120,95 @@ describe('AgentFileBands', () => {
             [4, '4 pending commits', 'true'],
         ];
         for (const [count, text, pending] of states) {
-            const { unmount } = render(<AgentFileBands model={makeModel({ pending_commits: count })} unavailable={undefined} onOpenDiff={jest.fn()} />);
+            const { unmount } = render(<AgentFileBands model={makeModel({ uncommitted: makeEntries(1), pending_commits: count })} unavailable={undefined} onOpenDiff={jest.fn()} />);
             expect(screen.getByTestId('agent-pending-commits')).toHaveTextContent(new RegExp(`^${text}$`));
             expect(screen.getByTestId('agent-pending-commits')).toHaveAttribute('data-pending', pending);
             unmount();
         }
-        draw(makeModel({ has_git_tree: false }));
+        draw(makeModel({ uncommitted: makeEntries(1), has_git_tree: false }));
         expect(screen.queryByTestId('agent-pending-commits')).not.toBeInTheDocument();
+    });
+
+    describe('pending commit detail', () => {
+        const DETAIL = [
+            { short_sha: 'abc1234', files: 3, added: 100, removed: 4 },
+            { short_sha: 'def5678', files: 1, added: 20, removed: 30 },
+        ];
+
+        it('stays a plain line with pending commits but no detail', () => {
+            draw(makeModel({ pending_commits: 2 }), { onTogglePendingExpanded: jest.fn() });
+            expect(screen.queryByTestId('agent-pending-commits-toggle')).not.toBeInTheDocument();
+            expect(screen.getByTestId('agent-pending-commits')).toHaveTextContent(/^2 pending commits$/);
+        });
+
+        it('stays a plain line with no pending commits or no upstream, whatever the detail says', () => {
+            for (const count of [0, undefined]) {
+                const { unmount } = render(<AgentFileBands model={makeModel({ uncommitted: makeEntries(1), pending_commits: count, pending_detail: DETAIL })} unavailable={undefined} onOpenDiff={jest.fn()} onTogglePendingExpanded={jest.fn()} />);
+                expect(screen.queryByTestId('agent-pending-commits-toggle')).not.toBeInTheDocument();
+                unmount();
+            }
+        });
+
+        it('folds to one summary with the line totals across the listed commits, collapsed by default', () => {
+            draw(makeModel({ pending_commits: 2, pending_detail: DETAIL }), { pendingExpanded: false, onTogglePendingExpanded: jest.fn() });
+            const toggle = screen.getByTestId('agent-pending-commits-toggle');
+            expect(toggle).toHaveTextContent(/^2 pending commits\s+\+120\s+-34$/);
+            expect(toggle).toHaveAttribute('aria-expanded', 'false');
+            expect(toggle).not.toHaveAttribute('title');
+            expect(screen.queryAllByTestId('agent-pending-commit-row')).toHaveLength(0);
+        });
+
+        it('asks the card to unfold, then lists each commit with its short hash and file count', () => {
+            const onToggle = jest.fn();
+            draw(makeModel({ pending_commits: 2, pending_detail: DETAIL }), { pendingExpanded: false, onTogglePendingExpanded: onToggle });
+            fireEvent.click(screen.getByTestId('agent-pending-commits-toggle'));
+            expect(onToggle).toHaveBeenCalledWith(true);
+        });
+
+        it('lists every commit when expanded, with 1 file singular and no bound line when unbounded', () => {
+            draw(makeModel({ pending_commits: 2, pending_detail: DETAIL }), { pendingExpanded: true, onTogglePendingExpanded: jest.fn() });
+            const rows = screen.getAllByTestId('agent-pending-commit-row');
+            expect(rows).toHaveLength(2);
+            expect(rows[0]).toHaveTextContent('abc1234');
+            expect(rows[0]).toHaveTextContent('3 files');
+            expect(rows[1]).toHaveTextContent('1 file');
+            expect(rows[1]).not.toHaveTextContent('1 files');
+            expect(screen.queryByTestId('agent-pending-commits-bound')).not.toBeInTheDocument();
+        });
+
+        it('says so when the list is bounded, and says how many commits the line totals cover', () => {
+            draw(makeModel({ pending_commits: 35, pending_detail: DETAIL }), { pendingExpanded: true, onTogglePendingExpanded: jest.fn() });
+            expect(screen.getByTestId('agent-pending-commits-bound')).toHaveTextContent('Showing the latest 2 of 35 pending commits');
+            expect(screen.getByTestId('agent-pending-commits-toggle')).toHaveAttribute('title', 'Line counts cover 2 of 35 pending commits');
+        });
+
+        it('lists a commit whose figures could not be read by its hash alone, and leaves it out of the totals', () => {
+            draw(makeModel({ pending_commits: 2, pending_detail: [{ short_sha: 'abc1234' }, DETAIL[1]] }), { pendingExpanded: true, onTogglePendingExpanded: jest.fn() });
+            expect(screen.getAllByTestId('agent-pending-commit-row')[0]).toHaveTextContent(/^abc1234$/);
+            expect(screen.getByTestId('agent-pending-commits-toggle')).toHaveTextContent(/\+20\s+-30$/);
+            expect(screen.getByTestId('agent-pending-commits-toggle')).toHaveAttribute('title', 'Line counts cover 1 of 2 pending commits');
+        });
+
+        it('omits the totals when no listed commit was diffed', () => {
+            draw(makeModel({ pending_commits: 1, pending_detail: [{ short_sha: 'abc1234', files: 2 }] }), { pendingExpanded: false, onTogglePendingExpanded: jest.fn() });
+            expect(screen.queryByTestId('agent-pending-commits-line-diff')).not.toBeInTheDocument();
+        });
+        it('keeps the pending row and the files row independent: each reads and asks on its own props', () => {
+            const onToggleFiles = jest.fn();
+            const onTogglePending = jest.fn();
+            draw(makeModel({ uncommitted: makeEntries(2), pending_commits: 2, pending_detail: DETAIL }), { expanded: true, onToggleExpanded: onToggleFiles, pendingExpanded: false, onTogglePendingExpanded: onTogglePending });
+            expect(screen.getByTestId('agent-file-band-toggle-uncommitted')).toHaveAttribute('aria-expanded', 'true');
+            expect(screen.getByTestId('agent-pending-commits-toggle')).toHaveAttribute('aria-expanded', 'false');
+            expect(screen.queryAllByTestId('agent-pending-commit-row')).toHaveLength(0);
+            fireEvent.click(screen.getByTestId('agent-pending-commits-toggle'));
+            expect(onTogglePending).toHaveBeenCalledWith(true);
+            expect(onToggleFiles).not.toHaveBeenCalled();
+        });
+
+        it('draws the pending commits open while the files row is closed', () => {
+            draw(makeModel({ uncommitted: makeEntries(2), pending_commits: 2, pending_detail: DETAIL }), { expanded: false, onToggleExpanded: jest.fn(), pendingExpanded: true, onTogglePendingExpanded: jest.fn() });
+            expect(screen.getByTestId('agent-file-band-toggle-uncommitted')).toHaveAttribute('aria-expanded', 'false');
+            expect(screen.getAllByTestId('agent-pending-commit-row')).toHaveLength(2);
+        });
     });
 });

@@ -47,6 +47,8 @@ export class NotethinkEditorProvider implements vscode.CustomTextEditorProvider 
 	) {
 		this.activity_analyser = new AgentAnalyser(context);
 		this.parse_pool = new ParsePool(context);
+		// the provider owns the pool, so it registers the pool's disposal at extension deactivation
+		context.subscriptions.push({ dispose: () => this.parse_pool.dispose() });
 	}
 
 	public sendCommandToActiveWebview(command: string, payload?: Record<string, unknown>): void {

@@ -522,21 +522,18 @@ button.agentTwisty {
   }
 }
 
-// grey with nothing pending, and the "Waiting on you" colour with something
-.pendingCommits {
-  margin: 0;
-  font-size: 0.85em;
-  color: var(--nt-agent-idle);
-
-  &[data-pending="true"] {
-    color: var(--nt-agent-waiting);
-  }
-}
-
-.fileBandEmpty {
+// the one grey every quiet row of the files and pending rows shares, so the two cannot drift apart
+.quietRow {
   margin: 0;
   font-size: 0.85em;
   opacity: 0.55;
+}
+
+// the "Waiting on you" colour, for local commits not yet pushed
+.pendingCommits {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--nt-agent-waiting);
 }
 
 .fileRowButton {
@@ -591,6 +588,24 @@ button.agentTwisty {
   text-overflow: ellipsis;
   direction: rtl;
   text-align: left;
+}
+
+// the expandable pending row takes the waiting colour on its whole band, so the summary button and the list under it share it
+.pendingCommitsBand {
+  color: var(--nt-agent-waiting);
+}
+
+// a pending commit under the pending row: short sha then its file count, indented under the chevron like a file row
+.pendingCommitRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 6px 2px 24px;
+  font-size: 0.85em;
+}
+
+.commitSha {
+  font-family: var(--vscode-editor-font-family, monospace);
 }
 
 // a commit row has no action, so it is laid out as the file row's button is but drawn as plain text: vendor, subject, short sha

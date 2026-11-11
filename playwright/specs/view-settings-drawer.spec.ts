@@ -591,8 +591,8 @@ test.describe('View settings drawer', () => {
     test('dragging a group chip while an automatic order is selected switches the select to Custom, seeded from the order on screen', async ({ page }) => {
         await showKanbanSettings(page);
         await page.getByTestId('setting-control-groupOrder').selectOption('alphabetical');
-        // alphabetical ignores the saved order entirely; untagged still stays last
-        await expect.poll(async () => groupDisplayChipValues(page)).toEqual(['code-review', 'doing', 'done', 'testing', 'untagged']);
+        // alphabetical ignores the saved order entirely; untagged still stays last, and the chips are the groups on the board
+        await expect.poll(async () => groupDisplayChipValues(page)).toEqual(['doing', 'done', 'untagged']);
 
         const chips = page.getByTestId(/^group-display-chip-/);
         await centreInDrawer(chips.first());
@@ -611,6 +611,6 @@ test.describe('View settings drawer', () => {
         }).toBeUndefined();
         await expect(page.getByTestId('setting-control-groupOrder')).toHaveValue('custom');
         // the written order is the alphabetical list with the dragged chip moved, not whatever a stale custom order held
-        await expect.poll(async () => groupDisplayChipValues(page)).toEqual(['doing', 'code-review', 'done', 'testing', 'untagged']);
+        await expect.poll(async () => groupDisplayChipValues(page)).toEqual(['done', 'doing', 'untagged']);
     });
 });

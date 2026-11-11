@@ -6,6 +6,7 @@ import {
     attributedCommits,
     unattributedCommits,
     attributedFiles,
+    isAgentCardScanDone,
     sessionForUnboundKey,
     sessionStateOf,
     sessionsForStory,
@@ -15,12 +16,13 @@ import {
     unattributedFiles,
     type ActivityAnalyserState,
     type ActivityRefusal,
+    type ActivityScanProgress,
     type ActivitySessionState,
     type ActivitySnapshot,
     type ActivityStoryKey,
 } from "../../../lib/agentactivityops";
 import { virtualNoteKeyOf } from "../../../lib/virtualnoteops";
-import type { ActivityChangedFile, ActivityCommit, ActivityState } from "../../../types/AgentActivity";
+import type { ActivityChangedFile, ActivityCommit, ActivityPendingCommit, ActivityState } from "../../../types/AgentActivity";
 import type { NoteProps } from "../../../types/NoteProps";
 
 /*
@@ -66,13 +68,19 @@ export interface AgentCommitEntry {
  * - winning_state: the most urgent state among `sessions`, undefined on a card drawing none; the meta-row chip is coloured and labelled by it
  * - has_git_tree: the analyser has read a working tree for this note's repository, so the pending commits row has something to state
  * - pending_commits: local commits not yet pushed, the branch's ahead count; undefined when the branch has no upstream, or when `has_git_tree` is false
+ * - pending_detail: the newest pending commits, newest first, bounded; undefined until a scan has read them
  * - has_completed_scan: true once a 'live' snapshot has ever landed; distinguishes an empty first
  *   scan from a later rescan that must not blank an already-populated card
+ * - scan_done: this card's own scan is over, whether or not the whole first scan is: a scan has completed,
+ *   or every session that could belong to this card's repository has been read
+ * - scan_progress: the first scan's tally of sessions read out of sessions found, while it runs
  */
 export interface AgentNoteModel {
     heard_from_host: boolean;
     analyser: ActivityAnalyserState | undefined;
     has_completed_scan: boolean;
+    scan_done: boolean;
+    scan_progress: ActivityScanProgress | undefined;
     refusals: ActivityRefusal[];
     unreadable_session_ids: string[];
     is_virtual: boolean;
@@ -84,6 +92,7 @@ export interface AgentNoteModel {
     committed: AgentCommitEntry[];
     has_git_tree: boolean;
     pending_commits: number | undefined;
+    pending_detail: ActivityPendingCommit[] | undefined;
 }
 
 /** the sessions one note draws: the single minted-for session on a virtual note, else every agent whose own write calls bound it to this story */
@@ -136,6 +145,8 @@ export function useAgentNoteModel(note: NoteProps): AgentNoteModel {
             heard_from_host: snapshot !== undefined,
             analyser: snapshot?.analyser,
             has_completed_scan,
+            scan_done: isAgentCardScanDone(snapshot?.analyser, tree?.root_path, has_completed_scan),
+            scan_progress: snapshot?.analyser.progress,
             refusals: snapshot?.analyser.refusals ?? [],
             unreadable_session_ids: [...new Set((snapshot?.analyser.refusals ?? []).map(r => r.session_id).filter((id): id is string => id !== undefined))],
             is_virtual: virtualNoteKeyOf(note, AGENT_VIRTUAL_NAMESPACE) !== undefined,
@@ -147,6 +158,7 @@ export function useAgentNoteModel(note: NoteProps): AgentNoteModel {
             committed: committedEntriesFor(tree, sessions),
             has_git_tree: tree !== undefined,
             pending_commits: tree?.tree.pending_commits,
+            pending_detail: tree?.tree.pending_detail,
         };
     }, [snapshot, note, fallback_doc_path, has_completed_scan]);
 }

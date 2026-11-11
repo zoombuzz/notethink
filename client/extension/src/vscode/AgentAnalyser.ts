@@ -5,8 +5,11 @@ import { bestAliasMapping, remapUnderRoot, type AliasRootMapping } from '../lib/
 import {
     buildActivitySnapshot,
     emptyAnalyserState,
+    rootsWithNothingLeftToRead,
+    scopeMayBelongTo,
     unreadableSessionIds,
     type ActivityAnalyserState,
+    type AgentCandidateScope,
     type ActivityRefusal,
     type ActivitySessionState,
     type ActivityTreeState,
@@ -17,14 +20,16 @@ import { REGISTRY_FILE_MAX_BYTES, REGISTRY_MAX_AGENTS, overlayRegistry, parseReg
 import { PROGRESS_FILE_MAX_BYTES, THINKERSYNC_HOME_SEGMENTS, parseProgressFile, progressFileSegments, progressForRepository, progressProjectName } from '../lib/progressfileops';
 import { attributeCommitsToSessions, attributeFilesToSessions, type AgentCommitCall, type AgentWriteCall } from '../lib/agentgitattributionops';
 import { lineDiffFromBytes, type LineDiffCounts } from '../lib/agentlinediffops';
+import { parseScanCache, scanCacheFileNameFor, serialiseScanCache, type AgentFileIdentity } from '../lib/agentscancacheops';
 import type { AgentPricedUsageEntry } from '../lib/agentpricingops';
-import { readLineDiffSides, readRepositoryTree, resolveGitApi, type GitApi, type GitRepository } from './agentgitops';
+import { looseObjectReader, readLineDiffSides, readPendingCommitsOf, readRepositoryTree, resolveGitApi, upstreamCommitOf, type GitApi, type GitRepository, type LineDiffSides } from './agentgitops';
+import { splitObject, type GitObjectReader, type PendingCommitChange } from '../lib/agentgitobjectops';
 import type { GitReflogCommit } from '../lib/agentgitreflogops';
 import { findStoryInDocs, isBoardPath, siblingBoardPath, storiesForWriteCall, type StoryBindingWriteCall, type StoryDocument } from '../lib/agentstorybindingops';
 import { sliceTail, type TailBookmark } from '../lib/agenttailparseops';
 import type { AgentAnalyserRawFile, AgentAnalyserResolvedCall, AgentAnalyserWorkerJob, AgentAnalyserWorkerRequest, AgentAnalyserWorkerResponse, AgentAnalyserWorkerSessionOutput, AgentLineDiffJob, AgentVendorId } from './AgentAnalyserWorker';
 import { AgentAnalyserWorkerPool, defaultAgentAnalyserPoolSize } from './AgentAnalyserWorkerPool';
-import { addActivityUsage, emptyActivityUsage, type ActivityChangedFile, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
+import { ACTIVITY_PENDING_DETAIL_MAX, addActivityUsage, emptyActivityUsage, type ActivityChangedFile, type ActivityPendingCommit, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
 import type { HashMapOf } from '../types/general';
 
 // only sessions with activity inside this window count toward what a story's card draws
@@ -56,6 +61,8 @@ const AGENT_BATCH_MAX_JOBS = 64;
 const AGENT_BATCH_TARGET_BYTES_PER_WORKER = 32 * 1024 * 1024;
 // a credited file is always diffed; an uncredited one only until a repo's uncommitted band reaches this many diffed files
 const AGENT_LINE_DIFF_MAX_FILES_PER_REPO = 20;
+// files diffed across one repository's pending commits per scan; a commit past the budget lists without line totals
+const AGENT_PENDING_DIFF_MAX_FILES_PER_REPO = 60;
 // concurrent diff-side reads per repository; each HEAD side is a git show, so an unbounded burst only queues
 const AGENT_LINE_DIFF_READ_CONCURRENCY = 8;
 /**
@@ -66,6 +73,8 @@ const AGENT_LINE_DIFF_READ_CONCURRENCY = 8;
  * in the worker at once.
  */
 const AGENT_TAIL_CACHE_RECENT_MS = 10 * 60 * 1000;
+// a first scan saves its read cache at most this often, so an interrupted one resumes without a large write per batch
+const AGENT_SCAN_CACHE_SAVE_INTERVAL_MS = 15_000;
 // how far above a remote workspace folder resolveVendorHome climbs looking for a vendor directory
 const AGENT_REMOTE_HOME_PROBE_MAX_DEPTH = 8;
 // the conventional multi-user home roots tried when no ancestor of the workspace folder qualifies
@@ -98,28 +107,6 @@ interface DiscoveredJob extends AgentAnalyserWorkerJob {
     identity: AgentFileIdentity[];
 }
 
-/**
- * One file's stat as it bears on whether a session needs re-reading: unchanged mtime AND size means
- * the file's content is unchanged.
- * - path: the bare `uri.path`, used only as a stable cache key (`sessionUnchanged`, `tail_state`,
- *   the line-diff cache); it carries no scheme or authority, so it is never rebuilt into a `vscode.Uri`
- * - uri_string: this file's full URI, scheme and authority included, as `uri.toString()` - the only
- *   form that survives a structured-clone boundary (this identity rides along in a worker job) intact,
- *   so a re-read goes through `vscode.Uri.parse(uri_string)` rather than `vscode.Uri.file(path)`, which
- *   always means the LOCAL disk even in a Remote-SSH window
- * - appendable: true for an append-only JSONL transcript (every main transcript, every Claude Code
- *   subagent transcript, Grok's events.jsonl), which is what makes tail-slicing safe; false for a file
- *   a vendor rewrites whole each time it changes (Grok's usage.json), which is always read and sent in
- *   full and never tracked in `tail_state`
- */
-interface AgentFileIdentity {
-    path: string;
-    uri_string: string;
-    mtime: number;
-    size: number;
-    appendable: boolean;
-}
-
 // a Claude Code session found changed by the stat pass, not yet read; read closes over it until its batch's turn
 interface ClaudeCodeCandidate {
     session_id: string;
@@ -135,10 +122,13 @@ interface ClaudeCodeCandidate {
  * One changed session, stat only. `identity` sorts by recency and estimates batch size before
  * anything is read; `read` is a per-vendor closure, invoked once this candidate's batch is chosen,
  * so a batch's read cost is paid only when it is actually read.
+ * - scope: where the session could belong, from its folder name alone (`AgentCandidateScope`); absent
+ *   for a Codex rollout, which reveals its directory only once read
  */
 interface DiscoveryCandidate {
     vendor: AgentVendorId;
     session_id: string;
+    scope?: AgentCandidateScope;
     identity: AgentFileIdentity[];
     read: () => Promise<{ job: DiscoveredJob; bytes_read: number } | undefined>;
 }
@@ -293,6 +283,8 @@ export class AgentAnalyser {
     private readonly subscribers = new Set<PostFn>();
     private demand_count = 0;
     private stop_timer: ReturnType<typeof setTimeout> | undefined;
+    // the grace elapsed while a scan was running: the analyser stops once that scan ends, never part way through it
+    private stop_after_scan = false;
     private rescan_timer: ReturnType<typeof setTimeout> | undefined;
     private running = false;
     // true once the first scan ever completes, never cleared: decides whether a scan's progress is shown at all
@@ -311,6 +303,11 @@ export class AgentAnalyser {
     private git_api: GitApi | undefined;
     private git_failure_logged = false;
     private readonly warned_unreadable = new Set<string>();
+    // where the persisted read cache lives for the resolved vendor home; undefined when this host offers no storage
+    private scan_cache_uri: vscode.Uri | undefined;
+    private scan_cache_dirty = false;
+    private scan_cache_saved_ms = 0;
+    private scan_cache_saving = false;
     // keyed by session_id: the file stats that produced `output`, so an unchanged session skips re-reading and re-parsing
     private readonly file_cache = new Map<string, { files: AgentFileIdentity[]; output: AgentAnalyserWorkerSessionOutput }>();
     // keyed by `${session_id}\0${path}`; a file with no entry here is read whole the next time it changes
@@ -321,6 +318,8 @@ export class AgentAnalyser {
     private pending_worker_evictions: string[] = [];
     // keyed by `${root_path}\0${file_path}`; an unchanged file's added/removed counts are reused rather than re-diffed
     private readonly line_diff_cache = new Map<string, LineDiffCacheEntry>();
+    // keyed by repository root; `key` is what made the detail still good: HEAD, the upstream's sha and the ahead count
+    private readonly pending_detail_cache = new Map<string, { key: string; detail: ActivityPendingCommit[] | undefined }>();
     // one entry per session folded, keyed by session_id: skips re-folding while its boards are unchanged
     private readonly session_fold_cache = new Map<string, SessionFoldCache>();
     // keyed by board doc_path: the last text seen and a version bumped on each change, so signatures stay small
@@ -355,6 +354,7 @@ export class AgentAnalyser {
         this.subscribers.add(post);
         this.demand_count++;
         if (this.stop_timer !== undefined) { clearTimeout(this.stop_timer); this.stop_timer = undefined; }
+        this.stop_after_scan = false;
         if (!this.running) { this.startRunning(); }
         post(this.currentMessage());
     }
@@ -365,7 +365,11 @@ export class AgentAnalyser {
         this.demand_count = Math.max(0, this.demand_count - 1);
         if (this.demand_count > 0) { return; }
         if (this.stop_timer !== undefined) { clearTimeout(this.stop_timer); }
-        this.stop_timer = setTimeout(() => { this.stopRunning(); }, AGENT_STOP_GRACE_MS);
+        this.stop_timer = setTimeout(() => {
+            this.stop_timer = undefined;
+            if (this.scan_in_progress) { this.stop_after_scan = true; return; }
+            this.stopRunning();
+        }, AGENT_STOP_GRACE_MS);
         (this.stop_timer as unknown as { unref?: () => void }).unref?.();
     }
 
@@ -389,6 +393,7 @@ export class AgentAnalyser {
         this.subscribers.clear();
         this.demand_count = 0;
         if (this.stop_timer !== undefined) { clearTimeout(this.stop_timer); this.stop_timer = undefined; }
+        this.stop_after_scan = false;
         this.stopRunning();
     }
 
@@ -422,6 +427,8 @@ export class AgentAnalyser {
         }
         this.vendor_home = resolved.home;
         writeToLog('resolveVendorHome', `resolved agent vendor home: ${resolved.description}`);
+        await this.loadScanCache(resolved.home);
+        if (!this.running) { return; }
         this.armWatchers(resolved.home);
         this.scheduleScan(0);
     }
@@ -583,6 +590,8 @@ export class AgentAnalyser {
         for (const watcher of this.watchers) { watcher.dispose(); }
         this.watchers.length = 0;
         this.pool.dispose();
+        // disposal drops every worker's line cache, so a bookmark recorded before it must never resume against a fresh worker
+        this.worker_generation++;
     }
 
     /**
@@ -647,6 +656,55 @@ export class AgentAnalyser {
         if (this.running) { this.scheduleScan(AGENT_RESCAN_INTERVAL_MS); }
     }
 
+    // --- the persisted read cache ---
+
+    /**
+     * Seeds `file_cache` from the store kept for this vendor home, so the first scan after a window
+     * restart finds every unchanged session already read and reads only what changed. Skipped when the
+     * cache is already warm in this host (a stop and restart keeps it in memory) or the host offers no
+     * storage. A missing, unreadable, mismatched or corrupt store changes nothing: the scan reads what
+     * it has to and the next save replaces the store.
+     */
+    private async loadScanCache(home: ResolvedAgentVendorHome): Promise<void> {
+        const storage = this.context.globalStorageUri;
+        if (!storage) { this.scan_cache_uri = undefined; return; }
+        this.scan_cache_uri = vscode.Uri.joinPath(storage, scanCacheFileNameFor(home.home.toString()));
+        if (this.file_cache.size > 0) { return; }
+        let bytes: Uint8Array;
+        try { bytes = await vscode.workspace.fs.readFile(this.scan_cache_uri); }
+        catch { return; }
+        const entries = parseScanCache<AgentAnalyserWorkerSessionOutput>(new TextDecoder().decode(bytes), Date.now(), AGENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+        for (const entry of entries) {
+            if (!this.file_cache.has(entry.session_id)) { this.file_cache.set(entry.session_id, { files: entry.files, output: entry.output }); }
+        }
+        writeToLogAtLevel('debug', 'loadScanCache', `loaded ${entries.length} session(s) from the persisted read cache`);
+    }
+
+    /**
+     * Writes `file_cache` to this vendor home's store when it has changed since the last write,
+     * leaving out sessions that have left the 30 day window so the store stays bounded. One write at a
+     * time, and a failed write is logged and tried again on the next change, never thrown.
+     */
+    private async saveScanCache(): Promise<void> {
+        const uri = this.scan_cache_uri;
+        const storage = this.context.globalStorageUri;
+        if (!uri || !storage || !this.scan_cache_dirty || this.scan_cache_saving) { return; }
+        this.scan_cache_saving = true;
+        this.scan_cache_dirty = false;
+        this.scan_cache_saved_ms = Date.now();
+        try {
+            const entries = Array.from(this.file_cache, ([session_id, cached]) => ({ session_id, files: cached.files, output: cached.output }));
+            const text = serialiseScanCache(entries, Date.now(), AGENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+            await vscode.workspace.fs.createDirectory(storage);
+            await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(text));
+        } catch (err) {
+            this.scan_cache_dirty = true;
+            writeToErrorLog('saveScanCache', 'agent scan cache could not be written', err);
+        } finally {
+            this.scan_cache_saving = false;
+        }
+    }
+
     // --- scanning ---
 
     /**
@@ -667,7 +725,12 @@ export class AgentAnalyser {
             this.scan_in_progress = false;
             this.last_scan_ended_ms = Date.now();
             this.last_scan_duration_ms = this.last_scan_ended_ms - attempt_started_ms;
-            if (this.rescan_requested) {
+            const stop_now = this.stop_after_scan && this.demand_count === 0;
+            this.stop_after_scan = false;
+            if (stop_now) {
+                this.rescan_requested = false;
+                this.stopRunning();
+            } else if (this.rescan_requested) {
                 this.rescan_requested = false;
                 this.scheduleScan(this.minScanDelayMs());
             }
@@ -713,6 +776,7 @@ export class AgentAnalyser {
         const now_ms = scan_started_ms;
         const window_start_ms = now_ms - AGENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
         const previous_sessions = this.sessions;
+        const first_scan = !this.has_shown_live;
         // discovery (stat-only), story documents and git trees are independent, so they run together ahead of the first batch
         const [{ candidates: discovered, reused, live_status, live_names, stat_ms }, { value: story_docs, ms: story_docs_ms }, { value: reads, ms: git_trees_ms }] = await Promise.all([
             this.discoverJobs(now_ms, window_start_ms),
@@ -721,8 +785,7 @@ export class AgentAnalyser {
         ]);
         const progress = await this.readProgress(vendor_home, reads);
         const registry_agents = await this.readRegistry(vendor_home, reads);
-        // newest first: Codex's own discovery walks date directories oldest-first, so this sort establishes real recency
-        const candidates = [...discovered].sort((a, b) => b.identity[0].mtime - a.identity[0].mtime);
+        const candidates = this.orderCandidates(discovered, reads);
         // a scan with nothing to read still makes one round trip (carrying pending evictions), so a worker failure is still caught
         const batches = candidates.length > 0 ? this.buildBatches(candidates) : [[]];
         const phases = this.initScanPhaseTotals(stat_ms ?? 0, reused.length, story_docs_ms, git_trees_ms, batches.length);
@@ -736,6 +799,9 @@ export class AgentAnalyser {
         const board_versions = this.boardVersions(story_docs);
         // read-ahead by one batch: batch N+1 reads while batch N's round trip, fold and post are still running
         let pending_read = this.startBatchRead(batches, 0);
+        // sessions found this scan: reused ones need no read, so only the candidates still have to be worked through
+        const sessions_found = reused.length + candidates.length;
+        let candidates_done = 0;
         for (let batch_index = 0; batch_index < batches.length; batch_index++) {
             const is_last_batch = batch_index === batches.length - 1;
             const { started_ms: read_started_ms, promise: read_promise } = pending_read;
@@ -749,6 +815,7 @@ export class AgentAnalyser {
                 phases.bytes_read += result.bytes_read;
             }
             phases.sessions_read += batch.length;
+            candidates_done += batches[batch_index].length;
             phases.bytes_transferred += batch.reduce((sum, job) => sum + this.jobBytes(job), 0);
             const worker_started_ms = Date.now();
             const response = await this.sendToWorker(batch);
@@ -779,6 +846,7 @@ export class AgentAnalyser {
                 this.progress = progress;
                 this.state = emptyAnalyserState(is_last_batch ? 'live' : 'scanning');
                 this.state.refusals = refusals;
+                if (!is_last_batch) { this.noteScanProgress(this.state, batches.slice(batch_index + 1).flat(), reused.length + candidates_done, sessions_found, reads); }
                 const post_started_ms = Date.now();
                 this.postToAll();
                 phases.posting_ms += Date.now() - post_started_ms;
@@ -788,15 +856,29 @@ export class AgentAnalyser {
                     phases.live_post_ms = Date.now() - scan_started_ms;
                 }
             }
+            if (first_scan) {
+                writeToLogAtLevel('debug', 'runScanBatch', `first scan batch ${batch_index + 1} of ${batches.length}: ${reused.length + candidates_done} of ${sessions_found} session(s) read, ${Date.now() - scan_started_ms}ms in`);
+                if (!is_last_batch && Date.now() - this.scan_cache_saved_ms >= AGENT_SCAN_CACHE_SAVE_INTERVAL_MS) { void this.saveScanCache(); }
+            }
         }
         await this.postFreshLineDiffs(reads, write_calls_by_repo, commit_calls_by_repo, phases);
         // this attempt ended with no batch failure, so a future failure starts counting from zero
         this.consecutive_scan_failures = 0;
         this.pruneFileCache(sessions_seen_this_scan);
+        await this.saveScanCache();
         this.logSessionChanges(previous_sessions, this.sessions);
         // logged even with nothing found, so that reads differently from "never ran"; bytes_transferred is what tail-slicing sent
         writeToLogAtLevel('debug', 'runScan', this.scanTimingLine(vendor_home, phases, Date.now() - scan_started_ms));
         if (this.running) { this.scheduleScan(AGENT_RESCAN_INTERVAL_MS); }
+    }
+
+    /**
+     * Stamps a still-scanning state with the first scan's tally and the repositories it is already
+     * finished with: a repository is finished once no session left to read could belong to it.
+     */
+    private noteScanProgress(state: ActivityAnalyserState, remaining: ReadonlyArray<DiscoveryCandidate>, sessions_read: number, sessions_found: number, reads: HashMapOf<RepositoryRead>): void {
+        state.progress = { sessions_read, sessions_found };
+        state.done_roots = rootsWithNothingLeftToRead(Object.keys(reads), remaining.map(candidate => candidate.scope));
     }
 
     /**
@@ -855,6 +937,18 @@ export class AgentAnalyser {
         return `scanned ${vendor_home.claudeCode}, ${vendor_home.codex}, ${vendor_home.grok}: ${sessions_read + reused_count} session(s) (${sessions_read} read, ${reused_count} skipped), ${bytes_read} byte(s) read, ${bytes_transferred} byte(s) transferred, total ${elapsed_ms}ms across ${batch_count} batch(es) (discovery ${discovery_ms}ms, reading ${reading_ms}ms, parsing ${parsing_ms}ms, fold ${fold_ms}ms [story docs ${story_docs_ms}ms, git trees ${git_trees_ms}ms, binding ${binding_ms}ms (${binding_cache_hits} cache hit(s), ${binding_cache_misses} miss(es)), attribution ${attribution_ms}ms, line diffs ${line_diff_ms}ms], posting ${posting_ms}ms, first post ${first_post_ms ?? elapsed_ms}ms, live post ${live_post_ms ?? elapsed_ms}ms)`;
     }
 
+    /**
+     * The order sessions are read in: those that could belong to an open repository or workspace folder
+     * first (a session of unknown scope counts, since it could), newest first within each group, so the
+     * cards on screen finish before history belonging to other folders is read. Codex's own discovery
+     * walks date directories oldest-first, so the mtime sort is what establishes real recency.
+     */
+    private orderCandidates(discovered: ReadonlyArray<DiscoveryCandidate>, reads: HashMapOf<RepositoryRead>): DiscoveryCandidate[] {
+        const open_paths = [...(vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.path), ...Object.keys(reads)];
+        const groups = new Map(discovered.map(candidate => [candidate, open_paths.some(open_path => scopeMayBelongTo(candidate.scope, open_path)) ? 0 : 1] as const));
+        return [...discovered].sort((a, b) => groups.get(a)! - groups.get(b)! || b.identity[0].mtime - a.identity[0].mtime);
+    }
+
     // candidates split by count and size before anything is read: a small first batch, then pool-sized batches
     private buildBatches(candidates: DiscoveryCandidate[]): DiscoveryCandidate[][] {
         const batches: DiscoveryCandidate[][] = [];
@@ -902,7 +996,7 @@ export class AgentAnalyser {
         const output_by_id = new Map(outputs.map(output => [output.session_id, output]));
         for (const job of jobs) {
             const output = output_by_id.get(job.session_id);
-            if (output) { this.file_cache.set(job.session_id, { files: job.identity, output }); }
+            if (output) { this.file_cache.set(job.session_id, { files: job.identity, output }); this.scan_cache_dirty = true; }
         }
     }
 
@@ -917,6 +1011,7 @@ export class AgentAnalyser {
         for (const session_id of this.file_cache.keys()) {
             if (seen.has(session_id)) { continue; }
             this.file_cache.delete(session_id);
+            this.scan_cache_dirty = true;
             this.session_fold_cache.delete(session_id);
             this.evictTailStateFor(session_id);
             this.pending_worker_evictions.push(session_id);
@@ -1347,7 +1442,8 @@ export class AgentAnalyser {
             const committed = attributeCommitsToSessions(read.reflog, commit_calls_by_repo.get(root_path) ?? []);
             attribution_ms += Date.now() - attribution_started_ms;
             const uncommitted = await this.applyLineDiffs(root_path, read.repository, attributed_uncommitted, compute_fresh_line_diffs);
-            return [root_path, { root_path, root_relative: read.root_relative, tree: { ...read.tree, uncommitted, committed } }];
+            const pending_detail = await this.pendingDetailFor(root_path, read.repository, compute_fresh_line_diffs);
+            return [root_path, { root_path, root_relative: read.root_relative, tree: { ...read.tree, uncommitted, committed, pending_detail } }];
         }));
         // attribution is synchronous, so its spans never overlap; line diffs overlap across roots and take the remaining wall time
         phases.attribution_ms += attribution_ms;
@@ -1384,6 +1480,71 @@ export class AgentAnalyser {
         return files.map(file => {
             const result = results.get(file.path);
             return result ? { ...file, added: result.added, removed: result.removed } : file;
+        });
+    }
+
+    /**
+     * The newest pending commits with their file and line figures. Like the uncommitted files' line
+     * counts it costs object reads, so only the scan's fresh pass computes it; every earlier batch
+     * answers from the last computed list while HEAD, the upstream and the ahead count are unchanged,
+     * and from nothing otherwise.
+     */
+    private async pendingDetailFor(root_path: string, repository: GitRepository, compute_fresh: boolean): Promise<ActivityPendingCommit[] | undefined> {
+        const state = repository.state;
+        const key = `${state.HEAD?.commit ?? ''}|${upstreamCommitOf(state) ?? ''}|${state.HEAD?.ahead ?? ''}`;
+        const cached = this.pending_detail_cache.get(root_path);
+        if (cached?.key === key) { return cached.detail; }
+        if (!compute_fresh) { return undefined; }
+        const detail = await this.computePendingDetail(repository);
+        this.pending_detail_cache.set(root_path, { key, detail });
+        return detail;
+    }
+
+    // a blob's bytes; undefined for a side that does not exist, 'declined' for one that should exist and cannot be read
+    private async readBlobBytes(read: GitObjectReader, sha: string | undefined): Promise<Uint8Array | undefined | 'declined'> {
+        if (!sha) { return undefined; }
+        const object = await read(sha);
+        const split = object ? splitObject(object) : undefined;
+        return split?.type === 'blob' ? split.body : 'declined';
+    }
+
+    private async computePendingDetail(repository: GitRepository): Promise<ActivityPendingCommit[] | undefined> {
+        const read = looseObjectReader(repository.rootUri);
+        const pending = await readPendingCommitsOf(repository, ACTIVITY_PENDING_DETAIL_MAX, read);
+        if (!pending || pending.commits.length === 0) { return undefined; }
+        let budget = AGENT_PENDING_DIFF_MAX_FILES_PER_REPO;
+        const diffed_commits = new Set<number>();
+        const entries: Array<{ key: string; side: LineDiffSides }> = [];
+        const declined = new Set<string>();
+        for (let i = 0; i < pending.commits.length; i++) {
+            const changes: PendingCommitChange[] | undefined = pending.commits[i].changes;
+            if (!changes || changes.length > budget) { continue; }
+            budget -= changes.length;
+            diffed_commits.add(i);
+            const sides = await this.mapWithConcurrency(changes, AGENT_LINE_DIFF_READ_CONCURRENCY, async change => [await this.readBlobBytes(read, change.old_sha), await this.readBlobBytes(read, change.new_sha)] as const);
+            for (let j = 0; j < changes.length; j++) {
+                const [head_bytes, working_bytes] = sides[j];
+                const diff_key = `${i}:${j}`;
+                if (head_bytes === 'declined' || working_bytes === 'declined') { declined.add(diff_key); continue; }
+                entries.push({ key: diff_key, side: { head_bytes, working_bytes } });
+            }
+        }
+        const counts = await this.diffSides(entries);
+        return pending.commits.map((commit, i): ActivityPendingCommit => {
+            const short_sha = commit.sha.slice(0, 7);
+            if (!commit.changes) { return { short_sha }; }
+            const result: ActivityPendingCommit = { short_sha, files: commit.changes.length };
+            if (!diffed_commits.has(i)) { return result; }
+            let added = 0;
+            let removed = 0;
+            for (let j = 0; j < commit.changes.length; j++) {
+                const diff_key = `${i}:${j}`;
+                const file_counts = declined.has(diff_key) ? undefined : counts.get(diff_key);
+                if (!file_counts) { return result; }
+                added += file_counts.added;
+                removed += file_counts.removed;
+            }
+            return { ...result, added, removed };
         });
     }
 
@@ -1447,14 +1608,25 @@ export class AgentAnalyser {
     private async computeLineDiffs(repository: GitRepository, files: ActivityChangedFile[]): Promise<Map<string, LineDiffCounts | undefined>> {
         const results = new Map<string, LineDiffCounts | undefined>();
         const sides = await this.mapWithConcurrency(files, AGENT_LINE_DIFF_READ_CONCURRENCY, file => readLineDiffSides(repository.rootUri, file));
-        const jobs: AgentLineDiffJob[] = [];
+        const entries: Array<{ key: string; side: LineDiffSides }> = [];
         for (let i = 0; i < files.length; i++) {
             const side = sides[i];
             if (side === 'declined') { results.set(files[i].path, undefined); continue; }
-            // copied, never transferred: a failed round trip can still compute from these bytes on the host without re-reading them
-            jobs.push({ key: files[i].path, head_bytes: side.head_bytes?.slice().buffer, working_bytes: side.working_bytes?.slice().buffer });
+            entries.push({ key: files[i].path, side });
         }
-        if (jobs.length === 0) { return results; }
+        for (const [key, counts] of await this.diffSides(entries)) { results.set(key, counts); }
+        return results;
+    }
+
+    /**
+     * Counts each entry's line diff on the worker's nested thread in one round trip. A failed round
+     * trip computes the batch with `lineDiffFromBytes` on the host instead of losing the counts.
+     */
+    private async diffSides(entries: Array<{ key: string; side: LineDiffSides }>): Promise<Map<string, LineDiffCounts | undefined>> {
+        const results = new Map<string, LineDiffCounts | undefined>();
+        if (entries.length === 0) { return results; }
+        // copied, never transferred: a failed round trip can still compute from these bytes on the host without re-reading them
+        const jobs: AgentLineDiffJob[] = entries.map(entry => ({ key: entry.key, head_bytes: entry.side.head_bytes?.slice().buffer, working_bytes: entry.side.working_bytes?.slice().buffer }));
         try {
             const response = await this.pool.roundTrip({ request_id: this.nextRequestId(), jobs: [], line_diff_jobs: jobs });
             for (const result of response.line_diff_results ?? []) { results.set(result.key, result.counts); }
@@ -1462,11 +1634,7 @@ export class AgentAnalyser {
             writeToErrorLog('computeLineDiffs', 'agent line-diff worker round trip failed, computing this batch on the host instead', err);
             this.pool.resetAll();
             this.worker_generation++;
-            for (let i = 0; i < files.length; i++) {
-                const side = sides[i];
-                if (side === 'declined') { continue; }
-                results.set(files[i].path, lineDiffFromBytes(side.head_bytes, side.working_bytes));
-            }
+            for (const entry of entries) { results.set(entry.key, lineDiffFromBytes(entry.side.head_bytes, entry.side.working_bytes)); }
         }
         return results;
     }
@@ -1825,7 +1993,7 @@ export class AgentAnalyser {
                 return;
             }
             const claude_candidate: ClaudeCodeCandidate = { session_id, dir_name, transcript_uri, transcript_identity, extra_identity, identity, vendor_live };
-            candidates.push({ vendor: 'claude-code', session_id, identity, read: () => this.readClaudeCodeCandidate(claude_candidate, live, now_ms, window_start_ms) });
+            candidates.push({ vendor: 'claude-code', session_id, scope: { claude_dir: dir_name }, identity, read: () => this.readClaudeCodeCandidate(claude_candidate, live, now_ms, window_start_ms) });
         });
         const stat_ms = Date.now() - stat_started_ms;
         const live_status = new Map<string, ActivityState>();
@@ -2007,7 +2175,7 @@ export class AgentAnalyser {
                 reused.push(this.overlayLiveState(this.file_cache.get(session_id)!.output, { live: vendor_live }));
                 return;
             }
-            candidates.push({ vendor: 'grok', session_id, identity, read: () => this.readGrokCandidate(events_uri, identity, session_id, cwd, vendor_live, now_ms, window_start_ms) });
+            candidates.push({ vendor: 'grok', session_id, scope: { cwd }, identity, read: () => this.readGrokCandidate(events_uri, identity, session_id, cwd, vendor_live, now_ms, window_start_ms) });
         });
         return { candidates, reused, stat_ms: Date.now() - stat_started_ms };
     }

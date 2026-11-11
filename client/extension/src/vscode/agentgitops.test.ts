@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { Uri } from '../__mocks__/vscode';
-import { GIT_API_REPOSITORIES_COMMAND, GIT_API_REPOSITORY_STATE_COMMAND, lineDiffForFile, pendingCommitsOf, readRepositoryTree, resolveGitApi, type GitRepository } from './agentgitops';
+import { GIT_API_REPOSITORIES_COMMAND, GIT_API_REPOSITORY_STATE_COMMAND, lineDiffForFile, looseObjectReader, pendingCommitsOf, readPendingCommitsOf, readRepositoryTree, resolveGitApi, upstreamCommitOf, type GitRepository } from './agentgitops';
+import type { GitObjectReader } from '../lib/agentgitobjectops';
+import { deflateSync } from 'zlib';
 
 const ROOT_PATH = '/ws/notethink';
 
@@ -219,5 +221,64 @@ describe('lineDiffForFile', () => {
         expect(counts).toBeUndefined();
         const schemes = (vscode.workspace.fs.readFile as jest.Mock).mock.calls.map(([uri]: [vscode.Uri]) => uri.scheme);
         expect(schemes).not.toContain('git');
+    });
+});
+
+describe('upstreamCommitOf', () => {
+    it('finds the sha of the remote branch the current branch tracks, from the repository refs', () => {
+        const state = { HEAD: { name: 'staging', upstream: { remote: 'origin', name: 'staging' } }, refs: [{ name: 'origin/main', commit: 'm' }, { name: 'origin/staging', commit: 's' }] };
+        expect(upstreamCommitOf(state)).toBe('s');
+    });
+
+    it('is undefined with no upstream, or when the refs do not list it', () => {
+        expect(upstreamCommitOf({ HEAD: { name: 'staging' }, refs: [{ name: 'origin/staging', commit: 's' }] })).toBeUndefined();
+        expect(upstreamCommitOf({ HEAD: { upstream: { remote: 'origin', name: 'x' } }, refs: [] })).toBeUndefined();
+        expect(upstreamCommitOf({ HEAD: { upstream: { remote: 'origin', name: 'x' } } })).toBeUndefined();
+    });
+});
+
+describe('readPendingCommitsOf', () => {
+    const never_read: GitObjectReader = async () => { throw new Error('must not read'); };
+
+    it('reads nothing when nothing is ahead, there is no upstream, or the head sha is unknown or not sha-1', async () => {
+        const upstream = { remote: 'origin', name: 'staging' };
+        for (const head of [
+            { commit: 'a'.repeat(40), upstream, ahead: 0 },
+            { commit: 'a'.repeat(40) },
+            { upstream, ahead: 2 },
+            { commit: 'a'.repeat(64), upstream, ahead: 2 },
+        ]) {
+            expect(await readPendingCommitsOf(makeRepository({ HEAD: head }), 20, never_read)).toBeUndefined();
+        }
+    });
+
+    it('bounds the walk by the smaller of the ahead count and the listing bound', async () => {
+        const seen: string[] = [];
+        const read: GitObjectReader = async sha => { seen.push(sha); return undefined; };
+        const result = await readPendingCommitsOf(makeRepository({ HEAD: { commit: 'a'.repeat(40), upstream: { remote: 'origin', name: 's' }, ahead: 50 } }), 20, read);
+        expect(result).toEqual({ commits: [], reached_upstream: false });
+        expect(seen).toEqual(['a'.repeat(40)]);
+    });
+});
+
+describe('looseObjectReader', () => {
+    it('reads and inflates the object at its fanned-out path under .git/objects, and reports a missing one as absent', async () => {
+        const sha = 'ab' + 'c'.repeat(38);
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: { path: string }) => {
+            if (uri.path === `${ROOT_PATH}/.git/objects/ab/${'c'.repeat(38)}`) { return new Uint8Array(deflateSync(Buffer.from('blob 2\0hi'))); }
+            throw new Error('no such file');
+        });
+        const read = looseObjectReader(Uri.file(ROOT_PATH));
+        expect(new TextDecoder().decode(await read(sha))).toBe('blob 2\0hi');
+        expect(await read('ff' + 'd'.repeat(38))).toBeUndefined();
+    });
+
+    it('refuses a sha that is not 40 hex digits without touching the filesystem', async () => {
+        const read_file = vscode.workspace.fs.readFile as jest.Mock;
+        read_file.mockClear();
+        const read = looseObjectReader(Uri.file(ROOT_PATH));
+        expect(await read('../../../etc/passwd')).toBeUndefined();
+        expect(await read('AB' + 'c'.repeat(38))).toBeUndefined();
+        expect(read_file).not.toHaveBeenCalled();
     });
 });

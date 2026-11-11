@@ -4,7 +4,7 @@ import * as path from 'node:path';
 // the one place the fixtures directory is located, so no caller has to know the hop from its own file
 const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
 
-function fixturePath(fixture: string): string {
+export function fixturePath(fixture: string): string {
     return path.join(FIXTURES_DIR, fixture);
 }
 

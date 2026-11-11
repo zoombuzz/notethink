@@ -56,6 +56,12 @@ export const AGENT_VIRTUAL_NAMESPACE = 'agent';
 export const AGENT_SCAN_PENDING_KEY = 'agentScan';
 
 // the one band a diff can be opened on; the committed band lists commits, not files, and carries no diff affordance
+/**
+ * The view_expanded_ids entry for one card's pending commits row: the card's stable_id plus this suffix, so
+ * the row's open state is its own entry on the same view-owned list the files row's bare stable_id sits on.
+ */
+export const PENDING_COMMITS_EXPANSION_SUFFIX = '#pending-commits';
+
 export const ACTIVITY_BAND_UNCOMMITTED = 'uncommitted';
 export type ActivityBand = typeof ACTIVITY_BAND_UNCOMMITTED;
 
@@ -117,12 +123,33 @@ export interface ActivityRefusal {
 /**
  * ActivityAnalyserState answers "is the analyser working at all" for the whole workspace, which is
  * the first thing an otherwise empty board has to say.
+ * - progress: while scanning, how many of the sessions found have been read or reused so far; absent once live
+ * - done_roots: while scanning, the repository roots (`ActivityTreeState.root_path`) whose own scan is
+ *   complete because every session that could belong to them has been read; absent once live
  */
 export interface ActivityAnalyserState {
     state: ActivityAnalyserLiveness;
     reason?: string;
     reason_code?: ActivityAnalyserUnavailableReasonCode;
     refusals: ActivityRefusal[];
+    progress?: ActivityScanProgress;
+    done_roots?: string[];
+}
+
+/** ActivityScanProgress is the first scan's tally: sessions read or reused so far, out of the sessions it found */
+export interface ActivityScanProgress {
+    sessions_read: number;
+    sessions_found: number;
+}
+
+/**
+ * Whether one card's own scan is over, so it may say what it holds (including that it holds nothing)
+ * without waiting for the rest of the first scan: a completed scan has landed, the analyser is live,
+ * or the host has read every session that could belong to the card's repository.
+ */
+export function isAgentCardScanDone(analyser: ActivityAnalyserState | undefined, root_path: string | undefined, has_completed_scan: boolean): boolean {
+    if (has_completed_scan || analyser?.state === 'live') { return true; }
+    return root_path !== undefined && (analyser?.done_roots?.includes(root_path) ?? false);
 }
 
 /**

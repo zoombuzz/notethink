@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AGENT_LINE_DIFF_MAX_BYTES, lineDiffFromBytes, looksBinary, type LineDiffCounts } from '../lib/agentlinediffops';
 import { parseGitReflog, type GitReflogCommit } from '../lib/agentgitreflogops';
+import { inflateObject, readPendingCommits, type GitObjectReader, type PendingCommitsRead } from '../lib/agentgitobjectops';
 import { writeToLog } from '../lib/errorops';
 import type { ActivityChangedFile, ActivityChangeKind, ActivityTree } from '../types/AgentActivity';
 
@@ -50,9 +51,22 @@ export interface GitHead {
     ahead?: number;
 }
 
+/**
+ * GitRef is the git extension's `Ref` as `git.api.getRepositoryState` returns it.
+ * - name: a remote branch reads `origin/staging`
+ * - commit: the sha the ref points at
+ */
+export interface GitRef {
+    type?: string;
+    name?: string;
+    commit?: string;
+    remote?: string;
+}
+
 /** GitCommandState is the part of `git.api.getRepositoryState`'s answer this file reads */
 interface GitCommandState {
     HEAD?: GitHead;
+    refs?: GitRef[];
     workingTreeChanges?: GitCommandChange[];
     indexChanges?: GitCommandChange[];
 }
@@ -68,6 +82,7 @@ export interface GitRepositoryState {
     workingTreeChanges: GitChange[];
     indexChanges: GitChange[];
     HEAD?: GitHead;
+    refs?: GitRef[];
 }
 
 /** GitRepository is one repository's root and a state snapshot taken this scan */
@@ -100,6 +115,7 @@ async function readRepositoriesByCommand(): Promise<GitRepository[]> {
             rootUri: vscode.Uri.parse(root),
             state: {
                 HEAD: state.HEAD,
+                refs: state.refs,
                 workingTreeChanges: (state.workingTreeChanges ?? []).map(changeFromCommand),
                 indexChanges: (state.indexChanges ?? []).map(changeFromCommand),
             },
@@ -146,6 +162,36 @@ function uncommittedFrom(state: GitRepositoryState, root_path: string): Activity
 export function pendingCommitsOf(head: GitHead | undefined): number | undefined {
     if (!head?.upstream) { return undefined; }
     return head.ahead ?? 0;
+}
+
+/** the sha the upstream branch points at, from the repository's refs; undefined when the refs do not list it */
+export function upstreamCommitOf(state: Pick<GitRepositoryState, 'HEAD' | 'refs'>): string | undefined {
+    const upstream = state.HEAD?.upstream;
+    if (!upstream) { return undefined; }
+    return state.refs?.find(ref => ref.name === `${upstream.remote}/${upstream.name}`)?.commit;
+}
+
+/** a repository's loose objects, read through `vscode.workspace.fs`; a packed object, or a repository whose `.git` is not a folder, reads as absent */
+export function looseObjectReader(root_uri: vscode.Uri): GitObjectReader {
+    return async (sha: string) => {
+        // a sha parsed out of a repository's own objects names a path, so only 40 hex digits may
+        if (!/^[0-9a-f]{40}$/.test(sha)) { return undefined; }
+        const bytes = await readSideBytes(vscode.Uri.joinPath(root_uri, '.git', 'objects', sha.slice(0, 2), sha.slice(2)));
+        return bytes ? inflateObject(bytes) : undefined;
+    };
+}
+
+/**
+ * The newest pending commits of a repository, from the git extension's own HEAD, ahead count and refs
+ * for where to stop and how many to read, and the loose object store for what each commit changes.
+ * Undefined when nothing is pending or the branch's sha is unknown; a sha-256 repository reads as
+ * nothing too, since its tree entries are not 20 bytes wide.
+ */
+export async function readPendingCommitsOf(repository: GitRepository, max_commits: number, read: GitObjectReader = looseObjectReader(repository.rootUri)): Promise<PendingCommitsRead | undefined> {
+    const head_sha = repository.state.HEAD?.commit;
+    const ahead = pendingCommitsOf(repository.state.HEAD);
+    if (!head_sha || head_sha.length !== 40 || !ahead) { return undefined; }
+    return readPendingCommits(read, head_sha, upstreamCommitOf(repository.state), Math.min(ahead, max_commits));
 }
 
 function relativeToRoot(root_path: string, absolute_path: string): string {

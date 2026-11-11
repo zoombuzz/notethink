@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { fileDeclaredViewType } from "../../lib/mergeAggregateRoot";
 import { aggregateNoteLinetags, findNoteBySeq, isAggregateRoot, majorityCardType, majorityNgView } from "../../lib/noteops";
 import { resolveNamespacedTag } from "../../lib/linetagops";
 import { CARD_AUTO, cardRegistryWithViewSettings, resolveCardType } from "../notes/cardregistryops";
@@ -42,6 +43,11 @@ export default function AutoView(props: ViewProps): ReactElement {
     } else if (isEmptyFolderAggregate(props)) {
         // an empty folder opens on the board, never the single-file document default
         derived_attributes.type = 'kanban';
+    } else if (props.display_options?.integration_mode !== INTEGRATION_MODE_FOLDER) {
+        // a single file's own nt_view applies with no caret in it (viewer opened over its only editor), when no focused note votes
+        const root_note = findNoteBySeq(props.notes, 0);
+        const file_view = root_note ? fileDeclaredViewType(root_note) : undefined;
+        if (file_view) { derived_attributes.type = file_view; }
     }
     if (props.display_options?.focused_notes?.length) {
         const attributes: { [key: string]: LineTag } = aggregateNoteLinetags(props.display_options?.focused_notes);

@@ -12,9 +12,11 @@ import styles from "../AgentNote.module.scss";
  * unreadable sessions, no host report yet, an unavailable analyser, still scanning, failed, or -
  * for a real note - no activity in 30 days.
  *
- * The "still scanning" notice is gated on `!model.has_completed_scan`: once the card has ever shown
- * a completed scan, a later rescan is never reflected on it, so the notice only fires before the
- * first scan finishes. "failed" carries no such gate, since an operator watching a background
+ * The "still scanning" notice is gated on `!model.scan_done`: once the card has ever shown a
+ * completed scan, or its own repository's sessions have all been read, a later rescan is never
+ * reflected on it, so the notice only fires while this card's scan is open. It is drawn only on a
+ * card with no sessions yet, where it carries the first scan's progress; a card already drawing
+ * sessions shows them, dimmed in its meta row, with no notice. "failed" carries no such gate, since an operator watching a background
  * rescan fail is worth telling regardless of whether the data underneath is still good.
  *
  * Each notice is one short line, with its full explanation carried as the line's `title`.
@@ -59,9 +61,14 @@ function emptyNotice(model: AgentNoteModel): EmptyNotice | undefined {
     if (model.analyser.state === 'unavailable') {
         return unavailableNotice(model.analyser.reason_code, model.analyser.reason);
     }
-    // 'scanning' means "no information yet" only before the first completed scan, so this never blanks a populated card
-    if (model.analyser.state === 'scanning' && !model.has_completed_scan) {
-        return { text: l10n.t('Scanning agent activity...'), detail: l10n.t('NoteThink is still scanning for local agent sessions.') };
+    // 'scanning' means "no information yet" only until this card's own scan is done, so this never blanks a populated card
+    if (model.analyser.state === 'scanning' && !model.scan_done && model.sessions.length === 0) {
+        const detail = l10n.t('NoteThink is still scanning for local agent sessions.');
+        const progress = model.scan_progress;
+        if (progress !== undefined && progress.sessions_found > 0) {
+            return { text: l10n.t('Scanning agent activity, {0} of {1} sessions', String(progress.sessions_read), String(progress.sessions_found)), detail };
+        }
+        return { text: l10n.t('Scanning agent activity...'), detail };
     }
     if (model.analyser.state === 'failed') {
         return {

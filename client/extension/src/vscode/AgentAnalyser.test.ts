@@ -1,8 +1,12 @@
+import { createHash } from 'crypto';
+import { setTimeout as sleepReal } from 'timers/promises';
+import { deflateSync } from 'zlib';
 import * as vscode from 'vscode';
 import { Uri } from '../__mocks__/vscode';
 import { AgentAnalyser, setFileStatMaxEntriesForTest } from './AgentAnalyser';
 import { handleAgentAnalyserRequest, resetTailCacheForTest, setTailCacheMaxBytesForTest, setTranscriptMaxBytesForTest, type AgentAnalyserWorkerRequest, type AgentAnalyserWorkerResponse } from './AgentAnalyserWorker';
 import * as errorops from '../lib/errorops';
+import { encodeClaudeProjectDirName } from '../lib/agenthomeops';
 
 // fixed clock just after the 2026-09-22 fixtures, so they never age out of the analyser's 30 day window
 const FIXTURE_NOW_MS = Date.parse('2026-09-22T12:00:00Z');
@@ -595,6 +599,71 @@ describe('AgentAnalyser lifecycle', () => {
 		expect(first_message.activity.sessions).toHaveLength(1);
 	});
 
+	it('a restart after the grace with nothing changed reads zero transcripts and posts the last snapshot at once', async () => {
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), Date.now());
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const first_post = jest.fn();
+		analyser.demand(first_post);
+		await settle();
+		expect(transcriptReadCount()).toBe(1);
+		analyser.withdraw(first_post);
+		await jest.advanceTimersByTimeAsync(5_000);
+		await settle();
+
+		(vscode.workspace.fs.readFile as jest.Mock).mockClear();
+		const second_post = jest.fn();
+		analyser.demand(second_post);
+		await settle();
+		// the rescan this restart runs finds every session unchanged by its stat, so no transcript crosses the wire
+		expect(transcriptReadCount()).toBe(0);
+		const last = second_post.mock.calls[second_post.mock.calls.length - 1][0].activity;
+		expect(last.analyser.state).toBe('live');
+		expect(last.sessions).toHaveLength(1);
+	});
+
+	it('lets a scan in flight finish through a withdrawal, stopping the analyser only once it ends', async () => {
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), Date.now());
+		const controlled = controllableWorkerFactory();
+		const analyser = new AgentAnalyser(mockContext(), controlled.worker);
+		const posted: Array<Record<string, unknown>> = [];
+		const post = (msg: Record<string, unknown>): void => { posted.push(msg); };
+		analyser.demand(post);
+		await settle();
+		// the worker is holding its answer, so the first scan is mid-flight when the last card goes away
+		analyser.withdraw(post);
+		await jest.advanceTimersByTimeAsync(5_000);
+		controlled.release();
+		await settle();
+		// nobody is subscribed to hear it, so the finished scan is read back off the analyser itself
+		const after: Array<Record<string, unknown>> = [];
+		analyser.resendTo(msg => after.push(msg));
+		expect(sessionIdsFrom(after)).toEqual([CLAUDE_SESSION_ID]);
+		expect((after[0].activity as { analyser: { state: string } }).analyser.state).toBe('live');
+		// the scan ended with nobody demanding it, so the analyser stopped rather than arming its next poll
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockClear();
+		await jest.advanceTimersByTimeAsync(60_000);
+		expect(vscode.workspace.fs.readDirectory).not.toHaveBeenCalled();
+	});
+
+	it('keeps scanning when a card returns during the first scan after the grace, without starting over', async () => {
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), Date.now());
+		const controlled = controllableWorkerFactory();
+		const analyser = new AgentAnalyser(mockContext(), controlled.worker);
+		const posted: Array<Record<string, unknown>> = [];
+		const post = (msg: Record<string, unknown>): void => { posted.push(msg); };
+		analyser.demand(post);
+		await settle();
+		analyser.withdraw(post);
+		await jest.advanceTimersByTimeAsync(5_000);
+		analyser.demand(post);
+		controlled.release();
+		await settle();
+		expect((posted[posted.length - 1].activity as { analyser: { state: string } }).analyser.state).toBe('live');
+		expect(sessionIdsFrom(posted)).toEqual([CLAUDE_SESSION_ID]);
+		// the one transcript was read once for the one scan, not again for a restarted one
+		expect(transcriptReadCount()).toBe(1);
+	});
+
 	describe('skipping unchanged files across scans', () => {
 		it('a second scan with unchanged stats reads zero bytes and yields the same session', async () => {
 			mockClaudeCodeSession(claudeTranscriptLine('Edit'), Date.now());
@@ -742,6 +811,44 @@ describe('AgentAnalyser lifecycle', () => {
 			expect(retry_job.transcript.mode).toBe('whole');
 			expect(new TextDecoder().decode(retry_job.transcript.bytes)).toBe(`${first_line}\n${second_line}\n`);
 			expect(sessionIdsFrom(posted)).toEqual([CLAUDE_SESSION_ID]);
+		});
+
+		it('a stop and restart with the session still live and growing keeps its usage covering the whole transcript', async () => {
+			const base_mtime = Date.now();
+			const first_line = claudeTranscriptLine('Edit');
+			const second_line = claudeTranscriptLine('Write').replace('"id":"m1"', '"id":"m2"');
+			mockClaudeCodeSession(`${first_line}\n`, base_mtime);
+			const requests: AgentAnalyserWorkerRequest[] = [];
+			// a real worker thread dies with its line cache when the pool terminates it, so terminate clears the shared cache too
+			const factory = (): Worker => {
+				const worker = {
+					onmessage: null as ((event: MessageEvent<AgentAnalyserWorkerResponse>) => void) | null,
+					onerror: null as ((event: ErrorEvent) => void) | null,
+					postMessage: (message: AgentAnalyserWorkerRequest) => {
+						requests.push(message);
+						Promise.resolve().then(() => { worker.onmessage?.({ data: handleAgentAnalyserRequest(message) } as MessageEvent<AgentAnalyserWorkerResponse>); });
+					},
+					terminate: () => { resetTailCacheForTest(); },
+				};
+				return worker as unknown as Worker;
+			};
+			const analyser = new AgentAnalyser(mockContext(), factory);
+			const posted: Array<Record<string, unknown>> = [];
+			const post = (msg: Record<string, unknown>): void => { posted.push(msg); };
+			analyser.demand(post);
+			await settle();
+			expect((sessionFieldFrom(posted, CLAUDE_SESSION_ID, 'usage') as { input_tokens: number }).input_tokens).toBe(10);
+
+			analyser.withdraw(post);
+			await jest.advanceTimersByTimeAsync(5_000); // AGENT_STOP_GRACE_MS, disposing the worker pool
+			await settle();
+			mockClaudeCodeSession(`${first_line}\n${second_line}\n`, base_mtime + 1000);
+			analyser.demand(post);
+			await settle();
+			const job = requests[requests.length - 1].jobs.find(j => j.session_id === CLAUDE_SESSION_ID)!;
+			// the new worker holds none of the earlier lines, so the transcript has to arrive whole, never as a tail
+			expect((sessionFieldFrom(posted, CLAUDE_SESSION_ID, 'usage') as { input_tokens: number }).input_tokens).toBe(20);
+			expect(job.transcript.mode).toBe('whole');
 		});
 
 		it("a session the worker's own byte cap evicted is re-read whole next time, never sent as a tail again", async () => {
@@ -2782,5 +2889,408 @@ describe('AgentAnalyser agent registry', () => {
 		wireRegistry({ odd: JSON.stringify({ agent: 'odd', vendor: 'claude', repo: '/ws', state: 'hibernating', updated_at: '2026-11-03T10:00:00Z' }) });
 		const sessions = await scan();
 		expect(sessions[0].session).toMatchObject({ vendor: 'claude-code', registry_only: true, state: 'unknown' });
+	});
+});
+
+describe('AgentAnalyser pending commit detail', () => {
+	const REPO_ROOT = '/ws';
+	const NOW = FIXTURE_NOW_MS;
+
+	// a loose object store: each object stored deflated at its `.git/objects/xx/yyyy` path, as git writes it
+	const objects = new Map<string, Uint8Array>();
+
+	function put(type: string, body: Buffer): string {
+		const object = Buffer.concat([Buffer.from(`${type} ${body.length}\0`), body]);
+		const sha = createHash('sha1').update(object).digest('hex');
+		objects.set(`${REPO_ROOT}/.git/objects/${sha.slice(0, 2)}/${sha.slice(2)}`, new Uint8Array(deflateSync(object)));
+		return sha;
+	}
+
+	function tree(entries: Array<{ name: string; sha: string }>): string {
+		return put('tree', Buffer.concat(entries.map(entry => Buffer.concat([Buffer.from(`100644 ${entry.name}\0`), Buffer.from(entry.sha, 'hex')]))));
+	}
+
+	function commit(tree_sha: string, parent: string): string {
+		return put('commit', Buffer.from(`tree ${tree_sha}\nparent ${parent}\nauthor A <a@b> 1 +0000\ncommitter A <a@b> 1 +0000\n\nsubject\n`));
+	}
+
+	beforeEach(() => {
+		jest.clearAllMocks();
+		objects.clear();
+		jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate'] });
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file(REPO_ROOT), name: 'ws', index: 0 }];
+	});
+
+	afterEach(() => {
+		jest.useRealTimers();
+		(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
+		(vscode.commands.executeCommand as jest.Mock).mockReset();
+	});
+
+	async function settle(): Promise<void> {
+		// inflating a loose object runs on a real stream, which no fake clock advances, so each round also waits a real moment
+		for (let i = 0; i < 30; i++) {
+			await jest.advanceTimersByTimeAsync(0);
+			await sleepReal(3);
+		}
+	}
+
+	// two commits ahead of an upstream: the first edits a.ts (one line added, one removed), the second adds b.ts (two lines)
+	function wirePendingBranch(ahead: number): { head: string } {
+		const upstream = commit(tree([{ name: 'a.ts', sha: put('blob', Buffer.from('one\ntwo\n')) }]), '0'.repeat(40));
+		const first = commit(tree([{ name: 'a.ts', sha: put('blob', Buffer.from('one\nthree\n')) }]), upstream);
+		const second = commit(tree([{ name: 'a.ts', sha: put('blob', Buffer.from('one\nthree\n')) }, { name: 'b.ts', sha: put('blob', Buffer.from('x\ny\n')) }]), first);
+		(vscode.commands.getCommands as jest.Mock).mockResolvedValue(['git.api.getRepositories', 'git.api.getRepositoryState']);
+		(vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string) => {
+			if (command === 'git.api.getRepositories') { return [`file://${REPO_ROOT}`]; }
+			return {
+				HEAD: { name: 'staging', commit: second, upstream: { remote: 'origin', name: 'staging' }, ahead },
+				refs: [{ type: 'RemoteHead', name: 'origin/staging', commit: upstream }],
+				workingTreeChanges: [],
+				indexChanges: [],
+			};
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const stored = objects.get(uri.path);
+			if (stored) { return stored; }
+			throw new Error('not found');
+		});
+		return { head: second };
+	}
+
+	function treeFrom(posted: Array<Record<string, unknown>>): { pending_commits?: number; pending_detail?: Array<{ short_sha: string; files?: number; added?: number; removed?: number }> } {
+		const last = posted[posted.length - 1];
+		return (last.activity as { trees: Array<{ tree: object }> }).trees[0]?.tree ?? {};
+	}
+
+	it('posts each pending commit with its short hash, file count and line totals, newest first', async () => {
+		const { head } = wirePendingBranch(2);
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		const { pending_commits, pending_detail } = treeFrom(posted);
+		expect(pending_commits).toBe(2);
+		expect(pending_detail).toEqual([
+			{ short_sha: head.slice(0, 7), files: 1, added: 2, removed: 0 },
+			{ short_sha: expect.any(String), files: 1, added: 1, removed: 1 },
+		]);
+	});
+
+	it('posts the live scan before it reads any commit, then posts the detail on the fresh pass', async () => {
+		wirePendingBranch(2);
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		const trees = posted.map(msg => (msg.activity as { trees?: Array<{ tree: { pending_detail?: unknown } }> } | undefined)?.trees?.[0]?.tree);
+		expect(trees[0]?.pending_detail).toBeUndefined();
+		expect(trees[trees.length - 1]?.pending_detail).toBeDefined();
+	});
+
+	it('bounds the list by the ahead count, so the row can say it lists fewer than are pending', async () => {
+		wirePendingBranch(1);
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(treeFrom(posted).pending_detail).toHaveLength(1);
+	});
+
+	it('posts no detail when the branch has nothing pending, or its objects are packed', async () => {
+		wirePendingBranch(0);
+		let analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		let posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(treeFrom(posted).pending_detail).toBeUndefined();
+		analyser.dispose();
+		wirePendingBranch(2);
+		objects.clear();
+		analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		posted = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(treeFrom(posted).pending_commits).toBe(2);
+		expect(treeFrom(posted).pending_detail).toBeUndefined();
+	});
+});
+
+describe('AgentAnalyser first scan progress and per-card completion', () => {
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
+		wireGitCommands({ '/ws': { workingTreeChanges: [] } });
+	});
+
+	afterEach(() => { jest.useRealTimers(); });
+
+	async function settle(rounds = 20): Promise<void> {
+		for (let i = 0; i < rounds; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	// one transcript per session, in the project folder Claude Code itself would name for its cwd
+	function mockSessions(sessions: ReadonlyArray<{ id: string; cwd: string; mtime: number }>): void {
+		const dir_for = (cwd: string): string => encodeClaudeProjectDirName(cwd);
+		const path_for = (s: { id: string; cwd: string }): string => `${CLAUDE_PROJECTS_DIR}/${dir_for(s.cwd)}/${s.id}.jsonl`;
+		const bytes_for = (cwd: string): Uint8Array => new TextEncoder().encode(claudeTranscriptLine('Edit').replace(CLAUDE_SESSION_CWD, cwd));
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path === CLAUDE_PROJECTS_DIR) { return [...new Set(sessions.map(s => dir_for(s.cwd)))].map(dir => [dir, vscode.FileType.Directory]); }
+			return sessions.filter(s => uri.path === `${CLAUDE_PROJECTS_DIR}/${dir_for(s.cwd)}`).map(s => [`${s.id}.jsonl`, vscode.FileType.File]);
+		});
+		(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const match = sessions.find(s => uri.path === path_for(s));
+			if (match) { return { type: 1, ctime: 0, mtime: match.mtime, size: bytes_for(match.cwd).byteLength }; }
+			throw new Error('not found');
+		});
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			const match = sessions.find(s => uri.path === path_for(s));
+			if (match) { return bytes_for(match.cwd); }
+			throw new Error('not found');
+		});
+	}
+
+	function analyserOf(posted: Array<Record<string, unknown>>, index: number): { state: string; progress?: { sessions_read: number; sessions_found: number }; done_roots?: string[] } {
+		return (posted[index].activity as { analyser: { state: string; progress?: { sessions_read: number; sessions_found: number }; done_roots?: string[] } }).analyser;
+	}
+
+	it('reads the open repository\'s sessions before newer ones from other folders, and calls its card done once they are read', async () => {
+		const now = Date.now();
+		// the four /ws/app sessions are the oldest, so only the folder-first order puts them in the first batch of eight
+		const sessions = [
+			...Array.from({ length: 4 }, (_, i) => ({ id: `ws${i}`, cwd: '/ws/app', mtime: now - (100 + i) * 1000 })),
+			...Array.from({ length: 6 }, (_, i) => ({ id: `other${i}`, cwd: '/other/place', mtime: now - i * 1000 })),
+		];
+		mockSessions(sessions);
+		const recording = recordingWorkerFactory();
+		const analyser = new AgentAnalyser(mockContext(), recording.worker, 1);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		const first_batch_ids = recording.requests[0].jobs.map(job => job.session_id);
+		expect(first_batch_ids.slice(0, 4).sort()).toEqual(['ws0', 'ws1', 'ws2', 'ws3']);
+		expect(first_batch_ids).toHaveLength(8);
+		const first_scanning = posted.findIndex((_, i) => analyserOf(posted, i).state === 'scanning' && analyserOf(posted, i).progress !== undefined);
+		expect(first_scanning).toBeGreaterThan(-1);
+		// two sessions of another folder are still unread, but nothing left could belong to /ws
+		expect(analyserOf(posted, first_scanning).progress).toEqual({ sessions_read: 8, sessions_found: 10 });
+		expect(analyserOf(posted, first_scanning).done_roots).toEqual(['/ws']);
+		expect(sessionIdsFrom(posted.slice(0, first_scanning + 1))).toEqual(expect.arrayContaining(['ws0', 'ws1', 'ws2', 'ws3']));
+		// the live post that ends the scan carries neither: every card is done and the tally is over
+		const last = analyserOf(posted, posted.length - 1);
+		expect(last.state).toBe('live');
+		expect(last.progress).toBeUndefined();
+		expect(last.done_roots).toBeUndefined();
+	});
+
+	it('does not call a card done while a session that could belong to it is still unread', async () => {
+		const now = Date.now();
+		mockSessions(Array.from({ length: 10 }, (_, i) => ({ id: `ws${i}`, cwd: '/ws/app', mtime: now - i * 1000 })));
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker, 1);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		const first_scanning = posted.findIndex((_, i) => analyserOf(posted, i).progress !== undefined);
+		expect(analyserOf(posted, first_scanning).progress).toEqual({ sessions_read: 8, sessions_found: 10 });
+		expect(analyserOf(posted, first_scanning).done_roots).toEqual([]);
+	});
+
+	it('logs one debug line per first-scan batch with the sessions read so far', async () => {
+		const log_spy = jest.spyOn(errorops, 'writeToLogAtLevel');
+		const now = Date.now();
+		mockSessions(Array.from({ length: 10 }, (_, i) => ({ id: `ws${i}`, cwd: '/ws/app', mtime: now - i * 1000 })));
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker, 1);
+		analyser.demand(jest.fn());
+		await settle();
+		const lines = log_spy.mock.calls.filter(call => call[1] === 'runScanBatch').map(call => String(call[2]));
+		expect(lines).toHaveLength(2);
+		expect(lines[0]).toContain('batch 1 of 2: 8 of 10 session(s) read');
+		expect(lines[1]).toContain('batch 2 of 2: 10 of 10 session(s) read');
+		// a later scan over the same sessions is not a first scan, so it adds no batch line
+		await jest.advanceTimersByTimeAsync(15_000);
+		await settle();
+		expect(log_spy.mock.calls.filter(call => call[1] === 'runScanBatch')).toHaveLength(2);
+		log_spy.mockRestore();
+	});
+
+	it('names a Claude Code project folder for its sessions\' own cwd, the mapping discovery relies on', async () => {
+		const now = Date.now();
+		mockSessions([{ id: 'ws0', cwd: '/ws/my_app.v2', mtime: now }]);
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker, 1);
+		analyser.demand(jest.fn());
+		await settle();
+		const listed = (vscode.workspace.fs.readDirectory as jest.Mock).mock.calls.map(call => (call[0] as { path: string }).path);
+		// the folder an on-disk Claude Code layout holds is the cwd with every non-alphanumeric character a dash
+		expect(listed).toContain(`${CLAUDE_PROJECTS_DIR}/-ws-my-app-v2`);
+		expect(encodeClaudeProjectDirName('/ws/my_app.v2')).toBe('-ws-my-app-v2');
+	});
+});
+
+describe('AgentAnalyser persisted read cache', () => {
+	const STORE_DIR = '/store/global';
+
+	beforeEach(() => {
+		jest.clearAllMocks();
+		jest.useFakeTimers({ now: FIXTURE_NOW_MS });
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+		(vscode.workspace.fs.readFile as jest.Mock).mockRejectedValue(new Error('no such file'));
+		(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/ws'), name: 'ws', index: 0 }];
+	});
+
+	afterEach(() => { jest.useRealTimers(); });
+
+	async function settle(): Promise<void> {
+		for (let i = 0; i < 20; i++) { await jest.advanceTimersByTimeAsync(0); }
+	}
+
+	function storedContext(log_path?: string): vscode.ExtensionContext {
+		return { ...mockContext(log_path), globalStorageUri: Uri.file(STORE_DIR) } as unknown as vscode.ExtensionContext;
+	}
+
+	// reads and writes under the store directory go to a map; every other path keeps the fixture's own answer
+	function wireStore(store: Map<string, Uint8Array>): void {
+		const base_read = (vscode.workspace.fs.readFile as jest.Mock).getMockImplementation()!;
+		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+			if (uri.path.startsWith(`${STORE_DIR}/`)) {
+				const held = store.get(uri.path);
+				if (held === undefined) { throw new Error('not found'); }
+				return held;
+			}
+			return base_read(uri);
+		});
+		(vscode.workspace.fs.writeFile as jest.Mock).mockImplementation(async (uri: vscode.Uri, bytes: Uint8Array) => { store.set(uri.path, bytes); });
+	}
+
+	it('a new window reuses what the last one read: an unchanged session costs no transcript read', async () => {
+		const mtime = Date.now();
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), mtime);
+		const store = new Map<string, Uint8Array>();
+		wireStore(store);
+		const first = new AgentAnalyser(storedContext(), fakeWorkerFactory().worker);
+		first.demand(jest.fn());
+		await settle();
+		expect(transcriptReadCount()).toBe(1);
+		expect(store.size).toBe(1);
+
+		// a fresh host: nothing in memory, only the store left behind
+		(vscode.workspace.fs.readFile as jest.Mock).mockClear();
+		const second = new AgentAnalyser(storedContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		second.demand(msg => posted.push(msg));
+		await settle();
+		expect(transcriptReadCount()).toBe(0);
+		expect(sessionIdsFrom(posted)).toEqual([CLAUDE_SESSION_ID]);
+		expect((posted[posted.length - 1].activity as { analyser: { state: string } }).analyser.state).toBe('live');
+	});
+
+	it('re-reads only a session whose files changed since the store was written', async () => {
+		const mtime = Date.now();
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), mtime);
+		const store = new Map<string, Uint8Array>();
+		wireStore(store);
+		const first = new AgentAnalyser(storedContext(), fakeWorkerFactory().worker);
+		first.demand(jest.fn());
+		await settle();
+
+		mockClaudeCodeSession(`${claudeTranscriptLine('Edit')}\n${claudeTranscriptLine('Write').replace('"id":"m1"', '"id":"m2"')}`, mtime + 1000);
+		wireStore(store);
+		(vscode.workspace.fs.readFile as jest.Mock).mockClear();
+		const second = new AgentAnalyser(storedContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		second.demand(msg => posted.push(msg));
+		await settle();
+		expect(transcriptReadCount()).toBe(1);
+		expect((sessionFieldFrom(posted, CLAUDE_SESSION_ID, 'usage') as { input_tokens: number }).input_tokens).toBe(20);
+	});
+
+	it('discards a store of another version or a corrupt one, and reads the session', async () => {
+		const mtime = Date.now();
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), mtime);
+		const store = new Map<string, Uint8Array>();
+		wireStore(store);
+		const first = new AgentAnalyser(storedContext(), fakeWorkerFactory().worker);
+		first.demand(jest.fn());
+		await settle();
+		const [store_path, stored] = [...store.entries()][0];
+		const mismatched = JSON.stringify({ ...JSON.parse(new TextDecoder().decode(stored)), version: 0 });
+
+		for (const text of [mismatched, '{ not json']) {
+			store.set(store_path, new TextEncoder().encode(text));
+			(vscode.workspace.fs.readFile as jest.Mock).mockClear();
+			const next = new AgentAnalyser(storedContext(), fakeWorkerFactory().worker);
+			const posted: Array<Record<string, unknown>> = [];
+			next.demand(msg => posted.push(msg));
+			await settle();
+			expect(transcriptReadCount()).toBe(1);
+			expect(sessionIdsFrom(posted)).toEqual([CLAUDE_SESSION_ID]);
+		}
+	});
+
+	it('keys the store by vendor home, so two homes never share entries', async () => {
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), Date.now());
+		const store = new Map<string, Uint8Array>();
+		wireStore(store);
+		const local = new AgentAnalyser(storedContext(), fakeWorkerFactory().worker);
+		local.demand(jest.fn());
+		await settle();
+		const other_home = new AgentAnalyser(storedContext('/home/other/.config/Code/logs/x/exthost/webWorker/NoteThink.notethink/notethink-extension.log'), fakeWorkerFactory().worker);
+		other_home.demand(jest.fn());
+		await settle();
+		// each home looked for its own store file, and the second never found the first's entries
+		const looked_for = (vscode.workspace.fs.readFile as jest.Mock).mock.calls.map(call => (call[0] as { path: string }).path).filter(path => path.startsWith(`${STORE_DIR}/`));
+		expect(new Set(looked_for).size).toBe(2);
+		expect(store.size).toBe(1);
+	});
+
+	it('writes nothing, and still scans, when the host offers no global storage', async () => {
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), Date.now());
+		const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+		const posted: Array<Record<string, unknown>> = [];
+		analyser.demand(msg => posted.push(msg));
+		await settle();
+		expect(vscode.workspace.fs.writeFile).not.toHaveBeenCalled();
+		expect(sessionIdsFrom(posted)).toEqual([CLAUDE_SESSION_ID]);
+	});
+
+	// a change to the worker's output shape invalidates every stored entry: bump AGENT_SCAN_CACHE_VERSION with it
+	it('stores an output of the shape the current store version describes', async () => {
+		mockClaudeCodeSession(claudeTranscriptLine('Edit'), Date.now());
+		const store = new Map<string, Uint8Array>();
+		wireStore(store);
+		const analyser = new AgentAnalyser(storedContext(), fakeWorkerFactory().worker);
+		analyser.demand(jest.fn());
+		await settle();
+		const stored = JSON.parse(new TextDecoder().decode([...store.values()][0])) as { version: number; entries: Array<{ session_id: string; files: Array<Record<string, unknown>>; output: Record<string, unknown> }> };
+		expect(stored.version).toBe(1);
+		expect(Object.keys(stored.entries[0]).sort()).toEqual(['files', 'output', 'session_id']);
+		expect(Object.keys(stored.entries[0].files[0]).sort()).toEqual(['appendable', 'mtime', 'path', 'size', 'uri_string']);
+		expect(Object.keys(stored.entries[0].output).sort()).toEqual(['active_ms', 'calls', 'capabilities', 'current', 'cwd', 'ended_at', 'model', 'priced_calls', 'session_id', 'started_at', 'state', 'updated_at', 'usage', 'vendor']);
+	});
+
+	it('stores no edit body of a source file and no message text', async () => {
+		const board_and_source = JSON.stringify({
+			type: 'assistant', timestamp: '2026-09-22T11:00:00Z', cwd: CLAUDE_SESSION_CWD,
+			message: {
+				id: 'm1', role: 'assistant', model: 'claude-sonnet-5',
+				content: [
+					{ type: 'text', text: 'PRIVATE-MESSAGE-TEXT' },
+					{ type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: 'src/foo.ts', old_string: 'PRIVATE-OLD-BODY', new_string: 'PRIVATE-NEW-BODY' } },
+				],
+				usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+			},
+		});
+		mockClaudeCodeSession(board_and_source, Date.now());
+		const store = new Map<string, Uint8Array>();
+		wireStore(store);
+		const analyser = new AgentAnalyser(storedContext(), fakeWorkerFactory().worker);
+		analyser.demand(jest.fn());
+		await settle();
+		const text = new TextDecoder().decode([...store.values()][0]);
+		expect(text).toContain(CLAUDE_SESSION_ID);
+		expect(text).not.toContain('PRIVATE');
 	});
 });

@@ -1,3 +1,4 @@
+import { encodeClaudeProjectDirName, projectDirNamesWorkspace } from './agenthomeops';
 import type {
     ActivityChangedFile,
     ActivityRejectCode,
@@ -77,12 +78,53 @@ export interface ActivitySessionState {
  *   session yet
  * - live: at least one scan has completed, whether or not it found anything
  * - failed: the worker crashed and its one restart also failed
+ * - progress: while scanning, how many of the sessions found have been read or reused so far; absent
+ *   once the scan is live
+ * - done_roots: while scanning, the repository roots (`ActivityTreeState.root_path`) whose own scan is
+ *   complete, because every session that could belong to them has been read; absent once live, when
+ *   every root is done
  */
 export interface ActivityAnalyserState {
     state: AgentAnalyserState;
     reason?: string;
     reason_code?: AgentAnalyserUnavailableReasonCode;
     refusals: ActivityRefusal[];
+    progress?: ActivityScanProgress;
+    done_roots?: string[];
+}
+
+/** ActivityScanProgress is the first scan's tally: sessions read or reused so far, out of the sessions it found */
+export interface ActivityScanProgress {
+    sessions_read: number;
+    sessions_found: number;
+}
+
+/**
+ * Where a session still to be read could belong, known before anything is read.
+ * - claude_dir: Claude Code names each project folder for the session's launch directory with every
+ *   character outside `[a-zA-Z0-9]` replaced by a dash (`encodeClaudeProjectDirName`)
+ * - cwd: Grok's folder name is the URI-encoded cwd itself, decoded here
+ * A Codex rollout names no directory, so its scope is absent and it could belong anywhere.
+ */
+export type AgentCandidateScope = { claude_dir: string } | { cwd: string };
+
+/**
+ * Whether a session with this scope could belong to the repository or folder at `root_path`: its
+ * directory names that path (or a symlinked alias of it) or a folder inside it, or sits above it, since
+ * a session launched in an umbrella folder can still write into a repository beneath. An unknown scope
+ * could belong anywhere, so it never lets a repository count as finished early.
+ */
+export function scopeMayBelongTo(scope: AgentCandidateScope | undefined, root_path: string): boolean {
+    if (scope === undefined) { return true; }
+    if ('claude_dir' in scope) {
+        return projectDirNamesWorkspace(scope.claude_dir, root_path) || encodeClaudeProjectDirName(root_path).startsWith(`${scope.claude_dir}-`);
+    }
+    return scope.cwd === root_path || scope.cwd.startsWith(`${root_path}/`) || root_path.startsWith(`${scope.cwd}/`);
+}
+
+/** the roots no remaining session could belong to, sorted so an unchanged answer serialises identically */
+export function rootsWithNothingLeftToRead(root_paths: ReadonlyArray<string>, remaining: ReadonlyArray<AgentCandidateScope | undefined>): string[] {
+    return root_paths.filter(root_path => !remaining.some(scope => scopeMayBelongTo(scope, root_path))).sort();
 }
 
 /**

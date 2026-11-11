@@ -1,7 +1,7 @@
 import type * as vscode from 'vscode';
 import { Uri } from '../__mocks__/vscode';
 import { parse } from '../lib/parseops';
-import { isParseStaleError, ParsePool, setQueueMaxLengthForTest } from './ParsePool';
+import { isParseStaleError, ParsePool } from './ParsePool';
 import { handleParseWorkerRequest, type ParseWorkerRequest, type ParseWorkerResponse } from './ParseWorker';
 
 /**
@@ -176,21 +176,16 @@ describe('ParsePool', () => {
     });
 
     it('drops the oldest queued job past the queue length bound, rejecting it rather than growing without limit', async () => {
-        setQueueMaxLengthForTest(2);
-        try {
-            const { factory } = controllableWorkerFactory();
-            const pool = new ParsePool(mockContext(), factory, 1);
-            const held = pool.parse('/busy.md', '# Busy'); // occupies the only slot
-            const oldest = pool.parse('/a.md', '# A');
-            const oldest_rejection = oldest.catch(err => err);
-            pool.parse('/b.md', '# B'); // fills the 2-entry queue
-            pool.parse('/c.md', '# C'); // pushes the queue past its bound, evicting the oldest queued entry (/a.md)
-            const err = await oldest_rejection;
-            expect(err).toBeInstanceOf(Error);
-            expect(isParseStaleError(err)).toBe(false);
-            void held;
-        } finally {
-            setQueueMaxLengthForTest(undefined);
-        }
+        const { factory } = controllableWorkerFactory();
+        const pool = new ParsePool(mockContext(), factory, 1, 2);
+        const held = pool.parse('/busy.md', '# Busy'); // occupies the only slot
+        const oldest = pool.parse('/a.md', '# A');
+        const oldest_rejection = oldest.catch(err => err);
+        pool.parse('/b.md', '# B'); // fills the 2-entry queue
+        pool.parse('/c.md', '# C'); // pushes the queue past its bound, evicting the oldest queued entry (/a.md)
+        const err = await oldest_rejection;
+        expect(err).toBeInstanceOf(Error);
+        expect(isParseStaleError(err)).toBe(false);
+        void held;
     });
 });

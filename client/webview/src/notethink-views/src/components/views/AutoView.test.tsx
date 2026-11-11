@@ -430,3 +430,39 @@ describe('AutoView', () => {
         });
     });
 });
+
+describe('AutoView single-file declared view type', () => {
+    const view_tag = (note_seq: number, value: string): NonNullable<NoteProps['linetags']>[string] => ({ key: 'nt_view', value, note_seq, key_offset: 0, value_offset: 0, linktext_offset: 0 });
+
+    // root with one H1 child declaring the view, the shape a parsed single file has
+    function singleFileProps(h1_view: string | undefined, overrides: Partial<ViewProps> = {}): ViewProps {
+        const h1 = makeNote({ seq: 1, depth: 1, linetags: h1_view ? { nt_view: view_tag(1, h1_view) } : {} });
+        const root = makeNote({ seq: 0, child_notes: [h1] });
+        return makeViewProps({ notes: [root, h1], display_options: { integration_mode: 'current_file' }, ...overrides });
+    }
+
+    it('resolves the file H1 nt_view when the caret is cleared and only the root is focused', () => {
+        const props = singleFileProps('kanban');
+        props.display_options!.focused_notes = [props.notes![0]];
+        render(<AutoView {...props} />);
+        expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'kanban');
+    });
+
+    it('resolves the file H1 nt_view with no focused notes at all', () => {
+        render(<AutoView {...singleFileProps('kanban')} />);
+        expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'kanban');
+    });
+
+    it('stays a document when the file declares no nt_view', () => {
+        render(<AutoView {...singleFileProps(undefined)} />);
+        expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'document');
+    });
+
+    it('lets a focused note\'s own nt_view win over the file default', () => {
+        const props = singleFileProps('kanban');
+        const focused = makeNote({ seq: 2, linetags: { nt_view: view_tag(2, 'document') } });
+        props.display_options!.focused_notes = [focused];
+        render(<AutoView {...props} />);
+        expect(screen.getByTestId('generic-view')).toHaveAttribute('data-type', 'document');
+    });
+});

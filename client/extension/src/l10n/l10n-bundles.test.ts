@@ -28,6 +28,8 @@ const ALLOWED_SAME_EVERY_LOCALE = [
     'VS',
     // the inherited pill badge - a single letter, kept identical in every locale beside VS and M by design
     'I',
+    // the agent count on the status line, "2 ag" - a placeholder and an abbreviation kept identical in every locale by design
+    '{0} ag',
 ];
 
 const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
@@ -56,11 +58,10 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         'Auto ({0})',
         // "Session" is the French word (a common loanword); de/es/it all differ
         'Session',
-        // "agent" is the French word too, and "agents" its plural; de/es/it all differ
-        '1 agent',
-        '{0} agents',
     ],
     it: [
+        // "file" is the Italian word for a file, as in English; de/es/fr all differ
+        '1 file',
         // "Token" is the Italian loanword for a credential token; fr uses "Jeton"
         'Token',
     ],

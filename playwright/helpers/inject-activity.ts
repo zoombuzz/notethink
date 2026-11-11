@@ -29,7 +29,11 @@ interface ActivityRefusalSpec {
  * - sessions: session ids to keep; defaults to every session this helper declares
  * - tail_read_sessions: ids of sessions to mark `tail_read`, as the analyser does for a transcript over its size bound
  * - extra_uncommitted: extra unattributed changed files, to fill a card's uncommitted band
+ * - no_uncommitted: leaves the working tree clean, so the card has no uncommitted files
  * - pending_commits: the branch's ahead-of-upstream count, 2 by default; 'none' leaves it off, as a branch with no upstream does
+ * - pending_detail: the newest pending commits as the host lists them; by default up to two, one per pending commit, and 'none' leaves it off, as a repository whose objects cannot be read does
+ * - scan_progress: the first scan's tally of sessions read out of sessions found, carried on a scanning snapshot
+ * - repository_done: a scanning snapshot also names this repository as one whose own scan is done, as the host does once every session that could belong to it has been read
  * - finished_children: how many finished subagents the `claude-coordinator` session carries beside its running one
  * - progress: coordinator percentages by story id, each stamped as written by the coordinator at the given time
  */
@@ -42,7 +46,11 @@ interface InjectActivityOptions {
     sessions?: string[];
     tail_read_sessions?: string[];
     extra_uncommitted?: number;
+    no_uncommitted?: boolean;
     pending_commits?: number | 'none';
+    pending_detail?: Array<Record<string, unknown>> | 'none';
+    scan_progress?: { sessions_read: number; sessions_found: number };
+    repository_done?: boolean;
     finished_children?: number;
     progress?: Array<{ story_id: string; pct: number; at?: string; note?: string }>;
 }
@@ -182,13 +190,19 @@ const SESSION_BUILDERS: Record<string, (story_doc_path: string, options: InjectA
 };
 
 /** the tree one repository's working tree carries, keyed to the same session ids the sessions above declare */
-function activityTree(extra_uncommitted = 0, pending_commits: number | 'none' = 2): Record<string, unknown> {
+const PENDING_COMMITS_DETAIL = [
+    { short_sha: 'abc1234', files: 3, added: 100, removed: 4 },
+    { short_sha: 'def5678', files: 1, added: 20, removed: 30 },
+];
+
+function activityTree(extra_uncommitted = 0, pending_commits: number | 'none' = 2, no_uncommitted = false, pending_detail?: Array<Record<string, unknown>> | 'none'): Record<string, unknown> {
+    const detail = pending_detail ?? (pending_commits === 'none' ? 'none' : PENDING_COMMITS_DETAIL.slice(0, pending_commits));
     const extra = Array.from({ length: extra_uncommitted }, (_, i) => ({ path: `docs/extra-${i + 1}.md`, change: 'modified' }));
     return {
         generated_at: '2026-09-18T09:14:02Z',
         branch: 'staging',
         head_commit: 'ef11de8b1c9a4d2f6e5b0a3c7d8e9f01a2b3c4d5',
-        uncommitted: [
+        uncommitted: no_uncommitted ? [] : [
             { path: 'client/extension/src/types/AgentActivity.ts', change: 'added', session_id: 'claude-bound-busy', added: 18, removed: 0 },
             { path: 'client/extension/src/lib/agentanalyserops.ts', change: 'added', session_id: 'claude-bound-busy', added: 6, removed: 0 },
             { path: 'package.json', change: 'modified' },
@@ -200,6 +214,7 @@ function activityTree(extra_uncommitted = 0, pending_commits: number | 'none' = 
             { sha: 'b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5', subject: 'rename axisops', session_id: 'grok-bound-idle' },
         ],
         ...(pending_commits === 'none' ? {} : { pending_commits }),
+        ...(detail === 'none' || detail.length === 0 ? {} : { pending_detail: detail }),
     };
 }
 
@@ -214,9 +229,14 @@ export function activityFixtureSnapshot(options: InjectActivityOptions = {}): Re
         session: { ...SESSION_BUILDERS[id](story_doc_path, options), ...(options.tail_read_sessions?.includes(id) ? { tail_read: true } : {}) },
     }));
     return {
-        analyser: { state: options.state ?? (options.live === false ? 'unavailable' : 'live'), refusals: options.refusals ?? [] },
+        analyser: {
+            state: options.state ?? (options.live === false ? 'unavailable' : 'live'),
+            refusals: options.refusals ?? [],
+            ...(options.scan_progress ? { progress: options.scan_progress } : {}),
+            ...(options.repository_done ? { done_roots: [root_path] } : {}),
+        },
         sessions,
-        trees: [{ root_path, root_relative, tree: activityTree(options.extra_uncommitted, options.pending_commits) }],
+        trees: [{ root_path, root_relative, tree: activityTree(options.extra_uncommitted, options.pending_commits, options.no_uncommitted, options.pending_detail) }],
         progress: (options.progress ?? []).map(entry => ({ root_relative, at: '2026-09-18T09:00:00Z', by: 'coordinator', ...entry })),
     };
 }

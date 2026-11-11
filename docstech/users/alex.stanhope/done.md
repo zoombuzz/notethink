@@ -8517,3 +8517,19 @@ Pins in effect after this wave (snapshot):
 - `copy-webpack-plugin` 14.0.0 exact - not a hold - unreleased beyond 14.0.0 at the time of the wave; ncu offered nothing newer
 - `@types/vscode` 1.145.0 exact - paired with `engines.vscode` ^1.145.0, which rise together every wave
 Unpinned this wave: `@types/vscode` (1.138.0 hold cleared). packageManager raised 12.15.0 to 12.18.0 (root only; the three client sub-packages stay on 12.8.1, outside this wave).
+
+
+### Spike a WASM markdown parser in the parse worker [](?id=wasm-parser-spike)
+
+Decide go or no-go on replacing `mdast-util-from-markdown` in `ParseWorker.ts` with markdown-rs compiled to WASM (via @vscode/wasm). The worker pool from [[extension-parse-offload]] already keeps parsing off the host thread, so this spike is only about raw parse speed. The hot-path survey ([[hot-path-survey]]) leans no-go: the mdast tree has to be rebuilt as JS objects on the way back, which may eat the gain.
+
++ decision 2026-11-11 (operator): not pursued for now; the spike could be done, but is not going to be done yet, so it is closed here unrun rather than left on the board
+  + to pick it up, refile it at the top of `todo.md` with the criteria and steps below
++ go/no-go criteria, all three must hold
+  + position compatibility: `position.start` / `position.end` line, column and offset on every node type `convertMdastToNoteHierarchy` and origin tracking read, on the parseops fixture corpus
+  + payload parity: 400KB and 800KB done.md-shaped fixtures render identically through both parsers, with no dropped linetags or stable_ids
+  + speedup of at least 3x in wall-clock parse time, worker to worker, including rebuilding the JS mdast
++ scope
+  + a throwaway `ParseWorker.ts` variant or a `scripts/perf/` script, never wired into the shipped extension before the decision
++ not run: build the WASM parse path and measure all three criteria on the same fixtures
++ not run: record the numbers and the go or no-go decision, before any implementation task is filed

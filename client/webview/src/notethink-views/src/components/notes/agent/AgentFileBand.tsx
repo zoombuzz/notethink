@@ -69,7 +69,7 @@ function changeMark(change: string): string {
 }
 
 /** a file's own +added -removed, or the band header's total; absent when the analyser has not computed (or declined to compute) a line diff for this file */
-function LineDiffCounts(props: { added: number | undefined; removed: number | undefined; testid: string }): React.ReactElement | null {
+export function LineDiffCounts(props: { added: number | undefined; removed: number | undefined; testid: string }): React.ReactElement | null {
     if (props.added === undefined || props.removed === undefined) { return null; }
     return (
         <span className={styles.lineDiff} data-testid={props.testid}>

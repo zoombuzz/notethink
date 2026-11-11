@@ -17,6 +17,7 @@ import {
     formatStatusUsage,
     formatAgentClock,
     formatDurationClock,
+    isAgentCardScanDone,
     isAgentScanPending,
     normaliseActivityPath,
     parseActivityMessage,
@@ -42,6 +43,7 @@ import {
     sessionDisplayName,
     viewedActivityScope,
     virtualNotesForActivity,
+    type ActivityAnalyserState,
     type ActivitySessionState,
     type ActivitySnapshot,
     type ActivityTreeState,
@@ -470,6 +472,23 @@ describe('drawing a vendor and its arguments', () => {
         expect(shortModelId('grok-4')).toBe('grok-4');
         expect(shortModelId('claude-')).toBe('claude-');
         expect(shortModelId(undefined)).toBe('');
+    });
+});
+
+describe('a card\'s own scan being done', () => {
+    const scanning = (extra: Partial<ActivityAnalyserState> = {}): ActivityAnalyserState => ({ state: 'scanning', refusals: [], ...extra });
+
+    it('is done once the analyser is live or a completed scan has ever landed', () => {
+        expect(isAgentCardScanDone({ state: 'live', refusals: [] }, '/ws', false)).toBe(true);
+        expect(isAgentCardScanDone(scanning(), '/ws', true)).toBe(true);
+    });
+
+    it('is done while scanning only when the card\'s own repository is among the finished ones', () => {
+        expect(isAgentCardScanDone(scanning({ done_roots: ['/ws', '/lib'] }), '/ws', false)).toBe(true);
+        expect(isAgentCardScanDone(scanning({ done_roots: ['/lib'] }), '/ws', false)).toBe(false);
+        expect(isAgentCardScanDone(scanning({ done_roots: ['/ws'] }), undefined, false)).toBe(false);
+        expect(isAgentCardScanDone(scanning(), '/ws', false)).toBe(false);
+        expect(isAgentCardScanDone(undefined, '/ws', false)).toBe(false);
     });
 });
 

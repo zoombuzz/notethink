@@ -301,6 +301,23 @@ export interface ActivityCommit {
     session_id?: string;
 }
 
+/** the most pending commits an ActivityTree lists; the row says so when the branch is further ahead than this */
+export const ACTIVITY_PENDING_DETAIL_MAX = 20;
+
+/**
+ * ActivityPendingCommit is one local commit not yet pushed. A commit's figures are absent when its
+ * objects could not be read whole, never guessed.
+ * - short_sha: the first seven characters of the commit's sha
+ * - files: how many files the commit changes against its first parent
+ * - added, removed: the commit's line totals, present only when every file it changes was diffed
+ */
+export interface ActivityPendingCommit {
+    short_sha: string;
+    files?: number;
+    added?: number;
+    removed?: number;
+}
+
 /**
  * ActivityTree is one repository's working tree as the analyser last read it via the built-in git
  * extension.
@@ -308,6 +325,7 @@ export interface ActivityCommit {
  *   that session's own write calls
  * - committed: commits on this branch, credited to a session only by that session's own commit calls
  * - pending_commits: local commits not yet pushed, the branch's ahead count against its upstream; undefined when the branch has no upstream
+ * - pending_detail: the newest of those commits, newest first, at most ACTIVITY_PENDING_DETAIL_MAX; shorter than pending_commits when the list is bounded, and absent until a scan's fresh pass has read them or when they cannot be read
  */
 export interface ActivityTree {
     generated_at: string;
@@ -316,6 +334,7 @@ export interface ActivityTree {
     uncommitted: ActivityChangedFile[];
     committed: ActivityCommit[];
     pending_commits?: number;
+    pending_detail?: ActivityPendingCommit[];
 }
 
 /**

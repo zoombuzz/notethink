@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from "react";
 import { AGENT_CARD_TYPE } from "./cardregistryops";
 import { useActivityUnavailable, useAgentActivityDemand } from "../../lib/activityhooks";
-import { ACTIVITY_OPEN_CHAT_MESSAGE_TYPE, ACTIVITY_OPEN_DIFF_MESSAGE_TYPE, vendorColour, type ActivityBand } from "../../lib/agentactivityops";
+import { ACTIVITY_OPEN_CHAT_MESSAGE_TYPE, ACTIVITY_OPEN_DIFF_MESSAGE_TYPE, PENDING_COMMITS_EXPANSION_SUFFIX, vendorColour, type ActivityBand } from "../../lib/agentactivityops";
 import { HIDDEN_ATTRIBUTES } from "../../lib/linetagops";
 import { isNoteManuallyExpanded } from "../../lib/noteops";
 import { buildNoteStyles } from "../../lib/noteui";
@@ -68,8 +68,8 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
     const handleOpenChat = useCallback((vendor: string, session_id: string) => {
         post_message?.({ type: ACTIVITY_OPEN_CHAT_MESSAGE_TYPE, vendor, session_id });
     }, [post_message]);
-    // 'scanning' means "no information yet" only before the first completed scan; has_completed_scan guards that
-    const scanning = !model.has_completed_scan && model.analyser?.state === 'scanning';
+    // 'scanning' means "no information yet" only until this card's own scan is done, which can precede the whole scan's end
+    const scanning = !model.scan_done && model.analyser?.state === 'scanning';
     // manual expansion is the view's, on the same view_expanded_ids list the default card's Show more writes
     const expanded = isNoteManuallyExpanded(note_props);
     const stable_id = note_props.stable_id;
@@ -77,6 +77,12 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
     const handleToggleExpanded = useMemo(() => (stable_id !== undefined && set_note_expanded
         ? (next: boolean) => set_note_expanded(stable_id, next)
         : undefined), [stable_id, set_note_expanded]);
+    // the pending commits row is its own entry on that list, so it opens and closes independently of the files row
+    const pending_key = stable_id !== undefined ? `${stable_id}${PENDING_COMMITS_EXPANSION_SUFFIX}` : undefined;
+    const pending_expanded = pending_key !== undefined && (note_props.display_options?.view_expanded_ids?.includes(pending_key) ?? false);
+    const handleTogglePendingExpanded = useMemo(() => (pending_key !== undefined && set_note_expanded
+        ? (next: boolean) => set_note_expanded(pending_key, next)
+        : undefined), [pending_key, set_note_expanded]);
     // take the props version of every attribute, because the memoized headline only augments the note
     const note: NoteProps = {
         headline: memoized_headline,
@@ -119,7 +125,7 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
                 />
                 <AgentQuestionBand sessions={model.sessions} />
                 {/* waits for a completed scan, since crediting a file needs every session's write calls */}
-                {model.sessions.length > 0 && (model.analyser?.state === 'live' || model.has_completed_scan) && <AgentFileBands model={model} unavailable={unavailable} onOpenDiff={handleOpenDiff} expanded={expanded} onToggleExpanded={handleToggleExpanded} />}
+                {model.sessions.length > 0 && (model.analyser?.state === 'live' || model.has_completed_scan) && <AgentFileBands model={model} unavailable={unavailable} onOpenDiff={handleOpenDiff} expanded={expanded} onToggleExpanded={handleToggleExpanded} pendingExpanded={pending_expanded} onTogglePendingExpanded={handleTogglePendingExpanded} />}
             </div>
         </div>
     );

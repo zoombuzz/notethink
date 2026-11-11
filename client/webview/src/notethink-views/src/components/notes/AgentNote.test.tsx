@@ -108,7 +108,7 @@ describe('AgentNote', () => {
     it('folds the token and cost counter into the status line, and draws one on each agent row, stating the figure is approximate', () => {
         seed({ sessions: [makeSessionState(makeSession())] });
         render(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-count')).toHaveTextContent('1 agent, 1.5Kt, ~$0.12');
+        expect(screen.getByTestId('agent-count')).toHaveTextContent('1 ag, 1.5Kt, ~$0.12');
         expect(screen.queryByTestId('agent-usage-summary')).not.toBeInTheDocument();
         expect(screen.getByTestId('agent-usage')).toHaveTextContent('~$0.12');
     });
@@ -120,7 +120,7 @@ describe('AgentNote', () => {
         render(<AgentNote {...makeStoryNote()} />);
         const row_usage = screen.getByTestId('agent-usage');
         expect(row_usage).toHaveTextContent('1.5k tokens ~$0.12');
-        expect(screen.getByTestId('agent-count')).toHaveTextContent('1 agent, 1.5Kt, ~$0.12');
+        expect(screen.getByTestId('agent-count')).toHaveTextContent('1 ag, 1.5Kt, ~$0.12');
     });
 
     it('draws no band for a vendor that cannot report a question, leaving the row to state the agent', () => {
@@ -198,7 +198,7 @@ describe('AgentNote', () => {
         expect(container.querySelector('[data-winning-state="waiting"]')).toBeInTheDocument();
         expect(screen.getByTestId('agent-state-chip')).toHaveAttribute('data-state', 'waiting');
         expect(screen.getByTestId('agent-state-chip')).toHaveTextContent('Waiting on you');
-        expect(screen.getByTestId('agent-count')).toHaveTextContent(/^2 agents, /);
+        expect(screen.getByTestId('agent-count')).toHaveTextContent(/^2 ag, /);
     });
 
     it('draws no meta row on a card with no sessions', () => {
@@ -376,6 +376,37 @@ describe('AgentNote file and commit bands', () => {
         expect(screen.queryAllByTestId('agent-file-row')).toHaveLength(0);
     });
 
+    it('keeps the pending commits row and the files row open independently, each as its own entry on the view\'s expansion list', () => {
+        const detail = [{ short_sha: 'abc1234', files: 3, added: 100, removed: 4 }];
+        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: five_files, pending_commits: 1, pending_detail: detail } }] });
+        let latest_ids: string[] = [];
+        function Harness(): React.ReactElement {
+            const [expanded_ids, setExpandedIds] = React.useState<string[]>([]);
+            latest_ids = expanded_ids;
+            const setNoteExpanded = (stable_id: string, expanded: boolean): void => {
+                setExpandedIds(ids => (expanded ? [...ids.filter(id => id !== stable_id), stable_id] : ids.filter(id => id !== stable_id)));
+            };
+            const note = makeStoryNote();
+            return <AgentNote {...note} display_options={{ ...note.display_options, view_expanded_ids: expanded_ids }} handlers={{ setNoteExpanded }} />;
+        }
+        render(<Harness />);
+        const files_toggle = screen.getByTestId('agent-file-band-toggle-uncommitted');
+        const pending_toggle = screen.getByTestId('agent-pending-commits-toggle');
+        fireEvent.click(pending_toggle);
+        expect(pending_toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(files_toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getAllByTestId('agent-pending-commit-row')).toHaveLength(1);
+        expect(screen.queryAllByTestId('agent-file-row')).toHaveLength(0);
+        fireEvent.click(files_toggle);
+        expect(files_toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(pending_toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(latest_ids).toHaveLength(2);
+        fireEvent.click(pending_toggle);
+        expect(pending_toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(files_toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByTestId('agent-file-row')).toHaveLength(5);
+    });
+
     it('unfolds on its own state when no view owns expansion for the card', () => {
         seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: five_files } }] });
         render(<AgentNote {...makeStoryNote()} />);
@@ -398,9 +429,9 @@ describe('AgentNote file and commit bands', () => {
     });
 
     it('says there are no uncommitted files in one line that does not unfold, even with commits on the branch', () => {
-        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: [] } }] });
+        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: [], pending_commits: 0 } }] });
         render(<AgentNote {...makeStoryNote()} />);
-        expect(screen.getByTestId('agent-file-bands-empty')).toHaveTextContent('No uncommitted files');
+        expect(screen.getByTestId('agent-file-bands-empty')).toHaveTextContent(/^No uncommitted files or pending commits$/);
         expect(screen.queryByTestId('agent-file-band-uncommitted')).not.toBeInTheDocument();
         expect(screen.queryByTestId('agent-commit-band')).not.toBeInTheDocument();
     });
@@ -431,6 +462,21 @@ describe('AgentNote file and commit bands', () => {
         seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: [], pending_commits: 3 } }] });
         render(<AgentNote {...makeStoryNote()} />);
         expect(screen.getByTestId('agent-pending-commits')).toHaveTextContent('3 pending commits');
+    });
+
+    it('unfolds the pending commits row on the card\'s own expansion, listing each commit and bounding the list with its bound shown', () => {
+        const detail = [{ short_sha: 'abc1234', files: 2, added: 10, removed: 1 }, { short_sha: 'def5678', files: 1, added: 3, removed: 0 }];
+        seed({ sessions: [makeSessionState(makeSession())], trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { ...tree, uncommitted: [], pending_commits: 30, pending_detail: detail } }] });
+        render(<AgentNote {...makeStoryNote()} />);
+        const toggle = screen.getByTestId('agent-pending-commits-toggle');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle).toHaveTextContent(/^30 pending commits\s+\+13\s+-1$/);
+        expect(screen.queryAllByTestId('agent-pending-commit-row')).toHaveLength(0);
+        fireEvent.click(toggle);
+        expect(screen.getAllByTestId('agent-pending-commit-row')).toHaveLength(2);
+        expect(screen.getByTestId('agent-pending-commits-bound')).toHaveTextContent('Showing the latest 2 of 30 pending commits');
+        fireEvent.click(toggle);
+        expect(screen.queryAllByTestId('agent-pending-commit-row')).toHaveLength(0);
     });
 
     it('opens an uncommitted file as a diff from a real control, echoing back the root and path the host published', () => {
@@ -591,6 +637,47 @@ describe('AgentNote says plainly what it does not know', () => {
         const notice = screen.getByTestId('agent-banner-notice');
         expect(notice).toHaveTextContent('Scanning agent activity...');
         expect(notice).toHaveAttribute('title', expect.stringContaining('still scanning'));
+    });
+
+    it('puts the first scan\'s progress in the notice on a card with no sessions yet', () => {
+        seed({ analyser: { state: 'scanning', progress: { sessions_read: 212, sessions_found: 624 } } });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-banner-notice')).toHaveTextContent('Scanning agent activity, 212 of 624 sessions');
+    });
+
+    it('draws no scanning notice on a card already drawing sessions, and keeps its count dimmed', () => {
+        seed({ analyser: { state: 'scanning', progress: { sessions_read: 212, sessions_found: 624 } }, sessions: [makeSessionState(makeSession())] });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.queryByTestId('agent-banner-notice')).not.toBeInTheDocument();
+        expect(screen.getByTestId('agent-count')).toHaveAttribute('data-scanning', 'true');
+    });
+
+    it('says a card\'s repository has no agent activity once its own scan is done, while the rest of the first scan runs', () => {
+        seed({
+            analyser: { state: 'scanning', progress: { sessions_read: 212, sessions_found: 624 }, done_roots: [ROOT_PATH] },
+            trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { generated_at: '2026-09-18T09:14:02Z', branch: 'staging', head_commit: 'ef11de8', uncommitted: [], committed: [] } }],
+        });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-banner-notice')).toHaveTextContent('No agent activity in 30 days');
+    });
+
+    it('keeps the scanning notice on a card whose repository is not among the finished ones', () => {
+        seed({
+            analyser: { state: 'scanning', progress: { sessions_read: 212, sessions_found: 624 }, done_roots: ['/some/other/repo'] },
+            trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { generated_at: '2026-09-18T09:14:02Z', branch: 'staging', head_commit: 'ef11de8', uncommitted: [], committed: [] } }],
+        });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-banner-notice')).toHaveTextContent('Scanning agent activity, 212 of 624 sessions');
+    });
+
+    it('draws a finished card\'s count plainly while the rest of the first scan runs', () => {
+        seed({
+            analyser: { state: 'scanning', done_roots: [ROOT_PATH] },
+            sessions: [makeSessionState(makeSession())],
+            trees: [{ root_path: ROOT_PATH, root_relative: ROOT_RELATIVE, tree: { generated_at: '2026-09-18T09:14:02Z', branch: 'staging', head_commit: 'ef11de8', uncommitted: [], committed: [] } }],
+        });
+        render(<AgentNote {...makeStoryNote()} />);
+        expect(screen.getByTestId('agent-count')).not.toHaveAttribute('data-scanning');
     });
 
     it('says the analyser failed, and gives the reason on hover rather than as a paragraph on every card', () => {

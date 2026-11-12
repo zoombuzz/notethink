@@ -23,7 +23,8 @@ Then open any `.md` file, right-click it and choose **Open With... -> NoteThink*
 - **Agent activity**: see which AI coding agents (Claude Code, Codex, Grok, and any other vendor registered with thinkersync) are working on which story, live, on desktop - including a remote window, where it reads the sessions on the host serving the workspace
 - **Linetags**: plain markdown links carry status, epic, and other attributes invisibly - see [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
 - **GFM + Frontmatter**: tables, strikethrough, task lists, footnotes, YAML/TOML frontmatter
-- **Writes back two things, precisely**: a card drag and a checkbox click, and nothing else - see [Known Limitations](#known-limitations)
+- **Coordinators beside boards**: on desktop, a folder view lists the agents registered with thinkersync beside the boards they own, with a send-to-agent message and a draggable target line - see [Coordinators beside boards](#coordinators-beside-boards)
+- **Writes back a few things, precisely**: a card drag, a checkbox click, and, on your own action, a message to an agent and its target line - see [Known Limitations](#known-limitations)
 
 ## Screenshots
 
@@ -220,6 +221,17 @@ Agents of any vendor can also be read from the thinkersync agent registry: one `
 
 Clicking an agent on a card opens that session in VS Code: in Claude Code's own chat panel, or, for a vendor with no such panel, as the session's transcript in an editor.
 
+### Coordinators beside boards
+
+A folder view lists the registered coordinators beside its boards, read from the same registry. A coordinator is the long-lived agent that owns one repository's board. The panel appears above the board in folder view whenever a story board (`docstech/users/<name>/todo.md`) is loaded, and has one row for every registered coordinator whose repository holds a loaded file: a folder holding several repositories lists each repository's agent, and a view open on one repository, or a folder inside it, lists the one agent that owns it. It is desktop only, like the `agent` card, because a browser host has no file access to the registry, and in a remote window it reads the registry on the host serving the workspace. A repository with no registered coordinator shows none.
+
+NoteThink only shows and asks: it never starts, stops or restarts an agent. Each row shows the agent's name, its state (working, idle, starting, recycling or stopped), the story it is on, its program version and how many convoys it has open, as the registry records them. Two buttons open under a row:
+
+- **Send to agent** opens a message box. Pressing **Send** writes one envelope, a small JSON file, into the agent's mailbox on that machine (`mailboxes/<agent>/inbox/` beside the registry). The file is written under a temporary name and renamed into place, so the agent never reads half of it. Nothing is ever sent automatically, and an agent whose mailbox does not exist yet is refused rather than given one. A story card in the view also carries a small envelope action, which opens the same box with the story named; it sends nothing until you press Send.
+- **Target line** lists the board's stories with a line drawn on it. The line is the `[](?coord=<host>)` marker on a story heading: the coordinator on that host may work from the top of the board down to the line, and stories below it are dimmed. Drag the line to another place between stories, or focus it and press the Up and Down arrow keys to move it one story, Home to take it off the board and End to put it below the last story. The move rewrites the `coord` linetag on the stories' headings in the board file, so a host keeps one marker, and saves the board unless it already held other unsaved edits. Open convoys (unticked tasks tagged `delegate=<repo>`) and the steps only you can take (unticked tasks tagged `work=manual`) show on the stories they belong to.
+
+As with the registry above, NoteThink looks only in the default `~/.local/share/thinkersync/`, and shows nothing about an agent's mailbox path, terminal pane or sessions.
+
 ## Story progress pie
 
 A story at `doing`, `code-review` or `testing`, or with an agent working on it, shows a small pie beside its headline in every card type (the card, the sticky and the agent card). The pie is labelled "n% complete", and hovering it names where the figure came from. It sweeps to a new value when the figure changes, and holds still if your system asks for reduced motion. The first of these that has a figure is used:
@@ -230,7 +242,7 @@ A story at `doing`, `code-review` or `testing`, or with an agent working on it, 
 
 ## Known Limitations
 
-- **Not a text editor**: NoteThink writes back exactly two kinds of change - dragging a card in Kanban or Line view rewrites its status (or grouping attribute) linetag, plus an `nt_kanban_ordering_weight` linetag to remember the drop position, and clicking a checkbox toggles it in the source. It never edits body text, headings, or anything else, and nothing changes unless you drag a card or tick a checkbox yourself
+- **Not a text editor**: NoteThink writes back exactly two kinds of change - dragging a card in Kanban or Line view rewrites its status (or grouping attribute) linetag, plus an `nt_kanban_ordering_weight` linetag to remember the drop position, and clicking a checkbox toggles it in the source. It never edits body text, headings, or anything else, and nothing changes unless you drag a card or tick a checkbox yourself. Two more things are written, each only when you ask for it in a coordinator panel: a message you press Send on is written as a file into that agent's mailbox, and moving a target line rewrites the `coord` linetag on story headings in that board
 
 ## Contributing
 

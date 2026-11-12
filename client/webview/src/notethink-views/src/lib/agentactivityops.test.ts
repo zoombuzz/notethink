@@ -135,6 +135,7 @@ describe('the activity message', () => {
             sessions: [],
             trees: [],
             progress: [],
+            coordinators: [],
         });
     });
 

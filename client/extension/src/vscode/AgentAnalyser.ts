@@ -16,6 +16,7 @@ import {
     type AgentAnalyserUnavailableReasonCode,
 } from '../lib/agentanalyserops';
 import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
+import { coordinatorsFrom, boardDocFor } from '../lib/coordinatorops';
 import { REGISTRY_FILE_MAX_BYTES, REGISTRY_MAX_AGENTS, overlayRegistry, parseRegistryEntry, registryEntrySegments, REGISTRY_DIR_SEGMENTS, type ResolvedRegistryAgent } from '../lib/agentregistryops';
 import { PROGRESS_FILE_MAX_BYTES, THINKERSYNC_HOME_SEGMENTS, parseProgressFile, progressFileSegments, progressForRepository, progressProjectName } from '../lib/progressfileops';
 import { attributeCommitsToSessions, attributeFilesToSessions, type AgentCommitCall, type AgentWriteCall } from '../lib/agentgitattributionops';
@@ -29,7 +30,7 @@ import { findStoryInDocs, isBoardPath, siblingBoardPath, storiesForWriteCall, ty
 import { sliceTail, type TailBookmark } from '../lib/agenttailparseops';
 import type { AgentAnalyserRawFile, AgentAnalyserResolvedCall, AgentAnalyserWorkerJob, AgentAnalyserWorkerRequest, AgentAnalyserWorkerResponse, AgentAnalyserWorkerSessionOutput, AgentLineDiffJob, AgentVendorId } from './AgentAnalyserWorker';
 import { AgentAnalyserWorkerPool, defaultAgentAnalyserPoolSize } from './AgentAnalyserWorkerPool';
-import { ACTIVITY_PENDING_DETAIL_MAX, addActivityUsage, emptyActivityUsage, type ActivityChangedFile, type ActivityPendingCommit, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
+import { ACTIVITY_PENDING_DETAIL_MAX, addActivityUsage, emptyActivityUsage, type ActivityChangedFile, type ActivityCoordinator, type ActivityPendingCommit, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
 import type { HashMapOf } from '../types/general';
 
 // only sessions with activity inside this window count toward what a story's card draws
@@ -333,6 +334,9 @@ export class AgentAnalyser {
     private sessions: HashMapOf<ActivitySessionState> = {};
     private trees: HashMapOf<ActivityTreeState> = {};
     private progress: ActivityStoryProgress[] = [];
+    private coordinators: ActivityCoordinator[] = [];
+    // keyed by agent name: the absolute path of the board its target line is drawn on, which a marker move edits
+    private coordinator_board_paths = new Map<string, string>();
     private last_posted: string | undefined;
 
     constructor(
@@ -376,6 +380,22 @@ export class AgentAnalyser {
     /** the current snapshot for a panel that has just (re)loaded and holds nothing */
     public resendTo(post: PostFn): void {
         post(this.currentMessage());
+    }
+
+    /** the coordinator row the last scan listed under this agent name, with the absolute path of the board its target line is drawn on; the admission gate for a send and a marker move */
+    public coordinatorFor(agent: string): { coordinator: ActivityCoordinator; board_path?: string } | undefined {
+        const coordinator = this.coordinators.find(candidate => candidate.agent === agent);
+        return coordinator ? { coordinator, board_path: this.coordinator_board_paths.get(agent) } : undefined;
+    }
+
+    /** the thinkersync home the registry was read from, undefined until the vendor home is resolved or where this host has no file access */
+    public thinkersyncHomeUri(): vscode.Uri | undefined {
+        return this.vendor_home ? vscode.Uri.joinPath(this.vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS) : undefined;
+    }
+
+    /** asks for a scan now rather than at the next poll, so a change a panel just made shows promptly; a no-op while the analyser is not running */
+    public refresh(): void {
+        if (this.running) { this.scheduleScan(0); }
     }
 
     /** the working tree one repository last read, for the diff opener's admission gate */
@@ -844,6 +864,7 @@ export class AgentAnalyser {
                 this.sessions = this.withRegistry(sessions_acc, registry_agents, progress, story_docs, now_ms);
                 this.trees = trees_this_batch;
                 this.progress = progress;
+                this.setCoordinators(registry_agents, story_docs);
                 this.state = emptyAnalyserState(is_last_batch ? 'live' : 'scanning');
                 this.state.refusals = refusals;
                 if (!is_last_batch) { this.noteScanProgress(this.state, batches.slice(batch_index + 1).flat(), reused.length + candidates_done, sessions_found, reads); }
@@ -1749,11 +1770,21 @@ export class AgentAnalyser {
                 try {
                     const bytes = await vscode.workspace.fs.readFile(doc_uri);
                     const doc_path = this.workspaceRelative(doc_uri.path);
-                    if (doc_path) { docs.push({ doc_path, text: new TextDecoder().decode(bytes) }); }
+                    if (doc_path) { docs.push({ doc_path, text: new TextDecoder().decode(bytes), abs_path: doc_uri.path }); }
                 } catch { /* this user has no board of this name, which is normal */ }
             }
         } catch { /* this workspace folder is not a project with a docstech/users directory */ }
         return docs;
+    }
+
+    // the coordinator rows for this scan's registry agents, each placed on the board its repository keeps
+    private setCoordinators(agents: ResolvedRegistryAgent[], story_docs: StoryDocument[]): void {
+        this.coordinators = coordinatorsFrom(agents, story_docs);
+        this.coordinator_board_paths = new Map();
+        for (const coordinator of this.coordinators) {
+            const abs_path = boardDocFor(story_docs, coordinator.root_relative)?.abs_path;
+            if (abs_path) { this.coordinator_board_paths.set(coordinator.agent, abs_path); }
+        }
     }
 
     // the folded sessions with the registry laid over them, a registered agent's story looked up on the boards read this scan
@@ -2211,7 +2242,7 @@ export class AgentAnalyser {
     // --- posting ---
 
     private currentMessage(): Record<string, unknown> {
-        const snapshot = buildActivitySnapshot(this.state, this.sessions, this.trees, this.progress);
+        const snapshot = buildActivitySnapshot(this.state, this.sessions, this.trees, this.progress, this.coordinators);
         return { type: 'activity', activity: snapshot };
     }
 

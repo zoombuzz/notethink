@@ -33,7 +33,7 @@ function storyNote(markdown: string): NoteProps {
 }
 
 function snapshot(overrides: Partial<ActivitySnapshot> = {}): ActivitySnapshot {
-    return { analyser: { state: 'live', refusals: [] }, sessions: [], trees: [], progress: [], ...overrides };
+    return { analyser: { state: 'live', refusals: [] }, sessions: [], trees: [], progress: [], coordinators: [], ...overrides };
 }
 
 function session(state: ActivitySession['state'], story_id: string): ActivitySession {

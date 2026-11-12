@@ -4,6 +4,7 @@ import { headlineClickPosition, createNoteClickHandler } from "../../../lib/note
 import type { NoteProps } from "../../../types/NoteProps";
 import OriginPill from "../../../components/notes/OriginPill";
 import StoryProgressPie from "../../../components/notes/StoryProgressPie";
+import StorySendButton from "../../../components/notes/StorySendButton";
 import { originHasProject, projectFolderFromOrigin } from "../../../lib/originops";
 import view_specific_styles from "../../../components/ViewRenderer.module.scss";
 
@@ -13,7 +14,7 @@ interface MarkdownNoteHeadlineProps {
 
 /**
  * Render-only headline row: optional line number badge, optional origin pill, the story progress pie
- * (which draws itself, or nothing), headline content, and inline linetag badges when
+ * and the send-to-coordinator action (each draws itself, or nothing), headline content, and inline linetag badges when
  * showLinetagsInHeadlines is enabled. Stateless apart from the pie's own store read; the click
  * handler goes through createNoteClickHandler to share the note tree's selection-mutation
  * pathway. Renders nothing for the root note, since an empty rowheader would still match
@@ -51,6 +52,7 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
                 />
             )}
             <StoryProgressPie note={note} />
+            <StorySendButton note={note} />
             {note.headline}
             {show_inline_linetags && Object.entries(note.linetags!)
                 .filter(([key]) => !isInternalAttribute(key))

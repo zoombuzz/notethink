@@ -2885,6 +2885,69 @@ describe('AgentAnalyser agent registry', () => {
 		expect(error_spy).not.toHaveBeenCalled();
 	});
 
+	describe('coordinators beside boards', () => {
+		const BOARD_TEXT = '# Todo\n\n\n### Alpha [](?id=alpha&status=doing&coord=host-a)\n\n+ [ ] reply [](?work=manual)\n\n\n### Beta [](?id=beta)\n';
+		const COORDINATOR = JSON.stringify({
+			agent: 'coord-demo', agent_kind: 'coordinator', vendor: 'claude', repo: '/ws', machine: 'host-a', mailbox: '/secret/mailbox', state: 'idle', story: '',
+			session_id: 'sess-9', pane: '%3', binary_version: '1.2.3', open_convoys: ['c1'], updated_at: '2026-11-03T10:00:00Z',
+		});
+
+		async function scanSnapshot(): Promise<{ coordinators: Array<Record<string, unknown>> }> {
+			const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
+			const posted: Array<Record<string, unknown>> = [];
+			analyser.demand(msg => posted.push(msg));
+			await settle();
+			lookup = analyser;
+			return posted[posted.length - 1].activity as { coordinators: Array<Record<string, unknown>> };
+		}
+
+		let lookup: AgentAnalyser | undefined;
+
+		function wireBoard(): void {
+			const read_directory = vscode.workspace.fs.readDirectory as jest.Mock;
+			const read_file = vscode.workspace.fs.readFile as jest.Mock;
+			const read_directory_before = read_directory.getMockImplementation()!;
+			const read_file_before = read_file.getMockImplementation()!;
+			(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+				if (uri.path === '/ws/docstech/users') { return { type: 2, ctime: 0, mtime: 0, size: 0 }; }
+				throw new Error('not found');
+			});
+			read_directory.mockImplementation(async (uri: vscode.Uri) => (uri.path === '/ws/docstech/users' ? [['dev', vscode.FileType.Directory]] : read_directory_before(uri)));
+			read_file.mockImplementation(async (uri: vscode.Uri) => (uri.path === '/ws/docstech/users/dev/todo.md' ? new TextEncoder().encode(BOARD_TEXT) : read_file_before(uri)));
+		}
+
+		it('posts each registered coordinator in the open folder with its board, and nothing about its mailbox, pane or session', async () => {
+			wireRegistry({ 'coord-demo': COORDINATOR });
+			wireBoard();
+			const { coordinators } = await scanSnapshot();
+			expect(coordinators).toHaveLength(1);
+			expect(coordinators[0]).toMatchObject({
+				agent: 'coord-demo', machine: 'host-a', state: 'idle', version: '1.2.3', open_convoys: ['c1'], root_relative: '', board_doc_path: 'docstech/users/dev/todo.md', marker_after: 1,
+			});
+			expect((coordinators[0].board_stories as Array<Record<string, unknown>>).map(story => story.id)).toEqual(['alpha', 'beta']);
+			const wire = JSON.stringify(coordinators);
+			for (const leaked of ['/secret/mailbox', '%3', 'sess-9']) { expect(wire).not.toContain(leaked); }
+		});
+
+		it('lists no overseer and no coordinator whose repository is outside the open folder', async () => {
+			wireRegistry({
+				overseer: JSON.stringify({ agent: 'overseer', agent_kind: 'overseer', repo: '/ws', machine: 'host-a', state: 'idle' }),
+				'coord-elsewhere': JSON.stringify({ agent: 'coord-elsewhere', agent_kind: 'coordinator', repo: '/elsewhere/other', machine: 'host-a', state: 'idle' }),
+			});
+			wireBoard();
+			expect((await scanSnapshot()).coordinators).toEqual([]);
+		});
+
+		it('names the board and the thinkersync home a request is admitted against, and only for a listed agent', async () => {
+			wireRegistry({ 'coord-demo': COORDINATOR });
+			wireBoard();
+			await scanSnapshot();
+			expect(lookup?.coordinatorFor('coord-demo')).toMatchObject({ coordinator: { agent: 'coord-demo' }, board_path: '/ws/docstech/users/dev/todo.md' });
+			expect(lookup?.coordinatorFor('coord-other')).toBeUndefined();
+			expect(lookup?.thinkersyncHomeUri()?.path).toBe('/home/test/.local/share/thinkersync');
+		});
+	});
+
 	it('carries an unknown state through as an unknown row', async () => {
 		wireRegistry({ odd: JSON.stringify({ agent: 'odd', vendor: 'claude', repo: '/ws', state: 'hibernating', updated_at: '2026-11-03T10:00:00Z' }) });
 		const sessions = await scan();

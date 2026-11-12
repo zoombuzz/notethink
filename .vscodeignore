@@ -44,3 +44,4 @@ sh/**
 templates/**
 test-results/**
 .ncurc.json
+workflows/**

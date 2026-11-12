@@ -34,6 +34,8 @@ const ALLOWED_SAME_EVERY_LOCALE = [
 
 const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
     de: [
+        // "Version" is the German word; es and it differ
+        'Version {0}',
         // "Position" is the German word; es/fr/it all differ
         'Position:',
         // "Name" is the German word; es/fr/it all differ
@@ -42,6 +44,8 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         'Token',
     ],
     es: [
+        // "Convoy" is the Spanish loanword; de/fr/it all differ
+        'Convoy: {0}',
         // "Auto" is the accepted Spanish abbreviation of "automatico"; de and it use the full word
         'Auto ({0})',
         // "tokens" is the Spanish loanword its "{0} tokens ({1}d)" value already uses; de/fr/it all differ
@@ -50,6 +54,8 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         'Token',
     ],
     fr: [
+        // "Version" is the French word; es and it differ
+        'Version {0}',
         // "Collisions" is the French word; de/es/it all differ
         'Collisions',
         // "Orientation" is the French word; de/es/it all differ

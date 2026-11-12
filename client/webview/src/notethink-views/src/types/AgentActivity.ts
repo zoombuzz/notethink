@@ -356,6 +356,51 @@ export interface ActivityStoryProgress {
     note?: string;
 }
 
+/**
+ * ActivityCoordinatorStory is one story of a coordinator's board, as its target line lists it.
+ * - id: the story's `id=` linetag slug, or the slug of its title when it has none
+ * - status: the story's `status=` value, empty when it has none
+ * - convoys: the repositories named by the story's unticked tasks tagged `delegate=<repo>`, each an open convoy
+ * - operator_steps: the text of the story's unticked tasks tagged `work=manual`, each a step only the operator can take
+ */
+export interface ActivityCoordinatorStory {
+    id: string;
+    title: string;
+    status: string;
+    convoys: string[];
+    operator_steps: string[];
+}
+
+/**
+ * ActivityCoordinator is one registered coordinator, read-only, beside the board it owns. Left out on
+ * purpose: its mailbox path, terminal pane, session ids and absolute repository path, none of which a
+ * row draws or a send needs, since the host resolves the mailbox from the agent's name.
+ * - agent: the agent's registry name, such as `coord-demo`, which is also what a send names
+ * - vendor: the vendor slug the display table keys on
+ * - state: the registry's own state word, carried as written
+ * - story: the story id the coordinator is working on, empty when none
+ * - version: the program version the registry records, empty when it records none
+ * - machine: the short host name the registry records, which is also the host a `coord=` marker names
+ * - open_convoys: the registry's own list of open convoys, carried as written
+ * - root_relative: workspace-relative posix path of the repository, empty when it IS a workspace folder
+ * - board_doc_path: workspace-relative path of the `todo.md` the target line is drawn on; absent when the repository has none
+ * - board_stories: that board's stories, top to bottom
+ * - marker_after: how many stories sit at or above the lowest story carrying this host's `coord=` marker, 0 when none carries it
+ */
+export interface ActivityCoordinator {
+    agent: string;
+    vendor: string;
+    state: string;
+    story: string;
+    version: string;
+    machine: string;
+    open_convoys: string[];
+    root_relative: string;
+    board_doc_path?: string;
+    board_stories: ActivityCoordinatorStory[];
+    marker_after: number;
+}
+
 // why a session's own files could not be read; a caller asserts and branches on the code and logs the reason
 export const ACTIVITY_REJECT_CODES = ['unreadable', 'unsupported_version', 'invalid_shape'] as const;
 export type ActivityRejectCode = typeof ACTIVITY_REJECT_CODES[number];

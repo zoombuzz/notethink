@@ -1,6 +1,20 @@
 # Todo [](?nt_view=kanban)
 
 
+### Draw every chevron with one shared mark [](?id=shared-chevron-mark)
+
++ goal: one chevron mark, so a weight or opacity change lands everywhere.
++ problem: the agent card, the drawer tree and the toolbar tabs each draw the same rotating chevron their own way, an SVG in one and a rotated `›` text glyph with its own CSS in the other two, and they have already drifted on opacity and transition.
++ builds on: `AgentChevron` in `client/webview/src/notethink-views/src/components/notes/agent/AgentChevron.tsx:13`, kept as the one drawn mark; no new disclosure control.
++ parallel: edits `DrawerTree.tsx`, `ToolbarTab.tsx`, `ViewRenderer.module.scss` and `AgentNote.module.scss`, so run it away from other stories touching those
++ [ ] Move `AgentChevron` out of `notes/agent/` to a shared components path and give it a direction (right, down, up) in place of the `open` boolean
++ [ ] Move the chevron CSS from `AgentNote.module.scss:197-209` beside it, one opacity and one transition
++ [ ] Draw `DrawerTree`'s leading slot with the shared mark where the caller passes a glyph, keeping the blank spacer on leaf rows
++ [ ] Draw `ToolbarTab`'s chevron with the shared mark, keeping `data-testid`, `data-direction` and `aria-hidden`
++ [ ] Delete `.drawerTreeGlyphOpen`, `.toolbarTabChevron*` and the `›` glyph arguments no caller needs
++ [ ] Update the `DrawerTree`, `GenericView` and `settings-toggle` assertions that read the old glyph, and walk the toolbar drawers and the jump tree in a browser
+
+
 ### Share parse-worker scheduling and recovery [](?id=shared-parse-worker-scheduling&status=code-review)
 
 + goal: keep current-file and folder parsing responsive when a parse worker fails.
@@ -220,7 +234,7 @@ Opening a file tagged `[](?nt_view=kanban)` through NoteThink: Open Viewer draws
   + unit coverage in `AutoView.test.tsx` (cleared caret, no focus, no tag, focused note override)
 
 
-### Latest folder scan wins [](?id=latest-folder-scan-wins)
+### Latest folder scan wins [](?id=latest-folder-scan-wins&status=doing)
 
 Typing a new Include filter can leave the board and the Files drawer showing the result of an older, partial pattern. On 2026-09-25, in a workspace of about 2200 markdown files, `**/{todo,done}.md` showed `(0 in 0 files)` while 22 files on disk match it.
 
@@ -237,19 +251,28 @@ Typing a new Include filter can leave the board and the Files drawer showing the
   + inferred: a partial-pattern scan finished last and overwrote the full one; the production build does not log enough to confirm
   + `(0 in 0 files)` also renders when discovered equals loaded at zero (BreadcrumbTrail.tsx count label), so the label alone does not prove scan order
 + follows PATTERNS.md > "Empty states": fix the error path before the presentation, so this lands before [[files-drawer-change-defaults]] and any first-run copy
-+ [ ] stamp each folder discovery with a generation number in PanelSession
-+ [ ] drop a stale scan's findFiles result, its per-file loads, its aggregate payload and its `pending=false`
-+ [ ] add an extension test: two deferred `findFiles`, the older resolves last, the board keeps the newer set and discovered count
++ [X] stamp each folder discovery with a generation number in PanelSession
+  + `folder_scan_generation` in `PanelSession.ts`, bumped by each `enterFolderMode`; the scan carries its number through `discoverFolderDocs`, `loadDiscoveredDocs` and `loadFolderDoc`
+  + re-verified against the current tree first: the overlap and the missing same-folder guard were as described; `ParsePool.ts` and `ParseScheduler.ts` needed no change
++ [X] drop a stale scan's findFiles result, its per-file loads, its aggregate payload and its `pending=false`
+  + a superseded scan returns after `computeWorkspaceProjects`, after discovery, after the cache check and after each load, so it never touches the totals, the discovery batch, the aggregate, the pending flag or the watcher
+  + decision: the newer scan's own `pending` pair brackets the visible state, so a stale scan sends no `pending=false`; in-flight parses are not cancelled (out of scope)
++ [X] add an extension test: two deferred `findFiles`, the older resolves last, the board keeps the newer set and discovered count
+  + `notethinkEditor.test.ts` > "the latest folder scan wins": older resolves last, older resolves first, and a truncated winner; two of the three fail with the guards removed and all pass with them
   + assert payload fields, not the breadcrumb string
   + include one `**/{todo,done}.md` case on the same path
   + do not use `**/{todo` as the only fixture
-+ [ ] keep `(X in Y of M files)` when the winning scan is truncated (PATTERNS.md > "Bounded lists say they are bounded")
++ [X] keep `(X in Y of M files)` when the winning scan is truncated (PATTERNS.md > "Bounded lists say they are bounded")
+  + the totals and `aggregate_truncated` are still set only by the winning scan; the truncated-winner test asserts `aggregate_truncated`, the full discovered count and the capped doc count when a smaller older scan lands last
 + [ ] verify in that workspace: reload the window with Include `**/{todo,done}.md` and confirm stories from 22 files
+  + ran a public-safe stand-in: `playwright/specs/folder-latest-scan-real-host.spec.ts` generates 2222 markdown files with 22 `todo.md` / `done.md`, serves the built extension through @vscode/test-web, opens the viewer in folder mode (label `of 2222 files)`), then types the Include filter `**/{todo`, `**/{todo,`, `**/{todo,d`, `**/{todo,done}.md` with a pause longer than the drawer debounce after each; the settled label is `in 22 files)` with stories from both a first and a last project visible
+  + residue: the stand-in also passes with the guards removed (a test-web host walks a virtual filesystem, so its scans complete in order), so it guards the typing path but does not reproduce the race; the reload of the real window with the persisted Include filter on a host using `findFiles` is not automated and stays for the operator
++ open question: will the operator reload the original workspace in VS Code with Include `**/{todo,done}.md` and report the label (expecting stories from 22 files), or split that check into its own story so this one can advance?
 + out of scope
   + cancelling in-flight parses from the parse-offload work; a stale scan's results are ignored, not aborted
 
 
-### Chief-of-staff workflow pack [](?id=chief-of-staff-pack)
+### Chief-of-staff workflow pack [](?id=chief-of-staff-pack&status=doing)
 
 Someone running coding agents against stories in a `todo.md` has no ready-made way to ask an agent "what should be worked on next?" or "what do I need to do right now to keep the agents busy?", or to watch that work on a board. This story ships a workflow pack in `workflows/chief-of-staff/`: two agent skills, the story rules they rely on, and a board that opens in NoteThink, where each step links to the markdown that drives it.
 
@@ -273,36 +296,59 @@ Someone running coding agents against stories in a `todo.md` has no ready-made w
   + a Jest scan over `workflows/` catches absolute home paths, emails, IP addresses and host:port pairs, analytics ids, secret-shaped strings, links that leave the pack, and em or en dash glyphs
   + the scan takes an optional terms file from outside the repo, for names that must not appear but cannot be listed publicly, and reports matches masked
   + quotes and process narrative are still a judgement, per `AGENTS.md` > This repository is public
-+ [ ] write `AGENTS.md` with the How stories work section, and a `CLAUDE.md` holding only `@AGENTS.md`
-+ [ ] write `what-next` and `me-now` as repo-local skills that point only at files in the pack
-+ [ ] add the move-to-done script with Jest tests for the append, the `status=` strip, the open-box refusal and a dry run
-+ [ ] write the board `todo.md` and `README.md`, each story linking to its file
-+ [ ] add the sanitise scan as a Jest test over `workflows/`, with a test proving each pattern is caught and the terms file is masked
-+ [ ] confirm in VS Code that each board link opens its markdown in the viewer
++ decision: the Jest scan and script tests live in `client/extension/src/workflows/`, the one Jest project whose node environment fits them, and the move script is a dependency-free `.mjs` so a stranger can run it with plain Node
++ decision: the optional terms file is a path held in an environment variable read by the scan test; findings print rule, file, line and a masked match, never the text
++ decision: `workflows/**` is added to `.vscodeignore` so the pack stays out of the VSIX; `.mjs` is ignored by eslint and tsc includes only each client `src`, so the pack is outside lint scope already
++ decision: the board's link walk is a permanent Playwright spec, which also guards the pack against later changes
++ residue: the signed-out browser check through notethink.com's app route waits on the push, since the pack is not public until then
++ [X] write `AGENTS.md` with the How stories work section, and a `CLAUDE.md` holding only `@AGENTS.md`
+  + evidence: `workflows/chief-of-staff/AGENTS.md`, `CLAUDE.md`; `workflowspack.test.ts` asserts CLAUDE.md is exactly `@AGENTS.md`
++ [X] write `what-next` and `me-now` as repo-local skills that point only at files in the pack
+  + evidence: `workflows/chief-of-staff/skills/*/SKILL.md`; the link scan and the resolve-every-link test pass over them
++ [X] add the move-to-done script with Jest tests for the append, the `status=` strip, the open-box refusal and a dry run
+  + evidence: `workflows/chief-of-staff/scripts/move-to-done.mjs`, 11 tests in `client/extension/src/workflows/movetodone.test.ts` driving the script as a process
++ [X] write the board `todo.md` and `README.md`, each story linking to its file
+  + evidence: `workflows/chief-of-staff/todo.md`, `README.md`, `done.md`; `workflowspack.test.ts` checks every board story links an existing markdown file in the pack
++ [X] add the sanitise scan as a Jest test over `workflows/`, with a test proving each pattern is caught and the terms file is masked
+  + evidence: `sanitiseops.ts`, `sanitiseops.test.ts` (a test per rule), `workflowspack.test.ts` (scan of `workflows/`, passes with no terms file, masked terms file case)
++ [X] confirm in VS Code that each board link opens its markdown in the viewer
+  + evidence: `playwright/specs/workflow-pack-links.spec.ts` runs the real extension in a VS Code web host over a copy of the pack, opens `todo.md` in the viewer and follows the four distinct links (`AGENTS.md`, `README.md`, both `SKILL.md`), each showing its target's title; passed
 + [ ] once pushed, open the board signed out through notethink.com's app route and confirm columns render and links open, in the same run
-+ [ ] bump the patch version
++ open question: this check can only run after the push, so the story cannot reach code-review first; ship it at doing and run the check straight after the push (recommended), or split the check into its own story?
++ [X] bump the patch version
+  + evidence: `package.json` 0.4.35
 
 
-### Evaluate AgentChevron as a duplicate expand control [](?id=agent-chevron-duplicate-eval)
+### Evaluate AgentChevron as a duplicate expand control [](?id=agent-chevron-duplicate-eval&status=code-review)
 
 Question: is `AgentChevron` (`client/webview/src/notethink-views/src/components/notes/agent/AgentChevron.tsx`) a duplicate of another expand or collapse control that is worth refactoring, to reduce technical debt and make the code more readable?
 
 + parallel: reads code and writes only to this board, so it can run alongside any other batch story
 + known: 8042cc4 (agent tree) added `AgentChevron.tsx`
 + suspected: other expand or collapse controls in the webview may already do the same job under another name; nothing has searched for them yet
-+ [ ] Search the webview for existing chevron, caret, disclosure or expand controls and compare each with `AgentChevron` (`git log` on each)
-+ [ ] Record a verdict with `file:line` evidence: a duplicate worth refactoring, or different enough to keep, and why
-+ [ ] If it is worth refactoring, file the refactor as its own story at the top of this board, with a `builds on` line naming the component to keep
++ [X] Search the webview for existing chevron, caret, disclosure or expand controls and compare each with `AgentChevron` (`git log` on each)
+  + `AgentChevron.tsx:13-19` is an inline SVG (path `M6 4l4 4-4 4`, `currentColor`) with `.agentChevron` and `.agentChevronOpen` (`AgentNote.module.scss:197-209`: opacity 0.8, 0.1s rotate(90deg), reduced-motion off); 4 callers, all in `agent/` (`AgentSessionRow.tsx:169`, `AgentChildRows.tsx:87`, `AgentFileBand.tsx:98`, `AgentPendingCommits.tsx:73`), each a native button or treeitem with `aria-expanded`; added once in 8042cc4, no history since
+  + `DrawerTree.tsx:67,78`: a text `›` glyph passed in by each caller (`JumpDrawer.tsx:58,68`, `SettingsViewDrawer.tsx:527`, `SettingsCardDrawer.tsx:175`) in `.drawerTreeGlyph` (`ViewRenderer.module.scss:755-766`: 1em box, opacity 0.7, rotate(90deg) when open, no transition); the row's `li` carries `aria-expanded`; last touched 14bee99, 9342e9d
+  + `ToolbarTab.tsx:42,62-67`: the same `›` glyph in `.toolbarTabChevron` (`ViewRenderer.module.scss:953-967`: 1em box, opacity 0.8, rotate(90deg) closed and rotate(-90deg) open, so it points down then up); `aria-expanded` on the button; `data-direction` read by `GenericView.test.tsx:1468` and `settings-toggle.spec.ts:193`; last touched 19d3010
+  + `SettingsViewDrawer.tsx:797,837` and `ErrorBoundary.tsx:64`: native `<details>` and `<summary>`, whose twisty is the browser's own marker, not a drawn chevron: different mechanism, no overlap
+  + breadcrumb separators (`BreadcrumbPathSegments.tsx:34`, `BreadcrumbNoteSegments.tsx:41`, `BreadcrumbTrail.tsx:132`) are a static `›`, not a control: no overlap
++ [X] Record a verdict with `file:line` evidence: a duplicate worth refactoring, or different enough to keep, and why
+  + verdict: `AgentChevron` is the component to keep, and it is a partial duplicate worth a small refactor: three places draw the same rotating chevron three ways (SVG in `AgentChevron.tsx:15`, rotated text glyph in `DrawerTree.tsx:78`, rotated text glyph in `ToolbarTab.tsx:62-67`), with two near-identical CSS blocks (`ViewRenderer.module.scss:755-766` and `953-967`) beside `AgentNote.module.scss:197-209`
+  + the drift is already visible: opacity 0.7 vs 0.8, rotation only transitions on the SVG, and the glyph depends on the font's `›` weight, which the DrawerTree and ToolbarTab comments (`ToolbarTab.tsx:35`) say they match by hand
+  + different enough to keep apart: the three differ in wiring, not drawing. `ToolbarTab` flips down to up (a drawer opening, not a tree node), and `DrawerTree` takes its glyph from caller data so a leaf row can be blank; only the drawn mark and its CSS are shared, so the refactor is the mark, not the controls
+  + not worth merging: the controls themselves (the agent buttons, `DrawerTreeItem`, `ToolbarTab`) differ in markup and keyboard handling, and `<details>` stays native
++ [X] If it is worth refactoring, file the refactor as its own story at the top of this board, with a `builds on` line naming the component to keep
+  + filed as `shared-chevron-mark` at the top of this board
 
 
-### Watcher applies dependency and config changes [](?id=watch-restarts-on-config)
+### Watcher applies dependency and config changes [](?id=watch-restarts-on-config&status=code-review)
 
 `pnpm run watch` recompiles on source changes, including those a `git pull` lands. A pull that changes a `package.json`, a `pnpm-lock.yaml`, `webpack.config.js` or a `tsconfig*.json` is not applied: the bundles keep building against stale config or modules until someone restarts the watcher by hand.
 
 + parallel: touches only `scripts/watch.mjs` and the `watch` script in `package.json`, so it can run alongside any other batch story
 + background
   + `watch` is `SELFINSPECT_ENV=dev webpack --watch` (`package.json` scripts); it logs to `test-results/dev.log`
-  + inferred, untested: webpack watches only its module graph, so it never re-reads `webpack.config.js` or ts-loader's `tsconfig`
+  + measured: webpack watches only its module graph, so it never re-reads `webpack.config.js` or ts-loader's `tsconfig`; in a minimal project under `webpack --watch`, editing the config and the tsconfig caused no recompile, and a later source edit recompiled with the old DefinePlugin value and the old `target` still applied
   + there are four lockfiles: root, `client/extension`, `client/webview` and `client/webview/src/notethink-views`, the last three installed by the root `postinstall`
   + no PATTERNS.md entry for a self-restarting watcher; new pattern
 + approach
@@ -312,11 +358,14 @@ Question: is `AgentChevron` (`client/webview/src/notethink-views/src/components/
   + changes are debounced, so a pull touching many files causes one restart
   + a failed install is logged loudly and webpack is not restarted against half-installed modules
   + SIGTERM and SIGINT are forwarded to the child, so stopping the watcher by PID stops everything
-+ [ ] add `scripts/watch.mjs` and point the `watch` script at it, keeping `SELFINSPECT_ENV=dev`
-+ [ ] keep the child's command line matching `webpack --watch` with the repo root as cwd, which is how a running watcher is found
-+ [ ] cover the decision logic with tests: which changed path means install and restart, restart only, or nothing
-+ [ ] verify against a running watcher: rewrite `webpack.config.js` unchanged, touch a lockfile, and read each restart and the new compile in `test-results/dev.log`
-+ [ ] bump the patch version
++ decision: the decision logic is `scripts/watchops.js` (CommonJS so the extension Jest project, whose `roots` and `testMatch` now include `scripts/*.test.js`, runs `scripts/watchops.test.js`)
++ decision: a `package.json` change installs only when its dependency fields, `pnpm` block or `packageManager` changed; a version bump restarts for the root file (webpack.config.js reads it) and does nothing for nested ones
++ decision: only the four package directories are watched, non-recursively, so there is no inotify cost from `node_modules`
++ [X] add `scripts/watch.mjs` and point the `watch` script at it, keeping `SELFINSPECT_ENV=dev` (`package.json` scripts.watch is `SELFINSPECT_ENV=dev node scripts/watch.mjs`)
++ [X] keep the child's command line matching `webpack --watch` with the repo root as cwd, which is how a running watcher is found (the child is `sh -c 'webpack --watch; exit $?'`, seen in `pgrep -af "webpack --watch"` with cwd at the repo root)
++ [X] cover the decision logic with tests: which changed path means install and restart, restart only, or nothing (`scripts/watchops.test.js`, 38 tests: path classification, dependency fingerprint, batch plan, debounce)
++ [X] verify against a running watcher: rewrite `webpack.config.js` unchanged, touch a lockfile, and read each restart and the new compile in the log (run in a fresh install of a scratch copy so a running dev watcher was left alone: the config rewrite logged `changed: restart` and a new `webpack --watch` compiled; touching `client/webview/pnpm-lock.yaml` logged `changed: install`, a `pnpm install --frozen-lockfile` and a restart; a dependency added without a lockfile logged a loud install failure with webpack left stopped, and reverting it restarted webpack; SIGTERM left no child)
++ [X] bump the patch version (0.4.36)
 
 
 ### Compact agent card: usage in status line, folded files [](?id=agent-card-compact&status=code-review)
@@ -369,7 +418,7 @@ The agent card spends space on things the operator does not read. The usage summ
 + design revised 2026-11-11: the pending row's grey states use the files row's grey, not `--nt-agent-idle`, and a clean pushed card folds both rows into one line; see [[agent-card-quiet-line]]
 
 
-### Coordinators beside boards in folder and project views [](?id=coordinator-views)
+### Coordinators beside boards in folder and project views [](?id=coordinator-views&status=code-review)
 
 The `agent` card shows which sessions are editing a story, but not the long-lived coordinator that owns a repo's board. With many repos open under one folder, the operator cannot see which repos have a coordinator, what state each is in, or message one without leaving the board.
 
@@ -390,16 +439,26 @@ The `agent` card shows which sessions are editing a story, but not the long-live
   + open convoys and their operator steps show on the story they belong to
   + over Remote-SSH the web-worker extension host runs locally but reads the remote machine's files through the workspace file system, so it reads that machine's registry
   + desktop only, like the `agent` card, because a browser host has no file access
-+ [ ] add a registry reader that lists `agent.json` entries and filters by repo path inside the open folder
-+ [ ] add a list of registered agents with their state to the folder view and the project view
-+ [ ] add a "send to agent" action on the board and on a card that writes an envelope to the agent's mailbox
-+ [ ] render the `[](?coord=<host>)` marker as a draggable line, rewriting the linetag on drop
-+ [ ] add a keyboard path that moves the target line without dragging
-+ [ ] show open convoys and operator steps on their stories
-+ [ ] cover the registry filter, the envelope write and the marker move with Jest tests
-+ [ ] cover the folder view, the project view and the draggable line with Playwright tests
-+ [ ] extend the Agent activity section of `README.md` with the registry source and the show-only rule
-+ [ ] bump the patch version
++ [X] add a registry reader that lists `agent.json` entries and filters by repo path inside the open folder
+  + evidence: `readRegistry` in AgentAnalyser.ts, `parseRegistryEntry` and `coordinatorsInScope` filter in agentregistryops.ts and webview coordinatorops.ts
++ [X] add a list of registered agents with their state to the folder view and the project view
+  + evidence: `CoordinatorPanel.tsx` mounted in GenericView.tsx; spec "a folder view lists each registered coordinator..." and "a view open on one repository..."
++ [X] add a "send to agent" action on the board and on a card that writes an envelope to the agent's mailbox
+  + evidence: `CoordinatorCommands.ts` send (temp file then rename into inbox) and `StorySendButton.tsx` on cards
++ [X] render the `[](?coord=<host>)` marker as a draggable line, rewriting the linetag on drop
+  + evidence: `CoordinatorTargetLine.tsx`; spec "drags with a real pointer to the story it is released after"
++ [X] add a keyboard path that moves the target line without dragging
+  + evidence: `useTargetLineControls` Up/Down/Home/End; spec "moves with the keyboard alone, keeping focus on the line"
++ [X] show open convoys and operator steps on their stories
+  + evidence: `parseBoardStories` convoys and operator_steps, rendered in `TargetStory`; spec "lists the board with the line... convoys and steps on their stories"
++ [X] cover the registry filter, the envelope write and the marker move with Jest tests
+  + evidence: coordinatorops.test.ts (both copies), CoordinatorCommands.test.ts, CoordinatorPanel.test.tsx, StorySendButton.test.tsx
++ [X] cover the folder view, the project view and the draggable line with Playwright tests
+  + evidence: playwright/specs/coordinator-views.spec.ts, 14 tests
++ [X] extend the Agent activity section of `README.md` with the registry source and the show-only rule
+  + evidence: README.md "Coordinators beside boards" subsection and Known Limitations
++ [X] bump the patch version
+  + evidence: package.json 0.4.33 -> 0.4.37 across this batch (0.4.37 is this story)
 
 
 ### Send envelopes between machines through a sync service [](?id=coordinator-sync-client)
@@ -409,6 +468,7 @@ Story [[coordinator-views]] reaches agents on the same machine only. An agent on
 + background
   + the sync client and the per-instance process belong to thinkersync, a separate open-source project; this story only uses them
   + dependency: delivery between machines cannot be built until thinkersync's client library exists, so this story waits on it
+  + measured 2026-11-12: thinkersync's client library is written but not released as a package, its per-instance process is still being built, and its sync service is not yet deployed
   + an instance is one NoteThink instance: a VS Code window on a folder, or the browser workbench
   + each instance runs its own thinkersync client and process, and stays independent of other instances on the same machine
 + approach
@@ -425,6 +485,7 @@ Story [[coordinator-views]] reaches agents on the same machine only. An agent on
 + [ ] state the network use in the Agent activity section of `README.md`, which today says NoteThink reads no network endpoint for agent activity
 + [ ] cover the setting, the process lifecycle and the routing choice with Jest tests
 + [ ] bump the patch version
++ open question: hold this story until thinkersync releases its client library and per-instance process (recommended), or build it now against a fake of their contract and swap in the real client later?
 
 
 ### Files drawer defaults under Change defaults [](?id=files-drawer-change-defaults)

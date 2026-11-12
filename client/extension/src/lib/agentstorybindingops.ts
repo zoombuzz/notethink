@@ -41,10 +41,12 @@ import type { AgentToolInvocationEdit } from './vendors/agentvendorops';
 /**
  * One board document the binder searches.
  * - doc_path: workspace-relative posix path, exactly as a note's own origin carries it
+ * - abs_path: the document's absolute path in its workspace folder, for a reader that must act on the file itself
  */
 export interface StoryDocument {
     doc_path: string;
     text: string;
+    abs_path?: string;
 }
 
 /**

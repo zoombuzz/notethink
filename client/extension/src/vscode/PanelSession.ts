@@ -22,6 +22,7 @@ import {
 } from '../lib/settings';
 import type { HashMapOf, Doc } from '../types/general';
 import { ActivityCommands } from './ActivityCommands';
+import { CoordinatorCommands } from './CoordinatorCommands';
 import type { AgentAnalyser } from './AgentAnalyser';
 import type { AudioCaptureCoordinator, AudioPanelRegistration } from './AudioCaptureCoordinator';
 import { isParseStaleError, type ParsePool } from './ParsePool';
@@ -118,6 +119,8 @@ export class PanelSession {
 	// folder-size metadata for the breadcrumb's "(loaded of discovered)"; incremental updates keep resending it
 	private integration_total_discovered = 0;
 	private integration_truncated = false;
+	// bumped by every enterFolderMode; a scan holding an older number is superseded and drops its results
+	private folder_scan_generation = 0;
 	private workspace_projects: string[] = [];
 	// onDidChangeTextDocument fires only for editor-open docs, so this refreshes an externally-edited but unopened file
 	private active_file_watcher: vscode.FileSystemWatcher | undefined;
@@ -129,6 +132,7 @@ export class PanelSession {
 	private readonly extension_version: string;
 	// demand/withdraw track whether this panel is drawing an `agent` card, never whether the shared analyser is running
 	private readonly activity_commands: ActivityCommands;
+	private readonly coordinator_commands: CoordinatorCommands;
 	private readonly post_to_webview: (message: Record<string, unknown>) => void;
 	private activity_demanded = false;
 	private readonly last_parse_duration_ms = new Map<string, number>();
@@ -156,6 +160,7 @@ export class PanelSession {
 		this.extension_version = this.context.extension.packageJSON.version as string || '';
 		this.post_to_webview = (message: Record<string, unknown>): void => { this.webviewPanel.webview.postMessage(message); };
 		this.activity_commands = new ActivityCommands(this.base_uri, this.activity_analyser, this.post_to_webview, () => this.activityTargetColumn());
+		this.coordinator_commands = new CoordinatorCommands(this.activity_analyser, this.post_to_webview, (doc_path, changes) => this.applyEditTextToDoc(doc_path, changes), absolute_path => this.resolveWorkspaceUri(absolute_path));
 	}
 
 	// rebuilds an absolute path into a URI carrying the workspace scheme, so discovery and opens never assume file:
@@ -537,6 +542,7 @@ export class PanelSession {
 		debug('onDidReceiveMessage', e.type);
 		try {
 			if (await this.activity_commands.handleMessage(e)) { return; }
+			if (await this.coordinator_commands.handleMessage(e)) { return; }
 			switch (e.type) {
 				case 'requestInitialState': return this.handleRequestInitialState();
 				case 'updateSetting': return this.handleUpdateSetting(e);
@@ -853,11 +859,15 @@ export class PanelSession {
 			const previous_docs = { ...this.integration_docs };
 			for (const key of Object.keys(this.integration_docs)) { delete this.integration_docs[key]; }
 			this.discardDiscoveryBatch();
+			const scan_generation = ++this.folder_scan_generation;
 			this.integration_path = folder_path;
 			this.adoptFolderFilters(e);
 			await this.computeWorkspaceProjects();
+			// a newer scan owns the filters, the cache and the watcher from here on
+			if (scan_generation !== this.folder_scan_generation) { return; }
 			const pattern = new vscode.RelativePattern(this.resolveWorkspaceUri(folder_path), this.integration_include);
-			await this.discoverFolderDocs(pattern, folder_path, previous_docs);
+			await this.discoverFolderDocs(pattern, folder_path, previous_docs, scan_generation);
+			if (scan_generation !== this.folder_scan_generation) { return; }
 			this.armFolderWatcher(pattern);
 		} catch (err) {
 			writeToErrorLog('enterFolderMode', `failed to enter folder mode at ${folder_path}`, err);
@@ -1061,7 +1071,9 @@ export class PanelSession {
 	 * throttled (createThrottledProgressSender) so the message volume stays small regardless of how
 	 * many directories or files are involved; the fast path sends neither, since nothing reloads.
 	 */
-	private async discoverFolderDocs(pattern: vscode.RelativePattern, folder_path: string, previous_docs: HashMapOf<Doc>): Promise<void> {
+	private async discoverFolderDocs(pattern: vscode.RelativePattern, folder_path: string, previous_docs: HashMapOf<Doc>, scan_generation: number): Promise<void> {
+		// a superseded scan posts nothing: the newer scan sends its own pending pair and aggregate payload
+		const isStale = (): boolean => scan_generation !== this.folder_scan_generation;
 		this.sendPendingChange('folderDiscovery', true);
 		let uris: Array<vscode.Uri>;
 		let cache_hit: boolean;
@@ -1093,6 +1105,7 @@ export class PanelSession {
 				// a newer enterFolderMode already superseded this scan; its own final tick would misreport this abandoned one's tally
 				if (!walked.stopped) { walk_progress.final({ dirs_walked, files_found: discovered.length }); }
 			}
+			if (isStale()) { return; }
 			// defense in depth: findFiles' brace-expanded exclude has edge cases, and the watcher armed below has no exclude at all
 			const filtered = discovered.filter(uri => !this.isExcludedByIntegrationFilter(uri.path));
 			// deterministic order so the capped subset is stable across reloads
@@ -1114,10 +1127,12 @@ export class PanelSession {
 			}
 			cache_hit = await this.discoveredSetMatchesCache(uris, previous_docs);
 		} catch (err) {
+			if (isStale()) { return; }
 			writeToErrorLog('discoverFolderDocs', `discovery failed for ${folder_path}`, err);
 			this.sendPendingChange('folderDiscovery', false);
 			return;
 		}
+		if (isStale()) { return; }
 		if (cache_hit) {
 			debug('setIntegration folder: fast-path - discovered set matches cached docs, skipping reload');
 			// restores integration_docs, cleared by enterFolderMode before discovery, so the payload carries the cached map
@@ -1126,17 +1141,28 @@ export class PanelSession {
 			this.sendPendingChange('folderDiscovery', false);
 			return;
 		}
-		// files-read-of-total progress applies to the loading phase on every scheme, unlike the walk-only 'walking' phase above
+		this.loadDiscoveredDocs(uris, folder_path, scan_generation);
+	}
+
+	/**
+	 * Loads every discovered file and, once all have settled, posts the canonical aggregate and clears
+	 * the pending signal. A scan a newer enterFolderMode has superseded posts neither.
+	 */
+	private loadDiscoveredDocs(uris: Array<vscode.Uri>, folder_path: string, scan_generation: number): void {
+		const isStale = (): boolean => scan_generation !== this.folder_scan_generation;
+		// files-read-of-total progress applies to the loading phase on every scheme, unlike the walk-only 'walking' phase
 		const load_progress = createThrottledProgressSender<{ files_loaded: number; files_total: number }>(
 			({ files_loaded, files_total }) => this.sendDiscoveryProgress({ phase: 'loading', files_loaded, files_total }),
 		);
 		let files_loaded = 0;
 		// isolates loadFolderDoc from .map's (value, index, array) trio; it never rejects, so every entry still ticks
-		const load_promises = uris.map(uri => this.loadFolderDoc(uri, { batched: true }).then(() => {
+		const load_promises = uris.map(uri => this.loadFolderDoc(uri, { batched: true, scan_generation }).then(() => {
 			files_loaded++;
+			if (isStale()) { return; }
 			load_progress.tick({ files_loaded, files_total: uris.length });
 		}));
 		Promise.allSettled(load_promises).then(() => {
+			if (isStale()) { return; }
 			try {
 				debug('setIntegration folder: load complete, %d docs', Object.keys(this.integration_docs).length);
 				// flushes whatever the last interval left queued before the canonical map lands
@@ -1283,9 +1309,15 @@ export class PanelSession {
 	 * the old path must be rejected again on return, or a sibling project's docs mysteriously
 	 * reappear after an update. isAdmittedByIntegrationFilters alone cannot substitute for the
 	 * path check: a sibling's folder-relative `../` path can still match a globstar include.
+	 *
+	 * scan_generation, set by a discovery load, is checked at the same two points: a scan of the same
+	 * folder that a newer enterFolderMode has superseded stores and queues nothing.
 	 */
-	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean; batched?: boolean } = {}): Promise<void> {
+	private async loadFolderDoc(uri: vscode.Uri, opts: { fromDisk?: boolean; batched?: boolean; scan_generation?: number } = {}): Promise<void> {
+		// a discovery load carries its scan's generation; a watcher load has none and is judged by the path checks alone
+		const isSuperseded = (): boolean => opts.scan_generation !== undefined && opts.scan_generation !== this.folder_scan_generation;
 		try {
+			if (isSuperseded()) { return; }
 			// guards against a late-arriving load from a previous integration_path
 			if (!this.isWithinIntegrationPath(uri.path)) {
 				return;
@@ -1316,7 +1348,7 @@ export class PanelSession {
 				doc = await this.buildDoc(document, true);
 			}
 			// re-checked after the async load, since a concurrent enterFolderMode may have switched integration_path meanwhile
-			if (!this.isWithinIntegrationPath(uri.path)) {
+			if (isSuperseded() || !this.isWithinIntegrationPath(uri.path)) {
 				return;
 			}
 			this.integration_docs[doc.id] = { ...doc, updateSentAt: new Date().toISOString() };

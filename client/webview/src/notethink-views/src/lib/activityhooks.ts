@@ -1,7 +1,21 @@
 import Debug from "debug";
 import { useEffect, useSyncExternalStore } from "react";
 import { ACTIVITY_DEMAND_MESSAGE_TYPE, ACTIVITY_WITHDRAW_MESSAGE_TYPE, AGENT_SCAN_PENDING_KEY, isAgentScanPending, parseActivityMessage, parseActivityUnavailableMessage, type ActivitySnapshot, type ActivityUnavailable } from "./agentactivityops";
+import { parseCoordinatorResult, type CoordinatorResult } from "./coordinatorops";
 import { PENDING_WORK_SAFETY_NET_MS, type UsePendingWorkApi } from "../hooks/usePendingWork";
+
+/**
+ * CoordinatorComposeRequest asks the coordinator panel to open an agent's send form, as a story card's
+ * own send action does.
+ * - agent: the coordinator's registry name
+ * - text: what the form opens with, the story named
+ * - seq: counted by the store as each request lands
+ */
+export interface CoordinatorComposeRequest {
+    agent: string;
+    text: string;
+    seq: number;
+}
 
 const debug = Debug("nodejs:notethink-views:activityhooks");
 // re-marks the scan key at half the safety net, so a slow first scan keeps its spinner rather than losing it
@@ -29,6 +43,12 @@ const AGENT_SCAN_REMARK_MS = PENDING_WORK_SAFETY_NET_MS / 2;
 
 let snapshot: ActivitySnapshot | undefined = undefined;
 let unavailable: ActivityUnavailable | undefined = undefined;
+// the host's last answer to a coordinator send or marker move, undefined before the first
+let coordinator_result: CoordinatorResult | undefined = undefined;
+let coordinator_result_seq = 0;
+// a story card's request to open a coordinator's send form with this text; seq keeps two asks for one story distinct
+let compose_request: CoordinatorComposeRequest | undefined = undefined;
+let compose_request_seq = 0;
 // latched true on the first 'live' snapshot, never cleared: a backstop against a later snapshot regressing the card
 let has_completed_scan = false;
 const listeners = new Set<() => void>();
@@ -44,6 +64,13 @@ function onWindowMessage(event: MessageEvent): void {
         debug('activity snapshot: %s, %d session(s), %d tree(s)', next.analyser.state, next.sessions.length, next.trees.length);
         snapshot = next;
         if (next.analyser.state === 'live') { has_completed_scan = true; }
+        publish();
+        return;
+    }
+    const answered = parseCoordinatorResult(event.data);
+    if (answered) {
+        debug('coordinator %s answered %s for %s', answered.request, answered.code, answered.agent);
+        coordinator_result = { ...answered, seq: ++coordinator_result_seq };
         publish();
         return;
     }
@@ -77,6 +104,28 @@ export function readActivityUnavailable(): ActivityUnavailable | undefined {
     return unavailable;
 }
 
+/** the host's last answer to a coordinator send or marker move, undefined when it has given none */
+export function readCoordinatorResult(): CoordinatorResult | undefined {
+    return coordinator_result;
+}
+
+/** ask the coordinator panel to open this agent's send form, starting with this text */
+export function requestCoordinatorCompose(agent: string, text: string): void {
+    compose_request = { agent, text, seq: ++compose_request_seq };
+    publish();
+}
+
+/** the seam a test drives to land a coordinator answer without a window message */
+export function setCoordinatorResult(next: CoordinatorResult | undefined): void {
+    coordinator_result = next === undefined ? undefined : { ...next, seq: ++coordinator_result_seq };
+    publish();
+}
+
+/** the latest request from a story card to open a send form, undefined before the first */
+export function readCoordinatorCompose(): CoordinatorComposeRequest | undefined {
+    return compose_request;
+}
+
 /** whether a 'live' snapshot has ever landed in this panel's lifetime */
 export function readHasCompletedAgentScan(): boolean {
     return has_completed_scan;
@@ -103,6 +152,8 @@ export function setActivitySnapshot(next: ActivitySnapshot | undefined): void {
 export function resetActivitySnapshot(): void {
     snapshot = undefined;
     unavailable = undefined;
+    coordinator_result = undefined;
+    compose_request = undefined;
     has_completed_scan = false;
     publish();
 }
@@ -119,6 +170,16 @@ export function useAgentActivity(): ActivitySnapshot | undefined {
  */
 export function useHasCompletedAgentScan(): boolean {
     return useSyncExternalStore(subscribeToActivity, readHasCompletedAgentScan, readHasCompletedAgentScan);
+}
+
+/** the host's latest answer to a coordinator send or marker move, re-rendering the caller when one arrives */
+export function useCoordinatorResult(): CoordinatorResult | undefined {
+    return useSyncExternalStore(subscribeToActivity, readCoordinatorResult, readCoordinatorResult);
+}
+
+/** the latest request from a story card to open a send form, re-rendering the caller when one arrives */
+export function useCoordinatorCompose(): CoordinatorComposeRequest | undefined {
+    return useSyncExternalStore(subscribeToActivity, readCoordinatorCompose, readCoordinatorCompose);
 }
 
 /** the host's latest refusal of a row's request, re-rendering the caller when one arrives */

@@ -9,6 +9,7 @@ import {
     type ActivityChangedFile,
     type ActivityChildSession,
     type ActivityCommit,
+    type ActivityCoordinator,
     type ActivityRejectCode,
     type ActivitySession,
     type ActivityState,
@@ -51,6 +52,9 @@ export const ACTIVITY_OPEN_DIFF_MESSAGE_TYPE = 'openActivityDiff';
 export const ACTIVITY_OPEN_CHAT_MESSAGE_TYPE = 'openActivityChat';
 export const ACTIVITY_DEMAND_MESSAGE_TYPE = 'activityDemand';
 export const ACTIVITY_WITHDRAW_MESSAGE_TYPE = 'activityWithdraw';
+export const COORDINATOR_SEND_MESSAGE_TYPE = 'coordinatorSend';
+export const COORDINATOR_MOVE_MARKER_MESSAGE_TYPE = 'coordinatorMoveMarker';
+export const COORDINATOR_RESULT_MESSAGE_TYPE = 'coordinatorResult';
 export const AGENT_VIRTUAL_NAMESPACE = 'agent';
 // the pending-work key the toolbar spinner holds while the analyser's first scan is in flight
 export const AGENT_SCAN_PENDING_KEY = 'agentScan';
@@ -175,12 +179,15 @@ export interface ActivityTreeState {
  * agent is working anywhere this analyser can see.
  * - progress: the coordinators' per-story percentages for the open repositories; empty when none is
  *   recorded or the host cannot read them
+ * - coordinators: the registered coordinators whose repository sits in the open folder, each with its
+ *   board's stories; empty when none is registered or the host cannot read the registry
  */
 export interface ActivitySnapshot {
     analyser: ActivityAnalyserState;
     sessions: ActivitySessionState[];
     trees: ActivityTreeState[];
     progress: ActivityStoryProgress[];
+    coordinators: ActivityCoordinator[];
 }
 
 /** the snapshot a board holds before the host has said anything at all */
@@ -189,6 +196,7 @@ export const EMPTY_ACTIVITY_SNAPSHOT: ActivitySnapshot = {
     sessions: [],
     trees: [],
     progress: [],
+    coordinators: [],
 };
 
 /**
@@ -254,6 +262,7 @@ export function parseActivityMessage(message: unknown): ActivitySnapshot | undef
         sessions: Array.isArray(payload.sessions) ? payload.sessions : [],
         trees: Array.isArray(payload.trees) ? payload.trees : [],
         progress: Array.isArray(payload.progress) ? payload.progress : [],
+        coordinators: Array.isArray(payload.coordinators) ? payload.coordinators : [],
     };
 }
 

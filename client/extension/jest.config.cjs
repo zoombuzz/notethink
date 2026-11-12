@@ -48,8 +48,11 @@ module.exports = {
     // mock the vscode module
     '^vscode$': '<rootDir>/src/__mocks__/vscode.ts',
   },
+  // the root-level watch supervisor's decision logic lives beside it in scripts/
+  roots: ['<rootDir>/src', '<rootDir>/../../scripts'],
   testMatch: [
     '<rootDir>/src/**/*.test.ts',
+    '<rootDir>/../../scripts/*.test.js',
   ],
   // exclude the old mocha test suite
   testPathIgnorePatterns: ['/node_modules/', '/dist/', '/src/test/'],

@@ -14,7 +14,7 @@ import { NotethinkEditorProvider } from './notethinkEditor';
 import { PanelSession } from './PanelSession';
 import { AUDIO_CHUNK_BYTES, AudioCaptureCoordinator } from './AudioCaptureCoordinator';
 import { FLAT_SETTINGS, buildDeclaredSettingsContributions, flatSettingKeys } from '../lib/settings';
-import { DEFAULT_EXCLUDE_FILTER } from '../constants';
+import { DEFAULT_EXCLUDE_FILTER, MAX_AGGREGATE_FILES } from '../constants';
 import * as cryptoops from '../lib/cryptoops';
 
 // ---- helpers ----------------------------------------------------------------
@@ -1280,6 +1280,107 @@ describe('NotethinkEditorProvider', () => {
 			expect(errorLogSpy).toHaveBeenCalledWith('discoverFolderDocs', expect.stringContaining('load completion failed'), expect.any(Error));
 			aggregateSpy.mockRestore();
 			errorLogSpy.mockRestore();
+		});
+
+		describe('the latest folder scan wins', () => {
+			const todo_path = '/workspace/oma/docstech/users/alex/todo.md';
+			const done_path = '/workspace/oma/docstech/users/alex/done.md';
+			const other_path = '/workspace/oma/other/todo.md';
+
+			// one findFiles call held open, resolved by the test in whatever order it likes
+			const deferFindFiles = (): { resolve: (uris: Uri[]) => void; promise: Promise<Uri[]> } => {
+				let resolve!: (uris: Uri[]) => void;
+				const promise = new Promise<Uri[]>(res => { resolve = res; });
+				return { resolve, promise };
+			};
+			const waitForFindCalls = async (count: number): Promise<void> => {
+				while (folderFindCalls().length < count) { await flush(); }
+			};
+			const aggregates = (): UpdateMessage[] => getUpdates(panelHelper.postedMessages).filter(u => u.aggregate_total_discovered !== undefined && u.merge_strategy !== 'merge');
+			const pendingOffCount = (): number => panelHelper.postedMessages.filter(m => m.type === 'pendingChange' && m.key === 'folderDiscovery' && m.on === false).length;
+			const mergedDocPaths = (): string[] => getUpdates(panelHelper.postedMessages)
+				.flatMap(u => Object.values(u.partial.docs) as UpdateDocEntry[])
+				.map(d => d.path);
+
+			beforeEach(() => {
+				(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (u: Uri) => mockTextDocument(`# story in ${u.path}`, u.path));
+				(vscode.workspace.findFiles as jest.Mock).mockReset();
+				panelHelper.postedMessages.length = 0;
+			});
+
+			it('keeps the newer scan when the older one resolves last', async () => {
+				const older = deferFindFiles();
+				const newer = deferFindFiles();
+				(vscode.workspace.findFiles as jest.Mock).mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+
+				const first = panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace', include: '**/todo.md', exclude: '' });
+				await waitForFindCalls(1);
+				const second = panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace', include: '**/{todo,done}.md', exclude: '' });
+				await waitForFindCalls(2);
+
+				newer.resolve([Uri.file(todo_path), Uri.file(done_path)]);
+				await second;
+				while (pendingOffCount() < 1) { await flush(); }
+				older.resolve([Uri.file(other_path)]);
+				await first;
+				await flush();
+				await flush();
+
+				const final_aggregate = aggregates().pop() as UpdateMessage;
+				expect(final_aggregate.aggregate_total_discovered).toBe(2);
+				expect(final_aggregate.include_filter).toBe('**/{todo,done}.md');
+				expect(Object.values(final_aggregate.partial.docs as Record<string, UpdateDocEntry>).map(d => d.path).sort()).toEqual([done_path, todo_path]);
+				expect(mergedDocPaths()).not.toContain(other_path);
+				expect(aggregates()).toHaveLength(1);
+				expect(pendingOffCount()).toBe(1);
+			});
+
+			it('drops the older scan when it resolves first, so only the newer set is posted', async () => {
+				const older = deferFindFiles();
+				const newer = deferFindFiles();
+				(vscode.workspace.findFiles as jest.Mock).mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+
+				const first = panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace', include: '**/todo.md', exclude: '' });
+				await waitForFindCalls(1);
+				const second = panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace', include: '**/{todo,done}.md', exclude: '' });
+				await waitForFindCalls(2);
+
+				older.resolve([Uri.file(other_path)]);
+				await first;
+				await flush();
+				newer.resolve([Uri.file(todo_path), Uri.file(done_path)]);
+				await second;
+				while (pendingOffCount() < 1) { await flush(); }
+				await flush();
+
+				expect(mergedDocPaths()).not.toContain(other_path);
+				expect(aggregates().pop()?.aggregate_total_discovered).toBe(2);
+				expect(pendingOffCount()).toBe(1);
+			});
+
+			it('reports the winning scan as truncated, with its full discovered count, even when a smaller older scan lands last', async () => {
+				const older = deferFindFiles();
+				const newer = deferFindFiles();
+				(vscode.workspace.findFiles as jest.Mock).mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+				const many = Array.from({ length: MAX_AGGREGATE_FILES + 5 }, (_unused, index) => Uri.file(`/workspace/oma/n${String(index).padStart(4, '0')}.md`));
+
+				const first = panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace', include: '**/todo.md', exclude: '' });
+				await waitForFindCalls(1);
+				const second = panelHelper.simulateMessage({ type: 'setIntegration', mode: 'folder', path: '/workspace', include: '**/*.md', exclude: '' });
+				await waitForFindCalls(2);
+
+				newer.resolve(many);
+				await second;
+				while (pendingOffCount() < 1) { await flush(); }
+				older.resolve([Uri.file(todo_path)]);
+				await first;
+				await flush();
+
+				const final_aggregate = aggregates().pop() as UpdateMessage;
+				expect(final_aggregate.aggregate_truncated).toBe(true);
+				expect(final_aggregate.aggregate_total_discovered).toBe(MAX_AGGREGATE_FILES + 5);
+				expect(Object.keys(final_aggregate.partial.docs)).toHaveLength(MAX_AGGREGATE_FILES);
+			});
 		});
 
 		describe('filters gate every route into the aggregate, not just discovery', () => {

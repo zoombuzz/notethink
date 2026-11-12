@@ -47,14 +47,17 @@ function context(status: string | undefined, progress: ActivityStoryProgress[] =
 }
 
 describe('parseRegistryEntry', () => {
-    it('keeps the fields a row displays and drops the rest', () => {
+    it('keeps the fields a row or a coordinator row displays and drops the rest', () => {
         const text = JSON.stringify({
             agent: 'coord-demo', agent_kind: 'coordinator', vendor: 'claude', repo: '/ws/demo/', machine: 'host-a', mailbox: '/secret/mailbox',
             state: 'working', story: 'story-a', session_id: 'sess-2', previous_session_ids: ['sess-1'], binary_version: '9.9', open_convoys: ['c1'],
             last_recycle: '2026-11-01T00:00:00Z', updated_at: FRESH, pane: '%3',
         });
         const entry = parseRegistryEntry(text, 'dir-name');
-        expect(entry).toEqual({ agent: 'coord-demo', vendor: 'claude-code', repo: '/ws/demo', state: 'working', story: 'story-a', session_ids: ['sess-2', 'sess-1'], updated_at: FRESH });
+        expect(entry).toEqual({
+            agent: 'coord-demo', vendor: 'claude-code', repo: '/ws/demo', state: 'working', story: 'story-a', session_ids: ['sess-2', 'sess-1'], updated_at: FRESH,
+            agent_kind: 'coordinator', machine: 'host-a', binary_version: '9.9', open_convoys: ['c1'],
+        });
         expect(JSON.stringify(entry)).not.toContain('mailbox');
         expect(JSON.stringify(entry)).not.toContain('%3');
     });
@@ -62,6 +65,7 @@ describe('parseRegistryEntry', () => {
     it('treats every field but the repository as optional and carries an unknown state', () => {
         expect(parseRegistryEntry('{"repo":"/ws/demo","state":"hibernating"}', 'dir-name')).toEqual({
             agent: 'dir-name', vendor: 'unknown', repo: '/ws/demo', state: 'hibernating', story: '', session_ids: [], updated_at: undefined,
+            agent_kind: '', machine: '', binary_version: '', open_convoys: [],
         });
     });
 

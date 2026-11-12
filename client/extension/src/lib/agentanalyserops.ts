@@ -3,6 +3,7 @@ import type {
     ActivityChangedFile,
     ActivityRejectCode,
     ActivitySession,
+    ActivityCoordinator,
     ActivityStoryProgress,
     ActivityTree,
 } from '../types/AgentActivity';
@@ -134,12 +135,15 @@ export function rootsWithNothingLeftToRead(root_paths: ReadonlyArray<string>, re
  * anywhere this analyser can see.
  * - progress: the coordinators' per-story percentages for the repositories in the open folder; empty
  *   when none is recorded or this host cannot read them, which is not an error
+ * - coordinators: the registered coordinators whose repository sits in the open folder, each with its
+ *   board's stories; empty when none is registered or this host cannot read the registry
  */
 export interface ActivitySnapshot {
     analyser: ActivityAnalyserState;
     sessions: ActivitySessionState[];
     trees: ActivityTreeState[];
     progress: ActivityStoryProgress[];
+    coordinators: ActivityCoordinator[];
 }
 
 export function emptyAnalyserState(state: AgentAnalyserState, reason?: string, reason_code?: AgentAnalyserUnavailableReasonCode): ActivityAnalyserState {
@@ -147,7 +151,7 @@ export function emptyAnalyserState(state: AgentAnalyserState, reason?: string, r
 }
 
 export function emptyActivitySnapshot(state: AgentAnalyserState = 'scanning', reason?: string, reason_code?: AgentAnalyserUnavailableReasonCode): ActivitySnapshot {
-    return { analyser: emptyAnalyserState(state, reason, reason_code), sessions: [], trees: [], progress: [] };
+    return { analyser: emptyAnalyserState(state, reason, reason_code), sessions: [], trees: [], progress: [], coordinators: [] };
 }
 
 /** every session id the analyser declared it could not fully read, deduped and sorted for a stable snapshot */
@@ -187,11 +191,13 @@ export function buildActivitySnapshot(
     sessions: HashMapOf<ActivitySessionState>,
     trees: HashMapOf<ActivityTreeState>,
     progress: ReadonlyArray<ActivityStoryProgress> = [],
+    coordinators: ReadonlyArray<ActivityCoordinator> = [],
 ): ActivitySnapshot {
     return {
         analyser: state,
         sessions: Object.values(sessions).sort((a, b) => a.session.session_id < b.session.session_id ? -1 : a.session.session_id > b.session.session_id ? 1 : 0),
         trees: Object.values(trees).sort((a, b) => a.root_path < b.root_path ? -1 : a.root_path > b.root_path ? 1 : 0),
         progress: [...progress],
+        coordinators: [...coordinators],
     };
 }

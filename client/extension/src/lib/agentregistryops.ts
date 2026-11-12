@@ -14,10 +14,10 @@ import { progressProjectName } from './progressfileops';
  * change or a restart. So an entry is bound to its story only while that story is in flight on the
  * board, and a `working` entry that nothing since its last update corroborates reads as stale.
  *
- * What reaches the webview is the agent's name, vendor, state and story, drawn on an ordinary
- * `ActivitySession`. Left out on purpose: the mailbox path, the terminal pane id, the binary version,
- * the machine name, the open convoys and the last recycle time, none of which a row displays, and
- * the agent kind.
+ * What reaches an agent card is the agent's name, vendor, state and story, drawn on an ordinary
+ * `ActivitySession`. The coordinator rows (`coordinatorops.ts`) also take the agent kind, machine, binary
+ * version and open convoys. Left out on purpose everywhere: the mailbox path, which a send re-derives
+ * from the agent's name, the terminal pane id and the last recycle time.
  */
 
 // the registry directory below the thinkersync home, one directory per agent
@@ -46,6 +46,9 @@ const REGISTRY_UNKNOWN_VENDOR = 'unknown';
 // the longest name and story id carried, so a runaway writer cannot bloat every activity post
 const REGISTRY_TEXT_MAX_CHARS = 120;
 
+// the most open convoys carried from one entry, so a runaway writer cannot bloat every activity post
+const REGISTRY_CONVOYS_MAX = 50;
+
 const REGISTRY_SESSION_ID_PREFIX = 'registry:';
 
 /**
@@ -57,6 +60,10 @@ const REGISTRY_SESSION_ID_PREFIX = 'registry:';
  * - story: the story id the agent is working on, empty when none
  * - session_ids: the agent's current session id first, then its previous ones, so a vendor session joins by any of them
  * - updated_at: ISO 8601 UTC of the last state change or restart
+ * - agent_kind: what the agent is (`coordinator`, `overseer`, `session`), empty when the entry names none
+ * - machine: the short host name the agent runs on, empty when the entry names none
+ * - binary_version: the program version the agent last recorded, empty when none
+ * - open_convoys: the agent's open convoys, as the registry lists them
  */
 export interface RegistryEntry {
     agent: string;
@@ -66,6 +73,10 @@ export interface RegistryEntry {
     story: string;
     session_ids: string[];
     updated_at?: string;
+    agent_kind?: string;
+    machine?: string;
+    binary_version?: string;
+    open_convoys?: string[];
 }
 
 /**
@@ -141,6 +152,10 @@ export function parseRegistryEntry(text: string, fallback_agent: string): Regist
         story: textField(raw.story),
         session_ids,
         updated_at,
+        agent_kind: textField(raw.agent_kind),
+        machine: textField(raw.machine),
+        binary_version: textField(raw.binary_version),
+        open_convoys: Array.isArray(raw.open_convoys) ? raw.open_convoys.map(textField).filter(id => id.length > 0).slice(0, REGISTRY_CONVOYS_MAX) : [],
     };
 }
 

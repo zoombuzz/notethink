@@ -1,14 +1,15 @@
 import Debug from "debug";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { KeyboardEvent, ReactElement } from "react";
+import type { KeyboardEvent, ReactElement, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { renderedOffsetFromPoint, rectAtRenderedOffset } from "../../../lib/caretdom";
 import type { CaretRect } from "../../../lib/caretdom";
-import { caretFieldsOf, editForKey, fieldAt, moveCaret, noteSourceStart, renderedToSource, virtualCaretEnabled } from "../../../lib/caretops";
+import { caretFieldsOf, editForKey, fieldAt, moveCaret, noteSourceStart, renderedToSource } from "../../../lib/caretops";
 import type { CaretEdit, CaretField, CaretMove } from "../../../lib/caretops";
 import { findDeepestNote, findDeepestNoteByOriginPosition } from "../../../lib/noteops";
 import type { NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
+import styles from "./VirtualCaret.module.scss";
 
 const debug = Debug("nodejs:notethink-views:components:views:generic:VirtualCaret");
 
@@ -30,18 +31,25 @@ interface CaretState {
     offset: number;
 }
 
+/**
+ * - view_props, handlers: the view the caret draws in
+ * - scope_ref: the element holding this view's cards; headlines are looked up inside it, so each pane of a split view draws its own caret
+ * - typing: the dev-only typing prototype (click to arm, hidden input, relayed edits); false draws the editor's caret and nothing else
+ */
 interface VirtualCaretProps {
     view_props: ViewProps;
     handlers: ViewApi;
+    scope_ref: RefObject<HTMLElement | null>;
+    typing: boolean;
 }
 
 /**
- * The virtual caret prototype, rendered only in a dev build. It follows the editor's real caret while
- * the file is open in a text editor, and otherwise takes the keys itself. This deliberately departs
- * from the standard that keeps keystrokes out of the webview, which is what the spike measures.
+ * The editor's caret drawn in a card title or linetag value, in every build. It shows where the user is
+ * typing in the text editor beside the viewer and takes no keys, posts no edits and never arms on a
+ * click, so the viewer stays out of the keyboard. With `typing` set (a dev build, first pane only) the
+ * spike's typing prototype is added on top: a click arms the caret and the webview relays edits itself.
  */
-export default function VirtualCaret(props: VirtualCaretProps): ReactElement | null {
-    if (!virtualCaretEnabled()) { return null; }
+export default function VirtualCaret(props: VirtualCaretProps): ReactElement {
     return <VirtualCaretLayer {...props} />;
 }
 
@@ -54,8 +62,8 @@ function fieldOf(note: NoteProps, key: string | undefined): CaretField | undefin
 }
 
 // a note's own headline: the first rowheader in its seq element, since tree offsets repeat across a folder view's files
-function headlineOf(note: NoteProps): HTMLElement | null {
-    return document.querySelector<HTMLElement>(`[data-seq="${note.seq}"] [role="rowheader"]`);
+function headlineOf(note: NoteProps, scope: ParentNode): HTMLElement | null {
+    return scope.querySelector<HTMLElement>(`[data-seq="${note.seq}"] [role="rowheader"]`);
 }
 
 function fieldElement(headline: HTMLElement, key: string | undefined): HTMLElement | null {
@@ -64,9 +72,9 @@ function fieldElement(headline: HTMLElement, key: string | undefined): HTMLEleme
         : Array.from(headline.querySelectorAll<HTMLElement>('[data-vc-linetag]')).find(element => element.dataset.vcLinetag === key) ?? null;
 }
 
-// eslint-disable-next-line max-lines-per-function -- a prototype kept in one place so the spike's whole footprint can be deleted together
+// eslint-disable-next-line max-lines-per-function -- the follow-the-editor path and the dev typing prototype share one caret state
 function VirtualCaretLayer(props: VirtualCaretProps): ReactElement | null {
-    const { view_props, handlers } = props;
+    const { view_props, handlers, scope_ref, typing } = props;
     const { notes, selection, active_editor_doc_path } = view_props;
     const [caret, setCaret] = useState<CaretState | undefined>(undefined);
     const [rect, setRect] = useState<CaretRect | undefined>(undefined);
@@ -81,6 +89,8 @@ function VirtualCaretLayer(props: VirtualCaretProps): ReactElement | null {
     const pending_timer_ref = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const queue_ref = useRef<Array<'Backspace' | 'Delete' | { text: string }>>([]);
     const editor_head = selection?.main.head;
+    // a range selection is not a caret: the editor draws it, and the viewer shows nothing
+    const editor_is_range = selection !== undefined && selection.main.anchor !== selection.main.head;
     // an editor owns the caret of a file it shows; null selections clear it, so a defined one means open
     const editor_live = editor_head !== undefined;
     const postMove = useCallback((field: CaretField, rendered_offset: number): void => {
@@ -89,7 +99,9 @@ function VirtualCaretLayer(props: VirtualCaretProps): ReactElement | null {
     }, [handlers, view_props.doc_path]);
     // the caret follows the editor's real caret while the file is open
     useEffect(() => {
-        if (editor_head === undefined) { return; }
+        // with no editor selection the dev prototype keeps its own caret; the shipped caret has nothing to follow
+        if (editor_head === undefined) { if (!typing) { setCaret(undefined); } return; }
+        if (editor_is_range) { setCaret(undefined); return; }
         const all_notes = notes ?? [];
         // folder mode resolves by the note's origin; a single file has none, so its tree offsets are the file's own
         const by_origin = active_editor_doc_path ? findDeepestNoteByOriginPosition(all_notes, active_editor_doc_path, editor_head) : undefined;
@@ -100,9 +112,10 @@ function VirtualCaretLayer(props: VirtualCaretProps): ReactElement | null {
         // an editor caret outside every title and linetag value leaves nothing to draw
         if (!note || !hit || note_start === undefined) { setCaret(undefined); return; }
         setCaret({ doc_path: note.origin?.doc_path, note_start, field_key: hit.field.kind === 'linetag' ? hit.field.key : undefined, offset: hit.rendered_offset });
-    }, [editor_head, notes, active_editor_doc_path]);
+    }, [editor_head, editor_is_range, typing, notes, active_editor_doc_path]);
     // a click on a title or a linetag value puts the caret there and takes the keys
     useEffect(() => {
+        if (!typing) { return; }
         function onClick(event: MouseEvent): void {
             const target = event.target as HTMLElement | null;
             const headline = target?.closest<HTMLElement>('[role="rowheader"]');
@@ -128,7 +141,7 @@ function VirtualCaretLayer(props: VirtualCaretProps): ReactElement | null {
         // captured, because the note's own click handler stops propagation before it reaches the document
         document.addEventListener('click', onClick, true);
         return () => document.removeEventListener('click', onClick, true);
-    }, [editor_live, postMove]);
+    }, [typing, editor_live, postMove]);
     // one relayed edit at a time: send it, and hold the next keys until the update that carries it lands
     const relay = useCallback((key: 'Backspace' | 'Delete' | { text: string }): void => {
         const current = caret_ref.current;
@@ -185,13 +198,17 @@ function VirtualCaretLayer(props: VirtualCaretProps): ReactElement | null {
     useLayoutEffect(() => {
         if (!caret) { setRect(undefined); return; }
         const note = noteOfCaret(notes, caret);
-        const headline = note ? headlineOf(note) : null;
+        const scope = scope_ref.current ?? document;
+        const headline = note ? headlineOf(note, scope) : null;
         const element = headline ? fieldElement(headline, caret.field_key) : null;
-        const next = element ? rectAtRenderedOffset(element, caret.offset) : undefined;
+        const field = note ? fieldOf(note, caret.field_key) : undefined;
+        // an unmappable title (autolink, entity, raw HTML) renders other text than the map expects, and no caret beats a wrong one
+        const mappable = !!element && !!field && element.textContent?.trim() === field.map.rendered.trim();
+        const next = element && mappable ? rectAtRenderedOffset(element, caret.offset) : undefined;
         // read by the performance probe to say why a caret is not drawn
         (window as unknown as { __virtual_caret_state?: unknown }).__virtual_caret_state = { note_found: !!note, headline_found: !!headline, element_found: !!element, caret };
         setRect(previous => (previous && next && previous.left === next.left && previous.top === next.top && previous.height === next.height) ? previous : next);
-    }, [caret, notes, tick]);
+    }, [caret, notes, tick, scope_ref]);
     // recorded for the performance probe: when the drawn caret last settled
     useEffect(() => {
         const probe = window as unknown as { __virtual_caret_paints?: number[] };
@@ -210,7 +227,7 @@ function VirtualCaretLayer(props: VirtualCaretProps): ReactElement | null {
     debug('caret %O editor_live %s', caret, editor_live);
     return createPortal(
         <>
-            <input
+            {typing && <input
                 ref={input_ref}
                 data-testid="virtual-caret-input"
                 aria-label="Virtual caret"
@@ -220,7 +237,7 @@ function VirtualCaretLayer(props: VirtualCaretProps): ReactElement | null {
                 onKeyDown={onKeyDown}
                 onBlur={() => {}}
                 style={{ position: 'fixed', left: 0, top: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
-            />
+            />}
             {rect && caret && (
                 <div
                     data-testid="virtual-caret"
@@ -228,7 +245,8 @@ function VirtualCaretLayer(props: VirtualCaretProps): ReactElement | null {
                     data-caret-field={caret.field_key ?? 'title'}
                     data-caret-mode={editor_live ? 'editor' : 'virtual'}
                     aria-hidden="true"
-                    style={{ position: 'fixed', left: rect.left, top: rect.top, width: 2, height: rect.height, background: 'currentColor', pointerEvents: 'none', zIndex: 1000 }}
+                    className={styles.caret}
+                    style={{ left: rect.left, top: rect.top, height: rect.height }}
                 />
             )}
         </>,

@@ -28,9 +28,8 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
     // renders the pill only when there's something to show, so a single-file story with no epic shows none
     const has_project = originHasProject(note.origin);
     const show_origin = !!note.origin && note.level === 1 && (has_project || !!note.origin.epic);
-    // dev builds only: the virtual caret needs a heading's title and each linetag value marked, and a focused note's tags
-    const caret_dev = virtualCaretEnabled();
-    const show_inline_linetags = (note.display_options?.settings?.showLinetagsInHeadlines || (caret_dev && note.focused)) && note.linetags;
+    // a focused note's tag values show in dev builds only; production shows them when showLinetagsInHeadlines is on
+    const show_inline_linetags = (note.display_options?.settings?.showLinetagsInHeadlines || (virtualCaretEnabled() && note.focused)) && note.linetags;
     return (
         <div className={view_specific_styles.headline}
              role={'rowheader'}
@@ -54,11 +53,11 @@ export default function MarkdownNoteHeadline(props: MarkdownNoteHeadlineProps): 
                 />
             )}
             <StoryProgressPie note={note} />
-            {caret_dev && note.type === 'heading' ? <span data-vc-title="">{note.headline}</span> : note.headline}
+            {note.type === 'heading' ? <span data-vc-title="">{note.headline}</span> : note.headline}
             {show_inline_linetags && Object.entries(note.linetags!)
                 .filter(([key]) => !isInternalAttribute(key))
                 .map(([key, tag]) => (
-                    <span key={key} className={view_specific_styles.linetagInline}>{key}={caret_dev ? <span data-vc-linetag={key}>{tag.value}</span> : tag.value}</span>
+                    <span key={key} className={view_specific_styles.linetagInline}>{key}=<span data-vc-linetag={key}>{tag.value}</span></span>
                 ))
             }
         </div>

@@ -14,28 +14,28 @@ function note(overrides: Partial<NoteProps> = {}): NoteProps {
     } as NoteProps;
 }
 
-afterEach(() => {
-    delete (globalThis as { NOTETHINK_DEV?: boolean }).NOTETHINK_DEV;
-});
-
-describe('MarkdownNoteHeadline and the virtual caret marks', () => {
-    it('renders no caret marks and no linetag chips outside a dev build', () => {
+describe('MarkdownNoteHeadline and the editor caret marks', () => {
+    it('marks the title and leaves a focused note\'s linetag values hidden in a production build', () => {
         const { container } = render(<MarkdownNoteHeadline note={note()} />);
-        expect(container.querySelector('[data-vc-title]')).toBeNull();
+        expect(container.querySelector('[data-vc-title]')?.textContent).toBe('Title');
         expect(container.querySelector('[data-vc-linetag]')).toBeNull();
         expect(container.textContent).toBe('Title');
     });
 
-    it('marks the title and shows a focused note\'s linetag values in a dev build', () => {
-        (globalThis as { NOTETHINK_DEV?: boolean }).NOTETHINK_DEV = true;
-        const { container } = render(<MarkdownNoteHeadline note={note()} />);
-        expect(container.querySelector('[data-vc-title]')?.textContent).toBe('Title');
+    it('marks each linetag value where showLinetagsInHeadlines renders it', () => {
+        const { container } = render(<MarkdownNoteHeadline note={note({ focused: false, display_options: { id: 'v1', settings: { showLinetagsInHeadlines: true } } })} />);
         expect(container.querySelector('[data-vc-linetag="status"]')?.textContent).toBe('doing');
+        expect(container.textContent).toBe('Titlestatus=doing');
     });
 
-    it('leaves an unfocused note\'s linetags hidden in a dev build', () => {
-        (globalThis as { NOTETHINK_DEV?: boolean }).NOTETHINK_DEV = true;
+    it('leaves an unfocused note\'s linetags hidden', () => {
         const { container } = render(<MarkdownNoteHeadline note={note({ focused: false })} />);
         expect(container.querySelector('[data-vc-linetag]')).toBeNull();
+        expect(container.textContent).toBe('Title');
+    });
+
+    it('marks no title on a note that is not a heading', () => {
+        const { container } = render(<MarkdownNoteHeadline note={note({ type: 'paragraph' as NoteProps['type'], focused: false })} />);
+        expect(container.querySelector('[data-vc-title]')).toBeNull();
     });
 });

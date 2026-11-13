@@ -21,6 +21,7 @@ Then open any `.md` file, right-click it and choose **Open With... -> NoteThink*
 - **Split view**: open a second pane beside the first from the toolbar, such as a Document beside a Kanban board, each with its own toolbar and scroll; drag the handle between them to resize, and both panes and the split survive a reload
 - **Folder mode**: aggregate every markdown file in a folder into one board
 - **Live Updates**: edit the file in the normal text editor and the view updates in place, debounced
+- **Editor caret in cards**: while the file is open in a text editor beside the viewer, a card shows the editor's caret, in its title, or in a linetag value when "Show linetags in headlines" is on, at the same place, in every view and in each pane of a split view
 - **Agent activity**: see which AI coding agents (Claude Code, Codex, Grok, and any other vendor registered with thinkersync) are working on which story, live, on desktop - including a remote window, where it reads the sessions on the host serving the workspace
 - **Linetags**: plain markdown links carry status, epic, and other attributes invisibly - see [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
 - **GFM + Frontmatter**: tables, strikethrough, task lists, footnotes, YAML/TOML frontmatter
@@ -243,7 +244,7 @@ A story at `doing`, `code-review` or `testing`, or with an agent working on it, 
 
 ## Known Limitations
 
-- **Not a text editor**: NoteThink writes back exactly two kinds of change - dragging a card in Kanban or Line view rewrites its status (or grouping attribute) linetag, plus an `nt_kanban_ordering_weight` linetag to remember the drop position, and clicking a checkbox toggles it in the source. It never edits body text, headings, or anything else, and nothing changes unless you drag a card or tick a checkbox yourself. Two more things are written, each only when you ask for it in the coordinator list: a message you press Send on, a story you confirm sending from its card, or a vendor change you confirm is written as a file into that agent's mailbox, and moving a target line rewrites the `coord` linetag on story headings in that board
+- **Not a text editor**: NoteThink writes back exactly two kinds of change - dragging a card in Kanban or Line view rewrites its status (or grouping attribute) linetag, plus an `nt_kanban_ordering_weight` linetag to remember the drop position, and clicking a checkbox toggles it in the source. It never edits body text, headings, or anything else, and nothing changes unless you drag a card or tick a checkbox yourself. The caret shown in a card title is the text editor's own, drawn for you to see where you are typing: the viewer takes no keys, and a click on a title does not place one. Two more things are written, each only when you ask for it in the coordinator list: a message you press Send on, a story you confirm sending from its card, or a vendor change you confirm is written as a file into that agent's mailbox, and moving a target line rewrites the `coord` linetag on story headings in that board
 
 ## Contributing
 

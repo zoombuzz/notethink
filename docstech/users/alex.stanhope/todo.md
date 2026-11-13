@@ -1,6 +1,32 @@
 # Todo [](?nt_view=kanban)
 
 
+### Show the editor's caret in card titles [](?id=read-only-caret&status=code-review)
+
+While a markdown file is open in a text editor beside NoteThink, the editor's caret is invisible in the viewer. When it sits in a heading or a linetag value, the matching card should show a caret at the same place, so the viewer shows where the user is typing.
+
++ builds on: [[virtual-caret-spike]], whose prototype (`VirtualCaret.tsx`, `caretops.ts`, `caretdom.ts`) already follows the editor's selection; this story ships that half to users
++ builds on: `selectionChanged` from the editor (`PanelSession.ts`, received in `useVscodeMessages.ts`), debounced by `SELECTION_DEBOUNCE_MS`
++ decision 2026-11-13: read-only; the viewer takes no keys, posts no `editText` and never arms a caret on click, so CODING_STANDARDS.md > View interaction state stays as written and `README.md` "Not a text editor" stays true
++ decision 2026-11-13: a production caret lands in a linetag value only where the view already renders that value, which is when the card setting `showLinetagsInHeadlines` is on (off by default, no production view shows values otherwise); the focused-card value chips stay dev-only
++ decision 2026-11-13: the typing half (click to arm, key relay, hidden input) stays behind `NOTETHINK_DEV`, untouched, until the open question on [[virtual-caret-spike]] is answered
++ scope
+  + titles and linetag values only, with the mapping limits the spike recorded (autolinks, entities, raw HTML, reference links, hard breaks fall back to no caret rather than a wrong one)
+  + every view and card type that renders a headline, and each pane of a split view showing that file
+  + the caret blinks like the editor's, follows the theme's cursor colour, and is hidden when the editor's selection is a range or leaves titles and values
++ [X] split the follow-the-editor path out of the `NOTETHINK_DEV` gate, so a production build draws the editor's caret, and keep every typing path behind the gate
+  + `VirtualCaret` always mounts; `typing` (`virtualCaretEnabled()` and the first pane) gates the click handler, hidden input and relayed edits; title and value marks in `MarkdownNoteHeadline` render in every build; a focused card's value chips stay dev-only
++ [X] draw the caret in each pane of a split view that shows the selection's file
++ [X] hide the caret for a range selection, a selection outside titles and values, and an unmappable title
++ [X] make sure the caret never moves focus, scrolls the view or changes the focused card
++ [X] cover the gate split with Jest: production draws, takes no keys and arms nothing on click; dev keeps the typing tests
++ [X] add a Playwright spec on a production-mode build: a `selectionChanged` into a title and into a linetag value draws the caret, keys typed in the view change nothing
+  + `editor-caret.prod.spec.ts` runs in the `chromium-production` project against a minified bundle from `scripts/build-prod-harness-bundle.mjs`; `pnpm run test-playwright` builds both bundles
++ [X] add one README feature line, and say in `README.md` "Not a text editor" that the caret is shown, not typed into
++ [X] walk it in a browser in the kanban, document and line views, light and dark
++ [X] bump the patch version
+
+
 ### Links in a card title survive linetag parsing [](?id=title-link-linetags&status=code-review)
 
 A markdown link in a heading, such as `## Read [the guide](guide.md) first`, should render as a title with a working link. Today the linetag parser takes the first `[` of the headline as the start of the linetags, so the link and the text after it vanish from the card title.
@@ -177,7 +203,7 @@ A story card on a coordinator's board carries a small envelope beside its progre
 + decision 2026-11-12 (operator): OK sends one envelope asking the coordinator to pick up the story and include it in its current batch
   + the message names the story's id and its board, as one l10n string
   + the panel's message box stays for anything longer
-+ open question: the tray also leaves out the view's container note, which has a source position but is the view's frame rather than a card in it; accept that as the rule (recommended), or show the tray on the container too?
++ decision 2026-11-13: the tray leaves out the view's container note, which has a source position but is the view's frame rather than a card in it
 + [X] add `titleEndOffset` to `lib/noteops.ts`, the source offset at the end of a note's title text
   + Jest: a plain title, a title with linetags, and a note in a folder view
 + [X] add `ConfirmModal` beside `InsertModal.tsx` on a native `<dialog>`, with Jest tests for OK, Cancel and Escape
@@ -309,8 +335,8 @@ Changing a card's title or a linetag value means leaving the viewer for the text
     + inferred, not run in a real host: an input keeps VS Code from forwarding Backspace and Enter to the drill commands, and `selectRange` to a visible editor hands focus to it (`PanelSession.ts` `revealInVisibleEditor`), so with the file open the first move passes the caret to the editor
     + not built: selections, Shift and Ctrl arrows, Up and Down, clipboard, IME composition
   + recommendation: build only the read-only half (draw the editor's caret in titles and values) unless the operator wants typing without an editor, which also needs a save rule (save after an edit when the file was clean before, as the coordinator marker move does), an answer for undo, and a fix for the card unmounting
-+ open question: file a build story for the read-only caret (draw the editor's caret in titles and linetag values, no typing)? Recommended: yes
-+ open question: also build typing without an editor? Recommended: only if the undo gap is accepted and the save rule above is adopted
++ decision 2026-11-13: build the read-only caret, which draws the editor's caret in titles and linetag values and takes no keys, as [[read-only-caret]]
++ open question: also build typing without an editor? Recommended: only if the undo gap is accepted and the save rule above is adopted; until then the typing half stays behind `NOTETHINK_DEV`
 + [X] draw a caret in a title, and in a linetag value, where the editor's selection falls
   + plain titles first, then titles with emphasis, inline code and a link
 + [X] move the caret with Left, Right, Home and End within the title and values, posting `selectRange` so the real caret follows when the file is open

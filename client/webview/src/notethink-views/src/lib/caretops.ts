@@ -5,14 +5,14 @@ import { titleEndOffset } from "./noteops";
 declare const NOTETHINK_DEV: boolean | undefined;
 
 /**
- * Pure helpers for the virtual caret prototype (dev builds only): the mapping between a title's
+ * Pure helpers for the virtual caret: the mapping between a title's
  * rendered text and its markdown source, the caret field a note offers (its title, or one linetag
- * value), and the single-key edits relayed to the extension as `editText` changes. Everything here is
+ * value), and (dev builds only) the single-key edits relayed to the extension as `editText` changes. Everything here is
  * in the source file's own offset space (the space `editText` and `selectRange` speak), never the
  * merged-tree space.
  */
 
-/** Whether the virtual caret prototype runs: a dev build only, so a production build behaves as it always has. */
+/** Whether the typing half of the virtual caret runs (click to arm, key relay, hidden input): a dev build only. The editor's caret is drawn in every build and needs no gate. */
 export function virtualCaretEnabled(): boolean {
     return typeof NOTETHINK_DEV !== 'undefined' && NOTETHINK_DEV === true;
 }

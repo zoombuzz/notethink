@@ -19,12 +19,27 @@ export default defineConfig({
         baseURL: 'http://localhost:9123',
         trace: 'on-first-retry',
     },
+    /*
+     * The `chromium` project runs every spec against the dev bundle `pnpm run build` emits. Specs named
+     * `*.prod.spec.ts` run in `chromium-production` against the minified bundle that
+     * scripts/build-prod-harness-bundle.mjs builds, served on its own port, because behaviour a
+     * production build must have (such as the editor caret taking no keys) only shows there.
+     */
     projects: [
-        { name: 'chromium', use: { browserName: 'chromium' } },
+        { name: 'chromium', testIgnore: /\.prod\.spec\.ts$/, use: { browserName: 'chromium' } },
+        { name: 'chromium-production', testMatch: /\.prod\.spec\.ts$/, use: { browserName: 'chromium', baseURL: 'http://localhost:9124' } },
     ],
-    webServer: {
-        command: 'node playwright/harness/serve.mjs',
-        port: 9123,
-        reuseExistingServer: !process.env.CI,
-    },
+    webServer: [
+        {
+            command: 'node playwright/harness/serve.mjs',
+            port: 9123,
+            reuseExistingServer: !process.env.CI,
+        },
+        {
+            command: 'node playwright/harness/serve.mjs',
+            port: 9124,
+            env: { PORT: '9124', NOTETHINK_HARNESS_DIST: 'test-results/perf-bundles/production' },
+            reuseExistingServer: !process.env.CI,
+        },
+    ],
 });

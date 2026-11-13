@@ -1,24 +1,25 @@
 # Prod-ready Results
-# Version: 0.4.46
-# Date: 2026-11-13T10:15:00Z
-# Tree: HEAD a7f0d9f plus the working tree (55 changed paths, 17 untracked source, test and fixture files read)
-# Stories: title-link-linetags, windowed-column-edited-card, virtual-caret-spike, split-view: doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move all four stories to done.md (move rehearsed, exit 0)
+# Version: 0.4.47
+# Date: 2026-11-13T11:50:00Z
+# Tree: HEAD 92886c0 plus batch C working tree (caret gate split, VirtualCaret.module.scss, production Playwright project, README and standards lines)
+# Stories: read-only-caret doing -> code-review
+# Ship verdict: Ready to ship: /push-prod will move "Show the editor's caret in card titles" to done.md
 # ---
-Build | pass | webpack and rollup exit 0 (inside pnpm run check) | fresh
-Lint | pass | 0 errors, 2 warnings (max-lines-per-function in files outside this batch) | fresh
-Project guards | not applicable | none for notethink | skipped
-Dependency audit | pass | no known vulnerabilities at high or above | fresh
-CODING_STANDARDS | pass | mechanical greps and inline pass clean | fresh
-Exposure | pass | public repo: scan found one marker (a coord host linetag on split-view), removed; reading of docstech, README and fixtures clean | fresh
-Fleet fix check | pass | no shared-surface or new-dependency-class hit | fresh
-Jest | pass | 4006/4006 passed (182 suites) | fresh
-Mocha host suite | pass | 43 passed, 0 failed | fresh
-Playwright | pass | 365/365 passed, 0 flaky, 0 skipped | fresh
-Split view walk | pass | kanban board beside document in the harness: open, resize, reload and close covered by split-view.spec.ts; screenshot reviewed and deleted | fresh
-Story-state advance | pass | 4 stories doing -> code-review, move rehearsed for each | fresh
-Version bump | pass | 0.4.46 (HEAD is 0.4.42) | fresh
+Story-state intake | 1 at doing | fresh
+Story reconciliation | all tasks already ticked | fresh
+Build | ok (pnpm run build-and-rollup) | fresh
+Lint | ok | reused (green at 2026-11-13T11:36:04Z)
+Project guards | none for this project | skipped
+Dependency audit | no high or critical dependencies declared at risk (extension declares polyfills only; not run) | skipped
+CODING_STANDARDS | mechanical checks clean, inline pass clean | fresh
+Exposure | public: scan clean after removing the coordinator marker from the story linetag; reading clean | fresh
+Fleet fix check | not a fleet fix (notethink-only viewer feature) | fresh
+Jest | 4012/4012 passed (182 files) | reused (green at 2026-11-13T11:36:22Z)
+Mocha | 43/43 passed | fresh
+Playwright | 376/376 passed (dev project plus chromium-production) | reused (green at 2026-11-13T11:37:50Z)
+Story-state advance | doing -> code-review, move rehearsed (exit 0) | fresh
+Version bump | 0.4.47 | fresh
 # --- Fixed during review ---
-Exposure: removed the coordinator-host linetag from the split-view heading in todo.md.
+Story linetag: removed the coordinator's local marker from the heading before advancing.
 # --- Open ---
-Two open question lines on virtual-caret-spike and one on card-action-tray are deliberate operator records.
+none

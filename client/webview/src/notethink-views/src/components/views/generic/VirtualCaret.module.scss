@@ -1,0 +1,18 @@
+// the editor's caret drawn over a card title or linetag value; it never takes pointer events or focus
+.caret {
+    position: fixed;
+    width: 2px;
+    background: var(--vscode-editorCursor-foreground, currentColor);
+    pointer-events: none;
+    z-index: 1000;
+    animation: caretBlink 1.06s steps(1, end) infinite;
+}
+
+@keyframes caretBlink {
+    0%, 50% { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .caret { animation: none; }
+}

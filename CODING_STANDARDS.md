@@ -206,6 +206,7 @@ export default function ComponentName(props: Props) {
 Per-view interaction state has two layers, and the editor wins ties. A view gesture (click, drag, keyboard nav) writes `view_focused_ids` / `view_selected_ids` straight into view-managed state, so it lands immediately. The editor-derived match (caret in note, per doc and source position) overrides it whenever it produces a result, because almost all editing happens in the editor. The view-driven layer covers the gap before the editor's `selectionChanged` round-trip and the case where the editor has no opinion (its active doc is outside the aggregated set, or the caret is outside every note).
 
 - **The editor takes DOM focus.** A `revealRange` / `selectRange` posted by the view routes through `vscode.window.showTextDocument(..., { preserveFocus: false })`, so the webview never captures keystrokes the user expects to land in the editor.
+- **The viewer shows the editor's caret and takes no keys.** `VirtualCaret.tsx` draws the editor's caret in a heading title in every build, and in a linetag value wherever `showLinetagsInHeadlines` renders it (a focused card's value chips are dev-only) and in each pane of a split view, and never focuses, scrolls, posts `editText` or arms on a click. Click-to-arm, the hidden input and relayed edits are the typing prototype, which runs only when `NOTETHINK_DEV` is set (`virtualCaretEnabled()`); the production half is covered by `playwright/specs/*.prod.spec.ts`, which the `chromium-production` project runs against the bundle `scripts/build-prod-harness-bundle.mjs` builds.
 - **The view follows the editor.** When the editor moves to a different note, for any reason, the view's focused and selected state follows on the next derivation, even over an earlier view click.
 - **Matchers work across every aggregated doc.** Editor-driven decoration must not assume one coordinate space: match on per-doc origin metadata (`origin.doc_path` + `origin.source_position`) so one algorithm serves `current_file` and `folder` modes with no `integration_mode` branch.
 
@@ -297,7 +298,7 @@ Canonical: [`VERIFICATION.md`](../lightenna-iac/docstech/standards/VERIFICATION.
 | Rollup | `pnpm -C client/webview/src/notethink-views run rollup` |
 | Jest | `pnpm run test-jest` |
 | Mocha | `pnpm run test-mocha` |
-| Playwright E2E | `pnpm run test-playwright` |
+| Playwright E2E (dev bundle, then a production bundle for `*.prod.spec.ts`) | `pnpm run test-playwright` |
 | Lint, build, rollup, Jest and Mocha | `pnpm run check` |
 
 ### No web dev server

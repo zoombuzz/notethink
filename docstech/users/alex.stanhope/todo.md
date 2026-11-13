@@ -336,7 +336,7 @@ Changing a card's title or a linetag value means leaving the viewer for the text
     + not built: selections, Shift and Ctrl arrows, Up and Down, clipboard, IME composition
   + recommendation: build only the read-only half (draw the editor's caret in titles and values) unless the operator wants typing without an editor, which also needs a save rule (save after an edit when the file was clean before, as the coordinator marker move does), an answer for undo, and a fix for the card unmounting
 + decision 2026-11-13: build the read-only caret, which draws the editor's caret in titles and linetag values and takes no keys, as [[read-only-caret]]
-+ open question: also build typing without an editor? Recommended: only if the undo gap is accepted and the save rule above is adopted; until then the typing half stays behind `NOTETHINK_DEV`
++ decision 2026-11-13: typing without an editor is not built for users; the typing half stays behind `NOTETHINK_DEV` while the read-only caret is in use
 + [X] draw a caret in a title, and in a linetag value, where the editor's selection falls
   + plain titles first, then titles with emphasis, inline code and a link
 + [X] move the caret with Left, Right, Home and End within the title and values, posting `selectRange` so the real caret follows when the file is open
@@ -607,7 +607,7 @@ Opening a file tagged `[](?nt_view=kanban)` through NoteThink: Open Viewer draws
   + unit coverage in `AutoView.test.tsx` (cleared caret, no focus, no tag, focused note override)
 
 
-### Latest folder scan wins [](?id=latest-folder-scan-wins&status=doing)
+### Latest folder scan wins [](?id=latest-folder-scan-wins&status=code-review)
 
 Typing a new Include filter can leave the board and the Files drawer showing the result of an older, partial pattern. On 2026-09-25, in a workspace of about 2200 markdown files, `**/{todo,done}.md` showed `(0 in 0 files)` while 22 files on disk match it.
 
@@ -637,15 +637,15 @@ Typing a new Include filter can leave the board and the Files drawer showing the
   + do not use `**/{todo` as the only fixture
 + [X] keep `(X in Y of M files)` when the winning scan is truncated (PATTERNS.md > "Bounded lists say they are bounded")
   + the totals and `aggregate_truncated` are still set only by the winning scan; the truncated-winner test asserts `aggregate_truncated`, the full discovered count and the capped doc count when a smaller older scan lands last
-+ [ ] verify in that workspace: reload the window with Include `**/{todo,done}.md` and confirm stories from 22 files
++ [X] verify in that workspace: reload the window with Include `**/{todo,done}.md` and confirm stories from 22 files
+  + evidence 2026-11-13: the reloaded window read 228 stories in 26 files, and a walk of that workspace with `DEFAULT_EXCLUDE_FILTER` finds exactly 26 `todo.md` / `done.md` files today (it held 22 when the fault was seen), so the full pattern's scan won
   + ran a public-safe stand-in: `playwright/specs/folder-latest-scan-real-host.spec.ts` generates 2222 markdown files with 22 `todo.md` / `done.md`, serves the built extension through @vscode/test-web, opens the viewer in folder mode (label `of 2222 files)`), then types the Include filter `**/{todo`, `**/{todo,`, `**/{todo,d`, `**/{todo,done}.md` with a pause longer than the drawer debounce after each; the settled label is `in 22 files)` with stories from both a first and a last project visible
   + residue: the stand-in also passes with the guards removed (a test-web host walks a virtual filesystem, so its scans complete in order), so it guards the typing path but does not reproduce the race; the reload of the real window with the persisted Include filter on a host using `findFiles` is not automated and stays for the operator
-+ open question: will the operator reload the original workspace in VS Code with Include `**/{todo,done}.md` and report the label (expecting stories from 22 files), or split that check into its own story so this one can advance?
 + out of scope
   + cancelling in-flight parses from the parse-offload work; a stale scan's results are ignored, not aborted
 
 
-### Chief-of-staff workflow pack [](?id=chief-of-staff-pack&status=doing)
+### Chief-of-staff workflow pack [](?id=chief-of-staff-pack&status=code-review)
 
 Someone running coding agents against stories in a `todo.md` has no ready-made way to ask an agent "what should be worked on next?" or "what do I need to do right now to keep the agents busy?", or to watch that work on a board. This story ships a workflow pack in `workflows/chief-of-staff/`: two agent skills, the story rules they rely on, and a board that opens in NoteThink, where each step links to the markdown that drives it.
 
@@ -673,7 +673,6 @@ Someone running coding agents against stories in a `todo.md` has no ready-made w
 + decision: the optional terms file is a path held in an environment variable read by the scan test; findings print rule, file, line and a masked match, never the text
 + decision: `workflows/**` is added to `.vscodeignore` so the pack stays out of the VSIX; `.mjs` is ignored by eslint and tsc includes only each client `src`, so the pack is outside lint scope already
 + decision: the board's link walk is a permanent Playwright spec, which also guards the pack against later changes
-+ residue: the signed-out browser check through notethink.com's app route waits on the push, since the pack is not public until then
 + [X] write `AGENTS.md` with the How stories work section, and a `CLAUDE.md` holding only `@AGENTS.md`
   + evidence: `workflows/chief-of-staff/AGENTS.md`, `CLAUDE.md`; `workflowspack.test.ts` asserts CLAUDE.md is exactly `@AGENTS.md`
 + [X] write `what-next` and `me-now` as repo-local skills that point only at files in the pack
@@ -686,8 +685,7 @@ Someone running coding agents against stories in a `todo.md` has no ready-made w
   + evidence: `sanitiseops.ts`, `sanitiseops.test.ts` (a test per rule), `workflowspack.test.ts` (scan of `workflows/`, passes with no terms file, masked terms file case)
 + [X] confirm in VS Code that each board link opens its markdown in the viewer
   + evidence: `playwright/specs/workflow-pack-links.spec.ts` runs the real extension in a VS Code web host over a copy of the pack, opens `todo.md` in the viewer and follows the four distinct links (`AGENTS.md`, `README.md`, both `SKILL.md`), each showing its target's title; passed
-+ [ ] once pushed, open the board signed out through notethink.com's app route and confirm columns render and links open, in the same run
-+ open question: this check can only run after the push, so the story cannot reach code-review first; ship it at doing and run the check straight after the push (recommended), or split the check into its own story?
++ decision 2026-11-13: the signed-out check through notethink.com's app route (columns render, links open) leaves this story and runs with the notethink.com release that follows this repo's push, since the pack is not public until then
 + [X] bump the patch version
   + evidence: `package.json` 0.4.35
 
@@ -860,4 +858,4 @@ Story [[coordinator-views]] reaches agents on the same machine only. An agent on
 + [ ] state the network use in the Agent activity section of `README.md`, which today says NoteThink reads no network endpoint for agent activity
 + [ ] cover the setting, the process lifecycle and the routing choice with Jest tests
 + [ ] bump the patch version
-+ open question: hold this story until thinkersync releases its client library and per-instance process (recommended), or build it now against a fake of their contract and swap in the real client later?
++ decision 2026-11-13: hold this story until thinkersync releases its client library and per-instance process; no build against a fake of their contract

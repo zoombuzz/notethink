@@ -1,25 +1,27 @@
 # Prod-ready Results
 # Version: 0.4.47
-# Date: 2026-11-13T11:50:00Z
-# Tree: HEAD 92886c0 plus batch C working tree (caret gate split, VirtualCaret.module.scss, production Playwright project, README and standards lines)
-# Stories: read-only-caret doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move "Show the editor's caret in card titles" to done.md
+# Date: 2026-11-13T20:02:00Z
+# Tree: HEAD e6e1c78 plus docstech/users/alex.stanhope/todo.md (decision lines on four stories, one task ticked from evidence, one task removed by scope decision)
+# Stories: latest-folder-scan-wins doing -> code-review; chief-of-staff-pack doing -> code-review
+# Ship verdict: Ready to ship: /push-prod will move "Latest folder scan wins" and "Chief-of-staff workflow pack" to done.md
 # ---
-Story-state intake | 1 at doing | fresh
-Story reconciliation | all tasks already ticked | fresh
-Build | ok (pnpm run build-and-rollup) | fresh
-Lint | ok | reused (green at 2026-11-13T11:36:04Z)
+Overseer inbox | no overseer review (ABSENT) | skipped
+Story-state intake | 2 at doing | fresh
+Story reconciliation | ticked 1 from evidence (latest-folder-scan-wins workspace reload: 26 files shown, 26 on disk); 1 task removed by scope decision (chief-of-staff-pack signed-out check) | fresh
+Gate scope | board (every changed path is a story board) | fresh
+Build | board-only diff | skipped
+Lint | ok (0 errors, 2 existing max-lines warnings) | fresh
 Project guards | none for this project | skipped
-Dependency audit | no high or critical dependencies declared at risk (extension declares polyfills only; not run) | skipped
-CODING_STANDARDS | mechanical checks clean, inline pass clean | fresh
-Exposure | public: scan clean after removing the coordinator marker from the story linetag; reading clean | fresh
-Fleet fix check | not a fleet fix (notethink-only viewer feature) | fresh
-Jest | 4012/4012 passed (182 files) | reused (green at 2026-11-13T11:36:22Z)
-Mocha | 43/43 passed | fresh
-Playwright | 376/376 passed (dev project plus chromium-production) | reused (green at 2026-11-13T11:37:50Z)
-Story-state advance | doing -> code-review, move rehearsed (exit 0) | fresh
-Version bump | 0.4.47 | fresh
+Dependency audit | board-only diff, dependencies unchanged since e6e1c78 | skipped
+CODING_STANDARDS | standards checker: coherence, accuracy, compliance 100%; uniformity issue engines.node predates this diff | fresh
+Exposure | public: scan clean, board diff read clean | fresh
+Fleet fix check | no shared-surface change (board only) | fresh
+Jest | board-only diff; 4012 at e6e1c78 | skipped
+Playwright | board-only diff; 376 at e6e1c78 | skipped
+Todo/Done | ok | fresh
+Story-state advance | 2 advanced doing -> code-review, moves rehearsed | fresh
+Version bump | board-only diff, no bump (0.4.47) | skipped
 # --- Fixed during review ---
-Story linetag: removed the coordinator's local marker from the heading before advancing.
+none
 # --- Open ---
 none

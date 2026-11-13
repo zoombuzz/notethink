@@ -255,8 +255,5 @@
   "Ask {0} to restart in {1}?": "Ask {0} to restart in {1}?",
   "That is not a vendor a coordinator can change to.": "That is not a vendor a coordinator can change to.",
   "Asked {0} to change vendor.": "Asked {0} to change vendor.",
-  "The vendor change could not be sent.": "The vendor change could not be sent.",
-  "Open a second pane": "Open a second pane",
-  "Close this pane": "Close this pane",
-  "Resize panes": "Resize panes"
+  "The vendor change could not be sent.": "The vendor change could not be sent."
 }

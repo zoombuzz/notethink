@@ -580,11 +580,4 @@ describe('useViewHandlers.handle_apply_filters', () => {
         expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'excludeFilter', value: '**/{node_modules}/**' });
         expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'maxNotesPerFile', value: 7 });
     });
-    it('the second pane writes the per-file cap to the folder entry the merge reads, not to its own entry', () => {
-        const set_view_managed_state = jest.fn();
-        const props = { ...makeFolderProps(set_view_managed_state, jest.fn()), id: '__pane2__' };
-        const { result } = renderHook(() => useViewHandlers(props, makeSelectionRef(undefined)));
-        result.current.handle_apply_filters('**/todo.md', '**/{node_modules}/**', 7);
-        expect(set_view_managed_state.mock.calls[0][0][0].id).toBe('__folder__');
-    });
 });

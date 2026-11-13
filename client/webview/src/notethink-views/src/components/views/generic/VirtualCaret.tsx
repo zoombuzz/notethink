@@ -33,7 +33,7 @@ interface CaretState {
 
 /**
  * - view_props, handlers: the view the caret draws in
- * - scope_ref: the element holding this view's cards; headlines are looked up inside it, so each pane of a split view draws its own caret
+ * - scope_ref: the element holding this view's cards; headlines are looked up inside it
  * - typing: the dev-only typing prototype (click to arm, hidden input, relayed edits); false draws the editor's caret and nothing else
  */
 interface VirtualCaretProps {
@@ -46,7 +46,7 @@ interface VirtualCaretProps {
 /**
  * The editor's caret drawn in a card title or linetag value, in every build. It shows where the user is
  * typing in the text editor beside the viewer and takes no keys, posts no edits and never arms on a
- * click, so the viewer stays out of the keyboard. With `typing` set (a dev build, first pane only) the
+ * click, so the viewer stays out of the keyboard. With `typing` set (a dev build) the
  * spike's typing prototype is added on top: a click arms the caret and the webview relays edits itself.
  */
 export default function VirtualCaret(props: VirtualCaretProps): ReactElement {

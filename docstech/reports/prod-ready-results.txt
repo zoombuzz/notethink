@@ -1,26 +1,26 @@
 # Prod-ready Results
-# Version: 0.4.47
-# Date: 2026-11-13T20:02:00Z
-# Tree: HEAD e6e1c78 plus docstech/users/alex.stanhope/todo.md (decision lines on four stories, one task ticked from evidence, one task removed by scope decision)
-# Stories: latest-folder-scan-wins doing -> code-review; chief-of-staff-pack doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move "Latest folder scan wins" and "Chief-of-staff workflow pack" to done.md
+# Version: 0.4.48
+# Date: 2026-11-13T20:33:00Z
+# Tree: HEAD 2511e2f plus the remove-split-view working tree (35 changed paths outside docstech, todo.md, three reports)
+# Stories: remove-split-view doing -> code-review
+# Ship verdict: Ready to ship: /push-prod will move "Remove the in-view split" to done.md
 # ---
-Overseer inbox | no overseer review (ABSENT) | skipped
-Story-state intake | 2 at doing | fresh
-Story reconciliation | ticked 1 from evidence (latest-folder-scan-wins workspace reload: 26 files shown, 26 on disk); 1 task removed by scope decision (chief-of-staff-pack signed-out check) | fresh
-Gate scope | board (every changed path is a story board) | fresh
-Build | board-only diff | skipped
-Lint | ok (0 errors, 2 existing max-lines warnings) | fresh
+Overseer inbox | no overseer review | skipped
+Story-state intake | 1 at doing, all tasks ticked | fresh
+Story reconciliation | all tasks already ticked, tree delivers them (no reference to the split remains outside docstech) | fresh
+Gate scope | code | fresh
+Build | ok (webpack, via test-playwright) | fresh
+Lint | ok | reused (green at 2026-11-13T20:27:10Z, tree unchanged)
 Project guards | none for this project | skipped
-Dependency audit | board-only diff, dependencies unchanged since e6e1c78 | skipped
-CODING_STANDARDS | standards checker: coherence, accuracy, compliance 100%; uniformity issue engines.node predates this diff | fresh
-Exposure | public: scan clean, board diff read clean | fresh
-Fleet fix check | no shared-surface change (board only) | fresh
-Jest | board-only diff; 4012 at e6e1c78 | skipped
-Playwright | board-only diff; 376 at e6e1c78 | skipped
+Dependency audit | not run, dependencies unchanged | skipped
+CODING_STANDARDS | mechanical greps and inline pass clean | fresh
+Exposure | public: scan clean, diff read clean | fresh
+Fleet fix check | no shared-surface hit | fresh
+Jest | 3985/3985 passed (180 files) | reused (green at 2026-11-13T20:27:27Z, tree unchanged)
+Playwright | 373/373 passed (dev and chromium-production projects), none flaky or skipped | fresh
 Todo/Done | ok | fresh
-Story-state advance | 2 advanced doing -> code-review, moves rehearsed | fresh
-Version bump | board-only diff, no bump (0.4.47) | skipped
+Story-state advance | doing -> code-review, move rehearsed | fresh
+Version bump | 0.4.48 | fresh
 # --- Fixed during review ---
 none
 # --- Open ---

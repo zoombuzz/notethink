@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
-import { buildIntegrationDispatch, isPaneViewId, resolveIntegrationMode } from "../../../lib/viewstateops";
+import { buildIntegrationDispatch, resolveIntegrationMode } from "../../../lib/viewstateops";
 import { arraysEqual, deriveNaturalColumnOrder, isAggregateRoot, majorityCardType, replaceGroupDisplayForAxis, splitGroupDisplayByPresence } from "../../../lib/noteops";
 import { resolveGroupByAxisKey } from "../../../lib/groupbyops";
 import { KANBAN_AXIS_KEY } from "../../../lib/axisops";
@@ -195,11 +195,9 @@ export function useViewToolbar(
             value,
         });
     }, [handlers, markPending]);
-    // viewType is not integration-specific, so a pick in current_file mode also applies in folder mode
+    // viewType is not integration-specific, so a type picked in current_file mode also applies in folder mode
     const handle_view_type_change = useCallback((view_type: string): void => {
         handlers.setViewManagedState([{ id: props.id, type: view_type }]);
-        // the second pane's type stays its own: a cascade write would retype the first pane
-        if (isPaneViewId(props.id)) { return; }
         cascade_write_setting('views', { sets: [{ node_id: 'root', key: 'viewType', value: view_type }] });
     }, [handlers, props.id, cascade_write_setting]);
     // one cascade write, into cardType's one home; the card reaches every note via display_options rebuilt from the cascade

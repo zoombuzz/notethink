@@ -4,7 +4,7 @@ import type { MouseEvent } from "react";
 import { usePendingWorkContext } from "../../../hooks/PendingWorkContext";
 import { calculateTextChangesForCheckbox, focusedChainIdsFor, resolveCaretPosition } from "../../../lib/noteops";
 import { isAlreadyFocusedClick } from "../../../lib/noteui";
-import { FOLDER_VIEW_STATE_ID, captureEditorHold, isPaneViewId, nextExpandedIds, reconcileAutoIntegrationMode, writeViewExpandedIds, writeViewInteractionState, type EditorHold } from "../../../lib/viewstateops";
+import { FOLDER_VIEW_STATE_ID, captureEditorHold, nextExpandedIds, reconcileAutoIntegrationMode, writeViewExpandedIds, writeViewInteractionState, type EditorHold } from "../../../lib/viewstateops";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../../../types/IntegrationMode";
 import type { ClickPositionInfo, NoteProps } from "../../../types/NoteProps";
 import type { ViewApi, ViewProps } from "../../../types/ViewProps";
@@ -208,9 +208,8 @@ export function useViewHandlers(
     // applies the user's edited include/exclude globs and per-file story cap
     const handle_apply_filters = useCallback((next_include: string, next_exclude: string, next_max_notes_per_file: number): void => {
         markPending('integrationFilters');
-        // the folder merge reads its cap from the folder entry, so the second pane writes there rather than to its own
         handlers.setViewManagedState([{
-            id: isPaneViewId(props.id) ? FOLDER_VIEW_STATE_ID : props.id,
+            id: props.id,
             display_options: {
                 maxNotesPerFile: next_max_notes_per_file,
             },

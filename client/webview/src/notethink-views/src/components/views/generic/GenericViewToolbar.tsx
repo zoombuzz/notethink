@@ -8,9 +8,7 @@ import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIn
 import type { StableIdCollision } from "../../../lib/noteops";
 import { enumerateGroupByCandidates, resolveGroupByAxisKey } from "../../../lib/groupbyops";
 import { hasBoardFiles } from "../../../lib/coordinatorops";
-import { buildOpenPaneUpdate, isSplitOpen } from "../../../lib/paneops";
 import { registryWithUserTypes, resolveViewSetting } from "../../../lib/viewregistryops";
-import { PANE_VIEW_STATE_ID, isPaneViewId } from "../../../lib/viewstateops";
 import type { ActiveDrawer } from "./useToolbarDrawers";
 import AudioRecordingControl from "./AudioRecordingControl";
 import CollisionsDrawer from "../drawers/CollisionsDrawer";
@@ -162,30 +160,6 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         aria-label={l10n.t('Insert')}
                     >
                         &#43;
-                    </button>
-                )}
-                {!isSplitOpen(props.view_state_ids) && (
-                    <button
-                        type="button"
-                        className={`${master_view_styles.toolbarIconButton} ${master_view_styles.toolbarIconButtonYields}`}
-                        data-testid="split-open-button"
-                        onClick={() => handlers.setViewManagedState([buildOpenPaneUpdate(props.type, user_view_types)])}
-                        title={l10n.t('Open a second pane')}
-                        aria-label={l10n.t('Open a second pane')}
-                    >
-                        &#9707;
-                    </button>
-                )}
-                {isPaneViewId(props.id) && (
-                    <button
-                        type="button"
-                        className={master_view_styles.toolbarIconButton}
-                        data-testid="split-close-button"
-                        onClick={() => handlers.deleteViewFromManagedState(PANE_VIEW_STATE_ID)}
-                        title={l10n.t('Close this pane')}
-                        aria-label={l10n.t('Close this pane')}
-                    >
-                        &#10005;
                     </button>
                 )}
                 <AudioRecordingControl

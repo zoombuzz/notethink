@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { GenericView } from "../../notethink-views/src/components";
-import SplitPanes from "../../notethink-views/src/components/views/SplitPanes";
-import { clampSplitRatio } from "../../notethink-views/src/lib/paneops";
 import { mergeAggregateRoot, FolderMergeCache, FOLDER_VIEW_STATE_ID, type AggregatedDocInput } from "../../notethink-views/src/lib/mergeAggregateRoot";
-import { PANE_VIEW_STATE_ID } from "../../notethink-views/src/lib/viewstateops";
 import { INTEGRATION_MODE_FOLDER } from "../../notethink-views/src/types/IntegrationMode";
 import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE } from "../../constants";
 import { buildViewDisplayOptions } from "../../lib/composerops";
@@ -11,7 +8,6 @@ import { releaseFolderDocContent } from "../../hooks/useWorkerParsedDocs";
 import type { ReactElement } from "react";
 import type { HashMapOf, Doc } from "../../types/general";
 import type { ViewProps } from "../../notethink-views/src/types/ViewProps";
-import type { ViewState } from "../../hooks/usePersistedViewStates";
 import type { TextSelection } from "../../notethink-views/src/types/NoteProps";
 import type { NoteRendererProps } from "../NoteRenderer";
 
@@ -22,9 +18,7 @@ function docContentKey(doc: Doc): string {
 
 /**
  * FolderTreeComposer merges every loaded Doc into a single synthetic-root tree and
- * renders one GenericView for the whole folder, plus a second beside it while the second pane has a
- * view-state entry. Both panes share the one merged tree and its merge cache, so a second pane costs a
- * render and no second merge; each reads its own view-state entry for its type and settings.
+ * renders one GenericView for the whole folder.
  *
  * Tree-composers sit one layer above views (Document/Kanban/Auto): each composer produces
  * the note tree handed to a leaf view. Companion to NoteTreeComposer for single-file mode.
@@ -93,6 +87,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
             }
         }
     }, [merge_key]);
+    const { viewType, view_display_options } = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_FOLDER, integration_path);
     // number of source files actually loaded into the merged view (the breadcrumb shows this)
     const file_count = Object.keys(docs).length;
     // top-level stories merged into the synthetic root - the "X" in the breadcrumb "(X in Y files)"
@@ -108,60 +103,50 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
     // active editor's doc path + selection: useViewContext's per-doc matcher finds the caret's merged note
     const active_editor_doc_path = props.activeEditorDocPath;
     const active_selection: TextSelection | undefined = active_editor_doc_path ? props.selections?.[active_editor_doc_path] : undefined;
-    const buildPaneProps = (pane_id: string, pane_state: ViewState | undefined): ViewProps => {
-        const { viewType, view_display_options } = buildViewDisplayOptions(props, pane_state, INTEGRATION_MODE_FOLDER, integration_path);
-        return {
-            // --- identity (doc_path/doc_relative_path/doc_text intentionally undefined for the merged view) ---
-            id: pane_id,
-            type: viewType,
-            workspace_root: props.workspace_root,
-            // --- folder aggregate metadata ---
-            file_count,
-            aggregate_total_discovered: props.aggregate_total_discovered,
-            discovery_scanning: props.discovery_scanning,
-            discovery_progress: props.discovery_progress,
-            note_count,
-            aggregate_loaded_files,
-            // --- settings-cascade mirror: camelCase (not snake_case) because these carry VS Code config values whose keys (notethink.settings.*) are camelCase end-to-end, unlike the snake_case note-tree wire data ---
-            includeFilter,
-            excludeFilter,
-            settingsCascadeHasWorkspaceOverrides: cascade?.hasWorkspaceOverrides,
-            settingsCascadeHasAnyOverrides: cascade?.hasAnyOverrides,
-            settingsCascadeDiverged: cascade?.diverged,
-            // --- view state + the opened file's declared integration intent ---
-            view_state_ids,
-            file_declared_integration: props.fileDeclaredIntegration,
-            display_options: view_display_options,
-            audio_state: props.audioState,
-            // --- note tree ---
-            nested: {
-                parent_context: merged_root,
-            },
-            notes: all_notes,
-            // --- editor-derived inputs: the active editor's doc + its selection drive useViewContext's per-doc caret matcher ---
-            selection: active_selection,
-            active_editor_doc_path,
-            // --- handler functions (view→host dispatch) ---
-            handlers: {
-                setViewManagedState: props.setViewManagedState || (() => {}),
-                deleteViewFromManagedState: props.deleteViewFromManagedState ?? (() => {}),
-                revertAllViewsToDefaultState: () => {},
-                // keyboard navigation commands drive the first pane only
-                onNavigationCommand: pane_id === PANE_VIEW_STATE_ID ? undefined : props.onNavigationCommand,
-                toggleAudio: props.toggleAudio,
-                reportAudioIndicatorPresence: props.reportAudioIndicatorPresence,
-                postMessage: props.postMessage ? (message: unknown) => {
-                    // click handlers attach docPath from note.origin; without it, the extension drops what it can't route
-                    props.postMessage!(message);
-                } : undefined,
-            },
-        };
+    const view_props: ViewProps = {
+        // --- identity (doc_path/doc_relative_path/doc_text intentionally undefined for the merged view) ---
+        id: view_state_id,
+        type: viewType,
+        workspace_root: props.workspace_root,
+        // --- folder aggregate metadata ---
+        file_count,
+        aggregate_total_discovered: props.aggregate_total_discovered,
+        discovery_scanning: props.discovery_scanning,
+        discovery_progress: props.discovery_progress,
+        note_count,
+        aggregate_loaded_files,
+        // --- settings-cascade mirror: camelCase (not snake_case) because these carry VS Code config values whose keys (notethink.settings.*) are camelCase end-to-end, unlike the snake_case note-tree wire data ---
+        includeFilter,
+        excludeFilter,
+        settingsCascadeHasWorkspaceOverrides: cascade?.hasWorkspaceOverrides,
+        settingsCascadeHasAnyOverrides: cascade?.hasAnyOverrides,
+        settingsCascadeDiverged: cascade?.diverged,
+        // --- view state + the opened file's declared integration intent ---
+        view_state_ids,
+        file_declared_integration: props.fileDeclaredIntegration,
+        display_options: view_display_options,
+        audio_state: props.audioState,
+        // --- note tree ---
+        nested: {
+            parent_context: merged_root,
+        },
+        notes: all_notes,
+        // --- editor-derived inputs: the active editor's doc + its selection drive useViewContext's per-doc caret matcher ---
+        selection: active_selection,
+        active_editor_doc_path,
+        // --- handler functions (view→host dispatch) ---
+        handlers: {
+            setViewManagedState: props.setViewManagedState || (() => {}),
+            deleteViewFromManagedState: props.deleteViewFromManagedState ?? (() => {}),
+            revertAllViewsToDefaultState: () => {},
+            onNavigationCommand: props.onNavigationCommand,
+            toggleAudio: props.toggleAudio,
+            reportAudioIndicatorPresence: props.reportAudioIndicatorPresence,
+            postMessage: props.postMessage ? (message: unknown) => {
+                // click handlers attach docPath from note.origin; without it, the extension drops what it can't route
+                props.postMessage!(message);
+            } : undefined,
+        },
     };
-    const second_pane_state = props.viewStates?.[PANE_VIEW_STATE_ID];
-    return <SplitPanes
-        primary={<GenericView {...buildPaneProps(view_state_id, view_state)} />}
-        secondary={second_pane_state ? <GenericView {...buildPaneProps(PANE_VIEW_STATE_ID, second_pane_state)} /> : undefined}
-        ratio={clampSplitRatio(second_pane_state?.display_options?.split_ratio)}
-        onRatioChange={(split_ratio) => props.setViewManagedState?.([{ id: PANE_VIEW_STATE_ID, display_options: { split_ratio } }])}
-    />;
+    return <GenericView {...view_props} />;
 }

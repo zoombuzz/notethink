@@ -22,7 +22,6 @@ export type NoteClickHandler = (event: MouseEvent<HTMLElement>, note: NoteProps 
  * - showLinetagsInHeadlines / autoExpandFocusedNote / showLineNumbers / clockMode: card-drawn settings, resolved the same way for the rendered note's own card type before GenericNote stamps them here, so a sticky carrying its own value in cardOverrides reads it under this same flat field
  * - groupDisplay: each group's order and visibility; absent means the natural (derived) order with every group shown, which is how the cascade's empty array arrives here. A group whose entry carries `shown: false` is dropped from both Kanban and Line view
  * - groupOrder: how the groups are ordered - `custom` reads groupDisplay's own order, the other modes recompute it from the live notes on every render, `newestFirst` and `newestLast` from each card's ordering timestamp as its card type defines it
- * - split_ratio: the share of the split's width the first pane takes, between the clamp bounds in paneops.ts; written on the second pane's entry, since that entry's existence is what makes the split
  * - view_expanded_ids: stable_ids of the notes the user manually expanded past their clip height, newest last and capped by nextExpandedIds so the persisted list cannot grow without bound; the manual override layer under autoExpandFocusedNote, and the reason expansion outlives a remount
  */
 export interface NoteDisplayOptions {
@@ -73,7 +72,6 @@ export interface NoteDisplayOptions {
     view_selected_ids?: string[];
     view_expanded_ids?: string[];
     view_caret?: number;
-    split_ratio?: number;
     integration_mode?: string;
     integration_mode_selection?: string;
     integration_path?: string;

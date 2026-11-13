@@ -1,6 +1,43 @@
 # Todo [](?nt_view=kanban)
 
 
+### Remove the in-view split [](?id=remove-split-view&status=code-review)
+
+[[split-view]] draws two panes inside one NoteThink tab with its own drag handle. VS Code already arranges side-by-side content as editor groups, which the user sizes, drags and restores the same way for every editor, so a split inside the tab works against the editor's own layout. The in-view split is removed, and no replacement is planned.
+
++ decision 2026-11-13: drop the in-view split entirely; no editor-group version is filed
++ decision 2026-11-13: keep `deleteViewFromManagedState` implemented (`usePersistedViewStates` `handleDeleteViewManagedState`, threaded through `ExtensionReceiver` and `NoteRenderer`): it is the general `ViewApi` handler for removing one view-state entry, which was a no-op before the split
++ decision 2026-11-13: `parent_view` / `child_views` stay deleted; nothing ever wrote them
++ decision 2026-11-13: no migration for a persisted `__pane2__` entry: the split never shipped in a published build
++ scope
+  + `SplitPanes.tsx`, `SplitPanes.module.scss`, `SplitPanes.test.tsx`, `paneops.ts`, `paneops.test.ts`
+  + `PANE_VIEW_STATE_ID`, `isPaneViewId` and the second-pane branch of `resolveViewStateId` in `viewstateops.ts`, and their tests
+  + `split_ratio` in `NoteProps.ts`
+  + `NoteTreeComposer.tsx` and `FolderTreeComposer.tsx` render one `GenericView` again, and their tests
+  + the open and close buttons in `GenericViewToolbar.tsx`; the second-pane branches in `useViewHandlers.ts`, `useViewToolbar.ts` and `usePersistedViewStates.ts`, and their tests
+  + `GenericView.tsx` `typing` becomes `virtualCaretEnabled()`; the split rules in `ViewRenderer.module.scss`; the pane wording in `VirtualCaret.tsx` and `NoteRenderer.tsx` comments
+  + the `Open a second pane`, `Close this pane` and `Resize panes` strings in all five `l10n/bundle.l10n*.json`
+  + `playwright/specs/split-view.spec.ts`, and the split case in `playwright/specs/editor-caret.prod.spec.ts`
+  + the Split view line and the split wording in the caret line of `README.md`, and the split wording in `CODING_STANDARDS.md` > View interaction state
+  + the split wording in [[read-only-caret]], recorded as a decision line rather than deleting its ticked task
++ [X] delete the split's own files and the second-pane view-state key
+  + SplitPanes (tsx, scss, test), paneops (ts, test) and split-view.spec.ts removed; viewstateops.ts restored to its pre-split shape
++ [X] render one `GenericView` per composer again, with no split container
+  + both composers restored from before the split, keeping `deleteViewFromManagedState: props.deleteViewFromManagedState ?? (() => {})`
++ [X] remove the toolbar buttons, the second-pane branches in the handlers and the caret's pane case
+  + GenericViewToolbar, useViewHandlers, useViewToolbar, usePersistedViewStates and GenericView `typing` no longer name a pane; tsc on client/webview clean
++ [X] remove the three l10n strings from every bundle
+  + `git diff -- l10n` shows exactly the three entries gone from all five bundles, JSON still valid
++ [X] update `README.md`, `CODING_STANDARDS.md` and [[read-only-caret]] so nothing describes a split
+  + README Split view line and caret-line clause, CODING_STANDARDS line 209 clause, and the read-only-caret scope and decision lines edited
++ [X] delete or rewrite every test that drives a second pane, keeping the `deleteViewFromManagedState` tests with a neutral view id
+  + usePersistedViewStates.test.ts uses `doc-2`; pane tests removed from GenericView, composer, handler, toolbar, viewstateops tests and editor-caret.prod.spec.ts; jest 3985 passed
++ [X] confirm nothing references the split: no `SplitPanes`, `paneops`, `__pane2__`, `split_ratio` or `split-open-button` left outside `docstech/`
+  + `git grep` over the repo outside docstech and dist finds none of the names or strings
++ [X] bump the patch version
+  + `package.json` 0.4.47 to 0.4.48
+
+
 ### Show the editor's caret in card titles [](?id=read-only-caret&status=code-review)
 
 While a markdown file is open in a text editor beside NoteThink, the editor's caret is invisible in the viewer. When it sits in a heading or a linetag value, the matching card should show a caret at the same place, so the viewer shows where the user is typing.
@@ -10,9 +47,10 @@ While a markdown file is open in a text editor beside NoteThink, the editor's ca
 + decision 2026-11-13: read-only; the viewer takes no keys, posts no `editText` and never arms a caret on click, so CODING_STANDARDS.md > View interaction state stays as written and `README.md` "Not a text editor" stays true
 + decision 2026-11-13: a production caret lands in a linetag value only where the view already renders that value, which is when the card setting `showLinetagsInHeadlines` is on (off by default, no production view shows values otherwise); the focused-card value chips stay dev-only
 + decision 2026-11-13: the typing half (click to arm, key relay, hidden input) stays behind `NOTETHINK_DEV`, untouched, until the open question on [[virtual-caret-spike]] is answered
++ decision 2026-11-13: the split view this story drew in was removed by [[remove-split-view]]; the caret draws in the one view of each tab
 + scope
   + titles and linetag values only, with the mapping limits the spike recorded (autolinks, entities, raw HTML, reference links, hard breaks fall back to no caret rather than a wrong one)
-  + every view and card type that renders a headline, and each pane of a split view showing that file
+  + every view and card type that renders a headline
   + the caret blinks like the editor's, follows the theme's cursor colour, and is hidden when the editor's selection is a range or leaves titles and values
 + [X] split the follow-the-editor path out of the `NOTETHINK_DEV` gate, so a production build draws the editor's caret, and keep every typing path behind the gate
   + `VirtualCaret` always mounts; `typing` (`virtualCaretEnabled()` and the first pane) gates the click handler, hidden input and relayed edits; title and value marks in `MarkdownNoteHeadline` render in every build; a focused card's value chips stay dev-only
@@ -374,6 +412,7 @@ Two views visible at once, such as a document pane beside a kanban pane. The vie
   + the split ratio and both panes survive a reload
   + closing a pane leaves no stranded `viewStates` entry
   + `pnpm run check` green
++ decision 2026-11-13: dropped; a split inside one NoteThink tab works against VS Code's editor groups, so [[remove-split-view]] removes it and no replacement is filed
 + [X] build the pane container: a CSS split with a drag handle around two `GenericView` mounts
   + decision: `SplitPanes` (`components/views/SplitPanes.tsx`) is a flex host with a focusable separator handle; with no second pane it adds no sizing or scroll container, and the first pane keeps its tree position so opening or closing the second never remounts it. Each composer renders its own panes: `NoteTreeComposer` converts the doc once per pane (a board flattens epics, a document does not), `FolderTreeComposer` shares one merge and merge cache between both panes.
 + [X] route add-pane and close-pane through the existing view-state handlers
@@ -638,7 +677,7 @@ Typing a new Include filter can leave the board and the Files drawer showing the
 + [X] keep `(X in Y of M files)` when the winning scan is truncated (PATTERNS.md > "Bounded lists say they are bounded")
   + the totals and `aggregate_truncated` are still set only by the winning scan; the truncated-winner test asserts `aggregate_truncated`, the full discovered count and the capped doc count when a smaller older scan lands last
 + [X] verify in that workspace: reload the window with Include `**/{todo,done}.md` and confirm stories from 22 files
-  + evidence 2026-11-13: the reloaded window read 228 stories in 26 files, and a walk of that workspace with `DEFAULT_EXCLUDE_FILTER` finds exactly 26 `todo.md` / `done.md` files today (it held 22 when the fault was seen), so the full pattern's scan won
+  + evidence 2026-11-13: a remote window loading the 0.4.47 build, which carries the generation guard, read 228 stories in 26 files after the reload, and a walk of that workspace with `DEFAULT_EXCLUDE_FILTER` finds exactly 26 `todo.md` / `done.md` files today (it held 22 when the fault was seen), so the full pattern's scan won
   + ran a public-safe stand-in: `playwright/specs/folder-latest-scan-real-host.spec.ts` generates 2222 markdown files with 22 `todo.md` / `done.md`, serves the built extension through @vscode/test-web, opens the viewer in folder mode (label `of 2222 files)`), then types the Include filter `**/{todo`, `**/{todo,`, `**/{todo,d`, `**/{todo,done}.md` with a pause longer than the drawer debounce after each; the settled label is `in 22 files)` with stories from both a first and a last project visible
   + residue: the stand-in also passes with the guards removed (a test-web host walks a virtual filesystem, so its scans complete in order), so it guards the typing path but does not reproduce the race; the reload of the real window with the persisted Include filter on a host using `findFiles` is not automated and stays for the operator
 + out of scope

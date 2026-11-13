@@ -2,7 +2,6 @@ import React, { lazy, useRef } from "react";
 import { documentRootForStrip, hasVisibleCard } from "../../lib/noteops";
 import { chainOf, isGroupedViewType, registryWithUserTypes, resolvedSettingsForView } from "../../lib/viewregistryops";
 import { virtualCaretEnabled } from "../../lib/caretops";
-import { isPaneViewId } from "../../lib/viewstateops";
 import { INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode } from "../../types/IntegrationMode";
 import type { UserViewType } from "../../types/Messages";
 import type { ViewProps } from "../../types/ViewProps";
@@ -93,7 +92,7 @@ function resolveFolderStatus(show_toolbar: boolean, integration_mode: ConcreteIn
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function GenericView(props: ViewProps): React.ReactElement {
-    // the element holding this view's cards, which the editor caret searches so each pane draws its own
+    // the element holding this view's cards, which the editor caret searches for its headline
     const content_region_ref = useRef<HTMLDivElement>(null);
     // view_props carries admitted virtual notes and the guarded handler surface to every hook and view below
     const { view_props, view_context, handlers, handle_folder_click, handle_apply_filters, handle_file_jump, drawers, jump, collisions, toolbar, insert, auto_resolved_type } = useGenericView(props);
@@ -197,8 +196,8 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     />
                 )}
             </div>
-            {/* the editor's caret, drawn once per view; the dev typing prototype takes the first pane only, since it finds its note by document-wide seq */}
-            {show_toolbar && <VirtualCaret view_props={enriched_props} handlers={handlers} scope_ref={content_region_ref} typing={virtualCaretEnabled() && !isPaneViewId(view_props.id)} />}
+            {/* the editor's caret, drawn once per view */}
+            {show_toolbar && <VirtualCaret view_props={enriched_props} handlers={handlers} scope_ref={content_region_ref} typing={virtualCaretEnabled()} />}
             <InsertModal
                 opened={insert.insert_modal_open}
                 onClose={insert.close_insert_modal}

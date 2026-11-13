@@ -2,7 +2,6 @@ import Debug from 'debug';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toPersistedDocs, type VSCodeState } from '../lib/vscodeops';
 import { emitPersistState } from '../lib/persistStateProbe';
-import { PANE_VIEW_STATE_ID } from '../notethink-views/src/lib/viewstateops';
 import type { HashMapOf, Doc } from '../types/general';
 import type { NoteDisplayOptions } from '../notethink-views/src/types/NoteProps';
 
@@ -39,8 +38,6 @@ export function usePersistedViewStates(
         setViewStates(prev => {
             const next = { ...prev };
             for (const id of Object.keys(next)) {
-                // the second pane keeps its own view type: a window-wide command speaks for the first pane
-                if (id === PANE_VIEW_STATE_ID) { continue; }
                 next[id] = updater(next[id]);
             }
             if (Object.keys(next).length === 0) {
@@ -67,7 +64,7 @@ export function usePersistedViewStates(
             return next;
         });
     }, []);
-    // removes exactly one entry, so a closed pane leaves nothing stranded; an unknown id changes nothing
+    // removes exactly one entry; an unknown id changes nothing
     const handleDeleteViewManagedState = useCallback((view_id?: string) => {
         if (!view_id) { return; }
         setViewStates(prev => {

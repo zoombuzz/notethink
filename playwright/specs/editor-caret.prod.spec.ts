@@ -196,24 +196,4 @@ test.describe('The editor caret in a production build', () => {
             }
         });
     }
-
-    test('draws in each pane of a split view that shows the file', async ({ page }) => {
-        await harness(page);
-        const doc_path = await openBoard(page);
-        await page.getByTestId('split-open-button').click();
-        await expect(page.getByTestId('split-pane-secondary').locator('[data-seq]').first()).toBeVisible();
-        await simulateSelectionChanged(page, doc_path, fixtureOffsetOf(FIXTURE, 'Plain title') + 5);
-        const carets = page.getByTestId('virtual-caret');
-        await expect(carets).toHaveCount(2);
-        for (const pane of ['split-pane-primary', 'split-pane-secondary']) {
-            const pane_box = (await page.getByTestId(pane).boundingBox())!;
-            const title_box = (await page.getByTestId(pane).locator('[data-vc-title]:has-text("Plain title")').first().boundingBox())!;
-            const inside = await carets.evaluateAll((elements, pane_x) => elements.filter(el => {
-                const rect = el.getBoundingClientRect();
-                return rect.left >= pane_x.left && rect.left <= pane_x.right;
-            }).length, { left: title_box.x, right: title_box.x + title_box.width });
-            expect(inside, `a caret over the title in ${pane}`).toBe(1);
-            expect(pane_box.width).toBeGreaterThan(0);
-        }
-    });
 });

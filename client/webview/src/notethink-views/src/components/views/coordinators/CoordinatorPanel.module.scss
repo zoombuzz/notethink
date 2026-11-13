@@ -1,5 +1,5 @@
 /*
- * The coordinator panel above a folder view's board: one quiet row per registered coordinator, and under
+ * The coordinator panel in the Card drawer of a folder view: one quiet row per registered coordinator, and under
  * a row the two things it opens, a send form and the board with its target line. Colour is rationed to the
  * state dot and the target line; everything else is the editor's own foreground at reduced opacity. Every
  * colour falls back to a literal, because a bare webview host does not guarantee the chart colours.
@@ -15,7 +15,7 @@
   flex-direction: column;
   gap: 4px;
   padding: 4px 8px;
-  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
   font-size: 0.9em;
 }
 
@@ -44,6 +44,18 @@
 
 .agentName {
   font-weight: 600;
+}
+
+.vendorMark {
+  font-weight: 600;
+}
+
+.vendorSelect {
+  font: inherit;
+  font-size: 0.9em;
+  color: var(--vscode-dropdown-foreground, inherit);
+  background: var(--vscode-dropdown-background, transparent);
+  border: 1px solid var(--vscode-dropdown-border, rgba(128, 128, 128, 0.5));
 }
 
 .state,

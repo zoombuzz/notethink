@@ -131,6 +131,21 @@ describe('coordinator requests from a view', () => {
             expect(posted[0]).toMatchObject({ code: 'write_failed', ok: false });
         });
 
+        it('writes a vendor-change envelope naming the vendor as the registry spells it, and answers as a vendor request', async () => {
+            await commands.handleMessage({ type: 'coordinatorSend', agent: 'coord-demo', kind: 'vendor', vendor: 'agy' });
+            const files = inboxFiles('coord-demo');
+            expect(files).toHaveLength(1);
+            const envelope = JSON.parse(fs.readFileSync(path.join(home_dir, 'mailboxes', 'coord-demo', 'inbox', files[0]), 'utf8'));
+            expect(envelope).toMatchObject({ v: 0, kind: 'vendor', state: 'submitted', target: 'coord-demo@host-a', body: { vendor: 'agy' } });
+            expect(posted).toEqual([{ type: 'coordinatorResult', request: 'vendor', agent: 'coord-demo', code: 'sent', ok: true }]);
+        });
+
+        it('writes nothing for a vendor outside the registry names', async () => {
+            await commands.handleMessage({ type: 'coordinatorSend', agent: 'coord-demo', kind: 'vendor', vendor: 'gemini' });
+            expect(posted).toEqual([{ type: 'coordinatorResult', request: 'vendor', agent: 'coord-demo', code: 'bad_vendor', ok: false }]);
+            expect(inboxFiles('coord-demo')).toEqual([]);
+        });
+
         it('takes the agent from the message only as a name to look up, never as a path', async () => {
             await commands.handleMessage({ type: 'coordinatorSend', agent: '../../escape', body: 'hello' });
             expect(posted[0]).toMatchObject({ code: 'unknown_agent', ok: false });

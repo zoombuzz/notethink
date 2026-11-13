@@ -561,15 +561,6 @@ body.disableAddressBarHidingOnScroll {
 // Settings drawer - specialises the shared drawer shell
 //
 
-// breathing room around the cascade action buttons so they read as a distinct action area
-.cascadeControls {
-  margin-top: 1.25em;
-  padding-top: 0.75em;
-  border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.25)));
-  display: flex;
-  gap: 0.75em;
-}
-
 /*
  * The group order + visibility editor: one chip per group, stacked down the page in board order. Side by
  * side is what the order means, but it does not fit - five groups already overflow the control column and
@@ -631,6 +622,12 @@ body.disableAddressBarHidingOnScroll {
 //
 // Files drawer - specialises the shared drawer shell (editable globs + file list)
 //
+
+// the Change defaults panel in the Files drawer's right-aligned side column reads left to right, like View settings
+.filesDrawerDefaults {
+  margin-top: 1em;
+  text-align: left;
+}
 
 .filesDrawerInput {
   display: block;
@@ -751,18 +748,12 @@ body.disableAddressBarHidingOnScroll {
   gap: 0.4em;
 }
 
-// leading glyph slot - an outline chevron (›) on the root + child folders, a blank spacer on files - so labels align, matching the VS Code Explorer twisties
+// leading twisty slot - the shared chevron on the root + child folders, a blank spacer on files - so labels align, matching the VS Code Explorer twisties
 .drawerTreeGlyph {
   flex: none;
-  display: inline-block;
-  width: 1em;
-  text-align: center;
-  opacity: 0.7;
-}
-
-// the expanded root's chevron points down (rotate the same › glyph so its weight matches the collapsed child chevrons)
-.drawerTreeGlyphOpen {
-  transform: rotate(90deg);
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
 }
 
 // children indented under the root with an Explorer-style indent guide
@@ -949,23 +940,6 @@ body.disableAddressBarHidingOnScroll {
   text-overflow: ellipsis;
 }
 
-// open/closed indicator: the same › glyph the jump tree rotates, so both chevrons match in weight
-.toolbarTabChevron {
-  flex: none;
-  display: inline-block;
-  width: 1em;
-  text-align: center;
-  opacity: 0.8;
-}
-
-.toolbarTabChevronClosed {
-  transform: rotate(90deg);
-}
-
-.toolbarTabChevronOpen {
-  transform: rotate(-90deg);
-}
-
 // direction: rtl makes the inline trail overflow (and therefore clip) on its left, so a long path loses its outermost folders rather than the leaf tab the user is aiming at; the trail itself is flipped back to ltr below
 .viewToolbarBreadcrumb {
   flex: 1;
@@ -1122,6 +1096,8 @@ body.disableAddressBarHidingOnScroll {
 
   &.focused {
     outline: dashed 2px var(--vscode-focusBorder);
+    // the containing block for the card's action tray, which hangs past the ring
+    position: relative;
 
     // an inner focused note sits just inside its parent's ring (the parent's symmetric body padding keeps this inner ring equally spaced on both sides)
     .note.focused {
@@ -1141,6 +1117,7 @@ body.disableAddressBarHidingOnScroll {
 
   &.selected {
     outline: solid 2px var(--vscode-focusBorder);
+    position: relative;
 
     .note.selected {
       outline-offset: 8px;
@@ -2368,9 +2345,7 @@ body.disableAddressBarHidingOnScroll {
 }
 
 /*
- * The buttons inside a disclosure panel. Deliberately not `.cascadeControls`, which the Files drawer uses
- * for the same three actions in a column with nothing around them - the rule and the space above it are
- * what separate them there, and a panel already does that job with its own border.
+ * The buttons inside a disclosure panel, wrapping onto further lines when the drawer is narrow.
  */
 .settingsDisclosureActions {
   display: flex;
@@ -2406,7 +2381,8 @@ body.disableAddressBarHidingOnScroll {
 }
 
 // the sentence explaining the panel, held clear of the summary above and the controls below
-.settingsDrawerBody .settingsDivergedNote {
+.settingsDrawerBody .settingsDivergedNote,
+.filesDrawerDefaults .settingsDivergedNote {
   margin: 0.7em 0 0;
   opacity: 0.7;
 }

@@ -44,6 +44,8 @@ import {
     breadcrumbNoteForLabel,
     findNoteBySeq,
     resolveParentContextNote,
+    titleEndOffset,
+    isInnermostHighlighted,
 } from './noteops';
 import { makeVirtualNote } from './virtualnoteops';
 import type { NoteProps, NoteOrigin, TextSelection, LineTag } from '../types/NoteProps';
@@ -1681,5 +1683,59 @@ describe('hasVisibleCard', () => {
     it('reads only the entries belonging to the live axis, ignoring another axis\'s hidden groups', () => {
         const other_axis_hidden = [{ value: 'doing', shown: false, axis: 'nt_first_level_folder' }];
         expect(hasVisibleCard([statusNote('doing')], true, 'status', other_axis_hidden)).toBe(true);
+    });
+});
+
+describe('titleEndOffset', () => {
+    it('ends a plain title at the end of the headline line', () => {
+        const note = makeNote({ headline_raw: '### Alpha story', position: { start: { offset: 100, line: 5 }, end: { offset: 115, line: 5 } } });
+        expect(titleEndOffset(note)).toBe(115);
+    });
+
+    it('trims trailing spaces from the title', () => {
+        const note = makeNote({ headline_raw: '### Alpha story   ', position: { start: { offset: 0, line: 1 }, end: { offset: 18, line: 1 } } });
+        expect(titleEndOffset(note)).toBe(15);
+    });
+
+    it('ends a title before its linetags, with the space before them trimmed', () => {
+        const headline_raw = '### Alpha story [](?id=alpha&status=doing)';
+        const note = makeNote({ headline_raw, linetags_from: 100 + '### Alpha story '.length, position: { start: { offset: 100, line: 5 }, end: { offset: 100 + headline_raw.length, line: 5 } } });
+        expect(titleEndOffset(note)).toBe(100 + '### Alpha story'.length);
+    });
+
+    it('answers in the source file\'s coordinates in a folder view, not the merged tree\'s', () => {
+        const origin: NoteOrigin = { doc_id: 'd', doc_path: '/ws/a.md', source_position: { start: { offset: 40, line: 3 }, end: { offset: 55, line: 3 } } };
+        const note = makeNote({ headline_raw: '### Alpha story', origin, position: { start: { offset: 9000, line: 300 }, end: { offset: 9015, line: 300 } } });
+        expect(titleEndOffset(note)).toBe(55);
+    });
+
+    it('ends a title that is only linetags at its start', () => {
+        const note = makeNote({ headline_raw: '[](?id=a)', linetags_from: 7, position: { start: { offset: 7, line: 1 }, end: { offset: 16, line: 1 } } });
+        expect(titleEndOffset(note)).toBe(7);
+    });
+});
+
+describe('isInnermostHighlighted', () => {
+    const outer = makeNote({ seq: 1, focused: true });
+    it('is false for a note that is neither focused nor selected', () => {
+        expect(isInnermostHighlighted(makeNote({ seq: 4 }))).toBe(false);
+    });
+
+    it('is true for the last note of the focused chain, and false for an outer one', () => {
+        const display_options = { id: 'v', cropped_focused_seqs: [1, 2] };
+        expect(isInnermostHighlighted({ ...outer, display_options })).toBe(false);
+        expect(isInnermostHighlighted(makeNote({ seq: 2, focused: true, display_options }))).toBe(true);
+    });
+
+    it('reads the cropped chain, so a story stays the target while the caret is in a child below it', () => {
+        expect(isInnermostHighlighted(makeNote({ seq: 1, focused: true, display_options: { id: 'v', focused_seqs: [1, 2, 3], cropped_focused_seqs: [1] } }))).toBe(true);
+    });
+
+    it('is true for a selected note unless a selected note inside it is also drawn', () => {
+        const child = makeNote({ seq: 2, selected: true, parent_notes: [makeNote({ seq: 1 })] });
+        const display_options = { id: 'v', cropped_selected_seqs: [1, 2], selected_notes: [makeNote({ seq: 1 }), child] };
+        expect(isInnermostHighlighted(makeNote({ seq: 1, selected: true, display_options }))).toBe(false);
+        expect(isInnermostHighlighted({ ...child, display_options })).toBe(true);
+        expect(isInnermostHighlighted(makeNote({ seq: 1, selected: true, display_options: { id: 'v', cropped_selected_seqs: [1], selected_notes: [makeNote({ seq: 1 })] } }))).toBe(true);
     });
 });

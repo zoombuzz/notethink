@@ -163,6 +163,39 @@ test.describe('Aggregate (Folder) view', () => {
         await expect(drawer).toHaveAttribute('data-open', 'false');
     });
 
+    test('the Files drawer keeps its default actions in a closed Change defaults disclosure, tallying only the file keys', async ({ page }) => {
+        await injectMultipleDocsFromFixtures(page, [
+            { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },
+            { fixture: 'folder-b.md', doc_path: `${WORKSPACE_ROOT}/notebook/docstech/todo.md`, relative_path: 'notebook/docstech/todo.md' },
+        ], { workspace_root: WORKSPACE_ROOT });
+
+        await selectFolderMode(page);
+        await page.waitForSelector('[data-folder-mode="true"]');
+        await page.getByTestId('breadcrumb-file-count').click();
+        const drawer = page.getByTestId('files-drawer-grid');
+        await expect(drawer).toHaveAttribute('data-open', 'true');
+
+        // closed on open: no default action is visible until the disclosure is opened
+        const disclosure = drawer.getByTestId('change-defaults');
+        await expect(disclosure).toBeVisible();
+        await expect(drawer.getByTestId('save-as-default')).toBeHidden();
+        await expect(drawer.getByTestId('diverged-count')).toContainText('0 settings');
+
+        // only Include changed, no view setting: the tally reads 1 and save is enabled
+        await page.getByTestId('files-drawer-include').fill('**/orbit/**');
+        await expect(drawer.getByTestId('diverged-count')).toContainText('1 setting');
+        await drawer.getByTestId('change-defaults-summary').click();
+        await expect(drawer.getByTestId('save-as-default')).toBeEnabled();
+        await expect(drawer.getByTestId('save-as-default')).toHaveText('Save as user default');
+        await expect(drawer.getByTestId('revert-to-defaults')).toHaveText('Revert to user default');
+        await expect(drawer.getByTestId('restore-builtin-defaults')).toBeVisible();
+
+        // saving promotes the filter to the user scope, so nothing differs any more
+        await drawer.getByTestId('save-as-default').click();
+        await expect(drawer.getByTestId('diverged-count')).toContainText('0 settings');
+        await expect(drawer.getByTestId('save-as-default')).toBeDisabled();
+    });
+
     test('clicking a file in the Files drawer switches to current_file mode for that file and closes the drawer', async ({ page }) => {
         await injectMultipleDocsFromFixtures(page, [
             { fixture: 'folder-a.md', doc_path: `${WORKSPACE_ROOT}/orbit/docstech/todo.md`, relative_path: 'orbit/docstech/todo.md' },

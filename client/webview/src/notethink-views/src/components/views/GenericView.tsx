@@ -10,8 +10,6 @@ import InsertModal from "../InsertModal";
 import GenericViewBreadcrumb from "./generic/GenericViewBreadcrumb";
 import GenericViewToolbar from "./generic/GenericViewToolbar";
 import EmptyStoriesOverlay, { type FolderStatusMode } from "./EmptyStoriesOverlay";
-import CoordinatorPanel from "./coordinators/CoordinatorPanel";
-import { hasBoardFiles } from "../../lib/coordinatorops";
 import { useGenericView } from "./generic/useGenericView";
 import view_styles from "../ViewRenderer.module.scss";
 
@@ -182,10 +180,6 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     onRestoreBuiltinDefault={toolbar.handle_restore_builtin_default}
                     onApplyFilters={handle_apply_filters}
                 />
-            )}
-            {/* folder mode only, and only where a story board is loaded: the registry is asked about no folder without one */}
-            {show_toolbar && toolbar.integration_mode === INTEGRATION_MODE_FOLDER && hasBoardFiles(view_props.aggregate_loaded_files) && (
-                <CoordinatorPanel loaded_files={view_props.aggregate_loaded_files} post_message={handlers.postMessage} />
             )}
             <div className={view_styles.viewContentRegion}>
                 {/* while scanning with no visible card the panel stands in for the board, so no empty group headings show */}

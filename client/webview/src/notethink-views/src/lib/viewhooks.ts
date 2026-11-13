@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { findBodyItemElement, kanbanDraggableId } from './noteops';
+import { ACTION_TRAY_ATTRIBUTE, findBodyItemElement, kanbanDraggableId } from './noteops';
 import { scrollVirtualGroupToNoteId } from './virtualScrollRegistry';
 import type { NoteDisplayOptions, TextSelection } from '../types/NoteProps';
 
@@ -117,6 +117,19 @@ function stickyOccluderBottomPx(view_id: string): number {
 }
 
 /**
+ * The story's box widened to take in the action tray the highlighted note carries below its
+ * bottom-right corner, so the scroll keeps the tray in view with the ring. The box is the story's own
+ * when the note has no tray.
+ */
+function reachWithActionTray(story: HTMLElement, note_element: HTMLElement): { top: number; bottom: number; left: number; right: number } {
+    const rect = story.getBoundingClientRect();
+    const tray = note_element.querySelector<HTMLElement>(`[${ACTION_TRAY_ATTRIBUTE}]`);
+    if (!tray) { return rect; }
+    const tray_rect = tray.getBoundingClientRect();
+    return { top: rect.top, left: rect.left, right: Math.max(rect.right, tray_rect.right), bottom: Math.max(rect.bottom, tray_rect.bottom) };
+}
+
+/**
  * Scroll the focused story so it clears the sticky header stack (toolbar plus any open drawer),
  * and horizontally past the board edge for a kanban group. Does nothing when the story has no
  * element in the DOM, or is already fully clear of the header stack - frameDelta then returns 0
@@ -127,7 +140,7 @@ function frameFocusedStoryIntoView(focused_seqs: number[] | undefined, view_id: 
     if (!resolved) { return; }
     // frames the top-level story card (the visible ring), not the deepest focused sub-note
     const story = outermostRingedElement(resolved.note_element);
-    const rect = story.getBoundingClientRect();
+    const rect = reachWithActionTray(story, resolved.note_element);
     const ring = SCROLL_FOCUS_RING_PX;
     // sticky toolbar (and any open drawer) eat the top of the vertical scrollport
     const occluder_top = stickyOccluderBottomPx(view_id) + SCROLL_OCCLUDER_BUFFER_PX;

@@ -1,6 +1,7 @@
 import Debug from "debug";
 import React from "react";
 import type { ReactNode } from "react";
+import Chevron from "../../Chevron";
 import styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:ToolbarTab");
@@ -32,14 +33,13 @@ interface ToolbarTabProps {
  * The trigger half of a ToolbarDrawer: a named tab carrying an open/closed chevron. Each tab is
  * titled with its own current state and sits where that state already lives - in the breadcrumb for
  * the leaf, the count and the warnings alert, on the right for the view type. The chevron is the
- * same `›` glyph the jump tree uses, rotated down when the drawer is closed and up when it is open,
- * so the two indicators read alike and the repo needs no icon font. An open tab takes the drawer
+ * same shared `Chevron` the jump tree and the agent card draw, pointing down when the drawer is closed
+ * and up when it is open, so every disclosure reads alike. An open tab takes the drawer
  * body's background and drops its baseline, so it merges into the panel pushed down beneath it.
  * onToggle receives the tab element itself, which the drawer hook scroll-anchors to and refocuses on
  * Escape.
  */
 function ToolbarTab(props: ToolbarTabProps): React.ReactElement {
-    const chevron_class = props.open ? styles.toolbarTabChevronOpen : styles.toolbarTabChevronClosed;
     debug("tab=%s open=%s", props.testId, props.open);
     return (
         <button
@@ -58,14 +58,7 @@ function ToolbarTab(props: ToolbarTabProps): React.ReactElement {
         >
             <span className={styles.toolbarTabLabel} data-testid={`${props.testId}-label`}>{props.label}</span>
             {props.icon}
-            <span
-                className={`${styles.toolbarTabChevron} ${chevron_class}`}
-                data-testid={`${props.testId}-chevron`}
-                data-direction={props.open ? 'up' : 'down'}
-                aria-hidden="true"
-            >
-                {'›'}
-            </span>
+            <Chevron direction={props.open ? 'up' : 'down'} testId={`${props.testId}-chevron`} />
         </button>
     );
 }

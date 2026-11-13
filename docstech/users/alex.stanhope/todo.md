@@ -1,18 +1,288 @@
 # Todo [](?nt_view=kanban)
 
 
-### Draw every chevron with one shared mark [](?id=shared-chevron-mark)
+### Sticky notes that look stuck on a board [](?id=sticky-board-look&tokens_estimated=6&status=code-review)
+
+The sticky card reads as a flat coloured box. Its curled corner is drawn with a far larger curve than its other three corners, so the fold looks like a bubble rather than paper. Stickies should look like paper notes stuck on a board: a little taller, each at a slight angle, casting a shadow, with a faint curve across the paper.
+
++ parallel: touches only `StickyNote.tsx`, `StickyNote.module.scss` and `sticky-card.spec.ts`, so it can run alongside any other story
++ builds on: the `sticky-card` story in `done.md`, through `StickyNote.tsx` and `StickyNote.module.scss`; no new card type or surface
++ background, measured 2026-11-12 in `client/webview/src/notethink-views/src/components/notes/StickyNote.module.scss`
+  + vertical padding is 7px top and 11px bottom (`:43`)
+  + the paper's corners are `border-radius: 2px` (`:44`)
+  + the curl has two parts: the paper's 315deg gradient paints a 12px corner transparent (`:36`, `:47`), and the `::after` flap covers the fold line (`:52-62`)
+  + the flap's curve is `border-top-left-radius: 70%` of a 17px square (`:57-60`), about 12px against the other corners' 2px
+  + the shadow is `0 1px 3px rgba(0, 0, 0, 0.28)`, deepening on hover (`:30`, `:48`)
+  + nothing rotates, and the only gradient is the corner shading
+  + the focus ring is an `outline` on the outer `.stickyNote`, while the paper is the inner `.stickyInner` (header comment `:4-7`)
++ decision 2026-11-12 (operator)
+  + slightly more vertical padding
+  + the curled corner's curve is a small circle matching the radius of the other corners
+  + each sticky sits at a small random rotation, as if stuck on a board
+  + each sticky drops a shadow that gives it depth off the board
+  + a very subtle top-to-bottom graduated fill, as if the paper curves slightly
++ approach
+  + one `--sticky-radius` custom property draws the paper's three square corners and the flap's curve, so they cannot drift apart again
+  + the angle is hashed from the note's `stable_id` into a small range (about -2deg to +2deg)
+    + so a sticky keeps its angle across re-renders, scans and reloads instead of jittering
+    + inferred: "random" means irregular from note to note, not changing over time
+  + rotate the paper (`.stickyInner`), never the card element
+    + the focus ring stays square, and `useScrollToCaret`, which measures the card with `getBoundingClientRect`, frames it as before
+    + CODING_STANDARDS.md > Focused-note scroll framing
+  + the drop shadow layers a tight contact shadow under a softer, wider one; hover stays the deeper of the two states
+  + the vertical shade must not paint the transparent curl corner, or the lifted corner disappears
+    + inferred: a background layer under the curl gradient would fill that corner, so the shade goes into the paper colour stops or is masked out of the corner
+  + the same look in every view a sticky appears in, light and dark themes alike (CODING_STANDARDS.md > Every card type works in every view)
++ [X] raise `.stickyInner`'s vertical padding slightly, to around 10px top and 14px bottom, keeping the title clear of the curl
++ [X] add `--sticky-radius` and draw both the flap's curve and the paper's other corners from it
++ [X] derive a stable angle per sticky from its `stable_id` in a helper beside `StickyNote.tsx`, passed inline like `--nt-sticky-hue`
++ [X] rotate `.stickyInner` by that angle, leaving the card element and its focus ring unrotated
++ [X] replace the paper's shadow and its hover shadow with layered drop shadows
++ [X] add the subtle top-to-bottom shade to the paper in both themes, leaving the curl corner transparent
++ [X] update the header comment in `StickyNote.module.scss` for the rotation, the shadow and the shade
++ [X] cover the angle helper with Jest: stable for one id, spread across ids, inside the range
++ [X] extend `playwright/specs/sticky-card.spec.ts`
+  + two stickies carry different rotations on `.stickyInner`, and the card element carries none
+  + the flap's curve radius equals the paper's corner radius
+  + the focused-ring test (`:123`) still passes on a rotated sticky in the leftmost column
++ [X] update the `sticky` row of `AUTHORING_GUIDE.md` > Card types (`:361`) if its description no longer fits
++ [X] walk a sticky board in the kanban, document and line views in a browser, light and dark, and inspect the corner close up
++ [X] bump the patch version
++ manual: judge the angle range, the shadow depth and the shade on a full board, and tune any that reads as too much
+
+
+### Draw every chevron with one shared mark [](?id=shared-chevron-mark&status=code-review)
 
 + goal: one chevron mark, so a weight or opacity change lands everywhere.
 + problem: the agent card, the drawer tree and the toolbar tabs each draw the same rotating chevron their own way, an SVG in one and a rotated `›` text glyph with its own CSS in the other two, and they have already drifted on opacity and transition.
-+ builds on: `AgentChevron` in `client/webview/src/notethink-views/src/components/notes/agent/AgentChevron.tsx:13`, kept as the one drawn mark; no new disclosure control.
++ builds on: `AgentChevron` (now `Chevron` in `client/webview/src/notethink-views/src/components/Chevron.tsx`), kept as the one drawn mark; no new disclosure control.
 + parallel: edits `DrawerTree.tsx`, `ToolbarTab.tsx`, `ViewRenderer.module.scss` and `AgentNote.module.scss`, so run it away from other stories touching those
-+ [ ] Move `AgentChevron` out of `notes/agent/` to a shared components path and give it a direction (right, down, up) in place of the `open` boolean
-+ [ ] Move the chevron CSS from `AgentNote.module.scss:197-209` beside it, one opacity and one transition
-+ [ ] Draw `DrawerTree`'s leading slot with the shared mark where the caller passes a glyph, keeping the blank spacer on leaf rows
-+ [ ] Draw `ToolbarTab`'s chevron with the shared mark, keeping `data-testid`, `data-direction` and `aria-hidden`
-+ [ ] Delete `.drawerTreeGlyphOpen`, `.toolbarTabChevron*` and the `›` glyph arguments no caller needs
-+ [ ] Update the `DrawerTree`, `GenericView` and `settings-toggle` assertions that read the old glyph, and walk the toolbar drawers and the jump tree in a browser
++ [X] Move `AgentChevron` out of `notes/agent/` to a shared components path and give it a direction (right, down, up) in place of the `open` boolean
++ [X] Move the chevron CSS from `AgentNote.module.scss:197-209` beside it, one opacity and one transition
++ [X] Draw `DrawerTree`'s leading slot with the shared mark where the caller passes a glyph, keeping the blank spacer on leaf rows
++ [X] Draw `ToolbarTab`'s chevron with the shared mark, keeping `data-testid`, `data-direction` and `aria-hidden`
++ [X] Delete `.drawerTreeGlyphOpen`, `.toolbarTabChevron*` and the `›` glyph arguments no caller needs
++ [X] Update the `DrawerTree`, `GenericView` and `settings-toggle` assertions that read the old glyph, and walk the toolbar drawers and the jump tree in a browser
+
+
+### Files drawer defaults under Change defaults [](?id=files-drawer-change-defaults&status=code-review)
+
+The Files drawer shows Make user default, Reset to user default and Reset to built-in default all the time, while View settings keeps its default actions in a closed Change defaults disclosure. Every drawer that offers default actions should use that one disclosure.
+
++ background
+  + measured: FilesDrawer.tsx renders `SettingsCascadeButtons` unconditionally in its `drawerMeta` aside
+  + measured: `SettingsCascadeButtons.tsx` always enables "Make user default", which applies every NoteThink setting
+  + measured: `ChangeDefaultsDisclosure` (SettingsViewDrawer.tsx) is a closed `<details>` with a diverged tally, and disables save when nothing diverged
+  + measured: SettingsCardDrawer.tsx has no cascade buttons by design; the default actions cover every setting
+  + design: the disclosure sits in the drawer's side column under its File settings title, closed, with the same tally text as View settings
++ [X] extract `ChangeDefaultsDisclosure` into one shared component, keeping its tally and disabled rules
+  + the caller passes the count; the component never computes it
++ [X] render it in the Files drawer in place of `SettingsCascadeButtons`, closed by default
++ [X] count the Files tally over the three NODE_FILES keys: includeFilter, excludeFilter, maxNotesPerFile
+  + measured: View's count covers only its own rows (SettingsViewDrawer.tsx `diverged_count`), and those rows leave out the NODE_FILES keys (settingRows.ts header)
+  + disable save only when none of the three diverged
+  + both buttons still write every NoteThink setting; only the tally is scoped
+  + do not pass View's count into Files
++ [X] keep the built-in restore button on the Files drawer only, where a wiped filter must be recoverable
++ [X] align the Files labels with View settings (Save as user default, Revert to user default)
++ [X] retire `SettingsCascadeButtons` once nothing renders it, moving its tests to the shared component
++ [X] extend FilesDrawer.test.tsx and a playwright spec to open the disclosure before clicking a default action
+  + include a files-only divergence: Include changed, no view setting changed, save enabled and tally at 1
++ out of scope
+  + cascade buttons on the card drawer
+  + narrowing the whole-cascade message to file filters only
+
+
+### Card action tray beside the highlight ring [](?id=card-action-tray&tokens_estimated=16&status=code-review)
+
+A story card on a coordinator's board carries a small envelope beside its progress pie, on every card type, all the time. The action is wanted; its placement is not. Card actions should appear only when a card is highlighted, as a row of blue icons at the card's bottom-right corner, outside the dashed highlight ring. Two actions to start: edit, which puts the text editor's caret at the end of the card's title, and send to the coordinator, which asks before it sends.
+
++ parallel: edits `MarkdownNoteHeadline.tsx`, which [[virtual-caret-spike]] also edits, so run that one after this
++ builds on: `StorySendButton` (`components/notes/StorySendButton.tsx:21`) from [[coordinator-views]]; its coordinator match moves into the tray and the headline button goes
++ builds on: the `selectRange` message (`types/Messages.ts:11-27`), as the double-click path posts it (`useViewHandlers.ts:117-125`)
++ builds on: the native `<dialog>` with `showModal()` in `components/InsertModal.tsx`, the webview's only modal today
++ builds on: the `coordinatorSend` message and `CoordinatorCommands.send` (`client/extension/src/vscode/CoordinatorCommands.ts:62-87`), unchanged
++ background, measured 2026-11-12, paths under `client/webview/src/notethink-views/src/` unless rooted
+  + the envelope renders in `components/notes/markdown/MarkdownNoteHeadline.tsx:55`, so every card type drawing the headline shows it
+  + it shows only on a story note, in a folder view, whose story is on a registered coordinator's board (`StorySendButton.tsx:23-35`)
+  + its click sends nothing: it opens the coordinator panel's form prefilled with `About story {id}: ` (`StorySendButton.tsx:37-41`)
+    + the request is webview-local (`lib/activityhooks.ts:113`), consumed by `CoordinatorPanel.tsx:70-77`
+  + the highlight ring is `outline: dashed 2px var(--vscode-focusBorder)` on `.note.focused` (`components/ViewRenderer.module.scss:1123-1124`)
+    + offset 6px, or 8px for a nested note (`:1120`, `:1127-1129`)
+    + an outer note containing a focused note fades its ring (`:1137-1139`); a selected note draws it solid (`:1142-1143`)
+  + the webview has no reusable confirm dialog, and the extension makes no modal `showWarningMessage` call
+  + `README.md:230` says the card's envelope "sends nothing until you press Send"
++ decision 2026-11-12 (operator)
+  + remove the envelope from the headline of every card type
+  + show a row of icons at the bottom-right of a highlighted card, outside the dashed ring
+  + the icons are blue, matching the ring
+  + hovering an icon explains what it does
+  + the mail icon opens a modal confirm asking whether to send the story to the coordinator, with OK and Cancel
+  + a pencil icon to the mail icon's left puts the text editor's caret at the end of the card's title text
++ approach
+  + the tray shows on the innermost highlighted note, dashed (focused) or solid (selected), never on a faded outer ring
+  + one render site serves every card type, found from the card dispatch (`components/notes/cardregistryops.ts`, `AutoView.tsx`)
+    + CODING_STANDARDS.md > Every card type works in every view
+  + the tray sits beyond the ring's offset plus its width, so the two never overlap
+  + icons and their hover use `var(--vscode-focusBorder)`; each button has an `aria-label` and a `title` through `l10n.t`
+  + the pencil shows on every note with a source position; the mail icon only where `StorySendButton` shows today
+  + the pencil posts `selectRange` with `from` = `to` = the end of the title text, and `forceOpen` so it opens the file when no editor shows it
+    + source coordinates, computed as `revealNote` does (`useViewHandlers.ts:160-185`)
+    + the title ends before the linetags (`linetags_from`, `types/NoteProps.ts:180`), trailing spaces trimmed, else at the end of the headline line
+    + the editor takes focus, as for every view-posted `selectRange` (CODING_STANDARDS.md > View interaction state)
+  + a `ConfirmModal` on a native `<dialog>`: OK posts once; Cancel, Escape and a backdrop click post nothing; focus returns to the icon
+    + a webview dialog rather than VS Code's modal message, so the Playwright harness, which has no extension host, can drive it
+    + new pattern: notethink's first generic confirm dialog, for any later tray action that needs one
+  + the `coordinatorResult` code (`sent`, `unknown_agent`, `no_mailbox` and the rest) shows where the panel shows it today, so a refusal is never silent
+  + the tray widens the ring's footprint, so `useScrollToCaret` (`viewhooks.ts`) reserves room for it, and no group or column clips it
++ decision 2026-11-12 (operator): OK sends one envelope asking the coordinator to pick up the story and include it in its current batch
+  + the message names the story's id and its board, as one l10n string
+  + the panel's message box stays for anything longer
++ open question: the tray also leaves out the view's container note, which has a source position but is the view's frame rather than a card in it; accept that as the rule (recommended), or show the tray on the container too?
++ [X] add `titleEndOffset` to `lib/noteops.ts`, the source offset at the end of a note's title text
+  + Jest: a plain title, a title with linetags, and a note in a folder view
++ [X] add `ConfirmModal` beside `InsertModal.tsx` on a native `<dialog>`, with Jest tests for OK, Cancel and Escape
++ [X] add the action tray, pencil then mail icon, from one render site for every card type, on the innermost highlighted note only
++ [X] wire the pencil to post `selectRange` at `titleEndOffset` with `forceOpen`
++ [X] wire the mail icon to the confirm, and OK to `coordinatorSend` with the pick-up-in-this-batch message
++ [X] show the user the send result for every result code
++ [X] remove `StorySendButton` from `MarkdownNoteHeadline.tsx:55`, moving its coordinator match into the tray and deleting what no caller needs
++ [X] extend `useScrollToCaret` to keep the tray in view with the ring, and name the tray in CODING_STANDARDS.md > Focused-note scroll framing
++ [X] add each new string to `l10n/bundle.l10n.json` and the de, es, fr and it bundles
++ [X] replace `StorySendButton.test.tsx` with tray tests
+  + shown on a focused and a selected note, hidden behind a faded outer ring
+  + the mail icon only on a coordinator's board
++ [X] update `playwright/specs/coordinator-views.spec.ts:122-136` for the tray: Cancel sends nothing, OK writes one envelope
++ [X] add a Playwright spec for the tray on a card and a sticky
+  + the tray sits outside the ring
+  + the pencil posts `selectRange` at the end of the title
++ [X] update `README.md` lines 26, 230 and 245 for the tray, the confirm and the pencil
++ [X] add a "design revised 2026-11-12" line on [[coordinator-views]] for the envelope's move into the tray
++ [X] walk the tray in a browser: highlight cards at the left and bottom edges of a board, hover both icons, edit, send and cancel
++ [X] bump the patch version
+
+
+### Coordinators in the agent card drawer, with a vendor setting [](?id=coordinator-drawer-vendor&tokens_estimated=14&status=code-review)
+
+The coordinator list sits permanently above the board in every folder view that holds a story board. It is useful, but it should not be a permanent fixture: it belongs in a drawer. Each row also shows the program version, which says less than which agent CLI the coordinator runs in, and that choice should be a setting the user can change from the row.
+
++ parallel: run after [[card-action-tray]], which moves the story card's send action and changes where its result shows
++ builds on: `CoordinatorPanel` (`client/webview/src/notethink-views/src/components/views/coordinators/CoordinatorPanel.tsx:26`) from [[coordinator-views]], moved rather than rebuilt
++ builds on: `CoordinatorCommands.send` (`client/extension/src/vscode/CoordinatorCommands.ts:62-87`) and its mailbox write; only the envelope's kind is new, defined by thinkersync
++ builds on: `ACTIVITY_VENDOR_DISPLAY` (`types/AgentActivity.ts:41-46`) and `vendorMonogram` (`lib/agentactivityops.ts:550`), the marks the agent card already draws
++ background, measured 2026-11-12, paths under `client/webview/src/notethink-views/src/` unless rooted
+  + the panel mounts above the board in `components/views/GenericView.tsx:188`
+  + each row draws name, state, story, `Version {0}` (`CoordinatorPanel.tsx:91`) and the open convoy count, then two toggles
+    + Send to agent (`:94`) opens a text box; Send writes one request envelope into that agent's mailbox
+    + Target line (`:95`) shows the board with the `[](?coord=<host>)` marker as a line that can be dragged or moved by keyboard, rewriting the marker on save
+  + the row knows the coordinator's vendor (`ActivityCoordinator.vendor`, `types/AgentActivity.ts:392`) but never draws it
+  + the Card drawer (`components/views/drawers/SettingsCardDrawer.tsx`) already holds agent card settings, such as the clock mode select (`:84`)
+  + an Antigravity agent draws no mark today: the registry writes `agy`, `registryVendorSlug` maps only `claude` (`client/extension/src/lib/agentregistryops.ts:40-42`), and the display table's key is `antigravity` (`types/AgentActivity.ts:25`)
+  + the panel only shows and asks; NoteThink never starts, stops or restarts an agent (`README.md` > Coordinators beside boards)
+  + inferred: a coordinator reads a mailbox request as free text, and no request format for changing its vendor exists in this repo or in the registry contract
++ decision 2026-11-12 (operator)
+  + the coordinator list is not a permanent fixture above the board
+  + it moves into the Card drawer, under the agent card type
+  + the version in each row is replaced by the vendor's two-letter mark, such as `CC` for Claude Code
+  + the vendor is a setting: a drop-down beside each coordinator shows its current vendor and lets the user pick another
+  + picking another vendor sends a message to that coordinator asking it to change to the chosen vendor
++ approach
+  + the drop-down asks, it does not switch: the coordinator decides when it can change, and the row shows the registry's vendor until the registry reports the new one
+  + the chosen vendor is held as pending, labelled as requested, as the target line holds a pending position (`CoordinatorPanel.tsx:49-61`)
+    + a refused send lets the drop-down fall back to the registry's vendor, with the result code shown
+  + the options are the vendors `ACTIVITY_VENDOR_DISPLAY` knows, each as its mark and name, in the vendor's colour
+  + the request is thinkersync's vendor-change envelope, naming the vendor as the registry writes it (`claude`, `agy`, `codex`, `grok`)
+  + the list keeps its scope rule, `coordinatorsInScope`, and stays desktop only
+  + dependency: thinkersync's story "Define a vendor-change envelope for coordinators" defines the envelope, and the coordinator tooling's own story makes a coordinator act on it
+    + build the drop-down's send against the envelope as thinkersync documents it; until a coordinator acts on it, the row stays at the registry's vendor and shows the reply
++ decision 2026-11-12 (operator): keep Send to agent and Target line in the drawer row, working as they do today
+  + Send to agent is a free-text message box per coordinator; [[card-action-tray]] adds a confirmed send from the card
+  + Target line is the visual way to move the coordinator's work-down-to-here marker, otherwise edited by hand in `todo.md`
++ decision 2026-11-12 (operator): confirm a vendor change before sending it, through the `ConfirmModal` from [[card-action-tray]]
+  + a vendor change restarts the coordinator in another CLI
++ [X] remove the panel from above the board in `GenericView.tsx:188`
++ [X] render the coordinator list in the Card drawer under the agent card type, in folder view, with the same scope rule
++ [X] map the registry's `agy` to `antigravity` in `REGISTRY_VENDOR_SLUGS`, with a Jest case, so an Antigravity coordinator draws `AG`
++ [X] replace `Version {0}` with the vendor mark in the vendor's colour
++ [X] add a vendor drop-down to each row, showing the current vendor and listing the known vendors
++ [X] send the vendor-change envelope through the existing send path when the user picks another vendor, after the confirm
+  + the envelope is written by `buildCoordinatorEnvelope` (`client/extension/src/lib/coordinatorops.ts`), extended for the new kind rather than copied
++ [X] hold the requested vendor as pending until the registry reports it, falling back on a refused send
++ [X] carry Send to agent and Target line into the drawer row unchanged
++ [X] add each new string to `l10n/bundle.l10n.json` and the de, es, fr and it bundles
++ [X] update `CoordinatorPanel.test.tsx` and `SettingsCardDrawer.test.tsx` for the move, the mark, the drop-down and the request body
++ [X] move `playwright/specs/coordinator-views.spec.ts` from the panel above the board to the drawer, and add the vendor change
++ [X] rewrite `README.md` > Coordinators beside boards and its feature line (`:26`) for the drawer and the vendor setting
++ [X] add a "design revised 2026-11-12" line on [[coordinator-views]] for the move and the vendor mark
++ [X] walk the drawer in a browser: open it on a folder with two repositories, change a vendor, and cancel one
++ [X] bump the patch version
+
+
+### Virtual caret in the viewer: viability spike [](?id=virtual-caret-spike&tokens_estimated=20)
+
+Changing a card's title or a linetag value means leaving the viewer for the text editor. Could the viewer show its own caret instead? It would follow the editor's real caret while the file is open in a text editor. When the file is not open, it would move within titles and linetag values in the viewer, relaying each edit as if it had been typed in the editor. This story builds a prototype and records whether the idea is viable; it does not ship the caret to users.
+
++ parallel: run after [[card-action-tray]], which also edits `MarkdownNoteHeadline.tsx`
++ builds on: `view_caret` in `display_options` (`client/webview/src/notethink-views/src/lib/viewstateops.ts:171-191`), an offset the view already holds but never draws
++ builds on: `selectionChanged` from the editor (`client/extension/src/vscode/PanelSession.ts:525-536`, received at `client/webview/src/hooks/useVscodeMessages.ts:92-99`)
++ builds on: `selectRange` from the view, and `editText` through `applyEditTextChanges` (`PanelSession.ts:59-87`) for writes; no second edit path
++ background, measured 2026-11-12
+  + the editor reports its selection only for the doc at `active_path`, debounced by `SELECTION_DEBOUNCE_MS` (`PanelSession.ts:525-536`)
+    + so a caret following the editor lags by at least that debounce
+  + an `editText` on a document with no visible editor applies a `WorkspaceEdit` to a silently opened document, left dirty and unsaved (`PanelSession.ts:79-86`, `:1531`)
+  + the coordinator marker move saves after its edit when the document was clean before (`CoordinatorCommands.ts`, around `:95-112`), the one precedent for saving
+  + nothing in the webview edits text today: no `contentEditable`; the only inputs are the drawers, the insert modal and the coordinator form
+  + titles render through markdown, so rendered and source offsets diverge wherever a title carries emphasis, code or a link
++ deviates from CODING_STANDARDS.md > View interaction state, which keeps keystrokes out of the webview
+  + with no editor open, the prototype has to take keys in the webview
+  + the verdict says whether that rule needs rewriting
++ scope
+  + titles and linetag values only, never body text
+  + the prototype runs only when `NOTETHINK_DEV` is set, so a production build behaves as today and `README.md:245` ("Not a text editor") stays true
+  + out of scope: shipping the caret to users; the verdict decides whether a build story follows
++ [ ] draw a caret in a title, and in a linetag value, where the editor's selection falls
+  + plain titles first, then titles with emphasis, inline code and a link
++ [ ] move the caret with Left, Right, Home and End within the title and values, posting `selectRange` so the real caret follows when the file is open
++ [ ] relay typing, Backspace and Delete as `editText` when the file is not open in a text editor, and redraw the caret after the round-trip
++ [ ] measure keystroke-to-repaint time for a relayed edit on one small file and on a large folder view, with `pnpm run test-perf`
++ [ ] measure undo and save on a relayed edit
+  + whether VS Code's undo reaches a `WorkspaceEdit` on a document no editor shows
+  + what saving after each edit costs
++ [ ] cover the rendered-to-source offset mapping with Jest
++ [ ] record the verdict in this story: viable or not, the measured lag and repaint time, the markdown mapping limits, undo and save, and the focus rule
++ [ ] bump the patch version
+
+
+### Split view: two panes on the view registry [](?id=split-view) [post-v1]
+
+Two views visible at once, such as a document pane beside a kanban pane. The view hierarchy and per-view state this story once asked for already exist; the gap is mounting a second view.
+
++ goal
+  + two views mounted side by side, each scrolling independently and addressed by its own view id
+  + a drag handle between the panes resizes the split, persisted like other view settings
++ background
+  + the view hierarchy is data already: [[view-registry]] (`viewregistryops.ts`)
+  + per-view state exists: `setViewManagedState` / `deleteViewFromManagedState` / `revertAllViewsToDefaultState` (ViewProps.ts) and the `viewStates` map; a second pane is a second entry, not a new state system
+  + `parent_view` / `child_views` on ViewProps are declared and read (`useViewContext.ts`) but never written
+  + mermaid renders inline as a card type, so "document + mermaid" is no longer a split-view case
++ ordering
+  + lands after [[kanban-virtualized-columns]], [[webview-state-persistence-diet]], [[folder-wire-payload-diet]] and [[extension-parse-offload]], since a second pane doubles the costs they bound
++ scope
+  + each pane is an ordinary `GenericView` reading its own `viewStates` entry; no parallel render path
+  + two panes only; two different view types or two different scopes (current file beside a folder)
++ out of scope
+  + more than two panes
++ acceptance criteria
+  + both panes render with their own toolbar, breadcrumb and drawers
+  + the split ratio and both panes survive a reload
+  + closing a pane leaves no stranded `viewStates` entry
+  + `pnpm run check` green
++ [ ] build the pane container: a CSS split with a drag handle around two `GenericView` mounts
++ [ ] route add-pane and close-pane through the existing view-state handlers
++ [ ] populate `parent_view` / `child_views` for the pane relationship, or delete them as dead code
++ [ ] persist the split ratio and each pane's view id across reload
++ [ ] add jest: each pane resolves its own view state; closing a pane removes exactly its entry
++ [ ] add playwright: open a second pane, resize, reload, both panes and the ratio survive
 
 
 ### Share parse-worker scheduling and recovery [](?id=shared-parse-worker-scheduling&status=code-review)
@@ -439,6 +709,8 @@ The `agent` card shows which sessions are editing a story, but not the long-live
   + open convoys and their operator steps show on the story they belong to
   + over Remote-SSH the web-worker extension host runs locally but reads the remote machine's files through the workspace file system, so it reads that machine's registry
   + desktop only, like the `agent` card, because a browser host has no file access
++ design revised 2026-11-12: a card's send action is no longer an envelope on the headline; it moves into the action tray at a highlighted card's bottom-right corner and asks for confirmation before it writes one envelope; see [[card-action-tray]]
++ design revised 2026-11-12: the coordinator list no longer sits above the board; it moves into the Card drawer under the agent card type, each row shows the vendor's two-letter mark instead of the program version, and a drop-down asks the coordinator to change vendor; see [[coordinator-drawer-vendor]]
 + [X] add a registry reader that lists `agent.json` entries and filters by repo path inside the open folder
   + evidence: `readRegistry` in AgentAnalyser.ts, `parseRegistryEntry` and `coordinatorsInScope` filter in agentregistryops.ts and webview coordinatorops.ts
 + [X] add a list of registered agents with their state to the folder view and the project view
@@ -486,63 +758,3 @@ Story [[coordinator-views]] reaches agents on the same machine only. An agent on
 + [ ] cover the setting, the process lifecycle and the routing choice with Jest tests
 + [ ] bump the patch version
 + open question: hold this story until thinkersync releases its client library and per-instance process (recommended), or build it now against a fake of their contract and swap in the real client later?
-
-
-### Files drawer defaults under Change defaults [](?id=files-drawer-change-defaults)
-
-The Files drawer shows Make user default, Reset to user default and Reset to built-in default all the time, while View settings keeps its default actions in a closed Change defaults disclosure. Every drawer that offers default actions should use that one disclosure.
-
-+ background
-  + measured: FilesDrawer.tsx renders `SettingsCascadeButtons` unconditionally in its `drawerMeta` aside
-  + measured: `SettingsCascadeButtons.tsx` always enables "Make user default", which applies every NoteThink setting
-  + measured: `ChangeDefaultsDisclosure` (SettingsViewDrawer.tsx) is a closed `<details>` with a diverged tally, and disables save when nothing diverged
-  + measured: SettingsCardDrawer.tsx has no cascade buttons by design; the default actions cover every setting
-  + design: the disclosure sits in the drawer's side column under its File settings title, closed, with the same tally text as View settings
-+ [ ] extract `ChangeDefaultsDisclosure` into one shared component, keeping its tally and disabled rules
-  + the caller passes the count; the component never computes it
-+ [ ] render it in the Files drawer in place of `SettingsCascadeButtons`, closed by default
-+ [ ] count the Files tally over the three NODE_FILES keys: includeFilter, excludeFilter, maxNotesPerFile
-  + measured: View's count covers only its own rows (SettingsViewDrawer.tsx `diverged_count`), and those rows leave out the NODE_FILES keys (settingRows.ts header)
-  + disable save only when none of the three diverged
-  + both buttons still write every NoteThink setting; only the tally is scoped
-  + do not pass View's count into Files
-+ [ ] keep the built-in restore button on the Files drawer only, where a wiped filter must be recoverable
-+ [ ] align the Files labels with View settings (Save as user default, Revert to user default)
-+ [ ] retire `SettingsCascadeButtons` once nothing renders it, moving its tests to the shared component
-+ [ ] extend FilesDrawer.test.tsx and a playwright spec to open the disclosure before clicking a default action
-  + include a files-only divergence: Include changed, no view setting changed, save enabled and tally at 1
-+ out of scope
-  + cascade buttons on the card drawer
-  + narrowing the whole-cascade message to file filters only
-
-
-### Split view: two panes on the view registry [](?id=split-view) [post-v1]
-
-Two views visible at once, such as a document pane beside a kanban pane. The view hierarchy and per-view state this story once asked for already exist; the gap is mounting a second view.
-
-+ goal
-  + two views mounted side by side, each scrolling independently and addressed by its own view id
-  + a drag handle between the panes resizes the split, persisted like other view settings
-+ background
-  + the view hierarchy is data already: [[view-registry]] (`viewregistryops.ts`)
-  + per-view state exists: `setViewManagedState` / `deleteViewFromManagedState` / `revertAllViewsToDefaultState` (ViewProps.ts) and the `viewStates` map; a second pane is a second entry, not a new state system
-  + `parent_view` / `child_views` on ViewProps are declared and read (`useViewContext.ts`) but never written
-  + mermaid renders inline as a card type, so "document + mermaid" is no longer a split-view case
-+ ordering
-  + lands after [[kanban-virtualized-columns]], [[webview-state-persistence-diet]], [[folder-wire-payload-diet]] and [[extension-parse-offload]], since a second pane doubles the costs they bound
-+ scope
-  + each pane is an ordinary `GenericView` reading its own `viewStates` entry; no parallel render path
-  + two panes only; two different view types or two different scopes (current file beside a folder)
-+ out of scope
-  + more than two panes
-+ acceptance criteria
-  + both panes render with their own toolbar, breadcrumb and drawers
-  + the split ratio and both panes survive a reload
-  + closing a pane leaves no stranded `viewStates` entry
-  + `pnpm run check` green
-+ [ ] build the pane container: a CSS split with a drag handle around two `GenericView` mounts
-+ [ ] route add-pane and close-pane through the existing view-state handlers
-+ [ ] populate `parent_view` / `child_views` for the pane relationship, or delete them as dead code
-+ [ ] persist the split ratio and each pane's view id across reload
-+ [ ] add jest: each pane resolves its own view state; closing a pane removes exactly its entry
-+ [ ] add playwright: open a second pane, resize, reload, both panes and the ratio survive

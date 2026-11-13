@@ -7,6 +7,7 @@ import type { ViewApi, ViewProps } from "../../../types/ViewProps";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode, type IntegrationMode } from "../../../types/IntegrationMode";
 import type { StableIdCollision } from "../../../lib/noteops";
 import { enumerateGroupByCandidates, resolveGroupByAxisKey } from "../../../lib/groupbyops";
+import { hasBoardFiles } from "../../../lib/coordinatorops";
 import { registryWithUserTypes, resolveViewSetting } from "../../../lib/viewregistryops";
 import type { ActiveDrawer } from "./useToolbarDrawers";
 import AudioRecordingControl from "./AudioRecordingControl";
@@ -130,6 +131,10 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
         user_view_types,
         props.display_options?.settings?.viewOverrides ?? {},
     ).value as string;
+    // the Card drawer lists coordinators in folder mode where a story board is loaded, asking the registry only while open
+    const card_drawer_coordinators = integrationMode === INTEGRATION_MODE_FOLDER && activeDrawer === 'cards' && hasBoardFiles(props.aggregate_loaded_files)
+        ? { loaded_files: props.aggregate_loaded_files, post_message: handlers.postMessage }
+        : undefined;
     const group_by_candidate_keys = enumerateGroupByCandidates(props.notes).filter(c => c.kind === 'categorical').map(c => c.key);
     // the "Auto (...)" label names the axis the board groups by; a kanban chain's selection is never auto here
     const group_by_resolved_key = resolveGroupByAxisKey(props.notes, props.display_options?.focused_notes, group_by_selection);
@@ -224,6 +229,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                     cardTypeSelection={cardTypeSelection}
                     onCardTypeChange={onCardTypeChange}
                     onSettingChange={onSettingChange}
+                    coordinators={card_drawer_coordinators}
                 />
             </ToolbarDrawer>
             {integrationMode === INTEGRATION_MODE_FOLDER && (
@@ -251,6 +257,7 @@ export default function GenericViewToolbar(component_props: GenericViewToolbarPr
                         onMakeDefault={onMakeDefault}
                         onResetToDefault={onResetToDefault}
                         canResetToDefault={props.settingsCascadeHasWorkspaceOverrides ?? false}
+                        diverged={props.settingsCascadeDiverged ?? []}
                         onRestoreBuiltinDefault={onRestoreBuiltinDefault}
                         canRestoreBuiltinDefault={props.settingsCascadeHasAnyOverrides ?? false}
                     />

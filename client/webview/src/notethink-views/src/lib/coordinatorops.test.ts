@@ -5,6 +5,8 @@ import {
     coordinatorsInScope,
     hasBoardFiles,
     parseCoordinatorResult,
+    registryVendorName,
+    COORDINATOR_VENDOR_OPTIONS,
     targetPositionFromKey,
     targetPositionFromPointer,
     targetValueText,
@@ -98,5 +100,22 @@ describe('the words a row uses', () => {
         expect(parseCoordinatorResult({ type: 'coordinatorResult', request: 'other', agent: 'x', code: 'sent' })).toBeUndefined();
         expect(parseCoordinatorResult({ type: 'activity' })).toBeUndefined();
         expect(parseCoordinatorResult(null)).toBeUndefined();
+    });
+
+    it('answers a vendor change in its own words', () => {
+        const vendor = (code: string): string | undefined => coordinatorResultMessage({ request: 'vendor', agent: 'coord-demo', code, ok: code === 'sent' });
+        expect(vendor('sent')).toBe('Asked coord-demo to change vendor.');
+        expect(vendor('bad_vendor')).toBe('That is not a vendor a coordinator can change to.');
+        expect(vendor('no_mailbox')).toBe('The agent has no mailbox yet.');
+        expect(vendor('write_failed')).toBe('The vendor change could not be sent.');
+        expect(parseCoordinatorResult({ type: 'coordinatorResult', request: 'vendor', agent: 'coord-demo', code: 'sent', ok: true })).toEqual({ request: 'vendor', agent: 'coord-demo', code: 'sent', ok: true });
+    });
+
+    it('spells each display vendor as the registry does, and offers every vendor the display table knows', () => {
+        expect(registryVendorName('claude-code')).toBe('claude');
+        expect(registryVendorName('antigravity')).toBe('agy');
+        expect(registryVendorName('codex')).toBe('codex');
+        expect(registryVendorName('grok')).toBe('grok');
+        expect(COORDINATOR_VENDOR_OPTIONS).toEqual(['claude-code', 'codex', 'grok', 'antigravity']);
     });
 });

@@ -211,4 +211,67 @@ describe('FilesDrawer', () => {
         renderDrawer({ noteCount: 42 });
         expect(screen.queryByTestId('files-drawer-instructions')).not.toBeInTheDocument();
     });
+
+    describe('Change defaults', () => {
+        const cascade_props = {
+            onMakeDefault: jest.fn(),
+            onResetToDefault: jest.fn(),
+            onRestoreBuiltinDefault: jest.fn(),
+        };
+
+        function renderWithDefaults(overrides: Record<string, unknown> = {}): RenderResult {
+            return render(<FilesDrawer {...default_props} {...cascade_props} {...overrides} />);
+        }
+
+        it('keeps every default action inside a closed Change defaults disclosure', () => {
+            renderWithDefaults();
+            const disclosure = screen.getByTestId('change-defaults');
+            expect(disclosure).not.toHaveAttribute('open');
+            expect(disclosure).toContainElement(screen.getByTestId('save-as-default'));
+            expect(disclosure).toContainElement(screen.getByTestId('revert-to-defaults'));
+            expect(disclosure).toContainElement(screen.getByTestId('restore-builtin-defaults'));
+        });
+
+        it('labels the actions as View settings does', () => {
+            renderWithDefaults();
+            expect(screen.getByTestId('save-as-default')).toHaveTextContent('Save as user default');
+            expect(screen.getByTestId('revert-to-defaults')).toHaveTextContent('Revert to user default');
+        });
+
+        it('counts only the three file keys, never a view setting that diverged', () => {
+            renderWithDefaults({ diverged: ['scrollNoteIntoView', 'views:kanban:cardRatio'] });
+            expect(screen.getByTestId('diverged-count')).toHaveTextContent('(0 settings diverged)');
+            expect(screen.getByTestId('save-as-default')).toBeDisabled();
+        });
+
+        it('enables save with a tally of 1 when only Include diverged', () => {
+            const onMakeDefault = jest.fn();
+            renderWithDefaults({ diverged: ['includeFilter'], onMakeDefault });
+            expect(screen.getByTestId('diverged-count')).toHaveTextContent('(1 setting diverged)');
+            const save = screen.getByTestId('save-as-default');
+            expect(save).toBeEnabled();
+            fireEvent.click(save);
+            expect(onMakeDefault).toHaveBeenCalledTimes(1);
+        });
+
+        it('tallies all three file keys together', () => {
+            renderWithDefaults({ diverged: ['includeFilter', 'excludeFilter', 'maxNotesPerFile', 'clockMode'] });
+            expect(screen.getByTestId('diverged-count')).toHaveTextContent('(3 settings diverged)');
+        });
+
+        it('disables the built-in restore when nothing overrides the built-in defaults', () => {
+            renderWithDefaults({ canRestoreBuiltinDefault: false });
+            expect(screen.getByTestId('restore-builtin-defaults')).toBeDisabled();
+        });
+
+        it('fires the built-in restore even while Revert to user default is disabled', () => {
+            const onRestoreBuiltinDefault = jest.fn();
+            renderWithDefaults({ canResetToDefault: false, canRestoreBuiltinDefault: true, onRestoreBuiltinDefault });
+            expect(screen.getByTestId('revert-to-defaults')).toBeDisabled();
+            const restore = screen.getByTestId('restore-builtin-defaults');
+            expect(restore).toBeEnabled();
+            fireEvent.click(restore);
+            expect(onRestoreBuiltinDefault).toHaveBeenCalledTimes(1);
+        });
+    });
 });

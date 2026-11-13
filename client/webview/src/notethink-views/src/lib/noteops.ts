@@ -8,6 +8,9 @@ import { isVirtualNote } from "./virtualnoteops";
 
 const debug = Debug("nodejs:notethink-views:noteops");
 
+// marks a card's action tray in the DOM, so the scroll framing can find it and keep it in view with the ring
+export const ACTION_TRAY_ATTRIBUTE = 'data-note-action-tray';
+
 export interface StableIdCollision {
     slug: string;
     notes: NoteProps[];
@@ -784,4 +787,39 @@ export function hasVisibleCard(notes: Array<NoteProps>, is_grouped_view: boolean
     );
     if (hidden.size === 0) { return true; }
     return notes.some(note => !hidden.has(kanbanColumnValue(note, axis_key)));
+}
+
+/**
+ * The source offset at the end of a note's title text: the headline line without its linetags and
+ * without trailing spaces, in the source file's own coordinates (the origin's source position in a
+ * folder view, the note's position in a single file). Undefined when the note has no position.
+ */
+export function titleEndOffset(note: NoteProps): number | undefined {
+    const start = note.origin?.source_position?.start.offset ?? note.position?.start?.offset;
+    if (start === undefined) { return undefined; }
+    const headline = note.headline_raw ?? '';
+    const linetags_at = note.linetags_from !== undefined ? note.linetags_from - note.position.start.offset : undefined;
+    const has_linetags = linetags_at !== undefined && linetags_at >= 0 && linetags_at <= headline.length;
+    return start + (has_linetags ? headline.slice(0, linetags_at) : headline).trimEnd().length;
+}
+
+/**
+ * Whether this note's highlight ring is the one a reader sees as the real target: it is focused or
+ * selected, and no deeper note inside it is. An outer note whose ring is faded to give way to an inner
+ * one is not. Reads the cropped seqs the card dispatch settles, so a caret in a child below the
+ * deepest selectable level still leaves the story as the target.
+ */
+export function isInnermostHighlighted(note: NoteProps): boolean {
+    const options = note.display_options;
+    if (note.selected) {
+        const selected_seqs = options?.cropped_selected_seqs ?? options?.selected_seqs ?? [];
+        return !(options?.selected_notes ?? []).some(other => other.seq !== note.seq
+            && selected_seqs.includes(other.seq)
+            && (other.parent_notes ?? []).some(parent => parent.seq === note.seq));
+    }
+    if (note.focused) {
+        const chain = options?.cropped_focused_seqs ?? options?.focused_seqs ?? [];
+        return chain.length === 0 || chain[chain.length - 1] === note.seq;
+    }
+    return false;
 }

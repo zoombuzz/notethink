@@ -2,7 +2,7 @@ import React from "react";
 import * as l10n from "@vscode/l10n";
 import { childDisplayName, childStateOf, formatActivityUsage, formatChildClock, shortModelId, splitChildrenForDisplay, truncateActivityArg, vendorMonogram } from "../../../lib/agentactivityops";
 import { ACTIVITY_ARG_MAX_CHARS, type ActivityChildSession } from "../../../types/AgentActivity";
-import AgentChevron from "./AgentChevron";
+import Chevron from "../../Chevron";
 import { agentStateDrawn, agentStateLabel } from "./agentStateLabel";
 import { useAgentClockNow } from "./useAgentClockNow";
 import styles from "../AgentNote.module.scss";
@@ -84,7 +84,7 @@ function AgentChildRows(props: AgentChildRowsProps): React.ReactElement | null {
                         data-testid="agent-children-toggle"
                         onClick={(event) => { event.stopPropagation(); props.onToggleFinished(!finished_open); }}
                     >
-                        <AgentChevron open={finished_open} />
+                        <Chevron direction={finished_open ? "down" : "right"} />
                         {finished_open
                             ? l10n.t('Hide {0} finished subagents', split.finished.length)
                             : l10n.t('Show {0} finished subagents', split.finished.length)}

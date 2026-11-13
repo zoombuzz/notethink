@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import * as l10n from "@vscode/l10n";
-import AgentChevron from "./AgentChevron";
+import Chevron from "../../Chevron";
 import { LineDiffCounts } from "./AgentFileBand";
 import type { ActivityPendingCommit } from "../../../types/AgentActivity";
 import styles from "../AgentNote.module.scss";
@@ -70,7 +70,7 @@ function AgentPendingCommits(props: AgentPendingCommitsProps): React.ReactElemen
                 title={coverage}
                 onClick={(event) => { event.stopPropagation(); toggle(!expanded); }}
             >
-                <AgentChevron open={expanded} />
+                <Chevron direction={expanded ? "down" : "right"} />
                 <span>{label}</span>
                 {' '}
                 {totals && <LineDiffCounts added={totals.added} removed={totals.removed} testid="agent-pending-commits-line-diff" />}

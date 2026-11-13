@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
-import { COORDINATOR_MOVE_MARKER_MESSAGE_TYPE, COORDINATOR_SEND_MESSAGE_TYPE } from "../../../lib/agentactivityops";
-import { readCoordinatorCompose, useAgentActivity, useAgentActivityDemand, useCoordinatorCompose, useCoordinatorResult } from "../../../lib/activityhooks";
-import { convoyCountLabel, coordinatorResultMessage, coordinatorsInScope, coordinatorStateLabel } from "../../../lib/coordinatorops";
+import { COORDINATOR_MOVE_MARKER_MESSAGE_TYPE, COORDINATOR_SEND_MESSAGE_TYPE, vendorColour, vendorLabel, vendorMonogram } from "../../../lib/agentactivityops";
+import { useAgentActivity, useAgentActivityDemand, useCoordinatorResult } from "../../../lib/activityhooks";
+import { COORDINATOR_VENDOR_OPTIONS, convoyCountLabel, coordinatorResultMessage, coordinatorsInScope, coordinatorStateLabel, registryVendorName } from "../../../lib/coordinatorops";
 import type { ActivityCoordinator } from "../../../types/AgentActivity";
+import ConfirmModal from "../../ConfirmModal";
 import CoordinatorTargetLine from "./CoordinatorTargetLine";
 import styles from "./CoordinatorPanel.module.scss";
 
@@ -14,10 +15,15 @@ interface CoordinatorPanelProps {
 }
 
 /**
- * The registered coordinators beside the board of a folder view: one row per agent whose repository
+ * The registered coordinators in the Card drawer of a folder view: one row per agent whose repository
  * holds a file the view has loaded, so a folder holding several repositories lists each repository's
  * agent, and a view open on one repository lists the one agent that owns it. It draws nothing when no
  * agent is registered, and nothing at all where the host cannot read the registry (a browser host).
+ *
+ * Each row names its coordinator's vendor as the vendor's two-letter mark and offers a drop-down to ask
+ * for another. The drop-down asks, it does not switch: a pick opens a confirm, a confirmed pick posts the
+ * vendor-change request and is held as pending, labelled as requested, until the registry reports that
+ * vendor, and a refused request lets the drop-down fall back to the registry's vendor.
  *
  * The panel only shows and asks. It never starts, stops or restarts an agent: the two things it can do
  * are a message to an agent's mailbox, written only when the user presses Send, and a move of the
@@ -45,12 +51,12 @@ function CoordinatorRow(props: RowProps): ReactElement {
     const [send_open, setSendOpen] = useState(false);
     const [target_open, setTargetOpen] = useState(false);
     const [text, setText] = useState('');
+    // the vendor asked for, held until the registry reports it or the host refuses, and the pick awaiting its confirm
+    const [pending_vendor, setPendingVendor] = useState<string | undefined>(undefined);
+    const [confirm_vendor, setConfirmVendor] = useState<string | undefined>(undefined);
     // the line's position the user just asked for, held until the board reports it or the host refuses
     const [pending_position, setPendingPosition] = useState<number | undefined>(undefined);
-    const text_ref = useRef<HTMLTextAreaElement>(null);
-    const handled_compose_seq = useRef(readCoordinatorCompose()?.seq ?? 0);
     const result = useCoordinatorResult();
-    const compose = useCoordinatorCompose();
     const own_result = result?.agent === coordinator.agent ? result : undefined;
     const position = pending_position ?? coordinator.marker_after;
     // a new position from the board is the answer to a move, so the held one is let go
@@ -59,21 +65,26 @@ function CoordinatorRow(props: RowProps): ReactElement {
     useEffect(() => {
         if (own_result?.request === 'move' && own_result.code !== 'moved') { setPendingPosition(undefined); }
     }, [own_result?.seq]);
+    // a vendor from the registry is the answer to a change, so the held one is let go
+    useEffect(() => { setPendingVendor(undefined); }, [coordinator.vendor]);
+    // a refused vendor request lets the drop-down fall back to the registry's vendor
+    useEffect(() => {
+        if (own_result?.request === 'vendor' && !own_result.ok) { setPendingVendor(undefined); }
+    }, [own_result?.seq]);
     // a sent message is on its way, so the form empties
     useEffect(() => {
         if (own_result?.request === 'send' && own_result.ok) { setText(''); }
     }, [own_result?.seq]);
-    // a story card asked for this agent's send form, opened with its story named
-    useEffect(() => {
-        if (!compose || compose.seq === handled_compose_seq.current || compose.agent !== coordinator.agent) { return; }
-        handled_compose_seq.current = compose.seq;
-        setSendOpen(true);
-        setText(compose.text);
-        setTimeout(() => text_ref.current?.focus(), 0);
-    }, [compose, coordinator.agent]);
     function handleSend(event: FormEvent): void {
         event.preventDefault();
         post_message?.({ type: COORDINATOR_SEND_MESSAGE_TYPE, agent: coordinator.agent, body: text });
+    }
+    function handleVendorConfirm(): void {
+        const vendor = confirm_vendor;
+        setConfirmVendor(undefined);
+        if (vendor === undefined) { return; }
+        setPendingVendor(vendor);
+        post_message?.({ type: COORDINATOR_SEND_MESSAGE_TYPE, agent: coordinator.agent, kind: 'vendor', vendor: registryVendorName(vendor) });
     }
     function handleMove(next: number): void {
         setPendingPosition(next);
@@ -81,6 +92,8 @@ function CoordinatorRow(props: RowProps): ReactElement {
     }
     const message = own_result ? coordinatorResultMessage(own_result) : undefined;
     const convoys = coordinator.open_convoys.length;
+    const shown_vendor = pending_vendor ?? coordinator.vendor;
+    const vendor_options = COORDINATOR_VENDOR_OPTIONS.includes(shown_vendor) ? COORDINATOR_VENDOR_OPTIONS : [shown_vendor, ...COORDINATOR_VENDOR_OPTIONS];
     return (
         <div className={styles.row} data-testid="coordinator-row" data-agent={coordinator.agent} data-state={coordinator.state}>
             <div className={styles.rowHead}>
@@ -88,7 +101,17 @@ function CoordinatorRow(props: RowProps): ReactElement {
                 <span className={styles.agentName} data-testid="coordinator-name">{coordinator.agent}</span>
                 <span className={styles.state} data-testid="coordinator-state">{coordinatorStateLabel(coordinator.state)}</span>
                 {coordinator.story && <span className={styles.detail} data-testid="coordinator-story-now">{l10n.t('On story {0}', coordinator.story)}</span>}
-                {coordinator.version && <span className={styles.detail} data-testid="coordinator-version">{l10n.t('Version {0}', coordinator.version)}</span>}
+                <span className={styles.vendorMark} style={{ color: vendorColour(coordinator.vendor) }} title={vendorLabel(coordinator.vendor)} data-testid="coordinator-vendor-mark" data-vendor={coordinator.vendor}>{vendorMonogram(coordinator.vendor)}</span>
+                <select
+                    className={styles.vendorSelect}
+                    value={shown_vendor}
+                    aria-label={l10n.t('Vendor for {0}', coordinator.agent)}
+                    data-testid="coordinator-vendor-select"
+                    onChange={event => setConfirmVendor(event.target.value)}
+                >
+                    {vendor_options.map(vendor => <option key={vendor} value={vendor}>{`${vendorMonogram(vendor)} ${vendorLabel(vendor)}`}</option>)}
+                </select>
+                {pending_vendor !== undefined && <span className={styles.detail} data-testid="coordinator-vendor-requested">{l10n.t('Requested: {0}', vendorLabel(pending_vendor))}</span>}
                 {convoys > 0 && <span className={styles.detail} data-testid="coordinator-convoys">{convoyCountLabel(convoys)}</span>}
                 <span className={styles.actions}>
                     <button type="button" className={styles.action} aria-expanded={send_open} data-testid="coordinator-send-toggle" onClick={() => setSendOpen(open => !open)}>{l10n.t('Send to agent')}</button>
@@ -98,7 +121,6 @@ function CoordinatorRow(props: RowProps): ReactElement {
             {send_open && (
                 <form className={styles.sendForm} onSubmit={handleSend} data-testid="coordinator-send-form">
                     <textarea
-                        ref={text_ref}
                         className={styles.sendText}
                         rows={3}
                         value={text}
@@ -110,6 +132,13 @@ function CoordinatorRow(props: RowProps): ReactElement {
                 </form>
             )}
             {target_open && <CoordinatorTargetLine coordinator={coordinator} position={position} onMove={handleMove} />}
+            <ConfirmModal
+                opened={confirm_vendor !== undefined}
+                title={l10n.t('Change vendor')}
+                message={l10n.t('Ask {0} to restart in {1}?', coordinator.agent, confirm_vendor === undefined ? '' : vendorLabel(confirm_vendor))}
+                onConfirm={handleVendorConfirm}
+                onCancel={() => setConfirmVendor(undefined)}
+            />
             <div className={styles.status} role="status" aria-live="polite" data-testid="coordinator-status" data-code={own_result?.code}>{message}</div>
         </div>
     );

@@ -11,6 +11,13 @@
  * is never cropped. The paper's shadow shows through the transparent corner as the shadow a lifted corner
  * would cast.
  *
+ * The paper reads as stuck on a board. It tilts by a small angle hashed from the note's identity (the
+ * --nt-sticky-angle property), so each sticky keeps its own angle across renders; only the paper rotates,
+ * never the card, so the focus ring stays square and the scroll framing measures the card as before. It
+ * drops a contact shadow under a wider soft one, and a faint top-to-bottom shade, a ::before clipped short
+ * of the curl corner, suggests the paper bowing slightly. --sticky-radius draws the paper's corners and the
+ * flap's curve alike.
+ *
  * --nt-sticky-hue arrives inline from StickyNote. Paper is pale in both themes, as paper is, with dark ink;
  * the light theme takes a paler shade still, so the project pill, drawn lighter in that theme, stays
  * distinct from the paper it sits on.
@@ -23,31 +30,52 @@
   --nt-card-shadow-hover: none;
   --nt-card-shadow-lifted: none;
 
-  // room round the paper, so stickies stacked in a document stand apart; inside the card, so the focus ring keeps its geometry
-  padding: 4px;
+  // room round the paper, deeper above and below so a tilted corner does not reach the sticky stacked next to it; inside the card, so the focus ring keeps its geometry
+  padding: 10px 4px;
 
   &:hover .stickyInner {
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.3), 0 8px 16px rgba(0, 0, 0, 0.32);
   }
 }
 
 .stickyInner {
   // the curl's depth, measured square from the corner to the fold line
   --sticky-curl: 12px;
+  // one radius for the paper's three square corners and the flap's curve, so the fold cannot read as a bubble
+  --sticky-radius: 2px;
+  // the faint curve across the paper: a lighter top easing to a darker bottom, laid over the paper colour
+  --sticky-shade-top: rgba(255, 255, 255, 0.12);
+  --sticky-shade-bottom: rgba(0, 0, 0, 0.1);
   --sticky-paper: hsl(var(--nt-sticky-hue) 55% 70%);
   --sticky-paper-shade: hsl(var(--nt-sticky-hue) 48% 62%);
   --sticky-fold: hsl(var(--nt-sticky-hue) 42% 52%);
   --sticky-fold-light: hsl(var(--nt-sticky-hue) 50% 66%);
 
   position: relative;
-  padding: 7px 18px 11px 12px;
-  border-radius: 2px;
+  // its own stacking context, so the shade layer sits above the paper colour and below the headline
+  isolation: isolate;
+  padding: 10px 18px 14px 12px;
+  border-radius: var(--sticky-radius);
+  // --nt-sticky-angle arrives inline from StickyNote; the paper tilts and the card element stays square
+  transform: rotate(var(--nt-sticky-angle, 0deg));
   color: #1d1f23;
   // the lift shading is measured from the corner rather than as a share of the width, so a wide group is not shaded end to end
   background: linear-gradient(315deg, transparent var(--sticky-curl), var(--sticky-paper-shade) var(--sticky-curl), var(--sticky-paper) calc(var(--sticky-curl) * 5));
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  // a tight contact shadow under a softer, wider one, so the paper stands off the board
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.26), 0 4px 10px rgba(0, 0, 0, 0.24);
   transition: box-shadow 200ms ease;
 
+  // the shade, cut short of the curl corner so the lifted corner stays transparent
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: linear-gradient(180deg, var(--sticky-shade-top), var(--sticky-shade-bottom));
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--sticky-curl) * 1.4142), calc(100% - var(--sticky-curl) * 1.4142) 100%, 0 100%);
+    pointer-events: none;
+  }
   // the flap: the corner folded back over the paper, darkest along the crease and catching light at its tip
   &::after {
     content: '';
@@ -57,7 +85,7 @@
     width: calc(var(--sticky-curl) * 1.4142);
     height: calc(var(--sticky-curl) * 1.4142);
     background: linear-gradient(315deg, transparent 50%, rgba(0, 0, 0, 0.2) 50%, var(--sticky-fold) 58%, var(--sticky-fold-light) 100%);
-    border-top-left-radius: 70%;
+    border-top-left-radius: var(--sticky-radius);
     pointer-events: none;
   }
 }

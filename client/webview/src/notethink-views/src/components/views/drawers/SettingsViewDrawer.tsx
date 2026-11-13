@@ -35,7 +35,8 @@ import { DEFAULT_CARD_TYPE, noteOrderTimestampFn, renderableCardIds } from "../.
 import GroupBySelector from "../GroupBySelector";
 import SettingsRow from "../SettingsRow";
 import { viewTypeLabel } from "../viewTypeLabel";
-import { divergedCountLabel, globalSettingRows, orderRowsByOwner, rowHome, settingRowLabel, viewRowsForNode, VIEW_SETTING_ROWS, type SettingRowDef, type SettingRowValues } from "../settingRows";
+import ChangeDefaultsDisclosure from "../ChangeDefaultsDisclosure";
+import { globalSettingRows, orderRowsByOwner, rowHome, settingRowLabel, viewRowsForNode, VIEW_SETTING_ROWS, type SettingRowDef, type SettingRowValues } from "../settingRows";
 import DrawerTree, { type DrawerTreeNode } from "./DrawerTree";
 
 const debug = Debug("nodejs:notethink-views:SettingsViewDrawer");
@@ -524,7 +525,7 @@ function buildTypeTreeNodes(parent_id: string | undefined, ctx: TypeTreeContext)
             id: node.id,
             testId: `view-node-${node.id}`,
             label: nodeLabel(node, ctx.registry),
-            glyph: children.length > 0 ? '›' : '',
+            chevron: children.length > 0,
             expanded: children.length > 0 ? true : undefined,
             kind: node.selectable ? 'selectable' : 'abstract',
             current: node.id === ctx.selected_node,
@@ -811,63 +812,6 @@ function CustomViewTypesDisclosure(props: CustomViewTypesDisclosureProps): React
                 {props.selectedUserType !== undefined && (
                     <UserTypeControls key={props.selectedUserType.id} userType={props.selectedUserType} onRename={props.onRename} onDelete={props.onDelete} />
                 )}
-            </div>
-        </details>
-    );
-}
-
-interface ChangeDefaultsDisclosureProps {
-    divergedCount: number;
-    onMakeDefault: () => void;
-    onResetToDefault: () => void;
-    canResetToDefault?: boolean;
-}
-
-/**
- * The two default actions, collapsed behind one disclosure so the pane leads with the settings rather
- * than with a row of buttons. Both drive the diverged count to zero: saving promotes every value to the
- * user scope, reverting clears the workspace scope, and each is disabled while it would do nothing -
- * saving needs something to have diverged, reverting needs a workspace override to clear. The panel
- * therefore never offers an action it cannot carry out, which is what the tally beside its name is for.
- * Restoring the built-in defaults is deliberately not here - it stays in the Files drawer, which is where
- * a wiped filter has to be recoverable from.
- */
-function ChangeDefaultsDisclosure(props: ChangeDefaultsDisclosureProps): React.ReactElement {
-    return (
-        <details className={styles.settingsChangeDefaults} data-testid="change-defaults">
-            <summary data-testid="change-defaults-summary">
-                <span className={styles.settingsChangeDefaultsLabel}>{l10n.t('Change defaults')}</span>
-                {' '}
-                <span className={styles.settingsDivergedTally} data-testid="diverged-count">
-                    ({divergedCountLabel(props.divergedCount)})
-                </span>
-            </summary>
-            <div className={styles.settingsDisclosureBody}>
-                <p className={styles.settingsDivergedNote}>
-                    {props.divergedCount === 0
-                        ? l10n.t('Nothing here differs from your saved defaults.')
-                        : l10n.t('Settings diverged from the defaults and are already saved')}
-                </p>
-                <div className={styles.settingsDisclosureActions}>
-                <button
-                    type="button"
-                    data-testid="save-as-default"
-                    onClick={props.onMakeDefault}
-                    disabled={props.divergedCount === 0}
-                    title={l10n.t('Save every current setting as your default across every VS Code window.')}
-                >
-                    {l10n.t('Save as user default')}
-                </button>
-                <button
-                    type="button"
-                    data-testid="revert-to-defaults"
-                    onClick={props.onResetToDefault}
-                    disabled={!props.canResetToDefault}
-                    title={l10n.t("Clear this workspace's overrides and fall back to your defaults.")}
-                    >
-                        {l10n.t('Revert to user default')}
-                    </button>
-                </div>
             </div>
         </details>
     );

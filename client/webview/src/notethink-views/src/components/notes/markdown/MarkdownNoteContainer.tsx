@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { getStandardNoteDataProps } from "../../../lib/renderops";
 import { buildNoteStyles } from "../../../lib/noteui";
 import type { NoteProps } from "../../../types/NoteProps";
+import NoteActionTray from "../NoteActionTray";
 
 interface MarkdownNoteContainerProps {
     note: NoteProps;
@@ -38,6 +39,7 @@ export default function MarkdownNoteContainer(props: MarkdownNoteContainerProps)
              style={provided?.draggableProps?.style as React.CSSProperties | undefined}
         >
             {children}
+            <NoteActionTray note={note} />
         </div>
     );
 }

@@ -1,11 +1,13 @@
 import {
     COORDINATOR_SEND_BODY_MAX_CHARS,
+    COORDINATOR_VENDOR_NAMES,
     boardDocFor,
     buildCoordinatorEnvelope,
     compactStamp,
     coordMarkerChanges,
     coordinatorsFrom,
     isCoordinatorEntry,
+    isCoordinatorVendorName,
     isSafeCoordinatorName,
     mailboxInboxSegments,
     markerAfter,
@@ -220,6 +222,26 @@ describe('buildCoordinatorEnvelope', () => {
         expect(buildCoordinatorEnvelope({ ...base, machine: 'a b' })).toBeUndefined();
         expect(buildCoordinatorEnvelope({ ...base, rand_hex: 'ZZZZZZ' })).toBeUndefined();
         expect(buildCoordinatorEnvelope({ ...base, body: 'x'.repeat(COORDINATOR_SEND_BODY_MAX_CHARS) })).toBeDefined();
+    });
+
+    it('builds a vendor-change envelope of kind vendor whose body names the registry vendor', () => {
+        expect(buildCoordinatorEnvelope({ agent: 'coord-demo', machine: 'host-a', kind: 'vendor', vendor: 'agy', now: NOW, rand_hex: 'abc123' })).toEqual({
+            v: 0, id: '20261111T093000Z-abc123', sender: 'notethink', sender_kind: 'operator', origin_machine: 'host-a', target: 'coord-demo@host-a',
+            task_id: '20261111T093000Z-abc123', reply_to: '', kind: 'vendor', state: 'submitted', body: { vendor: 'agy' }, created_at: '2026-11-11T09:30:00Z',
+        });
+        for (const vendor of COORDINATOR_VENDOR_NAMES) {
+            expect(buildCoordinatorEnvelope({ agent: 'coord-demo', machine: 'host-a', kind: 'vendor', vendor, now: NOW, rand_hex: 'abc123' })?.body).toEqual({ vendor });
+        }
+    });
+
+    it('refuses a vendor change naming an unknown vendor, an unsafe name or a malformed suffix', () => {
+        const base = { agent: 'coord-demo', machine: 'host-a', kind: 'vendor' as const, vendor: 'claude', now: NOW, rand_hex: 'abc123' };
+        expect(buildCoordinatorEnvelope({ ...base, vendor: 'claude-code' })).toBeUndefined();
+        expect(buildCoordinatorEnvelope({ ...base, vendor: '' })).toBeUndefined();
+        expect(buildCoordinatorEnvelope({ ...base, agent: '../x' })).toBeUndefined();
+        expect(buildCoordinatorEnvelope({ ...base, rand_hex: 'zz' })).toBeUndefined();
+        expect(isCoordinatorVendorName('codex')).toBe(true);
+        expect(isCoordinatorVendorName('antigravity')).toBe(false);
     });
 
     it('names the compact stamp and the inbox path it files under', () => {

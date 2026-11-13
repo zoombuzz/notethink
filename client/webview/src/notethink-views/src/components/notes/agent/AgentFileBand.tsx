@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import * as l10n from "@vscode/l10n";
 import { vendorMonogram, type ActivityBand, type ActivityUnavailable } from "../../../lib/agentactivityops";
 import type { AgentFileEntry } from "./useAgentNoteModel";
-import AgentChevron from "./AgentChevron";
+import Chevron from "../../Chevron";
 import styles from "../AgentNote.module.scss";
 
 /**
@@ -21,7 +21,7 @@ import styles from "../AgentNote.module.scss";
  * failure this feature exists to prevent.
  *
  * The band is one summary row, collapsed by default, that unfolds to every file when clicked. The row is
- * a native button with an `AgentChevron` and `aria-expanded`, the same disclosure the subagent toggle
+ * a native button with a `Chevron` and `aria-expanded`, the same disclosure the subagent toggle
  * uses. With `onToggleExpanded` the open state is the owner's, so it survives a re-render; without it
  * the band keeps its own.
  * - totalLineDiff: the summary's own +added -removed, summed only across entries the analyser actually diffed; absent when none of this band's entries carry a line diff
@@ -95,7 +95,7 @@ function AgentFileBand(props: AgentFileBandProps): React.ReactElement {
                 title={props.coverageTitle}
                 onClick={(event) => { event.stopPropagation(); flip(); }}
             >
-                <AgentChevron open={expanded} />
+                <Chevron direction={expanded ? "down" : "right"} />
                 <span>{props.title}</span>
                 {' '}
                 {props.totalLineDiff && <LineDiffCounts added={props.totalLineDiff.added} removed={props.totalLineDiff.removed} testid={`agent-file-band-line-diff-${props.band}`} />}

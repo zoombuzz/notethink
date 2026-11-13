@@ -98,6 +98,8 @@ test.describe('Story progress pie', () => {
             const pie = row.getByTestId('story-progress-pie');
             const pill = row.getByTestId('origin-project-pill');
             await expect(pie).toHaveAttribute('data-pill-matched', 'true');
+            // a sticky's paper is tilted, which skews boxes measured across its width, so the lines are compared level
+            await page.addStyleTag({ content: '[data-card-type="sticky"] * { transform: none !important; }' });
             const pill_colour = await pill.evaluate(el => getComputedStyle(el).backgroundColor);
             const wedge_colour = await pie.locator('circle').nth(1).evaluate(el => getComputedStyle(el).stroke);
             expect(wedge_colour).toBe(pill_colour);

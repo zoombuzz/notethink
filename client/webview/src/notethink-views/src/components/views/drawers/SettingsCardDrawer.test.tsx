@@ -1,8 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent, within, type RenderResult } from '@testing-library/react';
+import { act, render, screen, fireEvent, within, type RenderResult } from '@testing-library/react';
 import SettingsCardDrawer from './SettingsCardDrawer';
 import { CARD_REGISTRY } from '../../notes/cardregistryops';
 import { CARD_SETTING_ROWS } from '../settingRows';
+import { resetActivitySnapshot, setActivitySnapshot } from '../../../lib/activityhooks';
+import type { ActivityCoordinator } from '../../../types/AgentActivity';
 
 const default_props = {
     viewId: 'v1',
@@ -179,5 +181,39 @@ describe('SettingsCardDrawer rows', () => {
         expect(screen.queryByTestId('new-view-type-offer')).not.toBeInTheDocument();
         expect(screen.queryByTestId('new-view-type-open')).not.toBeInTheDocument();
         expect(screen.queryByTestId('custom-view-types')).not.toBeInTheDocument();
+    });
+});
+
+describe('SettingsCardDrawer coordinators', () => {
+    const LOADED = ['demo/docstech/users/dev/todo.md'];
+    const demo: ActivityCoordinator = {
+        agent: 'coord-demo', vendor: 'claude-code', state: 'working', story: '', version: '1.2.3', machine: 'host-a', open_convoys: [], root_relative: 'demo',
+        board_doc_path: LOADED[0], board_stories: [], marker_after: 0,
+    };
+
+    function seed(): void {
+        act(() => { setActivitySnapshot({ analyser: { state: 'live', refusals: [] }, sessions: [], trees: [], progress: [], coordinators: [demo] }); });
+    }
+
+    afterEach(() => { resetActivitySnapshot(); });
+
+    it('lists the coordinators under the agent card type only, with the drawer\'s own scope', () => {
+        const post = jest.fn();
+        renderDrawer({ coordinators: { loaded_files: LOADED, post_message: post } } as never);
+        seed();
+        expect(screen.queryByTestId('coordinator-panel')).toBeNull();
+        fireEvent.click(screen.getByTestId('card-node-agent'));
+        expect(screen.getByTestId('coordinator-panel')).toBeInTheDocument();
+        expect(screen.getAllByTestId('coordinator-row')).toHaveLength(1);
+        expect(post).toHaveBeenCalledWith({ type: 'activityDemand' });
+        fireEvent.click(screen.getByTestId('card-node-sticky'));
+        expect(screen.queryByTestId('coordinator-panel')).toBeNull();
+    });
+
+    it('lists no coordinators where the view mounts none', () => {
+        renderDrawer();
+        seed();
+        fireEvent.click(screen.getByTestId('card-node-agent'));
+        expect(screen.queryByTestId('coordinator-panel')).toBeNull();
     });
 });

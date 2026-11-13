@@ -165,6 +165,57 @@ test.describe('Sticky card', () => {
     });
 });
 
+test.describe('Sticky board look', () => {
+
+    test.beforeEach(async ({ page }) => {
+        await harness(page);
+        await stickyFolderBoard(page);
+    });
+
+    test('each paper carries its own rotation while the card element carries none', async ({ page }) => {
+        const looks = await page.locator('[data-card-type="sticky"]').evaluateAll(cards => cards.map(card => ({
+            card_transform: getComputedStyle(card).transform,
+            paper_transform: getComputedStyle(card.firstElementChild as HTMLElement).transform,
+        })));
+        expect(looks.length).toBeGreaterThan(1);
+        expect(looks.every(look => look.card_transform === 'none')).toBe(true);
+        expect(looks.every(look => look.paper_transform !== 'none')).toBe(true);
+        expect(new Set(looks.map(look => look.paper_transform)).size).toBeGreaterThan(1);
+    });
+
+    test('the flap curve matches the paper corner radius, and the paper drops a layered shadow', async ({ page }) => {
+        const card = page.locator('[data-card-type="sticky"]').first();
+        const drawn = await card.evaluate(el => {
+            const paper = el.firstElementChild as HTMLElement;
+            return {
+                paper_radius: getComputedStyle(paper).borderTopLeftRadius,
+                flap_radius: getComputedStyle(paper, '::after').borderTopLeftRadius,
+                shadow: getComputedStyle(paper).boxShadow,
+                shade: getComputedStyle(paper, '::before').backgroundImage,
+            };
+        });
+        expect(drawn.flap_radius).toBe(drawn.paper_radius);
+        expect(drawn.paper_radius).toBe('2px');
+        // two layered shadows read as two comma-separated rgba values
+        expect(drawn.shadow.match(/rgba\(/g)?.length).toBe(2);
+        expect(drawn.shade).toContain('linear-gradient');
+    });
+
+    test('a focused sticky in the leftmost column keeps a square ring while its paper is rotated', async ({ page }) => {
+        const first = page.locator('[data-card-type="sticky"]').first();
+        await first.click();
+        await expect(first).toHaveAttribute('aria-current', 'true');
+        const ring = await first.evaluate(el => ({
+            style: getComputedStyle(el).outlineStyle,
+            transform: getComputedStyle(el).transform,
+            paper_transform: getComputedStyle(el.firstElementChild as HTMLElement).transform,
+        }));
+        expect(ring.style).not.toBe('none');
+        expect(ring.transform).toBe('none');
+        expect(ring.paper_transform).not.toBe('none');
+    });
+});
+
 test.describe('Default card type as a Kanban view setting', () => {
 
     test.beforeEach(async ({ page }) => {

@@ -3,7 +3,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ReactElement } from "react";
 import * as l10n from "@vscode/l10n";
 import { globMatches } from "../../../lib/globMatch";
-import SettingsCascadeButtons from "../SettingsCascadeButtons";
+import { NODE_FILES, settingKeysForNode } from "../../../lib/viewregistryops";
+import ChangeDefaultsDisclosure from "../ChangeDefaultsDisclosure";
 import styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:FilesDrawer");
@@ -12,6 +13,9 @@ const debug = Debug("nodejs:notethink-views:FilesDrawer");
 const FILES_FILTER_DEBOUNCE_MS = 200;
 // floor for the per-file story cap; an empty/NaN input falls back to the current value, never 0
 const MIN_MAX_NOTES_PER_FILE = 1;
+
+// the cascade keys this drawer edits, which is all its Change defaults tally counts
+const FILES_SETTING_KEYS: readonly string[] = settingKeysForNode(NODE_FILES);
 
 type FilesDrawerField = 'include' | 'exclude' | 'max_notes';
 
@@ -28,6 +32,7 @@ interface FilesDrawerProps {
     onMakeDefault?: () => void;
     onResetToDefault?: () => void;
     canResetToDefault?: boolean;
+    diverged?: string[];
     onRestoreBuiltinDefault?: () => void;
     canRestoreBuiltinDefault?: boolean;
 }
@@ -36,6 +41,11 @@ interface FilesDrawerProps {
 function absolutizeFilePath(file_path: string, workspace_root?: string): string {
     if (file_path.startsWith('/')) { return file_path; }
     return workspace_root ? `${workspace_root}/${file_path}` : file_path;
+}
+
+// how many of the cascade's diverged keys are the file filters and the per-file cap
+function filesDivergedCount(diverged: string[] = []): number {
+    return diverged.filter(key => FILES_SETTING_KEYS.includes(key)).length;
 }
 
 /**
@@ -216,13 +226,24 @@ function FilesDrawer(props: FilesDrawerProps): ReactElement {
             <aside className={styles.drawerMeta}>
                 <h3>{l10n.t('File settings')}</h3>
                 {props.onMakeDefault && props.onResetToDefault && props.onRestoreBuiltinDefault && (
-                    <SettingsCascadeButtons
-                        onMakeDefault={props.onMakeDefault}
-                        onResetToDefault={props.onResetToDefault}
-                        canResetToDefault={props.canResetToDefault}
-                        onRestoreBuiltinDefault={props.onRestoreBuiltinDefault}
-                        canRestoreBuiltinDefault={props.canRestoreBuiltinDefault}
-                    />
+                    <div className={styles.filesDrawerDefaults}>
+                        <ChangeDefaultsDisclosure
+                            divergedCount={filesDivergedCount(props.diverged)}
+                            onMakeDefault={props.onMakeDefault}
+                            onResetToDefault={props.onResetToDefault}
+                            canResetToDefault={props.canResetToDefault}
+                        >
+                            <button
+                                type="button"
+                                data-testid="restore-builtin-defaults"
+                                onClick={props.onRestoreBuiltinDefault}
+                                disabled={!props.canRestoreBuiltinDefault}
+                                title={l10n.t("Clear both this workspace's and your user overrides for every NoteThink setting and restore the built-in defaults.")}
+                            >
+                                {l10n.t('Reset to built-in default')}
+                            </button>
+                        </ChangeDefaultsDisclosure>
+                    </div>
                 )}
             </aside>
         </div>

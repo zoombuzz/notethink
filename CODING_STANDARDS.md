@@ -217,6 +217,7 @@ When a note becomes focused or selected, `useScrollToCaret` (`viewhooks.ts`) fra
 
 - **The highlight ring is visible on every edge, never cropped.** The ring is an `outline` with offset and width that `getBoundingClientRect` excludes, so the scroll reserves space for it, measured against the scroll container's client size, not `window.innerWidth/innerHeight`.
 - **A note that fits** the viewer shows whole, ring included; **one wider or taller** than the viewer anchors top-left.
+- **A highlighted card's action tray is part of what is framed.** `NoteActionTray` hangs below the card's bottom-right corner, past the ring, so the scroll reserves room for the tray's box (found by `ACTION_TRAY_ATTRIBUTE`) with the ring, and no group or column may clip it.
 - Revealing the caret line inside a clipped note body belongs to `useMarkdownNoteBodyScroll`, not this hook.
 
 The recurring regression is a ring cropped on the left edge of a card flush against the scroll container: verify by focusing a card in the leftmost column.

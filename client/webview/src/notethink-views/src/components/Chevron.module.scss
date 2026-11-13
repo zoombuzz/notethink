@@ -1,0 +1,25 @@
+/*
+ * The shared chevron mark: one opacity and one transition for every disclosure that draws it. The mark is
+ * drawn pointing right, so each direction is a rotation of that one path.
+ */
+.chevron {
+  flex: none;
+  opacity: 0.8;
+  transition: transform 0.1s ease;
+}
+
+.chevronRight {
+  transform: rotate(0deg);
+}
+
+.chevronDown {
+  transform: rotate(90deg);
+}
+
+.chevronUp {
+  transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron { transition: none; }
+}

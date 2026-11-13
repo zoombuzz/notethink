@@ -5,10 +5,28 @@ import { buildNoteStyles } from "../../lib/noteui";
 import { hueForOrigin, originHasProject } from "../../lib/originops";
 import type { NoteProps } from "../../types/NoteProps";
 import MarkdownNoteHeadline from "./markdown/MarkdownNoteHeadline";
+import NoteActionTray from "./NoteActionTray";
 import sticky_styles from "./StickyNote.module.scss";
 
 // the hue of a sticky with no project to take its colour from: a paper yellow
 export const STICKY_FALLBACK_HUE = 52;
+
+// the widest tilt of a sticky either side of level, in degrees
+export const STICKY_MAX_ANGLE = 2;
+
+/**
+ * The tilt of a sticky in degrees, hashed from a stable key so a sticky keeps its angle across re-renders,
+ * scans and reloads, while neighbouring stickies differ. Always within plus or minus STICKY_MAX_ANGLE.
+ */
+export function stickyAngleForKey(key: string): number {
+    let hash = 2166136261;
+    for (let i = 0; i < key.length; i++) {
+        hash ^= key.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    const unit = (hash >>> 0) / 4294967295;
+    return Math.round((unit * 2 - 1) * STICKY_MAX_ANGLE * 100) / 100;
+}
 
 /**
  * StickyNote, the sticky card: the origin pill and the title on a square of paper with its bottom-right
@@ -51,8 +69,9 @@ export default function StickyNote(props: NoteProps): ReactElement {
         ...note_props,
     };
     const sticky_hue = originHasProject(note.origin) ? hueForOrigin(note.origin) : STICKY_FALLBACK_HUE;
-    // React's style type names no custom properties, so the hue and the drag style go in untyped
-    const card_style: Record<string, unknown> = { ...(provided?.draggableProps?.style as Record<string, unknown> | undefined), '--nt-sticky-hue': sticky_hue };
+    const sticky_angle = stickyAngleForKey(note.stable_id ?? note.headline_raw ?? '');
+    // React's style type names no custom properties, so the hue, the angle and the drag style go in untyped
+    const card_style: Record<string, unknown> = { ...(provided?.draggableProps?.style as Record<string, unknown> | undefined), '--nt-sticky-hue': sticky_hue, '--nt-sticky-angle': `${sticky_angle}deg` };
     return (
         <div className={buildNoteStyles(note, [sticky_styles.stickyNote, ...(note.display_options?.additional_classes ?? [])]).join(' ')}
              id={note.display_options?.id}
@@ -70,6 +89,7 @@ export default function StickyNote(props: NoteProps): ReactElement {
             <div className={sticky_styles.stickyInner}>
                 <MarkdownNoteHeadline note={note} />
             </div>
+            <NoteActionTray note={note} />
         </div>
     );
 }

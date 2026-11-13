@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, act } from '@testing-library/react';
+import { ACTION_TRAY_ATTRIBUTE } from './noteops';
 import { useScrollToCaret } from './viewhooks';
 import { scrollVirtualGroupToNoteId } from './virtualScrollRegistry';
 import type { NoteDisplayOptions, NoteProps } from '../types/NoteProps';
@@ -127,6 +128,22 @@ describe('useScrollToCaret vertical framing against the root (document-level) sc
         render(React.createElement(Harness, { display_options: baseDisplayOptions(), view_id: 'v1' }));
         flushOneFrame();
         expect(scroll_by_spy).toHaveBeenCalledWith({ top: 3284, behavior: 'smooth' });
+    });
+
+    it('frames the note\'s action tray with its ring, so a tray below the card is never cropped', () => {
+        Element.prototype.getBoundingClientRect = jest.fn(function (this: HTMLElement) {
+            if (this.id === 'vv1-n1') { return { top: 4000, bottom: 4040, left: 0, right: 100, width: 100, height: 40, x: 0, y: 4000, toJSON: () => ({}) }; }
+            if (this.id === 'tray') { return { top: 4052, bottom: 4074, left: 70, right: 100, width: 30, height: 22, x: 70, y: 4052, toJSON: () => ({}) }; }
+            return { top: 0, bottom: 5000, left: 0, right: 800, width: 800, height: 5000, x: 0, y: 0, toJSON: () => ({}) };
+        }) as unknown as typeof Element.prototype.getBoundingClientRect;
+        function TrayHarness(): React.ReactElement {
+            useScrollToCaret(baseDisplayOptions(), 'v1', undefined);
+            return React.createElement('div', { id: 'vv1-n1' }, React.createElement('div', { id: 'tray', [ACTION_TRAY_ATTRIBUTE]: '' }));
+        }
+        render(React.createElement(TrayHarness));
+        flushOneFrame();
+        // the tray's bottom (4074) plus the 12px ring clearance, less the 768px viewport
+        expect(scroll_by_spy).toHaveBeenCalledWith({ top: 3318, behavior: 'smooth' });
     });
 });
 

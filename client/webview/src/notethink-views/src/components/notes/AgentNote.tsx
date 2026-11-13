@@ -8,6 +8,7 @@ import { buildNoteStyles } from "../../lib/noteui";
 import { getStandardNoteDataProps, isInternalAttribute, renderMarkdownNoteHeadline } from "../../lib/renderops";
 import type { NoteProps } from "../../types/NoteProps";
 import GenericNoteAttributes from "./GenericNoteAttributes";
+import NoteActionTray from "./NoteActionTray";
 import MarkdownNoteHeadline from "./markdown/MarkdownNoteHeadline";
 import AgentActivityBanner from "./agent/AgentActivityBanner";
 import AgentFileBands from "./agent/AgentFileBands";
@@ -127,6 +128,7 @@ export default function AgentNote(props: NoteProps): React.ReactElement {
                 {/* waits for a completed scan, since crediting a file needs every session's write calls */}
                 {model.sessions.length > 0 && (model.analyser?.state === 'live' || model.has_completed_scan) && <AgentFileBands model={model} unavailable={unavailable} onOpenDiff={handleOpenDiff} expanded={expanded} onToggleExpanded={handleToggleExpanded} pendingExpanded={pending_expanded} onTogglePendingExpanded={handleTogglePendingExpanded} />}
             </div>
+            <NoteActionTray note={note} />
         </div>
     );
 }

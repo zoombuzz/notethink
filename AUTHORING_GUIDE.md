@@ -358,7 +358,7 @@ about.
 | Value | What you get |
 |---|---|
 | `card` | The full card: origin pill, title, attribute chips, body |
-| `sticky` | A sticky: origin pill and title only, on paper with its bottom-right corner curled. The paper takes the colour of the note's project pill, or yellow when the note has no project |
+| `sticky` | A sticky: origin pill and title only, on paper with its bottom-right corner curled, tilted a little and casting a shadow, as if stuck on a board. The paper takes the colour of the note's project pill, or yellow when the note has no project |
 | `auto` | Resolve it rather than pin it (the default) |
 
 Set it on the file root (`#`), alongside the view if you want both:

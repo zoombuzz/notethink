@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import * as l10n from "@vscode/l10n";
 import { ACTIVITY_ARG_MAX_CHARS, type ActivitySession } from "../../../types/AgentActivity";
 import { AGENT_CLOCK_MODE_DEFAULT, agentClockTooltip, factStateFor, formatActivityUsage, formatAgentClock, sessionDisplayName, sessionExpandedByDefault, sessionStateOf, sessionUsageForStory, shortModelId, truncateActivityArg, vendorLabel, vendorMonogram, type ActivityRefusal, type AgentClockMode, type ActivitySessionState, type ActivityStoryKey } from "../../../lib/agentactivityops";
-import AgentChevron from "./AgentChevron";
+import Chevron from "../../Chevron";
 import AgentChildRows from "./AgentChildRows";
 import { agentStateDrawn, agentStateLabel } from "./agentStateLabel";
 import { useAgentClockNow } from "./useAgentClockNow";
@@ -166,7 +166,7 @@ function AgentSessionRow(props: AgentSessionRowProps): React.ReactElement {
                         title={expanded ? l10n.t('Collapse subagents') : l10n.t('Expand subagents')}
                         onClick={(event) => { event.stopPropagation(); setChosenExpanded(!expanded); }}
                     >
-                        <AgentChevron open={expanded} />
+                        <Chevron direction={expanded ? "down" : "right"} />
                     </button>
                 ) : <span className={styles.agentTwisty} aria-hidden={true} />}
                 <button

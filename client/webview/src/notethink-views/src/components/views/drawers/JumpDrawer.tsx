@@ -55,7 +55,7 @@ function JumpDrawer(props: JumpDrawerProps): ReactElement {
     const root_node: DrawerTreeNode = {
         id: 'jump-root',
         label: root_label,
-        glyph: '›',
+        chevron: true,
         expanded: true,
         testId: 'jump-drawer-root',
         title: l10n.t('Return to the current view'),
@@ -65,7 +65,7 @@ function JumpDrawer(props: JumpDrawerProps): ReactElement {
         children: entries.map(entry => ({
             id: entry.path,
             label: entry.label,
-            glyph: entry.kind === 'folder' ? '›' : '',
+            chevron: entry.kind === 'folder',
             kind: entry.kind,
             testId: 'jump-drawer-entry',
             title: entry.path,

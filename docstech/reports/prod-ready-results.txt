@@ -1,22 +1,22 @@
 # Prod-ready Results
-# Version: 0.4.37
-# Date: 2026-11-12T07:27:00Z
-# Tree: d5d91d7 plus the uncommitted batch (modified and untracked paths reviewed)
-# Stories: latest-folder-scan-wins doing -> doing (1 task open); chief-of-staff-pack doing -> doing (1 task open); agent-chevron-duplicate-eval doing -> code-review; watch-restarts-on-config doing -> code-review; coordinator-views doing -> code-review
-# Ship verdict: ✅ Ready to ship: /push-prod will move the three code-review stories to done.md; the two doing stories ship unmoved with their open checks
+# Version: 0.4.42
+# Date: 2026-11-13T08:35:00Z
+# Tree: HEAD 135f34e plus the working tree (73 changed paths, 11 untracked source/test files read)
+# Stories: sticky-board-look, shared-chevron-mark, files-drawer-change-defaults, card-action-tray, coordinator-drawer-vendor: doing -> code-review
+# Ship verdict: Ready to ship: /push-prod will move all five stories to done.md (move rehearsed, exit 0)
 # ---
-Build | ✅ | webpack compiled successfully | fresh
-Lint | ✅ | 0 errors, 1 pre-existing warning (AgentAnalyser.ts runScanOnce max-lines) | fresh
-Project guards | ⏭️ | none for this project | skipped
-Dependency audit | ✅ | pnpm audit --prod --audit-level=high: no known vulnerabilities | fresh
-CODING_STANDARDS | ✅ | mechanical greps clean, inline pass done | fresh
-Exposure | ✅ | 3 findings, all rejected test fixtures in sanitiseops.test.ts; hostname marker removed from the board | fresh
-Jest | ✅ | 3845/3845 (174 files) | fresh (re-run after board edit)
-Playwright | ✅ | 337/337, no flaky, no skips | reused (green at 2026-11-12T07:25:16Z, app tree unchanged)
-Mocha (web host) | ✅ | 40 passes, 0 failures | reused (green stamp over the tree before the comment fix)
-Version bump | ✅ | 0.4.33 -> 0.4.37 | -
+Build | pass | webpack build exit 0 | fresh
+Lint | pass | 0 errors, 2 warnings (max-lines-per-function) | fresh
+Project guards | not applicable | none for notethink | skipped
+Dependency audit | pass | no known vulnerabilities at high or above | fresh
+CODING_STANDARDS | pass | mechanical greps and inline pass clean | fresh
+Exposure | pass | public repo; 1 finding fixed (host alias in a linetag) | fresh
+Fleet fix check | pass | no shared-surface or new-dependency-class hit | fresh
+Jest | pass | 3905/3905 (176 suites) | fresh
+Playwright | pass | 350/350, no flaky, no skipped | fresh (full run before one comment-only edit)
+Version | pass | 0.4.42 | n/a
 # --- Fixed during review ---
-Comments: workflows/chief-of-staff/scripts/move-to-done.mjs header turned from consecutive // lines into one block comment.
-Rejected: sanitiseops.test.ts private address and key-header strings are deliberate test inputs; watch.mjs and move-to-done.mjs console.log is their output channel and is outside lint scope.
+Exposure: removed a workstation host alias from the split-view story's linetag in todo.md.
+Comments: NoteActionTray header comment wrapped and now names the container and root exclusion.
 # --- Open ---
-latest-folder-scan-wins: real-window reload open. chief-of-staff-pack: signed-out check after push open.
+none

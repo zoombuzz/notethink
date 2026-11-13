@@ -1,4 +1,4 @@
-import { emptyActivityUsage, ACTIVITY_VENDOR_CLAUDE_CODE, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef } from '../types/AgentActivity';
+import { emptyActivityUsage, ACTIVITY_VENDOR_ANTIGRAVITY, ACTIVITY_VENDOR_CLAUDE_CODE, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef } from '../types/AgentActivity';
 import type { ActivitySessionState } from './agentanalyserops';
 import type { HashMapOf } from '../types/general';
 import { progressProjectName } from './progressfileops';
@@ -39,6 +39,7 @@ export const REGISTRY_BINDING_STORY_STATUSES = ['doing', 'code-review', 'testing
 // registry vendor names that differ from the slug the vendor display table keys on
 const REGISTRY_VENDOR_SLUGS: Readonly<Record<string, string>> = {
     claude: ACTIVITY_VENDOR_CLAUDE_CODE,
+    agy: ACTIVITY_VENDOR_ANTIGRAVITY,
 };
 
 const REGISTRY_UNKNOWN_VENDOR = 'unknown';

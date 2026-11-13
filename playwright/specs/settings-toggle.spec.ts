@@ -193,6 +193,8 @@ test.describe('Settings Toggle', () => {
         await expect(page.getByTestId('view-settings-button-chevron')).toHaveAttribute('data-direction', 'down');
         await expect(page.getByTestId('card-settings-button-chevron')).toHaveAttribute('data-direction', 'down');
         await expect(page.getByTestId('breadcrumb-leaf-chevron')).toHaveAttribute('data-direction', 'down');
+        // every tab draws the one shared svg mark, not a text glyph
+        await expect(page.getByTestId('view-settings-button-chevron')).toHaveJSProperty('tagName', 'svg');
 
         await settings_tab.click();
         await expect(page.getByTestId('settings-drawer-grid')).toHaveAttribute('data-open', 'true');

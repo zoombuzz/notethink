@@ -194,20 +194,6 @@ button.agentTwisty {
   }
 }
 
-.agentChevron {
-  flex: none;
-  opacity: 0.8;
-  transition: transform 0.1s ease;
-}
-
-.agentChevronOpen {
-  transform: rotate(90deg);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .agentChevron { transition: none; }
-}
-
 .agentRowButton {
   @include agent-row-grid(0px);
   flex: 1 1 auto;

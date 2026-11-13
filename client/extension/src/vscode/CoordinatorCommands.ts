@@ -9,7 +9,7 @@ export const COORDINATOR_MESSAGE_MOVE_MARKER = 'coordinatorMoveMarker';
 export const COORDINATOR_MESSAGE_RESULT = 'coordinatorResult';
 
 // the outcomes a webview request is answered with; the webview owns the copy for each, so only the code crosses
-export const COORDINATOR_SEND_CODES = ['sent', 'unknown_agent', 'bad_message', 'unavailable', 'no_mailbox', 'write_failed'] as const;
+export const COORDINATOR_SEND_CODES = ['sent', 'unknown_agent', 'bad_message', 'bad_vendor', 'unavailable', 'no_mailbox', 'write_failed'] as const;
 export const COORDINATOR_MOVE_CODES = ['moved', 'moved_unsaved', 'unknown_agent', 'no_board', 'bad_position', 'write_failed'] as const;
 
 /**
@@ -31,7 +31,8 @@ export interface CoordinatorLookup {
  *
  * - send: writes one envelope into the agent's inbox, to a temporary name and then renamed, so the agent
  *   never sees half a file. It refuses an agent whose mailbox does not already exist rather than
- *   creating one.
+ *   creating one. A message with `kind: 'vendor'` and a `vendor` name writes a vendor-change envelope
+ *   instead of a free-text request, and is answered as the request `vendor`.
  * - move marker: rewrites the `coord` linetags on the agent's board so its host's marker sits on one
  *   story, through the panel's own edit path, then saves the board unless it already held unsaved edits
  *   of someone's, which a save would otherwise commit.
@@ -53,7 +54,7 @@ export class CoordinatorCommands {
         return false;
     }
 
-    private answer(request: 'send' | 'move', agent: string, code: string): void {
+    private answer(request: 'send' | 'move' | 'vendor', agent: string, code: string): void {
         this.post({ type: COORDINATOR_MESSAGE_RESULT, request, agent, code, ok: code === 'sent' || code === 'moved' || code === 'moved_unsaved' });
     }
 
@@ -62,16 +63,20 @@ export class CoordinatorCommands {
     private async send(e: Record<string, unknown>): Promise<void> {
         const agent = typeof e.agent === 'string' ? e.agent : '';
         const body = typeof e.body === 'string' ? e.body : '';
+        const is_vendor = e.kind === 'vendor';
+        const request = is_vendor ? 'vendor' : 'send';
+        const vendor = typeof e.vendor === 'string' ? e.vendor : '';
         try {
             const found = this.lookup.coordinatorFor(agent);
-            if (!found) { this.answer('send', agent, 'unknown_agent'); return; }
+            if (!found) { this.answer(request, agent, 'unknown_agent'); return; }
             const home = this.lookup.thinkersyncHomeUri();
-            if (!home) { this.answer('send', agent, 'unavailable'); return; }
-            const envelope = buildCoordinatorEnvelope({ agent, machine: found.coordinator.machine, body, now: new Date(), rand_hex: randomHex() });
-            if (!envelope) { this.answer('send', agent, 'bad_message'); return; }
+            if (!home) { this.answer(request, agent, 'unavailable'); return; }
+            const fields = { agent, machine: found.coordinator.machine, now: new Date(), rand_hex: randomHex() };
+            const envelope = is_vendor ? buildCoordinatorEnvelope({ ...fields, kind: 'vendor', vendor }) : buildCoordinatorEnvelope({ ...fields, body });
+            if (!envelope) { this.answer(request, agent, is_vendor ? 'bad_vendor' : 'bad_message'); return; }
             const mailbox_uri = vscode.Uri.joinPath(home, 'mailboxes', agent);
             try { await vscode.workspace.fs.stat(mailbox_uri); }
-            catch { this.answer('send', agent, 'no_mailbox'); return; }
+            catch { this.answer(request, agent, 'no_mailbox'); return; }
             const inbox_uri = vscode.Uri.joinPath(home, ...mailboxInboxSegments(agent));
             await vscode.workspace.fs.createDirectory(inbox_uri);
             const final_uri = vscode.Uri.joinPath(inbox_uri, `${envelope.id}.json`);
@@ -79,10 +84,10 @@ export class CoordinatorCommands {
             await vscode.workspace.fs.writeFile(temp_uri, new TextEncoder().encode(`${JSON.stringify(envelope, null, 2)}\n`));
             await vscode.workspace.fs.rename(temp_uri, final_uri, { overwrite: false });
             writeToLogAtLevel('debug', 'sendToCoordinator', `wrote envelope ${envelope.id} to ${envelope.target}`);
-            this.answer('send', agent, 'sent');
+            this.answer(request, agent, 'sent');
         } catch (err) {
             writeToErrorLog('sendToCoordinator', `failed to write an envelope for ${agent}`, err);
-            this.answer('send', agent, 'write_failed');
+            this.answer(request, agent, 'write_failed');
         }
     }
 

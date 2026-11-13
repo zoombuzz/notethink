@@ -83,7 +83,7 @@ describe('registry vocabulary', () => {
     it('maps the registry vendor onto the display slug and keeps an unknown vendor as its own', () => {
         expect(registryVendorSlug('claude')).toBe('claude-code');
         expect(registryVendorSlug(' Claude ')).toBe('claude-code');
-        expect(registryVendorSlug('agy')).toBe('agy');
+        expect(registryVendorSlug('agy')).toBe('antigravity');
         expect(registryVendorSlug('codex')).toBe('codex');
         expect(registryVendorSlug(undefined)).toBe('unknown');
     });

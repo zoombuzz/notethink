@@ -2862,7 +2862,7 @@ describe('AgentAnalyser agent registry', () => {
 		const sessions = await scan();
 		expect(sessions).toHaveLength(1);
 		expect(sessions[0].root_path).toBe(REPO_ROOT);
-		expect(sessions[0].session).toMatchObject({ vendor: 'agy', registry_name: 'agy-helper', registry_only: true, state: 'idle', registry_story: 'story-a' });
+		expect(sessions[0].session).toMatchObject({ vendor: 'antigravity', registry_name: 'agy-helper', registry_only: true, state: 'idle', registry_story: 'story-a' });
 		const wire = JSON.stringify(sessions);
 		for (const leaked of ['/secret/mailbox', '%3', '1.2.3']) { expect(wire).not.toContain(leaked); }
 	});

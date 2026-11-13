@@ -8,7 +8,7 @@ const DEMO_TODO = 'demo/docstech/users/dev/todo.md';
 const OTHER_TODO = 'other/docstech/users/dev/todo.md';
 
 /*
- * The coordinators listed beside a folder view's boards, driven in the browser against the real bundle
+ * The coordinators listed in the Card drawer of a folder view, under the agent card type, driven in the browser against the real bundle
  * and a synthetic snapshot shaped as the analyser posts it. Jest proves the registry reading, the board
  * parsing, the envelope and the marker rewrite; what only a browser shows is the rows drawn in the right
  * views, the send form writing nothing until Send is pressed, a story card's send action opening the form
@@ -27,7 +27,7 @@ const DEMO_COORDINATOR = {
     root_relative: 'demo', board_doc_path: DEMO_TODO, board_stories: STORIES, marker_after: 1,
 };
 const OTHER_COORDINATOR = {
-    agent: 'coord-other', vendor: 'claude-code', state: 'idle', story: '', version: '', machine: 'host-a', open_convoys: [],
+    agent: 'coord-other', vendor: 'antigravity', state: 'idle', story: '', version: '', machine: 'host-a', open_convoys: [],
     root_relative: 'other', board_doc_path: OTHER_TODO, board_stories: [{ id: 'delta', title: 'Delta story', status: 'doing', convoys: [], operator_steps: [] }], marker_after: 0,
 };
 const ELSEWHERE_COORDINATOR = { ...OTHER_COORDINATOR, agent: 'coord-elsewhere', root_relative: 'elsewhere', board_doc_path: 'elsewhere/docstech/users/dev/todo.md' };
@@ -60,44 +60,117 @@ async function sent(page: Page, type: string): Promise<Array<Record<string, unkn
     return (await getCapturedMessages(page)).filter(message => message.type === type);
 }
 
+async function openCoordinators(page: Page): Promise<void> {
+    await page.getByTestId('card-settings-button').click();
+    await expect(page.getByTestId('card-settings-drawer-grid')).toHaveAttribute('data-open', 'true');
+    await page.getByTestId('card-node-agent').click();
+}
+
 function row(page: Page, agent: string): Locator {
     return page.locator(`[data-testid="coordinator-row"][data-agent="${agent}"]`);
 }
 
-test.describe('Coordinators beside boards', () => {
+test.describe('Coordinators in the Card drawer', () => {
 
     test('a folder view lists each registered coordinator whose repository holds a loaded file, and no other', async ({ page }) => {
         await openBoards(page, ['demo', 'other'], [DEMO_COORDINATOR, OTHER_COORDINATOR, ELSEWHERE_COORDINATOR]);
+        await expect(page.getByTestId('coordinator-panel')).toHaveCount(0);
+        await openCoordinators(page);
         await expect(page.getByTestId('coordinator-row')).toHaveCount(2);
         const demo = row(page, 'coord-demo');
         await expect(demo.getByTestId('coordinator-state')).toHaveText('Working');
         await expect(demo.getByTestId('coordinator-story-now')).toHaveText('On story alpha');
-        await expect(demo.getByTestId('coordinator-version')).toHaveText('Version 1.2.3');
+        await expect(demo.getByTestId('coordinator-vendor-mark')).toHaveText('CC');
+        await expect(demo.getByText(/Version/)).toHaveCount(0);
         await expect(demo.getByTestId('coordinator-convoys')).toHaveText('1 open convoy');
         await expect(row(page, 'coord-other').getByTestId('coordinator-state')).toHaveText('Idle');
+        await expect(row(page, 'coord-other').getByTestId('coordinator-vendor-mark')).toHaveText('AG');
         await expect(row(page, 'coord-elsewhere')).toHaveCount(0);
     });
 
     test('a view open on one repository lists that repository\'s agent alone', async ({ page }) => {
         await openBoards(page, ['demo'], [DEMO_COORDINATOR, OTHER_COORDINATOR]);
+        await openCoordinators(page);
         await expect(page.getByTestId('coordinator-row')).toHaveCount(1);
         await expect(row(page, 'coord-demo')).toBeVisible();
     });
 
     test('draws nothing when no coordinator is registered, though a loaded board has the host asked for activity', async ({ page }) => {
         await openBoards(page, ['demo'], []);
+        await openCoordinators(page);
         await expect(page.getByTestId('coordinator-panel')).toHaveCount(0);
         expect((await sent(page, 'activityDemand')).length).toBeGreaterThan(0);
     });
 
     test('offers only a message and the target line, never a way to start, stop or restart an agent', async ({ page }) => {
         await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+        await openCoordinators(page);
         await expect(row(page, 'coord-demo').getByRole('button')).toHaveText(['Send to agent', 'Target line']);
+    });
+
+    test.describe('the vendor setting', () => {
+        const picker = (page: Page, agent = 'coord-demo'): Locator => row(page, agent).getByTestId('coordinator-vendor-select');
+
+        test('a change asks first, and Cancel sends nothing and keeps the registry\'s vendor', async ({ page }) => {
+            await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+            await openCoordinators(page);
+            await clearCapturedMessages(page);
+            await expect(picker(page)).toHaveValue('claude-code');
+            await picker(page).selectOption('codex');
+            await expect(page.getByTestId('confirm-modal')).toBeVisible();
+            await expect(page.getByTestId('confirm-modal')).toContainText('Ask coord-demo to restart in Codex?');
+            await page.getByTestId('confirm-modal-cancel').click();
+            await expect(page.getByTestId('confirm-modal')).toBeHidden();
+            expect(await sent(page, 'coordinatorSend')).toHaveLength(0);
+            await expect(picker(page)).toHaveValue('claude-code');
+            await expect(page.getByTestId('coordinator-vendor-requested')).toHaveCount(0);
+        });
+
+        test('OK posts one vendor-change request naming the registry\'s spelling and holds it as requested until the registry reports it', async ({ page }) => {
+            await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+            await openCoordinators(page);
+            await clearCapturedMessages(page);
+            await picker(page).selectOption('antigravity');
+            await page.getByTestId('confirm-modal-ok').click();
+            const posted = await sent(page, 'coordinatorSend');
+            expect(posted).toHaveLength(1);
+            expect(posted[0]).toMatchObject({ agent: 'coord-demo', kind: 'vendor', vendor: 'agy' });
+            await expect(page.getByTestId('coordinator-vendor-requested')).toHaveText('Requested: Antigravity');
+            await expect(row(page, 'coord-demo').getByTestId('coordinator-vendor-mark')).toHaveText('CC');
+            await postSnapshot(page, [{ ...DEMO_COORDINATOR, vendor: 'antigravity' }]);
+            await expect(page.getByTestId('coordinator-vendor-requested')).toHaveCount(0);
+            await expect(row(page, 'coord-demo').getByTestId('coordinator-vendor-mark')).toHaveText('AG');
+            await expect(picker(page)).toHaveValue('antigravity');
+        });
+
+        test('a refused request falls back to the registry\'s vendor and says why', async ({ page }) => {
+            await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+            await openCoordinators(page);
+            await picker(page).selectOption('grok');
+            await page.getByTestId('confirm-modal-ok').click();
+            await postResult(page, { request: 'vendor', agent: 'coord-demo', code: 'no_mailbox', ok: false });
+            await expect(picker(page)).toHaveValue('claude-code');
+            await expect(page.getByTestId('coordinator-status')).toHaveText('The agent has no mailbox yet.');
+        });
+
+        test('two coordinators change vendor independently', async ({ page }) => {
+            await openBoards(page, ['demo', 'other'], [DEMO_COORDINATOR, OTHER_COORDINATOR]);
+            await openCoordinators(page);
+            await clearCapturedMessages(page);
+            await picker(page, 'coord-other').selectOption('claude-code');
+            await row(page, 'coord-other').getByTestId('confirm-modal-ok').click();
+            const posted = await sent(page, 'coordinatorSend');
+            expect(posted).toHaveLength(1);
+            expect(posted[0]).toMatchObject({ agent: 'coord-other', kind: 'vendor', vendor: 'claude' });
+            await expect(picker(page)).toHaveValue('claude-code');
+            await expect(row(page, 'coord-demo').getByTestId('coordinator-vendor-requested')).toHaveCount(0);
+        });
     });
 
     test.describe('send to agent', () => {
         test('writes nothing until Send is pressed, then posts one message naming the agent', async ({ page }) => {
             await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+            await openCoordinators(page);
             await clearCapturedMessages(page);
             await page.getByTestId('coordinator-send-toggle').click();
             await expect(page.getByTestId('coordinator-send-submit')).toBeDisabled();
@@ -114,34 +187,77 @@ test.describe('Coordinators beside boards', () => {
 
         test('says why a send did not go', async ({ page }) => {
             await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+            await openCoordinators(page);
             await page.getByTestId('coordinator-send-toggle').click();
             await postResult(page, { request: 'send', agent: 'coord-demo', code: 'no_mailbox', ok: false });
             await expect(page.getByTestId('coordinator-status')).toHaveText('The agent has no mailbox yet.');
         });
 
-        test('a story card\'s send action opens the agent\'s form with the story named, and sends nothing itself', async ({ page }) => {
+        async function highlight(page: Page, title: string): Promise<void> {
+            await page.locator('[role="rowheader"]', { hasText: title }).first().click();
+            await expect(page.getByTestId('note-action-tray')).toHaveCount(1);
+        }
+
+        test('a story card\'s envelope shows only on a highlighted card, and a click on it asks before sending anything', async ({ page }) => {
             await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+            await expect(page.getByTestId('story-send-button')).toHaveCount(0);
+            await highlight(page, 'Beta story');
             await clearCapturedMessages(page);
-            const button = page.getByTestId('story-send-button').first();
+            const button = page.getByTestId('story-send-button');
             await expect(button).toBeVisible();
             await expect(button).toHaveAccessibleName('Send this story to coord-demo');
             await button.click();
-            await expect(page.getByTestId('coordinator-send-text')).toHaveValue(/^About story (alpha|beta|gamma): $/);
+            await expect(page.getByTestId('confirm-modal')).toBeVisible();
+            await expect(page.getByTestId('confirm-modal')).toContainText('Ask coord-demo to pick up story beta and include it in its current batch?');
             expect(await sent(page, 'coordinatorSend')).toHaveLength(0);
         });
 
-        test('a story on no coordinator\'s board has no send action', async ({ page }) => {
+        test('Cancel and Escape send nothing and return focus to the envelope', async ({ page }) => {
+            await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+            await highlight(page, 'Beta story');
+            await clearCapturedMessages(page);
+            const button = page.getByTestId('story-send-button');
+            await button.click();
+            await page.getByTestId('confirm-modal-cancel').click();
+            await expect(page.getByTestId('confirm-modal')).toBeHidden();
+            await expect(button).toBeFocused();
+            await button.click();
+            await page.keyboard.press('Escape');
+            await expect(page.getByTestId('confirm-modal')).toBeHidden();
+            await expect(button).toBeFocused();
+            expect(await sent(page, 'coordinatorSend')).toHaveLength(0);
+        });
+
+        test('OK writes one envelope naming the story and its board, and the tray shows the host\'s answer', async ({ page }) => {
+            await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+            await highlight(page, 'Beta story');
+            await clearCapturedMessages(page);
+            await page.getByTestId('story-send-button').click();
+            await page.getByTestId('confirm-modal-ok').click();
+            const posted = await sent(page, 'coordinatorSend');
+            expect(posted).toHaveLength(1);
+            expect(posted[0]).toMatchObject({ agent: 'coord-demo', body: `Please pick up story beta from ${DEMO_TODO} and include it in your current batch.` });
+            await postResult(page, { request: 'send', agent: 'coord-demo', code: 'no_mailbox', ok: false });
+            await expect(page.getByTestId('note-action-tray-status')).toHaveText('The agent has no mailbox yet.');
+        });
+
+        test('a story on no coordinator\'s board has the pencil but no envelope', async ({ page }) => {
             await openBoards(page, ['demo', 'other'], [DEMO_COORDINATOR]);
-            await expect(page.getByTestId('story-send-button')).toHaveCount(3);
+            await highlight(page, 'Delta story');
+            await expect(page.getByTestId('note-edit-button')).toBeVisible();
+            await expect(page.getByTestId('story-send-button')).toHaveCount(0);
         });
     });
 
     test.describe('the target line', () => {
         async function openLine(page: Page): Promise<Locator> {
             await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
+            await openCoordinators(page);
             await page.getByTestId('coordinator-target-toggle').click();
             const line = page.getByTestId('coordinator-target-line');
             await expect(line).toBeVisible();
+            // the drawer body scrolls, so the board is brought wholly into view before a pointer measures it
+            await line.scrollIntoViewIfNeeded();
             await clearCapturedMessages(page);
             return line;
         }

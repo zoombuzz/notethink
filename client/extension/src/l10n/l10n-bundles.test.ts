@@ -34,8 +34,8 @@ const ALLOWED_SAME_EVERY_LOCALE = [
 
 const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
     de: [
-        // "Version" is the German word; es and it differ
-        'Version {0}',
+        // "OK" is the accepted confirm button label in German; es uses "Aceptar"
+        'OK',
         // "Position" is the German word; es/fr/it all differ
         'Position:',
         // "Name" is the German word; es/fr/it all differ
@@ -54,8 +54,8 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         'Token',
     ],
     fr: [
-        // "Version" is the French word; es and it differ
-        'Version {0}',
+        // "OK" is the accepted confirm button label in French; es uses "Aceptar"
+        'OK',
         // "Collisions" is the French word; de/es/it all differ
         'Collisions',
         // "Orientation" is the French word; de/es/it all differ
@@ -66,6 +66,8 @@ const ALLOWED_SAME_BY_LOCALE: Record<string, Array<string>> = {
         'Session',
     ],
     it: [
+        // "OK" is the accepted confirm button label in Italian; es uses "Aceptar"
+        'OK',
         // "file" is the Italian word for a file, as in English; de/es/fr all differ
         '1 file',
         // "Token" is the Italian loanword for a credential token; fr uses "Jeton"

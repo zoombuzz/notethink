@@ -25,6 +25,10 @@ export const COORDINATOR_AGENT_KIND = 'coordinator';
 // an agent or machine name is a mailbox path segment and half an envelope target, so it is pattern-checked first
 const SAFE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i;
 
+// the vendor names a coordinator's registry entry writes, which a vendor-change envelope names its target by
+export const COORDINATOR_VENDOR_NAMES = ['claude', 'agy', 'codex', 'grok'] as const;
+export type CoordinatorVendorName = typeof COORDINATOR_VENDOR_NAMES[number];
+
 // the longest message a send carries, so a pasted log cannot fill an inbox
 export const COORDINATOR_SEND_BODY_MAX_CHARS = 8000;
 
@@ -63,13 +67,13 @@ export interface CoordinatorTextChange {
 }
 
 /**
- * The fields of an envelope NoteThink writes, in thinkersync's version 0 layout.
+ * The fields every envelope NoteThink writes carries, in thinkersync's version 0 layout.
  * - sender / sender_kind: who sent it; a send here is the operator's own explicit action
  * - origin_machine: the machine the send was made from, which is the agent's own machine, since the mailbox is read from the host serving the workspace
  * - target: `<agent>@<machine>`
  * - task_id: the envelope's own id, since a send starts a new task
  */
-export interface CoordinatorEnvelope {
+interface CoordinatorEnvelopeBase {
     v: typeof ENVELOPE_VERSION;
     id: string;
     sender: string;
@@ -78,10 +82,27 @@ export interface CoordinatorEnvelope {
     target: string;
     task_id: string;
     reply_to: string;
-    kind: 'request';
     state: 'submitted';
-    body: string;
     created_at: string;
+}
+
+/** a free-text request, whose body is the message as typed */
+export interface CoordinatorRequestEnvelope extends CoordinatorEnvelopeBase {
+    kind: 'request';
+    body: string;
+}
+
+/** a vendor change, whose body names the vendor as the registry spells it */
+export interface CoordinatorVendorEnvelope extends CoordinatorEnvelopeBase {
+    kind: 'vendor';
+    body: { vendor: CoordinatorVendorName };
+}
+
+export type CoordinatorEnvelope = CoordinatorRequestEnvelope | CoordinatorVendorEnvelope;
+
+/** whether a name is a vendor a coordinator can be asked to change to */
+export function isCoordinatorVendorName(name: unknown): name is CoordinatorVendorName {
+    return typeof name === 'string' && (COORDINATOR_VENDOR_NAMES as ReadonlyArray<string>).includes(name);
 }
 
 /** whether a name is safe to use as a mailbox directory and an envelope target half */
@@ -250,17 +271,26 @@ export function compactStamp(now: Date): string {
 }
 
 /**
- * The envelope that asks a coordinator for something, or undefined when the agent or machine is not
- * safe to address or the message is empty or over the bound. The message is carried as typed, minus
- * surrounding whitespace.
+ * The fields of an envelope to build. A request carries a message; a vendor change carries the vendor
+ * name as the registry spells it.
  * - rand_hex: the id's random suffix, six hex digits
  */
-export function buildCoordinatorEnvelope(fields: { agent: string; machine: string; body: string; now: Date; rand_hex: string }): CoordinatorEnvelope | undefined {
-    const body = fields.body.trim();
-    if (!isSafeCoordinatorName(fields.agent) || !isSafeCoordinatorName(fields.machine)) { return undefined; }
-    if (body.length === 0 || body.length > COORDINATOR_SEND_BODY_MAX_CHARS || !/^[0-9a-f]{6}$/.test(fields.rand_hex)) { return undefined; }
+export type CoordinatorEnvelopeFields = { agent: string; machine: string; now: Date; rand_hex: string } & (
+    | { kind?: 'request'; body: string }
+    | { kind: 'vendor'; vendor: string }
+);
+
+/**
+ * The envelope that asks a coordinator for something, or undefined when the agent or machine is not
+ * safe to address, the random suffix is malformed, a request's message is empty or over the bound, or a
+ * vendor change names a vendor outside COORDINATOR_VENDOR_NAMES. A request's message is carried as
+ * typed, minus surrounding whitespace. A vendor change is the envelope kind `vendor` with the body
+ * `{ "vendor": "<name>" }`; the receiving coordinator treats it as an update.
+ */
+export function buildCoordinatorEnvelope(fields: CoordinatorEnvelopeFields): CoordinatorEnvelope | undefined {
+    if (!isSafeCoordinatorName(fields.agent) || !isSafeCoordinatorName(fields.machine) || !/^[0-9a-f]{6}$/.test(fields.rand_hex)) { return undefined; }
     const id = `${compactStamp(fields.now)}-${fields.rand_hex}`;
-    return {
+    const base: CoordinatorEnvelopeBase = {
         v: ENVELOPE_VERSION,
         id,
         sender: ENVELOPE_SENDER,
@@ -269,9 +299,14 @@ export function buildCoordinatorEnvelope(fields: { agent: string; machine: strin
         target: `${fields.agent}@${fields.machine}`,
         task_id: id,
         reply_to: '',
-        kind: 'request',
         state: 'submitted',
-        body,
         created_at: fields.now.toISOString().replace(/\.\d+Z$/, 'Z'),
     };
+    if (fields.kind === 'vendor') {
+        if (!isCoordinatorVendorName(fields.vendor)) { return undefined; }
+        return { ...base, kind: 'vendor', body: { vendor: fields.vendor } };
+    }
+    const body = fields.body.trim();
+    if (body.length === 0 || body.length > COORDINATOR_SEND_BODY_MAX_CHARS) { return undefined; }
+    return { ...base, kind: 'request', body };
 }

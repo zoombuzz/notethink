@@ -15,7 +15,7 @@ function buildRegistryNodes(parent_id: string | undefined, on_select: (node_id: 
         return {
             id: node.id,
             label: node.label,
-            glyph: children.length > 0 ? '›' : '',
+            chevron: children.length > 0,
             expanded: children.length > 0 ? true : undefined,
             kind: node.kind,
             testId: `view-tree-${node.id}`,
@@ -127,5 +127,18 @@ describe('DrawerTree', () => {
         expect(screen.getByTestId('view-tree-document')).toHaveAttribute('data-kind', 'concrete');
         expect(screen.getByTestId('view-tree-root').closest('li')).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByTestId('view-tree-kanban').closest('li')).not.toHaveAttribute('aria-expanded');
+    });
+
+    it('draws the shared chevron on a container row, turned down while expanded, and a blank slot on a leaf', () => {
+        render(<DrawerTree nodes={buildRegistryNodes(undefined, jest.fn())} testId="view-tree" />);
+        const root_chevron = screen.getByTestId('view-tree-root').querySelector('svg');
+        expect(root_chevron).not.toBeNull();
+        expect(root_chevron).toHaveAttribute('data-direction', 'down');
+        expect(screen.getByTestId('view-tree-kanban').querySelector('svg')).toBeNull();
+    });
+
+    it('points a collapsed container chevron right', () => {
+        render(<DrawerTree nodes={[{ id: 'closed', label: 'Closed', chevron: true, expanded: false, testId: 'closed-row' }]} />);
+        expect(screen.getByTestId('closed-row').querySelector('svg')).toHaveAttribute('data-direction', 'right');
     });
 });

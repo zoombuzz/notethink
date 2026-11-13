@@ -1,6 +1,7 @@
 import Debug from "debug";
 import React from "react";
 import type { ReactElement, ReactNode } from "react";
+import Chevron from "../../Chevron";
 import styles from "../../ViewRenderer.module.scss";
 
 const debug = Debug("nodejs:notethink-views:DrawerTree");
@@ -9,8 +10,8 @@ const debug = Debug("nodejs:notethink-views:DrawerTree");
  * One row of a drawer tree, and the subtree hanging off it.
  * - id: stable identity for the row; the React key and the fallback data-testid
  * - label: the row's visible content, already localised by the caller
- * - glyph: the character in the leading twisty slot; the default blank keeps labels aligned on rows with no chevron
- * - expanded: rotates the glyph to point down and publishes aria-expanded; omit on a row that is not a container
+ * - chevron: draws the shared chevron in the leading twisty slot; the blank slot of a row without one keeps labels aligned
+ * - expanded: turns the chevron to point down and publishes aria-expanded; omit on a row that is not a container
  * - kind: written through as data-kind so a caller can discriminate rows without a per-row testid
  * - testId / title / ariaLabel: passed to the row button verbatim
  * - current: the row the caller is showing; tints it and publishes aria-selected
@@ -23,7 +24,7 @@ const debug = Debug("nodejs:notethink-views:DrawerTree");
 export interface DrawerTreeNode {
     id: string;
     label: ReactNode;
-    glyph?: string;
+    chevron?: boolean;
     expanded?: boolean;
     kind?: string;
     testId?: string;
@@ -64,7 +65,6 @@ function DrawerTreeItem(props: DrawerTreeItemProps): ReactElement {
     const link_classes = [styles.drawerLink, props.depth === 0 ? styles.drawerTreeRoot : styles.drawerTreeEntry];
     if (node.disabled) { link_classes.push(styles.drawerTreeDimmed); }
     const row_classes = node.current ? `${styles.drawerTreeRow} ${styles.drawerTreeRowCurrent}` : styles.drawerTreeRow;
-    const glyph_classes = node.expanded ? `${styles.drawerTreeGlyph} ${styles.drawerTreeGlyphOpen}` : styles.drawerTreeGlyph;
     const has_children = (node.children?.length ?? 0) > 0;
     return (
         <li role="treeitem" aria-expanded={node.expanded} aria-selected={node.current}>
@@ -79,7 +79,7 @@ function DrawerTreeItem(props: DrawerTreeItemProps): ReactElement {
                     disabled={node.disabled}
                     onClick={node.onSelect}
                 >
-                    <span className={glyph_classes}>{node.glyph ?? ''}</span>
+                    <span className={styles.drawerTreeGlyph}>{node.chevron && <Chevron direction={node.expanded ? 'down' : 'right'} />}</span>
                     <span className={styles.drawerTreeLabel}>{node.label}</span>
                 </button>
                 {node.trailing !== undefined && (
@@ -98,7 +98,7 @@ function DrawerTreeItem(props: DrawerTreeItemProps): ReactElement {
 }
 
 /**
- * The shared drawer tree: a recursive glyph + indent + label renderer over a plain node list, used by
+ * The shared drawer tree: a recursive chevron + indent + label renderer over a plain node list, used by
  * the jump drawer's folder tree and by the view settings tree. It owns presentation only - selection
  * marks, dismissal, and what a click means all arrive per node from the caller, which is what lets the
  * jump tree dismiss on every click while the settings tree stays open.

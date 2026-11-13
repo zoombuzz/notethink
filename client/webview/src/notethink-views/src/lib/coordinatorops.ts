@@ -1,6 +1,6 @@
 import * as l10n from "@vscode/l10n";
 import { COORDINATOR_RESULT_MESSAGE_TYPE } from "./agentactivityops";
-import type { ActivityCoordinator } from "../types/AgentActivity";
+import { ACTIVITY_VENDOR_ANTIGRAVITY, ACTIVITY_VENDOR_CLAUDE_CODE, ACTIVITY_VENDOR_DISPLAY, type ActivityCoordinator } from "../types/AgentActivity";
 
 /**
  * Coordinators beside boards: the webview's pure half. Which registered coordinators a folder view
@@ -15,12 +15,12 @@ const BOARD_FILE_PATTERN = /(^|\/)docstech\/users\/[^/]+\/todo\.md$/;
 
 /**
  * CoordinatorResult is the host's answer to a send or a marker move.
- * - request: which of the two it answers
+ * - request: which of the three it answers: a free-text send, a marker move or a vendor change
  * - code: the machine-readable outcome, since the copy belongs to the webview
  * - seq: counted by the store as each answer lands, so two identical answers in a row still read as two
  */
 export interface CoordinatorResult {
-    request: 'send' | 'move';
+    request: 'send' | 'move' | 'vendor';
     agent: string;
     code: string;
     ok: boolean;
@@ -84,19 +84,28 @@ export function convoyCountLabel(count: number): string {
     return count === 1 ? l10n.t('1 open convoy') : l10n.t('{0} open convoys', count);
 }
 
+function coordinatorFailureMessage(request: CoordinatorResult['request']): string {
+    switch (request) {
+        case 'send': return l10n.t('The message could not be written.');
+        case 'vendor': return l10n.t('The vendor change could not be sent.');
+        default: return l10n.t('The board could not be changed.');
+    }
+}
+
 /** what to tell the user about an answer, undefined when there is nothing to say (a marker that moved, which the line itself shows) */
 export function coordinatorResultMessage(result: CoordinatorResult): string | undefined {
     switch (result.code) {
-        case 'sent': return l10n.t('Sent to {0}.', result.agent);
+        case 'sent': return result.request === 'vendor' ? l10n.t('Asked {0} to change vendor.', result.agent) : l10n.t('Sent to {0}.', result.agent);
         case 'moved': return undefined;
         case 'moved_unsaved': return l10n.t('Moved, but the board has other unsaved edits, so it is not saved yet.');
         case 'unknown_agent': return l10n.t('That agent is no longer listed.');
         case 'bad_message': return l10n.t('Write a message first.');
+        case 'bad_vendor': return l10n.t('That is not a vendor a coordinator can change to.');
         case 'unavailable': return l10n.t("This host cannot reach the agent's mailbox.");
         case 'no_mailbox': return l10n.t('The agent has no mailbox yet.');
         case 'no_board': return l10n.t('This agent has no board here.');
         case 'bad_position': return l10n.t('That position is not on the board.');
-        default: return result.request === 'send' ? l10n.t('The message could not be written.') : l10n.t('The board could not be changed.');
+        default: return coordinatorFailureMessage(result.request);
     }
 }
 
@@ -105,7 +114,22 @@ export function parseCoordinatorResult(message: unknown): CoordinatorResult | un
     if (message === null || typeof message !== 'object') { return undefined; }
     const envelope = message as Record<string, unknown>;
     if (envelope.type !== COORDINATOR_RESULT_MESSAGE_TYPE) { return undefined; }
-    const request = envelope.request === 'send' || envelope.request === 'move' ? envelope.request : undefined;
+    const request = envelope.request === 'send' || envelope.request === 'move' || envelope.request === 'vendor' ? envelope.request : undefined;
     if (!request || typeof envelope.agent !== 'string' || typeof envelope.code !== 'string') { return undefined; }
     return { request, agent: envelope.agent, code: envelope.code, ok: envelope.ok === true };
+}
+
+/** the vendors a coordinator can be asked to change to, as the display table keys them */
+export const COORDINATOR_VENDOR_OPTIONS: ReadonlyArray<string> = Object.keys(ACTIVITY_VENDOR_DISPLAY);
+
+/**
+ * A display vendor as the registry spells it, which is the name a vendor-change envelope carries:
+ * `claude-code` is `claude` and `antigravity` is `agy`, and every other vendor is spelled the same.
+ */
+export function registryVendorName(vendor: string): string {
+    switch (vendor) {
+        case ACTIVITY_VENDOR_CLAUDE_CODE: return 'claude';
+        case ACTIVITY_VENDOR_ANTIGRAVITY: return 'agy';
+        default: return vendor;
+    }
 }

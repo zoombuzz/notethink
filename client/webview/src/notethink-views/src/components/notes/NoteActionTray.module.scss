@@ -1,0 +1,38 @@
+// the tray hangs below the card's bottom-right corner, past the highlight ring: the ring's offset (up to 8px) plus its 2px width, then a gap
+.tray {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--vscode-focusBorder);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--vscode-focusBorder), transparent 80%);
+  }
+
+  svg { width: 16px; height: 16px; }
+}
+
+.answer {
+  max-width: 22em;
+  margin-right: 6px;
+  font-size: 12px;
+  color: var(--vscode-foreground);
+}

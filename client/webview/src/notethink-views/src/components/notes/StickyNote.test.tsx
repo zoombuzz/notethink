@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import StickyNote, { STICKY_FALLBACK_HUE } from './StickyNote';
+import StickyNote, { STICKY_FALLBACK_HUE, STICKY_MAX_ANGLE, stickyAngleForKey } from './StickyNote';
 import { hueForOrigin } from '../../lib/originops';
 import type { NoteOrigin, NoteProps } from '../../types/NoteProps';
 
@@ -132,5 +132,30 @@ describe('StickyNote', () => {
     it('clears the group card surface through its own class rather than any group rule', () => {
         const { container } = render(<StickyNote {...makeNote()} />);
         expect(container.querySelector('[data-card-type="sticky"]')).toHaveClass('stickyNote');
+    });
+});
+
+describe('stickyAngleForKey', () => {
+    it('gives one key the same angle every time', () => {
+        expect(stickyAngleForKey('note-abc')).toBe(stickyAngleForKey('note-abc'));
+    });
+
+    it('spreads different keys across different angles', () => {
+        const angles = new Set(Array.from({ length: 40 }, (_, i) => stickyAngleForKey(`note-${i}`)));
+        expect(angles.size).toBeGreaterThan(20);
+    });
+
+    it('stays inside the tilt range, and reaches both signs', () => {
+        const angles = Array.from({ length: 200 }, (_, i) => stickyAngleForKey(`story-${i}`));
+        expect(angles.every(a => Math.abs(a) <= STICKY_MAX_ANGLE)).toBe(true);
+        expect(angles.some(a => a < 0)).toBe(true);
+        expect(angles.some(a => a > 0)).toBe(true);
+    });
+
+    it('is carried on the card as an inline custom property, not as a rotation of the card', () => {
+        const { container } = render(<StickyNote {...makeNote({ stable_id: 'note-xyz' })} />);
+        const card = container.querySelector('[data-card-type="sticky"]') as HTMLElement;
+        expect(card.style.getPropertyValue('--nt-sticky-angle')).toBe(`${stickyAngleForKey('note-xyz')}deg`);
+        expect(card.style.transform).toBe('');
     });
 });

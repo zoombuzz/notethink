@@ -6,6 +6,7 @@ import {
     CARD_AUTO,
     CARD_REGISTRY,
     cardChainOf,
+    AGENT_CARD_TYPE,
     cardSettingWriteFor,
     childCardNodes,
     getCardNode,
@@ -19,6 +20,7 @@ import styles from "../../ViewRenderer.module.scss";
 import SettingsRow from "../SettingsRow";
 import { viewTypeLabel } from "../viewTypeLabel";
 import { CARD_SETTING_ROWS, cardRowsForNode, divergedCountLabel, orderRowsByOwner, settingRowLabel, type SettingRowDef, type SettingRowValues } from "../settingRows";
+import CoordinatorPanel from "../coordinators/CoordinatorPanel";
 import DrawerTree, { type DrawerTreeNode } from "./DrawerTree";
 
 const debug = Debug("nodejs:notethink-views:SettingsCardDrawer");
@@ -41,7 +43,13 @@ const debug = Debug("nodejs:notethink-views:SettingsCardDrawer");
  * - diverged: the cascade keys differing from their saved default, which is what marks a row M
  * - resolvedCardType: the concrete card the notes currently draw as, which is where the highlight starts
  * - cardTypeSelection: the persisted choice the radios reflect, `auto` when nothing is pinned
+ * - coordinators: set only in a folder view holding a story board, and only while the drawer is open; the agent card type then lists the registered coordinators under its settings
  */
+export interface SettingsCardCoordinators {
+    loaded_files: ReadonlyArray<string> | undefined;
+    post_message: ((message: Record<string, unknown>) => void) | undefined;
+}
+
 export interface SettingsCardDrawerProps {
     viewId: string;
     settings: SettingRowValues;
@@ -50,6 +58,7 @@ export interface SettingsCardDrawerProps {
     cardTypeSelection: string;
     onCardTypeChange: (card_type: string) => void;
     onSettingChange: (key: SettingsCascadeKey | 'cards', value: unknown) => void;
+    coordinators?: SettingsCardCoordinators;
 }
 
 /**
@@ -172,7 +181,7 @@ function buildCardTreeNodes(parent_id: string | undefined, ctx: CardTreeContext)
             id: node.id,
             testId: `card-node-${node.id}`,
             label: cardNodeLabel(node),
-            glyph: children.length > 0 ? '›' : '',
+            chevron: children.length > 0,
             expanded: children.length > 0 ? true : undefined,
             kind: node.selectable ? 'selectable' : 'abstract',
             current: node.id === ctx.selected_node,
@@ -343,6 +352,9 @@ function SettingsCardDrawer(props: SettingsCardDrawerProps): React.ReactElement 
                         onRowChange={handle_row_change}
                     />
                     <DivergedCount count={diverged_count} />
+                    {props.coordinators && selected_node === AGENT_CARD_TYPE && (
+                        <CoordinatorPanel loaded_files={props.coordinators.loaded_files} post_message={props.coordinators.post_message} />
+                    )}
                 </div>
             </div>
         </div>

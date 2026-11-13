@@ -1,22 +1,24 @@
 # Prod-ready Results
-# Version: 0.4.42
-# Date: 2026-11-13T08:35:00Z
-# Tree: HEAD 135f34e plus the working tree (73 changed paths, 11 untracked source/test files read)
-# Stories: sticky-board-look, shared-chevron-mark, files-drawer-change-defaults, card-action-tray, coordinator-drawer-vendor: doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move all five stories to done.md (move rehearsed, exit 0)
+# Version: 0.4.46
+# Date: 2026-11-13T10:15:00Z
+# Tree: HEAD a7f0d9f plus the working tree (55 changed paths, 17 untracked source, test and fixture files read)
+# Stories: title-link-linetags, windowed-column-edited-card, virtual-caret-spike, split-view: doing -> code-review
+# Ship verdict: Ready to ship: /push-prod will move all four stories to done.md (move rehearsed, exit 0)
 # ---
-Build | pass | webpack build exit 0 | fresh
-Lint | pass | 0 errors, 2 warnings (max-lines-per-function) | fresh
+Build | pass | webpack and rollup exit 0 (inside pnpm run check) | fresh
+Lint | pass | 0 errors, 2 warnings (max-lines-per-function in files outside this batch) | fresh
 Project guards | not applicable | none for notethink | skipped
 Dependency audit | pass | no known vulnerabilities at high or above | fresh
 CODING_STANDARDS | pass | mechanical greps and inline pass clean | fresh
-Exposure | pass | public repo; 1 finding fixed (host alias in a linetag) | fresh
+Exposure | pass | public repo: scan found one marker (a coord host linetag on split-view), removed; reading of docstech, README and fixtures clean | fresh
 Fleet fix check | pass | no shared-surface or new-dependency-class hit | fresh
-Jest | pass | 3905/3905 (176 suites) | fresh
-Playwright | pass | 350/350, no flaky, no skipped | fresh (full run before one comment-only edit)
-Version | pass | 0.4.42 | n/a
+Jest | pass | 4006/4006 passed (182 suites) | fresh
+Mocha host suite | pass | 43 passed, 0 failed | fresh
+Playwright | pass | 365/365 passed, 0 flaky, 0 skipped | fresh
+Split view walk | pass | kanban board beside document in the harness: open, resize, reload and close covered by split-view.spec.ts; screenshot reviewed and deleted | fresh
+Story-state advance | pass | 4 stories doing -> code-review, move rehearsed for each | fresh
+Version bump | pass | 0.4.46 (HEAD is 0.4.42) | fresh
 # --- Fixed during review ---
-Exposure: removed a workstation host alias from the split-view story's linetag in todo.md.
-Comments: NoteActionTray header comment wrapped and now names the container and root exclusion.
+Exposure: removed the coordinator-host linetag from the split-view heading in todo.md.
 # --- Open ---
-none
+Two open question lines on virtual-caret-spike and one on card-action-tray are deliberate operator records.

@@ -256,6 +256,15 @@ describe('useViewToolbar view-type dropdown (parity with the integration-mode dr
         expect(post_message).toHaveBeenCalledWith({ type: 'updateSetting', setting: 'views', value: { sets: [{ node_id: 'root', key: 'viewType', value: 'kanban' }] } });
     });
 
+    it('handle_view_type_change on the second pane retypes that pane alone, with no cascade write that would retype the first', () => {
+        const { handlers, set_view_managed_state, post_message } = makeHandlers();
+        const props = makeProps({ id: '__pane2__' });
+        const { result } = renderHook(() => useViewToolbar(props, handlers, props.display_options!, []));
+        act(() => { result.current.handle_view_type_change('line'); });
+        expect(set_view_managed_state).toHaveBeenCalledWith([{ id: '__pane2__', type: 'line' }]);
+        expect(post_message).not.toHaveBeenCalled();
+    });
+
     it('handle_setting_change posts one updateSetting for the key it was handed, whatever node owns it', () => {
         const { handlers, set_view_managed_state, post_message } = makeHandlers();
         const props = makeProps();

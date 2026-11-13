@@ -54,8 +54,7 @@ export interface ViewContext {
 }
 
 /**
- * Assembles the per-render view context: the cascaded display_options (global defaults -> ancestor
- * view props -> own props), the parent note that frames this view, the sorted set of notes visible
+ * Assembles the per-render view context: the cascaded display_options (global defaults -> own props), the parent note that frames this view, the sorted set of notes visible
  * within it, and the focused/selected note derivations driven by the editor selection. display_options
  * is enriched in place (level, focused/selected seqs, caret offset) to match the documented shape
  * consumed by the concrete views.
@@ -89,7 +88,7 @@ export function useViewContext(props: ViewProps): ViewContext {
         editor_hold_ref.current = undefined;
     }
     const editor_held = editor_hold_ref.current !== undefined;
-    // last-resort defaults before the first settingsCascade lands; ancestor views override in tree order
+    // last-resort defaults before the first settingsCascade lands
     const settings = useStableSettings({
         showLineNumbers: false,
         watchUnopenedFilesInViewer: true,
@@ -97,9 +96,6 @@ export function useViewContext(props: ViewProps): ViewContext {
         openNewEditorIfNoneOpen: false,
         scrollNoteIntoView: true,
         autoExpandFocusedNote: false,
-        ...props.parent_view?.parent_view?.parent_view?.display_options?.settings,
-        ...props.parent_view?.parent_view?.display_options?.settings,
-        ...props.parent_view?.display_options?.settings,
         ...props.display_options?.settings,
     });
     const display_options: NoteDisplayOptions = {

@@ -50,4 +50,22 @@ describe('FolderTreeComposer', () => {
 
         expect(captured_props[captured_props.length - 1].note_count).toBe(1);
     });
+    it('renders one pane, then a second over the same merged tree once the second pane has an entry', () => {
+        const docs: HashMapOf<Doc> = { 'doc-1': withParsedContent(textOnlyDoc()) };
+        const view_states = { '__folder__': { type: 'kanban' }, '__pane2__': { type: 'document', display_options: { split_ratio: 0.3 } } };
+        const { rerender, queryByTestId } = render(<FolderTreeComposer docs={docs} integration_path={INTEGRATION_PATH} props={buildProps()} />);
+        expect(captured_props.map(p => p.id)).toEqual(['__folder__']);
+        expect(queryByTestId('split-handle')).toBeNull();
+
+        captured_props.length = 0;
+        rerender(<FolderTreeComposer docs={docs} integration_path={INTEGRATION_PATH} props={buildProps({ viewStates: view_states })} />);
+        const first = captured_props.find(p => p.id === '__folder__');
+        const second = captured_props.find(p => p.id === '__pane2__');
+        expect(first?.type).toBe('kanban');
+        expect(second?.type).toBe('document');
+        // one merge serves both panes, so they hold the identical note list
+        expect(second?.notes).toBe(first?.notes);
+        expect(second?.display_options?.integration_mode).toBe('folder');
+        expect(second?.handlers?.onNavigationCommand).toBeUndefined();
+    });
 });

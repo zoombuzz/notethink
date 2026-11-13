@@ -255,5 +255,8 @@
   "Ask {0} to restart in {1}?": "¿Pedir a {0} que se reinicie con {1}?",
   "That is not a vendor a coordinator can change to.": "Un coordinador no puede cambiar a ese proveedor.",
   "Asked {0} to change vendor.": "Se pidió a {0} que cambiara de proveedor.",
-  "The vendor change could not be sent.": "No se pudo enviar el cambio de proveedor."
+  "The vendor change could not be sent.": "No se pudo enviar el cambio de proveedor.",
+  "Open a second pane": "Abrir un segundo panel",
+  "Close this pane": "Cerrar este panel",
+  "Resize panes": "Cambiar el tamaño de los paneles"
 }

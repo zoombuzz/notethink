@@ -18,6 +18,7 @@ Then open any `.md` file, right-click it and choose **Open With... -> NoteThink*
 - **Kanban and Line boards**: group stories by status, assignee, or any attribute you author - drag a card to rewrite its status (or grouping attribute) linetag in the file
 - **Group order**: drag the groups into your own order, or let the board order them by when their cards last changed (in either direction), alphabetically, or by card count
 - **Document view**: the same file read top to bottom, nested and structured
+- **Split view**: open a second pane beside the first from the toolbar, such as a Document beside a Kanban board, each with its own toolbar and scroll; drag the handle between them to resize, and both panes and the split survive a reload
 - **Folder mode**: aggregate every markdown file in a folder into one board
 - **Live Updates**: edit the file in the normal text editor and the view updates in place, debounced
 - **Agent activity**: see which AI coding agents (Claude Code, Codex, Grok, and any other vendor registered with thinkersync) are working on which story, live, on desktop - including a remote window, where it reads the sessions on the host serving the workspace

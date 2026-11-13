@@ -1,6 +1,45 @@
 # Todo [](?nt_view=kanban)
 
 
+### Links in a card title survive linetag parsing [](?id=title-link-linetags&status=code-review)
+
+A markdown link in a heading, such as `## Read [the guide](guide.md) first`, should render as a title with a working link. Today the linetag parser takes the first `[` of the headline as the start of the linetags, so the link and the text after it vanish from the card title.
+
++ source: found by [[virtual-caret-spike]] while mapping rendered titles to source offsets
++ background
+  + `findLineTags` in `client/webview/src/notethink-views/src/lib/linetagops.ts` sets the linetags start at the first `[` of the headline
+  + linetags are the trailing `[](?key=value)` links; an ordinary link has link text and a target that is not a `?` query
++ decision: reproduced; `findLineTags` now cuts its greedy match to the first `[text](?...)` link (link text allowed), keeping a bracket group's own `(`; the virtual caret and `titleEndOffset` derive from `linetags_from`, so they agree without code change
++ [X] reproduce with a Jest case in `linetagops.test.ts`: a headline with a link and no linetags, and one with a link followed by linetags
++ [X] make `findLineTags` start at the first trailing linetag link only, so ordinary links stay in the title
++ [X] check `titleEndOffset` and the virtual caret's title mapping still agree with the new start, and extend their tests for a linked title
++ [X] add a Playwright check that a card whose heading holds a link shows the link text and the text after it
++ [X] bump the patch version
+
+
+### Windowed column keeps an edited card mounted [](?id=windowed-column-edited-card&status=code-review)
+
+On a 200-file board, a card edited a few times in a row stopped being mounted by its windowed kanban column: the note stayed in the data, but its headline left the DOM. The cause is not established.
+
++ source: found by [[virtual-caret-spike]] while measuring relayed edits on `virtual-caret-relay-folder-200`
++ builds on: the windowed columns from the `kanban-virtualized-columns` story in `done.md`
++ [X] reproduce with ordinary `editText` edits to one card on a 200-file folder board (no caret), with a Playwright or perf-harness check that the card's headline stays in the DOM
+  + reproduces without the virtual caret, but only after the card has been clicked: `playwright/specs/windowed-edited-card.spec.ts` posts 200 files, clicks the first card, then re-sends its file 12 times with the headline growing by one character; before the fix the card was gone from the DOM by the second edit (a plain `getByRole` heading assertion failed, the board had scrolled to about 60000px)
+  + not reproduced without a click: the same edits on a card nobody clicked (30 edits) and in the perf harness with no caret keep the card mounted at the top of its column
+  + the virtual caret is not the cause: its click is only an ordinary card click, which is what sets the focus the fault needs
++ [X] find the cause, recording it in this story with evidence
+  + a click records the card's `stable_id` as the focused id, and a story's `stable_id` is `doc:slug-of-headline`, so any headline edit changes it and the recorded id stops resolving
+  + `resolveFocusedNote` then fell through to `view_caret`, the click's offset in the merged tree; after the edit that offset lands on another file's card (measured: the card with `aria-current` after the second edit belonged to a different doc than the edited one, at index about 290 of the Untagged column, 64000px down)
+  + `useScrollToCaret` asked the windowed column to scroll to that card and the page followed, so the window moved and the edited card, still in the data at index 0, was outside it
+  + `resolveParentContextNote` already states the rule for a vanished id (scope to the root, never to whatever note inherited the number); focus did not follow it
++ [X] fix it so an edited card stays mounted while it is in the column's visible window, with a test that fails before the fix
+  + `resolveFocusedNote` (`lib/noteops.ts`) returns no focus when a recorded focused id no longer resolves, and keeps the `view_caret` fallback only for a click that recorded no id
+  + `noteops.test.ts` 'does not fall back to view_caret when the focused id no longer resolves' fails on the old code (1 failed of 2467) and passes now; the Playwright spec's clicked-first variant failed before and passes with the board still at scroll 0 after 12 edits
+  + the card keeps its place but loses its focus ring after a headline edit, since its identity is its slug; following the card through a rename would need a stable id that survives headline edits, which is a larger change not made here
++ [X] bump the patch version
+  + `package.json` 0.4.44 to 0.4.45
+
+
 ### Sticky notes that look stuck on a board [](?id=sticky-board-look&tokens_estimated=6&status=code-review)
 
 The sticky card reads as a flat coloured box. Its curled corner is drawn with a far larger curve than its other three corners, so the fold looks like a bubble rather than paper. Stickies should look like paper notes stuck on a board: a little taller, each at a slight angle, casting a shadow, with a faint curve across the paper.
@@ -218,7 +257,7 @@ The coordinator list sits permanently above the board in every folder view that 
 + [X] bump the patch version
 
 
-### Virtual caret in the viewer: viability spike [](?id=virtual-caret-spike&tokens_estimated=20)
+### Virtual caret in the viewer: viability spike [](?id=virtual-caret-spike&tokens_estimated=20&status=code-review)
 
 Changing a card's title or a linetag value means leaving the viewer for the text editor. Could the viewer show its own caret instead? It would follow the editor's real caret while the file is open in a text editor. When the file is not open, it would move within titles and linetag values in the viewer, relaying each edit as if it had been typed in the editor. This story builds a prototype and records whether the idea is viable; it does not ship the caret to users.
 
@@ -240,20 +279,52 @@ Changing a card's title or a linetag value means leaving the viewer for the text
   + titles and linetag values only, never body text
   + the prototype runs only when `NOTETHINK_DEV` is set, so a production build behaves as today and `README.md:245` ("Not a text editor") stays true
   + out of scope: shipping the caret to users; the verdict decides whether a build story follows
-+ [ ] draw a caret in a title, and in a linetag value, where the editor's selection falls
++ verdict, measured 2026-11-13 (dev bundle in headless Chromium for the webview; a real VS Code web host for the extension side)
+  + **viable for titles and linetag values, with four limits a build story must own**: undo, unsaved files, input handling and card unmounting
+  + the prototype is `VirtualCaret.tsx` (a click arms it; the editor's selection drives it while the file is open), `caretops.ts` (mapping and edits) and `caretdom.ts` (drawing); it runs only when `NOTETHINK_DEV` is set
+  + prototype behaviour
+    + with the file open, the caret follows the editor's selection; Left, Right, Home and End post `selectRange`, and typing is never relayed
+    + with the file closed, a click arms the caret and Left, Right, Home, End, typing, Backspace and Delete are taken in the webview and relayed as `editText`
+    + one relayed edit is in flight at a time and later keys queue behind it, so typing speed is capped at one character per round trip
+  + lag
+    + editor to viewer: at least `SELECTION_DEBOUNCE_MS` (120ms) before a selection reaches the webview; the end-to-end figure on a real editor was not measured (needs a webview and an editor in one real host, which the repo's test harness does not give)
+    + keydown to the `editText` post: 0.1 to 0.5ms median
+    + update arriving to the caret repainted (`pnpm run test-perf -- --dev-bundle --only virtual-caret-relay-8k,virtual-caret-relay-100k,virtual-caret-relay-folder-200`, host time taken as zero): 8KB file 37 to 41ms median; 100KB file 30 to 36ms; 200-file folder board 85 to 93ms median with outliers up to 1046ms
+    + the extension's own part (`WorkspaceEdit` on a document no editor shows, `test-mocha`): 0.2ms median, 0.6ms max; its re-parse and the message hops were not measured, so a keystroke reaches the screen in roughly 40 to 100ms plus those
+  + undo and save (`client/extension/src/test/suite/virtualCaretHost.test.ts`)
+    + with no editor showing the file, the `undo` command does nothing to the text; once an editor shows it, each press undoes one relayed character, since every keystroke is its own edit
+    + a relayed edit leaves the document dirty and unsaved; saving after each edit measured 0.9ms median and 23.7ms max on the test host's in-memory file system, and a real disk or a remote one was not measured (settle with a `test-electron` run against a real workspace)
+  + markdown mapping limits
+    + the scanner matched the parser's rendered text on all 19 corpus titles (`caretops.test.ts`); it handles escapes, code spans, links, images and `**` `__` `~~` `*` `_` emphasis
+    + not handled: autolinks, entities, raw HTML, reference links, hard breaks, nested ambiguous emphasis; only a heading offers a title; a task line is left out because wrapping its checkbox in a marker breaks the card's list styling, and a code card, sticky or agent card has none
+    + typing inside emphasis marks lands inside them, and deleting the last character of an emphasised span leaves empty marks
+    + a linetag value accepts only letters, digits, `.`, `_` and `-`, because anything else would break its link
+  + faults found beside the caret, not fixed here
+    + `findLineTags` starts the linetags at the first `[` of a headline, so a markdown link in a title hides the link and the text after it, and the caret stops before the link
+    + a note's `stable_id` changes when its title is renamed, and tree offsets repeat across the files of a folder view, so the caret holds a note by its source start and finds its headline by `data-seq`
+    + on a 200-file board the windowed column stopped mounting a card after a few edits to it (the note stayed in the data, its headline left the DOM), so the caret drew nothing; the cause is not established
+    + a production bundle still contains the caret code, though with `NOTETHINK_DEV` unset nothing renders (0 title marks, inputs or carets measured)
+  + focus rule
+    + the standard's rule that the editor takes DOM focus needs an exception: with no editor showing the file, a click on a title or value arms the caret and the webview takes the keys through a hidden input (not `contentEditable`)
+    + inferred, not run in a real host: an input keeps VS Code from forwarding Backspace and Enter to the drill commands, and `selectRange` to a visible editor hands focus to it (`PanelSession.ts` `revealInVisibleEditor`), so with the file open the first move passes the caret to the editor
+    + not built: selections, Shift and Ctrl arrows, Up and Down, clipboard, IME composition
+  + recommendation: build only the read-only half (draw the editor's caret in titles and values) unless the operator wants typing without an editor, which also needs a save rule (save after an edit when the file was clean before, as the coordinator marker move does), an answer for undo, and a fix for the card unmounting
++ open question: file a build story for the read-only caret (draw the editor's caret in titles and linetag values, no typing)? Recommended: yes
++ open question: also build typing without an editor? Recommended: only if the undo gap is accepted and the save rule above is adopted
++ [X] draw a caret in a title, and in a linetag value, where the editor's selection falls
   + plain titles first, then titles with emphasis, inline code and a link
-+ [ ] move the caret with Left, Right, Home and End within the title and values, posting `selectRange` so the real caret follows when the file is open
-+ [ ] relay typing, Backspace and Delete as `editText` when the file is not open in a text editor, and redraw the caret after the round-trip
-+ [ ] measure keystroke-to-repaint time for a relayed edit on one small file and on a large folder view, with `pnpm run test-perf`
-+ [ ] measure undo and save on a relayed edit
++ [X] move the caret with Left, Right, Home and End within the title and values, posting `selectRange` so the real caret follows when the file is open
++ [X] relay typing, Backspace and Delete as `editText` when the file is not open in a text editor, and redraw the caret after the round-trip
++ [X] measure keystroke-to-repaint time for a relayed edit on one small file and on a large folder view, with `pnpm run test-perf`
++ [X] measure undo and save on a relayed edit
   + whether VS Code's undo reaches a `WorkspaceEdit` on a document no editor shows
   + what saving after each edit costs
-+ [ ] cover the rendered-to-source offset mapping with Jest
-+ [ ] record the verdict in this story: viable or not, the measured lag and repaint time, the markdown mapping limits, undo and save, and the focus rule
-+ [ ] bump the patch version
++ [X] cover the rendered-to-source offset mapping with Jest
++ [X] record the verdict in this story: viable or not, the measured lag and repaint time, the markdown mapping limits, undo and save, and the focus rule
++ [X] bump the patch version
 
 
-### Split view: two panes on the view registry [](?id=split-view) [post-v1]
+### Split view: two panes on the view registry [](?id=split-view&status=code-review) [post-v1]
 
 Two views visible at once, such as a document pane beside a kanban pane. The view hierarchy and per-view state this story once asked for already exist; the gap is mounting a second view.
 
@@ -277,12 +348,18 @@ Two views visible at once, such as a document pane beside a kanban pane. The vie
   + the split ratio and both panes survive a reload
   + closing a pane leaves no stranded `viewStates` entry
   + `pnpm run check` green
-+ [ ] build the pane container: a CSS split with a drag handle around two `GenericView` mounts
-+ [ ] route add-pane and close-pane through the existing view-state handlers
-+ [ ] populate `parent_view` / `child_views` for the pane relationship, or delete them as dead code
-+ [ ] persist the split ratio and each pane's view id across reload
-+ [ ] add jest: each pane resolves its own view state; closing a pane removes exactly its entry
-+ [ ] add playwright: open a second pane, resize, reload, both panes and the ratio survive
++ [X] build the pane container: a CSS split with a drag handle around two `GenericView` mounts
+  + decision: `SplitPanes` (`components/views/SplitPanes.tsx`) is a flex host with a focusable separator handle; with no second pane it adds no sizing or scroll container, and the first pane keeps its tree position so opening or closing the second never remounts it. Each composer renders its own panes: `NoteTreeComposer` converts the doc once per pane (a board flattens epics, a document does not), `FolderTreeComposer` shares one merge and merge cache between both panes.
++ [X] route add-pane and close-pane through the existing view-state handlers
+  + decision: the user opens a pane with the toolbar's split button (`split-open-button`), which writes the second pane's entry through `setViewManagedState`, and closes it with the close button on the second pane's toolbar (`split-close-button`), which calls `deleteViewFromManagedState('__pane2__')`. That handler was a no-op in both composers; `usePersistedViewStates` now implements it and `NoteRenderer` threads it. The new pane opens as a document beside a board and a board beside anything else. Resize is the drag handle, or Left/Right/Home/End on the focused handle. No command palette entry was added.
++ [X] populate `parent_view` / `child_views` for the pane relationship, or delete them as dead code
+  + decision: deleted. A pane is a sibling `GenericView` over its own `viewStates` entry, so nothing needs a parent or child link; the only reader was a settings merge in `useViewContext` that nothing could ever feed.
++ [X] persist the split ratio and each pane's view id across reload
+  + decision: the second pane's entry (`__pane2__`) is the whole record: its existence is the split being open, its `type` is the pane's view id, and `display_options.split_ratio` is the ratio, committed once per resize gesture. It rides the existing persisted `viewStates`. A window-wide `setViewType` command skips it, and a view-type pick on the second pane does not write the settings cascade, so the panes keep independent types.
++ [X] add jest: each pane resolves its own view state; closing a pane removes exactly its entry
+  + `NoteTreeComposer.test.tsx` and `FolderTreeComposer.test.tsx` (each pane reads its own entry), `usePersistedViewStates.test.ts` (delete removes exactly one entry, update-all skips the pane), `SplitPanes.test.tsx`, `paneops.test.ts`, plus the view-state key, toolbar and handler cases
++ [X] add playwright: open a second pane, resize, reload, both panes and the ratio survive
+  + `playwright/specs/split-view.spec.ts`: single file (open, key and drag resize, reload, close leaves no entry) and folder mode (shared merge, independent types, close)
 
 
 ### Share parse-worker scheduling and recovery [](?id=shared-parse-worker-scheduling&status=code-review)

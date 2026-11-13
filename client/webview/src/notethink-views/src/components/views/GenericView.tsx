@@ -1,6 +1,7 @@
 import React, { lazy } from "react";
 import { documentRootForStrip, hasVisibleCard } from "../../lib/noteops";
 import { chainOf, isGroupedViewType, registryWithUserTypes, resolvedSettingsForView } from "../../lib/viewregistryops";
+import { isPaneViewId } from "../../lib/viewstateops";
 import { INTEGRATION_MODE_FOLDER, type ConcreteIntegrationMode } from "../../types/IntegrationMode";
 import type { UserViewType } from "../../types/Messages";
 import type { ViewProps } from "../../types/ViewProps";
@@ -9,6 +10,7 @@ import GenericNoteAttributes from "../notes/GenericNoteAttributes";
 import InsertModal from "../InsertModal";
 import GenericViewBreadcrumb from "./generic/GenericViewBreadcrumb";
 import GenericViewToolbar from "./generic/GenericViewToolbar";
+import VirtualCaret from "./generic/VirtualCaret";
 import EmptyStoriesOverlay, { type FolderStatusMode } from "./EmptyStoriesOverlay";
 import { useGenericView } from "./generic/useGenericView";
 import view_styles from "../ViewRenderer.module.scss";
@@ -192,6 +194,8 @@ export default function GenericView(props: ViewProps): React.ReactElement {
                     />
                 )}
             </div>
+            {/* the dev-only caret finds its note by document-wide seq, so it serves the first pane only */}
+            {show_toolbar && !isPaneViewId(view_props.id) && <VirtualCaret view_props={enriched_props} handlers={handlers} />}
             <InsertModal
                 opened={insert.insert_modal_open}
                 onClose={insert.close_insert_modal}

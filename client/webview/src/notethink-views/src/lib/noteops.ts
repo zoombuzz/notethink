@@ -135,6 +135,11 @@ export function findSelectedNotesByOriginPosition(
  * Resolves the focused note: the editor-derived caret match wins whenever present, then the
  * latest view_focused_ids click, then the virtual view_caret against in-tree offsets - the last
  * resort so a note clicked without a stable_id still highlights.
+ *
+ * A focused id that no longer resolves (a story whose headline was edited, so its slug-derived
+ * stable_id changed, or a deleted one) leaves nothing focused rather than falling through to
+ * view_caret: that offset was recorded against the previous tree, and in a folder view it lands on
+ * another file's card, which would scroll the board away from the card being edited.
  */
 export function resolveFocusedNote(
     view_focused_ids: string[] | undefined,
@@ -147,6 +152,7 @@ export function resolveFocusedNote(
     if (last_id) {
         const found = notes.find(n => n.stable_id === last_id);
         if (found) { return found; }
+        return undefined;
     }
     // no-editor / no-stable_id fallback: resolve the virtual caret against the in-tree offsets
     if (view_caret !== undefined) {

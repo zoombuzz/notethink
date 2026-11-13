@@ -1019,6 +1019,16 @@ describe('resolveFocusedNote', () => {
         expect(resolveFocusedNote(['doc:absent'], [note], undefined)).toBeUndefined();
     });
 
+    it('does not fall back to view_caret when the focused id no longer resolves', () => {
+        const other_file_note = makeNote({ seq: 5, stable_id: 'other:story', position: { start: { line: 1, column: 1, offset: 40 }, end: { line: 3, column: 1, offset: 90 } } });
+        expect(resolveFocusedNote(['doc:renamed-away'], [other_file_note], undefined, 50)).toBeUndefined();
+    });
+
+    it('still resolves view_caret when no focused id was recorded', () => {
+        const note = makeNote({ seq: 5, stable_id: 'doc:a', position: { start: { line: 1, column: 1, offset: 40 }, end: { line: 3, column: 1, offset: 90 } } });
+        expect(resolveFocusedNote(undefined, [note], undefined, 50)?.stable_id).toBe('doc:a');
+    });
+
     it('uses the last id in the chain as the deepest focused note', () => {
         const parent = makeNote({ seq: 1, stable_id: 'doc:p' });
         const child = makeNote({ seq: 2, stable_id: 'doc:c' });
@@ -1707,6 +1717,13 @@ describe('titleEndOffset', () => {
         const origin: NoteOrigin = { doc_id: 'd', doc_path: '/ws/a.md', source_position: { start: { offset: 40, line: 3 }, end: { offset: 55, line: 3 } } };
         const note = makeNote({ headline_raw: '### Alpha story', origin, position: { start: { offset: 9000, line: 300 }, end: { offset: 9015, line: 300 } } });
         expect(titleEndOffset(note)).toBe(55);
+    });
+
+    it('keeps an ordinary link in the title and ends it before the linetags', () => {
+        const headline_raw = '### Read [guide](guide.md) first [](?id=a)';
+        const linetags_from = 100 + '### Read [guide](guide.md) first '.length;
+        const note = makeNote({ headline_raw, linetags_from, position: { start: { offset: 100, line: 5 }, end: { offset: 100 + headline_raw.length, line: 5 } } });
+        expect(titleEndOffset(note)).toBe(100 + '### Read [guide](guide.md) first'.length);
     });
 
     it('ends a title that is only linetags at its start', () => {

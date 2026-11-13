@@ -44,6 +44,20 @@ describe('findLineTags', () => {
         const result = findLineTags(input);
         expect(result).toContain('status=doing');
     });
+
+    it('starts at the first linetag, leaving an ordinary link in the title', () => {
+        expect(findLineTags('## Read [the guide](guide.md) first')).toBe('');
+        expect(findLineTags('## Read [the guide](guide.md) first [](?status=doing)')).toBe('[](?status=doing)');
+        expect(findLineTags('## Read [the guide](guide.md) first [](?a=1) [](?b=2)')).toBe('[](?a=1) [](?b=2)');
+    });
+
+    it('starts at the first linetag when it has link text', () => {
+        expect(findLineTags('## Read [the guide](guide.md) [doing](?status=doing)')).toBe('[doing](?status=doing)');
+    });
+
+    it('starts at the bracket group when ordinary links precede bracketed linetags', () => {
+        expect(findLineTags('## Read [the guide](guide.md) first ([](?status=doing))')).toBe('([](?status=doing))');
+    });
 });
 
 describe('parseLineTags', () => {

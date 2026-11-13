@@ -883,6 +883,17 @@ body.disableAddressBarHidingOnScroll {
 }
 
 /*
+ * An icon button that gives up its room before anything else on the row: the open-pane control is a
+ * convenience, so in a row too narrow for everything it shrinks away first (its large shrink factor
+ * takes the whole deficit) and leaves the audio status text and the drawer tabs their width.
+ */
+.toolbarIconButtonYields {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/*
  * a drawer tab, drawn wherever its own state already lives - three inside the breadcrumb, the
  * view-type one on the right. Stretched to the toolbar's full height so an active tab's background
  * meets the drawer body below with no seam

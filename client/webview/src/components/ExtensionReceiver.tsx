@@ -36,7 +36,7 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         view_states,
         view_states_ref,
         updateAllViewStates,
-        handleSetViewManagedState,
+        handleSetViewManagedState, handleDeleteViewManagedState,
     } = usePersistedViewStates(saved_state?.viewStates || {});
     const {
         docs,
@@ -97,7 +97,7 @@ export default function ExtensionReceiver(props: ExtensionReceiverProps): React.
         activeEditorDocPath={active_editor_doc_path}
         postMessage={postMessageToExtension}
         viewStates={view_states}
-        setViewManagedState={handleSetViewManagedState}
+        setViewManagedState={handleSetViewManagedState} deleteViewFromManagedState={handleDeleteViewManagedState}
         onNavigationCommand={navigation_callback_ref}
         workspace_root={workspace_root}
         workspace_projects={workspace_projects}

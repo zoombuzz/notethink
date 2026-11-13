@@ -49,9 +49,6 @@ export interface ViewProps {
         auto_resolved_type?: string;
         auto_resolved_card_type?: string;
     }
-    // --- recursive inclusion of parent and child views ---
-    child_views?: Array<ViewProps>;
-    parent_view?: ViewProps;
     // --- fields added at the React render stage (non-serialised) ---
     notes?: Array<NoteProps>;
     notes_within_parent_context?: Array<NoteProps>;

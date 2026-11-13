@@ -2,6 +2,7 @@ import Debug from 'debug';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toPersistedDocs, type VSCodeState } from '../lib/vscodeops';
 import { emitPersistState } from '../lib/persistStateProbe';
+import { PANE_VIEW_STATE_ID } from '../notethink-views/src/lib/viewstateops';
 import type { HashMapOf, Doc } from '../types/general';
 import type { NoteDisplayOptions } from '../notethink-views/src/types/NoteProps';
 
@@ -21,6 +22,7 @@ interface PersistedViewStatesState {
     setViewStates: React.Dispatch<React.SetStateAction<Record<string, ViewState>>>;
     updateAllViewStates: (updater: (view_state: ViewState) => ViewState) => void;
     handleSetViewManagedState: (updates: Array<Record<string, unknown>>) => void;
+    handleDeleteViewManagedState: (view_id?: string) => void;
 }
 
 type PersistVscodeState = (state: VSCodeState) => void;
@@ -37,6 +39,8 @@ export function usePersistedViewStates(
         setViewStates(prev => {
             const next = { ...prev };
             for (const id of Object.keys(next)) {
+                // the second pane keeps its own view type: a window-wide command speaks for the first pane
+                if (id === PANE_VIEW_STATE_ID) { continue; }
                 next[id] = updater(next[id]);
             }
             if (Object.keys(next).length === 0) {
@@ -63,7 +67,17 @@ export function usePersistedViewStates(
             return next;
         });
     }, []);
-    return { view_states, view_states_ref, setViewStates, updateAllViewStates, handleSetViewManagedState };
+    // removes exactly one entry, so a closed pane leaves nothing stranded; an unknown id changes nothing
+    const handleDeleteViewManagedState = useCallback((view_id?: string) => {
+        if (!view_id) { return; }
+        setViewStates(prev => {
+            if (!(view_id in prev)) { return prev; }
+            const next = { ...prev };
+            delete next[view_id];
+            return next;
+        });
+    }, []);
+    return { view_states, view_states_ref, setViewStates, updateAllViewStates, handleSetViewManagedState, handleDeleteViewManagedState };
 }
 
 /**

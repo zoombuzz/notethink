@@ -1,6 +1,8 @@
 import {
     FOLDER_VIEW_STATE_ID,
     MAX_EXPANDED_IDS,
+    PANE_VIEW_STATE_ID,
+    isPaneViewId,
     anyViewInFolderMode,
     buildIntegrationDispatch,
     captureEditorHold,
@@ -405,5 +407,26 @@ describe('editor hold', () => {
         expect(editorHoldApplies(hold, at(5), '/a.md', 'y')).toBe(false);
         expect(editorHoldApplies(hold, undefined, '/a.md', 'x')).toBe(false);
         expect(editorHoldApplies(undefined, at(5), '/a.md', 'x')).toBe(false);
+    });
+});
+
+describe('second pane view-state key', () => {
+    it('names only the second pane', () => {
+        expect(isPaneViewId(PANE_VIEW_STATE_ID)).toBe(true);
+        expect(isPaneViewId(FOLDER_VIEW_STATE_ID)).toBe(false);
+        expect(isPaneViewId(undefined)).toBe(false);
+    });
+
+    it('resolveViewStateId keeps the second pane on its own key even in folder mode', () => {
+        const folder_options = { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: '/ws' };
+        expect(resolveViewStateId(makeProps({ id: PANE_VIEW_STATE_ID, display_options: folder_options }))).toBe(PANE_VIEW_STATE_ID);
+        expect(resolveViewStateId(makeProps({ id: FOLDER_VIEW_STATE_ID, display_options: folder_options }))).toBe(FOLDER_VIEW_STATE_ID);
+    });
+
+    it('writeViewInteractionState from the second pane lands on its own entry', () => {
+        const { handlers, set_view_managed_state } = makeHandlers();
+        const props = makeProps({ id: PANE_VIEW_STATE_ID, display_options: { integration_mode: INTEGRATION_MODE_FOLDER, integration_path: '/ws' } });
+        writeViewInteractionState(props, handlers, ['a'], []);
+        expect(set_view_managed_state).toHaveBeenCalledWith([expect.objectContaining({ id: PANE_VIEW_STATE_ID })]);
     });
 });

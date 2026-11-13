@@ -1,0 +1,46 @@
+/*
+ * The split container. With no second pane it adds nothing: no sizing and no scroll container, so the
+ * single view scrolls the page exactly as it did before. Open, it is one viewport tall and each pane
+ * becomes its own scroll container, so the two scroll independently and each toolbar sticks to its own
+ * pane.
+ */
+.splitHost {
+  display: block;
+}
+
+.splitHostOpen {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+.pane {
+  display: block;
+}
+
+.paneOpen {
+  flex: none;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+.paneSecond {
+  flex: 1 1 0;
+}
+
+.handle {
+  flex: none;
+  width: 6px;
+  cursor: col-resize;
+  background: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  touch-action: none;
+
+  &:hover,
+  &:focus-visible,
+  &[data-dragging="true"] {
+    background: var(--vscode-focusBorder, #0078d4);
+    outline: none;
+  }
+}

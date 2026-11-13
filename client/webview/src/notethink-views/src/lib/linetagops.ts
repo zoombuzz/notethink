@@ -33,19 +33,32 @@ export const HIDDEN_ATTRIBUTES = [
  * @param input
  * @return string all the linetags ([...))$ in a single string
  * Regex copes with additional characters around first/last linetag, e.g. ('doing' story for Alex)
+ * The result starts at the first linetag link (`[text](?...)`), so an ordinary link earlier in the
+ * headline stays in the title.
  */
 export function findLineTags(input: string): string {
     // use String.match() with regex to pull out all linetags together (https://regexr.com/) if bracketed ([]()) or ('[]()')
     const bracketed_matches = input.match(new RegExp('(\\([^\\]]*\\[.*\\]\\(\\?[^\\)]*\\)[^\\]]*\\))[\\n]*$'));
     if (bracketed_matches && bracketed_matches?.length >= 2) {
-        return bracketed_matches[1];
+        return trimToFirstLineTag(bracketed_matches[1], true);
     }
     // same, for unbracketed [](?...); the '?' distinguishes a linetag from a markdown link
     const brackless_matches = input.match(new RegExp('(\\[.*\\]\\(\\?[^\\)]*\\)[^\\]]*)[\\n]*$'));
     if (brackless_matches && brackless_matches?.length >= 2) {
-        return brackless_matches[1];
+        return trimToFirstLineTag(brackless_matches[1], false);
     }
     return '';
+}
+
+// the greedy match can start inside an ordinary link; cut it to the first linetag link, keeping a bracket group's own '('
+function trimToFirstLineTag(matched: string, bracketed: boolean): string {
+    const first = matched.search(/\[[^\]]*\]\(\?/);
+    if (first <= 0) { return matched; }
+    if (bracketed) {
+        const open = matched.lastIndexOf('(', first);
+        if (open >= 0) { return matched.slice(open); }
+    }
+    return matched.slice(first);
 }
 
 /**

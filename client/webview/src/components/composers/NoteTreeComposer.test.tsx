@@ -142,4 +142,38 @@ describe('NoteTreeComposer', () => {
         expect(captured_props[0].view_state_ids).toEqual(expect.arrayContaining(['__folder__', 'doc-1', '__default']));
     });
 
+    describe('second pane', () => {
+        it('renders a single pane and no handle while the second pane has no view-state entry', () => {
+            const { queryByTestId } = render(<NoteTreeComposer note_id="doc-1" note={buildDoc()} props={buildProps()} />);
+            expect(captured_props.map(p => p.id)).toEqual(['doc-1']);
+            expect(queryByTestId('split-handle')).toBeNull();
+        });
+
+        it('mounts a second GenericView that reads its own view-state entry, not the first pane\'s', () => {
+            const view_states = { 'doc-1': { type: 'kanban' }, '__pane2__': { type: 'document', display_options: { split_ratio: 0.4 } } };
+            const { getByTestId } = render(<NoteTreeComposer note_id="doc-1" note={buildDoc()} props={buildProps({ viewStates: view_states })} />);
+            const first = captured_props.find(p => p.id === 'doc-1');
+            const second = captured_props.find(p => p.id === '__pane2__');
+            expect(first?.type).toBe('kanban');
+            expect(second?.type).toBe('document');
+            expect(getByTestId('split-handle')).toBeTruthy();
+            // the first pane's board flattening does not leak into the second pane's own conversion
+            expect(flattenSingleFileStories).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not hand the second pane the shared keyboard navigation ref', () => {
+            const nav_ref = { current: undefined };
+            render(<NoteTreeComposer note_id="doc-1" note={buildDoc()} props={buildProps({ viewStates: { '__pane2__': { type: 'document' } }, onNavigationCommand: nav_ref })} />);
+            expect(captured_props.find(p => p.id === 'doc-1')?.handlers?.onNavigationCommand).toBe(nav_ref);
+            expect(captured_props.find(p => p.id === '__pane2__')?.handlers?.onNavigationCommand).toBeUndefined();
+        });
+
+        it('wires deleteViewFromManagedState so closing the pane removes exactly its entry', () => {
+            const remove = jest.fn();
+            render(<NoteTreeComposer note_id="doc-1" note={buildDoc()} props={buildProps({ viewStates: { '__pane2__': { type: 'document' } }, deleteViewFromManagedState: remove })} />);
+            captured_props.find(p => p.id === '__pane2__')?.handlers?.deleteViewFromManagedState('__pane2__');
+            expect(remove).toHaveBeenCalledWith('__pane2__');
+        });
+    });
+
 });

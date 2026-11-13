@@ -22,6 +22,18 @@ export interface ViewStateLike {
 export const FOLDER_VIEW_STATE_ID = '__folder__';
 
 /**
+ * The view-state key of the second pane. The entry's existence is the fact that the split is open,
+ * and its display_options carry the pane's own settings and the split ratio, so closing the pane is
+ * deleting exactly this entry.
+ */
+export const PANE_VIEW_STATE_ID = '__pane2__';
+
+/** Whether a view id names the second pane, whose state never folds into the folder key. */
+export function isPaneViewId(view_id: string | undefined): boolean {
+    return view_id === PANE_VIEW_STATE_ID;
+}
+
+/**
  * Cap on the persisted manual-expansion list. The list rides in the vscode.setState shape, so it
  * cannot grow with every card the user has ever opened; past this many ids the oldest evict first.
  */
@@ -158,9 +170,11 @@ export function anyViewInFolderMode(
 
 /**
  * The view-state key to dispatch to: FOLDER_VIEW_STATE_ID in folder mode, so folder settings survive
- * a flip to current_file and back, else the view's own id.
+ * a flip to current_file and back, else the view's own id. The second pane always uses its own id, so
+ * its focus and expansion never land on the first pane's folder entry.
  */
 export function resolveViewStateId(props: ViewProps): string {
+    if (isPaneViewId(props.id)) { return props.id; }
     return resolveIntegrationMode(props.display_options) === INTEGRATION_MODE_FOLDER
         ? FOLDER_VIEW_STATE_ID
         : props.id;

@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { useVscodeStatePersistence, PERSIST_DEBOUNCE_MS, type ViewState } from './usePersistedViewStates';
+import { useVscodeStatePersistence, usePersistedViewStates, PERSIST_DEBOUNCE_MS, type ViewState } from './usePersistedViewStates';
 import { enablePersistStateProbe, disablePersistStateProbe, getPersistStateEvents } from '../lib/persistStateProbe';
 import type { HashMapOf, Doc } from '../types/general';
 
@@ -140,4 +140,38 @@ describe('useVscodeStatePersistence', () => {
         }
     });
 
+});
+
+describe('usePersistedViewStates second pane', () => {
+
+    it('deleting a view removes exactly its entry and leaves the rest', () => {
+        const { result } = renderHook(() => usePersistedViewStates({ __folder__: { type: 'kanban' }, __pane2__: { type: 'document' }, 'doc-1': { type: 'auto' } }));
+        act(() => { result.current.handleDeleteViewManagedState('__pane2__'); });
+        expect(Object.keys(result.current.view_states).sort()).toEqual(['__folder__', 'doc-1']);
+    });
+
+    it('deleting an absent or empty id leaves the same map object', () => {
+        const { result } = renderHook(() => usePersistedViewStates({ __folder__: { type: 'kanban' } }));
+        const before = result.current.view_states;
+        act(() => { result.current.handleDeleteViewManagedState('__pane2__'); });
+        act(() => { result.current.handleDeleteViewManagedState(undefined); });
+        expect(result.current.view_states).toBe(before);
+    });
+
+    it('a window-wide update touches the first pane and leaves the second pane\'s own type', () => {
+        const { result } = renderHook(() => usePersistedViewStates({ __folder__: { type: 'kanban' }, __pane2__: { type: 'document' } }));
+        act(() => { result.current.updateAllViewStates(view_state => ({ ...view_state, type: 'line' })); });
+        expect(result.current.view_states.__folder__.type).toBe('line');
+        expect(result.current.view_states.__pane2__.type).toBe('document');
+    });
+
+    it('opening then closing the pane through the managed-state handlers round-trips to the original map', () => {
+        const { result } = renderHook(() => usePersistedViewStates({ __folder__: { type: 'kanban' } }));
+        act(() => { result.current.handleSetViewManagedState([{ id: '__pane2__', type: 'document', display_options: { split_ratio: 0.5 } }]); });
+        expect(result.current.view_states.__pane2__).toEqual({ id: '__pane2__', type: 'document', display_options: { split_ratio: 0.5 } });
+        act(() => { result.current.handleSetViewManagedState([{ id: '__pane2__', display_options: { split_ratio: 0.35 } }]); });
+        expect(result.current.view_states.__pane2__.display_options?.split_ratio).toBe(0.35);
+        act(() => { result.current.handleDeleteViewManagedState('__pane2__'); });
+        expect(Object.keys(result.current.view_states)).toEqual(['__folder__']);
+    });
 });

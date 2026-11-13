@@ -31,6 +31,9 @@
  * on a debounced edit; folder-long-files-10 is 10 files at the done.md scale, testing payload size
  * under the batch cap.
  *
+ * A scenario marked `requires_dev_bundle` measures code that only runs when NOTETHINK_DEV is set (the
+ * virtual caret prototype): a default run leaves it out, and `--dev-bundle` runs it.
+ *
  * ADDING A SCENARIO (scripts/perf/scenarios.mjs): reuse an existing factory or return
  * `{ id, label, metric_ids, async run(context) }`; give every measurement a unique metric id via
  * measureStep; build a folder stream with discoveryMessages() rather than by hand, re-reading
@@ -310,7 +313,10 @@ async function main() {
         for (const scenario of SCENARIOS) { console.log(`${scenario.id}  [${scenario.metric_ids.join(', ')}]  ${scenario.label}`); }
         return 0;
     }
-    const scenarios = selectScenarios(options.only);
+    const selected = selectScenarios(options.only);
+    // a scenario that measures dev-only code has nothing to measure in the production bundle: left out of a default run, refused when named
+    const scenarios = selected.filter((scenario) => !scenario.requires_dev_bundle || options.bundle_mode === 'dev');
+    if (scenarios.length === 0) { throw new Error(`${selected.map((scenario) => scenario.id).join(', ')} needs --dev-bundle`); }
     console.log(`building the ${options.bundle_mode} webview bundle${options.skip_build ? ' (skipped, reusing the last one)' : ''}`);
     const bundle = await prepareBundle(REPO_ROOT, options.bundle_mode, { skip_build: options.skip_build });
     const server = await startHarnessServer(REPO_ROOT, bundle.bundle_path);

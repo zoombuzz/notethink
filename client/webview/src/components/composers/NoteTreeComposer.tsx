@@ -1,9 +1,12 @@
 import { type ReactElement, useMemo } from "react";
 import { GenericView } from "../../notethink-views/src/components";
+import SplitPanes from "../../notethink-views/src/components/views/SplitPanes";
 import { convertMdastToNoteHierarchy } from "../../notethink-views/src/lib/convertMdastToNoteHierarchy";
 import { fileDeclaredViewType, flattenSingleFileStories, stampSingleFileStableIds } from "../../notethink-views/src/lib/mergeAggregateRoot";
 import { flattenAllNotes } from "../../notethink-views/src/lib/noteops";
+import { clampSplitRatio } from "../../notethink-views/src/lib/paneops";
 import { chainOf, registryWithUserTypes } from "../../notethink-views/src/lib/viewregistryops";
+import { PANE_VIEW_STATE_ID } from "../../notethink-views/src/lib/viewstateops";
 import { buildViewDisplayOptions } from "../../lib/composerops";
 import { INTEGRATION_MODE_CURRENT_FILE } from "../../notethink-views/src/types/IntegrationMode";
 import type { Doc } from "../../types/general";
@@ -23,20 +26,40 @@ function drawsAsKanban(view_type: string, user_types: UserViewType[]): boolean {
 }
 
 /**
- * NoteTreeComposer composes a NoteProps tree from a single Doc and renders GenericView.
+ * NoteTreeComposer composes a NoteProps tree from a single Doc and renders it in a split: the doc's own
+ * pane, and the second pane beside it while the second pane has a view-state entry.
  *
  * Tree-composers sit one layer above views (Document/Kanban/Auto): each composer produces
  * the note tree handed to a leaf view. NoteTreeComposer is the single-file composer;
  * FolderTreeComposer is the folder-mode companion.
+ *
+ * Each pane converts the doc itself, since the conversion depends on the pane's view type (a board
+ * flattens epics into story cards, a document does not), so two panes of different types never share a tree.
+ */
+export default function NoteTreeComposer({ note_id, note, props }: { note_id: string; note: Doc; props: NoteRendererProps }): ReactElement {
+    const second_pane_state = props.viewStates?.[PANE_VIEW_STATE_ID];
+    return <SplitPanes
+        primary={<SingleFilePane view_id={note_id} note_id={note_id} note={note} props={props} />}
+        secondary={second_pane_state ? <SingleFilePane view_id={PANE_VIEW_STATE_ID} note_id={note_id} note={note} props={props} /> : undefined}
+        ratio={clampSplitRatio(second_pane_state?.display_options?.split_ratio)}
+        onRatioChange={(split_ratio) => props.setViewManagedState?.([{ id: PANE_VIEW_STATE_ID, display_options: { split_ratio } }])}
+    />;
+}
+
+/**
+ * One pane's GenericView over a single Doc, reading the view-state entry under `view_id`.
  *
  * By doing the MDAST conversion inside this component's render, any errors thrown by
  * convertMdastToNoteHierarchy are caught by the parent ErrorBoundary.
  *
  * stable_id is stamped here (no `origin` is present in single-file mode) so React keying
  * and FLIP rect-capture in the kanban view stay invariant under re-parse.
+ * - view_id: the doc's own id for the first pane, PANE_VIEW_STATE_ID for the second; also the view's identity
+ * - note_id: the doc's id in both panes, which keys the stable_ids and the docId stamped on posted messages
  */
-export default function NoteTreeComposer({ note_id, note, props }: { note_id: string; note: Doc; props: NoteRendererProps }): ReactElement {
-    const view_state = props.viewStates?.[note_id] || props.viewStates?.['__default'];
+function SingleFilePane({ view_id, note_id, note, props }: { view_id: string; note_id: string; note: Doc; props: NoteRendererProps }): ReactElement {
+    const is_second_pane = view_id === PANE_VIEW_STATE_ID;
+    const view_state = props.viewStates?.[view_id] || (is_second_pane ? undefined : props.viewStates?.['__default']);
     // the current_file stamp is this composer's source of truth for the toolbar selector, mirroring the folder stamp
     const { viewType, view_display_options } = buildViewDisplayOptions(props, view_state, INTEGRATION_MODE_CURRENT_FILE);
     const view_user_types = view_display_options.settings?.viewUserTypes ?? [];
@@ -60,7 +83,7 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
     const view_state_ids = props.viewStates ? Object.keys(props.viewStates) : undefined;
     const view_props: ViewProps = {
         // --- identity + opened-doc location ---
-        id: note_id,
+        id: view_id,
         type: viewType,
         doc_path: note.path,
         doc_relative_path: note.relative_path,
@@ -86,9 +109,10 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
         // --- handler functions (view→host dispatch) ---
         handlers: {
             setViewManagedState: props.setViewManagedState || (() => {}),
-            deleteViewFromManagedState: () => {},
+            deleteViewFromManagedState: props.deleteViewFromManagedState ?? (() => {}),
             revertAllViewsToDefaultState: () => {},
-            onNavigationCommand: props.onNavigationCommand,
+            // keyboard navigation commands drive the first pane only
+            onNavigationCommand: is_second_pane ? undefined : props.onNavigationCommand,
             toggleAudio: props.toggleAudio,
             reportAudioIndicatorPresence: props.reportAudioIndicatorPresence,
             postMessage: props.postMessage ? (message: unknown) => {

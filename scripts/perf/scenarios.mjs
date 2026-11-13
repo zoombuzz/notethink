@@ -341,6 +341,127 @@ function singleFileScenario({ id, label, file_bytes, story_bytes, metric_ids, se
     };
 }
 
+// the median of a list of numbers, rounded to one decimal
+function median(values) {
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    const value = sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+    return Math.round(value * 10) / 10;
+}
+
+// applies one editText change to source text, as the extension's WorkspaceEdit would
+function applyChange(text, change) {
+    return text.slice(0, change.from) + change.insert + text.slice(change.to ?? change.from);
+}
+
+/**
+ * Keystroke relay, measured in two halves a browser can see: the webview's own work from the keydown
+ * to the `editText` it posts, and the repaint from the update that carries the edit back to the drawn
+ * caret settling. The extension host's share sits between them and is not measurable here (the mocha
+ * suite times its edit and save); `host_ms` is a stand-in of zero, so these figures are a floor.
+ *
+ * Needs the dev bundle, since the caret only runs when NOTETHINK_DEV is set. `sample_count` keystrokes
+ * are typed after `warmup_count` that are thrown away; each types one character at the end of the
+ * mounted story's title, which the caret reaches by a click. Every sample uses a different story: on the
+ * folder board, a card edited more than a few times leaves its windowed column's mounted rows (the note
+ * is still in the data, but its headline is not in the DOM), so the caret has nothing to draw on. A single file clears the editor's selection
+ * first, so the caret takes the keys itself instead of following an editor.
+ */
+function caretRelayScenario({ id, label, metric_id, mode, file_count, file_bytes, story_bytes, settle_timeout_ms, sample_count = 15, warmup_count = 3 }) {
+    return {
+        id,
+        label,
+        metric_ids: [metric_id],
+        requires_dev_bundle: true,
+        async run(context) {
+            const measurements = {};
+            let facts = {};
+            const corpus = mode === 'folder'
+                ? buildFolderCorpus({ workspace_root: WORKSPACE_ROOT, file_count, stories_per_file: MAX_NOTES_PER_FILE, file_bytes, max_notes_per_file: MAX_NOTES_PER_FILE })
+                : buildSingleFileCorpus({ workspace_root: WORKSPACE_ROOT, file_bytes, story_bytes });
+            const session = await openHarnessPage(context.browser, context.page_url, mode === 'folder' ? folderViewStates() : {});
+            const settle = { expected_cards: corpus.expected_cards, settle_timeout_ms };
+            try {
+                if (mode === 'folder') {
+                    await stageAndDispatch(session.page, discoveryMessages(corpus.docs, workspaceProjectsOf(corpus.docs), DISCOVERY_BATCH_MAX_DOCS), settle);
+                } else {
+                    await stageAndDispatch(session.page, [singleFileUpdateMessage(corpus.doc), selectionChangedMessage(corpus.doc_path, 2)], settle);
+                    await session.page.evaluate((message) => window.dispatchEvent(new MessageEvent('message', { data: message })), { type: 'selectionChanged', docPath: corpus.doc_path, selection: null });
+                }
+                const texts = new Map(mode === 'folder' ? corpus.docs.map((doc) => [doc.path, doc.text]) : [[corpus.doc_path, corpus.doc.text]]);
+                await measureStep(measurements, metric_id, async () => {
+                    const post_ms = [];
+                    const repaint_ms = [];
+                    for (let sample = 0; sample < warmup_count + sample_count; sample += 1) {
+                        const sent = await session.page.evaluate(async (sample_index) => {
+                            // each sample types into a different story's title: a card edited over and over leaves the windowed column's mounted rows
+                            const titles = Array.from(document.querySelectorAll('[data-vc-title]')).filter((element) => element.textContent.startsWith('Story '));
+                            const title = titles[sample_index];
+                            if (!title) { return undefined; }
+                            title.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                            await new Promise((resolve) => { requestAnimationFrame(() => resolve()); });
+                            const input = document.querySelector('[data-testid="virtual-caret-input"]');
+                            window.__captured_messages = [];
+                            const t_key = performance.now();
+                            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true }));
+                            const deadline = t_key + 3000;
+                            while (!window.__captured_messages.some((message) => message.type === 'editText') && performance.now() < deadline) {
+                                await new Promise((resolve) => { requestAnimationFrame(() => resolve()); });
+                            }
+                            const message = window.__captured_messages.find((candidate) => candidate.type === 'editText');
+                            return message ? { post_ms: performance.now() - t_key, doc_path: message.docPath, change: message.changes[0] } : undefined;
+                        }, sample);
+                        if (!sent) { throw new Error('the keystroke posted no editText (no story title to type into, or the caret took no key)'); }
+                        const next_text = applyChange(texts.get(sent.doc_path), sent.change);
+                        texts.set(sent.doc_path, next_text);
+                        const doc = buildWireDoc({
+                            doc_path: sent.doc_path,
+                            relative_path: sent.doc_path.slice(WORKSPACE_ROOT.length + 1),
+                            text: next_text,
+                            created_by: mode === 'folder' ? 'perfHarness' : 'activeEditor',
+                            include_content: mode !== 'folder',
+                        });
+                        const update = mode === 'folder' ? folderMergeMessage([doc], corpus.docs.length, workspaceProjectsOf(corpus.docs)) : singleFileUpdateMessage(doc);
+                        // the webview keeps a doc only when it is newer than the one it holds, so each edit is stamped a second later than the last
+                        update.partial.docs[doc.id].updateSentAt = new Date(Date.parse(SENT_AT) + (sample + 1) * 1000).toISOString();
+                        const repaint = await session.page.evaluate(async (json) => {
+                            const paints = window.__virtual_caret_paints;
+                            const before = paints.length;
+                            const t0 = performance.now();
+                            window.dispatchEvent(new MessageEvent('message', { data: JSON.parse(json) }));
+                            while (paints.length === before && performance.now() < t0 + 5000) {
+                                await new Promise((resolve) => { requestAnimationFrame(() => resolve()); });
+                            }
+                            // one more frame, so the figure ends when the repaint reached the screen
+                            await new Promise((resolve) => { requestAnimationFrame(() => resolve()); });
+                            if (paints.length === before) { return { debug: { caret: document.querySelector('[data-testid="virtual-caret"]')?.outerHTML, title: document.querySelector('[data-vc-title]')?.textContent, titles: document.querySelectorAll('[data-vc-title]').length, edited: Array.from(document.querySelectorAll('[data-vc-title]')).filter((el) => /^Story 1x/.test(el.textContent)).length, state: window.__virtual_caret_state, input: !!document.querySelector('[data-testid="virtual-caret-input"]'), active: document.activeElement && document.activeElement.tagName } }; }
+                            return performance.now() - t0;
+                        }, JSON.stringify(update));
+                        if (typeof repaint === 'object') { throw new Error(`the caret did not repaint after the update (sample ${sample}) ${JSON.stringify(repaint.debug)}`); }
+                        if (sample >= warmup_count) { post_ms.push(sent.post_ms); repaint_ms.push(repaint); }
+                    }
+                    const slowest = Math.max(...repaint_ms);
+                    facts = { samples: sample_count, source_bytes: corpus.source_bytes, host_ms: 0 };
+                    return {
+                        elapsed_ms: median(repaint_ms),
+                        long_task_count: 0,
+                        long_task_total_ms: 0,
+                        long_task_max_ms: Math.round(slowest * 10) / 10,
+                        settled: true,
+                        repaint_median_ms: median(repaint_ms),
+                        repaint_max_ms: Math.round(slowest * 10) / 10,
+                        keydown_to_post_median_ms: median(post_ms),
+                        keydown_to_post_max_ms: Math.round(Math.max(...post_ms) * 10) / 10,
+                    };
+                });
+            } finally {
+                await session.close();
+            }
+            return { measurements, facts };
+        },
+    };
+}
+
 /*
  * The scenario list, in run order. Smallest first, so a run that is cut short still produces the
  * cheap numbers, and the 200-file load - the slowest by two orders of magnitude - runs last.
@@ -386,6 +507,9 @@ export const SCENARIOS = [
     folderProgressiveScenario({ id: 'folder-dense-10x400k', label: 'folder progressive load, 10 dense files of 400KB (87 stories/file, this repo\'s own done.md density)', metric_id: 'folder-load-10x400k-dense', file_count: 10, file_bytes: 409600, stories_per_file: 87, batch_size: 1, settle_timeout_ms: 300000 }),
     folderProgressiveScenario({ id: 'folder-progressive-100', label: 'folder progressive load, 100 files of 8KB', metric_id: 'folder-load-100', file_count: 100, file_bytes: 8192, batch_size: DISCOVERY_BATCH_MAX_DOCS, settle_timeout_ms: 300000 }),
     folderProgressiveScenario({ id: 'folder-progressive-200', label: 'folder progressive load, 200 files of 8KB (the extension MAX_AGGREGATE_FILES cap)', metric_id: 'folder-load-200', file_count: 200, file_bytes: 8192, batch_size: DISCOVERY_BATCH_MAX_DOCS, settle_timeout_ms: 900000 }),
+    caretRelayScenario({ id: 'virtual-caret-relay-8k', label: 'virtual caret: one typed character relayed and repainted on an 8KB single file (dev bundle only)', metric_id: 'virtual-caret-relay-8k', mode: 'single', file_bytes: 8192, story_bytes: 856, settle_timeout_ms: 60000, sample_count: 6, warmup_count: 2 }),
+    caretRelayScenario({ id: 'virtual-caret-relay-100k', label: 'virtual caret: one typed character relayed and repainted on a 100KB single file (dev bundle only)', metric_id: 'virtual-caret-relay-100k', mode: 'single', file_bytes: 102400, story_bytes: 856, settle_timeout_ms: 120000 }),
+    caretRelayScenario({ id: 'virtual-caret-relay-folder-200', label: 'virtual caret: one typed character relayed and repainted on a 200-file folder board (dev bundle only)', metric_id: 'virtual-caret-relay-folder-200', mode: 'folder', file_count: 200, file_bytes: 8192, settle_timeout_ms: 900000 }),
     folderInteractionScenario({
         id: 'folder-interactions-200',
         label: 'click, caret move and one-file merge on a settled 200-file board',

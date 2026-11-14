@@ -1,4 +1,4 @@
-import { firstInvalidChange, logEditTextChanges, offsetDeltaBefore, type TextChange } from './editops';
+import { docHashesOf, firstInvalidChange, logEditTextChanges, offsetDeltaBefore, type TextChange } from './editops';
 
 jest.mock('./errorops', () => ({
     writeToLog: jest.fn(),
@@ -7,6 +7,23 @@ jest.mock('./errorops', () => ({
 import { writeToLog } from './errorops';
 
 describe('editops', () => {
+
+    describe('docHashesOf', () => {
+
+        it('keeps the string hashes keyed by doc path', () => {
+            expect(docHashesOf({ '/w/a.md': 'abc', '/w/b.md': 'def' })).toEqual({ '/w/a.md': 'abc', '/w/b.md': 'def' });
+        });
+
+        it('drops an entry that is not a non-empty string', () => {
+            expect(docHashesOf({ '/w/a.md': 'abc', '/w/b.md': 7, '/w/c.md': '', '/w/d.md': null })).toEqual({ '/w/a.md': 'abc' });
+        });
+
+        it('reads a missing or malformed field as no hashes', () => {
+            expect(docHashesOf(undefined)).toEqual({});
+            expect(docHashesOf(null)).toEqual({});
+            expect(docHashesOf('abc')).toEqual({});
+        });
+    });
 
     describe('firstInvalidChange', () => {
 

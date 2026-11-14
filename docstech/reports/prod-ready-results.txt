@@ -1,27 +1,29 @@
 # Prod-ready Results
-# Version: 0.4.48
-# Date: 2026-11-13T20:33:00Z
-# Tree: HEAD 2511e2f plus the remove-split-view working tree (35 changed paths outside docstech, todo.md, three reports)
-# Stories: remove-split-view doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move "Remove the in-view split" to done.md
+# Version: 0.4.49
+# Date: 2026-11-14T15:25:00Z
+# Tree: HEAD caa45de plus the renderer-neutral core entry and its rollup build, the protocol version, doc_hashes on editText, their tests, AGENTS.md, CODING_STANDARDS.md, todo.md and the three reports
+# Stories: renderer-neutral-core doing -> code-review
+# Ship verdict: Ready to ship: /push-prod will move "Give a second renderer a core to build on" to done.md
 # ---
-Overseer inbox | no overseer review | skipped
-Story-state intake | 1 at doing, all tasks ticked | fresh
-Story reconciliation | all tasks already ticked, tree delivers them (no reference to the split remains outside docstech) | fresh
-Gate scope | code | fresh
-Build | ok (webpack, via test-playwright) | fresh
-Lint | ok | reused (green at 2026-11-13T20:27:10Z, tree unchanged)
-Project guards | none for this project | skipped
-Dependency audit | not run, dependencies unchanged | skipped
-CODING_STANDARDS | mechanical greps and inline pass clean | fresh
-Exposure | public: scan clean, diff read clean | fresh
-Fleet fix check | no shared-surface hit | fresh
-Jest | 3985/3985 passed (180 files) | reused (green at 2026-11-13T20:27:27Z, tree unchanged)
-Playwright | 373/373 passed (dev and chromium-production projects), none flaky or skipped | fresh
-Todo/Done | ok | fresh
-Story-state advance | doing -> code-review, move rehearsed | fresh
-Version bump | 0.4.48 | fresh
+Overseer inbox | skipped | not a coordinator's close | skipped (no overseer review)
+Story-state intake | ok | 1 at doing | fresh
+Story reconciliation | ok | all 6 tasks ticked with evidence | fresh
+Build | ok | webpack build inside the Playwright run, and the views package rollup (dist/core) exit 0 | fresh
+Lint | ok | 0 errors, 3 warnings (long functions in AgentAnalyser.ts, ExtensionReceiver.tsx and CoordinatorPanel.tsx, none in this change) | fresh
+Project guards | skipped | none beyond lint and Jest | skipped
+Dependency audit | ok | no known vulnerabilities at high or critical | fresh
+CODING_STANDARDS | ok | mechanical checks and one inline pass clean | fresh
+Exposure | ok | public repository: scan clean, added prose read; one story line reworded | fresh
+Fleet fix check | ok | no shared-surface hit and no new dependency class | fresh
+Jest | ok | 4002/4002 passed: extension 1255 (51 suites), webview 268 (20 suites), views 2479 (110 suites) | fresh
+Mocha | ok | 43 passed, 0 failed | fresh
+Playwright | ok | 373/373 passed | fresh
+Todo/Done | ok | board-format-check: 0 findings | fresh
+Story-state advance | ok | renderer-neutral-core doing -> code-review, move rehearsed (exit 0) | fresh
+Version bump | ok | 0.4.48 -> 0.4.49 | fresh
 # --- Fixed during review ---
-none
+Exposure: a story line addressed a named role in the second person; it now reads as an open question with a recommendation.
+Board: the views test count in the story was one behind after the kanban drop test was added; corrected to 2,479.
 # --- Open ---
-none
+The names `core` and its export list become public API of a published package; the permanent name check has to confirm them before a release.
+CHANGELOG.md has no entry for 0.4.49.

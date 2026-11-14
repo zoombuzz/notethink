@@ -1,9 +1,9 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, NOTETHINK_VIEW_TYPE } from '../constants';
+import { MAX_AGGREGATE_FILES, DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER, NOTETHINK_VIEW_TYPE, PROTOCOL_VERSION } from '../constants';
 import { generateIdentifier } from '../lib/cryptoops';
 import { createThrottledProgressSender, type DiscoveryLogDetails, drainWorklist, formatDiscoveryLogLine, resolveDiscoveryMethod } from '../lib/discoveryops';
-import { type TextChange, firstInvalidChange, logEditTextChanges, offsetDeltaBefore } from '../lib/editops';
+import { type TextChange, docHashesOf, firstInvalidChange, logEditTextChanges, offsetDeltaBefore } from '../lib/editops';
 import { chooseTargetColumn, type TargetColumnGroup } from '../lib/chooseTargetColumn';
 import { debug, writeToLog, writeToLogAtLevel, writeToErrorLog } from '../lib/errorops';
 import { globMatches } from '../lib/globMatch';
@@ -309,6 +309,7 @@ export class PanelSession {
 			partial: { docs: { [doc.id]: timestamped } },
 			merge_strategy,
 			workspace_root: this.workspace_root,
+			protocol_version: PROTOCOL_VERSION,
 			extension_version: this.extension_version,
 		});
 	}
@@ -1207,6 +1208,7 @@ export class PanelSession {
 			partial: { docs: this.integration_docs },
 			workspace_root: this.workspace_root,
 			workspace_projects: this.workspace_projects,
+			protocol_version: PROTOCOL_VERSION,
 			extension_version: this.extension_version,
 			aggregate_total_discovered: this.integration_total_discovered,
 			aggregate_truncated: this.integration_truncated,
@@ -1241,6 +1243,7 @@ export class PanelSession {
 			merge_strategy: 'merge',
 			workspace_root: this.workspace_root,
 			workspace_projects: this.workspace_projects,
+			protocol_version: PROTOCOL_VERSION,
 			extension_version: this.extension_version,
 			aggregate_total_discovered: this.integration_total_discovered,
 			aggregate_truncated: this.integration_truncated,
@@ -1505,18 +1508,25 @@ export class PanelSession {
 	 */
 	private async handleEditText(e: Record<string, unknown>): Promise<void> {
 		const changes_by_doc = e.changes_by_doc as Record<string, Array<TextChange>> | undefined;
+		const doc_hashes = docHashesOf(e.doc_hashes);
 		if (changes_by_doc && typeof changes_by_doc === 'object') {
 			for (const [doc_path, changes] of Object.entries(changes_by_doc)) {
-				await this.applyEditTextToDoc(doc_path, changes);
+				await this.applyEditTextToDoc(doc_path, changes, doc_hashes[doc_path]);
 			}
 		} else {
-			await this.applyEditTextToDoc(e.docPath as string, e.changes as Array<TextChange>);
+			const doc_path = e.docPath as string;
+			await this.applyEditTextToDoc(doc_path, e.changes as Array<TextChange>, doc_hashes[doc_path]);
 		}
 		// clear the debounce timer the edits set, so the batch doesn't re-emit a delayed update
 		if (this.change_timer) { clearTimeout(this.change_timer); this.change_timer = undefined; }
 	}
 
-	private async applyEditTextToDoc(doc_path: string, changes: Array<TextChange>): Promise<void> {
+	/**
+	 * Applies one doc's changes. `expected_hash`, when the sender supplied one, is the hash of the text
+	 * the offsets were computed against: a doc that has changed since is left alone and re-sent, so the
+	 * sender redraws from the text that is really there.
+	 */
+	private async applyEditTextToDoc(doc_path: string, changes: Array<TextChange>, expected_hash?: string): Promise<void> {
 		try {
 			// webview-supplied paths are untrusted: only allow edits to .md files inside the workspace
 			if (!doc_path || !isWithinWorkspace(doc_path, { requireExtension: '.md' })) {
@@ -1529,6 +1539,11 @@ export class PanelSession {
 			}
 			const uri = this.resolveWorkspaceUri(doc_path);
 			const document = await vscode.workspace.openTextDocument(uri);
+			if (expected_hash !== undefined && expected_hash !== await generateIdentifier(document.getText())) {
+				writeToLog('applyEditTextToDoc', `text changed since the edit was worked out, re-sending ${doc_path}`);
+				this.sendDoc(await this.buildDoc(document, this.isFolderScoped(document.uri.path)));
+				return;
+			}
 			const invalid = firstInvalidChange(changes, document.getText().length);
 			if (invalid) {
 				writeToLogAtLevel('error', 'applyEditTextToDoc',

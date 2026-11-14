@@ -36,3 +36,6 @@ export const INTEGRATION_MODE_FOLDER = 'folder';
 
 // viewType for the NoteThink board; lets the reveal path tell our board tabs from text-editor tabs on the same uri
 export const NOTETHINK_VIEW_TYPE = 'notethink.viewer';
+
+// the message protocol this host speaks, sent on every update; mirrors notethink-views' types/Messages.ts
+export const PROTOCOL_VERSION = 1;

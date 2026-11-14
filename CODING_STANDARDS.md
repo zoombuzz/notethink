@@ -243,6 +243,8 @@ Canonical: the header of `components/notes/cardregistryops.ts`, and `AutoView.ts
 | `client/webview/src/` | the webview app - React, `debug` logging, no `fs` |
 | `client/webview/src/notethink-views/src/` | a **nested package** with its own `package.json`, `rollup.config.js`, tsconfig and `node_modules`: `components/views/`, `components/notes/`, `lib/`, `types/`, and the public exports in `index.ts` |
 
+**`notethink-views/src/core.ts` is the renderer-neutral entry point**: the parser, the note tree, the view registry, the edit calculators and the message types, for a renderer that is not the React webview. Nothing reachable from it may import React, a stylesheet or a `.tsx` file, or touch the DOM as it loads; `core.test.ts` walks its import graph and fails when one is. Rollup builds it to `dist/core/index.js`, which must load in a page, a worker and Node alike, so its config asks for each dependency's `worker` build. Its export list is public API of a published package, so adding or renaming an export goes through the [permanent name check](#permanent-name-check).
+
 `ls` a directory rather than trusting a listing of it. File naming follows [`CODE_LAYOUT.md`](../lightenna-iac/docstech/standards/CODE_LAYOUT.md) > File naming, with these deltas:
 
 - **Types** are `PascalCase.ts` (`NoteProps.ts`). **Styles** are CSS modules beside their component (`components/Spinner.module.scss`); there is no `styles/` directory.
@@ -262,6 +264,8 @@ The worked examples:
 - **Constants mirrored across the bundle boundary are the documented exception**, below.
 
 ### Mirrored constants across the extension/webview boundary
+
+**`PROTOCOL_VERSION` is mirrored the same way**, in `client/extension/src/constants.ts` and `notethink-views/src/types/Messages.ts`. The webview states it in `requestInitialState` and the host on every `update`, so a host or a renderer that is not this extension's can tell when the other side speaks a different protocol. Raise both together when a message changes meaning or gains a required field; a new optional field does not need it.
 
 A small set of folder-view defaults is duplicated in `client/extension/src/constants.ts` and `client/webview/src/constants.ts`. The two are separate webpack bundles with no shared module graph, so there is no import path to one source: the duplication is the wire contract, and neither side is `*ops.ts`-ified. **The shared subset must agree; the files are not identical.** Shared: the include/exclude glob defaults (`DEFAULT_INCLUDE_FILTER`, `DEFAULT_EXCLUDE_FILTER`) and `DEFAULT_GROUP_DISPLAY`, each cross-referenced in a comment on both sides. Every other constant in either file is one-sided by design (`DEFAULT_COLUMN_ORDER` and `DEFAULT_MAX_NOTES_PER_FILE`, for instance, are webview-only; `grep -h '^export const' client/*/src/constants.ts` lists them), so do not push one across unless the extension gains a copy.
 

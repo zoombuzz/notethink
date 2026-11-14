@@ -4,6 +4,7 @@ import { mergeAggregateRoot, FolderMergeCache, FOLDER_VIEW_STATE_ID, type Aggreg
 import { INTEGRATION_MODE_FOLDER } from "../../notethink-views/src/types/IntegrationMode";
 import { DEFAULT_INCLUDE_FILTER, DEFAULT_EXCLUDE_FILTER, DEFAULT_MAX_NOTES_PER_FILE } from "../../constants";
 import { buildViewDisplayOptions } from "../../lib/composerops";
+import { withDocHashes } from "../../lib/docops";
 import { releaseFolderDocContent } from "../../hooks/useWorkerParsedDocs";
 import type { ReactElement } from "react";
 import type { HashMapOf, Doc } from "../../types/general";
@@ -144,7 +145,7 @@ export default function FolderTreeComposer({ docs, integration_path, props }: { 
             reportAudioIndicatorPresence: props.reportAudioIndicatorPresence,
             postMessage: props.postMessage ? (message: unknown) => {
                 // click handlers attach docPath from note.origin; without it, the extension drops what it can't route
-                props.postMessage!(message);
+                props.postMessage!(withDocHashes(message, (doc_path) => Object.values(docs).find(d => d.path === doc_path)?.hash_sha256));
             } : undefined,
         },
     };

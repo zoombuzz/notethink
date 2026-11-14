@@ -14,7 +14,7 @@ import { NotethinkEditorProvider } from './notethinkEditor';
 import { PanelSession } from './PanelSession';
 import { AUDIO_CHUNK_BYTES, AudioCaptureCoordinator } from './AudioCaptureCoordinator';
 import { FLAT_SETTINGS, buildDeclaredSettingsContributions, flatSettingKeys } from '../lib/settings';
-import { DEFAULT_EXCLUDE_FILTER, MAX_AGGREGATE_FILES } from '../constants';
+import { DEFAULT_EXCLUDE_FILTER, MAX_AGGREGATE_FILES, PROTOCOL_VERSION } from '../constants';
 import * as cryptoops from '../lib/cryptoops';
 
 // ---- helpers ----------------------------------------------------------------
@@ -367,6 +367,62 @@ describe('NotethinkEditorProvider', () => {
 				changes: [{ from: 5, to: 11, insert: ' Jest' }],
 			});
 
+			expect(vscode.workspace.applyEdit).toHaveBeenCalledTimes(1);
+		});
+
+		it('applies an edit whose doc hash matches the text the document holds', async () => {
+			const doc = mockTextDocument(docText, docPath);
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
+
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				docPath,
+				changes: [{ from: 5, to: 11, insert: ' Jest' }],
+				doc_hashes: { [docPath]: await cryptoops.generateIdentifier(docText) },
+			});
+
+			expect(vscode.workspace.applyEdit).toHaveBeenCalledTimes(1);
+		});
+
+		it('leaves a doc alone and re-sends it when its text changed since the edit was worked out', async () => {
+			const changed_text = 'Hello Brave New World';
+			const doc = mockTextDocument(changed_text, docPath);
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
+			(vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue(doc);
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				docPath,
+				changes: [{ from: 5, to: 11, insert: ' Jest' }],
+				doc_hashes: { [docPath]: await cryptoops.generateIdentifier(docText) },
+			});
+
+			expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
+			const resent = findUpdate(panelHelper.postedMessages);
+			expect(resent).toBeDefined();
+			expect((Object.values(resent.partial.docs) as UpdateDocEntry[])[0].text).toBe(changed_text);
+		});
+
+		it('checks each doc of a batch against its own hash', async () => {
+			const other_path = '/workspace/other.md';
+			const stale = mockTextDocument('Changed since', docPath);
+			const fresh = mockTextDocument(docText, other_path);
+			(vscode.window as unknown as WindowMutable).visibleTextEditors = [];
+			(vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (arg: unknown) => ((arg as Uri).path === docPath ? stale : fresh));
+			const hash = await cryptoops.generateIdentifier(docText);
+
+			await panelHelper.simulateMessage({
+				type: 'editText',
+				changes_by_doc: {
+					[docPath]: [{ from: 0, to: 5, insert: 'Howdy' }],
+					[other_path]: [{ from: 0, to: 5, insert: 'Howdy' }],
+				},
+				doc_hashes: { [docPath]: hash, [other_path]: hash },
+			});
+
+			// only the doc whose text still matches its hash is edited
 			expect(vscode.workspace.applyEdit).toHaveBeenCalledTimes(1);
 		});
 
@@ -1841,6 +1897,14 @@ describe('NotethinkEditorProvider', () => {
 			const selection_msg = findSelection(panelHelper.postedMessages);
 			expect(selection_msg).toBeDefined();
 			expect(selection_msg.docPath).toBe(defaultDocPath);
+		});
+
+		it('states the protocol version the host speaks on its update', async () => {
+			panelHelper.postedMessages.length = 0;
+
+			await panelHelper.simulateMessage({ type: 'requestInitialState', protocol_version: PROTOCOL_VERSION });
+
+			expect(findByType(panelHelper.postedMessages, 'update')?.protocol_version).toBe(PROTOCOL_VERSION);
 		});
 	});
 

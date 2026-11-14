@@ -42,6 +42,8 @@ async function openBoards(page: Page, repos: Array<'demo' | 'other'>, coordinato
     await injectMultipleDocsFromFixtures(page, docs, { workspace_root: WORKSPACE_ROOT });
     await selectFolderMode(page);
     await page.waitForSelector('[data-folder-mode="true"]');
+    // the activity store listens only once a card has mounted, which its demand proves; a snapshot posted sooner is lost
+    await expect.poll(async () => (await sent(page, 'activityDemand')).length).toBeGreaterThan(0);
     await postSnapshot(page, coordinators);
 }
 

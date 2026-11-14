@@ -1,5 +1,5 @@
 import type { Doc, HashMapOf } from "../types/general";
-import { decideAutoIntegrationReconcile, declTargetKey, pickMostRecentlySentDoc, resolveFileIntegrationDeclaration, type AutoReconcileInputs } from "./docops";
+import { decideAutoIntegrationReconcile, declTargetKey, pickMostRecentlySentDoc, resolveFileIntegrationDeclaration, withDocHashes, type AutoReconcileInputs } from "./docops";
 import { INTEGRATION_MODE_CURRENT_FILE, INTEGRATION_MODE_FOLDER } from "../notethink-views/src/types/IntegrationMode";
 
 function buildDoc(overrides: Partial<Doc> = {}): Doc {
@@ -33,6 +33,33 @@ function parsedDoc(lines: Array<{ line: string; depth: number }>, overrides: Par
         ...overrides,
     };
 }
+
+describe('docops.withDocHashes', () => {
+    const HASHES: Record<string, string> = { '/w/a.md': 'hash-a', '/w/b.md': 'hash-b' };
+    const hashForPath = (doc_path: string): string | undefined => HASHES[doc_path];
+    it('adds the hash of the doc a single-doc edit names', () => {
+        const message = { type: 'editText', docPath: '/w/a.md', changes: [{ from: 0, insert: 'x' }] };
+        expect(withDocHashes(message, hashForPath)).toEqual({ ...message, doc_hashes: { '/w/a.md': 'hash-a' } });
+    });
+    it('falls back to the given doc when a single-doc edit names none', () => {
+        const message = { type: 'editText', changes: [{ from: 0, insert: 'x' }] };
+        expect(withDocHashes(message, hashForPath, '/w/b.md')).toEqual({ ...message, doc_hashes: { '/w/b.md': 'hash-b' } });
+    });
+    it('adds a hash for every doc of a multi-doc edit whose hash is known', () => {
+        const message = { type: 'editText', changes_by_doc: { '/w/a.md': [], '/w/b.md': [], '/w/unknown.md': [] } };
+        expect(withDocHashes(message, hashForPath)).toEqual({ ...message, doc_hashes: { '/w/a.md': 'hash-a', '/w/b.md': 'hash-b' } });
+    });
+    it('returns the very same message when it is not an edit, already carries hashes, or names no known doc', () => {
+        const reveal = { type: 'revealRange', docPath: '/w/a.md', from: 0 };
+        const hashed = { type: 'editText', docPath: '/w/a.md', changes: [], doc_hashes: { '/w/a.md': 'earlier' } };
+        const unknown = { type: 'editText', docPath: '/w/unknown.md', changes: [] };
+        expect(withDocHashes(reveal, hashForPath)).toBe(reveal);
+        expect(withDocHashes(hashed, hashForPath)).toBe(hashed);
+        expect(withDocHashes(unknown, hashForPath)).toBe(unknown);
+        expect(withDocHashes(undefined, hashForPath)).toBeUndefined();
+        expect(withDocHashes('editText', hashForPath)).toBe('editText');
+    });
+});
 
 describe('docops.pickMostRecentlySentDoc', () => {
 

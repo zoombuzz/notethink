@@ -6,7 +6,7 @@ import { anyViewInFolderMode, resolveIntegrationMode, FOLDER_VIEW_STATE_ID } fro
 import { INTEGRATION_MODE_FOLDER } from '../notethink-views/src/types/IntegrationMode';
 import type { HashMapOf, Doc } from '../types/general';
 import type { TextSelection } from '../notethink-views/src/types/NoteProps';
-import type { SettingsCascadePayload, JumpTargetsMessage, DiscoveryProgress } from '../notethink-views/src/types/Messages';
+import { PROTOCOL_VERSION, type SettingsCascadePayload, type JumpTargetsMessage, type DiscoveryProgress } from '../notethink-views/src/types/Messages';
 import type { ViewState } from './usePersistedViewStates';
 
 const debug = Debug("nodejs:notethink:useVscodeMessages");
@@ -462,6 +462,7 @@ export function useVscodeMessages(deps: VscodeMessagesDeps): VscodeMessagesState
         // requests active doc, selection and settings cascade after integration_path is set for sendDoc
         postMessage({
             type: 'requestInitialState',
+            protocol_version: PROTOCOL_VERSION,
         });
         return () => {
             debug('removed message event listener');

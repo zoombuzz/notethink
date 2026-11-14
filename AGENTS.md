@@ -29,6 +29,7 @@ There is no root `src/`: the three source roots are described in [`CODING_STANDA
 | Extension | `client/extension/src/extension.ts` |
 | Webview | `client/webview/src/components/base/App.tsx` |
 | Component Library | `client/webview/src/notethink-views/src/index.ts` (public exports) |
+| Renderer-neutral core | `client/webview/src/notethink-views/src/core.ts` (parser, note tree, registries, edit calculators, message types; no React) |
 
 ## Naming Conventions
 

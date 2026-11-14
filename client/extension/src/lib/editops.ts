@@ -26,6 +26,20 @@ export function firstInvalidChange(changes: Array<TextChange>, doc_length: numbe
 }
 
 /**
+ * The `doc_hashes` an editText message carries, keyed by doc path, with anything that is not a string
+ * hash left out. A message from a sender that predates the field yields an empty map, so its docs are
+ * applied unchecked as they always were.
+ */
+export function docHashesOf(raw: unknown): Record<string, string> {
+    const hashes: Record<string, string> = {};
+    if (typeof raw !== 'object' || raw === null) { return hashes; }
+    for (const [doc_path, hash] of Object.entries(raw)) {
+        if (typeof hash === 'string' && hash !== '') { hashes[doc_path] = hash; }
+    }
+    return hashes;
+}
+
+/**
  * Net length change from edits at or before `offset`. Added to a caret offset, it keeps the caret on
  * its character through a view-driven edit instead of jumping to the last edited line. An edit
  * straddling the offset counts as after it.

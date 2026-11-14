@@ -69,4 +69,26 @@ export default [
         plugins: [dts()],
         external: [/\.css$/],
     },
+    /*
+     * The renderer-neutral core: one self-contained module with its parser bundled in and no React. It
+     * must load in a page, a worker and Node alike, so the `worker` condition is asked for first: a
+     * package's `browser` build may reach for `document` as it loads (the character-reference decoder
+     * does), where its `worker` build never can.
+     */
+    {
+        input: "src/core.ts",
+        output: [{ file: "dist/core/index.js", format: "esm", esModule: true, sourcemap: true, inlineDynamicImports: true }],
+        plugins: [
+            resolve({ extensions: ['.js', '.ts', '.mjs'], exportConditions: ['worker'], browser: true, preferBuiltins: false }),
+            commonjs(),
+            typescript({ tsconfig: "./tsconfig.json" }),
+            terser(),
+        ],
+        onwarn,
+    },
+    {
+        input: "src/core.ts",
+        output: [{ file: "dist/core/index.d.ts", format: "es" }],
+        plugins: [dts()],
+    },
 ];

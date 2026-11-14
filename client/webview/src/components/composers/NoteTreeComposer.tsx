@@ -5,6 +5,7 @@ import { fileDeclaredViewType, flattenSingleFileStories, stampSingleFileStableId
 import { flattenAllNotes } from "../../notethink-views/src/lib/noteops";
 import { chainOf, registryWithUserTypes } from "../../notethink-views/src/lib/viewregistryops";
 import { buildViewDisplayOptions } from "../../lib/composerops";
+import { withDocHashes } from "../../lib/docops";
 import { INTEGRATION_MODE_CURRENT_FILE } from "../../notethink-views/src/types/IntegrationMode";
 import type { Doc } from "../../types/general";
 import type { UserViewType } from "../../notethink-views/src/types/Messages";
@@ -95,11 +96,8 @@ export default function NoteTreeComposer({ note_id, note, props }: { note_id: st
                 if (message && typeof message === 'object' && 'type' in message) {
                     const m = message as Record<string, unknown>;
                     // respects an existing docId/docPath; folder mode sets it from note.origin, single-file mode stamps this view's own
-                    props.postMessage!({
-                        ...m,
-                        docId: m.docId ?? note_id,
-                        docPath: m.docPath ?? note.path,
-                    });
+                    const stamped = { ...m, docId: m.docId ?? note_id, docPath: m.docPath ?? note.path };
+                    props.postMessage!(withDocHashes(stamped, (doc_path) => (doc_path === note.path ? note.hash_sha256 : undefined)));
                 } else {
                     props.postMessage!(message);
                 }

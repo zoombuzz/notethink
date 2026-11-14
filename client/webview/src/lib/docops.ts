@@ -165,6 +165,30 @@ export function resolveFileIntegrationDeclaration(doc: Doc | undefined, workspac
 }
 
 /**
+ * An outgoing `editText` message with `doc_hashes` filled in for each doc it edits whose hash is known,
+ * so the host can refuse an edit worked out on text that has since changed. Any other message, and an
+ * editText that already carries hashes or edits no doc with a known hash, is returned as it came.
+ * - hashForPath: the `hash_sha256` of the doc at a path, as the webview last received it
+ * - fallback_doc_path: the doc a single-doc message edits when it names none
+ */
+export function withDocHashes(message: unknown, hashForPath: (doc_path: string) => string | undefined, fallback_doc_path?: string): unknown {
+    if (typeof message !== 'object' || message === null) { return message; }
+    const candidate = message as Record<string, unknown>;
+    if (candidate.type !== 'editText' || candidate.doc_hashes !== undefined) { return message; }
+    const changes_by_doc = candidate.changes_by_doc;
+    const single_path = typeof candidate.docPath === 'string' ? candidate.docPath : fallback_doc_path;
+    const single_paths = single_path ? [single_path] : [];
+    const doc_paths = typeof changes_by_doc === 'object' && changes_by_doc !== null ? Object.keys(changes_by_doc) : single_paths;
+    const doc_hashes: Record<string, string> = {};
+    for (const doc_path of doc_paths) {
+        const hash = hashForPath(doc_path);
+        if (hash) { doc_hashes[doc_path] = hash; }
+    }
+    if (Object.keys(doc_hashes).length === 0) { return message; }
+    return { ...candidate, doc_hashes };
+}
+
+/**
  * Pick the most-recently-sent doc from the map (ISO `updateSentAt` lex-compares as
  * chronological). Used in current_file mode to render exactly one composer regardless
  * of how the docs map got populated - a doc stamped by the extension's sendDoc is the

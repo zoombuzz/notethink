@@ -5,8 +5,31 @@
  */
 
 import type { IntegrationMode } from './IntegrationMode';
+import type { SetIntegrationMessage } from '../lib/viewstateops';
+
+/*
+ * The version of the message protocol below. A renderer states it in `requestInitialState` and a host
+ * states it in every `update`, so a host that is not the VS Code extension, or a renderer that is not
+ * this webview, can tell when the other side speaks a different one. Raise it when a message changes
+ * meaning or gains a required field; a new optional field does not need it. Mirrored as PROTOCOL_VERSION
+ * in client/extension/src/constants.ts, which shares no module graph with this package.
+ *
+ * The agent-activity and coordinator messages are not part of it: they serve cards that read files on the
+ * machine the extension runs on, and their shapes live with their handlers in client/extension/src/vscode.
+ */
+export const PROTOCOL_VERSION = 1;
 
 // webview -> Extension messages
+
+/**
+ * Webview -> extension, sent once on mount after any `setIntegration` replay: asks for the active doc,
+ * its selection and the settings cascade.
+ * - protocol_version: the PROTOCOL_VERSION the renderer was built against
+ */
+export interface RequestInitialStateMessage {
+    type: 'requestInitialState';
+    protocol_version?: number;
+}
 
 export interface RevealRangeMessage {
     type: 'revealRange';
@@ -38,6 +61,9 @@ export interface EditTextChange {
  * - single-doc: `docPath` + `changes` set. The legacy shape, used for kanban reorders within one file.
  * - multi-doc: `changes_by_doc` set (keyed by `docPath`). Used for folder-mode reorders spanning files;
  *   each entry applies independently, so a failure on one doc does not abort the batch.
+ * - doc_hashes: keyed by doc path, the `hash_sha256` of the text each doc's offsets were computed
+ *   against. The host refuses a doc whose text now hashes differently and re-sends that doc, so an edit
+ *   worked out on stale text never lands on changed text. A doc with no entry is applied unchecked.
  */
 export interface EditTextMessage {
     type: 'editText';
@@ -45,6 +71,7 @@ export interface EditTextMessage {
     docPath?: string;
     changes?: EditTextChange[];
     changes_by_doc?: Record<string, EditTextChange[]>;
+    doc_hashes?: Record<string, string>;
 }
 
 export interface OpenExternalMessage {
@@ -150,7 +177,58 @@ export interface OpenFileMessage {
     path: string;
 }
 
+/** Webview -> extension: the first agent card mounted, so the host starts reading agent activity. */
+export interface ActivityDemandMessage {
+    type: 'activityDemand';
+}
+
+/** Webview -> extension: the last agent card unmounted, so the host may stop reading agent activity. */
+export interface ActivityWithdrawMessage {
+    type: 'activityWithdraw';
+}
+
+/** Webview -> extension: the user switched audio capture on or off for the window. */
+export interface AudioToggleMessage {
+    type: 'audioToggle';
+    enabled: boolean;
+}
+
+/**
+ * Webview -> extension: one chunk of captured audio from the viewer that owns the microphone.
+ * - chunk_index: counts from 0 for each capture; a chunk dropped as silence still advances it
+ * - started_at: ISO 8601 time the chunk began, by the capturing client's clock
+ * - pcm: 16 kHz mono 16-bit little-endian samples
+ */
+export interface AudioChunkMessage {
+    type: 'audioChunk';
+    chunk_index: number;
+    started_at: string;
+    pcm: ArrayBuffer | Uint8Array;
+}
+
+/** Webview -> extension: the owning viewer's microphone went live or stopped, with any failure's name. */
+export interface AudioCaptureStatusMessage {
+    type: 'audioCaptureStatus';
+    capturing: boolean;
+    error_name?: string;
+}
+
+/** Webview -> extension: whether this frame may ask for the microphone at all, for the host's log. */
+export interface AudioFrameCheckMessage {
+    type: 'audioFrameCheck';
+    verdict: string;
+}
+
+/** Webview -> extension: an uncaught error or rejection in the webview, relayed to the host's log. */
+export interface RenderErrorMessage {
+    type: 'renderError';
+    message: string;
+    stack: string;
+}
+
 export type WebviewToExtensionMessage =
+    | RequestInitialStateMessage
+    | SetIntegrationMessage
     | RevealRangeMessage
     | SelectRangeMessage
     | EditTextMessage
@@ -161,31 +239,85 @@ export type WebviewToExtensionMessage =
     | ResetSettingsToDefaultMessage
     | RestoreSettingsToBuiltinDefaultMessage
     | RequestJumpTargetsMessage
-    | OpenFileMessage;
+    | OpenFileMessage
+    | ActivityDemandMessage
+    | ActivityWithdrawMessage
+    | AudioToggleMessage
+    | AudioChunkMessage
+    | AudioCaptureStatusMessage
+    | AudioFrameCheckMessage
+    | RenderErrorMessage;
 
 // extension -> Webview messages
 
+/**
+ * Extension -> webview: one or more docs, keyed by doc id. A doc is its path, its text and the text's
+ * `hash_sha256`, with its mdast as `content` when the host parsed it.
+ * - merge_strategy: 'merge' adds the docs to those the webview holds (a folder view); absent replaces them
+ * - protocol_version: the PROTOCOL_VERSION the host speaks
+ * - extension_version: the host's own version, which the webview compares with the bundle it was built from
+ * - workspace_projects: the workspace's root folder names, in a multi-root folder view
+ * - aggregate_total_discovered, aggregate_truncated: how many files a folder view found, and whether it stopped early
+ * - include_filter, exclude_filter: the globs the folder view was discovered with
+ */
 export interface UpdateMessage {
     type: 'update';
     partial: {
         docs: Record<string, unknown>;
     };
+    merge_strategy?: 'merge';
+    protocol_version?: number;
+    extension_version?: string;
+    workspace_root?: string;
+    workspace_projects?: string[];
+    aggregate_total_discovered?: number;
+    aggregate_truncated?: boolean;
+    include_filter?: string;
+    exclude_filter?: string;
 }
 
+/**
+ * Extension -> webview: the active editor's doc when it sits outside the folder a view is showing, so the
+ * webview can follow the editor without merging the doc into the folder.
+ */
+export interface ActiveEditorDocMessage {
+    type: 'activeEditorDoc';
+    doc: Record<string, unknown>;
+}
+
+/** Extension -> webview: a file a folder view was showing has been deleted. */
+export interface DocDeletedMessage {
+    type: 'docDeleted';
+    docId: string;
+    docPath: string;
+}
+
+/**
+ * Extension -> webview: where the editor's caret and selection sit in a doc; `selection` is null when no
+ * editor owns the doc, which hands focus and selection to the view.
+ */
 export interface SelectionChangedMessage {
     type: 'selectionChanged';
     docPath: string;
     selection: {
         head: number;
         anchor: number;
-    };
+    } | null;
 }
 
+/**
+ * Extension -> webview: a command run from the host's own menus or keys.
+ * - viewType: the view to switch to, for 'setViewType'
+ * - direction: where to move focus, for 'navigate'
+ * - mode, path: the integration scope to adopt, for 'setIntegrationScope'
+ */
 export interface CommandMessage {
     type: 'command';
-    command: 'setViewType' | 'navigate';
+    command: 'setViewType' | 'navigate' | 'setIntegrationScope';
     viewType?: string;
     direction?: 'up' | 'down' | 'drillIn' | 'drillOut' | 'clearFocus';
+    mode?: IntegrationMode;
+    path?: string;
 }
 
 /**
@@ -397,11 +529,20 @@ export interface JumpTargetsMessage {
     entries: JumpTarget[];
 }
 
+/** Extension -> webview: the window-wide audio capture state, pushed whenever it changes. */
+export interface AudioStateMessage {
+    type: 'audioState';
+    state: AudioState;
+}
+
 export type ExtensionToWebviewMessage =
     | UpdateMessage
+    | ActiveEditorDocMessage
+    | DocDeletedMessage
     | SelectionChangedMessage
     | CommandMessage
     | SettingsCascadeMessage
     | PendingChangeMessage
     | DiscoveryProgressMessage
-    | JumpTargetsMessage;
+    | JumpTargetsMessage
+    | AudioStateMessage;

@@ -1,4 +1,4 @@
-import type { ActivityCoordinator, ActivityCoordinatorStory } from '../types/AgentActivity';
+import type { ActivityBoardLines, ActivityCoordinator, ActivityCoordinatorStory } from '../types/AgentActivity';
 import type { ResolvedRegistryAgent } from './agentregistryops';
 import type { StoryDocument } from './agentstorybindingops';
 
@@ -294,18 +294,15 @@ export function boardDocFor(story_docs: ReadonlyArray<StoryDocument>, repo_relat
 /**
  * The coordinator rows for the registry entries placed in the open folder, in name order. An entry that
  * is not a coordinator, or whose name or machine is not safe to address, is left out. Each row carries
- * its repository's board stories, so the target line can be drawn without another read, and where the
- * build and ship lines fall on them; `ready_by_repo` holds each repository's ready story ids, keyed by
- * the repository's workspace-relative path.
+ * its repository's board stories, so the target line can be drawn without another read.
  */
-export function coordinatorsFrom(agents: ReadonlyArray<ResolvedRegistryAgent>, story_docs: ReadonlyArray<StoryDocument>, ready_by_repo: ReadonlyMap<string, ReadonlyArray<string>> = new Map()): ActivityCoordinator[] {
+export function coordinatorsFrom(agents: ReadonlyArray<ResolvedRegistryAgent>, story_docs: ReadonlyArray<StoryDocument>): ActivityCoordinator[] {
     const rows: ActivityCoordinator[] = [];
     for (const agent of agents) {
         const machine = agent.machine ?? '';
         if (!isCoordinatorEntry(agent) || !isSafeCoordinatorName(agent.agent) || !isSafeCoordinatorName(machine)) { continue; }
         const board = boardDocFor(story_docs, agent.repo_relative);
         const stories = board ? parseBoardStories(board.text) : [];
-        const lines = boardLinePositions(stories, ready_by_repo.get(agent.repo_relative) ?? []);
         rows.push({
             agent: agent.agent,
             vendor: agent.vendor,
@@ -318,11 +315,32 @@ export function coordinatorsFrom(agents: ReadonlyArray<ResolvedRegistryAgent>, s
             board_doc_path: board?.doc_path,
             board_stories: stories.slice(0, COORDINATOR_BOARD_MAX_STORIES).map(({ id, title, status, convoys, operator_steps }) => ({ id, title, status, convoys, operator_steps })),
             marker_after: markerAfter(stories, machine),
-            build_after: lines.build_after,
-            ship_after: lines.ship_after,
         });
     }
     return rows.sort((a, b) => (a.agent < b.agent ? -1 : a.agent > b.agent ? 1 : 0));
+}
+
+// a story board file, as opposed to done.md or any other document
+const TODO_BOARD_PATH = /(^|\/)docstech\/users\/[^/]+\/todo\.md$/;
+
+/**
+ * Where the build and ship lines fall on every `docstech/users/<name>/todo.md` among the documents, in
+ * path order. Each entry is computed from the board's own text, so it needs no coordinator and no agent
+ * session. A board with no story gets no entry. `ready_by_doc` holds the ready story ids that belong to
+ * each board, keyed by its document path; a board missing from it has none, which leaves the ship line to
+ * the `code-review` and `testing` statuses alone.
+ */
+export function boardLinesFrom(story_docs: ReadonlyArray<StoryDocument>, ready_by_doc: ReadonlyMap<string, ReadonlyArray<string>> = new Map()): ActivityBoardLines[] {
+    const entries: ActivityBoardLines[] = [];
+    for (const doc of story_docs) {
+        if (!TODO_BOARD_PATH.test(doc.doc_path)) { continue; }
+        const stories = parseBoardStories(doc.text);
+        if (stories.length === 0) { continue; }
+        const { build_after, ship_after } = boardLinePositions(stories, ready_by_doc.get(doc.doc_path) ?? []);
+        const story_ids = stories.slice(0, COORDINATOR_BOARD_MAX_STORIES).map(story => story.id);
+        entries.push({ doc_path: doc.doc_path, story_ids, build_after: Math.min(build_after, story_ids.length), ship_after: Math.min(ship_after, story_ids.length) });
+    }
+    return entries.sort((a, b) => (a.doc_path < b.doc_path ? -1 : a.doc_path > b.doc_path ? 1 : 0));
 }
 
 /** the compact UTC stamp an envelope id starts with, such as `20261111T093000Z` */

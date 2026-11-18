@@ -386,8 +386,6 @@ export interface ActivityCoordinatorStory {
  * - board_doc_path: workspace-relative path of the `todo.md` the target line is drawn on; absent when the repository has none
  * - board_stories: that board's stories, top to bottom
  * - marker_after: how many stories sit at or above the lowest story carrying this host's `coord=` marker, 0 when none carries it
- * - build_after: how many stories sit at or above the last story the coordinator will build if left to run, 0 when there is none
- * - ship_after: how many stories sit at or above the last story that has passed the release gate, 0 when there is none
  */
 export interface ActivityCoordinator {
     agent: string;
@@ -401,6 +399,19 @@ export interface ActivityCoordinator {
     board_doc_path?: string;
     board_stories: ActivityCoordinatorStory[];
     marker_after: number;
+}
+
+/**
+ * ActivityBoardLines is where the build and ship lines fall on one board file, computed from the board
+ * itself so no coordinator or registry is needed.
+ * - doc_path: workspace-relative posix path of the `todo.md`, which a view matches a story's document path against
+ * - story_ids: the board's story ids, top to bottom, bounded so a very long board cannot bloat every post
+ * - build_after: how many stories sit at or above the last story a coordinator would build if left to run, 0 when there is none
+ * - ship_after: how many stories sit at or above the last story that has passed the release gate, 0 when there is none
+ */
+export interface ActivityBoardLines {
+    doc_path: string;
+    story_ids: string[];
     build_after: number;
     ship_after: number;
 }

@@ -34,7 +34,7 @@ function makeTree(): ActivityTree {
 
 describe('emptyActivitySnapshot', () => {
     it('defaults to scanning with no sessions or trees', () => {
-        expect(emptyActivitySnapshot()).toEqual({ analyser: { state: 'scanning', reason: undefined, refusals: [] }, sessions: [], trees: [], progress: [], coordinators: [] });
+        expect(emptyActivitySnapshot()).toEqual({ analyser: { state: 'scanning', reason: undefined, refusals: [] }, sessions: [], trees: [], progress: [], coordinators: [], board_lines: [] });
     });
 
     it('carries a reason through to unavailable and failed states', () => {

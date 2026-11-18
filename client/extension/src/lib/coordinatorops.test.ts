@@ -1,4 +1,5 @@
 import {
+    COORDINATOR_BOARD_MAX_STORIES,
     COORDINATOR_SEND_BODY_MAX_CHARS,
     COORDINATOR_VENDOR_NAMES,
     boardDocFor,
@@ -6,6 +7,7 @@ import {
     buildCoordinatorEnvelope,
     compactStamp,
     coordMarkerChanges,
+    boardLinesFrom,
     coordinatorsFrom,
     isBuildable,
     isCoordinatorEntry,
@@ -333,11 +335,42 @@ describe('boardLinePositions', () => {
         expect(boardLinePositions([], ['a'])).toEqual({ build_after: 0, ship_after: 0 });
     });
 
-    it('reaches a coordinator row through its repository ready ids', () => {
-        const docs = [{ doc_path: 'demo/docstech/users/dev/todo.md', text: '### One [](?id=one&status=doing)\n\n\n### Two [](?id=two)\n' }];
-        const [row] = coordinatorsFrom([agent()], docs, new Map([['demo', ['two']]]));
-        expect(row).toMatchObject({ build_after: 1, ship_after: 2 });
-        const [plain] = coordinatorsFrom([agent()], docs);
-        expect(plain).toMatchObject({ build_after: 1, ship_after: 0 });
+    it('keeps the lines off a coordinator row, since they are read from the boards alone', () => {
+        const docs = [{ doc_path: 'demo/docstech/users/dev/todo.md', text: '### One [](?id=one&status=doing)\n' }];
+        const [row] = coordinatorsFrom([agent()], docs);
+        expect(row).not.toHaveProperty('build_after');
+        expect(row).not.toHaveProperty('ship_after');
+    });
+});
+
+describe('boardLinesFrom', () => {
+    const TEXT = '# Todo\n\n\n### One [](?id=one&status=doing)\n\n\n### Two [](?id=two)\n\n\n### Three [](?id=three&status=code-review)\n';
+    const docs = [
+        { doc_path: 'demo/docstech/users/dev/todo.md', text: TEXT },
+        { doc_path: 'demo/docstech/users/dev/done.md', text: '### Old [](?id=old&status=doing)\n' },
+        { doc_path: 'notes/todo.md', text: TEXT },
+        { doc_path: 'bare/docstech/users/dev/todo.md', text: '# Todo\n' },
+    ];
+
+    it('computes each user todo.md board alone, with no coordinator, leaving out done.md, other todo.md files and boards with no story', () => {
+        expect(boardLinesFrom(docs)).toEqual([
+            { doc_path: 'demo/docstech/users/dev/todo.md', story_ids: ['one', 'two', 'three'], build_after: 1, ship_after: 3 },
+        ]);
+    });
+
+    it('takes the ready ids of the board a document path names, leaving other boards to the statuses', () => {
+        const text = '### One [](?id=one)\n\n\n### Two [](?id=two)\n';
+        const boards = [{ doc_path: 'demo/docstech/users/dev/todo.md', text }, { doc_path: 'other/docstech/users/dev/todo.md', text }];
+        const lines = boardLinesFrom(boards, new Map([['demo/docstech/users/dev/todo.md', ['two']]]));
+        expect(lines.map(entry => [entry.doc_path, entry.ship_after])).toEqual([['demo/docstech/users/dev/todo.md', 2], ['other/docstech/users/dev/todo.md', 0]]);
+    });
+
+    it('puts boards in path order and bounds the story ids a board lists', () => {
+        const long = Array.from({ length: COORDINATOR_BOARD_MAX_STORIES + 20 }, (_, i) => `### S${i} [](?id=s${i}&status=doing)\n`).join('\n\n');
+        const [entry] = boardLinesFrom([{ doc_path: 'z/docstech/users/dev/todo.md', text: long }]);
+        expect(entry.story_ids).toHaveLength(COORDINATOR_BOARD_MAX_STORIES);
+        expect(entry.build_after).toBe(COORDINATOR_BOARD_MAX_STORIES);
+        const sorted = boardLinesFrom([{ doc_path: 'b/docstech/users/dev/todo.md', text: TEXT }, { doc_path: 'a/docstech/users/dev/todo.md', text: TEXT }]);
+        expect(sorted.map(item => item.doc_path)).toEqual(['a/docstech/users/dev/todo.md', 'b/docstech/users/dev/todo.md']);
     });
 });

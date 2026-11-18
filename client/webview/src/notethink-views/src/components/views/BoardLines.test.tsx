@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import BoardLines, { BoardLineDemand, BoardLinedBodyItems, boardLineLabel, withBoardLines } from './BoardLines';
 import { resetActivitySnapshot, setActivitySnapshot } from '../../lib/activityhooks';
 import type { ActivitySnapshot } from '../../lib/agentactivityops';
-import type { ActivityCoordinator } from '../../types/AgentActivity';
+import type { ActivityBoardLines } from '../../types/AgentActivity';
 import type { NoteProps } from '../../types/NoteProps';
 
 jest.mock('../notes/GenericNote', () => ({
@@ -13,17 +13,12 @@ jest.mock('../notes/GenericNote', () => ({
 
 const BOARD_PATH = 'demo/docstech/users/dev/todo.md';
 
-function coordinator(build_after: number, ship_after: number): ActivityCoordinator {
-    return {
-        agent: 'coord-demo', vendor: 'claude-code', state: 'working', story: '', version: '', machine: 'host-a', open_convoys: [],
-        root_relative: 'demo', board_doc_path: BOARD_PATH,
-        board_stories: ['a', 'b', 'c'].map(id => ({ id, title: id, status: '', convoys: [], operator_steps: [] })),
-        marker_after: 0, build_after, ship_after,
-    };
+function board(build_after: number, ship_after: number): ActivityBoardLines {
+    return { doc_path: BOARD_PATH, story_ids: ['a', 'b', 'c'], build_after, ship_after };
 }
 
-function seed(coordinators: ActivityCoordinator[]): void {
-    const snapshot: ActivitySnapshot = { analyser: { state: 'live', refusals: [] }, sessions: [], trees: [], progress: [], coordinators };
+function seed(board_lines: ActivityBoardLines[]): void {
+    const snapshot: ActivitySnapshot = { analyser: { state: 'live', refusals: [] }, sessions: [], trees: [], progress: [], coordinators: [], board_lines };
     act(() => { setActivitySnapshot(snapshot); });
 }
 
@@ -80,7 +75,7 @@ describe('BoardLinedBodyItems', () => {
     it('draws both lines among a board\'s stories once the snapshot lands', () => {
         const { container } = render(<BoardLinedBodyItems note={body()} />);
         expect(screen.queryByTestId('board-lines')).toBeNull();
-        seed([coordinator(1, 2)]);
+        seed([board(1, 2)]);
         expect([...container.children].map(el => el.getAttribute('data-board-lines') ?? el.getAttribute('data-testid'))).toEqual(['note-1', 'build', 'note-2', 'ship', 'note-3']);
     });
 
@@ -92,9 +87,9 @@ describe('BoardLinedBodyItems', () => {
         expect(note.handlers?.postMessage).toHaveBeenCalledWith({ type: 'activityWithdraw' });
     });
 
-    it('draws nothing for a board no coordinator owns', () => {
+    it('draws nothing for a board the host does not list', () => {
         render(<BoardLinedBodyItems note={body()} />);
-        seed([{ ...coordinator(1, 2), board_doc_path: 'other/todo.md' }]);
+        seed([{ ...board(1, 2), doc_path: 'other/todo.md' }]);
         expect(screen.queryByTestId('board-lines')).toBeNull();
     });
 });

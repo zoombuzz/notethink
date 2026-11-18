@@ -1,6 +1,15 @@
 # Todo [](?nt_view=kanban)
 
 
+### Confirm how the board lines behave [](?id=coordinator-board-lines-decisions&tokens_estimated=1)
+
+Two behaviours of the build and ship lines were chosen so the work could continue. Each can still be changed.
+
++ open question: Which stories should each line count? Today the solid build line counts stories that are sent, delegated or at doing, and skips parked stories and stories in review. The dashed ship line counts stories in the ready marker or at code-review or testing. Recommendation: keep both rules.
++ open question: How should a kanban board with several columns show the lines? Today each column draws them between its own cards, at the bottom of a column wholly above a line and at the top of one wholly below it. Recommendation: keep this.
++ [ ] apply the confirmed answers to the line rules and their tests
+
+
 ### Stop two specs timing out on web server start [](?id=playwright-webserver-start-timeouts&tokens_estimated=3)
 
 Two specs failed a full Playwright run by waiting 60 seconds for their web server, then passed alone and in the next full run.
@@ -16,8 +25,9 @@ Two specs failed a full Playwright run by waiting 60 seconds for their web serve
 The coordinator panel says an agent may work from the top of the board down to its target line. Coordinators now build the stories sent or delegated to them, and `coord=` only names the hosts allowed to build a story, so moving that line does not change what gets built.
 
 + evidence 2026-11-18: the hint in `CoordinatorTargetLine.tsx:123` and the range described in the header of `client/extension/src/lib/coordinatorops.ts`
++ evidence 2026-11-18: the agent registry the panel reads is no longer written, so it lists no coordinators and a card offers no send action
 + related: [[coordinator-board-lines]] draws the coordinator's real build line on story views
-+ [ ] decide whether the panel control should send stories, set host placement, or go
++ open question: What should happen to the coordinator panel and its target line? The panel is empty because its registry is gone, and the line no longer decides what gets built. Recommendation: rebuild the panel on current coordinator data and remove the target line, since the board lines now show the same thing.
 + [ ] change the panel and its wording to match that decision
 
 
@@ -26,8 +36,9 @@ The coordinator panel says an agent may work from the top of the board down to i
 A board's order decides what happens next, but no story view shows where that work stops. You cannot see how far a coordinator will get if left to run, or which stories a push would ship.
 
 + goal: two lines across every view that shows a board's stories in order, whichever card type is in use
-+ builds on: the coordinator rows of the activity snapshot, `coordinatorsFrom` in `client/extension/src/lib/coordinatorops.ts`
++ builds on: the activity snapshot and the board files `readStoryDocuments` loads in `client/extension/src/vscode/AgentAnalyser.ts`
 + builds on: the per-project coordinator file read, `readProgress` in `client/extension/src/vscode/AgentAnalyser.ts`
++ evidence 2026-11-18: no lines appear in VS Code, because they were attached to coordinator rows and those rows come from an agent registry that is no longer written
 + decision: the build line is solid, in the highlight colour `--vscode-focusBorder`, below the last story the coordinator will build
 + decision: the ship line is dashed, in the same colour, below the last story that has passed the release gate
 + decision: the lines belong to the view, not the card, so no card type draws or branches on them
@@ -41,9 +52,11 @@ A board's order decides what happens next, but no story view shows where that wo
   + a group whose cards all sit above the line draws it last, and one whose cards all sit below draws it first
   + an empty group draws nothing
   + a view sorted away from board order draws no lines, since position there says nothing about the board
-+ decision: each coordinator row carries both lines as `build_after` and `ship_after`, counts of the board's stories at or above the line; a view matches its stories to the board by document path and story id, so a filtered view still places the line correctly
++ decision: each board file gets its own line positions from what the window can read, so the lines need no coordinator session or registry
++ decision: a window connected to another machine shows that machine's board and ready file
++ decision: a view matches its stories to the board by document path and story id, so a filtered view still places the line correctly
 + decision: a document view draws the lines among the body items of the note holding the stories, so a card type that draws only a headline lists no stories there and has no line to draw
-+ [X] add the build and ship positions to each coordinator row, computed by a pure function with Jest cases for every rule above
++ [X] add the build and ship positions, computed by a pure function with Jest cases for every rule above
 + [X] read `ready.json` beside `progress.json`, treating a missing or malformed file as no ready stories
 + [X] draw both lines in the document, line and kanban views, virtualized columns included
 + [X] stack the lines cleanly when both fall at the same position
@@ -51,8 +64,14 @@ A board's order decides what happens next, but no story view shows where that wo
 + [X] give each line a localised accessible name and tooltip saying what it marks
 + [X] cover both lines, every card type and a grouped view in a Playwright spec
 + [X] bump the patch version
++ [X] compute the line positions per board file, with no dependency on coordinator rows
+  + `boardLinesFrom` in `coordinatorops.ts` feeds the snapshot's `board_lines` list, read from the boards and posted whether or not an agent home or session scan exists; `coordinatorops.test.ts` and the board lines block of `AgentAnalyser.test.ts` cover it
+  + the same path fixed a workspace folder rooted at `/` never resolving its boards, which a web host mounts
++ [X] prove the lines appear on a real extension host with a board on disk and no agent registry
+  + `playwright/specs/board-lines-real-host.spec.ts` passes on this tree and fails on the previous build, in the kanban and document views
++ [X] bump the patch version for this fix
 + the stacked-row form of both lines is measured in a rendered page by `board-lines.spec.ts`: vertical strokes, solid and dashed, between cards, with no card moved or resized
-+ manual: check both lines on a live board in VS Code, with a coordinator running
++ manual: check both lines on a live board in VS Code
 
 
 ### Keep each card tag on one row [](?status=code-review)

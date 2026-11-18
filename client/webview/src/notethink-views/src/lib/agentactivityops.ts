@@ -5,6 +5,7 @@ import {
     ACTIVITY_STATES,
     ACTIVITY_STATE_UNKNOWN,
     ACTIVITY_VENDOR_DISPLAY,
+    type ActivityBoardLines,
     type ActivityCapabilities,
     type ActivityChangedFile,
     type ActivityChildSession,
@@ -181,6 +182,7 @@ export interface ActivityTreeState {
  *   recorded or the host cannot read them
  * - coordinators: the registered coordinators whose repository sits in the open folder, each with its
  *   board's stories; empty when none is registered or the host cannot read the registry
+ * - board_lines: where the build and ship lines fall on each board file the host can read; empty when none is open
  */
 export interface ActivitySnapshot {
     analyser: ActivityAnalyserState;
@@ -188,6 +190,7 @@ export interface ActivitySnapshot {
     trees: ActivityTreeState[];
     progress: ActivityStoryProgress[];
     coordinators: ActivityCoordinator[];
+    board_lines: ActivityBoardLines[];
 }
 
 /** the snapshot a board holds before the host has said anything at all */
@@ -197,6 +200,7 @@ export const EMPTY_ACTIVITY_SNAPSHOT: ActivitySnapshot = {
     trees: [],
     progress: [],
     coordinators: [],
+    board_lines: [],
 };
 
 /**
@@ -263,6 +267,7 @@ export function parseActivityMessage(message: unknown): ActivitySnapshot | undef
         trees: Array.isArray(payload.trees) ? payload.trees : [],
         progress: Array.isArray(payload.progress) ? payload.progress : [],
         coordinators: Array.isArray(payload.coordinators) ? payload.coordinators : [],
+        board_lines: Array.isArray(payload.board_lines) ? payload.board_lines : [],
     };
 }
 

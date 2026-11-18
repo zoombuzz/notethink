@@ -1,23 +1,24 @@
 # Prod-ready Results
-# Version: 0.4.52
-# Date: 2026-11-18T12:50:00Z
-# Tree: staging working tree over 5b86c0c, all changed and untracked paths reviewed
-# Stories: coordinator-board-lines doing -> code-review; keep-each-card-tag-on-one-row doing -> code-review; pulse-the-editor-caret-instead-of-blinking-it doing -> code-review
-# Ship verdict: Ready to ship: /push-prod will move the three stories to done.md
+# Version: 0.4.53
+# Date: 2026-11-18T14:45:00Z
+# Tree: HEAD a5048c7 plus 24 changed paths (23 tracked, playwright/specs/board-lines-real-host.spec.ts untracked)
+# Stories: coordinator-board-lines doing -> code-review; the other stories are not touched (outside stories=)
+# Ship verdict: Ready to ship: /push-prod will move "Draw the build and ship lines on story views" to done.md
 # ---
-Build (webpack) | pass | exit 0 | fresh
-Rollup | pass | exit 0 | fresh
-Lint | pass | exit 0 | fresh (rerun after the new board-lines spec case)
-Project guards | none for this project | - | skipped (no guard script)
-Dependency audit | not run, package declares only the checks in package.json | - | skipped
-CODING_STANDARDS | clean | mechanical greps and inline pass | fresh
-Exposure | clean | public scan over the worktree, board text and fixtures read | fresh
-Fleet fix check | no shared-surface hit judged a fleet fix | - | fresh
-Jest | pass | 4037/4037 (183 files across extension, webview, notethink-views) | fresh
-Playwright | pass | 394/394 | fresh (second full run; first run 392/394, see Open)
-Story-state advance | three stories advanced doing -> code-review, move rehearsed | - | fresh
-Version bump | 0.4.52 | - | already bumped
+Real board check | OK | kanban and document views of this repo's own board, in a web host; build line below "Draw the build and ship lines on story views", ship line below "Pulse the editor caret instead of blinking it" | fresh
+Build | OK | pnpm run build, bundles contain the new code | fresh
+Lint | OK | | reused (green at 2026-11-18T13:23:29Z)
+Project guards | skipped | none for this project |
+Dependency audit | OK | no known vulnerabilities | fresh
+CODING_STANDARDS | OK | mechanical checks and inline pass clean | fresh
+Exposure | OK | public: scan clean, added prose read | fresh
+Fleet fix check | OK | no shared-surface or new-dependency-class hit | fresh
+Jest | OK | 4047 passed of 4047 (51, 20 and 112 suites) | reused (green at 2026-11-18T13:23:47Z)
+Playwright | OK | 396/396 passed, none flaky or skipped, board-lines-real-host 2/2 | fresh
+Todo/Done | OK | board format check 0 findings |
+Story-state advance | OK | doing -> code-review, move rehearsed |
+Version bump | OK | 0.4.53 |
 # --- Fixed during review ---
-Tests: the line-view case in board-lines.spec.ts only asserted when the board was already in rows orientation, which the default is not, so it never checked the vertical lines. It is replaced by a case that seeds rows orientation, then asserts vertical, solid and dashed strokes between and beside cards and that no card moves or resizes.
+none
 # --- Open ---
-Two real-host specs (folder-latest-scan-real-host, open-viewer-single-file-kanban) timed out starting their server within 60s in the first full run, then passed alone (13s) and in the second full run. Not fixed in this close.
+none

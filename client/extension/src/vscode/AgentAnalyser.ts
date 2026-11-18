@@ -16,7 +16,7 @@ import {
     type AgentAnalyserUnavailableReasonCode,
 } from '../lib/agentanalyserops';
 import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
-import { coordinatorsFrom, boardDocFor } from '../lib/coordinatorops';
+import { boardDocFor, boardLinesFrom, coordinatorsFrom } from '../lib/coordinatorops';
 import { REGISTRY_FILE_MAX_BYTES, REGISTRY_MAX_AGENTS, overlayRegistry, parseRegistryEntry, registryEntrySegments, REGISTRY_DIR_SEGMENTS, type ResolvedRegistryAgent } from '../lib/agentregistryops';
 import { PROGRESS_FILE_MAX_BYTES, READY_FILE_MAX_BYTES, THINKERSYNC_HOME_SEGMENTS, parseProgressFile, parseReadyFile, progressFileSegments, progressForRepository, progressProjectName, readyFileSegments } from '../lib/progressfileops';
 import { attributeCommitsToSessions, attributeFilesToSessions, type AgentCommitCall, type AgentWriteCall } from '../lib/agentgitattributionops';
@@ -30,7 +30,7 @@ import { findStoryInDocs, isBoardPath, siblingBoardPath, storiesForWriteCall, ty
 import { sliceTail, type TailBookmark } from '../lib/agenttailparseops';
 import type { AgentAnalyserRawFile, AgentAnalyserResolvedCall, AgentAnalyserWorkerJob, AgentAnalyserWorkerRequest, AgentAnalyserWorkerResponse, AgentAnalyserWorkerSessionOutput, AgentLineDiffJob, AgentVendorId } from './AgentAnalyserWorker';
 import { AgentAnalyserWorkerPool, defaultAgentAnalyserPoolSize } from './AgentAnalyserWorkerPool';
-import { ACTIVITY_PENDING_DETAIL_MAX, addActivityUsage, emptyActivityUsage, type ActivityChangedFile, type ActivityCoordinator, type ActivityPendingCommit, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
+import { ACTIVITY_PENDING_DETAIL_MAX, addActivityUsage, emptyActivityUsage, type ActivityBoardLines, type ActivityChangedFile, type ActivityCoordinator, type ActivityPendingCommit, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
 import type { HashMapOf } from '../types/general';
 
 // only sessions with activity inside this window count toward what a story's card draws
@@ -329,12 +329,15 @@ export class AgentAnalyser {
     private readonly cwd_alias_cache = new Map<string, AliasRootMapping>();
     private readonly watchers: vscode.FileSystemWatcher[] = [];
     private watch_debounce_timer: ReturnType<typeof setTimeout> | undefined;
+    private board_debounce_timer: ReturnType<typeof setTimeout> | undefined;
 
     private state: ActivityAnalyserState = emptyAnalyserState('scanning');
     private sessions: HashMapOf<ActivitySessionState> = {};
     private trees: HashMapOf<ActivityTreeState> = {};
     private progress: ActivityStoryProgress[] = [];
     private coordinators: ActivityCoordinator[] = [];
+    // where the build and ship lines fall on each board file; read from the boards alone, never waiting on the scan
+    private board_lines: ActivityBoardLines[] = [];
     // keyed by agent name: the absolute path of the board its target line is drawn on, which a marker move edits
     private coordinator_board_paths = new Map<string, string>();
     private last_posted: string | undefined;
@@ -438,19 +441,25 @@ export class AgentAnalyser {
     private async resolveVendorHomeAndRun(): Promise<void> {
         const resolved = await this.resolveVendorHome();
         if (!this.running) { return; }
+        this.vendor_home = resolved?.home;
+        // the board lines need only the boards, so they are read and posted whether or not an agent home was found
         if (!resolved) {
-            this.vendor_home = undefined;
+            this.armBoardWatcher();
+            await this.refreshBoardLines(false);
+            if (!this.running) { return; }
             const unavailable = this.vendorHomeUnavailableReason();
             this.state = emptyAnalyserState('unavailable', unavailable.reason, unavailable.reason_code);
             this.postToAll();
             return;
         }
-        this.vendor_home = resolved.home;
         writeToLog('resolveVendorHome', `resolved agent vendor home: ${resolved.description}`);
         await this.loadScanCache(resolved.home);
         if (!this.running) { return; }
         this.armWatchers(resolved.home);
+        this.armBoardWatcher();
         this.scheduleScan(0);
+        // read beside the first scan, not after it, so the lines show without waiting for the scan to finish or to fail
+        void this.refreshBoardLines(true);
     }
 
     /**
@@ -607,6 +616,7 @@ export class AgentAnalyser {
         this.running = false;
         if (this.rescan_timer !== undefined) { clearTimeout(this.rescan_timer); this.rescan_timer = undefined; }
         if (this.watch_debounce_timer !== undefined) { clearTimeout(this.watch_debounce_timer); this.watch_debounce_timer = undefined; }
+        if (this.board_debounce_timer !== undefined) { clearTimeout(this.board_debounce_timer); this.board_debounce_timer = undefined; }
         for (const watcher of this.watchers) { watcher.dispose(); }
         this.watchers.length = 0;
         this.pool.dispose();
@@ -640,6 +650,44 @@ export class AgentAnalyser {
                 writeToErrorLog('armWatchers', `agent activity watcher unavailable for ${glob.base}`, err);
             }
         }
+    }
+
+    /**
+     * Watches every user's `todo.md` board in the open folders, so an edit moves the build and ship
+     * lines within about a second rather than waiting for the next poll. It needs no agent home, so it is
+     * armed before the home is known; a host that cannot watch still has the poll once a home resolves.
+     */
+    private armBoardWatcher(): void {
+        try {
+            const watcher = vscode.workspace.createFileSystemWatcher('**/docstech/users/*/todo.md');
+            const onEvent = (): void => this.debounceBoardLines();
+            watcher.onDidCreate(onEvent);
+            watcher.onDidChange(onEvent);
+            watcher.onDidDelete(onEvent);
+            this.watchers.push(watcher);
+        } catch (err) {
+            writeToErrorLog('armBoardWatcher', 'board watcher unavailable', err);
+        }
+    }
+
+    private debounceBoardLines(): void {
+        if (this.board_debounce_timer !== undefined) { clearTimeout(this.board_debounce_timer); }
+        this.board_debounce_timer = setTimeout(() => {
+            this.board_debounce_timer = undefined;
+            if (this.running) { void this.refreshBoardLines(true); }
+        }, AGENT_WATCH_DEBOUNCE_MS);
+        (this.board_debounce_timer as unknown as { unref?: () => void }).unref?.();
+    }
+
+    /** rereads the boards and, when asked, posts the snapshot (a post that changes nothing is dropped); a failed read is logged and leaves the last lines */
+    private async refreshBoardLines(post: boolean): Promise<void> {
+        try {
+            this.board_lines = await this.readBoardLines(await this.readStoryDocuments());
+        } catch (err) {
+            writeToErrorLog('refreshBoardLines', 'the board lines could not be read', err);
+            return;
+        }
+        if (post) { this.postToAll(); }
     }
 
     private debounceScan(): void {
@@ -804,7 +852,7 @@ export class AgentAnalyser {
             timed(() => this.readRepositoryTrees(now_ms)),
         ]);
         const progress = await this.readProgress(vendor_home, reads);
-        const ready_by_repo = await this.readReady(vendor_home, reads);
+        this.board_lines = await this.readBoardLines(story_docs);
         const registry_agents = await this.readRegistry(vendor_home, reads);
         const candidates = this.orderCandidates(discovered, reads);
         // a scan with nothing to read still makes one round trip (carrying pending evictions), so a worker failure is still caught
@@ -865,7 +913,7 @@ export class AgentAnalyser {
                 this.sessions = this.withRegistry(sessions_acc, registry_agents, progress, story_docs, now_ms);
                 this.trees = trees_this_batch;
                 this.progress = progress;
-                this.setCoordinators(registry_agents, story_docs, ready_by_repo);
+                this.setCoordinators(registry_agents, story_docs);
                 this.state = emptyAnalyserState(is_last_batch ? 'live' : 'scanning');
                 this.state.refusals = refusals;
                 if (!is_last_batch) { this.noteScanProgress(this.state, batches.slice(batch_index + 1).flat(), reused.length + candidates_done, sessions_found, reads); }
@@ -1685,7 +1733,9 @@ export class AgentAnalyser {
         for (const folder of vscode.workspace.workspaceFolders ?? []) {
             const root = folder.uri.path;
             if (absolute_path === root) { return ''; }
-            if (absolute_path.startsWith(`${root}/`)) { return absolute_path.slice(root.length + 1); }
+            // a folder rooted at "/" (a web host's mount) already ends in the separator
+            const base = root.endsWith('/') ? root : `${root}/`;
+            if (absolute_path.startsWith(base)) { return absolute_path.slice(base.length); }
         }
         return undefined;
     }
@@ -1779,8 +1829,8 @@ export class AgentAnalyser {
     }
 
     // the coordinator rows for this scan's registry agents, each placed on the board its repository keeps
-    private setCoordinators(agents: ResolvedRegistryAgent[], story_docs: StoryDocument[], ready_by_repo: Map<string, string[]>): void {
-        this.coordinators = coordinatorsFrom(agents, story_docs, ready_by_repo);
+    private setCoordinators(agents: ResolvedRegistryAgent[], story_docs: StoryDocument[]): void {
+        this.coordinators = coordinatorsFrom(agents, story_docs);
         this.coordinator_board_paths = new Map();
         for (const coordinator of this.coordinators) {
             const abs_path = boardDocFor(story_docs, coordinator.root_relative)?.abs_path;
@@ -1818,22 +1868,32 @@ export class AgentAnalyser {
     }
 
     /**
-     * Each open repository's ready story ids, read-only, from the ready file beside its progress file,
-     * keyed by the repository's workspace-relative path. A repository outside the workspace folders, and
-     * a missing, oversize, unreadable or malformed file, contribute nothing.
+     * The build and ship lines of every board among these documents. Each board's ready story ids come
+     * from the ready file kept under its project's name, which is the basename of the repository directory
+     * holding the board, so a workspace folder that is the project and an umbrella folder holding projects
+     * side by side both resolve. This host having no agent home, or a missing, oversize, unreadable or
+     * malformed ready file, leaves the ship line to the `code-review` and `testing` statuses alone.
      */
-    private async readReady(vendor_home: ResolvedAgentVendorHome, reads: HashMapOf<RepositoryRead>): Promise<Map<string, string[]>> {
-        const found = new Map<string, string[]>();
-        for (const [root_path, read] of Object.entries(reads)) {
-            if (this.workspaceRelative(root_path) === undefined) { continue; }
-            const project = progressProjectName(root_path);
-            if (!project) { continue; }
-            const bytes = await this.readBytes(vscode.Uri.joinPath(vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS, ...readyFileSegments(project)));
-            if (!bytes || bytes.length > READY_FILE_MAX_BYTES) { continue; }
-            const ids = parseReadyFile(new TextDecoder().decode(bytes));
-            if (ids.length > 0) { found.set(read.root_relative, ids); }
+    private async readBoardLines(story_docs: StoryDocument[]): Promise<ActivityBoardLines[]> {
+        const ready_by_project = new Map<string, string[]>();
+        const ready_by_doc = new Map<string, string[]>();
+        const home = this.vendor_home;
+        if (home) {
+            for (const doc of story_docs) {
+                const project = doc.abs_path ? progressProjectName(doc.abs_path.split('/').slice(0, -4).join('/')) : undefined;
+                if (!project) { continue; }
+                if (!ready_by_project.has(project)) { ready_by_project.set(project, await this.readReadyIds(home, project)); }
+                ready_by_doc.set(doc.doc_path, ready_by_project.get(project) ?? []);
+            }
         }
-        return found;
+        return boardLinesFrom(story_docs, ready_by_doc);
+    }
+
+    // one project's ready story ids, read-only, from the ready file beside its progress file
+    private async readReadyIds(home: ResolvedAgentVendorHome, project: string): Promise<string[]> {
+        const bytes = await this.readBytes(vscode.Uri.joinPath(home.home, ...THINKERSYNC_HOME_SEGMENTS, ...readyFileSegments(project)));
+        if (!bytes || bytes.length > READY_FILE_MAX_BYTES) { return []; }
+        return parseReadyFile(new TextDecoder().decode(bytes));
     }
 
     /**
@@ -2262,7 +2322,7 @@ export class AgentAnalyser {
     // --- posting ---
 
     private currentMessage(): Record<string, unknown> {
-        const snapshot = buildActivitySnapshot(this.state, this.sessions, this.trees, this.progress, this.coordinators);
+        const snapshot = buildActivitySnapshot(this.state, this.sessions, this.trees, this.progress, this.coordinators, this.board_lines);
         return { type: 'activity', activity: snapshot };
     }
 

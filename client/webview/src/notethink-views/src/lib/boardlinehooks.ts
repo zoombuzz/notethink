@@ -10,7 +10,7 @@ import type { NoteProps } from "../types/NoteProps";
 export function useBoardLineSlots(notes: ReadonlyArray<NoteProps | undefined>, fallback_doc_path?: string): BoardLineSlots {
     const snapshot = useAgentActivity();
     return useMemo(
-        () => boardLineSlotsForNotes(notes, snapshot?.coordinators ?? [], fallback_doc_path),
+        () => boardLineSlotsForNotes(notes, snapshot?.board_lines ?? [], fallback_doc_path),
         [notes, snapshot, fallback_doc_path],
     );
 }
@@ -23,7 +23,7 @@ export function useBoardLineSlots(notes: ReadonlyArray<NoteProps | undefined>, f
 export function useGroupBoardLines(groups: ReadonlyArray<ReadonlyArray<NoteProps>>, fallback_doc_path?: string): { slots: BoardLineSlots[]; has_board: boolean } {
     const snapshot = useAgentActivity();
     return useMemo(() => ({
-        slots: groups.map(notes => boardLineSlotsForNotes(notes, snapshot?.coordinators ?? [], fallback_doc_path)),
+        slots: groups.map(notes => boardLineSlotsForNotes(notes, snapshot?.board_lines ?? [], fallback_doc_path)),
         has_board: groups.some(notes => hasBoardStories(notes, fallback_doc_path)),
     }), [groups, snapshot, fallback_doc_path]);
 }

@@ -62,7 +62,7 @@ export function withBoardLines(items: ReadonlyArray<ReactElement>, slots: BoardL
 
 /**
  * Asks the host for agent activity while mounted, without holding the scan spinner, because the lines
- * are drawn from the coordinators of the activity snapshot. Mounted only by a view showing board stories.
+ * are drawn from the board lines of the activity snapshot. Mounted only by a view showing board stories.
  */
 export function BoardLineDemand(props: { post_message: ((message: Record<string, unknown>) => void) | undefined }): null {
     useAgentActivityDemand(props.post_message, false);

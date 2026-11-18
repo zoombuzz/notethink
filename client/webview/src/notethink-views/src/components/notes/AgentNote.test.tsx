@@ -45,7 +45,7 @@ function seed(overrides: Partial<ActivitySnapshot> & { analyser?: Partial<Activi
         sessions: [],
         trees: [],
         progress: [],
-        coordinators: [],
+        coordinators: [], board_lines: [],
         ...rest,
     };
     setActivitySnapshot(snapshot);

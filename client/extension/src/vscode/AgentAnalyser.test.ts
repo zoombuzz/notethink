@@ -1237,6 +1237,8 @@ describe('AgentAnalyser vendor home resolution', () => {
 			'/a/.claude/projects', '/a/.codex/sessions', '/a/.grok/sessions',
 			'/.claude/projects', '/.codex/sessions', '/.grok/sessions',
 			'/root/.claude/projects', '/root/.codex/sessions', '/root/.grok/sessions',
+			// the board lines look for the folder's own boards, whatever the agent home search finds
+			'/a/b/docstech/users',
 		]));
 	});
 
@@ -2903,7 +2905,7 @@ describe('AgentAnalyser agent registry', () => {
 
 		let lookup: AgentAnalyser | undefined;
 
-		function wireBoard(): void {
+		function wireBoard(board_text = BOARD_TEXT, extra_files: Record<string, string> = {}): void {
 			const read_directory = vscode.workspace.fs.readDirectory as jest.Mock;
 			const read_file = vscode.workspace.fs.readFile as jest.Mock;
 			const read_directory_before = read_directory.getMockImplementation()!;
@@ -2913,7 +2915,11 @@ describe('AgentAnalyser agent registry', () => {
 				throw new Error('not found');
 			});
 			read_directory.mockImplementation(async (uri: vscode.Uri) => (uri.path === '/ws/docstech/users' ? [['dev', vscode.FileType.Directory]] : read_directory_before(uri)));
-			read_file.mockImplementation(async (uri: vscode.Uri) => (uri.path === '/ws/docstech/users/dev/todo.md' ? new TextEncoder().encode(BOARD_TEXT) : read_file_before(uri)));
+			read_file.mockImplementation(async (uri: vscode.Uri) => {
+				if (uri.path === '/ws/docstech/users/dev/todo.md') { return new TextEncoder().encode(board_text); }
+				if (extra_files[uri.path] !== undefined) { return new TextEncoder().encode(extra_files[uri.path]); }
+				return read_file_before(uri);
+			});
 		}
 
 		it('posts each registered coordinator in the open folder with its board, and nothing about its mailbox, pane or session', async () => {
@@ -2927,6 +2933,92 @@ describe('AgentAnalyser agent registry', () => {
 			expect((coordinators[0].board_stories as Array<Record<string, unknown>>).map(story => story.id)).toEqual(['alpha', 'beta']);
 			const wire = JSON.stringify(coordinators);
 			for (const leaked of ['/secret/mailbox', '%3', 'sess-9']) { expect(wire).not.toContain(leaked); }
+		});
+
+		describe('board lines', () => {
+			const LINES_BOARD = '# Todo\n\n\n### Alpha [](?id=alpha&status=doing)\n\n\n### Beta [](?id=beta)\n\n\n### Gamma [](?id=gamma)\n';
+			const READY_PATH = '/home/test/.local/share/thinkersync/coordinator/ws/ready.json';
+
+			async function boardLinesPosted(context = mockContext()): Promise<{ posted: Array<Record<string, unknown>>; analyser: AgentAnalyser }> {
+				const analyser = new AgentAnalyser(context, fakeWorkerFactory().worker);
+				const posted: Array<Record<string, unknown>> = [];
+				analyser.demand(msg => posted.push(msg));
+				await settle();
+				return { posted, analyser };
+			}
+
+			const lastLines = (posted: Array<Record<string, unknown>>): unknown => (posted[posted.length - 1].activity as { board_lines: unknown }).board_lines;
+
+			it('are posted from the board alone, with no registry and no coordinator', async () => {
+				wireRegistry(undefined);
+				wireBoard(LINES_BOARD);
+				const { posted } = await boardLinesPosted();
+				expect(lastLines(posted)).toEqual([{ doc_path: 'docstech/users/dev/todo.md', story_ids: ['alpha', 'beta', 'gamma'], build_after: 1, ship_after: 0 }]);
+				expect((posted[posted.length - 1].activity as { coordinators: unknown[] }).coordinators).toEqual([]);
+			});
+
+			it('take the ship line from the ready file kept under the repository directory name', async () => {
+				wireRegistry(undefined);
+				wireBoard(LINES_BOARD, { [READY_PATH]: JSON.stringify({ stories: ['beta'] }) });
+				const { posted } = await boardLinesPosted();
+				expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 1, ship_after: 2 })]);
+			});
+
+			it('fall back to the review statuses when the ready file is missing or malformed', async () => {
+				wireRegistry(undefined);
+				wireBoard(LINES_BOARD, { [READY_PATH]: '{not json' });
+				const { posted } = await boardLinesPosted();
+				expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 1, ship_after: 0 })]);
+			});
+
+			it('are still posted when the host has no agent home, beside the unavailable state', async () => {
+				wireBoard(LINES_BOARD);
+				const { posted } = await boardLinesPosted(mockContext('/mock/logs'));
+				expect(posted[posted.length - 1].activity).toMatchObject({ analyser: { state: 'unavailable', reason_code: 'no_local_access' } });
+				expect(lastLines(posted)).toEqual([expect.objectContaining({ doc_path: 'docstech/users/dev/todo.md', build_after: 1 })]);
+			});
+
+			it('are still posted when every scan batch fails', async () => {
+				wireRegistry(undefined);
+				wireBoard(LINES_BOARD);
+				const analyser = new AgentAnalyser(mockContext(), failingWorkerFactory());
+				const posted: Array<Record<string, unknown>> = [];
+				analyser.demand(msg => posted.push(msg));
+				await settle();
+				expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 1 })]);
+			});
+
+			it('are found when the workspace folder is the filesystem root, as a web host mounts it', async () => {
+				wireBoard(LINES_BOARD);
+				(vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: Uri.file('/'), name: 'root', index: 0 }];
+				const read_directory = vscode.workspace.fs.readDirectory as jest.Mock;
+				const read_file = vscode.workspace.fs.readFile as jest.Mock;
+				const read_directory_before = read_directory.getMockImplementation()!;
+				const read_file_before = read_file.getMockImplementation()!;
+				(vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+					if (uri.path === '/docstech/users') { return { type: 2, ctime: 0, mtime: 0, size: 0 }; }
+					throw new Error('not found');
+				});
+				read_directory.mockImplementation(async (uri: vscode.Uri) => (uri.path === '/docstech/users' ? [['dev', vscode.FileType.Directory]] : read_directory_before(uri)));
+				read_file.mockImplementation(async (uri: vscode.Uri) => (uri.path === '/docstech/users/dev/todo.md' ? new TextEncoder().encode(LINES_BOARD) : read_file_before(uri)));
+				const { posted } = await boardLinesPosted(mockContext('/mock/logs'));
+				expect(lastLines(posted)).toEqual([expect.objectContaining({ doc_path: 'docstech/users/dev/todo.md', story_ids: ['alpha', 'beta', 'gamma'], build_after: 1 })]);
+			});
+
+			it('follow a board edit through the board watcher, without waiting for a scan', async () => {
+				wireRegistry(undefined);
+				wireBoard(LINES_BOARD);
+				const { posted } = await boardLinesPosted();
+				const board_watchers = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls
+					.map((call, index) => ({ glob: call[0], result: (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results[index].value }))
+					.filter(entry => entry.glob === '**/docstech/users/*/todo.md');
+				expect(board_watchers).toHaveLength(1);
+				wireBoard('# Todo\n\n\n### Alpha [](?id=alpha&status=doing)\n\n\n### Beta [](?id=beta&status=doing)\n\n\n### Gamma [](?id=gamma)\n');
+				board_watchers[0].result.onDidChange.mock.calls[0][0]();
+				await jest.advanceTimersByTimeAsync(500);
+				await settle();
+				expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 2 })]);
+			});
 		});
 
 		it('lists no overseer and no coordinator whose repository is outside the open folder', async () => {

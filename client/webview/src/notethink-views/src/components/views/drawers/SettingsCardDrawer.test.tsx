@@ -192,7 +192,7 @@ describe('SettingsCardDrawer coordinators', () => {
     };
 
     function seed(): void {
-        act(() => { setActivitySnapshot({ analyser: { state: 'live', refusals: [] }, sessions: [], trees: [], progress: [], coordinators: [demo] }); });
+        act(() => { setActivitySnapshot({ analyser: { state: 'live', refusals: [] }, sessions: [], trees: [], progress: [], coordinators: [demo], board_lines: [] }); });
     }
 
     afterEach(() => { resetActivitySnapshot(); });

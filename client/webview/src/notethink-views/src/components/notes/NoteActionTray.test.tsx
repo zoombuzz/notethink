@@ -35,7 +35,7 @@ function note(overrides: Partial<NoteProps> = {}): NoteProps {
 }
 
 function seed(coordinators: ActivityCoordinator[]): void {
-    const snapshot: ActivitySnapshot = { analyser: { state: 'live', refusals: [] }, sessions: [], trees: [], progress: [], coordinators };
+    const snapshot: ActivitySnapshot = { analyser: { state: 'live', refusals: [] }, sessions: [], trees: [], progress: [], coordinators, board_lines: [] };
     act(() => { setActivitySnapshot(snapshot); });
 }
 

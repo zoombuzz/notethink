@@ -19,17 +19,13 @@ const DEMO_TODO = 'demo/docstech/users/dev/todo.md';
 const NAMES = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta'];
 const IDS = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta'];
 
-function coordinatorRow(ids: string[], build_after: number, ship_after: number): Record<string, unknown> {
-    return {
-        agent: 'coord-demo', vendor: 'claude-code', state: 'working', story: '', version: '', machine: 'host-a', open_convoys: [],
-        root_relative: 'demo', board_doc_path: DEMO_TODO,
-        board_stories: ids.map(id => ({ id, title: id, status: '', convoys: [], operator_steps: [] })),
-        marker_after: 0, build_after, ship_after,
-    };
+// one board's entry of the snapshot's board_lines list, with no coordinator row anywhere
+function boardRow(ids: string[], build_after: number, ship_after: number): Record<string, unknown> {
+    return { doc_path: DEMO_TODO, story_ids: ids, build_after, ship_after };
 }
 
-async function postSnapshot(page: Page, coordinators: Array<Record<string, unknown>>): Promise<void> {
-    const payload = { ...activityFixtureSnapshot({ sessions: [] }), coordinators };
+async function postSnapshot(page: Page, board_lines: Array<Record<string, unknown>>): Promise<void> {
+    const payload = { ...activityFixtureSnapshot({ sessions: [] }), coordinators: [], board_lines };
     await page.evaluate(snapshot => {
         window.dispatchEvent(new MessageEvent('message', { data: { type: 'activity', activity: snapshot } }));
     }, payload);
@@ -85,7 +81,7 @@ test.describe('Build and ship lines', () => {
             test(`the ${view} view draws both lines with the ${card_type} card type`, async ({ page }) => {
                 await openSingleFile(page, 'board-lines.md', view, card_type);
                 await demandSeen(page);
-                await postSnapshot(page, [coordinatorRow(IDS, 2, 4)]);
+                await postSnapshot(page, [boardRow(IDS, 2, 4)]);
                 if (view === 'document' && card_type !== 'card') {
                     // these card types draw a headline alone, so the document view lists no story to draw a line among
                     await expect(page.getByText('Alpha story')).toHaveCount(0);
@@ -101,7 +97,7 @@ test.describe('Build and ship lines', () => {
     test('the document view draws the build line after the second story and the ship line after the fourth', async ({ page }) => {
         await openSingleFile(page, 'board-lines.md', 'document', 'card');
         await demandSeen(page);
-        await postSnapshot(page, [coordinatorRow(IDS, 2, 4)]);
+        await postSnapshot(page, [boardRow(IDS, 2, 4)]);
         await expect(page.getByTestId('board-line-build')).toHaveCount(1);
         expect(await sequenceIn(page.locator('[data-testid^="document-"]').first())).toEqual(
             ['Alpha', 'Beta', 'lines:build', 'Gamma', 'Delta', 'lines:ship', 'Epsilon', 'Zeta'],
@@ -111,7 +107,7 @@ test.describe('Build and ship lines', () => {
     test('both lines stack, build first, when they fall at the same position', async ({ page }) => {
         await openSingleFile(page, 'board-lines.md', 'document', 'card');
         await demandSeen(page);
-        await postSnapshot(page, [coordinatorRow(IDS, 3, 3)]);
+        await postSnapshot(page, [boardRow(IDS, 3, 3)]);
         await expect(page.getByTestId('board-lines')).toHaveCount(1);
         await expect(page.getByTestId('board-lines')).toHaveAttribute('data-board-lines', 'build ship');
         const build = await page.getByTestId('board-line-build').boundingBox();
@@ -122,7 +118,7 @@ test.describe('Build and ship lines', () => {
     test('the build line is solid and the ship line dashed, both in the highlight colour, each named for what it marks', async ({ page }) => {
         await openSingleFile(page, 'board-lines.md', 'document', 'card');
         await demandSeen(page);
-        await postSnapshot(page, [coordinatorRow(IDS, 2, 4)]);
+        await postSnapshot(page, [boardRow(IDS, 2, 4)]);
         const build = page.getByTestId('board-line-build');
         const ship = page.getByTestId('board-line-ship');
         await expect(build).toHaveCSS('border-top-style', 'solid');
@@ -147,7 +143,7 @@ test.describe('Build and ship lines', () => {
     test('each group of a grouped view draws the line between its own cards, first or last when its cards sit wholly on one side', async ({ page }) => {
         await openSingleFile(page, 'board-lines.md', 'kanban', 'card');
         await demandSeen(page);
-        await postSnapshot(page, [coordinatorRow(IDS, 2, 4)]);
+        await postSnapshot(page, [boardRow(IDS, 2, 4)]);
         await expect(page.getByTestId('board-line-build').first()).toBeVisible();
         const group = (name: string): Locator => page.locator(`[data-flip-column-id="${name}"]`);
         // doing holds alpha and beta, both above both lines
@@ -156,19 +152,19 @@ test.describe('Build and ship lines', () => {
         expect(await sequenceIn(group('testing'))).toEqual(['lines:build', 'Delta', 'lines:ship']);
     });
 
-    test('a group with no cards draws no line, and the lines leave with the coordinator', async ({ page }) => {
+    test('a group with no cards draws no line, and the lines leave when the board leaves the list', async ({ page }) => {
         await openSingleFile(page, 'board-lines.md', 'kanban', 'card');
         await demandSeen(page);
-        await postSnapshot(page, [coordinatorRow(IDS, 2, 4)]);
+        await postSnapshot(page, [boardRow(IDS, 2, 4)]);
         await expect(page.getByTestId('board-line-build').first()).toBeVisible();
         await postSnapshot(page, []);
         await expect(page.getByTestId('board-lines')).toHaveCount(0);
     });
 
-    test('a board no coordinator owns draws no line', async ({ page }) => {
+    test('a board the host does not list draws no line', async ({ page }) => {
         await openSingleFile(page, 'board-lines.md', 'document', 'card');
         await demandSeen(page);
-        await postSnapshot(page, [{ ...coordinatorRow(IDS, 2, 4), board_doc_path: 'other/docstech/users/dev/todo.md' }]);
+        await postSnapshot(page, [{ ...boardRow(IDS, 2, 4), doc_path: 'other/docstech/users/dev/todo.md' }]);
         await expect(page.getByTestId('board-lines')).toHaveCount(0);
     });
 
@@ -195,7 +191,7 @@ test.describe('Build and ship lines', () => {
         await postSnapshot(page, []);
         const before = await measure();
         // build line after Alpha (between Alpha and Beta in doing), ship line after Delta (the end of testing)
-        await postSnapshot(page, [coordinatorRow(IDS, 1, 4)]);
+        await postSnapshot(page, [boardRow(IDS, 1, 4)]);
         const doing = page.locator('[data-flip-column-id="doing"]');
         const testing = page.locator('[data-flip-column-id="testing"]');
         const build = doing.getByTestId('board-line-build');
@@ -234,7 +230,7 @@ test.describe('Build and ship lines', () => {
         const ids = Array.from({ length: 40 }, (_, i) => `long-${String(i + 1).padStart(2, '0')}`);
         await openSingleFile(page, 'board-lines-long.md', 'kanban', 'card');
         await demandSeen(page);
-        await postSnapshot(page, [coordinatorRow(ids, 3, 1)]);
+        await postSnapshot(page, [boardRow(ids, 3, 1)]);
         await expect(page.getByTestId('board-line-build')).toHaveCount(1);
         await expect(page.getByTestId('board-line-ship')).toHaveCount(1);
         const mounted = await page.locator('[data-column-card-id]').count();
@@ -255,7 +251,7 @@ test.describe('Build and ship lines', () => {
         for (const view of ['document', 'kanban']) {
             await sendCommand(page, 'setViewType', { viewType: view });
             await demandSeen(page);
-            await postSnapshot(page, [coordinatorRow(['alpha', 'beta', 'gamma'], 2, 0)]);
+            await postSnapshot(page, [boardRow(['alpha', 'beta', 'gamma'], 2, 0)]);
             await expect(page.getByTestId('board-line-build').first()).toBeVisible();
             await expect(page.getByTestId('board-line-ship')).toHaveCount(0);
         }

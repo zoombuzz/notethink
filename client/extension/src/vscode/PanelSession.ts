@@ -160,7 +160,7 @@ export class PanelSession {
 		this.extension_version = this.context.extension.packageJSON.version as string || '';
 		this.post_to_webview = (message: Record<string, unknown>): void => { this.webviewPanel.webview.postMessage(message); };
 		this.activity_commands = new ActivityCommands(this.base_uri, this.activity_analyser, this.post_to_webview, () => this.activityTargetColumn());
-		this.coordinator_commands = new CoordinatorCommands(this.activity_analyser, this.post_to_webview, (doc_path, changes) => this.applyEditTextToDoc(doc_path, changes), absolute_path => this.resolveWorkspaceUri(absolute_path));
+		this.coordinator_commands = new CoordinatorCommands(this.activity_analyser, this.post_to_webview);
 	}
 
 	// rebuilds an absolute path into a URI carrying the workspace scheme, so discovery and opens never assume file:

@@ -30,7 +30,7 @@ const AGENT_SCAN_REMARK_MS = PENDING_WORK_SAFETY_NET_MS / 2;
 
 let snapshot: ActivitySnapshot | undefined = undefined;
 let unavailable: ActivityUnavailable | undefined = undefined;
-// the host's last answer to a coordinator send or marker move, undefined before the first
+// the host's last answer to a coordinator send, undefined before the first
 let coordinator_result: CoordinatorResult | undefined = undefined;
 let coordinator_result_seq = 0;
 // latched true on the first 'live' snapshot, never cleared: a backstop against a later snapshot regressing the card
@@ -88,7 +88,7 @@ export function readActivityUnavailable(): ActivityUnavailable | undefined {
     return unavailable;
 }
 
-/** the host's last answer to a coordinator send or marker move, undefined when it has given none */
+/** the host's last answer to a coordinator send, undefined when it has given none */
 export function readCoordinatorResult(): CoordinatorResult | undefined {
     return coordinator_result;
 }
@@ -144,7 +144,7 @@ export function useHasCompletedAgentScan(): boolean {
     return useSyncExternalStore(subscribeToActivity, readHasCompletedAgentScan, readHasCompletedAgentScan);
 }
 
-/** the host's latest answer to a coordinator send or marker move, re-rendering the caller when one arrives */
+/** the host's latest answer to a coordinator send, re-rendering the caller when one arrives */
 export function useCoordinatorResult(): CoordinatorResult | undefined {
     return useSyncExternalStore(subscribeToActivity, readCoordinatorResult, readCoordinatorResult);
 }

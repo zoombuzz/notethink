@@ -6,7 +6,6 @@ import {
     boardLinePositions,
     buildCoordinatorEnvelope,
     compactStamp,
-    coordMarkerChanges,
     boardLinesFrom,
     coordinatorsFrom,
     isBuildable,
@@ -15,10 +14,8 @@ import {
     isSafeCoordinatorName,
     isShippable,
     mailboxInboxSegments,
-    markerAfter,
     parseBoardStories,
     type BoardStory,
-    type CoordinatorTextChange,
 } from './coordinatorops';
 import type { ResolvedRegistryAgent } from './agentregistryops';
 
@@ -26,7 +23,7 @@ const BOARD = [
     '# Todo',
     '',
     '',
-    '### Alpha story [](?id=alpha&status=doing&coord=host-a)',
+    '### Alpha story [](?id=alpha&status=doing)',
     '',
     '+ [X] done task [](?work=manual)',
     '+ [ ] open task one',
@@ -47,24 +44,20 @@ const BOARD = [
     '',
 ].join('\n');
 
-function applyChanges(text: string, changes: CoordinatorTextChange[]): string {
-    return [...changes].sort((a, b) => b.from - a.from).reduce((acc, change) => acc.slice(0, change.from) + change.insert + acc.slice(change.to), text);
-}
-
 function agent(overrides: Partial<ResolvedRegistryAgent> = {}): ResolvedRegistryAgent {
     return {
         agent: 'coord-demo', vendor: 'claude-code', repo: '/ws/demo', state: 'working', story: 'alpha', session_ids: [],
-        root_path: '/ws/demo', repo_relative: 'demo', agent_kind: 'coordinator', machine: 'host-a', binary_version: '1.2.3', open_convoys: ['c1'],
+        root_path: '/ws/demo', repo_relative: 'demo', agent_kind: 'coordinator', machine: 'host-a', open_convoys: ['c1'],
         ...overrides,
     };
 }
 
 describe('parseBoardStories', () => {
-    it('reads each ### heading with its id, status, markers, convoys and operator steps', () => {
+    it('reads each ### heading with its id, status, convoys and operator steps', () => {
         const stories = parseBoardStories(BOARD);
         expect(stories.map(story => story.id)).toEqual(['alpha', 'beta', 'gamma-story-with-no-tags']);
-        expect(stories[0]).toMatchObject({ title: 'Alpha story', status: 'doing', markers: ['host-a'], convoys: [], operator_steps: ['reply to the vendor'] });
-        expect(stories[1]).toMatchObject({ status: '', markers: [], convoys: ['repo-b'], operator_steps: [] });
+        expect(stories[0]).toMatchObject({ title: 'Alpha story', status: 'doing', convoys: [], operator_steps: ['reply to the vendor'] });
+        expect(stories[1]).toMatchObject({ status: '', convoys: ['repo-b'], operator_steps: [] });
         expect(stories[2]).toMatchObject({ convoys: [], operator_steps: [] });
     });
 
@@ -74,76 +67,13 @@ describe('parseBoardStories', () => {
         expect(stories[0].operator_steps).not.toContain('done task');
     });
 
-    it('records where each heading line starts', () => {
-        const [first] = parseBoardStories(BOARD);
-        expect(BOARD.slice(first.line_start, first.line_start + first.line.length)).toBe(first.line);
-    });
-
-    it('reads a comma list of hosts in one coord tag', () => {
-        const [story] = parseBoardStories('### One [](?coord=host-a,host-b)\n');
-        expect(story.markers).toEqual(['host-a', 'host-b']);
-    });
-
     it('gives nothing for a text with no story', () => {
         expect(parseBoardStories('# Todo\n\nplain\n')).toEqual([]);
     });
 });
 
-describe('markerAfter', () => {
-    it('counts the stories down to the lowest one carrying the host, and 0 when none does', () => {
-        const stories = parseBoardStories('### A [](?coord=host-a)\n### B\n### C [](?coord=host-a)\n### D\n');
-        expect(markerAfter(stories, 'host-a')).toBe(3);
-        expect(markerAfter(stories, 'host-b')).toBe(0);
-    });
-});
-
-describe('coordMarkerChanges', () => {
-    it('moves the marker down one story and leaves every other line alone', () => {
-        const next = applyChanges(BOARD, coordMarkerChanges(BOARD, 'host-a', 2));
-        expect(next).toContain('### Alpha story [](?id=alpha&status=doing)');
-        expect(next).toContain('### Beta story [](?id=beta&coord=host-a)');
-        expect(next.replace('### Alpha story [](?id=alpha&status=doing)', '').replace('### Beta story [](?id=beta&coord=host-a)', '')).toBe(BOARD.replace('### Alpha story [](?id=alpha&status=doing&coord=host-a)', '').replace('### Beta story [](?id=beta)', ''));
-    });
-
-    it('adds a linetag to a heading that has none', () => {
-        const next = applyChanges(BOARD, coordMarkerChanges(BOARD, 'host-a', 3));
-        expect(next).toContain('### Gamma story with no tags [](?coord=host-a)');
-        expect(parseBoardStories(next).filter(story => story.markers.includes('host-a'))).toHaveLength(1);
-    });
-
-    it('takes the marker off the board with 0, dropping a linetag the marker alone filled', () => {
-        const board = '### One [](?coord=host-a)\n\n### Two [](?id=two&coord=host-a)\n';
-        const next = applyChanges(board, coordMarkerChanges(board, 'host-a', 0));
-        expect(next).toBe('### One\n\n### Two [](?id=two)\n');
-    });
-
-    it('keeps another host\'s marker, on the same tag or another', () => {
-        const board = '### One [](?coord=host-a,host-b)\n### Two\n';
-        const next = applyChanges(board, coordMarkerChanges(board, 'host-a', 2));
-        expect(next).toBe('### One [](?coord=host-b)\n### Two [](?coord=host-a)\n');
-    });
-
-    it('collapses two markers of one host into the one asked for', () => {
-        const board = '### One [](?coord=host-a)\n### Two [](?coord=host-a)\n### Three\n';
-        const next = applyChanges(board, coordMarkerChanges(board, 'host-a', 1));
-        expect(parseBoardStories(next).map(story => story.markers)).toEqual([['host-a'], [], []]);
-    });
-
-    it('gives no change when the marker already sits there, or the position names no story', () => {
-        expect(coordMarkerChanges(BOARD, 'host-a', 1)).toEqual([]);
-        expect(coordMarkerChanges(BOARD, 'host-a', 4)).toEqual([]);
-        expect(coordMarkerChanges(BOARD, 'host-a', -1)).toEqual([]);
-        expect(coordMarkerChanges(BOARD, 'host-a', 1.5)).toEqual([]);
-    });
-
-    it('refuses a host that is not safe to write into a linetag', () => {
-        expect(coordMarkerChanges(BOARD, 'a&status=done', 2)).toEqual([]);
-        expect(coordMarkerChanges(BOARD, '', 2)).toEqual([]);
-    });
-});
-
 describe('who a view lists', () => {
-    it('lists an entry naming no kind or a coordinator, never an overseer or a session', () => {
+    it('lists an entry naming no kind or a coordinator, never another kind', () => {
         expect(isCoordinatorEntry({ agent_kind: '' })).toBe(true);
         expect(isCoordinatorEntry({})).toBe(true);
         expect(isCoordinatorEntry({ agent_kind: 'coordinator' })).toBe(true);
@@ -164,9 +94,9 @@ describe('coordinatorsFrom', () => {
         { doc_path: 'other/docstech/users/dev/todo.md', text: '### Elsewhere\n' },
     ];
 
-    it('places each coordinator on its own repository\'s board with the marker position for its machine', () => {
+    it('places each coordinator on its own repository\'s board with the stories of its board', () => {
         const [row] = coordinatorsFrom([agent()], docs);
-        expect(row).toMatchObject({ agent: 'coord-demo', machine: 'host-a', version: '1.2.3', open_convoys: ['c1'], root_relative: 'demo', board_doc_path: 'demo/docstech/users/dev/todo.md', marker_after: 1 });
+        expect(row).toMatchObject({ agent: 'coord-demo', machine: 'host-a', open_convoys: ['c1'], root_relative: 'demo', board_doc_path: 'demo/docstech/users/dev/todo.md' });
         expect(row.board_stories.map(story => story.id)).toEqual(['alpha', 'beta', 'gamma-story-with-no-tags']);
     });
 
@@ -188,9 +118,9 @@ describe('coordinatorsFrom', () => {
         expect(rows.map(row => row.agent)).toEqual(['coord-alpha', 'coord-zed']);
     });
 
-    it('has an empty board and no marker for a repository with no todo.md', () => {
+    it('has an empty board for a repository with no todo.md', () => {
         const [row] = coordinatorsFrom([agent({ repo_relative: 'bare' })], docs);
-        expect(row).toMatchObject({ board_stories: [], marker_after: 0 });
+        expect(row).toMatchObject({ board_stories: [] });
         expect(row.board_doc_path).toBeUndefined();
     });
 
@@ -257,7 +187,7 @@ describe('buildCoordinatorEnvelope', () => {
 });
 
 function story(id: string, fields: Partial<BoardStory> = {}): BoardStory {
-    return { id, title: id, status: '', convoys: [], operator_steps: [], markers: [], sent: false, open_question: false, blocked: false, line_start: 0, line: '', ...fields };
+    return { id, title: id, status: '', convoys: [], operator_steps: [], sent: false, open_question: false, blocked: false, ...fields };
 }
 
 describe('parseBoardStories line facts', () => {

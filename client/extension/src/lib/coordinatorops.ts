@@ -4,28 +4,24 @@ import type { StoryDocument } from './agentstorybindingops';
 
 /**
  * Coordinators beside boards: the pure half. A coordinator is a long-lived agent that owns one
- * repository's board, registered in the thinkersync agent registry. This module turns registry
- * entries and the repository's own `todo.md` into the rows a view lists, rewrites a board's
- * `[](?coord=<host>)` target marker, and builds the envelope a send writes into the agent's mailbox.
+ * repository's board, read from the files coordinators write (`coordinatorfilesops.ts`). This module
+ * turns those entries and the repository's own `todo.md` into the rows a view lists, works out where
+ * the build and ship lines fall on a board, and builds the envelope a send writes into the agent's mailbox.
  *
- * NoteThink only ever shows and asks: it never starts, stops or restarts an agent. The two things it
- * writes are both explicit user actions: an envelope dropped in an agent's inbox, and the target marker
- * on the board. The envelope's layout is thinkersync's public interface, version 0: one JSON file named
- * `<id>.json` in `mailboxes/<agent>/inbox/` under the thinkersync home, whose id is a compact UTC stamp
- * and a short random suffix.
- *
- * The target marker is the linetag key `coord` on a story heading, naming a host; one host has one
- * marker, and the range the host's coordinator may work is the top of the board down to the lowest
- * story carrying it.
+ * NoteThink only ever shows and asks: it never starts, stops or restarts an agent. The one thing it
+ * writes is an envelope dropped in an agent's inbox, on the user's explicit action. The envelope's layout
+ * is thinkersync's public interface, version 0: one JSON file named `<id>.json` in
+ * `mailboxes/<agent>/inbox/` under the thinkersync home, whose id is a compact UTC stamp and a short
+ * random suffix.
  */
 
-// the registry kinds listed as coordinators; an entry naming none is read as one
+// the agent kind listed as a coordinator; an entry naming none is read as one
 export const COORDINATOR_AGENT_KIND = 'coordinator';
 
 // an agent or machine name is a mailbox path segment and half an envelope target, so it is pattern-checked first
 const SAFE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i;
 
-// the vendor names a coordinator's registry entry writes, which a vendor-change envelope names its target by
+// the vendor names a coordinator's session ledger writes, which a vendor-change envelope names its target by
 export const COORDINATOR_VENDOR_NAMES = ['claude', 'agy', 'codex', 'grok'] as const;
 export type CoordinatorVendorName = typeof COORDINATOR_VENDOR_NAMES[number];
 
@@ -56,28 +52,15 @@ const DELEGATED_ID_PREFIX = 'delegated-';
 const REVIEW_STATUSES = ['code-review', 'testing'];
 
 /**
- * One story of a board as the target line sees it, with where its heading sits.
- * - markers: the hosts named by the heading's `coord` linetag
- * - line_start: offset of the heading line's first character
- * - line: the heading line itself
+ * One story of a board as the build and ship lines see it.
  * - sent: whether the heading carries a `sent` linetag, which a coordinator's envelope writes when it hands the story over
  * - open_question: whether the story holds an unanswered `+ open question` line
  * - blocked: whether the story holds a `+ blocked` note
  */
 export interface BoardStory extends ActivityCoordinatorStory {
-    markers: string[];
     sent: boolean;
     open_question: boolean;
     blocked: boolean;
-    line_start: number;
-    line: string;
-}
-
-/** a replacement of one span of a document's text, the shape the panel's edit path applies */
-export interface CoordinatorTextChange {
-    from: number;
-    to: number;
-    insert: string;
 }
 
 /**
@@ -106,7 +89,7 @@ export interface CoordinatorRequestEnvelope extends CoordinatorEnvelopeBase {
     body: string;
 }
 
-/** a vendor change, whose body names the vendor as the registry spells it */
+/** a vendor change, whose body names the vendor as thinkersync spells it */
 export interface CoordinatorVendorEnvelope extends CoordinatorEnvelopeBase {
     kind: 'vendor';
     body: { vendor: CoordinatorVendorName };
@@ -129,7 +112,7 @@ export function mailboxInboxSegments(agent: string): string[] {
     return ['mailboxes', agent, 'inbox'];
 }
 
-/** whether a registry entry is one of the coordinators a view lists: an entry naming no kind is read as one, an overseer or a helper session is not */
+/** whether an entry is one of the coordinators a view lists: an entry naming no kind is read as one, any other kind is not */
 export function isCoordinatorEntry(entry: Pick<ResolvedRegistryAgent, 'agent_kind'>): boolean {
     const kind = entry.agent_kind ?? '';
     return kind === '' || kind === COORDINATOR_AGENT_KIND;
@@ -155,10 +138,6 @@ function linetagParams(line: string): Record<string, string> {
     return params;
 }
 
-function markerHosts(coord: string | undefined): string[] {
-    return coord ? coord.split(',').map(host => host.trim()).filter(host => host.length > 0) : [];
-}
-
 /** an unticked task line as the text an operator reads: the box and every linetag taken off */
 function taskText(line: string): string {
     return clip(line.replace(LINETAG_PATTERN, '').replace(/^\s*[+*-]\s+\[ \]\s*/, '').trim());
@@ -170,7 +149,6 @@ function taskText(line: string): string {
  */
 export function parseBoardStories(text: string): BoardStory[] {
     const stories: BoardStory[] = [];
-    let offset = 0;
     let current: BoardStory | undefined;
     for (const line of text.split('\n')) {
         const heading = STORY_HEADING.exec(line);
@@ -183,12 +161,9 @@ export function parseBoardStories(text: string): BoardStory[] {
                 status: params.status ?? '',
                 convoys: [],
                 operator_steps: [],
-                markers: markerHosts(params.coord),
                 sent: params.sent !== undefined,
                 open_question: false,
                 blocked: false,
-                line_start: offset,
-                line,
             };
             stories.push(current);
         } else if (current) {
@@ -202,7 +177,6 @@ export function parseBoardStories(text: string): BoardStory[] {
                 current.blocked = true;
             }
         }
-        offset += line.length + 1;
     }
     return stories;
 }
@@ -239,49 +213,6 @@ export function boardLinePositions(stories: ReadonlyArray<BoardStory>, ready_ids
     return { build_after, ship_after };
 }
 
-/** how many stories sit at or above the lowest story carrying this host's marker, 0 when none carries it */
-export function markerAfter(stories: ReadonlyArray<Pick<BoardStory, 'markers'>>, host: string): number {
-    let found = 0;
-    stories.forEach((story, index) => { if (story.markers.includes(host)) { found = index + 1; } });
-    return found;
-}
-
-/** a heading line with its `coord` linetag set to these hosts: the key leaves its tag when the list is empty, and the tag leaves the line when nothing else is in it */
-function withMarkerHosts(line: string, hosts: string[]): string {
-    const tags = [...line.matchAll(LINETAG_PATTERN)];
-    const holder = tags.find(tag => tag[1].split('&').some(pair => pair.startsWith('coord='))) ?? tags[tags.length - 1];
-    const coord_pair = hosts.length > 0 ? `coord=${hosts.join(',')}` : '';
-    if (!holder) { return coord_pair ? `${line.replace(/\s+$/, '')} [](?${coord_pair})` : line; }
-    const pairs = holder[1].split('&').filter(pair => pair.length > 0 && !pair.startsWith('coord='));
-    if (coord_pair) { pairs.push(coord_pair); }
-    const before = line.slice(0, holder.index);
-    const after = line.slice(holder.index + holder[0].length);
-    if (pairs.length > 0) { return `${before}[](?${pairs.join('&')})${after}`; }
-    const tail = after.trim();
-    return `${before.replace(/ +$/, '')}${tail ? ` ${tail}` : ''}`;
-}
-
-/**
- * The edits that leave this host's marker on the `after`th story of a board, and on no other: `after`
- * of 0 takes the marker off the board. One host has one marker, so every heading carrying the host
- * loses it first. Only the heading lines that change are touched, so the rest of the file, and any
- * other host's marker, stays byte for byte. No edit comes back when the marker already sits there or
- * `after` names no story.
- */
-export function coordMarkerChanges(text: string, host: string, after: number): CoordinatorTextChange[] {
-    const stories = parseBoardStories(text);
-    if (!Number.isInteger(after) || after < 0 || after > stories.length || !isSafeCoordinatorName(host)) { return []; }
-    const changes: CoordinatorTextChange[] = [];
-    stories.forEach((story, index) => {
-        const has = story.markers.includes(host);
-        const wants = index === after - 1;
-        if (has === wants) { return; }
-        const hosts = wants ? [...story.markers, host] : story.markers.filter(marker => marker !== host);
-        changes.push({ from: story.line_start, to: story.line_start + story.line.length, insert: withMarkerHosts(story.line, hosts) });
-    });
-    return changes;
-}
-
 /** the board a coordinator's repository keeps: the first `docstech/users/<name>/todo.md` under it, in path order */
 export function boardDocFor(story_docs: ReadonlyArray<StoryDocument>, repo_relative: string): StoryDocument | undefined {
     const base = repo_relative ? `${repo_relative}/` : '';
@@ -292,9 +223,9 @@ export function boardDocFor(story_docs: ReadonlyArray<StoryDocument>, repo_relat
 }
 
 /**
- * The coordinator rows for the registry entries placed in the open folder, in name order. An entry that
+ * The coordinator rows for the coordinator entries placed in the open folder, in name order. An entry that
  * is not a coordinator, or whose name or machine is not safe to address, is left out. Each row carries
- * its repository's board stories, so the target line can be drawn without another read.
+ * its repository's board stories, which the card send action picks its story from.
  */
 export function coordinatorsFrom(agents: ReadonlyArray<ResolvedRegistryAgent>, story_docs: ReadonlyArray<StoryDocument>): ActivityCoordinator[] {
     const rows: ActivityCoordinator[] = [];
@@ -308,13 +239,11 @@ export function coordinatorsFrom(agents: ReadonlyArray<ResolvedRegistryAgent>, s
             vendor: agent.vendor,
             state: agent.state,
             story: agent.story,
-            version: agent.binary_version ?? '',
             machine,
             open_convoys: agent.open_convoys ?? [],
             root_relative: agent.repo_relative,
             board_doc_path: board?.doc_path,
             board_stories: stories.slice(0, COORDINATOR_BOARD_MAX_STORIES).map(({ id, title, status, convoys, operator_steps }) => ({ id, title, status, convoys, operator_steps })),
-            marker_after: markerAfter(stories, machine),
         });
     }
     return rows.sort((a, b) => (a.agent < b.agent ? -1 : a.agent > b.agent ? 1 : 0));
@@ -350,7 +279,7 @@ export function compactStamp(now: Date): string {
 
 /**
  * The fields of an envelope to build. A request carries a message; a vendor change carries the vendor
- * name as the registry spells it.
+ * name as thinkersync spells it.
  * - rand_hex: the id's random suffix, six hex digits
  */
 export type CoordinatorEnvelopeFields = { agent: string; machine: string; now: Date; rand_hex: string } & (

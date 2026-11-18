@@ -187,8 +187,8 @@ describe('SettingsCardDrawer rows', () => {
 describe('SettingsCardDrawer coordinators', () => {
     const LOADED = ['demo/docstech/users/dev/todo.md'];
     const demo: ActivityCoordinator = {
-        agent: 'coord-demo', vendor: 'claude-code', state: 'working', story: '', version: '1.2.3', machine: 'host-a', open_convoys: [], root_relative: 'demo',
-        board_doc_path: LOADED[0], board_stories: [], marker_after: 0,
+        agent: 'coord-demo', vendor: 'claude-code', state: 'working', story: '', machine: 'host-a', open_convoys: [], root_relative: 'demo',
+        board_doc_path: LOADED[0], board_stories: [],
     };
 
     function seed(): void {

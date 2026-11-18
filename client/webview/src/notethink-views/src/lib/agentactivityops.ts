@@ -54,7 +54,6 @@ export const ACTIVITY_OPEN_CHAT_MESSAGE_TYPE = 'openActivityChat';
 export const ACTIVITY_DEMAND_MESSAGE_TYPE = 'activityDemand';
 export const ACTIVITY_WITHDRAW_MESSAGE_TYPE = 'activityWithdraw';
 export const COORDINATOR_SEND_MESSAGE_TYPE = 'coordinatorSend';
-export const COORDINATOR_MOVE_MARKER_MESSAGE_TYPE = 'coordinatorMoveMarker';
 export const COORDINATOR_RESULT_MESSAGE_TYPE = 'coordinatorResult';
 export const AGENT_VIRTUAL_NAMESPACE = 'agent';
 // the pending-work key the toolbar spinner holds while the analyser's first scan is in flight

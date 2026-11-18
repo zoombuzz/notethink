@@ -7,18 +7,14 @@ import {
     parseCoordinatorResult,
     registryVendorName,
     COORDINATOR_VENDOR_OPTIONS,
-    targetPositionFromKey,
-    targetPositionFromPointer,
-    targetValueText,
 } from './coordinatorops';
 import type { ActivityCoordinator } from '../types/AgentActivity';
 
 function coordinator(overrides: Partial<ActivityCoordinator> = {}): ActivityCoordinator {
     return {
-        agent: 'coord-demo', vendor: 'claude-code', state: 'idle', story: '', version: '', machine: 'host-a', open_convoys: [], root_relative: 'demo',
+        agent: 'coord-demo', vendor: 'claude-code', state: 'idle', story: '', machine: 'host-a', open_convoys: [], root_relative: 'demo',
         board_doc_path: 'demo/docstech/users/dev/todo.md',
         board_stories: [{ id: 'alpha', title: 'Alpha story', status: '', convoys: [], operator_steps: [] }, { id: 'beta', title: 'Beta story', status: '', convoys: [], operator_steps: [] }],
-        marker_after: 0,
         ...overrides,
     };
 }
@@ -44,36 +40,11 @@ describe('which coordinators a folder view lists', () => {
     });
 });
 
-describe('moving the target line', () => {
-    it('reads the position a pointer is at as how many story middles are above it', () => {
-        const middles = [10, 30, 50];
-        expect(targetPositionFromPointer(middles, 0)).toBe(0);
-        expect(targetPositionFromPointer(middles, 20)).toBe(1);
-        expect(targetPositionFromPointer(middles, 35)).toBe(2);
-        expect(targetPositionFromPointer(middles, 500)).toBe(3);
-    });
-
-    it('moves one story with Up and Down, to the ends with Home and End, and stays inside the board', () => {
-        expect(targetPositionFromKey('ArrowDown', 1, 3)).toBe(2);
-        expect(targetPositionFromKey('ArrowDown', 3, 3)).toBe(3);
-        expect(targetPositionFromKey('ArrowUp', 1, 3)).toBe(0);
-        expect(targetPositionFromKey('ArrowUp', 0, 3)).toBe(0);
-        expect(targetPositionFromKey('Home', 2, 3)).toBe(0);
-        expect(targetPositionFromKey('End', 0, 3)).toBe(3);
-        expect(targetPositionFromKey('Enter', 1, 3)).toBeUndefined();
-    });
-
-    it('says where the line is, or that it is off the board', () => {
-        expect(targetValueText(coordinator(), 2)).toBe('After Beta story');
-        expect(targetValueText(coordinator(), 0)).toBe('No target line: nothing is set to run');
-    });
-});
-
 describe('the words a row uses', () => {
-    it('names each registry state, and an unknown one plainly', () => {
+    it('names each state, and an unknown one plainly', () => {
         expect(coordinatorStateLabel('working')).toBe('Working');
-        expect(coordinatorStateLabel('starting')).toBe('Starting');
-        expect(coordinatorStateLabel('recycling')).toBe('Recycling');
+        expect(coordinatorStateLabel('waiting')).toBe('Waiting on you');
+        expect(coordinatorStateLabel('idle')).toBe('Idle');
         expect(coordinatorStateLabel('stopped')).toBe('Stopped');
         expect(coordinatorStateLabel('hibernating')).toBe('State not reported');
     });
@@ -83,27 +54,23 @@ describe('the words a row uses', () => {
         expect(convoyCountLabel(3)).toBe('3 open convoys');
     });
 
-    it('answers each outcome, and says nothing for a marker that moved', () => {
-        const send = (code: string): string | undefined => coordinatorResultMessage({ request: 'send', agent: 'coord-demo', code, ok: code === 'sent' });
-        const move = (code: string): string | undefined => coordinatorResultMessage({ request: 'move', agent: 'coord-demo', code, ok: code === 'moved' });
+    it('answers each outcome', () => {
+        const send = (code: string): string => coordinatorResultMessage({ request: 'send', agent: 'coord-demo', code, ok: code === 'sent' });
         expect(send('sent')).toBe('Sent to coord-demo.');
         expect(send('write_failed')).toBe('The message could not be written.');
         expect(send('bad_message')).toBe('Write a message first.');
-        expect(move('moved')).toBeUndefined();
-        expect(move('write_failed')).toBe('The board could not be changed.');
-        expect(move('moved_unsaved')).toContain('not saved yet');
-        expect(move('no_board')).toBe('This agent has no board here.');
     });
 
     it('reads a coordinator result message, and nothing else', () => {
         expect(parseCoordinatorResult({ type: 'coordinatorResult', request: 'send', agent: 'coord-demo', code: 'sent', ok: true })).toEqual({ request: 'send', agent: 'coord-demo', code: 'sent', ok: true });
         expect(parseCoordinatorResult({ type: 'coordinatorResult', request: 'other', agent: 'x', code: 'sent' })).toBeUndefined();
+        expect(parseCoordinatorResult({ type: 'coordinatorResult', request: 'move', agent: 'x', code: 'moved' })).toBeUndefined();
         expect(parseCoordinatorResult({ type: 'activity' })).toBeUndefined();
         expect(parseCoordinatorResult(null)).toBeUndefined();
     });
 
     it('answers a vendor change in its own words', () => {
-        const vendor = (code: string): string | undefined => coordinatorResultMessage({ request: 'vendor', agent: 'coord-demo', code, ok: code === 'sent' });
+        const vendor = (code: string): string => coordinatorResultMessage({ request: 'vendor', agent: 'coord-demo', code, ok: code === 'sent' });
         expect(vendor('sent')).toBe('Asked coord-demo to change vendor.');
         expect(vendor('bad_vendor')).toBe('That is not a vendor a coordinator can change to.');
         expect(vendor('no_mailbox')).toBe('The agent has no mailbox yet.');
@@ -111,7 +78,7 @@ describe('the words a row uses', () => {
         expect(parseCoordinatorResult({ type: 'coordinatorResult', request: 'vendor', agent: 'coord-demo', code: 'sent', ok: true })).toEqual({ request: 'vendor', agent: 'coord-demo', code: 'sent', ok: true });
     });
 
-    it('spells each display vendor as the registry does, and offers every vendor the display table knows', () => {
+    it('spells each display vendor as thinkersync does, and offers every vendor the display table knows', () => {
         expect(registryVendorName('claude-code')).toBe('claude');
         expect(registryVendorName('antigravity')).toBe('agy');
         expect(registryVendorName('codex')).toBe('codex');

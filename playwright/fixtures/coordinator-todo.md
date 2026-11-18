@@ -1,7 +1,7 @@
 # Todo
 
 
-### Alpha story [](?id=alpha&status=doing&coord=host-a)
+### Alpha story [](?id=alpha&status=doing)
 
 + [ ] first task
 + [ ] reply to the vendor [](?work=manual)

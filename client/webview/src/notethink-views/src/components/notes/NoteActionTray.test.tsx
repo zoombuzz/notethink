@@ -15,8 +15,8 @@ beforeAll(() => {
 
 function coordinator(overrides: Partial<ActivityCoordinator> = {}): ActivityCoordinator {
     return {
-        agent: 'coord-demo', vendor: 'claude-code', state: 'idle', story: '', version: '', machine: 'host-a', open_convoys: [], root_relative: 'demo', board_doc_path: BOARD,
-        board_stories: [{ id: 'alpha', title: 'Alpha story', status: '', convoys: [], operator_steps: [] }], marker_after: 0,
+        agent: 'coord-demo', vendor: 'claude-code', state: 'idle', story: '', machine: 'host-a', open_convoys: [], root_relative: 'demo', board_doc_path: BOARD,
+        board_stories: [{ id: 'alpha', title: 'Alpha story', status: '', convoys: [], operator_steps: [] }],
         ...overrides,
     };
 }

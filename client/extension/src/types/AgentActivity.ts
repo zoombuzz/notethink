@@ -201,13 +201,13 @@ export interface ActivityChildSession {
  *   the join to a story
  * - session_name: the name the vendor itself gives the session (Claude Code's own `name` in its live
  *   session file), undefined when the vendor names none or the session is not live
- * - registry_name: the agent's name from the agent registry, the fallback when the vendor names
- *   none; set when a registry entry joins this session, and the name of a registry-only row
- * - registry_only: true for a row built from a registry entry alone, because no vendor session
+ * - registry_name: the coordinator's name, the fallback when the vendor names none; set when a
+ *   coordinator joins this session, and the name of a registry-only row
+ * - registry_only: true for a row built from a coordinator alone, because no vendor session
  *   NoteThink can read matches it; it has no transcript to open, no usage and no live line
- * - registry_stale: true when the registry still says `working` but nothing since its last update
- *   shows work, so a row reads stale rather than working
- * - registry_story: the story id the registry entry names, shown on a registry-only row; a joined
+ * - registry_stale: true when the coordinator's files still say `working` but nothing since their
+ *   last update shows work, so a row reads stale rather than working
+ * - registry_story: the story id the coordinator names, shown on a registry-only row; a joined
  *   or registry-only session also takes it as its story binding when that story is in flight
  * - tail_read: true when the transcript was over the size bound, so this session's usage, active time
  *   and start cover only its newest part; absent otherwise
@@ -357,7 +357,7 @@ export interface ActivityStoryProgress {
 }
 
 /**
- * ActivityCoordinatorStory is one story of a coordinator's board, as its target line lists it.
+ * ActivityCoordinatorStory is one story of a coordinator's board, as the card send action lists it.
  * - id: the story's `id=` linetag slug, or the slug of its title when it has none
  * - status: the story's `status=` value, empty when it has none
  * - convoys: the repositories named by the story's unticked tasks tagged `delegate=<repo>`, each an open convoy
@@ -372,33 +372,29 @@ export interface ActivityCoordinatorStory {
 }
 
 /**
- * ActivityCoordinator is one registered coordinator, read-only, beside the board it owns. Left out on
- * purpose: its mailbox path, terminal pane, session ids and absolute repository path, none of which a
- * row draws or a send needs, since the host resolves the mailbox from the agent's name.
- * - agent: the agent's registry name, such as `coord-demo`, which is also what a send names
+ * ActivityCoordinator is one coordinator, read-only, beside the board it owns. Left out on purpose: its
+ * mailbox path, terminal pane, session ids and absolute repository path, none of which a row draws or a
+ * send needs, since the host resolves the mailbox from the agent's name.
+ * - agent: the agent's name, such as `coord-demo`, which is also what a send names
  * - vendor: the vendor slug the display table keys on
- * - state: the registry's own state word, carried as written
+ * - state: the state word, one of `working`, `waiting`, `idle` or `stopped`; a reader carries any other
  * - story: the story id the coordinator is working on, empty when none
- * - version: the program version the registry records, empty when it records none
- * - machine: the short host name the registry records, which is also the host a `coord=` marker names
- * - open_convoys: the registry's own list of open convoys, carried as written
+ * - machine: the short host name the coordinator builds on, which a send addresses
+ * - open_convoys: the coordinator's open convoys, carried as its resume note lists them
  * - root_relative: workspace-relative posix path of the repository, empty when it IS a workspace folder
- * - board_doc_path: workspace-relative path of the `todo.md` the target line is drawn on; absent when the repository has none
+ * - board_doc_path: workspace-relative path of the `todo.md` the card send action reads; absent when the repository has none
  * - board_stories: that board's stories, top to bottom
- * - marker_after: how many stories sit at or above the lowest story carrying this host's `coord=` marker, 0 when none carries it
  */
 export interface ActivityCoordinator {
     agent: string;
     vendor: string;
     state: string;
     story: string;
-    version: string;
     machine: string;
     open_convoys: string[];
     root_relative: string;
     board_doc_path?: string;
     board_stories: ActivityCoordinatorStory[];
-    marker_after: number;
 }
 
 /**

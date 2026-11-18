@@ -3,24 +3,23 @@ import { COORDINATOR_RESULT_MESSAGE_TYPE } from "./agentactivityops";
 import { ACTIVITY_VENDOR_ANTIGRAVITY, ACTIVITY_VENDOR_CLAUDE_CODE, ACTIVITY_VENDOR_DISPLAY, type ActivityCoordinator } from "../types/AgentActivity";
 
 /**
- * Coordinators beside boards: the webview's pure half. Which registered coordinators a folder view
- * lists, how a position on the target line is read from a pointer or a key, and the words every state
- * and every host answer is drawn in. The wire shapes are mirrored from the extension
+ * Coordinators beside boards: the webview's pure half. Which coordinators a folder view
+ * lists, and the words every state and every host answer is drawn in. The wire shapes are mirrored from the extension
  * (`client/extension/src/types/AgentActivity.ts`, `client/extension/src/vscode/CoordinatorCommands.ts`),
  * since the two bundles share no module graph.
  */
 
-// a story board lives at <project>/docstech/users/<name>/todo.md; a folder view holding one is worth a registry read
+// a story board lives at <project>/docstech/users/<name>/todo.md; a folder view holding one is worth a coordinator read
 const BOARD_FILE_PATTERN = /(^|\/)docstech\/users\/[^/]+\/todo\.md$/;
 
 /**
- * CoordinatorResult is the host's answer to a send or a marker move.
- * - request: which of the three it answers: a free-text send, a marker move or a vendor change
+ * CoordinatorResult is the host's answer to a send.
+ * - request: which of the two it answers: a free-text send or a vendor change
  * - code: the machine-readable outcome, since the copy belongs to the webview
  * - seq: counted by the store as each answer lands, so two identical answers in a row still read as two
  */
 export interface CoordinatorResult {
-    request: 'send' | 'move' | 'vendor';
+    request: 'send' | 'vendor';
     agent: string;
     code: string;
     ok: boolean;
@@ -34,7 +33,7 @@ export function hasBoardFiles(loaded_files: ReadonlyArray<string> | undefined): 
 
 /**
  * The coordinators a folder view lists: those whose repository holds a file the view has loaded. That is
- * every registered agent whose repository sits inside the open folder, and, when the view is open on
+ * every coordinator whose repository sits inside the open folder, and, when the view is open on
  * one repository or a folder within it, the one agent whose repository contains it.
  */
 export function coordinatorsInScope(coordinators: ReadonlyArray<ActivityCoordinator>, loaded_files: ReadonlyArray<string> | undefined): ActivityCoordinator[] {
@@ -42,38 +41,12 @@ export function coordinatorsInScope(coordinators: ReadonlyArray<ActivityCoordina
     return coordinators.filter(coordinator => files.some(file => coordinator.root_relative === '' || file === coordinator.root_relative || file.startsWith(`${coordinator.root_relative}/`)));
 }
 
-/** how many story rows have their middle above this point, which is the position a line dropped there takes: 0 above every story, the count below every one */
-export function targetPositionFromPointer(story_midpoints: ReadonlyArray<number>, y: number): number {
-    return story_midpoints.filter(midpoint => midpoint < y).length;
-}
-
-/**
- * The position a key moves the target line to, or undefined for a key it does not handle. Up and Down
- * move one story, Home takes the line off the board and End puts it below the last story.
- */
-export function targetPositionFromKey(key: string, position: number, story_count: number): number | undefined {
-    switch (key) {
-        case 'ArrowUp': return Math.max(0, position - 1);
-        case 'ArrowDown': return Math.min(story_count, position + 1);
-        case 'Home': return 0;
-        case 'End': return story_count;
-        default: return undefined;
-    }
-}
-
-/** the line's value as a screen reader reads it: the story it sits after, or that it is not on the board */
-export function targetValueText(coordinator: ActivityCoordinator, position: number): string {
-    if (position <= 0) { return l10n.t('No target line: nothing is set to run'); }
-    return l10n.t('After {0}', coordinator.board_stories[position - 1]?.title ?? '');
-}
-
-/** the registry's state word as the row says it; an unknown word is carried rather than hidden */
+/** the state word as the row says it; an unknown word reads as not reported */
 export function coordinatorStateLabel(state: string): string {
     switch (state) {
         case 'working': return l10n.t('Working');
         case 'idle': return l10n.t('Idle');
-        case 'starting': return l10n.t('Starting');
-        case 'recycling': return l10n.t('Recycling');
+        case 'waiting': return l10n.t('Waiting on you');
         case 'stopped': return l10n.t('Stopped');
         default: return l10n.t('State not reported');
     }
@@ -85,26 +58,18 @@ export function convoyCountLabel(count: number): string {
 }
 
 function coordinatorFailureMessage(request: CoordinatorResult['request']): string {
-    switch (request) {
-        case 'send': return l10n.t('The message could not be written.');
-        case 'vendor': return l10n.t('The vendor change could not be sent.');
-        default: return l10n.t('The board could not be changed.');
-    }
+    return request === 'vendor' ? l10n.t('The vendor change could not be sent.') : l10n.t('The message could not be written.');
 }
 
-/** what to tell the user about an answer, undefined when there is nothing to say (a marker that moved, which the line itself shows) */
-export function coordinatorResultMessage(result: CoordinatorResult): string | undefined {
+/** what to tell the user about an answer */
+export function coordinatorResultMessage(result: CoordinatorResult): string {
     switch (result.code) {
         case 'sent': return result.request === 'vendor' ? l10n.t('Asked {0} to change vendor.', result.agent) : l10n.t('Sent to {0}.', result.agent);
-        case 'moved': return undefined;
-        case 'moved_unsaved': return l10n.t('Moved, but the board has other unsaved edits, so it is not saved yet.');
         case 'unknown_agent': return l10n.t('That agent is no longer listed.');
         case 'bad_message': return l10n.t('Write a message first.');
         case 'bad_vendor': return l10n.t('That is not a vendor a coordinator can change to.');
         case 'unavailable': return l10n.t("This host cannot reach the agent's mailbox.");
         case 'no_mailbox': return l10n.t('The agent has no mailbox yet.');
-        case 'no_board': return l10n.t('This agent has no board here.');
-        case 'bad_position': return l10n.t('That position is not on the board.');
         default: return coordinatorFailureMessage(result.request);
     }
 }
@@ -114,7 +79,7 @@ export function parseCoordinatorResult(message: unknown): CoordinatorResult | un
     if (message === null || typeof message !== 'object') { return undefined; }
     const envelope = message as Record<string, unknown>;
     if (envelope.type !== COORDINATOR_RESULT_MESSAGE_TYPE) { return undefined; }
-    const request = envelope.request === 'send' || envelope.request === 'move' || envelope.request === 'vendor' ? envelope.request : undefined;
+    const request = envelope.request === 'send' || envelope.request === 'vendor' ? envelope.request : undefined;
     if (!request || typeof envelope.agent !== 'string' || typeof envelope.code !== 'string') { return undefined; }
     return { request, agent: envelope.agent, code: envelope.code, ok: envelope.ok === true };
 }
@@ -123,7 +88,7 @@ export function parseCoordinatorResult(message: unknown): CoordinatorResult | un
 export const COORDINATOR_VENDOR_OPTIONS: ReadonlyArray<string> = Object.keys(ACTIVITY_VENDOR_DISPLAY);
 
 /**
- * A display vendor as the registry spells it, which is the name a vendor-change envelope carries:
+ * A display vendor as thinkersync spells it, which is the name a vendor-change envelope carries:
  * `claude-code` is `claude` and `antigravity` is `agy`, and every other vendor is spelled the same.
  */
 export function registryVendorName(vendor: string): string {

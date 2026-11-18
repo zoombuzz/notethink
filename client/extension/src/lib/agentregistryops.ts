@@ -4,31 +4,20 @@ import type { HashMapOf } from '../types/general';
 import { progressProjectName } from './progressfileops';
 
 /**
- * Reading the thinkersync agent registry: the pure half. Every agent keeps one
- * `registry/<agent>/agent.json` under the thinkersync home, written by other tooling and read here
- * and never written, so a missing, empty, oversize or malformed file and any field a newer writer
- * adds are all ordinary: each function answers them with an omission, never an error. Every field is
- * optional, and a value this build does not know is carried rather than rejected.
+ * Coordinators as agent entries: the pure half that lays them over the vendor sessions. An entry is one
+ * project's coordinator as `coordinatorfilesops.ts` reads it from the files coordinators write, and every
+ * function here answers a missing or unknown field with an omission, never an error. A value this build
+ * does not know is carried rather than rejected.
  *
  * The entry's `state` is a hint and not a heartbeat, because `updated_at` moves only on a state
  * change or a restart. So an entry is bound to its story only while that story is in flight on the
  * board, and a `working` entry that nothing since its last update corroborates reads as stale.
  *
  * What reaches an agent card is the agent's name, vendor, state and story, drawn on an ordinary
- * `ActivitySession`. The coordinator rows (`coordinatorops.ts`) also take the agent kind, machine, binary
- * version and open convoys. Left out on purpose everywhere: the mailbox path, which a send re-derives
+ * `ActivitySession`. The coordinator rows (`coordinatorops.ts`) also take the agent kind, machine
+ * and open convoys. Left out on purpose everywhere: the mailbox path, which a send re-derives
  * from the agent's name, the terminal pane id and the last recycle time.
  */
-
-// the registry directory below the thinkersync home, one directory per agent
-export const REGISTRY_DIR_SEGMENTS = ['registry'] as const;
-export const REGISTRY_ENTRY_FILE = 'agent.json';
-
-// an entry is a few short fields; anything larger is not one and is left unread
-export const REGISTRY_FILE_MAX_BYTES = 64 * 1024;
-
-// the most agent directories read in one scan, so a runaway registry cannot stall it
-export const REGISTRY_MAX_AGENTS = 100;
 
 // a `working` entry with no corroborating activity this long after its last update reads as stale
 export const REGISTRY_STALE_AFTER_MS = 2 * 60 * 60 * 1000;
@@ -36,7 +25,7 @@ export const REGISTRY_STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 // the story statuses a `working` entry binds to its story under
 export const REGISTRY_BINDING_STORY_STATUSES = ['doing', 'code-review', 'testing'] as const;
 
-// registry vendor names that differ from the slug the vendor display table keys on
+// vendor names that differ from the slug the vendor display table keys on
 const REGISTRY_VENDOR_SLUGS: Readonly<Record<string, string>> = {
     claude: ACTIVITY_VENDOR_CLAUDE_CODE,
     agy: ACTIVITY_VENDOR_ANTIGRAVITY,
@@ -44,27 +33,20 @@ const REGISTRY_VENDOR_SLUGS: Readonly<Record<string, string>> = {
 
 const REGISTRY_UNKNOWN_VENDOR = 'unknown';
 
-// the longest name and story id carried, so a runaway writer cannot bloat every activity post
-const REGISTRY_TEXT_MAX_CHARS = 120;
-
-// the most open convoys carried from one entry, so a runaway writer cannot bloat every activity post
-const REGISTRY_CONVOYS_MAX = 50;
-
 const REGISTRY_SESSION_ID_PREFIX = 'registry:';
 
 /**
- * RegistryEntry is the part of one `agent.json` NoteThink keeps.
- * - agent: the agent's name, such as `coord-demo`; the directory name when the file carries none
- * - vendor: the vendor slug the display table keys on, the registry's own spelling mapped where it differs
+ * RegistryEntry is one coordinator as NoteThink keeps it.
+ * - agent: the agent's name, such as `coord-demo`, which is also its mailbox directory
+ * - vendor: the vendor slug the display table keys on, the writer's own spelling mapped where it differs
  * - repo: absolute path of the repository the agent works in
- * - state: the registry's own state word, carried as written
+ * - state: the state word, one of `working`, `waiting`, `idle` or `stopped`
  * - story: the story id the agent is working on, empty when none
- * - session_ids: the agent's current session id first, then its previous ones, so a vendor session joins by any of them
- * - updated_at: ISO 8601 UTC of the last state change or restart
- * - agent_kind: what the agent is (`coordinator`, `overseer`, `session`), empty when the entry names none
+ * - session_ids: the agent's session ids, newest first, so a vendor session joins by any of them
+ * - updated_at: ISO 8601 UTC of the newest line any of the agent's files holds
+ * - agent_kind: what the agent is, `coordinator` for every entry read from the coordinator files
  * - machine: the short host name the agent runs on, empty when the entry names none
- * - binary_version: the program version the agent last recorded, empty when none
- * - open_convoys: the agent's open convoys, as the registry lists them
+ * - open_convoys: the agent's open convoys, as its resume note lists them
  */
 export interface RegistryEntry {
     agent: string;
@@ -76,12 +58,11 @@ export interface RegistryEntry {
     updated_at?: string;
     agent_kind?: string;
     machine?: string;
-    binary_version?: string;
     open_convoys?: string[];
 }
 
 /**
- * A registry entry placed in the open workspace.
+ * A coordinator entry placed in the open workspace.
  * - root_path: the repository root the agent's session is filed under, the git root holding `repo` where one is open, else `repo`
  * - repo_relative: workspace-relative path of `repo`, empty when it is a workspace folder; boards and progress entries are matched against it
  */
@@ -98,11 +79,6 @@ export interface RegistryOverlayContext {
     now_ms: number;
     progress: ReadonlyArray<ActivityStoryProgress>;
     findStory: (repo_relative: string, story_id: string) => { story: ActivityStoryRef; status?: string } | undefined;
-}
-
-/** the path segments of one agent's entry below the thinkersync home */
-export function registryEntrySegments(agent_dir: string): string[] {
-    return [...REGISTRY_DIR_SEGMENTS, agent_dir, REGISTRY_ENTRY_FILE];
 }
 
 /** a registry vendor name as the display table's slug: `claude` is `claude-code`, any other vendor keeps its own lower-cased name */
@@ -122,42 +98,6 @@ export function registryActivityState(state: string): ActivityState {
         case 'stopped': return 'ended';
         default: return 'unknown';
     }
-}
-
-function textField(value: unknown): string {
-    return typeof value === 'string' ? value.trim().slice(0, REGISTRY_TEXT_MAX_CHARS) : '';
-}
-
-/**
- * The entry one `agent.json` holds, undefined when the text is not a JSON object or names no
- * repository (an entry that cannot be placed in a workspace is of no use). A field of the wrong type
- * is read as absent rather than failing the entry.
- */
-export function parseRegistryEntry(text: string, fallback_agent: string): RegistryEntry | undefined {
-    let parsed: unknown;
-    try { parsed = JSON.parse(text); }
-    catch { return undefined; }
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) { return undefined; }
-    const raw = parsed as Record<string, unknown>;
-    const repo = typeof raw.repo === 'string' ? raw.repo.trim().replace(/\/+$/, '') : '';
-    if (!repo.startsWith('/')) { return undefined; }
-    const previous = Array.isArray(raw.previous_session_ids) ? raw.previous_session_ids.map(textField).filter(id => id.length > 0) : [];
-    const current = textField(raw.session_id);
-    const session_ids = [...new Set([...(current ? [current] : []), ...previous])];
-    const updated_at = typeof raw.updated_at === 'string' && !Number.isNaN(Date.parse(raw.updated_at)) ? raw.updated_at : undefined;
-    return {
-        agent: textField(raw.agent) || textField(fallback_agent),
-        vendor: registryVendorSlug(typeof raw.vendor === 'string' ? raw.vendor : undefined),
-        repo,
-        state: textField(raw.state),
-        story: textField(raw.story),
-        session_ids,
-        updated_at,
-        agent_kind: textField(raw.agent_kind),
-        machine: textField(raw.machine),
-        binary_version: textField(raw.binary_version),
-        open_convoys: Array.isArray(raw.open_convoys) ? raw.open_convoys.map(textField).filter(id => id.length > 0).slice(0, REGISTRY_CONVOYS_MAX) : [],
-    };
 }
 
 /** the latest of the given ISO times in epoch ms, ignoring any that do not parse; undefined when none does */

@@ -1,43 +1,43 @@
 # Jest Test Results
-# Version: 0.4.53
-# Date: 2026-11-18T14:40:00Z
+# Version: 0.4.54
+# Date: 2026-11-18T15:25:53Z
 # Command: pnpm run test-jest
-# Exit status: 0 (reused green run at 2026-11-18T13:23:47Z)
-# Tree: HEAD a5048c7 plus the 24 changed paths of coordinator-board-lines
+# Exit status: 0 (reused green run at 2026-11-18T15:25:53Z)
+# Tree: HEAD 9e95da3 plus working tree for coordinator-target-line-rule
 # ---
 $ jest --config jest.config.cjs
-audioops median enqueue-to-arrival ms: 0.76
+audioops median enqueue-to-arrival ms: 0.64
 
-[1mTest Suites: [22m[1m[32m51 passed[39m[22m, 51 total
-[1mTests:       [22m[1m[32m1277 passed[39m[22m, 1277 total
+[1mTest Suites: [22m[1m[32m52 passed[39m[22m, 52 total
+[1mTests:       [22m[1m[32m1308 passed[39m[22m, 1308 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        3.538 s
+[1mTime:[22m        3.451 s, estimated 4 s
 [2mRan all test suites[22m[2m.[22m
 
 $ jest --config jest.config.cjs
-audio main-thread cost per chunk over 2000 after 100 warm-up: mean 0.0433 ms, p99 0.0972 ms, max 14.1503 ms
+audio main-thread cost per chunk over 2000 after 100 warm-up: mean 0.0342 ms, p99 0.0899 ms, max 11.3933 ms
 
 [1mTest Suites: [22m[1m[32m20 passed[39m[22m, 20 total
 [1mTests:       [22m[1m[32m268 passed[39m[22m, 268 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        10.361 s
+[1mTime:[22m        9.94 s, estimated 10 s
 [2mRan all test suites[22m[2m.[22m
 
 $ jest --config jest.config.cjs
 
 [1mTest Suites: [22m[1m[32m112 passed[39m[22m, 112 total
-[1mTests:       [22m[1m[32m2502 passed[39m[22m, 2502 total
+[1mTests:       [22m[1m[32m2491 passed[39m[22m, 2491 total
 [1mSnapshots:   [22m0 total
-[1mTime:[22m        3.339 s
+[1mTime:[22m        3.082 s
 [2mRan all test suites[22m[2m.[22m
 
 
 [1m┌──────────────────┬───────┬────────┬────────┬─────────┐[0m
 [1m│ Suite            │ Files │ Passed │ Failed │ Time    │[0m
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-│ extension        │    51 │ [32m  1277[0m │ [2m     0[0m │ 3.538 s │
-│ webview          │    20 │ [32m   268[0m │ [2m     0[0m │ 10.361 s │
-│ notethink-views  │   112 │ [32m  2502[0m │ [2m     0[0m │ 3.339 s │
+│ extension        │    52 │ [32m  1308[0m │ [2m     0[0m │ 3.451 s │
+│ webview          │    20 │ [32m   268[0m │ [2m     0[0m │  9.94 s │
+│ notethink-views  │   112 │ [32m  2491[0m │ [2m     0[0m │ 3.082 s │
 [1m├──────────────────┼───────┼────────┼────────┼─────────┤[0m
-[1m│ TOTAL            │   183 │[0m [32m  4047[0m [1m│[0m [2m     0[0m [1m│         │[0m
+[1m│ TOTAL            │   184 │[0m [32m  4067[0m [1m│[0m [2m     0[0m [1m│         │[0m
 [1m└──────────────────┴───────┴────────┴────────┴─────────┘[0m

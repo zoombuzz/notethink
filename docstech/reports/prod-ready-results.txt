@@ -1,23 +1,25 @@
 # Prod-ready Results
-# Version: 0.4.53
-# Date: 2026-11-18T14:45:00Z
-# Tree: HEAD a5048c7 plus 24 changed paths (23 tracked, playwright/specs/board-lines-real-host.spec.ts untracked)
-# Stories: coordinator-board-lines doing -> code-review; the other stories are not touched (outside stories=)
-# Ship verdict: Ready to ship: /push-prod will move "Draw the build and ship lines on story views" to done.md
+# Version: 0.4.54
+# Date: 2026-11-18T15:45:00Z
+# Tree: HEAD 9e95da3 plus the uncommitted coordinator panel rebuild (33 changed paths, 2 new files, 1 deleted)
+# Stories: coordinator-target-line-rule doing -> code-review; coordinator-board-lines, keep-each-card-tag-on-one-row, pulse-the-editor-caret-instead-of-blinking-it not touched (outside stories=); playwright-webserver-start-timeouts not touched
+# Ship verdict: Ready to ship: /push-prod will move "Rebuild the coordinator panel on current data" to done.md
 # ---
-Real board check | OK | kanban and document views of this repo's own board, in a web host; build line below "Draw the build and ship lines on story views", ship line below "Pulse the editor caret instead of blinking it" | fresh
-Build | OK | pnpm run build, bundles contain the new code | fresh
-Lint | OK | | reused (green at 2026-11-18T13:23:29Z)
-Project guards | skipped | none for this project |
-Dependency audit | OK | no known vulnerabilities | fresh
-CODING_STANDARDS | OK | mechanical checks and inline pass clean | fresh
-Exposure | OK | public: scan clean, added prose read | fresh
-Fleet fix check | OK | no shared-surface or new-dependency-class hit | fresh
-Jest | OK | 4047 passed of 4047 (51, 20 and 112 suites) | reused (green at 2026-11-18T13:23:47Z)
-Playwright | OK | 396/396 passed, none flaky or skipped, board-lines-real-host 2/2 | fresh
-Todo/Done | OK | board format check 0 findings |
-Story-state advance | OK | doing -> code-review, move rehearsed |
-Version bump | OK | 0.4.53 |
+Overseer inbox | skipped | no overseer review (bus absent) | skipped
+Story-state intake | ok | 1 at doing | fresh
+Story reconciliation | ok | all 5 tasks already ticked | fresh
+Build | ok | pnpm run build and library rollup, exit 0 | fresh
+Lint | ok | stamp green at 2026-11-18T15:25:36Z | reused (green at 2026-11-18T15:25:36Z)
+Project guards | skipped | none for this project | skipped
+Dependency audit | skipped | no change to dependencies | skipped
+CODING_STANDARDS | ok | mechanical greps clean, one inline pass clean | fresh
+Exposure | ok | public: scan clean, prose reviewed | fresh
+Fleet fix check | ok | no shared-surface or dependency-class hit | fresh
+Jest | ok | 4067 passed, 0 failed (184 files) | reused (green at 2026-11-18T15:25:53Z)
+Playwright | ok | 390 passed, 0 failed, 0 skipped, 0 flaky | fresh
+Todo/Done | ok | 0 board format findings | fresh
+Story-state advance | ok | doing -> code-review, move rehearsed | fresh
+Version bump | ok | 0.4.54 | fresh
 # --- Fixed during review ---
 none
 # --- Open ---

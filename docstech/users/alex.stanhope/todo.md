@@ -1,15 +1,6 @@
 # Todo [](?nt_view=kanban)
 
 
-### Confirm how the board lines behave [](?id=coordinator-board-lines-decisions&tokens_estimated=1)
-
-Two behaviours of the build and ship lines were chosen so the work could continue. Each can still be changed.
-
-+ open question: Which stories should each line count? Today the solid build line counts stories that are sent, delegated or at doing, and skips parked stories and stories in review. The dashed ship line counts stories in the ready marker or at code-review or testing. Recommendation: keep both rules.
-+ open question: How should a kanban board with several columns show the lines? Today each column draws them between its own cards, at the bottom of a column wholly above a line and at the top of one wholly below it. Recommendation: keep this.
-+ [ ] apply the confirmed answers to the line rules and their tests
-
-
 ### Stop two specs timing out on web server start [](?id=playwright-webserver-start-timeouts&tokens_estimated=3)
 
 Two specs failed a full Playwright run by waiting 60 seconds for their web server, then passed alone and in the next full run.
@@ -20,15 +11,29 @@ Two specs failed a full Playwright run by waiting 60 seconds for their web serve
 + [ ] fix the cause so both specs start reliably in a full run
 
 
-### Make the target line match what coordinators build [](?id=coordinator-target-line-rule&tokens_estimated=6)
+### Rebuild the coordinator panel on current data [](?id=coordinator-target-line-rule&status=code-review&sent=go-20261118&tokens_estimated=14)
 
-The coordinator panel says an agent may work from the top of the board down to its target line. Coordinators now build the stories sent or delegated to them, and `coord=` only names the hosts allowed to build a story, so moving that line does not change what gets built.
+The coordinator panel lists nothing, and cards offer no send action, because both read an agent registry that is no longer written. Its target line also says an agent works down to it, but coordinators now build the stories sent or delegated to them, and `coord=` only names the hosts allowed to build a story.
 
-+ evidence 2026-11-18: the hint in `CoordinatorTargetLine.tsx:123` and the range described in the header of `client/extension/src/lib/coordinatorops.ts`
-+ evidence 2026-11-18: the agent registry the panel reads is no longer written, so it lists no coordinators and a card offers no send action
-+ related: [[coordinator-board-lines]] draws the coordinator's real build line on story views
-+ open question: What should happen to the coordinator panel and its target line? The panel is empty because its registry is gone, and the line no longer decides what gets built. Recommendation: rebuild the panel on current coordinator data and remove the target line, since the board lines now show the same thing.
-+ [ ] change the panel and its wording to match that decision
++ goal: the panel lists each coordinator of the open repositories from the files coordinators write today, and can message it
++ builds on: `coordinatorsFrom` in `client/extension/src/lib/coordinatorops.ts`
++ builds on: the per-project coordinator file reads in `client/extension/src/vscode/AgentAnalyser.ts`
++ evidence 2026-11-18: no `registry/` directory exists under the coordinator state home on either development machine
++ evidence 2026-11-18: the hint in `CoordinatorTargetLine.tsx:123` describes a range coordinators no longer use
++ related: [[coordinator-board-lines]] now shows where coordinator work stops
++ decision: rebuild the panel on current coordinator data
++ decision: remove the target line and its marker move
++ design: a coordinator is listed when `coordinator/<project>/sessions.jsonl` holds a coordinator session for an open repository
++ design: its vendor and session ids come from that ledger, newest first
++ design: state is stopped from a newest `stop` line, waiting from `waiting.json`, working from the last `story-assignments.jsonl` story, otherwise idle
++ design: its machine comes from `coordinator-homes.json`, else the resume note in its mailbox, and with neither it has no address and is not listed
++ design: open convoys come from the resume note
++ [X] read coordinators from those files through a pure parser, with Jest cases for missing and malformed files
++ [X] keep the panel rows, the card send action and the agent card names working from that data
++ [X] remove the target line control, the marker move command, their strings and their tests
++ [X] check the parser against real coordinator files, read-only
++ [X] bump the patch version
++ manual: send a short message to a coordinator from the panel in VS Code
 
 
 ### Draw the build and ship lines on story views [](?id=coordinator-board-lines&status=code-review&sent=go-20261118&tokens_estimated=18)
@@ -42,13 +47,12 @@ A board's order decides what happens next, but no story view shows where that wo
 + decision: the build line is solid, in the highlight colour `--vscode-focusBorder`, below the last story the coordinator will build
 + decision: the ship line is dashed, in the same colour, below the last story that has passed the release gate
 + decision: the lines belong to the view, not the card, so no card type draws or branches on them
-+ decision: the lines only show position; moving work stays with the existing target controls
-+ proceeded on the recommendation 2026-11-18, for the operator to confirm: which stories count towards each line
++ decision: the lines only show position
++ decision 2026-11-18: which stories count towards each line
   + build line: a story tagged `sent=`, a `delegated-` id, or at `doing`
   + build line leaves out a story at `code-review` or `testing`, and one parked on an open question, a blocked note, an open manual task or an open delegated task
   + ship line: a story named in the coordinator's `ready.json`, or at `code-review` or `testing`
-  + reversing either rule is a change to one pure function
-+ proceeded on the recommendation 2026-11-18, for the operator to confirm: in a grouped view each group draws the line between its own cards
++ decision 2026-11-18: in a grouped view each group draws the line between its own cards
   + a group whose cards all sit above the line draws it last, and one whose cards all sit below draws it first
   + an empty group draws nothing
   + a view sorted away from board order draws no lines, since position there says nothing about the board

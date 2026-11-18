@@ -2811,9 +2811,15 @@ describe('AgentAnalyser story progress', () => {
 	});
 });
 
-describe('AgentAnalyser agent registry', () => {
+describe('AgentAnalyser coordinators', () => {
 	const REPO_ROOT = '/ws';
-	const REGISTRY_DIR = '/home/test/.local/share/thinkersync/registry';
+	const THINKERSYNC_DIR = '/home/test/.local/share/thinkersync';
+	const FRESH = '2026-09-22T11:30:00Z';
+
+	// a session ledger line for the coordinator of the project named by the repository directory
+	function ledgerLine(fields: Record<string, unknown> = {}): string {
+		return `${JSON.stringify({ v: 1, ts: FRESH, project: 'ws', session: 'sess-9', vendor: 'agy', role: 'coordinator', event: 'launch', ...fields })}\n`;
+	}
 
 	beforeEach(() => {
 		jest.clearAllMocks();
@@ -2832,17 +2838,13 @@ describe('AgentAnalyser agent registry', () => {
 		for (let i = 0; i < 5; i++) { await jest.advanceTimersByTimeAsync(0); }
 	}
 
-	// agents maps an agent directory to the text of its agent.json, or undefined for a directory with no readable file
-	function wireRegistry(agents: Record<string, string | Uint8Array | undefined> | undefined): void {
-		wireGitCommands({ [REPO_ROOT]: { workingTreeChanges: [], HEAD: { name: 'staging', commit: 'a'.repeat(40) } } });
-		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
-			if (uri.path === REGISTRY_DIR && agents !== undefined) { return Object.keys(agents).map(name => [name, vscode.FileType.Directory]); }
-			return [];
-		});
+	// files maps a path below the thinkersync home to its text, or to bytes for an oversize one; any other path is not found
+	function wireCoordinatorFiles(files: Record<string, string | Uint8Array> | undefined, repo_root = REPO_ROOT): void {
+		wireGitCommands({ [repo_root]: { workingTreeChanges: [], HEAD: { name: 'staging', commit: 'a'.repeat(40) } } });
+		(vscode.workspace.fs.readDirectory as jest.Mock).mockImplementation(async () => []);
 		(vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
-			const match = new RegExp(`^${REGISTRY_DIR}/([^/]+)/agent\\.json$`).exec(uri.path);
-			const content = match && agents ? agents[match[1]] : undefined;
-			if (content === undefined) { throw new Error('not found'); }
+			const content = files?.[uri.path.slice(`${THINKERSYNC_DIR}/`.length)];
+			if (!uri.path.startsWith(`${THINKERSYNC_DIR}/`) || content === undefined) { throw new Error('not found'); }
 			return typeof content === 'string' ? new TextEncoder().encode(content) : content;
 		});
 	}
@@ -2859,40 +2861,53 @@ describe('AgentAnalyser agent registry', () => {
 		return sessionsOf(posted);
 	}
 
-	it('posts a registry-only row for an agent whose repository is in the workspace, with nothing about its mailbox or pane', async () => {
-		wireRegistry({ 'agy-helper': JSON.stringify({ agent: 'agy-helper', vendor: 'agy', repo: '/ws', state: 'idle', story: 'story-a', mailbox: '/secret/mailbox', pane: '%3', binary_version: '1.2.3', updated_at: '2026-11-03T10:00:00Z' }) });
+	it('posts a registry-only row for a coordinator whose repository is in the workspace, with nothing about its pane or mailbox', async () => {
+		wireCoordinatorFiles({
+			'coordinator/ws/sessions.jsonl': ledgerLine({ pane: '%3', mailbox: '/secret/mailbox' }),
+			'coordinator/ws/story-assignments.jsonl': `${JSON.stringify({ ts: FRESH, story: 'story-a', session: 'sess-9', event: 'dispatched' })}\n`,
+		});
 		const sessions = await scan();
 		expect(sessions).toHaveLength(1);
 		expect(sessions[0].root_path).toBe(REPO_ROOT);
-		expect(sessions[0].session).toMatchObject({ vendor: 'antigravity', registry_name: 'agy-helper', registry_only: true, state: 'idle', registry_story: 'story-a' });
+		expect(sessions[0].session).toMatchObject({ vendor: 'antigravity', registry_name: 'coord-ws', registry_only: true, state: 'working', registry_story: 'story-a' });
 		const wire = JSON.stringify(sessions);
-		for (const leaked of ['/secret/mailbox', '%3', '1.2.3']) { expect(wire).not.toContain(leaked); }
+		for (const leaked of ['/secret/mailbox', '%3']) { expect(wire).not.toContain(leaked); }
 	});
 
-	it('skips an agent whose repository is outside every workspace folder', async () => {
-		wireRegistry({ 'coord-elsewhere': JSON.stringify({ agent: 'coord-elsewhere', vendor: 'claude', repo: '/elsewhere/other', state: 'working' }) });
+	it('skips a coordinator whose repository is outside every workspace folder', async () => {
+		wireCoordinatorFiles({ 'coordinator/other/sessions.jsonl': ledgerLine({ project: 'other' }) }, '/elsewhere/other');
 		expect(await scan()).toEqual([]);
 	});
 
+	it('reads a ledger over its bound from its newest lines', async () => {
+		const filler = `${JSON.stringify({ role: 'overseer', pad: 'x'.repeat(2000) })}\n`;
+		wireCoordinatorFiles({ 'coordinator/ws/sessions.jsonl': new TextEncoder().encode(filler.repeat(400) + ledgerLine()) });
+		const sessions = await scan();
+		expect(sessions).toHaveLength(1);
+		expect(sessions[0].session).toMatchObject({ registry_name: 'coord-ws', vendor: 'antigravity' });
+	});
+
 	it.each([
-		['a missing registry', undefined],
-		['a malformed file', { broken: '{"repo": ' }],
-		['an oversize file', { huge: new Uint8Array(70 * 1024) }],
-		['a directory with no agent.json', { empty: undefined }],
-		['an entry with no repository', { norepo: '{"agent":"x"}' }],
-	])('shows nothing and logs no error for %s', async (_label, agents) => {
-		wireRegistry(agents as Record<string, string | Uint8Array | undefined> | undefined);
+		['no coordinator files', undefined],
+		['a ledger of torn lines', { 'coordinator/ws/sessions.jsonl': '{"role":"coordinator"\n{broken' }],
+		['an empty ledger', { 'coordinator/ws/sessions.jsonl': '' }],
+		['an oversize file of no lines', { 'coordinator/ws/sessions.jsonl': new Uint8Array(600 * 1024) }],
+		['a ledger with no coordinator line', { 'coordinator/ws/sessions.jsonl': ledgerLine({ role: 'overseer' }) }],
+		['files but no ledger', { 'coordinator/ws/story-assignments.jsonl': '{"story":"x"}\n', 'coordinator-homes.json': '{"ws":"host-a"}' }],
+	])('shows nothing and logs no error for %s', async (_label, files) => {
+		wireCoordinatorFiles(files as Record<string, string | Uint8Array> | undefined);
 		const error_spy = jest.spyOn(errorops, 'writeToErrorLog');
 		expect(await scan()).toEqual([]);
 		expect(error_spy).not.toHaveBeenCalled();
 	});
 
 	describe('coordinators beside boards', () => {
-		const BOARD_TEXT = '# Todo\n\n\n### Alpha [](?id=alpha&status=doing&coord=host-a)\n\n+ [ ] reply [](?work=manual)\n\n\n### Beta [](?id=beta)\n';
-		const COORDINATOR = JSON.stringify({
-			agent: 'coord-demo', agent_kind: 'coordinator', vendor: 'claude', repo: '/ws', machine: 'host-a', mailbox: '/secret/mailbox', state: 'idle', story: '',
-			session_id: 'sess-9', pane: '%3', binary_version: '1.2.3', open_convoys: ['c1'], updated_at: '2026-11-03T10:00:00Z',
-		});
+		const BOARD_TEXT = '# Todo\n\n\n### Alpha [](?id=alpha&status=doing)\n\n+ [ ] reply [](?work=manual)\n\n\n### Beta [](?id=beta)\n';
+		const COORDINATOR_FILES = {
+			'coordinator/ws/sessions.jsonl': ledgerLine({ vendor: 'claude', pane: '%3' }),
+			'coordinator-homes.json': '{"ws":"host-a"}',
+			'mailboxes/coord-ws/resume.json': JSON.stringify({ origin_machine: 'host-b', body: { open_convoys: ['c1'] } }),
+		};
 
 		async function scanSnapshot(): Promise<{ coordinators: Array<Record<string, unknown>> }> {
 			const analyser = new AgentAnalyser(mockContext(), fakeWorkerFactory().worker);
@@ -2922,17 +2937,40 @@ describe('AgentAnalyser agent registry', () => {
 			});
 		}
 
-		it('posts each registered coordinator in the open folder with its board, and nothing about its mailbox, pane or session', async () => {
-			wireRegistry({ 'coord-demo': COORDINATOR });
+		it('posts each coordinator of the open folder with its board, and nothing about its pane or session', async () => {
+			wireCoordinatorFiles(COORDINATOR_FILES);
 			wireBoard();
 			const { coordinators } = await scanSnapshot();
 			expect(coordinators).toHaveLength(1);
 			expect(coordinators[0]).toMatchObject({
-				agent: 'coord-demo', machine: 'host-a', state: 'idle', version: '1.2.3', open_convoys: ['c1'], root_relative: '', board_doc_path: 'docstech/users/dev/todo.md', marker_after: 1,
+				agent: 'coord-ws', vendor: 'claude-code', machine: 'host-a', state: 'idle', story: '', open_convoys: ['c1'], root_relative: '', board_doc_path: 'docstech/users/dev/todo.md',
 			});
 			expect((coordinators[0].board_stories as Array<Record<string, unknown>>).map(story => story.id)).toEqual(['alpha', 'beta']);
 			const wire = JSON.stringify(coordinators);
-			for (const leaked of ['/secret/mailbox', '%3', 'sess-9']) { expect(wire).not.toContain(leaked); }
+			for (const leaked of ['%3', 'sess-9']) { expect(wire).not.toContain(leaked); }
+			expect(Object.keys(coordinators[0])).not.toContain('marker_after');
+		});
+
+		it('takes the machine from the resume note when the homes file names none, and lists no coordinator that has neither', async () => {
+			wireCoordinatorFiles({ ...COORDINATOR_FILES, 'coordinator-homes.json': '{"other":"host-c"}' });
+			wireBoard();
+			expect((await scanSnapshot()).coordinators[0]).toMatchObject({ machine: 'host-b' });
+			wireCoordinatorFiles({ 'coordinator/ws/sessions.jsonl': ledgerLine() });
+			wireBoard();
+			expect((await scanSnapshot()).coordinators).toEqual([]);
+		});
+
+		it('reads the state from the ledgers and the waiting file', async () => {
+			const assignment = `${JSON.stringify({ ts: FRESH, story: 'alpha', event: 'dispatched' })}\n`;
+			wireCoordinatorFiles({ ...COORDINATOR_FILES, 'coordinator/ws/story-assignments.jsonl': assignment });
+			wireBoard();
+			expect((await scanSnapshot()).coordinators[0]).toMatchObject({ state: 'working', story: 'alpha' });
+			wireCoordinatorFiles({ ...COORDINATOR_FILES, 'coordinator/ws/story-assignments.jsonl': assignment, 'coordinator/ws/waiting.json': `{"at":"${FRESH}","questions":["which?"]}` });
+			wireBoard();
+			expect((await scanSnapshot()).coordinators[0]).toMatchObject({ state: 'waiting' });
+			wireCoordinatorFiles({ ...COORDINATOR_FILES, 'coordinator/ws/sessions.jsonl': ledgerLine() + ledgerLine({ event: 'stop' }) });
+			wireBoard();
+			expect((await scanSnapshot()).coordinators[0]).toMatchObject({ state: 'stopped', story: '' });
 		});
 
 		describe('board lines', () => {
@@ -2950,7 +2988,7 @@ describe('AgentAnalyser agent registry', () => {
 			const lastLines = (posted: Array<Record<string, unknown>>): unknown => (posted[posted.length - 1].activity as { board_lines: unknown }).board_lines;
 
 			it('are posted from the board alone, with no registry and no coordinator', async () => {
-				wireRegistry(undefined);
+				wireCoordinatorFiles(undefined);
 				wireBoard(LINES_BOARD);
 				const { posted } = await boardLinesPosted();
 				expect(lastLines(posted)).toEqual([{ doc_path: 'docstech/users/dev/todo.md', story_ids: ['alpha', 'beta', 'gamma'], build_after: 1, ship_after: 0 }]);
@@ -2958,14 +2996,14 @@ describe('AgentAnalyser agent registry', () => {
 			});
 
 			it('take the ship line from the ready file kept under the repository directory name', async () => {
-				wireRegistry(undefined);
+				wireCoordinatorFiles(undefined);
 				wireBoard(LINES_BOARD, { [READY_PATH]: JSON.stringify({ stories: ['beta'] }) });
 				const { posted } = await boardLinesPosted();
 				expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 1, ship_after: 2 })]);
 			});
 
 			it('fall back to the review statuses when the ready file is missing or malformed', async () => {
-				wireRegistry(undefined);
+				wireCoordinatorFiles(undefined);
 				wireBoard(LINES_BOARD, { [READY_PATH]: '{not json' });
 				const { posted } = await boardLinesPosted();
 				expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 1, ship_after: 0 })]);
@@ -2979,7 +3017,7 @@ describe('AgentAnalyser agent registry', () => {
 			});
 
 			it('are still posted when every scan batch fails', async () => {
-				wireRegistry(undefined);
+				wireCoordinatorFiles(undefined);
 				wireBoard(LINES_BOARD);
 				const analyser = new AgentAnalyser(mockContext(), failingWorkerFactory());
 				const posted: Array<Record<string, unknown>> = [];
@@ -3006,7 +3044,7 @@ describe('AgentAnalyser agent registry', () => {
 			});
 
 			it('follow a board edit through the board watcher, without waiting for a scan', async () => {
-				wireRegistry(undefined);
+				wireCoordinatorFiles(undefined);
 				wireBoard(LINES_BOARD);
 				const { posted } = await boardLinesPosted();
 				const board_watchers = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls
@@ -3021,29 +3059,26 @@ describe('AgentAnalyser agent registry', () => {
 			});
 		});
 
-		it('lists no overseer and no coordinator whose repository is outside the open folder', async () => {
-			wireRegistry({
-				overseer: JSON.stringify({ agent: 'overseer', agent_kind: 'overseer', repo: '/ws', machine: 'host-a', state: 'idle' }),
-				'coord-elsewhere': JSON.stringify({ agent: 'coord-elsewhere', agent_kind: 'coordinator', repo: '/elsewhere/other', machine: 'host-a', state: 'idle' }),
-			});
+		it('lists no coordinator whose repository is outside the open folder', async () => {
+			wireCoordinatorFiles({ 'coordinator/other/sessions.jsonl': ledgerLine({ project: 'other' }), 'coordinator-homes.json': '{"other":"host-a"}' }, '/elsewhere/other');
 			wireBoard();
 			expect((await scanSnapshot()).coordinators).toEqual([]);
 		});
 
-		it('names the board and the thinkersync home a request is admitted against, and only for a listed agent', async () => {
-			wireRegistry({ 'coord-demo': COORDINATOR });
+		it('names the thinkersync home a request is admitted against, and only for a listed agent', async () => {
+			wireCoordinatorFiles(COORDINATOR_FILES);
 			wireBoard();
 			await scanSnapshot();
-			expect(lookup?.coordinatorFor('coord-demo')).toMatchObject({ coordinator: { agent: 'coord-demo' }, board_path: '/ws/docstech/users/dev/todo.md' });
+			expect(lookup?.coordinatorFor('coord-ws')).toMatchObject({ coordinator: { agent: 'coord-ws' } });
 			expect(lookup?.coordinatorFor('coord-other')).toBeUndefined();
 			expect(lookup?.thinkersyncHomeUri()?.path).toBe('/home/test/.local/share/thinkersync');
 		});
 	});
 
-	it('carries an unknown state through as an unknown row', async () => {
-		wireRegistry({ odd: JSON.stringify({ agent: 'odd', vendor: 'claude', repo: '/ws', state: 'hibernating', updated_at: '2026-11-03T10:00:00Z' }) });
+	it('reads a coordinator whose newest ledger line is a stop as an ended row', async () => {
+		wireCoordinatorFiles({ 'coordinator/ws/sessions.jsonl': ledgerLine({ vendor: 'claude' }) + ledgerLine({ vendor: 'claude', event: 'stop' }) });
 		const sessions = await scan();
-		expect(sessions[0].session).toMatchObject({ vendor: 'claude-code', registry_only: true, state: 'unknown' });
+		expect(sessions[0].session).toMatchObject({ vendor: 'claude-code', registry_only: true, state: 'ended' });
 	});
 });
 

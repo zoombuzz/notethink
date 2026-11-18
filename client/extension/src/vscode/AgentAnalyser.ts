@@ -16,8 +16,9 @@ import {
     type AgentAnalyserUnavailableReasonCode,
 } from '../lib/agentanalyserops';
 import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
-import { boardDocFor, boardLinesFrom, coordinatorsFrom } from '../lib/coordinatorops';
-import { REGISTRY_FILE_MAX_BYTES, REGISTRY_MAX_AGENTS, overlayRegistry, parseRegistryEntry, registryEntrySegments, REGISTRY_DIR_SEGMENTS, type ResolvedRegistryAgent } from '../lib/agentregistryops';
+import { boardLinesFrom, coordinatorsFrom } from '../lib/coordinatorops';
+import { COORDINATOR_FILE_MAX_BYTES, COORDINATOR_HOMES_FILE, COORDINATOR_LEDGER_MAX_BYTES, coordinatorEntryFrom, coordinatorFileSegments, type CoordinatorFileTexts } from '../lib/coordinatorfilesops';
+import { overlayRegistry, type ResolvedRegistryAgent } from '../lib/agentregistryops';
 import { PROGRESS_FILE_MAX_BYTES, READY_FILE_MAX_BYTES, THINKERSYNC_HOME_SEGMENTS, parseProgressFile, parseReadyFile, progressFileSegments, progressForRepository, progressProjectName, readyFileSegments } from '../lib/progressfileops';
 import { attributeCommitsToSessions, attributeFilesToSessions, type AgentCommitCall, type AgentWriteCall } from '../lib/agentgitattributionops';
 import { lineDiffFromBytes, type LineDiffCounts } from '../lib/agentlinediffops';
@@ -338,8 +339,6 @@ export class AgentAnalyser {
     private coordinators: ActivityCoordinator[] = [];
     // where the build and ship lines fall on each board file; read from the boards alone, never waiting on the scan
     private board_lines: ActivityBoardLines[] = [];
-    // keyed by agent name: the absolute path of the board its target line is drawn on, which a marker move edits
-    private coordinator_board_paths = new Map<string, string>();
     private last_posted: string | undefined;
 
     constructor(
@@ -385,13 +384,13 @@ export class AgentAnalyser {
         post(this.currentMessage());
     }
 
-    /** the coordinator row the last scan listed under this agent name, with the absolute path of the board its target line is drawn on; the admission gate for a send and a marker move */
-    public coordinatorFor(agent: string): { coordinator: ActivityCoordinator; board_path?: string } | undefined {
+    /** the coordinator row the last scan listed under this agent name; the admission gate for a send */
+    public coordinatorFor(agent: string): { coordinator: ActivityCoordinator } | undefined {
         const coordinator = this.coordinators.find(candidate => candidate.agent === agent);
-        return coordinator ? { coordinator, board_path: this.coordinator_board_paths.get(agent) } : undefined;
+        return coordinator ? { coordinator } : undefined;
     }
 
-    /** the thinkersync home the registry was read from, undefined until the vendor home is resolved or where this host has no file access */
+    /** the thinkersync home the coordinator files were read from, undefined until the vendor home is resolved or where this host has no file access */
     public thinkersyncHomeUri(): vscode.Uri | undefined {
         return this.vendor_home ? vscode.Uri.joinPath(this.vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS) : undefined;
     }
@@ -853,7 +852,7 @@ export class AgentAnalyser {
         ]);
         const progress = await this.readProgress(vendor_home, reads);
         this.board_lines = await this.readBoardLines(story_docs);
-        const registry_agents = await this.readRegistry(vendor_home, reads);
+        const registry_agents = await this.readCoordinatorAgents(vendor_home, reads);
         const candidates = this.orderCandidates(discovered, reads);
         // a scan with nothing to read still makes one round trip (carrying pending evictions), so a worker failure is still caught
         const batches = candidates.length > 0 ? this.buildBatches(candidates) : [[]];
@@ -1828,17 +1827,12 @@ export class AgentAnalyser {
         return docs;
     }
 
-    // the coordinator rows for this scan's registry agents, each placed on the board its repository keeps
+    // the coordinator rows for this scan's coordinators, each placed on the board its repository keeps
     private setCoordinators(agents: ResolvedRegistryAgent[], story_docs: StoryDocument[]): void {
         this.coordinators = coordinatorsFrom(agents, story_docs);
-        this.coordinator_board_paths = new Map();
-        for (const coordinator of this.coordinators) {
-            const abs_path = boardDocFor(story_docs, coordinator.root_relative)?.abs_path;
-            if (abs_path) { this.coordinator_board_paths.set(coordinator.agent, abs_path); }
-        }
     }
 
-    // the folded sessions with the registry laid over them, a registered agent's story looked up on the boards read this scan
+    // the folded sessions with the coordinators laid over them, a coordinator's story looked up on the boards read this scan
     private withRegistry(sessions: HashMapOf<ActivitySessionState>, agents: ResolvedRegistryAgent[], progress: ActivityStoryProgress[], story_docs: StoryDocument[], now_ms: number): HashMapOf<ActivitySessionState> {
         return overlayRegistry(sessions, agents, {
             now_ms,
@@ -1897,28 +1891,40 @@ export class AgentAnalyser {
     }
 
     /**
-     * The registry entries whose repository sits inside a workspace folder, read-only, through the same
-     * home the agent sessions resolve to (so over Remote-SSH it is the remote's registry). A missing
-     * registry, and any unreadable, oversize or malformed entry, is silent: most machines have none.
-     * Each entry is filed under the git root holding its repository where one is open, so a registered
-     * agent sits beside the same repository's vendor sessions.
+     * The coordinator of each open repository, read-only, from the files its project keeps under the same
+     * home the agent sessions resolve to (so over Remote-SSH they are the remote's files). A repository
+     * outside the workspace folders, one with no coordinator session on record and any missing,
+     * unreadable, oversize or malformed file is silent: most repositories have no coordinator. Each entry
+     * is filed under the git root of its repository, so a coordinator sits beside the same repository's
+     * vendor sessions. A ledger over its bound is read from its tail.
      */
-    private async readRegistry(vendor_home: ResolvedAgentVendorHome, reads: HashMapOf<RepositoryRead>): Promise<ResolvedRegistryAgent[]> {
+    private async readCoordinatorAgents(vendor_home: ResolvedAgentVendorHome, reads: HashMapOf<RepositoryRead>): Promise<ResolvedRegistryAgent[]> {
         const found: ResolvedRegistryAgent[] = [];
-        let listing: [string, vscode.FileType][];
-        try { listing = await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS, ...REGISTRY_DIR_SEGMENTS)); }
-        catch { return found; }
-        const agent_dirs = listing.filter(([, type]) => type !== vscode.FileType.File).map(([name]) => name).sort().slice(0, REGISTRY_MAX_AGENTS);
-        for (const agent_dir of agent_dirs) {
-            const bytes = await this.readBytes(vscode.Uri.joinPath(vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS, ...registryEntrySegments(agent_dir)));
-            if (!bytes || bytes.length > REGISTRY_FILE_MAX_BYTES) { continue; }
-            const entry = parseRegistryEntry(new TextDecoder().decode(bytes), agent_dir);
-            if (!entry) { continue; }
-            const repo_relative = this.workspaceRelative(entry.repo);
-            if (repo_relative === undefined) { continue; }
-            found.push({ ...entry, root_path: this.repositoryRootFor(entry.repo, reads) ?? entry.repo, repo_relative });
+        const homes_text = await this.readTextFile(vendor_home, [COORDINATOR_HOMES_FILE], COORDINATOR_FILE_MAX_BYTES);
+        for (const [root_path, read] of Object.entries(reads)) {
+            if (this.workspaceRelative(root_path) === undefined) { continue; }
+            const project = progressProjectName(root_path);
+            if (!project) { continue; }
+            const segments = coordinatorFileSegments(project);
+            const files: CoordinatorFileTexts = {
+                sessions: await this.readTextFile(vendor_home, segments.sessions, COORDINATOR_LEDGER_MAX_BYTES, true),
+                assignments: await this.readTextFile(vendor_home, segments.assignments, COORDINATOR_LEDGER_MAX_BYTES, true),
+                waiting: await this.readTextFile(vendor_home, segments.waiting, COORDINATOR_FILE_MAX_BYTES),
+                resume: await this.readTextFile(vendor_home, segments.resume, COORDINATOR_FILE_MAX_BYTES),
+                homes: homes_text,
+            };
+            const entry = coordinatorEntryFrom(project, root_path, files);
+            if (entry) { found.push({ ...entry, root_path, repo_relative: read.root_relative }); }
         }
         return found;
+    }
+
+    // one file below the thinkersync home as text, undefined when absent, unreadable or oversize; a ledger keeps its tail
+    private async readTextFile(vendor_home: ResolvedAgentVendorHome, segments: string[], max_bytes: number, keep_tail = false): Promise<string | undefined> {
+        const bytes = await this.readBytes(vscode.Uri.joinPath(vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS, ...segments));
+        if (!bytes) { return undefined; }
+        if (bytes.length <= max_bytes) { return new TextDecoder().decode(bytes); }
+        return keep_tail ? new TextDecoder().decode(bytes.slice(bytes.length - max_bytes)) : undefined;
     }
 
     private async readRepositoryTrees(now_ms: number): Promise<HashMapOf<RepositoryRead>> {

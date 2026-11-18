@@ -9,11 +9,9 @@ const OTHER_TODO = 'other/docstech/users/dev/todo.md';
 
 /*
  * The coordinators listed in the Card drawer of a folder view, under the agent card type, driven in the browser against the real bundle
- * and a synthetic snapshot shaped as the analyser posts it. Jest proves the registry reading, the board
- * parsing, the envelope and the marker rewrite; what only a browser shows is the rows drawn in the right
- * views, the send form writing nothing until Send is pressed, a story card's send action opening the form
- * for the right agent, and the target line moving by a real pointer drag and by the keyboard, each
- * posting exactly one move.
+ * and a synthetic snapshot shaped as the analyser posts it. Jest proves the coordinator file reading, the board
+ * parsing and the envelope; what only a browser shows is the rows drawn in the right views, the send form
+ * writing nothing until Send is pressed, and a story card's send action opening the form for the right agent.
  */
 
 const STORIES = [
@@ -23,12 +21,12 @@ const STORIES = [
 ];
 
 const DEMO_COORDINATOR = {
-    agent: 'coord-demo', vendor: 'claude-code', state: 'working', story: 'alpha', version: '1.2.3', machine: 'host-a', open_convoys: ['convoy-1'],
-    root_relative: 'demo', board_doc_path: DEMO_TODO, board_stories: STORIES, marker_after: 1,
+    agent: 'coord-demo', vendor: 'claude-code', state: 'working', story: 'alpha', machine: 'host-a', open_convoys: ['convoy-1'],
+    root_relative: 'demo', board_doc_path: DEMO_TODO, board_stories: STORIES,
 };
 const OTHER_COORDINATOR = {
-    agent: 'coord-other', vendor: 'antigravity', state: 'idle', story: '', version: '', machine: 'host-a', open_convoys: [],
-    root_relative: 'other', board_doc_path: OTHER_TODO, board_stories: [{ id: 'delta', title: 'Delta story', status: 'doing', convoys: [], operator_steps: [] }], marker_after: 0,
+    agent: 'coord-other', vendor: 'antigravity', state: 'idle', story: '', machine: 'host-a', open_convoys: [],
+    root_relative: 'other', board_doc_path: OTHER_TODO, board_stories: [{ id: 'delta', title: 'Delta story', status: 'doing', convoys: [], operator_steps: [] }],
 };
 const ELSEWHERE_COORDINATOR = { ...OTHER_COORDINATOR, agent: 'coord-elsewhere', root_relative: 'elsewhere', board_doc_path: 'elsewhere/docstech/users/dev/todo.md' };
 
@@ -74,7 +72,7 @@ function row(page: Page, agent: string): Locator {
 
 test.describe('Coordinators in the Card drawer', () => {
 
-    test('a folder view lists each registered coordinator whose repository holds a loaded file, and no other', async ({ page }) => {
+    test('a folder view lists each coordinator whose repository holds a loaded file, and no other', async ({ page }) => {
         await openBoards(page, ['demo', 'other'], [DEMO_COORDINATOR, OTHER_COORDINATOR, ELSEWHERE_COORDINATOR]);
         await expect(page.getByTestId('coordinator-panel')).toHaveCount(0);
         await openCoordinators(page);
@@ -97,23 +95,23 @@ test.describe('Coordinators in the Card drawer', () => {
         await expect(row(page, 'coord-demo')).toBeVisible();
     });
 
-    test('draws nothing when no coordinator is registered, though a loaded board has the host asked for activity', async ({ page }) => {
+    test('draws nothing when no coordinator is listed, though a loaded board has the host asked for activity', async ({ page }) => {
         await openBoards(page, ['demo'], []);
         await openCoordinators(page);
         await expect(page.getByTestId('coordinator-panel')).toHaveCount(0);
         expect((await sent(page, 'activityDemand')).length).toBeGreaterThan(0);
     });
 
-    test('offers only a message and the target line, never a way to start, stop or restart an agent', async ({ page }) => {
+    test('offers only a message, never a way to start, stop or restart an agent', async ({ page }) => {
         await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
         await openCoordinators(page);
-        await expect(row(page, 'coord-demo').getByRole('button')).toHaveText(['Send to agent', 'Target line']);
+        await expect(row(page, 'coord-demo').getByRole('button')).toHaveText(['Send to agent']);
     });
 
     test.describe('the vendor setting', () => {
         const picker = (page: Page, agent = 'coord-demo'): Locator => row(page, agent).getByTestId('coordinator-vendor-select');
 
-        test('a change asks first, and Cancel sends nothing and keeps the registry\'s vendor', async ({ page }) => {
+        test('a change asks first, and Cancel sends nothing and keeps the reported vendor', async ({ page }) => {
             await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
             await openCoordinators(page);
             await clearCapturedMessages(page);
@@ -128,7 +126,7 @@ test.describe('Coordinators in the Card drawer', () => {
             await expect(page.getByTestId('coordinator-vendor-requested')).toHaveCount(0);
         });
 
-        test('OK posts one vendor-change request naming the registry\'s spelling and holds it as requested until the registry reports it', async ({ page }) => {
+        test('OK posts one vendor-change request naming thinkersync\'s spelling and holds it as requested until the coordinator reports it', async ({ page }) => {
             await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
             await openCoordinators(page);
             await clearCapturedMessages(page);
@@ -145,7 +143,7 @@ test.describe('Coordinators in the Card drawer', () => {
             await expect(picker(page)).toHaveValue('antigravity');
         });
 
-        test('a refused request falls back to the registry\'s vendor and says why', async ({ page }) => {
+        test('a refused request falls back to the reported vendor and says why', async ({ page }) => {
             await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
             await openCoordinators(page);
             await picker(page).selectOption('grok');
@@ -248,95 +246,6 @@ test.describe('Coordinators in the Card drawer', () => {
             await highlight(page, 'Delta story');
             await expect(page.getByTestId('note-edit-button')).toBeVisible();
             await expect(page.getByTestId('story-send-button')).toHaveCount(0);
-        });
-    });
-
-    test.describe('the target line', () => {
-        async function openLine(page: Page): Promise<Locator> {
-            await openBoards(page, ['demo'], [DEMO_COORDINATOR]);
-            await openCoordinators(page);
-            await page.getByTestId('coordinator-target-toggle').click();
-            const line = page.getByTestId('coordinator-target-line');
-            await expect(line).toBeVisible();
-            // the drawer body scrolls, so the board is brought wholly into view before a pointer measures it
-            await line.scrollIntoViewIfNeeded();
-            await clearCapturedMessages(page);
-            return line;
-        }
-
-        test('lists the board with the line after the marked story, and the convoys and steps on their stories', async ({ page }) => {
-            const line = await openLine(page);
-            await expect(line).toHaveAttribute('role', 'separator');
-            await expect(line).toHaveAttribute('aria-valuenow', '1');
-            await expect(line).toHaveAttribute('aria-valuetext', 'After Alpha story');
-            await expect(page.getByTestId('coordinator-story')).toHaveCount(3);
-            await expect(page.getByTestId('coordinator-story').nth(2)).toHaveAttribute('data-in-range', 'false');
-            await expect(page.getByTestId('coordinator-story').nth(0).getByTestId('coordinator-story-step')).toHaveText('Your step: reply to the vendor');
-            await expect(page.getByTestId('coordinator-story').nth(1).getByTestId('coordinator-story-convoy')).toHaveText('Convoy: repo-b');
-        });
-
-        test('drags with a real pointer to the story it is released after, posting one move', async ({ page }) => {
-            const line = await openLine(page);
-            const beta = page.getByTestId('coordinator-story').nth(1);
-            const line_box = (await line.boundingBox())!;
-            const beta_box = (await beta.boundingBox())!;
-            await page.mouse.move(line_box.x + 20, line_box.y + line_box.height / 2);
-            await page.mouse.down();
-            await page.mouse.move(line_box.x + 20, beta_box.y + beta_box.height / 2 + 4, { steps: 6 });
-            await expect(page.getByTestId('coordinator-target-ghost')).toHaveAttribute('data-position', '2');
-            expect(await sent(page, 'coordinatorMoveMarker')).toHaveLength(0);
-            await page.mouse.up();
-            const moves = await sent(page, 'coordinatorMoveMarker');
-            expect(moves).toHaveLength(1);
-            expect(moves[0]).toMatchObject({ agent: 'coord-demo', after: 2 });
-            await expect(page.getByTestId('coordinator-target-line')).toHaveAttribute('aria-valuenow', '2');
-        });
-
-        test('drags above every story to take the marker off the board', async ({ page }) => {
-            const line = await openLine(page);
-            const alpha_box = (await page.getByTestId('coordinator-story').first().boundingBox())!;
-            const line_box = (await line.boundingBox())!;
-            await page.mouse.move(line_box.x + 20, line_box.y + line_box.height / 2);
-            await page.mouse.down();
-            await page.mouse.move(line_box.x + 20, alpha_box.y + 1, { steps: 6 });
-            await page.mouse.up();
-            expect((await sent(page, 'coordinatorMoveMarker'))[0]).toMatchObject({ after: 0 });
-            await expect(page.getByTestId('coordinator-target-line')).toHaveAttribute('aria-valuetext', 'No target line: nothing is set to run');
-        });
-
-        test('moves with the keyboard alone, keeping focus on the line', async ({ page }) => {
-            const line = await openLine(page);
-            await line.focus();
-            await page.keyboard.press('ArrowDown');
-            await expect(page.getByTestId('coordinator-target-line')).toHaveAttribute('aria-valuenow', '2');
-            await expect(page.getByTestId('coordinator-target-line')).toBeFocused();
-            await page.keyboard.press('End');
-            await expect(page.getByTestId('coordinator-target-line')).toHaveAttribute('aria-valuenow', '3');
-            await page.keyboard.press('ArrowUp');
-            await page.keyboard.press('Home');
-            await expect(page.getByTestId('coordinator-target-line')).toHaveAttribute('aria-valuenow', '0');
-            await expect(page.getByTestId('coordinator-target-line')).toBeFocused();
-            expect((await sent(page, 'coordinatorMoveMarker')).map(message => message.after)).toEqual([2, 3, 2, 0]);
-        });
-
-        test('takes the position the board reports once the host has written the marker', async ({ page }) => {
-            const line = await openLine(page);
-            await line.focus();
-            await page.keyboard.press('ArrowDown');
-            await postSnapshot(page, [{ ...DEMO_COORDINATOR, marker_after: 2 }]);
-            await expect(page.getByTestId('coordinator-target-line')).toHaveAttribute('aria-valuenow', '2');
-            await postSnapshot(page, [{ ...DEMO_COORDINATOR, marker_after: 3 }]);
-            await expect(page.getByTestId('coordinator-target-line')).toHaveAttribute('aria-valuenow', '3');
-        });
-
-        test('shows what the board holds again when the host refuses the move', async ({ page }) => {
-            const line = await openLine(page);
-            await line.focus();
-            await page.keyboard.press('Home');
-            await expect(page.getByTestId('coordinator-target-line')).toHaveAttribute('aria-valuenow', '0');
-            await postResult(page, { request: 'move', agent: 'coord-demo', code: 'write_failed', ok: false });
-            await expect(page.getByTestId('coordinator-target-line')).toHaveAttribute('aria-valuenow', '1');
-            await expect(page.getByTestId('coordinator-status')).toHaveText('The board could not be changed.');
         });
     });
 });

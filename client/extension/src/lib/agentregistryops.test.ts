@@ -2,9 +2,7 @@ import {
     REGISTRY_STALE_AFTER_MS,
     isRegistryWorkStale,
     overlayRegistry,
-    parseRegistryEntry,
     registryActivityState,
-    registryEntrySegments,
     registrySessionId,
     registryVendorSlug,
     type RegistryOverlayContext,
@@ -46,41 +44,8 @@ function context(status: string | undefined, progress: ActivityStoryProgress[] =
     };
 }
 
-describe('parseRegistryEntry', () => {
-    it('keeps the fields a row or a coordinator row displays and drops the rest', () => {
-        const text = JSON.stringify({
-            agent: 'coord-demo', agent_kind: 'coordinator', vendor: 'claude', repo: '/ws/demo/', machine: 'host-a', mailbox: '/secret/mailbox',
-            state: 'working', story: 'story-a', session_id: 'sess-2', previous_session_ids: ['sess-1'], binary_version: '9.9', open_convoys: ['c1'],
-            last_recycle: '2026-11-01T00:00:00Z', updated_at: FRESH, pane: '%3',
-        });
-        const entry = parseRegistryEntry(text, 'dir-name');
-        expect(entry).toEqual({
-            agent: 'coord-demo', vendor: 'claude-code', repo: '/ws/demo', state: 'working', story: 'story-a', session_ids: ['sess-2', 'sess-1'], updated_at: FRESH,
-            agent_kind: 'coordinator', machine: 'host-a', binary_version: '9.9', open_convoys: ['c1'],
-        });
-        expect(JSON.stringify(entry)).not.toContain('mailbox');
-        expect(JSON.stringify(entry)).not.toContain('%3');
-    });
-
-    it('treats every field but the repository as optional and carries an unknown state', () => {
-        expect(parseRegistryEntry('{"repo":"/ws/demo","state":"hibernating"}', 'dir-name')).toEqual({
-            agent: 'dir-name', vendor: 'unknown', repo: '/ws/demo', state: 'hibernating', story: '', session_ids: [], updated_at: undefined,
-            agent_kind: '', machine: '', binary_version: '', open_convoys: [],
-        });
-    });
-
-    it('reads a field of the wrong type as absent', () => {
-        const entry = parseRegistryEntry('{"repo":"/ws/demo","agent":7,"story":false,"previous_session_ids":"x","updated_at":"not a date"}', 'dir-name');
-        expect(entry).toMatchObject({ agent: 'dir-name', story: '', session_ids: [], updated_at: undefined });
-    });
-
-    it.each(['', 'not json', '[]', 'null', '{}', '{"repo":"relative/path"}', '{"repo":7}'])('gives nothing for %j', text => {
-        expect(parseRegistryEntry(text, 'dir-name')).toBeUndefined();
-    });
-});
-
 describe('registry vocabulary', () => {
-    it('maps the registry vendor onto the display slug and keeps an unknown vendor as its own', () => {
+    it('maps the written vendor name onto the display slug and keeps an unknown vendor as its own', () => {
         expect(registryVendorSlug('claude')).toBe('claude-code');
         expect(registryVendorSlug(' Claude ')).toBe('claude-code');
         expect(registryVendorSlug('agy')).toBe('antigravity');
@@ -88,17 +53,14 @@ describe('registry vocabulary', () => {
         expect(registryVendorSlug(undefined)).toBe('unknown');
     });
 
-    it('reads each registry state as an activity state', () => {
+    it('reads each state word as an activity state', () => {
         expect(registryActivityState('working')).toBe('working');
+        expect(registryActivityState('waiting')).toBe('waiting');
         expect(registryActivityState('idle')).toBe('idle');
         expect(registryActivityState('starting')).toBe('idle');
         expect(registryActivityState('stopped')).toBe('ended');
         expect(registryActivityState('')).toBe('unknown');
         expect(registryActivityState('hibernating')).toBe('unknown');
-    });
-
-    it('places an entry below the registry directory', () => {
-        expect(registryEntrySegments('coord-demo')).toEqual(['registry', 'coord-demo', 'agent.json']);
     });
 
     it('files a registry-only agent under its name and its repository', () => {

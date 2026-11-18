@@ -4,13 +4,16 @@ import {
     coordinatorAgentName,
     coordinatorEntryFrom,
     coordinatorFileSegments,
+    coordinatorMachineFrom,
     ledgerTail,
     parseAssignmentLedger,
+    parseAssignmentStories,
     parseHomesFile,
     parseJsonLines,
     parseResumeFile,
     parseSessionLedger,
     parseWaitingFile,
+    parseWaitingQuestions,
 } from './coordinatorfilesops';
 
 function lines(...objects: unknown[]): string {
@@ -216,5 +219,54 @@ describe('coordinatorEntryFrom', () => {
     it('survives every other file being malformed', () => {
         const entry = coordinatorEntryFrom('demo', '/ws/demo', { sessions, assignments: '{', waiting: '[', homes: 'x', resume: 'y' });
         expect(entry).toMatchObject({ agent: 'coord-demo', state: 'idle', story: '', machine: '', open_convoys: [] });
+    });
+});
+
+describe('parseAssignmentStories', () => {
+    it('is the last line story, or its stories when it lists several', () => {
+        expect(parseAssignmentStories(lines({ story: 'alpha' }, { story: 'beta' }))).toEqual(['beta']);
+        expect(parseAssignmentStories(lines({ story: 'alpha', stories: ['alpha', 'beta'] }))).toEqual(['alpha', 'beta']);
+        expect(parseAssignmentStories(lines({ story: 'alpha', stories: ['alpha'] }))).toEqual(['alpha']);
+    });
+
+    it('ignores keeper observed lines: one over a dispatched story keeps the dispatched story, one over a hand back gives nothing', () => {
+        const observed = { ts: '2026-11-18T12:00:00Z', story: 'a', stories: ['a', 'b', 'c'], event: 'observed', by: 'keeper' };
+        expect(parseAssignmentStories(lines({ story: 'alpha', event: 'dispatched' }, observed))).toEqual(['alpha']);
+        expect(parseAssignmentStories(lines({ story: 'alpha', event: 'dispatched' }, { story: '', event: 'handed-back' }, observed))).toEqual([]);
+        expect(parseAssignmentStories(lines(observed))).toEqual([]);
+    });
+
+    it('counts the batch of an adopted line', () => {
+        expect(parseAssignmentStories(lines({ story: 'alpha', event: 'dispatched' }, { story: 'alpha', stories: ['alpha', 'beta'], adopted: ['beta'], event: 'adopted' }))).toEqual(['alpha', 'beta']);
+    });
+
+    it('is empty after a hand back, for an empty or malformed ledger and for a torn last line', () => {
+        expect(parseAssignmentStories(lines({ story: 'alpha' }, { story: '', returned: 'alpha' }))).toEqual([]);
+        expect(parseAssignmentStories('')).toEqual([]);
+        expect(parseAssignmentStories('garbage')).toEqual([]);
+        expect(parseAssignmentStories(`${lines({ story: 'alpha' })}{"story":"be`)).toEqual(['alpha']);
+    });
+});
+
+describe('parseWaitingQuestions', () => {
+    it('lists the trimmed question texts and skips anything that is not text', () => {
+        expect(parseWaitingQuestions('{"at":"2026-11-18T09:00:00Z","questions":[" which one? ","",3,"two"]}')).toEqual(['which one?', 'two']);
+    });
+
+    it('is empty for a malformed file, a non-object and a file with no list', () => {
+        expect(parseWaitingQuestions('{nope')).toEqual([]);
+        expect(parseWaitingQuestions('[]')).toEqual([]);
+        expect(parseWaitingQuestions('{"questions":"which"}')).toEqual([]);
+    });
+});
+
+describe('coordinatorMachineFrom', () => {
+    const resume = JSON.stringify({ origin_machine: 'resume-host', body: {} });
+
+    it('is the homes file machine, else the resume note machine, else empty', () => {
+        expect(coordinatorMachineFrom('demo', { homes: '{"demo":"home-host"}', resume })).toBe('home-host');
+        expect(coordinatorMachineFrom('demo', { homes: '{"other":"x"}', resume })).toBe('resume-host');
+        expect(coordinatorMachineFrom('demo', { resume })).toBe('resume-host');
+        expect(coordinatorMachineFrom('demo', {})).toBe('');
     });
 });

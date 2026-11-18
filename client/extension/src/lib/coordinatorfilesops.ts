@@ -154,6 +154,32 @@ export function parseAssignmentLedger(text: string): { story: string; updated_at
     return { story: textField(last.story), updated_at: validTime(last.ts) };
 }
 
+/**
+ * The stories in flight from an assignment ledger: the coordinator's own work. Keeper `observed` lines only
+ * record what the board showed at `doing`, so they are dropped first. Of the lines left, the last one names
+ * them: its `stories` when it lists several, else its one story; none when it names none or no line is left.
+ */
+export function parseAssignmentStories(text: string): string[] {
+    const lines = parseJsonLines(ledgerTail(text)).filter(line => line.event !== 'observed');
+    if (lines.length === 0) { return []; }
+    const last = lines[lines.length - 1];
+    const story = textField(last.story);
+    if (!story) { return []; }
+    const listed = Array.isArray(last.stories) ? last.stories.map(textField).filter(name => name.length > 0) : [];
+    return listed.length > 1 ? listed : [story];
+}
+
+/** the question texts an open questions file lists, trimmed, empty when the file is malformed or lists none */
+export function parseWaitingQuestions(text: string): string[] {
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); }
+    catch { return []; }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) { return []; }
+    const questions = (parsed as { questions?: unknown }).questions;
+    if (!Array.isArray(questions)) { return []; }
+    return questions.map(question => (typeof question === 'string' ? question.trim() : '')).filter(question => question.length > 0);
+}
+
 /** the open questions file: whether it lists any, and when it was written */
 export function parseWaitingFile(text: string): { waiting: boolean; at?: string } {
     let parsed: unknown;
@@ -190,6 +216,12 @@ export function parseResumeFile(text: string): { machine: string; open_convoys: 
     return { machine: textField(raw.origin_machine), open_convoys };
 }
 
+/** the machine a project's coordinator builds on: the homes file's, else the resume note's, else empty */
+export function coordinatorMachineFrom(project: string, files: Pick<CoordinatorFileTexts, 'homes' | 'resume'>): string {
+    const homed = files.homes === undefined ? '' : parseHomesFile(files.homes, project);
+    return homed || (files.resume === undefined ? '' : parseResumeFile(files.resume).machine);
+}
+
 /**
  * The entry a project's coordinator files make, undefined when the sessions ledger is missing or holds no
  * coordinator line. State is `stopped` from a newest `stop` line, else `waiting` while the waiting file
@@ -202,7 +234,6 @@ export function coordinatorEntryFrom(project: string, repo: string, files: Coord
     const assignment = files.assignments === undefined ? { story: '' } : parseAssignmentLedger(files.assignments);
     const waiting = files.waiting === undefined ? { waiting: false } : parseWaitingFile(files.waiting);
     const resume = files.resume === undefined ? { machine: '', open_convoys: [] } : parseResumeFile(files.resume);
-    const homed = files.homes === undefined ? '' : parseHomesFile(files.homes, project);
     const state = ledger.stopped ? 'stopped' : waiting.waiting ? 'waiting' : assignment.story ? 'working' : 'idle';
     return {
         agent: coordinatorAgentName(project),
@@ -213,7 +244,7 @@ export function coordinatorEntryFrom(project: string, repo: string, files: Coord
         session_ids: ledger.session_ids,
         updated_at: latestTime([ledger.updated_at, assignment.updated_at, waiting.at]),
         agent_kind: COORDINATOR_ROLE,
-        machine: homed || resume.machine,
+        machine: coordinatorMachineFrom(project, files),
         open_convoys: resume.open_convoys,
     };
 }

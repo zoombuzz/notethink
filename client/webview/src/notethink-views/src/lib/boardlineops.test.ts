@@ -73,6 +73,32 @@ describe('boardLineSlots', () => {
     });
 });
 
+describe('boardLineSlots with a repeated story id', () => {
+    const repeated = (build_after: number, ship_after: number): ActivityBoardLines => board(build_after, ship_after, ['a', 'dup', 'b', 'dup', 'c']);
+
+    it('keeps the lines and tells the two stories apart by order', () => {
+        const slots = boardLineSlots(keys('a', 'dup', 'b', 'dup', 'c'), [repeated(2, 4)]);
+        expect(slots[2]).toEqual(['build']);
+        expect(slots[4]).toEqual(['ship']);
+    });
+
+    it('places a line between the two stories that share an id', () => {
+        const slots = boardLineSlots(keys('a', 'dup', 'b', 'dup', 'c'), [repeated(3, 0)]);
+        expect(slots[3]).toEqual(['build']);
+        expect(slots.flat()).toHaveLength(1);
+    });
+
+    it('keeps the lines when the repeated stories sit side by side or are shown only once', () => {
+        const side_by_side = board(2, 0, ['dup', 'dup', 'b']);
+        expect(boardLineSlots(keys('dup', 'dup', 'b'), [side_by_side])[2]).toEqual(['build']);
+        expect(boardLineSlots(keys('dup', 'b'), [side_by_side])[1]).toEqual(['build']);
+    });
+
+    it('still draws nothing when the cards are out of board order', () => {
+        expect(hasAnyBoardLine(boardLineSlots(keys('b', 'dup', 'a'), [repeated(2, 3)]))).toBe(false);
+    });
+});
+
 function story(title: string, fields: Partial<NoteProps> = {}): NoteProps {
     return { seq: 1, type: 'heading', level: 3, headline_raw: title, origin: { relative_path: BOARD_PATH }, ...fields } as unknown as NoteProps;
 }

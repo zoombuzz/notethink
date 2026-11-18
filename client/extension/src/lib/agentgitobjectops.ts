@@ -166,9 +166,10 @@ export async function readCommitChanges(read: GitObjectReader, commit_tree: stri
  * Walks first parents from HEAD until the upstream's commit, or `max_commits`, collecting each commit
  * and its changed files. A merge counts against its first parent only, so a branch that merged another
  * lists the merge and the first-parent line. `reached_upstream` is false when the walk ran out of
- * budget or hit an unreadable commit first.
+ * budget or hit an unreadable commit first. With `read_changes` false each commit is listed by sha alone,
+ * which skips the tree reads.
  */
-export async function readPendingCommits(read: GitObjectReader, head_sha: string, upstream_sha: string | undefined, max_commits: number): Promise<PendingCommitsRead> {
+export async function readPendingCommits(read: GitObjectReader, head_sha: string, upstream_sha: string | undefined, max_commits: number, read_changes = true): Promise<PendingCommitsRead> {
     const commits: PendingCommitRead[] = [];
     let sha: string | undefined = head_sha;
     while (sha && sha !== upstream_sha) {
@@ -177,7 +178,7 @@ export async function readPendingCommits(read: GitObjectReader, head_sha: string
         const commit = body ? parseCommitBody(body) : undefined;
         if (!commit) { return { commits, reached_upstream: false }; }
         const parent = commit.parents[0];
-        const changes = await readCommitChanges(read, commit.tree, parent);
+        const changes = read_changes ? await readCommitChanges(read, commit.tree, parent) : undefined;
         commits.push({ sha, changes });
         sha = parent;
     }

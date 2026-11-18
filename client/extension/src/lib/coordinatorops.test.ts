@@ -11,10 +11,13 @@ import {
     isBuildable,
     isCoordinatorEntry,
     isCoordinatorVendorName,
+    isMarkerPushed,
     isSafeCoordinatorName,
     isShippable,
     mailboxInboxSegments,
+    sameCommit,
     parseBoardStories,
+    type BoardLineFacts,
     type BoardStory,
 } from './coordinatorops';
 import type { ResolvedRegistryAgent } from './agentregistryops';
@@ -187,7 +190,7 @@ describe('buildCoordinatorEnvelope', () => {
 });
 
 function story(id: string, fields: Partial<BoardStory> = {}): BoardStory {
-    return { id, title: id, status: '', convoys: [], operator_steps: [], sent: false, open_question: false, blocked: false, ...fields };
+    return { id, title: id, status: '', convoys: [], operator_steps: [], sent: false, markers: [], open_question: false, blocked: false, ...fields };
 }
 
 describe('parseBoardStories line facts', () => {
@@ -201,6 +204,8 @@ describe('parseBoardStories line facts', () => {
         '### Stuck [](?id=stuck&status=doing)',
         '+ blocked on the vendor: waiting',
         '',
+        '### Placed [](?id=placed&sent=go-2&coord=host-a, host-b)',
+        '',
         '### Plain [](?id=plain)',
         '+ open questions are not a line shape',
         '+ [X] blocked tasks that are ticked do not count',
@@ -212,38 +217,120 @@ describe('parseBoardStories line facts', () => {
             ['sent-one', true, false, false],
             ['asked', false, true, false],
             ['stuck', false, false, true],
+            ['placed', true, false, false],
             ['plain', false, false, false],
         ]);
+    });
+
+    it('reads the machines a coord tag names', () => {
+        const stories = parseBoardStories(text);
+        expect(stories.map(s => s.markers)).toEqual([[], [], [], ['host-a', 'host-b'], []]);
     });
 });
 
 describe('isBuildable', () => {
-    it('takes a story that was sent, is delegated or is at doing', () => {
+    it('takes a story that was sent, is delegated or is the one in flight', () => {
         expect(isBuildable(story('a', { sent: true }))).toBe(true);
         expect(isBuildable(story('delegated-b'))).toBe(true);
-        expect(isBuildable(story('c', { status: 'doing' }))).toBe(true);
+        expect(isBuildable(story('c', { status: 'doing' }), { in_flight: ['c'] })).toBe(true);
         expect(isBuildable(story('d'))).toBe(false);
     });
 
-    it('leaves out a story at code-review or testing even when it was sent', () => {
+    it('does not take a story at doing that is neither sent, delegated nor in flight', () => {
+        expect(isBuildable(story('c', { status: 'doing' }))).toBe(false);
+        expect(isBuildable(story('c', { status: 'doing' }), { in_flight: ['other'] })).toBe(false);
+    });
+
+    it('leaves out a story at code-review or testing even when it was sent or is in flight', () => {
         expect(isBuildable(story('a', { sent: true, status: 'code-review' }))).toBe(false);
-        expect(isBuildable(story('a', { status: 'testing' }))).toBe(false);
+        expect(isBuildable(story('a', { status: 'testing' }), { in_flight: ['a'] })).toBe(false);
     });
 
     it('leaves out a story parked on a question, a blocked note, a manual task or a delegated task', () => {
-        expect(isBuildable(story('a', { status: 'doing', open_question: true }))).toBe(false);
-        expect(isBuildable(story('a', { status: 'doing', blocked: true }))).toBe(false);
-        expect(isBuildable(story('a', { status: 'doing', operator_steps: ['sign it'] }))).toBe(false);
-        expect(isBuildable(story('a', { status: 'doing', convoys: ['repo-b'] }))).toBe(false);
+        const parked: Array<Partial<BoardStory>> = [{ open_question: true }, { blocked: true }, { operator_steps: ['sign it'] }, { convoys: ['repo-b'] }];
+        for (const fields of parked) {
+            expect(isBuildable(story('a', { sent: true, ...fields }))).toBe(false);
+            expect(isBuildable(story('a', fields), { in_flight: ['a'] })).toBe(false);
+        }
+    });
+
+    it('leaves out a story whose id an open question of the coordinator names whole', () => {
+        const facts: BoardLineFacts = { waiting_questions: ['which way for fix-the-thing (a)?', 'and `other`'] };
+        expect(isBuildable(story('fix-the-thing', { sent: true }), facts)).toBe(false);
+        expect(isBuildable(story('fix', { sent: true }), facts)).toBe(true);
+        expect(isBuildable(story('thing', { sent: true }), facts)).toBe(true);
+        expect(isBuildable(story('other', { sent: true }), facts)).toBe(false);
+        expect(isBuildable(story('fix-the-thing', { sent: true }), { waiting_questions: ['fix-the-thing-two?'] })).toBe(true);
+        expect(isBuildable(story('a.b', { sent: true }), { waiting_questions: ['aXb?'] })).toBe(true);
+    });
+
+    it('leaves out a sent story whose coord tag excludes the coordinator machine, but not one with no tag or an unknown machine', () => {
+        const placed = story('a', { sent: true, markers: ['host-b'] });
+        expect(isBuildable(placed, { machine: 'host-a.example.test' })).toBe(false);
+        expect(isBuildable(placed, { machine: 'host-b.example.test' })).toBe(true);
+        expect(isBuildable(placed, {})).toBe(true);
+        expect(isBuildable(story('a', { sent: true }), { machine: 'host-a' })).toBe(true);
+    });
+
+    it('does not apply a coord tag to the story in flight', () => {
+        expect(isBuildable(story('a', { markers: ['host-b'] }), { machine: 'host-a', in_flight: ['a'] })).toBe(true);
     });
 });
 
 describe('isShippable', () => {
-    it('takes a story at code-review or testing, or one the ready file names', () => {
+    it('takes a story at code-review or testing, or one the ready marker names', () => {
         expect(isShippable(story('a', { status: 'code-review' }), [])).toBe(true);
         expect(isShippable(story('a', { status: 'testing' }), [])).toBe(true);
         expect(isShippable(story('a', { status: 'doing' }), ['a'])).toBe(true);
         expect(isShippable(story('a', { status: 'doing' }), ['b'])).toBe(false);
+    });
+});
+
+describe('sameCommit', () => {
+    it('compares a short and a long sha by prefix, in either order, ignoring case', () => {
+        const long = '6c3d7f27bfb747f9c2c42e9539288a6c19242425';
+        expect(sameCommit(long, '6c3d7f2')).toBe(true);
+        expect(sameCommit('6C3D7F2', long)).toBe(true);
+        expect(sameCommit(long, long)).toBe(true);
+        expect(sameCommit(long, '6c3d7f3')).toBe(false);
+    });
+
+    it('is false for a missing sha or one too short to name a commit', () => {
+        expect(sameCommit(undefined, '6c3d7f2')).toBe(false);
+        expect(sameCommit('', '')).toBe(false);
+        expect(sameCommit('6c3', '6c3d7f2')).toBe(false);
+    });
+});
+
+describe('isMarkerPushed', () => {
+    const marker = '6c3d7f27bfb747f9c2c42e9539288a6c19242425';
+    const other = '9e95da3f38e17d425b75e48406a05f6a0e6bd784';
+
+    it('is pushed when the branch has an upstream and nothing ahead of it', () => {
+        expect(isMarkerPushed(marker, { has_upstream: true, ahead: 0 })).toBe(true);
+        expect(isMarkerPushed(marker, { has_upstream: true })).toBe(true);
+    });
+
+    it('is pushed when the marker is the upstream commit, whichever sha is short', () => {
+        expect(isMarkerPushed(marker, { has_upstream: true, ahead: 2, upstream_sha: marker.slice(0, 7) })).toBe(true);
+        expect(isMarkerPushed(marker.slice(0, 10), { has_upstream: true, ahead: 2, upstream_sha: marker })).toBe(true);
+    });
+
+    it('is pushed when a complete list of the unpushed commits leaves the marker out', () => {
+        expect(isMarkerPushed(marker, { has_upstream: true, ahead: 1, upstream_sha: other, pending_shas: [other], pending_complete: true })).toBe(true);
+    });
+
+    it('is not pushed when the marker is among the unpushed commits', () => {
+        expect(isMarkerPushed(marker, { has_upstream: true, ahead: 1, upstream_sha: other, pending_shas: [marker], pending_complete: true })).toBe(false);
+        expect(isMarkerPushed(marker.slice(0, 8), { has_upstream: true, ahead: 1, pending_shas: [marker], pending_complete: true })).toBe(false);
+    });
+
+    it('counts the marker when git cannot say', () => {
+        expect(isMarkerPushed(marker, undefined)).toBe(false);
+        expect(isMarkerPushed(marker, { has_upstream: false })).toBe(false);
+        expect(isMarkerPushed(marker, { has_upstream: true, ahead: 1, pending_shas: [other], pending_complete: false })).toBe(false);
+        expect(isMarkerPushed(marker, { has_upstream: true, ahead: 1 })).toBe(false);
+        expect(isMarkerPushed('', { has_upstream: true, ahead: 1, pending_shas: [other], pending_complete: true })).toBe(false);
     });
 });
 
@@ -256,13 +343,19 @@ describe('boardLinePositions', () => {
             story('d', { sent: true }),
             story('e'),
         ];
-        expect(boardLinePositions(stories, [])).toEqual({ build_after: 4, ship_after: 1 });
-        expect(boardLinePositions(stories, ['e'])).toEqual({ build_after: 4, ship_after: 5 });
+        expect(boardLinePositions(stories)).toEqual({ build_after: 4, ship_after: 1 });
+        expect(boardLinePositions(stories, { ready_ids: ['e'] })).toEqual({ build_after: 4, ship_after: 5 });
+    });
+
+    it('puts the solid line on the story in flight and not on a later story left at doing', () => {
+        const stories = [story('a', { sent: true }), story('b', { status: 'doing' }), story('c', { status: 'doing' })];
+        expect(boardLinePositions(stories, {}).build_after).toBe(1);
+        expect(boardLinePositions(stories, { in_flight: ['b'] }).build_after).toBe(2);
     });
 
     it('is zero for both lines on a board with nothing to build or ship', () => {
-        expect(boardLinePositions([story('a'), story('b')], [])).toEqual({ build_after: 0, ship_after: 0 });
-        expect(boardLinePositions([], ['a'])).toEqual({ build_after: 0, ship_after: 0 });
+        expect(boardLinePositions([story('a'), story('b')])).toEqual({ build_after: 0, ship_after: 0 });
+        expect(boardLinePositions([], { ready_ids: ['a'] })).toEqual({ build_after: 0, ship_after: 0 });
     });
 
     it('keeps the lines off a coordinator row, since they are read from the boards alone', () => {
@@ -274,7 +367,7 @@ describe('boardLinePositions', () => {
 });
 
 describe('boardLinesFrom', () => {
-    const TEXT = '# Todo\n\n\n### One [](?id=one&status=doing)\n\n\n### Two [](?id=two)\n\n\n### Three [](?id=three&status=code-review)\n';
+    const TEXT = '# Todo\n\n\n### One [](?id=one&sent=go-1)\n\n\n### Two [](?id=two)\n\n\n### Three [](?id=three&status=code-review)\n';
     const docs = [
         { doc_path: 'demo/docstech/users/dev/todo.md', text: TEXT },
         { doc_path: 'demo/docstech/users/dev/done.md', text: '### Old [](?id=old&status=doing)\n' },
@@ -288,15 +381,21 @@ describe('boardLinesFrom', () => {
         ]);
     });
 
-    it('takes the ready ids of the board a document path names, leaving other boards to the statuses', () => {
+    it('takes the facts of the board a document path names, leaving other boards to the statuses', () => {
         const text = '### One [](?id=one)\n\n\n### Two [](?id=two)\n';
         const boards = [{ doc_path: 'demo/docstech/users/dev/todo.md', text }, { doc_path: 'other/docstech/users/dev/todo.md', text }];
-        const lines = boardLinesFrom(boards, new Map([['demo/docstech/users/dev/todo.md', ['two']]]));
-        expect(lines.map(entry => [entry.doc_path, entry.ship_after])).toEqual([['demo/docstech/users/dev/todo.md', 2], ['other/docstech/users/dev/todo.md', 0]]);
+        const lines = boardLinesFrom(boards, new Map([['demo/docstech/users/dev/todo.md', { ready_ids: ['two'], in_flight: ['one'] }]]));
+        expect(lines.map(entry => [entry.doc_path, entry.build_after, entry.ship_after])).toEqual([['demo/docstech/users/dev/todo.md', 1, 2], ['other/docstech/users/dev/todo.md', 0, 0]]);
+    });
+
+    it('keeps both lines on a board where two stories share an id', () => {
+        const text = '### Same [](?id=same&sent=go-1)\n\n\n### Same [](?id=same&status=code-review)\n';
+        const [entry] = boardLinesFrom([{ doc_path: 'demo/docstech/users/dev/todo.md', text }]);
+        expect(entry).toMatchObject({ story_ids: ['same', 'same'], build_after: 1, ship_after: 2 });
     });
 
     it('puts boards in path order and bounds the story ids a board lists', () => {
-        const long = Array.from({ length: COORDINATOR_BOARD_MAX_STORIES + 20 }, (_, i) => `### S${i} [](?id=s${i}&status=doing)\n`).join('\n\n');
+        const long = Array.from({ length: COORDINATOR_BOARD_MAX_STORIES + 20 }, (_, i) => `### S${i} [](?id=s${i}&sent=go-${i})\n`).join('\n\n');
         const [entry] = boardLinesFrom([{ doc_path: 'z/docstech/users/dev/todo.md', text: long }]);
         expect(entry.story_ids).toHaveLength(COORDINATOR_BOARD_MAX_STORIES);
         expect(entry.build_after).toBe(COORDINATOR_BOARD_MAX_STORIES);

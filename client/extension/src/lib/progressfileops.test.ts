@@ -5,6 +5,7 @@ import {
     THINKERSYNC_HOME_SEGMENTS,
     parseProgressFile,
     parseReadyFile,
+    parseReadyMarker,
     progressFileSegments,
     progressForRepository,
     progressProjectName,
@@ -101,6 +102,20 @@ describe('ready file', () => {
         expect(parseReadyFile('{"sha":"abc"}')).toEqual([]);
         expect(parseReadyFile('{"stories":"one"}')).toEqual([]);
         expect(parseReadyFile('{"stories":["ok",3,"",null,"also"]}')).toEqual(['ok', 'also']);
+    });
+
+    it('reads the marker commit beside its stories, lowercased, and leaves it empty when it is not a sha', () => {
+        const full = '6C3D7F27BFB747F9C2C42E9539288A6C19242425';
+        expect(parseReadyMarker(JSON.stringify({ sha: full, stories: ['one'] }))).toEqual({ sha: full.toLowerCase(), stories: ['one'] });
+        expect(parseReadyMarker(JSON.stringify({ sha: '6c3d7f2', stories: ['one'] }))).toEqual({ sha: '6c3d7f2', stories: ['one'] });
+        expect(parseReadyMarker(JSON.stringify({ sha: 'nope', stories: ['one'] }))).toEqual({ sha: '', stories: ['one'] });
+        expect(parseReadyMarker(JSON.stringify({ stories: ['one'] }))).toEqual({ sha: '', stories: ['one'] });
+    });
+
+    it('has no marker when the file names no stories or is malformed', () => {
+        expect(parseReadyMarker('{"sha":"6c3d7f2"}')).toBeUndefined();
+        expect(parseReadyMarker('{not json')).toBeUndefined();
+        expect(parseReadyMarker('')).toBeUndefined();
     });
 
     it('bounds how many stories one file contributes', () => {

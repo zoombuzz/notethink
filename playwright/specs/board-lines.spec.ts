@@ -104,6 +104,16 @@ test.describe('Build and ship lines', () => {
         );
     });
 
+    test('two stories sharing one id keep both lines, each between the right cards', async ({ page }) => {
+        await openSingleFile(page, 'board-lines-duplicate.md', 'document', 'card');
+        await demandSeen(page);
+        await postSnapshot(page, [boardRow(['alpha', 'twin', 'twin', 'delta'], 2, 3)]);
+        await expect(page.getByTestId('board-line-build')).toHaveCount(1);
+        expect(await sequenceIn(page.locator('[data-testid^="document-"]').first())).toEqual(
+            ['Alpha', 'Beta', 'lines:build', 'Gamma', 'lines:ship', 'Delta'],
+        );
+    });
+
     test('both lines stack, build first, when they fall at the same position', async ({ page }) => {
         await openSingleFile(page, 'board-lines.md', 'document', 'card');
         await demandSeen(page);

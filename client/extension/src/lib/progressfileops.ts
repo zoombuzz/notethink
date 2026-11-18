@@ -90,3 +90,24 @@ export function parseReadyFile(text: string): string[] {
     if (!Array.isArray(stories)) { return []; }
     return stories.filter((slug): slug is string => typeof slug === 'string' && slug.length > 0).slice(0, READY_STORIES_MAX);
 }
+
+/**
+ * The ready marker a ready file records: the commit the release gate last passed and its stories.
+ * - sha: the marker's commit, empty when the file names none, in which case the marker cannot be placed against git
+ */
+export interface ReadyMarker {
+    sha: string;
+    stories: string[];
+}
+
+/** the marker of a ready file's text, undefined when the file is malformed or names no stories */
+export function parseReadyMarker(text: string): ReadyMarker | undefined {
+    const stories = parseReadyFile(text);
+    if (stories.length === 0) { return undefined; }
+    let sha = '';
+    try {
+        const parsed = JSON.parse(text) as { sha?: unknown };
+        sha = typeof parsed.sha === 'string' ? parsed.sha.trim().toLowerCase() : '';
+    } catch { /* parseReadyFile already found a story, so this cannot fail */ }
+    return { sha: /^[0-9a-f]{7,64}$/.test(sha) ? sha : '', stories };
+}

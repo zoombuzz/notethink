@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { AGENT_LINE_DIFF_MAX_BYTES, lineDiffFromBytes, looksBinary, type LineDiffCounts } from '../lib/agentlinediffops';
 import { parseGitReflog, type GitReflogCommit } from '../lib/agentgitreflogops';
 import { inflateObject, readPendingCommits, type GitObjectReader, type PendingCommitsRead } from '../lib/agentgitobjectops';
+import { sameCommit, type PushState } from '../lib/coordinatorops';
 import { writeToLog } from '../lib/errorops';
 import type { ActivityChangedFile, ActivityChangeKind, ActivityTree } from '../types/AgentActivity';
 
@@ -192,6 +193,21 @@ export async function readPendingCommitsOf(repository: GitRepository, max_commit
     const ahead = pendingCommitsOf(repository.state.HEAD);
     if (!head_sha || head_sha.length !== 40 || !ahead) { return undefined; }
     return readPendingCommits(read, head_sha, upstreamCommitOf(repository.state), Math.min(ahead, max_commits));
+}
+
+/**
+ * What the git extension and the object store say about a repository's branch against its upstream, for
+ * judging whether a commit has been pushed. The unpushed commits are listed only when the answer needs
+ * them (an upstream with commits ahead of it), and the list is complete only when the walk reached the
+ * upstream commit and found as many commits as the ahead count says.
+ */
+export async function readPushStateOf(repository: GitRepository, max_commits: number, marker_sha: string, read: GitObjectReader = looseObjectReader(repository.rootUri)): Promise<PushState> {
+    const head = repository.state.HEAD;
+    const state: PushState = { has_upstream: !!head?.upstream, ahead: pendingCommitsOf(head), upstream_sha: upstreamCommitOf(repository.state) };
+    const head_sha = head?.commit;
+    if (!state.has_upstream || !state.ahead || sameCommit(marker_sha, state.upstream_sha) || !head_sha || head_sha.length !== 40) { return state; }
+    const pending = await readPendingCommits(read, head_sha, state.upstream_sha, Math.min(state.ahead, max_commits), false);
+    return { ...state, pending_shas: pending.commits.map(commit => commit.sha), pending_complete: pending.reached_upstream && pending.commits.length === state.ahead };
 }
 
 function relativeToRoot(root_path: string, absolute_path: string): string {

@@ -29,10 +29,23 @@ function linePosition(board: ActivityBoardLines, kind: BoardLineKind): number {
     return typeof position === 'number' && Number.isFinite(position) ? position : 0;
 }
 
-/** the board index of a story key on a board, -1 when the key is on another board or not a story of it */
-function boardIndex(board: ActivityBoardLines, key: ActivityStoryKey | undefined): number {
-    if (!key || !board.doc_path || normaliseActivityPath(board.doc_path) !== normaliseActivityPath(key.doc_path)) { return -1; }
-    return board.story_ids.indexOf(key.id);
+/**
+ * The board index of each key on a board, -1 for a key on another board or not a story of it. Stories
+ * sharing one id are told apart by order: the first card carrying the id takes the board's first story with
+ * it, the next card its next, and a card beyond the board's last one takes the last, so a repeated id
+ * neither breaks the board order nor loses the lines.
+ */
+function boardIndices(board: ActivityBoardLines, keys: ReadonlyArray<ActivityStoryKey | undefined>): number[] {
+    const taken = new Map<string, number>();
+    return keys.map(key => {
+        if (!key || !board.doc_path || normaliseActivityPath(board.doc_path) !== normaliseActivityPath(key.doc_path)) { return -1; }
+        const occurrences: number[] = [];
+        board.story_ids.forEach((id, index) => { if (id === key.id) { occurrences.push(index); } });
+        if (occurrences.length === 0) { return -1; }
+        const used = taken.get(key.id) ?? 0;
+        taken.set(key.id, used + 1);
+        return occurrences[Math.min(used, occurrences.length - 1)];
+    });
 }
 
 /**
@@ -49,10 +62,10 @@ function boardIndex(board: ActivityBoardLines, key: ActivityStoryKey | undefined
 export function boardLineSlots(keys: ReadonlyArray<ActivityStoryKey | undefined>, boards: ReadonlyArray<ActivityBoardLines>): BoardLineSlots {
     const slots: BoardLineSlots = Array.from({ length: keys.length + 1 }, () => []);
     for (const board of boards) {
-        const indices = keys.map(key => boardIndex(board, key));
+        const indices = boardIndices(board, keys);
         const placed = indices.map((board_index, position) => ({ board_index, position })).filter(entry => entry.board_index >= 0);
         if (placed.length === 0) { continue; }
-        if (placed.some((entry, i) => i > 0 && entry.board_index <= placed[i - 1].board_index)) { return slots; }
+        if (placed.some((entry, i) => i > 0 && entry.board_index < placed[i - 1].board_index)) { return slots; }
         for (const kind of BOARD_LINE_KINDS) {
             const after = linePosition(board, kind);
             if (after <= 0) { continue; }

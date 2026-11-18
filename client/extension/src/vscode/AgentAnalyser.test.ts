@@ -238,7 +238,7 @@ function mockClaudeCodeSession(content: string | undefined, mtime: number, live?
 }
 
 // answers git.api.* commands for these repositories, keyed by root path, in the shape the real commands return
-function wireGitCommands(repositories: Record<string, { workingTreeChanges: Array<{ path: string; status: string }>; HEAD?: { name?: string; commit?: string } }>): void {
+function wireGitCommands(repositories: Record<string, { workingTreeChanges: Array<{ path: string; status: string }>; HEAD?: { name?: string; commit?: string; upstream?: { remote: string; name: string }; ahead?: number }; refs?: Array<{ name: string; commit: string }> }>): void {
 	(vscode.commands.getCommands as jest.Mock).mockResolvedValue(['git.api.getRepositories', 'git.api.getRepositoryState']);
 	(vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, root?: string) => {
 		if (command === 'git.api.getRepositories') { return Object.keys(repositories).map(root_path => `file://${root_path}`); }
@@ -246,7 +246,7 @@ function wireGitCommands(repositories: Record<string, { workingTreeChanges: Arra
 		const state = repositories[root.replace(/^file:\/\//, '')];
 		if (!state) { return null; }
 		const change = (entry: { path: string; status: string }): { uri: string; originalUri: string; status: string } => ({ uri: `file://${entry.path}`, originalUri: `file://${entry.path}`, status: entry.status });
-		return { HEAD: state.HEAD, workingTreeChanges: state.workingTreeChanges.map(change), indexChanges: [] };
+		return { HEAD: state.HEAD, refs: state.refs, workingTreeChanges: state.workingTreeChanges.map(change), indexChanges: [] };
 	});
 }
 
@@ -2974,7 +2974,7 @@ describe('AgentAnalyser coordinators', () => {
 		});
 
 		describe('board lines', () => {
-			const LINES_BOARD = '# Todo\n\n\n### Alpha [](?id=alpha&status=doing)\n\n\n### Beta [](?id=beta)\n\n\n### Gamma [](?id=gamma)\n';
+			const LINES_BOARD = '# Todo\n\n\n### Alpha [](?id=alpha&status=doing&sent=go-1)\n\n\n### Beta [](?id=beta)\n\n\n### Gamma [](?id=gamma)\n';
 			const READY_PATH = '/home/test/.local/share/thinkersync/coordinator/ws/ready.json';
 
 			async function boardLinesPosted(context = mockContext()): Promise<{ posted: Array<Record<string, unknown>>; analyser: AgentAnalyser }> {
@@ -3000,6 +3000,76 @@ describe('AgentAnalyser coordinators', () => {
 				wireBoard(LINES_BOARD, { [READY_PATH]: JSON.stringify({ stories: ['beta'] }) });
 				const { posted } = await boardLinesPosted();
 				expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 1, ship_after: 2 })]);
+			});
+
+			describe('read from the coordinator files and git', () => {
+				const MARKER = 'b'.repeat(40);
+				const UPSTREAM = 'c'.repeat(40);
+				const BRANCH = { name: 'staging', commit: 'a'.repeat(40), upstream: { remote: 'origin', name: 'staging' } };
+				const BOARD = '# Todo\n\n\n### Alpha [](?id=alpha&sent=go-1)\n\n\n### Beta [](?id=beta&status=doing)\n\n\n### Gamma [](?id=gamma&status=doing)\n';
+				const ready = (stories: string[]): string => JSON.stringify({ sha: MARKER, stories });
+
+				// the repository the board sits in, with this branch state, then the board itself
+				function wireWith(files: Record<string, string>, head: Record<string, unknown> | undefined, refs: Array<{ name: string; commit: string }> = [], board = BOARD): void {
+					wireCoordinatorFiles(files);
+					wireGitCommands({ [REPO_ROOT]: { workingTreeChanges: [], HEAD: head, refs } });
+					wireBoard(board);
+				}
+
+				it('put the solid line on the story the ledger shows in flight, and leave a later story at doing out', async () => {
+					wireWith({ 'coordinator/ws/story-assignments.jsonl': `${JSON.stringify({ ts: FRESH, story: 'beta', event: 'dispatched' })}\n` }, BRANCH);
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ build_after: 2 })]);
+				});
+
+				it('leave a story at doing that is neither sent, delegated nor in flight off the solid line', async () => {
+					wireWith({}, BRANCH);
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ build_after: 1 })]);
+				});
+
+				it('park a story an open question of the coordinator names, and a sent story whose coord tag leaves out its machine', async () => {
+					wireWith({ 'coordinator/ws/waiting.json': `{"at":"${FRESH}","questions":["which way for alpha?"]}` }, BRANCH);
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ build_after: 0 })]);
+					const placed = BOARD.replace('sent=go-1', 'sent=go-1&coord=host-b');
+					wireWith({ 'coordinator-homes.json': '{"ws":"host-a"}' }, BRANCH, [], placed);
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ build_after: 0 })]);
+					wireWith({ 'coordinator-homes.json': '{"ws":"host-b"}' }, BRANCH, [], placed);
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ build_after: 1 })]);
+				});
+
+				it('count a ready marker whose commit is still unpushed, with the branch ahead of its upstream', async () => {
+					wireWith({ 'coordinator/ws/ready.json': ready(['beta']) }, { ...BRANCH, ahead: 2 }, [{ name: 'origin/staging', commit: UPSTREAM }]);
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ ship_after: 2 })]);
+				});
+
+				it('drop a ready marker that is pushed: nothing ahead of the upstream, or the upstream commit is the marker', async () => {
+					wireWith({ 'coordinator/ws/ready.json': ready(['beta']) }, { ...BRANCH, ahead: 0 });
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ ship_after: 0 })]);
+					wireWith({ 'coordinator/ws/ready.json': ready(['beta']) }, { ...BRANCH, ahead: 3 }, [{ name: 'origin/staging', commit: MARKER }]);
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ ship_after: 0 })]);
+				});
+
+				it('keep a ready marker when git has no upstream or no repository to ask', async () => {
+					wireWith({ 'coordinator/ws/ready.json': ready(['beta']) }, { name: 'staging', commit: 'a'.repeat(40) });
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ ship_after: 2 })]);
+					wireWith({ 'coordinator/ws/ready.json': ready(['beta']) }, BRANCH);
+					(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
+					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ ship_after: 2 })]);
+				});
+
+				it('apply the same rules when the board watcher refreshes them', async () => {
+					wireWith({ 'coordinator/ws/ready.json': ready(['beta']), 'coordinator/ws/story-assignments.jsonl': `${JSON.stringify({ ts: FRESH, story: 'beta', event: 'dispatched' })}\n` }, { ...BRANCH, ahead: 0 });
+					const { posted } = await boardLinesPosted();
+					const scanned = lastLines(posted);
+					expect(scanned).toEqual([expect.objectContaining({ build_after: 2, ship_after: 0 })]);
+					const watcher = (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.calls
+						.map((call, index) => ({ glob: call[0], result: (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results[index].value }))
+						.find(entry => entry.glob === '**/docstech/users/*/todo.md');
+					wireBoard(`${BOARD}\n\n### Delta [](?id=delta&status=code-review)\n`);
+					watcher!.result.onDidChange.mock.calls[0][0]();
+					await jest.advanceTimersByTimeAsync(500);
+					await settle();
+					expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 2, ship_after: 4, story_ids: ['alpha', 'beta', 'gamma', 'delta'] })]);
+				});
 			});
 
 			it('fall back to the review statuses when the ready file is missing or malformed', async () => {
@@ -3051,7 +3121,7 @@ describe('AgentAnalyser coordinators', () => {
 					.map((call, index) => ({ glob: call[0], result: (vscode.workspace.createFileSystemWatcher as jest.Mock).mock.results[index].value }))
 					.filter(entry => entry.glob === '**/docstech/users/*/todo.md');
 				expect(board_watchers).toHaveLength(1);
-				wireBoard('# Todo\n\n\n### Alpha [](?id=alpha&status=doing)\n\n\n### Beta [](?id=beta&status=doing)\n\n\n### Gamma [](?id=gamma)\n');
+				wireBoard('# Todo\n\n\n### Alpha [](?id=alpha&status=doing&sent=go-1)\n\n\n### Beta [](?id=beta&sent=go-2)\n\n\n### Gamma [](?id=gamma)\n');
 				board_watchers[0].result.onDidChange.mock.calls[0][0]();
 				await jest.advanceTimersByTimeAsync(500);
 				await settle();

@@ -16,15 +16,15 @@ import {
     type AgentAnalyserUnavailableReasonCode,
 } from '../lib/agentanalyserops';
 import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
-import { boardLinesFrom, coordinatorsFrom } from '../lib/coordinatorops';
-import { COORDINATOR_FILE_MAX_BYTES, COORDINATOR_HOMES_FILE, COORDINATOR_LEDGER_MAX_BYTES, coordinatorEntryFrom, coordinatorFileSegments, type CoordinatorFileTexts } from '../lib/coordinatorfilesops';
+import { boardLinesFrom, coordinatorsFrom, isMarkerPushed, type BoardLineFacts } from '../lib/coordinatorops';
+import { COORDINATOR_FILE_MAX_BYTES, COORDINATOR_HOMES_FILE, COORDINATOR_LEDGER_MAX_BYTES, coordinatorEntryFrom, coordinatorFileSegments, coordinatorMachineFrom, parseAssignmentStories, parseWaitingQuestions, type CoordinatorFileTexts } from '../lib/coordinatorfilesops';
 import { overlayRegistry, type ResolvedRegistryAgent } from '../lib/agentregistryops';
-import { PROGRESS_FILE_MAX_BYTES, READY_FILE_MAX_BYTES, THINKERSYNC_HOME_SEGMENTS, parseProgressFile, parseReadyFile, progressFileSegments, progressForRepository, progressProjectName, readyFileSegments } from '../lib/progressfileops';
+import { PROGRESS_FILE_MAX_BYTES, READY_FILE_MAX_BYTES, THINKERSYNC_HOME_SEGMENTS, parseProgressFile, parseReadyMarker, progressFileSegments, progressForRepository, progressProjectName, readyFileSegments } from '../lib/progressfileops';
 import { attributeCommitsToSessions, attributeFilesToSessions, type AgentCommitCall, type AgentWriteCall } from '../lib/agentgitattributionops';
 import { lineDiffFromBytes, type LineDiffCounts } from '../lib/agentlinediffops';
 import { parseScanCache, scanCacheFileNameFor, serialiseScanCache, type AgentFileIdentity } from '../lib/agentscancacheops';
 import type { AgentPricedUsageEntry } from '../lib/agentpricingops';
-import { looseObjectReader, readLineDiffSides, readPendingCommitsOf, readRepositoryTree, resolveGitApi, upstreamCommitOf, type GitApi, type GitRepository, type LineDiffSides } from './agentgitops';
+import { looseObjectReader, readLineDiffSides, readPendingCommitsOf, readPushStateOf, readRepositoryTree, resolveGitApi, upstreamCommitOf, type GitApi, type GitRepository, type LineDiffSides } from './agentgitops';
 import { splitObject, type GitObjectReader, type PendingCommitChange } from '../lib/agentgitobjectops';
 import type { GitReflogCommit } from '../lib/agentgitreflogops';
 import { findStoryInDocs, isBoardPath, siblingBoardPath, storiesForWriteCall, type StoryBindingWriteCall, type StoryDocument } from '../lib/agentstorybindingops';
@@ -34,6 +34,8 @@ import { AgentAnalyserWorkerPool, defaultAgentAnalyserPoolSize } from './AgentAn
 import { ACTIVITY_PENDING_DETAIL_MAX, addActivityUsage, emptyActivityUsage, type ActivityBoardLines, type ActivityChangedFile, type ActivityCoordinator, type ActivityPendingCommit, type ActivitySession, type ActivityState, type ActivityStoryProgress, type ActivityStoryRef, type ActivityStoryUsage, type ActivityUsage } from '../types/AgentActivity';
 import type { HashMapOf } from '../types/general';
 
+// the most unpushed commits listed to find a ready marker among them; a longer run reads as incomplete, so it counts
+const MARKER_PENDING_WALK_MAX_COMMITS = 500;
 // only sessions with activity inside this window count toward what a story's card draws
 const AGENT_WINDOW_DAYS = 30;
 // the periodic poll behind the watchers below, so a change no watcher caught still lands within this long
@@ -339,6 +341,7 @@ export class AgentAnalyser {
     private coordinators: ActivityCoordinator[] = [];
     // where the build and ship lines fall on each board file; read from the boards alone, never waiting on the scan
     private board_lines: ActivityBoardLines[] = [];
+    private marker_pushed_cache = new Map<string, { key: string; pushed: boolean }>();
     private last_posted: string | undefined;
 
     constructor(
@@ -681,7 +684,7 @@ export class AgentAnalyser {
     /** rereads the boards and, when asked, posts the snapshot (a post that changes nothing is dropped); a failed read is logged and leaves the last lines */
     private async refreshBoardLines(post: boolean): Promise<void> {
         try {
-            this.board_lines = await this.readBoardLines(await this.readStoryDocuments());
+            this.board_lines = await this.readBoardLines(await this.readStoryDocuments(), await this.readRepositories());
         } catch (err) {
             writeToErrorLog('refreshBoardLines', 'the board lines could not be read', err);
             return;
@@ -851,7 +854,7 @@ export class AgentAnalyser {
             timed(() => this.readRepositoryTrees(now_ms)),
         ]);
         const progress = await this.readProgress(vendor_home, reads);
-        this.board_lines = await this.readBoardLines(story_docs);
+        this.board_lines = await this.readBoardLines(story_docs, Object.values(reads).map(read => read.repository));
         const registry_agents = await this.readCoordinatorAgents(vendor_home, reads);
         const candidates = this.orderCandidates(discovered, reads);
         // a scan with nothing to read still makes one round trip (carrying pending evictions), so a worker failure is still caught
@@ -1862,32 +1865,78 @@ export class AgentAnalyser {
     }
 
     /**
-     * The build and ship lines of every board among these documents. Each board's ready story ids come
-     * from the ready file kept under its project's name, which is the basename of the repository directory
-     * holding the board, so a workspace folder that is the project and an umbrella folder holding projects
-     * side by side both resolve. This host having no agent home, or a missing, oversize, unreadable or
-     * malformed ready file, leaves the ship line to the `code-review` and `testing` statuses alone.
+     * The build and ship lines of every board among these documents. Each board's facts come from the
+     * files its project keeps under the thinkersync home, named by the basename of the repository
+     * directory holding the board, and from the git state of that repository: the stories the coordinator's
+     * ledger shows in flight, the open questions parking stories, the machine it builds on, and the stories
+     * of its ready marker while that marker is unpushed. A scan and a board watcher both come through here,
+     * so they apply the same rules. This host having no agent home leaves the lines to the board alone, and
+     * a missing, oversize, unreadable or malformed file leaves out only the fact it holds. Git not being
+     * able to say whether the marker is pushed leaves the marker counting.
      */
-    private async readBoardLines(story_docs: StoryDocument[]): Promise<ActivityBoardLines[]> {
-        const ready_by_project = new Map<string, string[]>();
-        const ready_by_doc = new Map<string, string[]>();
+    private async readBoardLines(story_docs: StoryDocument[], repositories: GitRepository[]): Promise<ActivityBoardLines[]> {
+        const facts_by_root = new Map<string, BoardLineFacts>();
+        const facts_by_doc = new Map<string, BoardLineFacts>();
         const home = this.vendor_home;
         if (home) {
             for (const doc of story_docs) {
-                const project = doc.abs_path ? progressProjectName(doc.abs_path.split('/').slice(0, -4).join('/')) : undefined;
-                if (!project) { continue; }
-                if (!ready_by_project.has(project)) { ready_by_project.set(project, await this.readReadyIds(home, project)); }
-                ready_by_doc.set(doc.doc_path, ready_by_project.get(project) ?? []);
+                const root = doc.abs_path ? doc.abs_path.split('/').slice(0, -4).join('/') : undefined;
+                const project = root ? progressProjectName(root) : undefined;
+                if (!root || !project) { continue; }
+                if (!facts_by_root.has(root)) { facts_by_root.set(root, await this.readBoardFacts(home, project, root, repositories)); }
+                facts_by_doc.set(doc.doc_path, facts_by_root.get(root) ?? {});
             }
         }
-        return boardLinesFrom(story_docs, ready_by_doc);
+        return boardLinesFrom(story_docs, facts_by_doc);
     }
 
-    // one project's ready story ids, read-only, from the ready file beside its progress file
-    private async readReadyIds(home: ResolvedAgentVendorHome, project: string): Promise<string[]> {
-        const bytes = await this.readBytes(vscode.Uri.joinPath(home.home, ...THINKERSYNC_HOME_SEGMENTS, ...readyFileSegments(project)));
-        if (!bytes || bytes.length > READY_FILE_MAX_BYTES) { return []; }
-        return parseReadyFile(new TextDecoder().decode(bytes));
+    // one project's board facts, read-only; the ready marker is kept only while it is unpushed
+    private async readBoardFacts(home: ResolvedAgentVendorHome, project: string, root: string, repositories: GitRepository[]): Promise<BoardLineFacts> {
+        const segments = coordinatorFileSegments(project);
+        const assignments = await this.readTextFile(home, segments.assignments, COORDINATOR_LEDGER_MAX_BYTES, true);
+        const waiting = await this.readTextFile(home, segments.waiting, COORDINATOR_FILE_MAX_BYTES);
+        const files = {
+            homes: await this.readTextFile(home, [COORDINATOR_HOMES_FILE], COORDINATOR_FILE_MAX_BYTES),
+            resume: await this.readTextFile(home, segments.resume, COORDINATOR_FILE_MAX_BYTES),
+        };
+        const ready_text = await this.readTextFile(home, readyFileSegments(project), READY_FILE_MAX_BYTES);
+        const marker = ready_text === undefined ? undefined : parseReadyMarker(ready_text);
+        const pushed = marker ? await this.markerIsPushed(root, marker.sha, repositories) : false;
+        return {
+            ready_ids: marker && !pushed ? marker.stories : [],
+            in_flight: assignments === undefined ? [] : parseAssignmentStories(assignments),
+            waiting_questions: waiting === undefined ? [] : parseWaitingQuestions(waiting),
+            machine: coordinatorMachineFrom(project, files),
+        };
+    }
+
+    // whether a ready marker's commit is pushed, from the repository holding the board; false when git cannot say
+    private async markerIsPushed(root: string, marker_sha: string, repositories: GitRepository[]): Promise<boolean> {
+        const repository = repositories
+            .filter(candidate => root === candidate.rootUri.path || root.startsWith(`${candidate.rootUri.path}/`))
+            .sort((a, b) => b.rootUri.path.length - a.rootUri.path.length)[0];
+        if (!repository) { return false; }
+        const head = repository.state.HEAD;
+        const key = `${marker_sha}|${head?.commit ?? ''}|${upstreamCommitOf(repository.state) ?? ''}|${head?.ahead ?? ''}|${head?.upstream ? 'u' : ''}`;
+        const cached = this.marker_pushed_cache.get(repository.rootUri.path);
+        if (cached?.key === key) { return cached.pushed; }
+        let pushed = false;
+        try { pushed = isMarkerPushed(marker_sha, await readPushStateOf(repository, MARKER_PENDING_WALK_MAX_COMMITS, marker_sha)); }
+        catch (err) { writeToErrorLog('markerIsPushed', 'the unpushed commits could not be read, so the ready marker still counts', err); }
+        this.marker_pushed_cache.set(repository.rootUri.path, { key, pushed });
+        return pushed;
+    }
+
+    // every repository the git extension has open, fresh; none without the git extension or when it fails
+    private async readRepositories(): Promise<GitRepository[]> {
+        this.git_api = this.git_api ?? await resolveGitApi();
+        if (!this.git_api) { return []; }
+        try { return await this.git_api.readRepositories(); }
+        catch (err) {
+            if (!this.git_failure_logged) { writeToErrorLog('readRepositories', 'the vscode.git extension commands failed', err); }
+            this.git_failure_logged = true;
+            return [];
+        }
     }
 
     /**

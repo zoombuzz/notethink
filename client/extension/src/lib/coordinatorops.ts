@@ -54,11 +54,13 @@ const REVIEW_STATUSES = ['code-review', 'testing'];
 /**
  * One story of a board as the build and ship lines see it.
  * - sent: whether the heading carries a `sent` linetag, which a coordinator's envelope writes when it hands the story over
+ * - markers: the machines a `coord=` linetag names as allowed to build the story, none when it carries no tag
  * - open_question: whether the story holds an unanswered `+ open question` line
  * - blocked: whether the story holds a `+ blocked` note
  */
 export interface BoardStory extends ActivityCoordinatorStory {
     sent: boolean;
+    markers: string[];
     open_question: boolean;
     blocked: boolean;
 }
@@ -162,6 +164,7 @@ export function parseBoardStories(text: string): BoardStory[] {
                 convoys: [],
                 operator_steps: [],
                 sent: params.sent !== undefined,
+                markers: (params.coord ?? '').split(',').map(host => host.trim()).filter(host => host.length > 0),
                 open_question: false,
                 blocked: false,
             };
@@ -182,18 +185,54 @@ export function parseBoardStories(text: string): BoardStory[] {
 }
 
 /**
- * Whether a coordinator left to run would build this story: it was handed over (a `sent` linetag), is a
- * delegated story (a `delegated-` id) or is at `doing`, and is not waiting on the operator or the gate.
- * A story at `code-review` or `testing`, one parked on an open question or a blocked note, and one with
- * an open manual task or an open delegated task are all left out.
+ * What the board alone cannot say about where the lines fall, read from the coordinator's own files and
+ * git. Every field is optional: with none, the lines come from the board's text alone.
+ * - ready_ids: the stories of a ready marker that is not yet pushed, empty once it is
+ * - in_flight: the stories the coordinator's assignment ledger shows in flight
+ * - waiting_questions: the texts of the coordinator's open questions, which park the stories they name
+ * - machine: the machine the coordinator builds on, when known, which a `coord=` tag is checked against
  */
-export function isBuildable(story: Pick<BoardStory, 'id' | 'status' | 'sent' | 'open_question' | 'blocked' | 'convoys' | 'operator_steps'>): boolean {
-    if (REVIEW_STATUSES.includes(story.status)) { return false; }
-    if (story.open_question || story.blocked || story.operator_steps.length > 0 || story.convoys.length > 0) { return false; }
-    return story.sent || story.id.startsWith(DELEGATED_ID_PREFIX) || story.status === 'doing';
+export interface BoardLineFacts {
+    ready_ids?: ReadonlyArray<string>;
+    in_flight?: ReadonlyArray<string>;
+    waiting_questions?: ReadonlyArray<string>;
+    machine?: string;
 }
 
-/** whether a story has passed the release gate: the coordinator's ready file names it, or it sits at `code-review` or `testing` */
+// a machine name as a `coord=` tag spells it: the first label of the host name
+function shortMachine(name: string): string {
+    return name.trim().toLowerCase().split('.')[0];
+}
+
+/** whether a story's `coord=` tag names machines that leave out this one; a tag that names none, or an unknown machine, excludes nothing */
+function excludesMachine(markers: ReadonlyArray<string>, machine: string | undefined): boolean {
+    if (markers.length === 0 || !machine) { return false; }
+    return !markers.map(shortMachine).includes(shortMachine(machine));
+}
+
+/** whether a story id appears whole in the text, a hyphen counting as part of a slug so `a-b` does not name `a` */
+function namedWhole(id: string, text: string): boolean {
+    return new RegExp(`(^|[^a-z0-9-])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9-])`).test(text);
+}
+
+/**
+ * Whether a coordinator left to run would build this story: it was handed over (a `sent` linetag), is a
+ * delegated story (a `delegated-` id) or is the story its ledger shows in flight, and is not waiting on the
+ * operator or the gate. A story at `doing` that is none of those does not count. A story at `code-review`
+ * or `testing` is left out, and so is a parked one: an open question or a blocked note, an open manual
+ * task, an open delegated task, an id named whole in an open question of the coordinator, or (for a story
+ * that is not in flight) a `coord=` tag that leaves out the coordinator's machine.
+ */
+export function isBuildable(story: Pick<BoardStory, 'id' | 'status' | 'sent' | 'open_question' | 'blocked' | 'convoys' | 'operator_steps' | 'markers'>, facts: BoardLineFacts = {}): boolean {
+    if (REVIEW_STATUSES.includes(story.status)) { return false; }
+    const in_flight = facts.in_flight?.includes(story.id) ?? false;
+    if (!in_flight && !story.sent && !story.id.startsWith(DELEGATED_ID_PREFIX)) { return false; }
+    if (!in_flight && excludesMachine(story.markers, facts.machine)) { return false; }
+    if (story.open_question || story.blocked || story.operator_steps.length > 0 || story.convoys.length > 0) { return false; }
+    return !namedWhole(story.id, (facts.waiting_questions ?? []).join('\n'));
+}
+
+/** whether a story has passed the release gate: the coordinator's unpushed ready marker names it, or it sits at `code-review` or `testing` */
 export function isShippable(story: Pick<BoardStory, 'id' | 'status'>, ready_ids: ReadonlyArray<string>): boolean {
     return REVIEW_STATUSES.includes(story.status) || ready_ids.includes(story.id);
 }
@@ -203,14 +242,54 @@ export function isShippable(story: Pick<BoardStory, 'id' | 'status'>, ready_ids:
  * line is the last buildable story, the ship line the last shippable one, whichever way the board is
  * ordered between them.
  */
-export function boardLinePositions(stories: ReadonlyArray<BoardStory>, ready_ids: ReadonlyArray<string>): { build_after: number; ship_after: number } {
+export function boardLinePositions(stories: ReadonlyArray<BoardStory>, facts: BoardLineFacts = {}): { build_after: number; ship_after: number } {
     let build_after = 0;
     let ship_after = 0;
     stories.forEach((story, index) => {
-        if (isBuildable(story)) { build_after = index + 1; }
-        if (isShippable(story, ready_ids)) { ship_after = index + 1; }
+        if (isBuildable(story, facts)) { build_after = index + 1; }
+        if (isShippable(story, facts.ready_ids ?? [])) { ship_after = index + 1; }
     });
     return { build_after, ship_after };
+}
+
+/**
+ * Whether a commit sha is the same commit as another, either of them possibly abbreviated: one is a prefix
+ * of the other, and neither is shorter than seven digits.
+ */
+export function sameCommit(a: string | undefined, b: string | undefined): boolean {
+    if (!a || !b || a.length < 7 || b.length < 7) { return false; }
+    const left = a.toLowerCase();
+    const right = b.toLowerCase();
+    return left.startsWith(right) || right.startsWith(left);
+}
+
+/**
+ * What git says about a repository's branch against its upstream.
+ * - has_upstream: whether the branch tracks a remote branch
+ * - ahead: commits on the branch not on its upstream
+ * - upstream_sha: the commit the upstream branch points at
+ * - pending_shas: the shas of the commits not on the upstream, newest first
+ * - pending_complete: whether pending_shas is the whole list, so a sha missing from it is not pending
+ */
+export interface PushState {
+    has_upstream: boolean;
+    ahead?: number;
+    upstream_sha?: string;
+    pending_shas?: ReadonlyArray<string>;
+    pending_complete?: boolean;
+}
+
+/**
+ * Whether a ready marker's commit has been pushed. It has when the branch has an upstream and nothing
+ * ahead of it, when the marker is the upstream's own commit, or when a complete list of the unpushed
+ * commits leaves it out. When git cannot say (no state, no upstream, an incomplete list, a marker with no
+ * sha) it has not, so the marker still counts.
+ */
+export function isMarkerPushed(marker_sha: string, state: PushState | undefined): boolean {
+    if (!state) { return false; }
+    if (state.has_upstream && (state.ahead ?? 0) === 0) { return true; }
+    if (sameCommit(marker_sha, state.upstream_sha)) { return true; }
+    return !!state.pending_complete && !!state.pending_shas && marker_sha.length >= 7 && !state.pending_shas.some(sha => sameCommit(marker_sha, sha));
 }
 
 /** the board a coordinator's repository keeps: the first `docstech/users/<name>/todo.md` under it, in path order */
@@ -255,17 +334,18 @@ const TODO_BOARD_PATH = /(^|\/)docstech\/users\/[^/]+\/todo\.md$/;
 /**
  * Where the build and ship lines fall on every `docstech/users/<name>/todo.md` among the documents, in
  * path order. Each entry is computed from the board's own text, so it needs no coordinator and no agent
- * session. A board with no story gets no entry. `ready_by_doc` holds the ready story ids that belong to
- * each board, keyed by its document path; a board missing from it has none, which leaves the ship line to
- * the `code-review` and `testing` statuses alone.
+ * session. A board with no story gets no entry. `facts_by_doc` holds what the coordinator's files and git
+ * add for each board, keyed by its document path; a board missing from it has none, which leaves the
+ * lines to what the board says alone: only sent and delegated stories build, and only the `code-review`
+ * and `testing` statuses ship.
  */
-export function boardLinesFrom(story_docs: ReadonlyArray<StoryDocument>, ready_by_doc: ReadonlyMap<string, ReadonlyArray<string>> = new Map()): ActivityBoardLines[] {
+export function boardLinesFrom(story_docs: ReadonlyArray<StoryDocument>, facts_by_doc: ReadonlyMap<string, BoardLineFacts> = new Map()): ActivityBoardLines[] {
     const entries: ActivityBoardLines[] = [];
     for (const doc of story_docs) {
         if (!TODO_BOARD_PATH.test(doc.doc_path)) { continue; }
         const stories = parseBoardStories(doc.text);
         if (stories.length === 0) { continue; }
-        const { build_after, ship_after } = boardLinePositions(stories, ready_by_doc.get(doc.doc_path) ?? []);
+        const { build_after, ship_after } = boardLinePositions(stories, facts_by_doc.get(doc.doc_path) ?? {});
         const story_ids = stories.slice(0, COORDINATOR_BOARD_MAX_STORIES).map(story => story.id);
         entries.push({ doc_path: doc.doc_path, story_ids, build_after: Math.min(build_after, story_ids.length), ship_after: Math.min(ship_after, story_ids.length) });
     }

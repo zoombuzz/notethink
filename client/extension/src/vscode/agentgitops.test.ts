@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Uri } from '../__mocks__/vscode';
-import { GIT_API_REPOSITORIES_COMMAND, GIT_API_REPOSITORY_STATE_COMMAND, lineDiffForFile, looseObjectReader, pendingCommitsOf, readPendingCommitsOf, readRepositoryTree, resolveGitApi, upstreamCommitOf, type GitRepository } from './agentgitops';
+import { GIT_API_REPOSITORIES_COMMAND, GIT_API_REPOSITORY_STATE_COMMAND, lineDiffForFile, looseObjectReader, pendingCommitsOf, readPendingCommitsOf, readPushStateOf, readRepositoryTree, resolveGitApi, upstreamCommitOf, type GitRepository } from './agentgitops';
 import type { GitObjectReader } from '../lib/agentgitobjectops';
 import { deflateSync } from 'zlib';
 
@@ -258,6 +258,49 @@ describe('readPendingCommitsOf', () => {
         const result = await readPendingCommitsOf(makeRepository({ HEAD: { commit: 'a'.repeat(40), upstream: { remote: 'origin', name: 's' }, ahead: 50 } }), 20, read);
         expect(result).toEqual({ commits: [], reached_upstream: false });
         expect(seen).toEqual(['a'.repeat(40)]);
+    });
+});
+
+describe('readPushStateOf', () => {
+    const upstream_sha = 'c'.repeat(40);
+    const first = 'd'.repeat(40);
+    const head_sha = 'e'.repeat(40);
+    const tree_sha = '1'.repeat(40);
+    const branch = { name: 'staging', commit: head_sha, upstream: { remote: 'origin', name: 'staging' } };
+    const refs = [{ name: 'origin/staging', commit: upstream_sha }];
+
+    // a chain of commits upstream <- first <- head, each as git stores a commit object
+    const commits: Record<string, string> = { [head_sha]: first, [first]: upstream_sha };
+    const read_commits: GitObjectReader = async sha => {
+        if (commits[sha] === undefined) { return undefined; }
+        const body = `tree ${tree_sha}\nparent ${commits[sha]}\nauthor A <a@b> 1 +0000\ncommitter A <a@b> 1 +0000\n\nsubject\n`;
+        return new TextEncoder().encode(`commit ${body.length}\0${body}`);
+    };
+
+    it('lists the unpushed commits, complete when the walk reaches the upstream and finds as many as are ahead', async () => {
+        const state = await readPushStateOf(makeRepository({ HEAD: { ...branch, ahead: 2 }, refs }), 500, 'f'.repeat(40), read_commits);
+        expect(state).toEqual({ has_upstream: true, ahead: 2, upstream_sha, pending_shas: [head_sha, first], pending_complete: true });
+    });
+
+    it('lists the commits only by sha, without reading what each changes', async () => {
+        const seen: string[] = [];
+        await readPushStateOf(makeRepository({ HEAD: { ...branch, ahead: 2 }, refs }), 500, 'f'.repeat(40), async sha => { seen.push(sha); return read_commits(sha); });
+        expect(seen).toEqual([head_sha, first]);
+    });
+
+    it('marks the list incomplete when an object cannot be read, the bound is short of the ahead count or the count disagrees with the walk', async () => {
+        const missing: GitObjectReader = async sha => (sha === first ? undefined : read_commits(sha));
+        expect(await readPushStateOf(makeRepository({ HEAD: { ...branch, ahead: 2 }, refs }), 500, 'f'.repeat(40), missing)).toMatchObject({ pending_complete: false });
+        expect(await readPushStateOf(makeRepository({ HEAD: { ...branch, ahead: 2 }, refs }), 1, 'f'.repeat(40), read_commits)).toMatchObject({ pending_complete: false });
+        expect(await readPushStateOf(makeRepository({ HEAD: { ...branch, ahead: 3 }, refs }), 500, 'f'.repeat(40), read_commits)).toMatchObject({ pending_complete: false });
+    });
+
+    it('reads no commit when nothing is ahead, there is no upstream, the marker is the upstream commit or the head is not sha-1', async () => {
+        const never_read: GitObjectReader = async () => { throw new Error('must not read'); };
+        expect(await readPushStateOf(makeRepository({ HEAD: { ...branch, ahead: 0 }, refs }), 500, 'f'.repeat(40), never_read)).toEqual({ has_upstream: true, ahead: 0, upstream_sha });
+        expect(await readPushStateOf(makeRepository({ HEAD: { name: 'staging', commit: head_sha } }), 500, 'f'.repeat(40), never_read)).toEqual({ has_upstream: false, ahead: undefined, upstream_sha: undefined });
+        expect(await readPushStateOf(makeRepository({ HEAD: { ...branch, ahead: 2 }, refs }), 500, upstream_sha.slice(0, 9), never_read)).toMatchObject({ has_upstream: true, ahead: 2 });
+        expect(await readPushStateOf(makeRepository({ HEAD: { ...branch, commit: 'e'.repeat(64), ahead: 2 }, refs }), 500, 'f'.repeat(40), never_read)).not.toHaveProperty('pending_shas');
     });
 });
 

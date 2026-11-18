@@ -1,6 +1,31 @@
 # Todo [](?nt_view=kanban)
 
 
+### Make the board lines match what will happen [](?id=board-lines-accuracy&status=code-review&sent=go-20261118&tokens_estimated=8)
+
+The build and ship lines can sit far below the work they describe. A folder view shows only the first stories of each file, so a line further down is drawn at the bottom of the shown stories, and the counting rules include stories that neither a coordinator nor a push will act on.
+
++ evidence 2026-11-18: a file capped to 20 of 64 stories drew both lines at its bottom, though they belonged at 32 and 24
++ evidence 2026-11-18: stories left at `doing` moved the solid line on boards where the coordinator had nothing to build
++ evidence 2026-11-18: older `code-review` stories moved the dashed line past the last story in the ready marker
++ evidence 2026-11-18: a ready marker already pushed still moved the dashed line
++ evidence 2026-11-18: two stories sharing one id make the order check fail, which removes both lines from that board
++ related: [[coordinator-board-lines]]
++ decision: the solid line counts only what the coordinator would run: sent or delegated stories that are not parked or in review, plus the story its ledger shows in flight
++ decision: a story at `doing` that is neither sent, delegated nor in flight does not move the solid line
++ decision: the dashed line counts the stories of an unpushed ready marker, plus every story at `code-review` or `testing`
++ decision: a line below the displayed stories stays drawn at the bottom of them
++ design: a story waiting in the coordinator's `waiting.json`, or placed on another machine by `coord=`, counts as parked
++ design: a marker counts as pushed when the branch has no unpushed commits, its commit is the upstream commit, or a complete list of unpushed commits leaves it out
++ design: when git cannot say, the marker still counts
++ [X] apply the solid and dashed line rules, with Jest cases for each
++ [X] keep the lines on a board where two stories share an id
++ [X] compare the solid line with the coordinator's own selection on real boards, read-only
++ [X] bump the patch version
++ the in-flight story is exempt from the `coord=` check, as the coordinator's own selection treats it
++ a coordinator with no recorded machine parks nothing on `coord=`, so a board placed on another machine by `coord=` can draw the solid line on a machine that would not build it
+
+
 ### Stop two specs timing out on web server start [](?id=playwright-webserver-start-timeouts&tokens_estimated=3)
 
 Two specs failed a full Playwright run by waiting 60 seconds for their web server, then passed alone and in the next full run.
@@ -49,9 +74,7 @@ A board's order decides what happens next, but no story view shows where that wo
 + decision: the lines belong to the view, not the card, so no card type draws or branches on them
 + decision: the lines only show position
 + decision 2026-11-18: which stories count towards each line
-  + build line: a story tagged `sent=`, a `delegated-` id, or at `doing`
-  + build line leaves out a story at `code-review` or `testing`, and one parked on an open question, a blocked note, an open manual task or an open delegated task
-  + ship line: a story named in the coordinator's `ready.json`, or at `code-review` or `testing`
+  + the rules are set by [[board-lines-accuracy]]
 + decision 2026-11-18: in a grouped view each group draws the line between its own cards
   + a group whose cards all sit above the line draws it last, and one whose cards all sit below draws it first
   + an empty group draws nothing
